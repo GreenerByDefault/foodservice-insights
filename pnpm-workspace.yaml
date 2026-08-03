@@ -1,0 +1,52 @@
+packages:
+  - apps/*
+  - packages/*
+
+engineStrict: true
+verifyDepsBeforeRun: warn
+
+strictPeerDependencies: true
+
+allowBuilds:
+  esbuild: true
+
+catalog:
+  # --- Shared toolchain --------------------------------------------------
+  typescript: ^6.0.3
+  '@types/node': ^24.10.0
+
+  # --- Svelte ------------------------------------------------------------
+  svelte: ^5.56.8
+  svelte-check: ^4.7.4
+  '@sveltejs/kit': ^2.70.2
+  '@sveltejs/adapter-node': ^5.5.7
+  '@sveltejs/vite-plugin-svelte': ^7.2.0
+  vite: ^8.2.0
+
+  # --- Styling / shadcn-svelte -------------------------------------------
+  # When `shadcn-svelte add <component>` rewrites apps/web/package.json with a
+  # literal version, move it here and restore `catalog:` in the package.
+  tailwindcss: ^4.3.3
+  '@tailwindcss/vite': ^4.3.3
+  shadcn-svelte: ^1.5.0
+  '@lucide/svelte': ^1.28.0
+  '@fontsource-variable/inter': ^5.3.0
+  tw-animate-css: ^1.4.0
+  bits-ui: ^2.18.1
+  clsx: ^2.1.1
+  tailwind-merge: ^3.6.0
+  tailwind-variants: ^3.3.0
+
+  # --- Vitest -----------------------------------------------------------------
+  vitest: 4.1.10
+  '@vitest/browser-playwright': 4.1.10
+  vitest-browser-svelte: 3.0.0
+
+  # --- Playwright -------------------------------------------------------------
+  playwright: 1.62.1
+  '@playwright/test': 1.62.1
+
+# pnpm 11 blocks very-recently-published packages by default; exceptions go here.
+# Drop an entry once the version is no longer new.
+minimumReleaseAgeExclude:
+  - shadcn-svelte@1.5.0

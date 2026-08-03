@@ -1,0 +1,40 @@
+node_modules/
+
+.vscode/
+
+# Build output (unanchored: appears inside every workspace package)
+.svelte-kit/
+build/
+dist/
+.output/
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Local agent state
+.claude/settings.local.json

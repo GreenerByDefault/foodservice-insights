@@ -1,0 +1,4 @@
+# Only the public marketing page may be crawled because everything else requires auth.
+User-agent: *
+Allow: /$
+Disallow: /
