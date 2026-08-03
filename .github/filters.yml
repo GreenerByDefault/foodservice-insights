@@ -1,0 +1,62 @@
+# Which CI jobs a change can affect. Consumed by `dorny/paths-filter` in `workflows/ci.yml`
+# with `predicate-quantifier: every`, so a file belongs to a filter only when it matches
+# *all* of that filter's patterns — hence `'**'` plus exclusions, rather than an inclusion
+# list. Only add an exclusion you can defend out loud.
+#
+# `scripts/ci/check_filters.py` enforces that every exclusion still matches a tracked file
+# (or is marked `# planned` and matches none). `push: main` runs everything unfiltered as a
+# second backstop.
+
+# TypeScript never imports Python. (We use `system` for e2e tests.)
+ts:
+  - '**'
+  - '!python/**' # planned
+  - '!pyproject.toml' # planned
+  - '!uv.lock' # planned
+  - '!*.md'
+  - '!**/README.md'
+  - '!LICENSE'
+
+# `catering_analysis` and `worker_child`. Python imports no TypeScript, and no Python in
+# the product imports the lab package.
+python:
+  - '**'
+  - '!apps/**'
+  - '!packages/**'
+  - '!tests/e2e/**'
+  - '!python/catering_analysis_lab/**' # planned
+  - '!package.json'
+  - '!pnpm-lock.yaml'
+  - '!pnpm-workspace.yaml'
+  - '!tsconfig.base.json'
+  - '!turbo.json'
+  - '!biome.json'
+  - '!*.md'
+  - '!**/README.md'
+  - '!LICENSE'
+
+# catering_analysis_lab depends on catering_analysis, so a core change reaches it; nothing
+# depends on the lab, so it reaches nothing else. Same as `python` minus the lab exclusion.
+python_lab:
+  - '**'
+  - '!apps/**'
+  - '!packages/**'
+  - '!tests/e2e/**'
+  - '!package.json'
+  - '!pnpm-lock.yaml'
+  - '!pnpm-workspace.yaml'
+  - '!tsconfig.base.json'
+  - '!turbo.json'
+  - '!biome.json'
+  - '!*.md'
+  - '!**/README.md'
+  - '!LICENSE'
+
+# Whole-stack e2e depends on nearly everything; the lab is the one real
+# exclusion, since nothing imports it and it's not in the worker image.
+system:
+  - '**'
+  - '!python/catering_analysis_lab/**' # planned
+  - '!*.md'
+  - '!**/README.md'
+  - '!LICENSE'
