@@ -5,6 +5,11 @@ and the testing tiers. Read it first, and prefer it over this file for anything 
 duplicated facts drift. This file covers how we want code written and the traps that
 produce a confusing failure a long way from the cause.
 
+For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how
+the system fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — in
+particular, both files record *rejected* alternatives, so check them before proposing a
+design change.
+
 This repo is TypeScript today and will grow Python workspaces.
 
 ## Verifying a change
@@ -58,6 +63,36 @@ actually ran; if something is failing or you skipped a step, say so.
   adding new functionality, you should generally add tests.
 - We care about our tests being fast, concurrent, and maintainable. Do not exhaustively
   test things already handled by the standard library and third-party dependencies.
+
+## Documentation
+
+Our worry is not too few docs; it is docs that quietly stop being true. These rules exist to
+keep every document either accurate or obviously dead.
+
+- **A doc lives at the highest point in the tree that contains all the code it describes.**
+  Something spanning more than one component goes in [`ARCHITECTURE.md`](ARCHITECTURE.md) —
+  a colocated doc cannot own a seam between two components. Something about one package
+  goes in that package. Product intent, owned by no code, goes in a root doc like
+  [`REQUIREMENTS.md`](REQUIREMENTS.md). Once there is more than one such doc, that's the
+  signal to introduce a `docs/` folder — not before.
+- **Never restate in prose what the code already states.** No schemas, file trees, or config
+  values. Name the file that holds the fact instead. A number copied into a doc is a number
+  that will disagree with the code within a month.
+- **Prefer documentation that executes.** A schema invariant belongs in a test that asserts
+  the database rejects the violation. A cross-language contract belongs in golden fixtures
+  that both sides parse. Those cannot rot silently; prose can.
+- **Docs carry intent; code carries mechanism.** If a refactor that changes no behaviour
+  would force you to edit a doc, that doc is describing mechanism — fix the doc.
+- **Record rejected alternatives as one-liners** (`*Rejected: X because Y.*`). They are the
+  highest-value lines in our docs: each one stops a settled decision from being
+  re-litigated by whoever reads the code next.
+- **Mark anything unresolved `**Open:**`** so it is greppable, and leave it where it belongs
+  rather than in a separate list of open questions that will drift.
+- **One source of truth per fact, named explicitly.** Kysely migrations own the schema; the
+  Supabase CLI's `migrations/` is unused. When two files could both plausibly answer a
+  question, say in one of them which one wins.
+- **A doc written before its code is a spec, and says so** in a status block naming what
+  replaces it. [`packages/db/SCHEMA.md`](packages/db/SCHEMA.md) is the current example.
 
 ## TypeScript and Svelte
 

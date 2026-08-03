@@ -4,6 +4,17 @@ Greener by Default's foodservice emissions analysis tool. Customers upload procu
 data and get back a report on the climate impact of their food purchasing, with
 recommendations.
 
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the system fits together, and why |
+| [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
+| [`packages/db/SCHEMA.md`](packages/db/SCHEMA.md) | Database schema |
+| [`AGENTS.md`](AGENTS.md) | How we write code here |
+
+This file covers everything operational: prerequisites, commands, repo layout, and testing.
+
 ## Prerequisites
 
 - **Node 24** (the version in [`.nvmrc`](.nvmrc)). `nvm use` if you use nvm.
@@ -60,6 +71,7 @@ This produces a production build of every package. To run it, use
 ```
 apps/web/           SvelteKit app (JS/TS workspace, pnpm)
 packages/core/      Shared values and helpers (JS/TS workspace, pnpm)
+packages/db/        Schema spec for now; migrations and queries land here
 tests/e2e/          Whole-system e2e tests
 ```
 
