@@ -52,6 +52,9 @@ Reasoning that outlives the column definitions:
 - **Every foreign key gets an index**, so rows are cleaned up quickly when the referenced row is
   deleted. The tables below leave these off; add them when implementing.
 - **Every `checksum_sha256` gets `CHECK (octet_length(checksum_sha256) = 32)`.**
+- **New queries get checked with `EXPLAIN ANALYZE`** before landing, per
+  [Use The Index, Luke](https://use-the-index-luke.com) — this is what "queries are optimized" in
+  [`REQUIREMENTS.md`](../../REQUIREMENTS.md#performance) means in practice.
 
 ## Tables
 

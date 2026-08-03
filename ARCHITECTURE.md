@@ -49,9 +49,7 @@ touches neither; it reads and writes a run directory the parent sets up for it.
 ## Supabase: database, auth, and blob store
 
 Supabase provides the Postgres database, the blob store (Supabase Storage), and auth (Supabase
-Auth). It is a good fit because Supabase Auth is free where standalone auth providers are
-expensive, Supabase Storage has everything we need including an S3 API and presigned URLs, the
-web UI and local development tooling are good, and the price is reasonable.
+Auth) as one hosted platform.
 
 **We do not use client-side database access or Row Level Security (RLS).** All database access
 goes through the server, the traditional architecture. RLS is easy to get wrong, substantially
@@ -63,13 +61,16 @@ lock-in. We can switch blob store providers if cost becomes an issue.
 
 ## Web app
 
-SvelteKit covers both the frontend and the backend. It is a fully fledged component framework,
-which fits how much client-side state and interaction this app has, and it is close to writing
-plain TypeScript, CSS, and HTML.
+SvelteKit covers both the frontend and the backend, using its default rendering strategy:
+server-side rendering (SSR) for the first request, then client-side navigation (CSR) after
+hydration. Server-only code (`hooks.server.ts`, `+layout.server.ts`, `+page.server.ts`) runs on
+every navigation regardless of whether the client re-renders the page.
 
-- *Rejected: Django.* Its ORM makes it easy to write unperformant queries, and templates are a
-  poor fit for this much client interaction.
-- *Rejected: React.* No advantage here, and heavier at runtime.
+**Backend routes are called with `fetch()`.**
+
+- *Rejected: SvelteKit form actions and remote functions.* Both add a layer of indirection over
+  plain `fetch()` calls to `+server.ts` handlers, which makes the code harder for newcomers to
+  follow without strong enough of a payoff.
 
 **Database access uses [Kysely](https://kysely.dev)**, a type-safe SQL builder: we write SQL
 directly in TypeScript. This gives predictable query performance, unlike an ORM, while keeping
@@ -84,8 +85,13 @@ vendor in full, so we own them outright.
 
 The frontend uses Supabase Auth to log in, sign up, and log out. Supabase updates its own
 database tables and issues a JWT, stored in a cookie. Every subsequent request carries that
-cookie; a hook in the server validates the JWT and then does a database lookup for the user's
-authorization — which organizations they belong to, and their role in each.
+cookie; the `handle()` hook in `hooks.server.ts` validates the JWT and does a database lookup for
+the user's authorization — which organizations they belong to, and their role in each — then
+stores the result in SvelteKit's `locals`, where server files such as `+layout.server.ts` and
+`+page.server.ts` can read it (for example, to 401 an unauthorized request). The root
+`+layout.server.ts`'s `load()` passes the user down to `.svelte` files for the client. When the
+frontend changes auth state, such as logging out, it calls `invalidateAll()` so SvelteKit re-runs
+the server `load()` functions — without a full page refresh.
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
@@ -236,6 +242,9 @@ What we care about: manual horizontal and vertical scaling; reliability, includi
 restarts and draining the existing container on deploy; price; logging; continuous deployment with
 the web app and worker separated; and overall simplicity over time. We explicitly do not care
 about autoscaling.
+
+**Deploys run database migrations before updating the app.** A failed code deploy can be rolled
+back, but a migration cannot — once it has run, fix forward rather than reverting it.
 
 **Open:** Railway vs Render vs DigitalOcean.
 
