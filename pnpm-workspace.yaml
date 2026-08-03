@@ -1,0 +1,73 @@
+packages:
+  - apps/*
+  - packages/*
+
+# In pnpm 11, `.npmrc` is read for auth and registry settings ONLY, and the
+# `pnpm` field in package.json is not read at all. Every other pnpm setting
+# lives here, in camelCase. Do not add a `.npmrc` for configuration -- it
+# would be silently ignored.
+engineStrict: true
+verifyDepsBeforeRun: warn
+
+# Peer ranges are load-bearing in this repo: @vitest/browser-playwright pins
+# `vitest` to an exact version. Without strictness, pnpm would quietly install
+# a second nested vitest, which surfaces as the near-ungoogleable
+# "Vitest failed to access its internal state".
+strictPeerDependencies: true
+
+# pnpm 11 blocks dependency build scripts unless allowed here. This replaces
+# the removed onlyBuiltDependencies / neverBuiltDependencies settings.
+allowBuilds:
+  esbuild: true
+
+catalog:
+  # --- Shared toolchain --------------------------------------------------
+  # MUST stay < 7. TypeScript 7 (the Go port) does not expose
+  # require('typescript').default.sys, which svelte-language-tools reads, so
+  # svelte-check crashes on startup. Revisit when TS 7.1 ships (~Oct 2026).
+  typescript: ^6.0.3
+  '@types/node': ^24.10.0
+
+  # --- Svelte ------------------------------------------------------------
+  svelte: ^5.56.8
+  svelte-check: ^4.7.4
+  '@sveltejs/kit': ^2.70.2
+  '@sveltejs/adapter-node': ^5.5.7
+  '@sveltejs/vite-plugin-svelte': ^7.2.0
+  vite: ^8.2.0
+
+  # --- Styling / shadcn-svelte -------------------------------------------
+  # Everything from `@lucide/svelte` down is chosen by the shadcn-svelte CLI, not
+  # by us. When `shadcn-svelte add <component>` rewrites apps/web/package.json
+  # with a literal version, move it here and restore `catalog:` in the package.
+  tailwindcss: ^4.3.3
+  '@tailwindcss/vite': ^4.3.3
+  shadcn-svelte: ^1.5.0
+  '@lucide/svelte': ^1.28.0
+  '@fontsource-variable/inter': ^5.3.0
+  tw-animate-css: ^1.4.0
+  bits-ui: ^2.18.1
+  clsx: ^2.1.1
+  tailwind-merge: ^3.6.0
+  tailwind-variants: ^3.3.0
+
+  # --- Vitest: these three must move together, exactly -------------------
+  # @vitest/browser-playwright declares `vitest` as an EXACT peer, so a
+  # caret range here would let pnpm resolve a newer vitest and end up with
+  # two copies. See strictPeerDependencies above.
+  vitest: 4.1.10
+  '@vitest/browser-playwright': 4.1.10
+  vitest-browser-svelte: 3.0.0
+
+  # --- Playwright: these two must be identical, exactly ------------------
+  # @playwright/test depends on `playwright` at an exact version, which pins
+  # playwright-core, which determines the downloaded browser revision -- and
+  # therefore the CI browser cache key. Any drift means two browser installs.
+  playwright: 1.62.1
+  '@playwright/test': 1.62.1
+
+# pnpm 11 refuses very fresh releases by default as supply-chain protection, and
+# records deliberate exceptions here. shadcn-svelte 1.5.0 was published the day we
+# scaffolded this repo. Entries can be dropped once the version is no longer new.
+minimumReleaseAgeExclude:
+  - shadcn-svelte@1.5.0

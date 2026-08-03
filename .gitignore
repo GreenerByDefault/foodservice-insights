@@ -1,0 +1,39 @@
+node_modules/
+
+# Build output. Deliberately not anchored with a leading slash: in a monorepo
+# these appear inside every workspace package, not just the root.
+.svelte-kit/
+build/
+dist/
+.output/
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
+# Python (phase 3)
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Local agent state
+.claude/settings.local.json

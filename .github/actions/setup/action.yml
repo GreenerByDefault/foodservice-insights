@@ -1,0 +1,19 @@
+name: Setup
+description: Install pnpm, Node, and workspace dependencies
+
+runs:
+  using: composite
+  steps:
+    # Must come before setup-node: its `cache: pnpm` needs pnpm on PATH.
+    # No `version:` input -- action-setup reads it from packageManager in
+    # package.json, and passing both is an error if they disagree.
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - run: pnpm install --frozen-lockfile
+      shell: bash

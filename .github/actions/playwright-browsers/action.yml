@@ -1,0 +1,24 @@
+name: Playwright browsers
+description: Install and cache the Chromium build that Playwright uses
+
+runs:
+  using: composite
+  steps:
+    # The Playwright version lives in the pnpm catalog, so hashing
+    # pnpm-workspace.yaml is a deterministic key that needs no shelling out.
+    # It over-invalidates on unrelated catalog edits, which is the safe direction.
+    - uses: actions/cache@v6
+      id: cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-workspace.yaml') }}
+
+    - if: steps.cache.outputs.cache-hit != 'true'
+      run: pnpm --filter @gbd/web exec playwright install --with-deps chromium
+      shell: bash
+
+    # The browser binary is cached but the OS-level shared libraries it links
+    # against are not, so those still need installing on a cache hit.
+    - if: steps.cache.outputs.cache-hit == 'true'
+      run: pnpm --filter @gbd/web exec playwright install-deps chromium
+      shell: bash
