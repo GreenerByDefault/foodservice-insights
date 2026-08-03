@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      vitest:
+        patterns:
+          - "vitest*"
+          - "@vitest/*"
+      playwright:
+        patterns:
+          - "playwright*"
+          - "@playwright/*"
+      svelte:
+        patterns:
+          - "svelte*"
+          - "@sveltejs/*"
+      # Group other non-major deps to cut down on PR noise.
+      dev-dependencies:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Python / uv workspace. Uncomment once the uv workspace exists.
+  # - package-ecosystem: "uv"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
