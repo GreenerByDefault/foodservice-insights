@@ -3,8 +3,8 @@
 What the product must do. For *how* it is built and why, see
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-Numeric limits below state the rule, not the value. Once implemented, the values live in code
-and this document points at them — see [`AGENTS.md`](AGENTS.md#documentation).
+This file is the source of truth for product rules, including the numeric limits. When
+implementing, each value should live in exactly one place in code and be referenced from there, then replace these docs with a link to them. See [`AGENTS.md`](AGENTS.md#documentation).
 
 ## Product capabilities
 
@@ -68,7 +68,7 @@ targeting 15 seconds.
 - While waiting, the user sees a timeline of key events and a loading state naming the current
   stage: file upload / validation, waiting in queue, analyzing.
 - The UI warns when a stage takes longer than expected.
-- The user can cancel the request. This soft-deletes the report — in-flight requests get a
+- The user can cancel the request. This essentially soft-deletes the report — in-flight requests get a
   cancel button rather than a delete button.
 
 ### Result page
@@ -161,7 +161,7 @@ Email OTP (one-time passcode).
 
 - An admin invites someone by email address and assigns their role. The invitee does not need an
   existing account.
-- The invitee gets an email linking to the site, with their email pre-filled and no token. They
+- The invitee gets an email linking to the site, with their email pre-filled. No magic token. They
   log in with OTP as normal.
 - On login, the server checks for pending invites matching the user's email:
   - Invites still within `expires_at` are shown on an accept/decline screen.
@@ -199,27 +199,22 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
   - The raw user ID stays in the audit log.
 - **An admin is blocked** from deleting their account, or leaving an organization, until they
   either delete the whole organization or promote another admin.
-- **An admin deleting an organization** *does* hard-delete all of its reports and input files. It
+- **An admin deleting an organization** *does* hard-delete all of the organization's reports and input files. It
   does not delete any user accounts.
 - A user can email GBD to request a hard delete. GBD admins do it with a script or in the
-  Supabase UI.
+  Supabase UI (TBD which approach).
 
 ### Account recovery
 
 A user who needs to change their email but is locked out of the original must contact GBD, who
-verifies them and then changes the email with a script or in the Supabase UI.
+verifies them and then changes the email with a script or in the Supabase UI (TBD which approach).
 
 ## Non-functional
-
-### Open source
-
-As much project code as feasible is open-sourced. The one exception is the product
-categorization cache — see [`ARCHITECTURE.md`](ARCHITECTURE.md#product-categorization-cache).
 
 ### Product categorization cache
 
 The AI code uses a cache of product categorizations from earlier runs. New runs add to the cache,
-but **a human must review new entries before they are used.**
+but **new entries go through human review first.**
 
 ### Design and accessibility
 
@@ -232,7 +227,7 @@ Follow GBD design and accessibility standards.
 
 Follow security best practices for web development.
 
-- Input files are handled according to their risk, including macro detection and CSV injection.
+- Input files are handled according to their risk, such as Excel zip bombs and CSV injection.
 - Always use minimum permissions — for example, read-only database access when debugging.
 - Data is encrypted in transit and at rest.
 - Protect against prompt injection.

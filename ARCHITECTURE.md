@@ -31,7 +31,7 @@ keep settled decisions settled — read them before proposing a change.
 | End-to-end tests | Playwright |
 | Edge / DDoS | Cloudflare |
 | Hosting | **Open:** Railway vs Render vs DigitalOcean |
-| Email | **Open:** GBD has no existing provider. Connect For Animals uses SendGrid. |
+| Email | **Open:** GBD has no existing provider; we need to propose one with reasonable cost and reliability. Connect For Animals uses SendGrid. |
 
 ## Components
 

@@ -177,10 +177,6 @@ Exposed publicly through the `/file/:id` route.
 - `UNIQUE (analysis_attempt_id, chart_key) WHERE kind = 'chart'`
 - Index `analysis_attempt_id`.
 
-**Open:** `kind = 'chart'` assumes the child process renders chart images that the web app
-displays. If we render charts client-side with d3 instead, this table and the child's output
-manifest both change shape.
-
 ### `app_user`
 
 | Column | Datatype | Required |
@@ -289,8 +285,8 @@ attempt to two workers is the failure this schema exists to prevent.
 ### Other tables
 
 - **Every org keeps an admin:** a deferred trigger constraint on `organization_member` enforcing
-  at least one admin per organization, as long as the organization still exists. Deferred, so that
-  a promote-then-demote inside one transaction is legal.
+  at least one admin per organization, as long as the organization still exists. Deferred, so
+  intermediate states within a transaction do not trip it.
 - **`report` deletion audit:** `deleted_by_user_id IS NULL OR deleted_at IS NOT NULL`.
 - **`result_file` chart keys:** `chart_key IS NOT NULL` if and only if `kind = 'chart'`.
 - **`result_file` uniqueness:** one PDF and one XLSX per attempt, and no duplicate `chart_key`
