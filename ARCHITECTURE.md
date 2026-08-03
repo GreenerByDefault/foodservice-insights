@@ -84,14 +84,18 @@ vendor in full, so we own them outright.
 ## Auth
 
 The frontend uses Supabase Auth to log in, sign up, and log out. Supabase updates its own
-database tables and issues a JWT, stored in a cookie. Every subsequent request carries that
-cookie; the `handle()` hook in `hooks.server.ts` validates the JWT and does a database lookup for
-the user's authorization — which organizations they belong to, and their role in each — then
-stores the result in SvelteKit's `locals`, where server files such as `+layout.server.ts` and
-`+page.server.ts` can read it (for example, to 401 an unauthorized request). The root
-`+layout.server.ts`'s `load()` passes the user down to `.svelte` files for the client. When the
-frontend changes auth state, such as logging out, it calls `invalidateAll()` so SvelteKit re-runs
-the server `load()` functions — without a full page refresh.
+database tables and issues a JWT, which is stored in a cookie. Every subsequent request carries
+that cookie.
+
+On each request, the `handle()` hook in `hooks.server.ts` validates the JWT, then looks up the
+user's authorization in the database: which organizations they belong to, and their role in each.
+It stores that result in SvelteKit's `locals`, where server files like `+layout.server.ts` and
+`+page.server.ts` can read it, for example to 401 an unauthorized request.
+
+The client gets the user from the root `+layout.server.ts`'s `load()`, which passes it down to
+`.svelte` files. When the frontend changes auth state, such as logging out, it calls
+`invalidateAll()` so that SvelteKit re-runs the server `load()` functions without a full page
+refresh.
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
@@ -135,8 +139,7 @@ WHERE id = (
 RETURNING *;
 ```
 
-This gives the semantics we need: roughly FIFO, concurrency-safe, and atomic. An index supports
-the lookup — see [`packages/db/SCHEMA.md`](packages/db/SCHEMA.md).
+This gives the semantics we need: roughly FIFO, concurrency-safe, and atomic.
 
 - *Rejected: a dedicated queue service such as Celery or Redis.* Postgres keeps the
   infrastructure smaller by having fewer components. The risk is that Postgres is not built for
@@ -168,19 +171,16 @@ Parent lifecycle:
 1. Pull an analysis attempt from the queue, if current attempts < 3.
 2. Fetch the input file from the blob store.
 3. Spawn a child process to run `catering_analysis`, setting up a folder with the required inputs.
-4. The child runs. On completion it saves results to its folder and terminates, which signals
+4. The child runs. On completion, it saves results to its folder and terminates, which signals
    success.
 5. Upload the result files to the blob store, save metadata to the database, and email the result.
 
 Whenever a child fails in any way — including being killed by its parent — the parent marks the
 analysis attempt failed and sends an email.
 
-### Language choice
-
-The child must be Python to run `catering_analysis`. The parent could be anything; we use
-TypeScript on Node.js so it can reuse the web app's database and blob store code. Node's async
-model also suits an IO-bound, concurrent parent. The consequence: the Docker image must run both
-our Node.js worker and the Python executable for the child.
+- *Rejected: writing the parent in Python too.* The parent benefits from
+  reusing the web app's TypeScript database and blob store code, and Node's async model suits an
+  IO-bound, concurrent parent.
 
 ### Heartbeats, hangs, and reaping
 
@@ -268,7 +268,7 @@ delete.
 
 ## File links
 
-Per the requirements, file links are public and non-expiring: anyone with the link can access the
+Per [`REQUIREMENTS.md`](REQUIREMENTS.md), file links are public and non-expiring: anyone with the link can access the
 file. But a deleted report's links must stop working, while the file itself stays in the blob
 store for debugging. Supabase Storage buckets are public or private as a whole, so a direct link
 into a public bucket cannot express this.
@@ -296,43 +296,14 @@ re-validate exhaustively.
 `catering_analysis` is already written to reduce prompt injection risk — for example, all output
 belongs to a fixed set of values.
 
-## Monorepo
-
-The web app and the worker parent must share a repository: both are TypeScript and both use the
-same database and blob store code.
-
-`catering_analysis` also moves into this repository, which means open-sourcing it. The motivation
-is the worker child process: a monorepo keeps the library in sync with the worker's API and makes
-it simpler to ship in the worker's Docker image.
-
 ## Secrets management
 
-Secrets load as environment variables. In production they are set on the hosting platform.
-Locally, `.env` holds public values such as `localhost` addresses, and `.env.local` holds real
-secrets such as API keys.
+Secrets load as environment variables. Locally, `.env` holds public values such as `localhost`
+addresses; `.env.local` holds real secrets such as API keys.
 
-We use GitHub's secret scanning and push protection.
+**Open:** no rotation process exists yet for suspected leaks.
 
-There is no rotation schedule, but the rotation process is documented in case we suspect a leak.
-
-We are careful with production access — for example, documenting how to set up a read-only
-Postgres role for debugging the production database. Extra care is warranted because AI agents
-operate in this repo.
-
-## Product categorization cache
-
-`catering_analysis` currently ships a 40k-row CSV of historical product categorizations, used
-purely as a cache. **This cache is the one part of the project that cannot be open-sourced.**
-
-When the worker encounters new products it should add them to the cache, but new entries must go
-through human review first. That workflow means the cache belongs in Postgres rather than a CSV,
-regardless of open-sourcing: Postgres lets multiple workers update it safely and concurrently.
-
-The flow: the child returns new categorizations to the parent; the parent writes them to the
-database marked as needing human review; when starting a new child, the parent pulls the latest
-copy of the cache down for it.
-
-Consequence: we no longer store this CSV in Git.
+Extra care with production access is warranted because AI agents operate in this repo.
 
 ## Failure modes
 
