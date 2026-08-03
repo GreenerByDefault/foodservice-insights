@@ -1,4 +1,7 @@
-/** Product name, as shown to users. */
+/** Product name, as shown to users.
+ *
+ * This is a placeholder value only to set up packages/core.
+ */
 export const APP_NAME = 'Foodservice Insights';
 
 /**

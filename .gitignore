@@ -1,7 +1,8 @@
 node_modules/
 
-# Build output. Deliberately not anchored with a leading slash: in a monorepo
-# these appear inside every workspace package, not just the root.
+.vscode/
+
+# Build output (unanchored: appears inside every workspace package)
 .svelte-kit/
 build/
 dist/
@@ -27,7 +28,7 @@ test-results/
 playwright-report/
 blob-report/
 
-# Python (phase 3)
+# Python
 __pycache__/
 *.py[cod]
 .venv/

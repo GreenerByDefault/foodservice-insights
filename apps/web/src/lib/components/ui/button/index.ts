@@ -2,7 +2,7 @@ import Root, {
   type ButtonProps,
   type ButtonSize,
   type ButtonVariant,
-  buttonVariants
+  buttonVariants,
 } from './button.svelte';
 
 export {
@@ -13,5 +13,5 @@ export {
   buttonVariants,
   Root,
   //
-  Root as Button
+  Root as Button,
 };

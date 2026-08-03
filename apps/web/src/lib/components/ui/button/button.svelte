@@ -16,7 +16,7 @@ export const buttonVariants = tv({
         'hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50',
       destructive:
         'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
-      link: 'text-primary underline-offset-4 hover:underline'
+      link: 'text-primary underline-offset-4 hover:underline',
     },
     size: {
       default:
@@ -29,13 +29,13 @@ export const buttonVariants = tv({
         "size-6 rounded-[min(var(--radius-md),8px)] in-data-[slot=button-group]:rounded-md [&_svg:not([class*='size-'])]:size-3",
       'icon-sm':
         'size-8 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-md',
-      'icon-lg': 'size-10'
-    }
+      'icon-lg': 'size-10',
+    },
   },
   defaultVariants: {
     variant: 'default',
-    size: 'default'
-  }
+    size: 'default',
+  },
 });
 
 export type ButtonVariant = VariantProps<typeof buttonVariants>['variant'];

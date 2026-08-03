@@ -23,8 +23,6 @@
     "noEmit": true
   }
 
-  // Deliberately no `baseUrl` and no `paths`. TypeScript does not merge `paths`
-  // across an extends chain, so declaring any here would clobber the $lib and
-  // $app/types entries that SvelteKit generates into .svelte-kit/tsconfig.json.
-  // Cross-package imports use package names (@gbd/core), not path aliases.
+  // No baseUrl/paths here: TypeScript doesn't merge `paths` across an extends
+  // chain, and this would clobber SvelteKit's generated $lib/$app/types entries.
 }

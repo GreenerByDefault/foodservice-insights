@@ -1,7 +1,4 @@
 {
-  // Base first, so the SvelteKit-generated config wins on the options it owns
-  // (module, moduleResolution, lib, types, paths, rootDirs, include) while the
-  // strictness flags from the base -- which SvelteKit never sets -- survive.
   "extends": ["../../tsconfig.base.json", "./.svelte-kit/tsconfig.json"],
   "compilerOptions": {
     "allowJs": true,

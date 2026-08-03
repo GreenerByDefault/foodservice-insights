@@ -2,15 +2,10 @@ name: CI
 
 on:
   pull_request:
-  # Also run on main. GitHub Actions caches written on a feature branch are not
-  # readable from other branches, so without main runs PRs never get cache hits.
-  push:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.head_ref || github.ref }}
-  # Never cancel main runs -- they are what warm the caches.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -20,36 +15,33 @@ env:
   DO_NOT_TRACK: 1
 
 jobs:
-  static:
-    name: lint + typecheck
+  ts-static:
+    name: 'TS: lint + typecheck'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup
-      # Deliberately not a Turborepo task: Biome is one fast Rust process over the
-      # whole repo, and `biome ci` emits GitHub annotations automatically.
-      - run: pnpm exec biome ci .
-      - run: pnpm run check
+      - uses: ./.github/actions/setup-node
+      - run: pnpm lint
+      - run: pnpm check
 
-  unit:
-    name: unit + component tests
+  ts-unit:
+    name: 'TS: unit + component tests'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup
-      # Component tests render in real Chromium, so they need the browser too.
+      - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/playwright-browsers
       - run: pnpm run test:unit
 
-  e2e:
-    name: e2e tests
+  ts-e2e:
+    name: 'TS: e2e tests'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/playwright-browsers
       - run: pnpm run test:e2e
       - uses: actions/upload-artifact@v7
@@ -62,13 +54,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # One stable check name to point branch protection at, so adding jobs above
-  # never requires touching repository settings.
+  # Stable name to point branch protection at, independent of the jobs above.
   ci:
     name: CI
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    needs: [static, unit, e2e]
+    needs: [ts-static, ts-unit, ts-e2e]
     steps:
       - name: Verify every job succeeded
         run: |

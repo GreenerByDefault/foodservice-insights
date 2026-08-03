@@ -1,106 +1,104 @@
 # Agent guide
 
-Read [`README.md`](README.md) first for setup and commands. This file covers conventions
-and the invariants that are easy to break without noticing.
+[`README.md`](README.md) is the source of truth for prerequisites, commands, repo layout,
+and the testing tiers. Read it first, and prefer it over this file for anything factual —
+duplicated facts drift. This file covers how we want code written and the traps that
+produce a confusing failure a long way from the cause.
 
-## Project state
+This repo is TypeScript today and will grow Python workspaces.
 
-Phase 1 boilerplate: a hello-world SvelteKit app plus the toolchain. No database, no
-worker, no Python. Do not add features, routes, or dependencies that belong to a later
-phase unless asked.
+## Verifying a change
 
-## Run and verify
+Run `pnpm lint && pnpm check && pnpm test` from the repo root before saying a change
+works. A change that typechecks but has not been run is not verified. Report what you
+actually ran; if something is failing or you skipped a step, say so.
 
-Always from the repo root; Turborepo fans out.
+## General development principles
 
-```sh
-pnpm lint        # Biome: format + lint + import order. `pnpm fmt` applies fixes.
-pnpm check       # svelte-check (--fail-on-warnings) + tsc --noEmit
-pnpm test:unit   # vitest: unit + component
-pnpm test:e2e    # Playwright
-```
+- All these principles are not rigid and depend on the context. For example, sometimes DRY
+  is appropriate. Other times, WET is appropriate.
+- Default to solving in the simplest way possible. It's hard to predict future needs.
+  Rather than "premature generalization", simple and maintainable code tends to be the
+  easiest to refactor.
+- Code is written for humans, not just machines. Maintainability and readability matter.
+- Constantly think about how a human can only remember 7 plus or minus 2 things at once
+  (chunking). Control the abstraction level, such as using helper functions, whitespace,
+  comments, immutability, data structures, etc.
 
-Before saying a change works, run `pnpm lint && pnpm check && pnpm test`. A change that
-typechecks but has not been run is not verified.
+### Functional style
 
-## Layout
+- Generally, prefer functional programming style, but don't be dogmatic about it.
+- Default to immutability, which reduces the cognitive load of having to think about what
+  may change at any moment.
+- Default to functional constructs like `map`, `filter`, and `reduce`. They make it more
+  immediately obvious what the iteration will do than an unconstrained `for` loop.
+  However, they are not always the best choice.
+- Use the type system to make illegal states impossible. For example, use algebraic data
+  types, along with string variants like `color: 'red' | 'green'` rather than
+  `color: string`.
+- OOP can be useful, but generally prefer composition over inheritance and limit
+  class-level mutability by default. Classes are often overkill.
+- Early returns and "inverting the conditional" are often excellent. Fail early and exit
+  the function early so that the main logic is not deeply nested.
+- It's often useful to extract pure functions from impure functions. Pure functions are
+  much easier to test, and they are easier to reason with.
 
-```
-apps/web/           SvelteKit app (frontend + backend)
-  src/lib/components/ui/    vendored shadcn-svelte — treat as third-party
-  src/lib/utils/shadcn.ts   cn() and the shadcn type helpers
-  e2e/                      Playwright tests that need only the web app
-packages/core/      shared, zero runtime dependencies
-tests/e2e/          placeholder for whole-system e2e (read its README)
-```
+### Style
 
-Cross-package imports use the package name (`@gbd/core`), never a relative path out of a
-package and never a tsconfig path alias.
+- With comments, prefer self-documenting code. However, comments can be very helpful,
+  especially to give context that cannot be intuited, such as performance or safety
+  considerations, or subtle edge cases.
+- Prefer the standard library. When that is not possible, consider using third-party
+  libraries, but usually prefer first-party code if it's simple to write because of supply
+  chain security being such a pain.
 
-## Invariants
+### Testing philosophy
 
-Breaking any of these produces a confusing failure a long way from the cause.
+- We deeply value tests to make it easier for us to maintain and extend the app. Whenever
+  adding new functionality, you should generally add tests.
+- We care about our tests being fast, concurrent, and maintainable. Do not exhaustively
+  test things already handled by the standard library and third-party dependencies.
 
-1. **`apps/web` has no `dependencies` key — only `devDependencies`.** `adapter-node`
-   marks everything in `dependencies` as external and bundles the rest, so an empty set
-   keeps `build/` self-contained. Add a runtime dependency only when it *must* stay
-   external (a native module such as `sharp`), and say why in the PR.
-2. **A package may export TypeScript source only if it has zero runtime dependencies.**
-   `packages/core` does this via `"exports": { ".": "./src/index.ts" }`. A source-exporting
-   package with runtime deps gets inlined into the web bundle while its dependencies are
-   resolved from `apps/web/`, where pnpm's strict layout means they do not exist. Anything
-   with runtime dependencies gets a real build step and exports a compiled `dist/`.
-3. **Dependency versions go in the `catalog:` block of `pnpm-workspace.yaml`**, and
-   packages reference them as `"catalog:"`. Several are pinned exactly because their peer
-   ranges are exact; the comments in that file explain which and why. Do not loosen a pin
-   without reading them.
-4. **pnpm settings go in `pnpm-workspace.yaml`, in camelCase.** As of pnpm 11, `.npmrc`
-   is read for auth and registry settings only, and the `pnpm` field in `package.json` is
-   ignored entirely. Do not create a `.npmrc` for configuration.
-5. **Never add a `svelte.config.js`, especially at the repo root.** SvelteKit config is
-   inline in `apps/web/vite.config.ts`. `svelte-check` searches *upwards* for
-   `svelte.config.js` and would silently adopt a root one.
-6. **`svelte-check` does not read `vite.config.ts`.** Anything under the `sveltekit()`
-   plugin's `compilerOptions` — including `warningFilter` — is invisible to `pnpm check`.
-   Silence a specific warning with a `<!-- svelte-ignore ... -->` comment instead.
+## TypeScript and Svelte
 
-## Conventions
-
-- **Svelte 5 runes only.** `$props()`, `$state()`, `$derived()`, `{@render children()}`.
-  Never `export let` or `<slot>`.
-- **Test file naming**, which is what keeps vitest and Playwright from colliding:
-  - `*.test.ts` — vitest, node environment
-  - `*.svelte.test.ts` — vitest, real Chromium via `vitest-browser-svelte`
-  - `*.e2e.ts` — Playwright
+- **Svelte 5 runes only.** Never `export let` or `<slot>`. Most Svelte code in training
+  data is Svelte 4, so check the Svelte MCP server rather than recalling an API.
+- **Use `async`/`await`**, not raw promise chains.
+- **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
+  of a package and never a tsconfig path alias.
+- **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
+  misnamed test is either skipped or picked up by the wrong runner. See the table in the
+  README.
 - **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
-- **Biome is the only formatter.** There is no Prettier and no ESLint. Do not add
-  `eslint-disable` comments; the vendored shadcn files still carry some from upstream and
-  those can stay.
+
+## Repo mechanics
+
+- **Dependency versions go in the `catalog:` block of
+  [`pnpm-workspace.yaml`](pnpm-workspace.yaml)**, and packages reference them as
+  `"catalog:"`. That is what keeps one version across the workspace. The vitest and
+  Playwright entries are pinned exactly, not with `^`, because those families declare
+  exact peer ranges on each other and `strictPeerDependencies` is on — a range there
+  breaks `pnpm install`.
+- **`svelte-kit sync` is inlined into the `check` and `test:unit` scripts** because it has
+  to run before typechecking or testing. It looks redundant; it isn't. Don't delete it and
+  rely on `prepare`, which pnpm runs only for some invocations.
 - **Quote parentheses in shell commands.** Route groups mean paths like
-  `'src/routes/(app)'` need quoting or the shell will mangle them.
-- **`svelte-kit sync` must run before typechecking or testing.** It is already inlined
-  into the `check` and `test:unit` scripts. Do not remove it and rely on `prepare` —
-  whether pnpm runs a workspace package's `prepare` depends on flags.
-
-## Accepted gaps
-
-Worth knowing so you do not assume coverage that is not there.
-
-- Biome's `.svelte` support is experimental. If `pnpm fmt` is not idempotent (running it
-  twice produces a diff), that is a known Biome bug — set `html.formatter.enabled: false`
-  in `biome.json` and keep the linter, rather than fighting it.
-- Moving off ESLint means no `eslint-plugin-svelte` rules and no `eslint-plugin-security`.
-  The latter matters once we parse user-uploaded files; a replacement needs to be chosen
-  before that ships.
-- There is no stable Tailwind class sorting. Biome's `useSortedClasses` is a nursery rule
-  and mishandles shadcn's `has-[>svg]:px-2.5` variants, so it is off.
-
-## Working style
-
-- Keep PRs small and focused; we squash-merge. Split out "prefactor" PRs when a change
-  needs groundwork.
+  `'src/routes/(app)'` need quoting or the shell mangles them.
 - Do not touch CI, adapters, or deployment configuration unless that is the task.
 - Do not commit secrets or real customer data.
+
+## PRs and sizing changes
+
+- We squash-merge PRs. So, your PR can have as many commits as you want; it all gets
+  combined. That means a PR is the "atomic unit" for changes
+- Keep PRs as small and focused as feasible. Smaller PRs are easier for coworkers to
+  review, future developers to understand, and better to Git bisect to identify which
+  commit changed functionality
+- To keep PRs smaller, use "prefactor" PRs when possible (aka stacked PRs). They refactor the code in
+  anticipation of the new feature, but don't yet add the new feature.
+- It can be helpful to merge code to main even if it isn't yet ready for the end-user to
+  consume. Consider techniques like feature gates. However, the code should be in a good
+  state before being merged.
 
 ## Svelte MCP server
 
@@ -110,6 +108,5 @@ documentation. Use it rather than recalling API details.
 - **`list-sections`** — call this first to discover what documentation exists. Read the
   `use_cases` field to decide what is relevant.
 - **`get-documentation`** — fetch every section the task touches, not just one.
-- **`svelte-autofixer`** — run this on any Svelte code you write, before showing it.
+- **`svelte-autofixer`** — run this on any Svelte code you write before showing it.
   Keep calling it until it returns no issues.
-- **`playground-link`** — only after the user asks, and never for code written to files.

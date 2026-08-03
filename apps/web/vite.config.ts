@@ -6,30 +6,21 @@ import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  // One .env at the repo root, shared by the web app, the worker, and scripts.
-  // Vite would otherwise only look inside apps/web.
   envDir: fileURLToPath(new URL('../../', import.meta.url)),
   plugins: [
     tailwindcss(),
-    // SvelteKit config lives here rather than in svelte.config.js, which is
-    // soft-deprecated. Note that svelte-check does NOT read this file, so
-    // anything under compilerOptions is invisible to `pnpm check`.
     sveltekit({
       compilerOptions: {
-        // Force runes mode for our own code, but not for libraries.
-        // Can be removed in Svelte 6.
+        // Runes mode for our code only, not libraries. Removable in Svelte 6.
         runes: ({ filename }) =>
-          filename.split(/[/\\]/).includes('node_modules') ? undefined : true
+          filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
       },
-      adapter: adapter()
-    })
+      adapter: adapter(),
+    }),
   ],
   ssr: {
-    // Vite already inlines pnpm-symlinked workspace packages, because their real
-    // path resolves outside node_modules. Stating it explicitly keeps @gbd/*
-    // bundled if that ever stops being true (`pnpm deploy`, a hoisted
-    // node-linker, Docker) -- Node cannot load TypeScript from node_modules.
-    noExternal: [/^@gbd\//]
+    // Node can't load .ts from node_modules; keep this even if pnpm's auto-inlining changes.
+    noExternal: [/^@gbd\//],
   },
   test: {
     expect: { requireAssertions: true },
@@ -41,11 +32,11 @@ export default defineConfig({
           browser: {
             enabled: true,
             provider: playwright({ actionTimeout: 5_000 }),
-            instances: [{ browser: 'chromium', headless: true }]
+            instances: [{ browser: 'chromium', headless: true }],
           },
           include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-          exclude: ['src/lib/server/**']
-        }
+          exclude: ['src/lib/server/**'],
+        },
       },
       {
         extends: './vite.config.ts',
@@ -53,9 +44,9 @@ export default defineConfig({
           name: 'server',
           environment: 'node',
           include: ['src/**/*.{test,spec}.{js,ts}'],
-          exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
-        }
-      }
-    ]
-  }
+          exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+        },
+      },
+    ],
+  },
 });

@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import AppTitle from './app-title.svelte';
 
 describe('AppTitle', () => {
-  it('renders the product name as the page heading', async () => {
+  it('placeholder component test: renders the product name as the page heading', async () => {
     const screen = await render(AppTitle);
 
     await expect
