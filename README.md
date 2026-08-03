@@ -101,10 +101,8 @@ trace with `npx playwright show-trace <path-to-zip>`.
 
 ### What CI runs
 
-A pull request runs only the jobs its changes can affect; a push to `main` runs everything.
-The rules, and the reasoning you need before editing them, are in
-[`.github/filters.yml`](.github/filters.yml). Run `python3 scripts/ci/check_filters.py` after
-touching that file.
+A pull request runs only the jobs its changes can affect; `main` runs everything. See
+[`.github/filters.yml`](.github/filters.yml) for the rules.
 
 ## Adding a shadcn-svelte component
 

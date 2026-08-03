@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 """Check that every exclusion in `.github/filters.yml` still describes reality.
 
-Each negated glob in that file is a claim that some CI job cannot be affected by those
-paths. A claim naming a path that no longer exists is worse than no claim at all: it reads
-as deliberate while excluding nothing, and nobody notices. So every negated glob must match
-at least one tracked file — unless it is marked `# planned`, in which case it must match
-none. Enforcing both directions makes the marker self-removing: the day the path lands,
-this fails and the marker has to go.
-
-Stdlib only, so it can run before any toolchain is installed. Usage, from anywhere:
-
-    python3 scripts/ci/check_filters.py
+An exclusion naming a path that no longer exists is worse than no exclusion: it reads as
+deliberate while excluding nothing, and nobody notices. So, every negated glob must match at
+least one tracked file, unless marked `# planned`, in which case it must match none.
 """
 
 from __future__ import annotations
@@ -35,7 +28,7 @@ ExclusionStatus = Literal["current", "planned"]
 OutputStyle = Literal["plain", "github"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Exclusion:
     """One negated glob in the filter file."""
 

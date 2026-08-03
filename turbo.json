@@ -1,9 +1,6 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "stream",
-  // Files outside every package that still belong in the global hash, so a change to one
-  // invalidates cached results everywhere. `pnpm-workspace.yaml` holds the dependency
-  // catalog, and editing it does not always change `pnpm-lock.yaml`.
   "globalDependencies": ["tsconfig.base.json", ".nvmrc", "pnpm-workspace.yaml"],
   "globalPassThroughEnv": ["PLAYWRIGHT_*"],
   "tasks": {

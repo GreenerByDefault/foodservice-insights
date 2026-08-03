@@ -1,59 +1,19 @@
-# Which CI jobs a change can affect. Consumed by `dorny/paths-filter` in
-# `workflows/ci.yml` with `predicate-quantifier: every`, so a file belongs to a filter only
-# when *all* of that filter's patterns match it.
+# Which CI jobs a change can affect. Consumed by `dorny/paths-filter` in `workflows/ci.yml`
+# with `predicate-quantifier: every`, so a file belongs to a filter only when it matches
+# *all* of that filter's patterns — hence `'**'` plus exclusions, rather than an inclusion
+# list. Only add an exclusion you can defend out loud.
 #
-# READ THIS BEFORE EDITING.
-#
-# Every filter is `'**'` followed by exclusions, never an inclusion list. Under `every`, that
-# reads as "everything, minus the following". It inverts the default: a path nobody has
-# thought about runs *every* job, and skipping a job requires someone to write down, here,
-# why that path cannot affect it. An inclusion list defaults the other way — a new directory
-# runs nothing — and that failure is silent.
-#
-# So each exclusion is a dependency claim. Only add one you can defend out loud.
-#
-# Note that `every` means a *positive* pattern narrows a filter rather than widening it:
-# adding `'apps/**'` to a list would restrict it to `apps/`, not add `apps/` to it. Exclusions
-# are the only sound way to edit these lists.
-#
-# Precision *within* a language is not this file's job. Turborepo derives the real
-# TypeScript package graph from each `package.json`, and CI passes `--affected` on pull
-# requests, so `ts` only has to answer "could any TypeScript job have work to do?".
-# Python affectedness is hand-declared below because uv has no equivalent, but that graph
-# is only two levels deep.
-#
-# Two things keep this file from quietly going stale:
-#
-#   1. `push: main` runs every job with no filtering at all, so a wrong exclusion surfaces
-#      within one squash-merge rather than hiding indefinitely.
-#   2. A negated glob must match at least one tracked file, or be marked `# planned` and
-#      match none. `scripts/ci/check_filters.py` enforces both directions, so an exclusion
-#      cannot outlive the path it names and a `# planned` marker cannot outlive its arrival.
-#
-# *Rejected: inclusion-style filters, because an unclassified path then runs nothing.*
-# *Rejected: a hand-written TS package graph, because Turborepo derives it from `package.json`.*
-# *Rejected: `paths-ignore` on the trigger, because the required `CI` check would stop reporting.*
-# *Rejected: blanket `**/*.md`, because `catering_analysis`'s packaged LLM prompts are markdown.*
-# *Rejected: per-member Python affectedness beyond core-vs-lab, because uv has no `--affected`.*
-# *Rejected: Turborepo remote caching for now, because it needs Vercel or a third-party action.*
+# `scripts/ci/check_filters.py` enforces that every exclusion still matches a tracked file
+# (or is marked `# planned` and matches none). `push: main` runs everything unfiltered as a
+# second backstop.
 
-# Typechecking, unit and component tests, and web e2e — everything that stays inside the
-# TypeScript tree. TypeScript imports no Python. That claim holds only for single-language
-# jobs: `system-e2e`, and a future worker-integration job, spawn the real Python child, so
-# they use `system` below rather than this filter.
-#
-# Biome runs in the same job, and `biome.json` excludes `python` from `files.includes` for
-# this reason: were Biome's scope wider than this filter's, a change to a formattable file
-# under `python/` would skip the only job that checks it. Biome owns the TypeScript tree,
-# ruff owns `python/`. (`biome.json` cannot hold comments, so that note lives here.)
+# TypeScript never imports Python. (We use `system` for e2e tests.)
 ts:
   - '**'
   - '!python/**' # planned
   - '!pyproject.toml' # planned
   - '!uv.lock' # planned
-  - '!ruff.toml' # planned
-  - '!docs/**' # planned
-  - '!*.md' # root docs only — `*` does not cross `/`
+  - '!*.md'
   - '!**/README.md'
   - '!LICENSE'
 
@@ -71,14 +31,12 @@ python:
   - '!tsconfig.base.json'
   - '!turbo.json'
   - '!biome.json'
-  - '!docs/**' # planned
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'
 
-# `catering_analysis_lab` depends on `catering_analysis`, so a change to the core reaches
-# the lab. Nothing depends on the lab, so it reaches nothing else. Identical to `python`
-# without the lab exclusion.
+# catering_analysis_lab depends on catering_analysis, so a core change reaches it; nothing
+# depends on the lab, so it reaches nothing else. Same as `python` minus the lab exclusion.
 python_lab:
   - '**'
   - '!apps/**'
@@ -90,19 +48,15 @@ python_lab:
   - '!tsconfig.base.json'
   - '!turbo.json'
   - '!biome.json'
-  - '!docs/**' # planned
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'
 
-# Whole-stack e2e: browser through web app, database, worker parent, Python child, blob
-# store. It depends on nearly everything by construction, so there is little to exclude —
-# that is the honest answer, not a gap. The lab is the one real exclusion: nothing imports
-# it and it is not in the worker image.
+# Whole-stack e2e depends on nearly everything; the lab is the one real
+# exclusion, since nothing imports it and it's not in the worker image.
 system:
   - '**'
   - '!python/catering_analysis_lab/**' # planned
-  - '!docs/**' # planned
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'

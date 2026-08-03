@@ -2,9 +2,6 @@ name: CI
 
 on:
   pull_request:
-  # Pull requests only run the jobs that a change can affect. Pushes to main run everything,
-  # unfiltered, so a wrong exclusion in `filters.yml` surfaces within one squash-merge
-  # instead of hiding indefinitely.
   push:
     branches: [main]
 
@@ -14,16 +11,11 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read # dorny/paths-filter lists a PR's changed files through the API
+  pull-requests: read  # paths-filter reads a PR's changed files via the API
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
   DO_NOT_TRACK: 1
-  # Which packages every turbo task covers. On a pull request, the ones it affects —
-  # Turborepo derives the package graph from each `package.json`, so this includes transitive
-  # dependents without a hand-maintained list, and falls back to *every* package if a root
-  # file changed or the clone is too shallow to compare. On main, every package, spelled as a
-  # filter rather than as an empty string so the value is always a single quotable argument.
   TURBO_SCOPE: ${{ github.event_name == 'pull_request' && '--affected' || '--filter=*' }}
 
 jobs:
@@ -47,21 +39,11 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           filters: .github/filters.yml
-          # Every pattern must match, which is what makes `'**'` plus negations mean
-          # "anything not excluded below". The default, `some`, would make every filter
-          # unconditionally true because of the leading `'**'`.
+          # 'some' (the default) would make every filter true, since '**' always matches.
           predicate-quantifier: every
 
       - name: Resolve which areas to run
         id: affected
-        # Two things are combined here so that each job's `if:` stays a single comparison:
-        #
-        #   - On anything other than a pull request, every area runs.
-        #   - The Python and system suites additionally require their workspace to exist.
-        #     The filters fail safe, so `python` and `system` already fire on, say, a
-        #     `.github/` change, and those jobs would fail rather than skip before
-        #     `pyproject.toml` and `tests/e2e/` land. This is a fact about the commit, not a
-        #     guess about dependencies, so the closed-world property still holds.
         env:
           UNFILTERED: ${{ github.event_name != 'pull_request' }}
           TS: ${{ steps.filter.outputs.ts }}
@@ -71,7 +53,11 @@ jobs:
         run: |
           emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
-          # area <name> <filter-result> [file the suite needs in order to exist at all]
+          # area <name> <filter-result> [file the area's workspace must have]
+          #
+          # TODO: once python/ and tests/e2e/ are permanent fixtures, the third argument's
+          # existence check is always true. Drop it and the [ -f ] line, and call area with
+          # just <name> <filter-result> everywhere.
           area() {
             if [ -n "${3:-}" ] && [ ! -f "$3" ]; then emit "$1" false; return; fi
             if [ "$UNFILTERED" = 'true' ] || [ "$2" = 'true' ]; then emit "$1" true; return; fi
@@ -90,9 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # `--affected` needs the base ref present locally. With a shallow clone Turborepo
-      # treats every package as affected, so shortening this silently gives up the filtering
-      # rather than failing.
+      # Turbo's --affected needs the base ref locally.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -145,10 +129,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-uv
+      - uses: ./.github/actions/setup-python
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      # **Open:** no Python type checker chosen yet — ty, mypy, or pyright.
 
   py-unit:
     name: 'Python: unit tests'
@@ -158,7 +141,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-uv
+      - uses: ./.github/actions/setup-python
       - run: uv run pytest python/catering_analysis python/worker_child
 
   py-lab:
@@ -169,7 +152,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-uv
+      - uses: ./.github/actions/setup-python
       - run: uv run pytest python/catering_analysis_lab
 
   system-e2e:
@@ -181,16 +164,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node
-      - uses: ./.github/actions/setup-uv
+      - uses: ./.github/actions/setup-python
       - uses: ./.github/actions/playwright-browsers
-      # A task name of its own, not `test:e2e`, so that ts-e2e stays the web app's own
-      # e2e suite and this stays the whole-stack one. No `$TURBO_SCOPE`: this suite depends
-      # on every component, and the `system` filter has already decided that.
       - run: pnpm exec turbo run test:system
 
-  # Stable name to point branch protection at, independent of the jobs above. It must stay
-  # `always()`: with path filtering, most jobs are skipped on most runs, and this is the only
-  # check that always reports. Skipped is not a failure.
+  # Stable name to point branch protection at, independent of the jobs above.
+  # Must stay always(): most jobs are skipped on most runs, and skipped isn't a failure.
   ci:
     name: CI
     if: ${{ always() }}
