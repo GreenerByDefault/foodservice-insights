@@ -99,6 +99,13 @@ pnpm --filter @gbd/web test:e2e -- --ui
 CI uploads a Playwright report as a build artifact on failure. Download it and open the
 trace with `npx playwright show-trace <path-to-zip>`.
 
+### What CI runs
+
+A pull request runs only the jobs its changes can affect; a push to `main` runs everything.
+The rules, and the reasoning you need before editing them, are in
+[`.github/filters.yml`](.github/filters.yml). Run `python3 scripts/ci/check_filters.py` after
+touching that file.
+
 ## Adding a shadcn-svelte component
 
 UI components are vendored from [shadcn-svelte](https://www.shadcn-svelte.com) into `apps/web/src/lib/components/ui/`, so we own them outright.

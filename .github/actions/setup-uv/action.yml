@@ -1,0 +1,18 @@
+name: Setup uv
+description: Install uv and sync the Python workspace
+
+runs:
+  using: composite
+  steps:
+    # Pinned exactly rather than to a major: astral-sh/setup-uv stopped publishing floating
+    # major tags after v7, so `@v9` does not resolve. Dependabot's github-actions ecosystem
+    # bumps this.
+    - uses: astral-sh/setup-uv@v9.0.0
+      with:
+        enable-cache: true
+
+    # Every member, so one cached environment serves every Python job. Once the workspace
+    # exists it is worth measuring whether per-job `uv sync --package <member>` is faster,
+    # since only the lab pulls the heavy extraction dependencies.
+    - run: uv sync --frozen --all-packages
+      shell: bash

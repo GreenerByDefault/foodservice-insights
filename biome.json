@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/.svelte-kit", "!**/build", "!pnpm-lock.yaml"]
+    "includes": ["**", "!**/.svelte-kit", "!**/build", "!pnpm-lock.yaml", "!python"]
   },
   "formatter": {
     "enabled": true,
