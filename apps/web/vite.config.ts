@@ -4,11 +4,35 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
+import pkg from './package.json' with { type: 'json' };
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-export default defineConfig({
+/** Our workspace packages, which the production server resolves at runtime instead of bundling.
+ *
+ * Inlining them into the SSR bundle is Vite's default for linked workspace packages, and it is
+ * what we are avoiding. An inlined `@gbd/db` still imports `pg` itself, and Vite resolves that
+ * import from `apps/web` — so `apps/web` would have to declare `pg` despite never importing it,
+ * and likewise for every dependency of every package, with nothing to catch a missing one.
+ * Inlining also moves a package's code into the app's bundle, which breaks any package that
+ * locates files from `import.meta.dirname`.
+ *
+ * Instead, the only cost of externalizing is that these packages must ship alongside the built
+ * server.
+ *
+ * WORKSPACE_PACKAGES is derived from `dependencies` so that adding a package needs no change here.
+ * `devDependencies` is deliberately not consulted: a package that isn't a runtime dependency
+ * wouldn't be installed next to the built server to resolve.
+ */
+const WORKSPACE_PACKAGES = Object.keys(pkg.dependencies).filter((name) => name.startsWith('@gbd/'));
+
+export default defineConfig(({ command }) => ({
   envDir: REPO_ROOT,
+
+  // Build only: in dev, an external module is loaded by native `import` and cached for the
+  // life of the process, so package edits would never reach the running server.
+  ssr: { external: command === 'build' ? WORKSPACE_PACKAGES : [] },
+
   plugins: [
     tailwindcss(),
     sveltekit({
@@ -21,10 +45,6 @@ export default defineConfig({
       adapter: adapter(),
     }),
   ],
-  ssr: {
-    // Node can't load .ts from node_modules; keep this even if pnpm's auto-inlining changes.
-    noExternal: [/^@gbd\//],
-  },
   test: {
     expect: { requireAssertions: true },
     projects: [
@@ -53,4 +73,4 @@ export default defineConfig({
       },
     ],
   },
-});
+}));

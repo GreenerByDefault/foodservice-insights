@@ -16,9 +16,9 @@
     "test": "pnpm run test:unit && pnpm run test:e2e",
     "lint": "biome ci .",
     "fmt": "biome check --write .",
-    "db:migrate": "pnpm --filter @gbd/db run migrate",
-    "db:truncate": "pnpm --filter @gbd/db run truncate",
-    "db:gen-types": "pnpm --filter @gbd/db run gen-types"
+    "db:migrate": "turbo run migrate",
+    "db:truncate": "turbo run truncate",
+    "db:gen-types": "turbo run gen-types"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

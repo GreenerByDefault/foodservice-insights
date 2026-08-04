@@ -6,13 +6,14 @@
   "globalPassThroughEnv": ["PLAYWRIGHT_*", "DB_CONNECTION_STRING"],
   "tasks": {
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
-      "outputs": ["build/**", ".svelte-kit/output/**"],
+      "outputs": ["build/**", "dist/**", ".svelte-kit/output/**"],
       "env": ["PUBLIC_*"]
     },
     "check": {
@@ -27,6 +28,18 @@
       "dependsOn": ["build"],
       "cache": false,
       "outputs": ["playwright-report/**", "test-results/**"]
+    },
+    "migrate": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "truncate": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "gen-types": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   }
 }

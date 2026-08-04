@@ -7,11 +7,11 @@
  * alongside these, per `SCHEMA.md` § Conventions.
  */
 
-import { POSTGRES_CODE_CHECK_VIOLATION } from '@gbd/db';
-import { DATABASE } from '@gbd/db/env';
-import { withRollback } from '@gbd/db/testing';
 import { afterAll, describe, expect, test } from 'vitest';
+import { DATABASE } from '../src/env.ts';
 import type { NewReport } from '../src/generated/public/Report.ts';
+import { POSTGRES_CODE_CHECK_VIOLATION } from '../src/postgres-codes.ts';
+import { withRollback } from '../src/testing/transactions.ts';
 
 afterAll(async () => {
   await DATABASE.destroy();

@@ -1,6 +1,6 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
-import type { default as CountsBasis } from './CountsBasis';
-import type { default as UnitSystem } from './UnitSystem';
+import type { default as CountsBasis } from './CountsBasis.js';
+import type { default as UnitSystem } from './UnitSystem.js';
 
 /** Identifier type for public.report */
 export type ReportId = string & { __brand: 'public.report' };

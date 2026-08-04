@@ -96,7 +96,7 @@ Run these from the repo root. Each one fans out across the workspace through Tur
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Dev server, at <http://localhost:5173> |
+| `pnpm dev` | Dev server at <http://localhost:5173>, plus a `tsc --watch` per package |
 | `pnpm check` | `svelte-check` on the web app, `tsc --noEmit` on packages |
 | `pnpm lint` | Biome: formatting, lint rules, and import sorting |
 | `pnpm fmt` | Biome, applying fixes |

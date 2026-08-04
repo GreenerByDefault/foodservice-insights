@@ -75,6 +75,17 @@ keep every document either accurate or obviously dead.
   goes in that package. Product intent, owned by no code, goes in a root doc like
   [`REQUIREMENTS.md`](REQUIREMENTS.md). Once there is more than one such doc, that's the
   signal to introduce a `docs/` folder — not before.
+- **But a decision that one file enacts is documented on that file**, in a comment, even when
+  its consequences reach other components. Ask which single file someone would have to edit to
+  reverse the decision, and put the reasoning there; only split it out when no one file owns
+  it. [`ARCHITECTURE.md`](ARCHITECTURE.md) then gets a few lines at most — the consequences
+  other components must know, and where the reasoning lives.
+- **[`README.md`](README.md) covers what a developer runs, not how the build is wired.**
+  Everyone reads it, so keep config and build mechanics out of it unless an everyday command
+  actually changed.
+- **Say it once, and briefly.** State the rule or the non-obvious constraint and stop. Do not
+  walk through the mechanism, the failure it prevented, or what CI does about it — those are
+  the sentences that rot first, and length in a doc everyone reads is a cost paid repeatedly.
 - **Never restate in prose what the code already states.** No schemas, file trees, or config
   values. Name the file that holds the fact instead. A number copied into a doc is a number
   that will disagree with the code within a month.
@@ -83,9 +94,9 @@ keep every document either accurate or obviously dead.
   that both sides parse. Those cannot rot silently; prose can.
 - **Docs carry intent; code carries mechanism.** If a refactor that changes no behaviour
   would force you to edit a doc, that doc is describing mechanism — fix the doc.
-- **Record rejected alternatives as one-liners** (`*Rejected: X because Y.*`). They are the
-  highest-value lines in our docs: each one stops a settled decision from being
-  re-litigated by whoever reads the code next.
+- **Record rejected alternatives as one-liners** (`*Rejected: X because Y.*`), wherever the
+  decision itself is documented — a code comment counts. But only do this if there's a good
+  chance someone will want to relitigate the decision.
 - **Mark anything unresolved `**Open:**`** so it is greppable, and leave it where it belongs
   rather than in a separate list of open questions that will drift.
 - **One source of truth per fact, named explicitly.** Kysely migrations own the schema; the
@@ -102,9 +113,15 @@ keep every document either accurate or obviously dead.
 - **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
   of a package and never a tsconfig path alias.
 - **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`.
-- **A runtime dependency of a `@gbd/*` package must also be declared in `apps/web`.** Vite
-  inlines our workspace packages but leaves their dependencies external, so the built server
-  resolves `pg` and `kysely` from `apps/web` rather than from `packages/db`.
+- **`@gbd/*` packages are consumed as compiled JS, from `dist/`.** So a package you edit has
+  to be rebuilt before another package sees the change; `pnpm dev` runs `tsc --watch` per
+  package to keep that automatic, and every other Turbo task depends on `^build`. Each
+  package owns its own runtime dependencies — declare them where they are imported, and
+  nowhere else.
+- **Add a `@gbd/*` package to `apps/web` as a `dependency`, not a `devDependency`,** if
+  server code imports it. `apps/web/vite.config.ts` derives the list of packages to leave
+  unbundled from `dependencies`, because those are the ones installed next to the built
+  server. Getting this wrong silently bundles the package instead of failing.
 - **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
   misnamed test is either skipped or picked up by the wrong runner. See the table in the
   README.

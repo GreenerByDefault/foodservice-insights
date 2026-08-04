@@ -1,9 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
-  // For `src/env.ts` only, which is Node-only. The rest of this package stays
-  // platform-agnostic — it is imported into browser bundles.
   "compilerOptions": {
-    "types": ["node"]
+    // For `src/env.ts` only, which is Node-only. The rest of this package stays
+    // platform-agnostic — it is imported into browser bundles.
+    "types": ["node"],
+
+    // Overrides the base's bundler settings, which would accept an extensionless relative
+    // import that Node then rejects at runtime.
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
   },
   "include": ["src/**/*.ts", "vitest.config.ts"]
 }
