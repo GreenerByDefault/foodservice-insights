@@ -21,9 +21,11 @@ export default defineConfig({
     // Runs the real adapter-node output, not `vite preview`, so e2e exercises the
     // deployed artifact. `turbo run test:e2e` depends on `build`.
     //
-    // We first truncate and migrate the database to remove database contamination.
+    // These tests commit, so we first clear both the database and the blob store, then bring
+    // them up to date with the code. We use `pnpm -r`, rather than the `turbo run` the root scripts
+    // use, because Turbo is already running this task.
     command:
-      'pnpm --filter @gbd/db run truncate && pnpm --filter @gbd/db run migrate && ' +
+      'pnpm -r run truncate && pnpm -r run migrate && ' +
       'node --env-file-if-exists=../../.env.test build/index.js',
     env: {
       PORT: String(PORT),

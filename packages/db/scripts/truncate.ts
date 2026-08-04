@@ -1,7 +1,7 @@
 /** Delete every row, keeping the schema. `TEST_DB=1` targets the test stack.
  *
- *   pnpm db:truncate
- *   TEST_DB=1 pnpm db:truncate
+ *   pnpm truncate
+ *   TEST_DB=1 pnpm truncate
  */
 
 import { sql } from 'kysely';

@@ -112,7 +112,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-supabase
-      - run: pnpm db:migrate
+      - run: pnpm migrate
         env:
           TEST_DB: '1'
       - name: Regenerate types and check nothing changed
@@ -121,7 +121,7 @@ jobs:
         run: |
           pnpm db:gen-types
           if ! git diff --exit-code --quiet packages/db/src/generated; then
-            echo '::error::packages/db/src/generated is stale. Run `pnpm db:migrate && pnpm db:gen-types` and commit the result.'
+            echo '::error::packages/db/src/generated is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
             git diff packages/db/src/generated
             exit 1
           fi

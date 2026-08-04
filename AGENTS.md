@@ -129,9 +129,9 @@ keep every document either accurate or obviously dead.
 
 ## Database
 
-- **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, the `db:*` scripts,
-  Kanel, and vitest. Without it you are pointed at the dev database. The `test:unit` and
-  `test:e2e` scripts set it for you.
+- **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, `migrate` and `truncate`,
+  Kanel, and vitest. Without it, you are pointed at the dev database and blob store. The 
+  `test:unit` and `test:e2e` scripts set it for you.
 - **Always use `scripts/supabase`, never a bare `supabase`.** The wrapper passes `--workdir`; the
   bare CLI finds neither stack and offers to create a third.
 - **Write migration columns in snake_case.** `CamelCasePlugin` translates identifiers, so a
