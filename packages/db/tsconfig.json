@@ -1,7 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+
+    // Overrides the base's bundler settings, which would accept an extensionless relative
+    // import that Node then rejects at runtime.
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
   },
   "include": [
     "src/**/*.ts",

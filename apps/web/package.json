@@ -14,13 +14,12 @@
     "test:e2e": "TEST_DB=1 playwright test"
   },
   "dependencies": {
+    "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
-    "kysely": "catalog:",
-    "pg": "catalog:"
+    "kysely": "catalog:"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "catalog:",
-    "@gbd/core": "workspace:*",
     "@lucide/svelte": "catalog:",
     "@playwright/test": "catalog:",
     "@sveltejs/adapter-node": "catalog:",

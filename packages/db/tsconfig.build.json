@@ -1,0 +1,15 @@
+// Emits `dist/`, which is what `package.json`'s `exports` point at. `tsconfig.json` is
+// still the config for typechecking, and covers the migrations, scripts, and tests this
+// one excludes — none of those are importable from outside the package.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

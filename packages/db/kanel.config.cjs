@@ -44,6 +44,10 @@ module.exports = {
 
   outputPath: './src/generated',
 
+  // Emit `.ts` files whose relative imports carry a `.js` extension so that
+  // imports from the rest of the monorepo work.
+  tsModuleFormat: 'esm',
+
   // Wipe our schema every run so that nothing hand-written can sneak in.
   preDeleteOutputFolder: true,
 

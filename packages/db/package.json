@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./env": "./src/env.ts",
-    "./testing": "./src/testing/index.ts"
+    ".": "./dist/index.js",
+    "./env": "./dist/env.js",
+    "./testing": "./dist/testing/index.js"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
     "migrate": "node scripts/migrate.ts",
