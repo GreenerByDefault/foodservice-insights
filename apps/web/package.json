@@ -16,6 +16,7 @@
   "dependencies": {
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
+    "@gbd/storage": "workspace:*",
     "kysely": "catalog:"
   },
   "devDependencies": {

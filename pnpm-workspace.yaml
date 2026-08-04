@@ -48,6 +48,9 @@ catalog:
   # Biome; `pnpm db:gen-types` re-formats the generated files after kanel runs.
   prettier: ^3.6.2
 
+  # --- Blob store -------------------------------------------------------------
+  '@aws-sdk/client-s3': ^3.992.0
+
   # --- Vitest -----------------------------------------------------------------
   vitest: 4.1.10
   '@vitest/browser-playwright': 4.1.10

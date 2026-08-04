@@ -21,6 +21,7 @@ This file covers everything operational: prerequisites, commands, repo layout, a
 apps/web/           SvelteKit app
 packages/core/      Shared TypeScript values and helpers
 packages/db/        Kysely client, migrations, and generated types
+packages/storage/   Blob store client and object operations
 supabase-dev/       Local Supabase stack for development
 supabase-test/      Local Supabase stack for tests
 tests/e2e/          Whole-system e2e tests
@@ -82,13 +83,13 @@ scripts/supabase stop
 TEST_DB=1 scripts/supabase stop
 ```
 
-First time only, set up the dev database's schema:
+First time only, set up the dev stack's database schema and blob store bucket:
 
 ```sh
-pnpm db:migrate
+pnpm migrate
 ```
 
-The test database migrates itself whenever you run the tests.
+The test stack does that for itself whenever you run the tests.
 
 ## Everyday commands
 
@@ -118,6 +119,7 @@ macOS.
 | Unit | Colocated with the code | vitest, node | `*.test.ts` |
 | Component | Colocated with the component | vitest, real Chromium | `*.svelte.test.ts` |
 | Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
+| Blob store | [`packages/storage/tests/`](packages/storage/tests/) | vitest, node | `*.test.ts` |
 | Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
 | System e2e | `tests/e2e/` (not yet) | Playwright | `*.e2e.ts` |
 
@@ -136,14 +138,19 @@ trace with `npx playwright show-trace <path-to-zip>`.
 
 ### Tests and the database
 
-**The test stack must be running** for any vitest node test — a fair number of them query
-Postgres. Migrations are applied automatically before tests run.
+**The test stack must be running** for any vitest Node test by running `TEST_DB=1 scripts/supabase start`.
+A fair number of tests query Postgres or the blob store. The test scripts apply migrations and create
+the bucket created before tests run.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
-`@gbd/db/testing`, which rolls the transaction back however the test ends. That is what
-keeps tests isolated.
+`@gbd/db/testing`, which rolls the transaction back however the test ends. It's necessary for
+isolation.
 
-Meanwhile, E2E tests commit transactions to the database. So, Playwright truncates the database before runs. Tests should generate random IDs with `crypto.randomUUID()` to avoid clashes between tests.
+**Every test that touches the blob store must wrap its keys in `withTemporaryPrefix`**, from
+`@gbd/storage/testing`, which deletes everything under its prefix however the test ends. It's
+necessary for isolation.
+
+Meanwhile, E2E tests commit transactions to the database and leave objects in the blob store. So, Playwright truncates both before runs. Tests should generate random IDs with `crypto.randomUUID()` to avoid clashes between tests.
 
 If the test database gets into a strange state, [reset it](#reset-a-database).
 
@@ -154,20 +161,23 @@ A pull request runs only the jobs its changes can affect; `main` runs everything
 
 ## Occasional tasks
 
-### Database commands
+### Database and blob store commands
 
 | Command | What it does |
 | --- | --- |
-| `pnpm db:migrate` | Apply pending migrations |
+| `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
+| `pnpm truncate` | Delete every row and every object, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) from the live database |
-| `pnpm db:truncate` | Delete every row, keeping the schema |
 
-Prefix any `db:*` command with `TEST_DB=1` to target the test stack instead of dev.
+`migrate` and `truncate` act on both stores. Use a pnpm filter to reach just one:
+`pnpm --filter @gbd/storage run migrate`.
+
+Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
 ### Add a database migration
 
 1. Add a file to `packages/db/migrations/`, numbered in sequence.
-2. `pnpm db:migrate`
+2. `pnpm migrate`
 3. `pnpm db:gen-types`, and commit the regenerated types alongside the migration.
 4. Add a test to `packages/db/tests/` for each new constraint or trigger.
 
@@ -177,24 +187,25 @@ code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
 
 ### Reset a database
 
-Clear the dev data, keeping the schema:
+Clear the dev data, keeping the schema and the bucket:
 
 ```sh
-pnpm db:truncate
+pnpm truncate
 ```
 
-Rebuild the dev database from nothing, when the schema itself is wrong:
+Rebuild the dev database from nothing, when the schema itself is wrong. A reset takes the blob
+store's bucket with it, which `pnpm migrate` puts back:
 
 ```sh
 scripts/supabase db reset
-pnpm db:migrate
+pnpm migrate
 ```
 
 Same for the test database, when it gets into a strange state:
 
 ```sh
 TEST_DB=1 scripts/supabase db reset
-TEST_DB=1 pnpm db:migrate
+TEST_DB=1 pnpm migrate
 ```
 
 ### Debug the database

@@ -19,6 +19,9 @@ port = 55322
 shadow_port = 55320
 
 # PostgREST. We never do client-side database access, so nothing uses it.
+#
+# `port` still matters with this disabled: it is the gateway port, and Supabase Storage's S3
+# endpoint is served on it at `/storage/v1/s3`. See `.env.example`.
 [api]
 enabled = false
 port = 55321
@@ -34,7 +37,7 @@ port = 55324
 smtp_port = 55325
 
 [storage]
-enabled = false
+enabled = true
 
 [studio]
 enabled = true

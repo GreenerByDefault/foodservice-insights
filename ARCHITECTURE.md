@@ -250,21 +250,7 @@ back, but a migration cannot — once it has run, fix forward rather than revert
 
 ## Blob store
 
-The bucket is private. Layout:
-
-```
-org/{org_id}
-    /rejected-upload/{rejected_upload_id}.csv
-    /report/{report_id}
-        /input/{input_file_id}.csv
-        /analysis_attempt/{analysis_attempt_id}
-            /result/{result_file_id}.{ext}
-```
-
-Keying everything under `org/{org_id}` means deleting an organization's files is a single prefix
-delete.
-
-> Moves to `packages/storage/README.md` when that package lands.
+The bucket is private. Refer to [`packages/storage/README.md`](packages/storage/README.md) for the layout and code.
 
 ## File links
 

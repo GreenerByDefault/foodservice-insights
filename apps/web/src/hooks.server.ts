@@ -1,5 +1,6 @@
 import type { Handle, ServerInit } from '@sveltejs/kit';
 import { closeDatabase } from '$lib/server/db';
+import { closeBlobStore } from '$lib/server/storage';
 
 function applySecurityHeaders(response: Response): Response {
   response.headers.set('X-Frame-Options', 'DENY');
@@ -13,15 +14,17 @@ export const handle: Handle = async ({ event, resolve }) => {
   return applySecurityHeaders(response);
 };
 
-/** Release the connection pool on shutdown, so a redeploy does not leak connections.
+/** Release the connection pool and blob store sockets on shutdown, so a redeploy leaks neither.
  *
  * https://svelte.dev/docs/kit/adapter-node#Graceful-shutdown
  */
 export const init: ServerInit = () => {
   process.on('sveltekit:shutdown', async (reason) => {
     console.log('Shutting down:', reason);
-    // When there is more than one cleanup task, run them with Promise.allSettled so one
-    // failure cannot strand the others.
-    await closeDatabase();
+    // allSettled, so one failing cleanup cannot strand the others.
+    const outcomes = await Promise.allSettled([closeDatabase(), closeBlobStore()]);
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') console.error('Cleanup failed:', outcome.reason);
+    }
   });
 };
