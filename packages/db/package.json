@@ -1,0 +1,33 @@
+{
+  "name": "@gbd/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./env": "./src/env.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test:unit": "TEST_DB=1 vitest run",
+    "migrate": "node scripts/migrate.ts",
+    "truncate": "node scripts/truncate.ts",
+    "gen-types": "kanel && biome check --write src/generated"
+  },
+  "dependencies": {
+    "@gbd/core": "workspace:*",
+    "kysely": "catalog:",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "kanel": "catalog:",
+    "kanel-kysely": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

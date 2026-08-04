@@ -1,4 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
+  // For `src/env.ts` only, which is Node-only. The rest of this package stays
+  // platform-agnostic — it is imported into browser bundles.
+  "compilerOptions": {
+    "types": ["node"]
+  },
   "include": ["src/**/*.ts", "vitest.config.ts"]
 }

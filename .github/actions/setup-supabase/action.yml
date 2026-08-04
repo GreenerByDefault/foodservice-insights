@@ -1,0 +1,21 @@
+name: Supabase test stack
+description: Install the Supabase CLI and start the local test stack
+
+runs:
+  using: composite
+  steps:
+    # Pinned, not `latest`. The CLI decides which Postgres and Auth images run, and an
+    # upstream schema change would otherwise land in CI as a spurious `ts-db-types` failure on
+    # an unrelated PR. Bump this deliberately, alongside `brew upgrade supabase` locally, so
+    # the regenerated types land in the same commit.
+    - uses: supabase/setup-cli@v1
+      with:
+        version: 2.111.0
+
+    # Only the database. Every other service is pulled and booted for nothing today, and the
+    # images are the slow part of this job. Drop exclusions here as we start depending on
+    # them — Storage with `packages/storage`, gotrue with Supabase Auth.
+    - run: scripts/supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      shell: bash
+      env:
+        TEST_DB: '1'

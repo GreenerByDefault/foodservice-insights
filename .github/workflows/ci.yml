@@ -96,7 +96,32 @@ jobs:
           fetch-depth: 0 # see ts-static
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/playwright-browsers
+      - uses: ./.github/actions/setup-supabase
       - run: pnpm exec turbo run test:unit "$TURBO_SCOPE"
+
+  ts-db-types:
+    name: 'TS: generated DB types are current'
+    needs: changes
+    if: needs.changes.outputs.ts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+      - uses: ./.github/actions/setup-supabase
+      - run: pnpm db:migrate
+        env:
+          TEST_DB: '1'
+      - name: Regenerate types and check nothing changed
+        env:
+          TEST_DB: '1'
+        run: |
+          pnpm db:gen-types
+          if ! git diff --exit-code --quiet packages/db/src/generated; then
+            echo '::error::packages/db/src/generated is stale. Run `pnpm db:migrate && pnpm db:gen-types` and commit the result.'
+            git diff packages/db/src/generated
+            exit 1
+          fi
 
   ts-e2e:
     name: 'TS: e2e tests'
@@ -110,6 +135,7 @@ jobs:
           fetch-depth: 0 # see ts-static
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/playwright-browsers
+      - uses: ./.github/actions/setup-supabase
       - run: pnpm exec turbo run test:e2e "$TURBO_SCOPE"
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
@@ -174,7 +200,8 @@ jobs:
     name: CI
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    needs: [changes, ts-static, ts-unit, ts-e2e, py-static, py-unit, py-lab, system-e2e]
+    needs:
+      [changes, ts-static, ts-unit, ts-db-types, ts-e2e, py-static, py-unit, py-lab, system-e2e]
     steps:
       - name: Verify every job succeeded
         run: |

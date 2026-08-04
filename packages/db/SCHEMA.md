@@ -1,11 +1,15 @@
 # Database schema
 
-> **Status: build spec.** No migrations exist yet, so this file is the spec to build from. Once
-> `packages/db/migrations/` exists, **those migrations are the source of truth for the schema** —
-> not this file, and not the Supabase CLI's own `migrations/`, which we do not use. At that point,
-> trim the column tables below to the model overview and let the migrations carry the detail. The
-> tables below don't list foreign key indexes for this reason — add them when writing the
-> migrations, per [Conventions](#conventions).
+> **Status: still the build spec.** [`migrations/`](migrations/) now exists and **is the source of
+> truth for the schema** — not this file, and not the Supabase CLI's own `migrations/`, which we do
+> not use. But it holds only [`001_report.ts`](migrations/001_report.ts), a deliberately partial
+> `report` table that exists to prove the Kysely and Kanel toolchain works. Nothing else below has
+> been built.
+>
+> So this file is still the spec to build from. Once the schema below is implemented, trim the
+> column tables to the model overview and let the migrations carry the detail. The tables below
+> don't list foreign key indexes for this reason — add them when writing the migrations, per
+> [Conventions](#conventions).
 
 For how the database fits into the wider system, see [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
 

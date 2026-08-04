@@ -24,14 +24,58 @@ This file covers everything operational: prerequisites, commands, repo layout, a
   corepack enable
   ```
 
+- **Docker**, running — Docker Desktop, Rancher Desktop, or OrbStack. The local Postgres
+  runs in it.
+- **The Supabase CLI**:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
 ## Setup
 
 ```sh
 pnpm install
 pnpm --filter @gbd/web exec playwright install chromium
+cp .env.example .env
 ```
 
+`.env` is gitignored and holds local, non-secret values. Real secrets go in `.env.local`.
+
 If you're using LLMs, set up the [Svelte MCP server](https://svelte.dev/docs/ai/local-setup).
+
+### Start the databases
+
+There are two independent Supabase stacks, and they run side by side.
+
+| Stack | For | Ports | Yours to modify? |
+| --- | --- | --- | --- |
+| [`supabase-dev/`](supabase-dev/) | Local development | `553xx` | Yes — seed it, hand-edit rows, break it |
+| [`supabase-test/`](supabase-test/) | Automated tests | `653xx` | No. The test suites own it and truncate it |
+
+`TEST_DB=1` is the single switch that picks the test stack — for the CLI, for the `db:*`
+scripts, and for vitest. Always go through the [`scripts/supabase`](scripts/supabase)
+wrapper, never a bare `supabase`, or the CLI will not find either stack.
+
+```sh
+scripts/supabase start
+TEST_DB=1 scripts/supabase start
+```
+
+Leave them running; the containers stop when your machine restarts. To stop them by hand:
+
+```sh
+scripts/supabase stop
+TEST_DB=1 scripts/supabase stop
+```
+
+First time only, set up the dev database's schema:
+
+```sh
+pnpm db:migrate
+```
+
+The test database migrates itself whenever you run the tests.
 
 ## Dev tasks (TypeScript projects)
 
@@ -44,9 +88,14 @@ Run these from the repo root. Each one fans out across the workspace through Tur
 | `pnpm fmt` | Biome, applying fixes |
 | `pnpm test:unit` | Unit and component tests (vitest) |
 | `pnpm test:e2e` | End-to-end tests (Playwright) |
-| `pnpm test` | Both test suites |
+| `pnpm test` | Both test suites, in that order |
+| `pnpm db:migrate` | Apply pending migrations |
+| `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) from the live database |
+| `pnpm db:truncate` | Delete every row, keeping the schema |
 
 To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web dev`. However, not all packages implement every command.
+
+Prefix any `db:*` command with `TEST_DB=1` to target the test stack instead of dev.
 
 ### Start the dev server
 
@@ -71,7 +120,9 @@ This produces a production build of every package. To run it, use
 ```
 apps/web/           SvelteKit app (JS/TS workspace, pnpm)
 packages/core/      Shared values and helpers (JS/TS workspace, pnpm)
-packages/db/        Schema spec for now; migrations and queries land here
+packages/db/        Kysely client, migrations, and generated types
+supabase-dev/       Local Supabase stack for development
+supabase-test/      Local Supabase stack for tests
 tests/e2e/          Whole-system e2e tests
 ```
 
@@ -83,12 +134,98 @@ Internal JS/TS packages are referenced by name (e.g. `@gbd/core`).
 | --- | --- | --- | --- |
 | Unit | Colocated with the code | vitest, node | `*.test.ts` |
 | Component | Colocated with the component | vitest, real Chromium | `*.svelte.test.ts` |
+| Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
 | Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
 | System e2e | `tests/e2e/` (not yet) | Playwright | `*.e2e.ts` |
 
 **Component tests** render a single component in a real browser via
 `vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
 e2e tests for anything that is really about one component's behaviour.
+
+**Database invariant tests** are the one tier that is not colocated, because the thing
+under test is the schema rather than any one module. See
+[`packages/db/SCHEMA.md`](packages/db/SCHEMA.md#conventions).
+
+### Tests and the database
+
+**The test stack must be running** for any vitest node test — a fair number of them query
+Postgres. Migrations are applied automatically before tests run.
+
+**Every test that touches the database must wrap its queries in `withRollback`**, from
+`@gbd/db/testing`, which rolls the transaction back however the test ends. That is what
+keeps tests isolated without truncating between them, and truncating is not an option:
+Turborepo runs each package's tests concurrently against the same database, so one package
+wiping tables would break another mid-run.
+
+E2E tests are the exception — they commit, so Playwright truncates and migrates before it
+boots the app. Anything they insert must be scoped with a unique id such as
+`crypto.randomUUID()`, since they run in parallel.
+
+### Reset the database
+
+Clear the dev data, keeping the schema:
+
+```sh
+pnpm db:truncate
+```
+
+Rebuild the dev database from nothing, when the schema itself is wrong:
+
+```sh
+scripts/supabase db reset
+pnpm db:migrate
+```
+
+Same for the test database, when it gets into a strange state:
+
+```sh
+TEST_DB=1 scripts/supabase db reset
+TEST_DB=1 pnpm db:migrate
+```
+
+### Add a database migration
+
+Migrations in [`packages/db/migrations/`](packages/db/migrations/) are the source of truth
+for the schema — not [`SCHEMA.md`](packages/db/SCHEMA.md), and not the Supabase CLI's own
+`migrations/`, which we do not use.
+
+1. Add a file to `packages/db/migrations/`, numbered in sequence.
+2. `pnpm db:migrate`
+3. `pnpm db:gen-types`, and commit the regenerated types alongside the migration.
+4. Add a test to `packages/db/tests/` for each new constraint or trigger.
+
+Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
+Keep them backwards-compatible with the running app, since migrations run *before* the new
+code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
+
+### Debug the database
+
+Supabase Studio for the dev stack is at <http://localhost:55323>. For logs:
+
+```sh
+docker logs -f supabase_db_fsi-dev
+```
+
+To see a query plan, per [`SCHEMA.md`](packages/db/SCHEMA.md#conventions)'s
+`EXPLAIN ANALYZE` convention:
+
+```typescript
+console.error(JSON.stringify(await query.explain('json', sql`analyze`), null, 2));
+```
+
+### CI failing on generated database types
+
+The `TS: generated DB types are current` job fails when
+[`packages/db/src/generated/`](packages/db/src/generated/) does not match what the schema
+would produce. Usually that means a migration landed without regenerating. Fix it with:
+
+```sh
+pnpm db:migrate && pnpm db:gen-types
+```
+
+If it fails on a branch that touched no database code, the Supabase CLI version pinned in
+[`.github/actions/setup-supabase/action.yml`](.github/actions/setup-supabase/action.yml) is
+probably behind your local one. Match them, regenerate, and commit.
 
 **Web e2e tests** build the app and run it with Playwright. Debug with:
 

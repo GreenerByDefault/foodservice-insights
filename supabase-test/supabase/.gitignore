@@ -1,0 +1,8 @@
+# Supabase CLI scratch state
+.branches
+.temp
+
+# Env
+.env
+.env.local
+.env.*.local

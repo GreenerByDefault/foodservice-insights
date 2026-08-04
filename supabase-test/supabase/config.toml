@@ -1,0 +1,61 @@
+# The local stack for automated tests. Reach it through `TEST_DB=1 ./supabase`.
+#
+# Nothing should ever modify this stack by hand — the test suites own it, and they assume
+# they can truncate it at will.
+#
+# Keep roughly in sync with supabase-dev/. Ports here are 653xx; there they are 553xx, so
+# both stacks run at once without colliding. The 55/65 rather than 54/64 keeps us clear of
+# the Supabase CLI's defaults, so an unrelated project's stack can stay up alongside ours.
+#
+# Note there is no `migrations/` directory beside this file, and there never should be:
+# Kysely migrations in packages/db/migrations/ are the only source of truth for the schema.
+
+project_id = "fsi-test"
+
+[db]
+# Must match the remote database. Run `SHOW server_version;` there to check.
+major_version = 17
+port = 65322
+shadow_port = 65320
+
+# PostgREST. We never do client-side database access, so nothing uses it.
+[api]
+enabled = false
+port = 65321
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+
+# Raised so tests are fast and deterministic rather than throttled.
+[auth.rate_limit]
+email_sent = 1000
+sign_in_sign_ups = 1000
+token_refresh = 1000
+token_verifications = 1000
+
+[auth.email]
+max_frequency = "1s"
+
+# Catches outbound email so nothing escapes locally. Web UI on `port`.
+[local_smtp]
+enabled = true
+port = 65324
+smtp_port = 65325
+
+[storage]
+enabled = true
+
+# No Studio: you should not be poking at the test stack by hand.
+[studio]
+enabled = false
+port = 65323
+
+[realtime]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false
