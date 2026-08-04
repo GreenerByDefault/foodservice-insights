@@ -10,8 +10,13 @@
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "test:unit": "svelte-kit sync && vitest run",
-    "test:e2e": "playwright test"
+    "test:unit": "svelte-kit sync && TEST_DB=1 vitest run",
+    "test:e2e": "TEST_DB=1 playwright test"
+  },
+  "dependencies": {
+    "@gbd/db": "workspace:*",
+    "kysely": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "catalog:",

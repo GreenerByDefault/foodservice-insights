@@ -1,0 +1,50 @@
+# The local stack for development. Reach it through `scripts/supabase`, never a bare `supabase`.
+#
+# Keep roughly in sync with supabase-test/. Ports here are 553xx; there they are 653xx, so
+# both stacks run at once without colliding. The 55/65 rather than 54/64 keeps us clear of
+# the Supabase CLI's defaults, so an unrelated project's stack can stay up alongside ours.
+#
+# We deliberately set only the keys we care about and let the CLI default the rest. Full
+# reference: https://supabase.com/docs/guides/local-development/cli/config
+#
+# Note there is no `migrations/` directory beside this file, and there never should be:
+# Kysely migrations in packages/db/migrations/ are the only source of truth for the schema.
+
+project_id = "fsi-dev"
+
+[db]
+# Must match the remote database. Run `SHOW server_version;` there to check.
+major_version = 17
+port = 55322
+shadow_port = 55320
+
+# PostgREST. We never do client-side database access, so nothing uses it.
+[api]
+enabled = false
+port = 55321
+
+[auth]
+enabled = false
+site_url = "http://localhost:5173"
+
+# Catches outbound email so nothing escapes locally. Web UI on `port`.
+[local_smtp]
+enabled = false
+port = 55324
+smtp_port = 55325
+
+[storage]
+enabled = false
+
+[studio]
+enabled = true
+port = 55323
+
+[realtime]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

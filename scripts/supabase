@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# The Supabase CLI, pointed at one of our two local stacks.
+#
+#   scripts/supabase start            # the dev stack, supabase-dev/
+#   TEST_DB=1 scripts/supabase start  # the test stack, supabase-test/
+#
+# Always go through this wrapper. A bare `supabase` looks for a `supabase/` directory in
+# the current one, finds neither stack, and offers to create a third.
+#
+# It cannot live at the repo root under the name `supabase`: the CLI resolves its own
+# `./supabase/config.json` relative to the working directory, so a file by that name
+# shadows the path and every invocation dies with ENOTDIR.
+set -euo pipefail
+
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+# Absolute, so this works from any package directory — `pnpm --filter` runs scripts with
+# the working directory set to the package, not the repo root.
+WORKDIR=${TEST_DB:+"$REPO_ROOT/supabase-test"}
+WORKDIR=${WORKDIR:-"$REPO_ROOT/supabase-dev"}
+
+exec supabase "$@" --workdir "$WORKDIR"

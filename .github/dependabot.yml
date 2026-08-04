@@ -19,6 +19,12 @@ updates:
         patterns:
           - "svelte*"
           - "@sveltejs/*"
+      database:
+        patterns:
+          - "kysely"
+          - "kanel*"
+          - "pg"
+          - "@types/pg"
       # Group other non-major deps to cut down on PR noise.
       dev-dependencies:
         update-types:

@@ -1,8 +1,9 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json", ".nvmrc", "pnpm-workspace.yaml"],
-  "globalPassThroughEnv": ["PLAYWRIGHT_*"],
+  "globalDependencies": ["tsconfig.base.json", ".nvmrc", "pnpm-workspace.yaml", ".env.test"],
+  "globalEnv": ["TEST_DB"],
+  "globalPassThroughEnv": ["PLAYWRIGHT_*", "DB_CONNECTION_STRING"],
   "tasks": {
     "dev": {
       "cache": false,

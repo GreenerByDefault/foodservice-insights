@@ -101,10 +101,34 @@ keep every document either accurate or obviously dead.
 - **Use `async`/`await`**, not raw promise chains.
 - **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
   of a package and never a tsconfig path alias.
+- **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`.
+- **A runtime dependency of a `@gbd/*` package must also be declared in `apps/web`.** Vite
+  inlines our workspace packages but leaves their dependencies external, so the built server
+  resolves `pg` and `kysely` from `apps/web` rather than from `packages/db`.
 - **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
   misnamed test is either skipped or picked up by the wrong runner. See the table in the
   README.
 - **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
+
+## Database
+
+- **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, the `db:*` scripts,
+  Kanel, and vitest. Without it you are pointed at the dev database. The `test:unit` and
+  `test:e2e` scripts set it for you.
+- **Always use `scripts/supabase`, never a bare `supabase`.** The wrapper passes `--workdir`; the
+  bare CLI finds neither stack and offers to create a third.
+- **Write migration columns in snake_case.** `CamelCasePlugin` translates identifiers, so a
+  `site_name` column is what makes `siteName` work in queries.
+- **`packages/db/src/generated/` is Kanel output**: committed, verified by CI, and deleted
+  wholesale on every run. Nothing hand-written goes in it — `src/schema.ts` is its companion.
+  Run `pnpm db:gen-types` after every migration and commit the result.
+- **Query helpers take `db: DatabaseExecutor` as their first parameter**, so tests can pass a
+  rolled-back transaction where the app passes its long-lived handle. For route handlers, put
+  the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
+  alongside `GET`/`POST` — and have the handler call it with `database()`. Call `database()`
+  inside the handler, never at module scope.
+- **Database tests must use `withRollback`** to enable safe concurrency.
+- **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 
 ## Repo mechanics
 
