@@ -12,10 +12,8 @@ runs:
       with:
         version: 2.111.0
 
-    # Only the database. Every other service is pulled and booted for nothing today, and the
-    # images are the slow part of this job. Drop exclusions here as we start depending on
-    # them — Storage with `packages/storage`, gotrue with Supabase Auth.
-    - run: scripts/supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+    # We exclude studio to speed up CI.
+    - run: scripts/supabase start -x studio
       shell: bash
       env:
         TEST_DB: '1'

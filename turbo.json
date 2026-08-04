@@ -2,9 +2,6 @@
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "stream",
   "globalDependencies": ["tsconfig.base.json", ".nvmrc", "pnpm-workspace.yaml", ".env.test"],
-  // Turborepo defaults to strict env mode, so a variable not named here is invisible to every
-  // task. `globalEnv` is hashed as well as passed through — TEST_DB belongs there so a cached
-  // result from one database can never be reused for the other.
   "globalEnv": ["TEST_DB"],
   "globalPassThroughEnv": ["PLAYWRIGHT_*", "DB_CONNECTION_STRING"],
   "tasks": {

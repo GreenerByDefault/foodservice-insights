@@ -4,10 +4,6 @@ import { env } from '$env/dynamic/private';
 
 /** The web app's database handle.
  *
- * Read at runtime through `$env/dynamic/private`, not `$env/static/private`, so the
- * connection string is not baked into the build. That is what lets one build run against any
- * database — production, staging, or the test stack that Playwright points it at.
- *
  * Route handlers use this directly. Helper functions should instead take a
  * `DatabaseExecutor` parameter, so tests can hand them a rolled-back transaction.
  */

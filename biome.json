@@ -66,6 +66,14 @@
           "correctness": { "noUnusedFunctionParameters": "off" }
         }
       }
+    },
+    {
+      "includes": ["packages/db/migrations/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noExplicitAny": "off" }
+        }
+      }
     }
   ]
 }

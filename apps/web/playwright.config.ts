@@ -21,10 +21,7 @@ export default defineConfig({
     // Runs the real adapter-node output, not `vite preview`, so e2e exercises the
     // deployed artifact. `turbo run test:e2e` depends on `build`.
     //
-    // Reset first, because e2e commits — unlike unit tests, which roll back. Then hand the
-    // built server the test stack's connection string: adapter-node reads no `.env` files, and
-    // `--env-file-if-exists` leaves anything already in the environment alone, so CI and
-    // production can still inject their own.
+    // We first truncate and migrate the database to remove database contamination.
     command:
       'pnpm --filter @gbd/db run truncate && pnpm --filter @gbd/db run migrate && ' +
       'node --env-file-if-exists=../../.env.test build/index.js',
@@ -32,7 +29,6 @@ export default defineConfig({
       PORT: String(PORT),
       // adapter-node rejects cross-site POSTs with 403 unless ORIGIN is set.
       ORIGIN: BASE_URL,
-      // The `truncate` and `migrate` above must hit the test stack, not dev.
       TEST_DB: '1',
     },
     // `url` waits for a 2xx response; `port` only waits for a listening socket.

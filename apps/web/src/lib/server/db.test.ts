@@ -1,8 +1,5 @@
-/** The web app can reach the database, and its tests roll back.
- *
- * `packages/db` covers the toolchain itself. This covers the seam that package cannot: that
- * `$env/dynamic/private` actually resolves here, and that the rollback harness works against
- * the handle the app builds for itself.
+/** These tests are only placeholders to prove the database wiring works.
+ * Delete it once we have real tests that exercise the database.
  */
 
 import { withRollback } from '@gbd/db/testing';

@@ -1,4 +1,4 @@
-# The local stack for development. Reach it through `./supabase`, never a bare `supabase`.
+# The local stack for development. Reach it through `scripts/supabase`, never a bare `supabase`.
 #
 # Keep roughly in sync with supabase-test/. Ports here are 553xx; there they are 653xx, so
 # both stacks run at once without colliding. The 55/65 rather than 54/64 keeps us clear of
@@ -24,17 +24,17 @@ enabled = false
 port = 55321
 
 [auth]
-enabled = true
+enabled = false
 site_url = "http://localhost:5173"
 
 # Catches outbound email so nothing escapes locally. Web UI on `port`.
 [local_smtp]
-enabled = true
+enabled = false
 port = 55324
 smtp_port = 55325
 
 [storage]
-enabled = true
+enabled = false
 
 [studio]
 enabled = true

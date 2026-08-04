@@ -15,7 +15,22 @@ recommendations.
 
 This file covers everything operational: prerequisites, commands, repo layout, and testing.
 
-## Prerequisites
+## Repo layout
+
+```
+apps/web/           SvelteKit app
+packages/core/      Shared TypeScript values and helpers
+packages/db/        Kysely client, migrations, and generated types
+supabase-dev/       Local Supabase stack for development
+supabase-test/      Local Supabase stack for tests
+tests/e2e/          Whole-system e2e tests
+```
+
+Internal TypeScript packages are referenced by name (e.g. `@gbd/core`).
+
+## Getting started
+
+### Prerequisites
 
 - **Node 24** (the version in [`.nvmrc`](.nvmrc)). `nvm use` if you use nvm.
 - **pnpm**, via Corepack, which reads the version from `package.json`:
@@ -32,15 +47,13 @@ This file covers everything operational: prerequisites, commands, repo layout, a
   brew install supabase/tap/supabase
   ```
 
-## Setup
+### Install
 
 ```sh
 pnpm install
 pnpm --filter @gbd/web exec playwright install chromium
 cp .env.example .env
 ```
-
-`.env` is gitignored and holds local, non-secret values. Real secrets go in `.env.local`.
 
 If you're using LLMs, set up the [Svelte MCP server](https://svelte.dev/docs/ai/local-setup).
 
@@ -77,56 +90,26 @@ pnpm db:migrate
 
 The test database migrates itself whenever you run the tests.
 
-## Dev tasks (TypeScript projects)
+## Everyday commands
 
 Run these from the repo root. Each one fans out across the workspace through Turborepo.
 
 | Command | What it does |
 | --- | --- |
+| `pnpm dev` | Dev server, at <http://localhost:5173> |
 | `pnpm check` | `svelte-check` on the web app, `tsc --noEmit` on packages |
 | `pnpm lint` | Biome: formatting, lint rules, and import sorting |
 | `pnpm fmt` | Biome, applying fixes |
 | `pnpm test:unit` | Unit and component tests (vitest) |
 | `pnpm test:e2e` | End-to-end tests (Playwright) |
-| `pnpm test` | Both test suites, in that order |
-| `pnpm db:migrate` | Apply pending migrations |
-| `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) from the live database |
-| `pnpm db:truncate` | Delete every row, keeping the schema |
+| `pnpm test` | Both test suites |
+| `pnpm build` | Production build of every package |
 
 To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web dev`. However, not all packages implement every command.
 
-Prefix any `db:*` command with `TEST_DB=1` to target the test stack instead of dev.
-
-### Start the dev server
-
-```sh
-pnpm dev
-```
-
-Then go to <http://localhost:5173>.
-
-### Build the app
-
-```sh
-pnpm build
-```
-
-This produces a production build of every package. To run it, use
-`pnpm --filter @gbd/web start`, then go to <http://localhost:3000> — not the
-`0.0.0.0:3000` the server logs, which is unreachable on macOS.
-
-## Repo layout
-
-```
-apps/web/           SvelteKit app (JS/TS workspace, pnpm)
-packages/core/      Shared values and helpers (JS/TS workspace, pnpm)
-packages/db/        Kysely client, migrations, and generated types
-supabase-dev/       Local Supabase stack for development
-supabase-test/      Local Supabase stack for tests
-tests/e2e/          Whole-system e2e tests
-```
-
-Internal JS/TS packages are referenced by name (e.g. `@gbd/core`).
+To run the production build, use `pnpm --filter @gbd/web start`, then go to
+<http://localhost:3000> — not the `0.0.0.0:3000` the server logs, which is unreachable on
+macOS.
 
 ## Testing
 
@@ -142,9 +125,14 @@ Internal JS/TS packages are referenced by name (e.g. `@gbd/core`).
 `vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
 e2e tests for anything that is really about one component's behaviour.
 
-**Database invariant tests** are the one tier that is not colocated, because the thing
-under test is the schema rather than any one module. See
-[`packages/db/SCHEMA.md`](packages/db/SCHEMA.md#conventions).
+**Web e2e tests** build the app and run it with Playwright. Debug with:
+
+```sh
+pnpm --filter @gbd/web test:e2e -- --ui
+```
+
+CI uploads a Playwright report as a build artifact on failure. Download it and open the
+trace with `npx playwright show-trace <path-to-zip>`.
 
 ### Tests and the database
 
@@ -153,15 +141,41 @@ Postgres. Migrations are applied automatically before tests run.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
 `@gbd/db/testing`, which rolls the transaction back however the test ends. That is what
-keeps tests isolated without truncating between them, and truncating is not an option:
-Turborepo runs each package's tests concurrently against the same database, so one package
-wiping tables would break another mid-run.
+keeps tests isolated.
 
-E2E tests are the exception — they commit, so Playwright truncates and migrates before it
-boots the app. Anything they insert must be scoped with a unique id such as
-`crypto.randomUUID()`, since they run in parallel.
+Meanwhile, E2E tests commit transactions to the database. So, Playwright truncates the database before runs. Tests should generate random IDs with `crypto.randomUUID()` to avoid clashes between tests.
 
-### Reset the database
+If the test database gets into a strange state, [reset it](#reset-a-database).
+
+### What CI runs
+
+A pull request runs only the jobs its changes can affect; `main` runs everything. See
+[`.github/filters.yml`](.github/filters.yml) for the rules.
+
+## Occasional tasks
+
+### Database commands
+
+| Command | What it does |
+| --- | --- |
+| `pnpm db:migrate` | Apply pending migrations |
+| `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) from the live database |
+| `pnpm db:truncate` | Delete every row, keeping the schema |
+
+Prefix any `db:*` command with `TEST_DB=1` to target the test stack instead of dev.
+
+### Add a database migration
+
+1. Add a file to `packages/db/migrations/`, numbered in sequence.
+2. `pnpm db:migrate`
+3. `pnpm db:gen-types`, and commit the regenerated types alongside the migration.
+4. Add a test to `packages/db/tests/` for each new constraint or trigger.
+
+Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
+Keep them backwards-compatible with the running app, since migrations run *before* the new
+code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
+
+### Reset a database
 
 Clear the dev data, keeping the schema:
 
@@ -183,21 +197,6 @@ TEST_DB=1 scripts/supabase db reset
 TEST_DB=1 pnpm db:migrate
 ```
 
-### Add a database migration
-
-Migrations in [`packages/db/migrations/`](packages/db/migrations/) are the source of truth
-for the schema — not [`SCHEMA.md`](packages/db/SCHEMA.md), and not the Supabase CLI's own
-`migrations/`, which we do not use.
-
-1. Add a file to `packages/db/migrations/`, numbered in sequence.
-2. `pnpm db:migrate`
-3. `pnpm db:gen-types`, and commit the regenerated types alongside the migration.
-4. Add a test to `packages/db/tests/` for each new constraint or trigger.
-
-Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
-Keep them backwards-compatible with the running app, since migrations run *before* the new
-code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
-
 ### Debug the database
 
 Supabase Studio for the dev stack is at <http://localhost:55323>. For logs:
@@ -213,35 +212,7 @@ To see a query plan, per [`SCHEMA.md`](packages/db/SCHEMA.md#conventions)'s
 console.error(JSON.stringify(await query.explain('json', sql`analyze`), null, 2));
 ```
 
-### CI failing on generated database types
-
-The `TS: generated DB types are current` job fails when
-[`packages/db/src/generated/`](packages/db/src/generated/) does not match what the schema
-would produce. Usually that means a migration landed without regenerating. Fix it with:
-
-```sh
-pnpm db:migrate && pnpm db:gen-types
-```
-
-If it fails on a branch that touched no database code, the Supabase CLI version pinned in
-[`.github/actions/setup-supabase/action.yml`](.github/actions/setup-supabase/action.yml) is
-probably behind your local one. Match them, regenerate, and commit.
-
-**Web e2e tests** build the app and run it with Playwright. Debug with:
-
-```sh
-pnpm --filter @gbd/web test:e2e -- --ui
-```
-
-CI uploads a Playwright report as a build artifact on failure. Download it and open the
-trace with `npx playwright show-trace <path-to-zip>`.
-
-### What CI runs
-
-A pull request runs only the jobs its changes can affect; `main` runs everything. See
-[`.github/filters.yml`](.github/filters.yml) for the rules.
-
-## Adding a shadcn-svelte component
+### Add a shadcn-svelte component
 
 UI components are vendored from [shadcn-svelte](https://www.shadcn-svelte.com) into `apps/web/src/lib/components/ui/`, so we own them outright.
 

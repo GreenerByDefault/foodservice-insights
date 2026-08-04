@@ -8,10 +8,6 @@ const SHUTDOWN_TIMEOUT_MS = 5_000;
 
 /** Build a database handle over its own connection pool.
  *
- * Callers supply the connection string rather than reading it here, because the three
- * runtimes get it three different ways: the web app from `$env/dynamic/private`, and
- * scripts, tests, and the worker from the environment via `@gbd/db/env`.
- *
  * Every caller owns the returned handle for its whole lifetime and must pass it to
  * `shutdownDatabase` on the way out.
  */
@@ -47,8 +43,8 @@ export function initializeDatabase(connectionString: string): Kysely<Database> {
       '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=60000 -c idle_session_timeout=600000',
   });
 
-  // Without these two handlers an unhandled pool error takes down the whole process, and
-  // the disconnects below are expected rather than exceptional.
+  // Without these two handlers, an unhandled pool error takes down the whole process.
+  // The following disconnects are expected rather than exceptional.
   pool.on('error', (error) => {
     if (error instanceof DatabaseError && error.code === POSTGRES_CODE_IDLE_SESSION_TIMEOUT) {
       console.warn('Database connection closed by idle_session_timeout');
@@ -72,8 +68,6 @@ export function initializeDatabase(connectionString: string): Kysely<Database> {
 
   return new Kysely<Database>({
     dialect: new PostgresDialect({ pool }),
-    // Lets us write `siteName` in queries against a `site_name` column. Kanel's
-    // camelCase hook generates types that agree.
     plugins: [new CamelCasePlugin()],
   });
 }
@@ -81,8 +75,8 @@ export function initializeDatabase(connectionString: string): Kysely<Database> {
 /** Close a database handle, releasing its pool.
  *
  * Always call this in cleanup code, or a script will hang and a redeploy will leak
- * connections. Prefer it over `database.destroy()` directly: it bounds how long shutdown can
- * take, so failing cleanup cannot block the rest of the shutdown path.
+ * connections. Prefer it over `database.destroy()` directly because it bounds how
+ * long shutdown can take.
  */
 export async function shutdownDatabase(database: Kysely<Database>): Promise<void> {
   const timeout = new Promise<never>((_, reject) =>

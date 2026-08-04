@@ -101,9 +101,7 @@ keep every document either accurate or obviously dead.
 - **Use `async`/`await`**, not raw promise chains.
 - **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
   of a package and never a tsconfig path alias.
-- **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`, which is
-  inlined at build time and would bake a connection string into the artifact. It also breaks
-  e2e, which runs the built server against the test database.
+- **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`.
 - **A runtime dependency of a `@gbd/*` package must also be declared in `apps/web`.** Vite
   inlines our workspace packages but leaves their dependencies external, so the built server
   resolves `pg` and `kysely` from `apps/web` rather than from `packages/db`.
@@ -117,14 +115,10 @@ keep every document either accurate or obviously dead.
 - **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, the `db:*` scripts,
   Kanel, and vitest. Without it you are pointed at the dev database. The `test:unit` and
   `test:e2e` scripts set it for you.
-- **Always `scripts/supabase`, never a bare `supabase`.** The wrapper passes `--workdir`; the
+- **Always use `scripts/supabase`, never a bare `supabase`.** The wrapper passes `--workdir`; the
   bare CLI finds neither stack and offers to create a third.
-- **Migrations own the schema.** [`packages/db/migrations/`](packages/db/migrations/) is the
-  source of truth, not [`SCHEMA.md`](packages/db/SCHEMA.md) and not the Supabase CLI's own
-  `migrations/`, which stays empty.
 - **Write migration columns in snake_case.** `CamelCasePlugin` translates identifiers, so a
-  `site_name` column is what makes `siteName` work in queries. A camelCase column still
-  "works" but leaves the two conventions disagreeing in the database.
+  `site_name` column is what makes `siteName` work in queries.
 - **`packages/db/src/generated/` is Kanel output**: committed, verified by CI, and deleted
   wholesale on every run. Nothing hand-written goes in it — `src/schema.ts` is its companion.
   Run `pnpm db:gen-types` after every migration and commit the result.
@@ -132,11 +126,8 @@ keep every document either accurate or obviously dead.
   rolled-back transaction where the app passes its long-lived handle. For route handlers, put
   the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
   alongside `GET`/`POST` — and have the handler call it with `DATABASE`.
-- **Database tests must use `withRollback`.** See the README on why truncating is not an
-  option.
-- **`pnpm test` is deliberately serial** (`test:unit && test:e2e`, not one `turbo run`). E2E
-  truncates, and `TRUNCATE` takes a lock that would block unit tests holding open
-  transactions.
+- **Database tests must use `withRollback`** to enable safe concurrency.
+- **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 
 ## Repo mechanics
 

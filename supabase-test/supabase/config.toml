@@ -1,4 +1,4 @@
-# The local stack for automated tests. Reach it through `TEST_DB=1 ./supabase`.
+# The local stack for automated tests. Reach it through `TEST_DB=1 scripts/supabase`.
 #
 # Nothing should ever modify this stack by hand — the test suites own it, and they assume
 # they can truncate it at will.
@@ -24,7 +24,7 @@ enabled = false
 port = 65321
 
 [auth]
-enabled = true
+enabled = false
 site_url = "http://localhost:5173"
 
 # Raised so tests are fast and deterministic rather than throttled.
@@ -39,16 +39,15 @@ max_frequency = "1s"
 
 # Catches outbound email so nothing escapes locally. Web UI on `port`.
 [local_smtp]
-enabled = true
+enabled = false
 port = 65324
 smtp_port = 65325
 
 [storage]
-enabled = true
-
-# No Studio: you should not be poking at the test stack by hand.
-[studio]
 enabled = false
+
+[studio]
+enabled = true
 port = 65323
 
 [realtime]

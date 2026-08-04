@@ -1,9 +1,7 @@
 /** The database, configured from the environment.
  *
- * **Not for the web app**, which builds its own handle from `$env/dynamic/private` so that
- * SvelteKit owns its configuration — see `apps/web/src/lib/server/db.ts`. This entry point is
- * for everything that runs outside Vite: this package's scripts, its vitest suites, and the
- * worker parent process when it lands.
+ * **Not for the web app**, which uses Vite to load env vars. This entry point is
+ * for everything else.
  *
  * Importing this module connects to a database, so import it only where that is wanted.
  * `TEST_DB=1` selects the test stack.

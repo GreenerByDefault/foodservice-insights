@@ -5,9 +5,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
-// `.env` files live at the repo root, not in this package. Vite and SvelteKit each need
-// telling separately: `envDir` covers Vite, and `env.dir` covers `$env/*`, which otherwise
-// defaults to this directory and silently resolves to nothing.
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 export default defineConfig({
@@ -49,8 +46,6 @@ export default defineConfig({
         test: {
           name: 'server',
           environment: 'node',
-          // Migrates the test database. `TEST_DB=1` in the `test:unit` script is what points
-          // this — and `$env/dynamic/private`, via Vite's test mode — at the test stack.
           globalSetup: ['./src/lib/server/tests/global-setup.ts'],
           include: ['src/**/*.{test,spec}.{js,ts}'],
           exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],

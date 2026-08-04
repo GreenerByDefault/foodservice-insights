@@ -2,19 +2,12 @@
  *
  *   pnpm db:truncate
  *   TEST_DB=1 pnpm db:truncate
- *
- * Unit tests do not need this — they roll their transactions back. It is for e2e, which
- * commits, and for clearing out a dev database by hand.
  */
 
 import { sql } from 'kysely';
 import { DATABASE, shutdown } from '../src/env.ts';
 
-/** Truncate every table in `public` except Kysely's own migration bookkeeping.
- *
- * Driven off `pg_tables` rather than a hardcoded list so it cannot drift from the schema.
- * One statement, so `CASCADE` doesn't have to fight foreign key ordering.
- */
+/** Truncate every table in `public` except Kysely's own migration bookkeeping. */
 async function truncateAll(): Promise<void> {
   const { rows } = await sql<{ tableName: string }>`
     SELECT tablename AS "tableName"

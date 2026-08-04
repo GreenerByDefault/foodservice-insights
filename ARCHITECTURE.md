@@ -298,10 +298,8 @@ belongs to a fixed set of values.
 
 ## Secrets management
 
-Secrets load as environment variables. Locally, `.env` holds public values such as `localhost`
-addresses; `.env.local` holds real secrets such as API keys. `.env.test` is committed, because
-every value in it is a local-only default that the Supabase CLI generates identically on every
-machine.
+Secrets load as environment variables. Locally they all live in one gitignored file, `.env`,
+templated by `.env.example`. `.env.test` is committed because every value in it is safe in version control and needed for tests.
 
 **Server config is read at runtime, not inlined at build time** — `$env/dynamic/private` rather
 than `$env/static/private`. One build artifact therefore runs against any environment, and
