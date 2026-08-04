@@ -8,19 +8,21 @@ import pkg from './package.json' with { type: 'json' };
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-/** Our workspace packages, which the production server resolves at runtime, unbundled.
+/** Our workspace packages, which the production server resolves at runtime instead of bundling.
  *
- * Vite inlines linked workspace packages into the SSR bundle by default, but leaves their
- * *dependencies* external and resolves those from `apps/web` — so `@gbd/db` gets inlined
- * while its `pg` import stays a bare specifier that only `apps/web/node_modules` can
- * satisfy. Under pnpm's isolated layout, it can't, and the failure would be at production startup
- * rather than at build time. Bundling also breaks any package that resolves paths relative
- * to its own location, since inlining moves it. Keeping them external lets each package own
- * its dependencies, at the cost of having to ship the packages alongside the built server.
+ * Inlining them into the SSR bundle is Vite's default for linked workspace packages, and it is
+ * what we are avoiding. An inlined `@gbd/db` still imports `pg` itself, and Vite resolves that
+ * import from `apps/web` — so `apps/web` would have to declare `pg` despite never importing it,
+ * and likewise for every dependency of every package, with nothing to catch a missing one.
+ * Inlining also moves a package's code into the app's bundle, which breaks any package that
+ * locates files from `import.meta.dirname`.
  *
- * Derived from `dependencies` rather than written out, so adding a package is enough.
- * `devDependencies` is deliberately not consulted: a package that isn't a runtime
- * dependency wouldn't be installed alongside the built server to resolve.
+ * Instead, the only cost of externalizing is that these packages must ship alongside the built
+ * server.
+ *
+ * WORKSPACE_PACKAGES is derived from `dependencies` so that adding a package needs no change here.
+ * `devDependencies` is deliberately not consulted: a package that isn't a runtime dependency
+ * wouldn't be installed next to the built server to resolve.
  */
 const WORKSPACE_PACKAGES = Object.keys(pkg.dependencies).filter((name) => name.startsWith('@gbd/'));
 
