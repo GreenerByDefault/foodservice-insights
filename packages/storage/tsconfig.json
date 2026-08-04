@@ -8,5 +8,5 @@
     "module": "nodenext",
     "moduleResolution": "nodenext"
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"]
 }

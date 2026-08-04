@@ -7,19 +7,9 @@ export {
 } from './client.ts';
 export { isBucketAlreadyExistsError, isNotFoundError } from './errors.ts';
 export {
-  deleteObject,
-  deleteObjects,
+  type DeletePrefixOptions,
   deletePrefix,
   getObject,
-  getObjectStream,
-  headObject,
-  type ListObjectsOptions,
-  listObjectKeys,
-  listObjects,
   type ObjectBody,
-  type ObjectMetadata,
-  type ObjectSummary,
-  objectExists,
-  type PutObjectOptions,
   putObject,
 } from './objects.ts';

@@ -2,7 +2,7 @@
  * Delete them once we have real tests that exercise the blob store.
  */
 
-import { getObject, objectExists, putObject } from '@gbd/storage';
+import { getObject, putObject } from '@gbd/storage';
 import { withTemporaryPrefix } from '@gbd/storage/testing';
 import { afterAll, expect, test } from 'vitest';
 import { blobStore, closeBlobStore } from './storage.ts';
@@ -17,12 +17,12 @@ test('writes and reads through the app handle, cleaning up after', async () => {
 
   await withTemporaryPrefix(blobStore(), async (prefix) => {
     used = `${prefix}from-the-web-app.png`;
-    await putObject(blobStore(), used, body, { contentType: 'image/png' });
+    await putObject(blobStore(), used, body);
 
     expect(await getObject(blobStore(), used)).toEqual(body);
   });
 
-  expect(await objectExists(blobStore(), used)).toBe(false);
+  expect(await getObject(blobStore(), used)).toBeUndefined();
 });
 
 test('returns the same handle every time, so the app holds one client', () => {

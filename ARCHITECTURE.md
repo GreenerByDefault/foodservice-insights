@@ -250,7 +250,7 @@ back, but a migration cannot — once it has run, fix forward rather than revert
 
 ## Blob store
 
-The bucket is private. Refer to [`packages/storage/README.md`](packages/storage/README.md) for the layout and code.
+Refer to [`packages/storage/README.md`](packages/storage/README.md) for the private bucket's layout and code.
 
 ## File links
 

@@ -119,7 +119,6 @@ macOS.
 | Unit | Colocated with the code | vitest, node | `*.test.ts` |
 | Component | Colocated with the component | vitest, real Chromium | `*.svelte.test.ts` |
 | Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
-| Blob store | [`packages/storage/tests/`](packages/storage/tests/) | vitest, node | `*.test.ts` |
 | Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
 | System e2e | `tests/e2e/` (not yet) | Playwright | `*.e2e.ts` |
 
