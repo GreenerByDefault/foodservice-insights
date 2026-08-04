@@ -17,6 +17,9 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
   DO_NOT_TRACK: 1
   TURBO_SCOPE: ${{ github.event_name == 'pull_request' && '--affected' || '--filter=*' }}
+  # actions/checkout leaves the base branch as a remote-tracking ref only. Without this,
+  # turbo can't resolve the branch and assumes every file changed.
+  TURBO_SCM_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
 
 jobs:
   changes:
