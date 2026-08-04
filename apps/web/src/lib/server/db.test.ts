@@ -4,14 +4,14 @@
 
 import { withRollback } from '@gbd/db/testing';
 import { afterAll, expect, test } from 'vitest';
-import { DATABASE } from './db.ts';
+import { closeDatabase, database } from './db.ts';
 
 afterAll(async () => {
-  await DATABASE.destroy();
+  await closeDatabase();
 });
 
 test('queries the database through the app handle, rolling back after', async () => {
-  const id = await withRollback(DATABASE, async (transaction) => {
+  const id = await withRollback(database(), async (transaction) => {
     const report = await transaction
       .insertInto('report')
       .values({
@@ -27,7 +27,8 @@ test('queries the database through the app handle, rolling back after', async ()
     return report.id;
   });
 
-  const afterRollback = await DATABASE.selectFrom('report')
+  const afterRollback = await database()
+    .selectFrom('report')
     .select('id')
     .where('id', '=', id)
     .executeTakeFirst();

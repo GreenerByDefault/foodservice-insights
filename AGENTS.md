@@ -125,7 +125,8 @@ keep every document either accurate or obviously dead.
 - **Query helpers take `db: DatabaseExecutor` as their first parameter**, so tests can pass a
   rolled-back transaction where the app passes its long-lived handle. For route handlers, put
   the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
-  alongside `GET`/`POST` — and have the handler call it with `DATABASE`.
+  alongside `GET`/`POST` — and have the handler call it with `database()`. Call `database()`
+  inside the handler, never at module scope.
 - **Database tests must use `withRollback`** to enable safe concurrency.
 - **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 

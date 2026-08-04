@@ -1,6 +1,5 @@
-import { shutdownDatabase } from '@gbd/db';
 import type { Handle, ServerInit } from '@sveltejs/kit';
-import { DATABASE } from '$lib/server/db';
+import { closeDatabase } from '$lib/server/db';
 
 function applySecurityHeaders(response: Response): Response {
   response.headers.set('X-Frame-Options', 'DENY');
@@ -23,6 +22,6 @@ export const init: ServerInit = () => {
     console.log('Shutting down:', reason);
     // When there is more than one cleanup task, run them with Promise.allSettled so one
     // failure cannot strand the others.
-    await shutdownDatabase(DATABASE);
+    await closeDatabase();
   });
 };

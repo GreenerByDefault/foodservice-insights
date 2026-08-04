@@ -303,7 +303,8 @@ templated by `.env.example`. `.env.test` is committed because every value in it 
 
 **Server config is read at runtime, not inlined at build time** — `$env/dynamic/private` rather
 than `$env/static/private`. One build artifact therefore runs against any environment, and
-rotating a credential does not require a rebuild.
+rotating a credential does not require a rebuild. The cost is that no server module may read
+config at the module-level while being imported.
 
 **Open:** no rotation process exists yet for suspected leaks.
 
