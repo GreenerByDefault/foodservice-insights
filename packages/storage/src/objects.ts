@@ -1,6 +1,7 @@
 import {
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
@@ -19,8 +20,33 @@ const MAX_KEYS_PER_REQUEST = 1000;
 /** An object's bytes. Streams are deliberately not accepted — see `putObject`. */
 export type ObjectBody = Uint8Array | string;
 
-export type DeletePrefixOptions = {
-  /** How many keys to clear per round trip.
+/** What may be written alongside an object's bytes.
+ *
+ * The content type is set at write time so the stored object is self-describing: a download
+ * reaches the blob store directly, since `/file/:id` redirects to a signed URL, and this is the
+ * header the browser then acts on without the reader having to supply it.
+ *
+ * Notably *not* here: the download filename. Supabase Storage silently discards a
+ * `Content-Disposition` given to `PutObject` but does honour a `response-content-disposition`
+ * override on a read, so the filename has to go on the signed URL — see `signedObjectUrl`. Which
+ * is the better home for it anyway: the filename belongs to the link we hand out, not to the
+ * stored bytes.
+ */
+export type PutObjectOptions = {
+  contentType?: string;
+};
+
+/** What a read tells us about one object, without its bytes. */
+export type ObjectMetadata = {
+  size: number;
+  contentType: string | undefined;
+  etag: string | undefined;
+  lastModified: Date | undefined;
+};
+
+/** Shared by every operation that walks a prefix a page at a time. */
+export type PagingOptions = {
+  /** How many keys to fetch per request.
    *
    * Only worth setting to exercise the paging loop over a handful of objects; S3's ceiling is
    * right for real use.
@@ -34,36 +60,104 @@ export type DeletePrefixOptions = {
  * known or go through a multipart upload. REQUIREMENTS.md caps uploads at 10MB, so holding
  * the whole body in memory costs nothing.
  */
-export async function putObject(store: BlobStore, key: string, body: ObjectBody): Promise<void> {
-  await store.client.send(new PutObjectCommand({ Bucket: store.bucket, Key: key, Body: body }));
+export async function putObject(
+  store: BlobStore,
+  key: string,
+  body: ObjectBody,
+  options: PutObjectOptions = {},
+): Promise<void> {
+  await store.client.send(
+    new PutObjectCommand({
+      Bucket: store.bucket,
+      Key: key,
+      Body: body,
+      ContentType: options.contentType,
+    }),
+  );
 }
 
 /** Read a whole object into memory, or `undefined` if there is nothing at `key`. */
 export async function getObject(store: BlobStore, key: string): Promise<Uint8Array | undefined> {
-  try {
-    const response = await store.client.send(
-      new GetObjectCommand({ Bucket: store.bucket, Key: key }),
-    );
-    return await response.Body?.transformToByteArray();
-  } catch (error) {
-    if (isNotFoundError(error)) return undefined;
-    throw error;
-  }
+  const response = await undefinedIfMissing(
+    store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: key })),
+  );
+  return await response?.Body?.transformToByteArray();
+}
+
+/** Read an object's metadata without its bytes, or `undefined` if there is nothing at `key`. */
+export async function headObject(
+  store: BlobStore,
+  key: string,
+): Promise<ObjectMetadata | undefined> {
+  const response = await undefinedIfMissing(
+    store.client.send(new HeadObjectCommand({ Bucket: store.bucket, Key: key })),
+  );
+  if (!response) return undefined;
+
+  return {
+    size: response.ContentLength ?? 0,
+    contentType: response.ContentType,
+    etag: response.ETag,
+    lastModified: response.LastModified,
+  };
+}
+
+/** Whether anything is stored at `key`.
+ *
+ * Signing a download URL does not reach the blob store, so this is how a caller answers "is the
+ * object really there" before handing out a link — see `signedObjectUrl`.
+ */
+export async function objectExists(store: BlobStore, key: string): Promise<boolean> {
+  return (await headObject(store, key)) !== undefined;
+}
+
+/** Every key that starts with `prefix`. */
+export async function listObjectKeys(
+  store: BlobStore,
+  prefix: string,
+  options: PagingOptions = {},
+): Promise<string[]> {
+  const keys: string[] = [];
+  for await (const page of listKeyPages(store, prefix, options)) keys.push(...page);
+  return keys;
 }
 
 /** Delete every object under `prefix`, and report how many that was. Does nothing when nothing
  * matches.
  *
  * Deletes each listing page as it arrives instead of collecting every key first, so memory is
- * bounded by one request and the paging loop is the only thing that has to be right.
+ * bounded by one request.
+ *
+ * This is the primitive that makes deleting one organization's files a single call — see the key
+ * layout in this package's README.
  */
 export async function deletePrefix(
   store: BlobStore,
   prefix: string,
-  options: DeletePrefixOptions = {},
+  options: PagingOptions = {},
 ): Promise<number> {
-  let continuationToken: string | undefined;
   let deleted = 0;
+
+  for await (const page of listKeyPages(store, prefix, options)) {
+    await deleteKeys(store, page);
+    deleted += page.length;
+  }
+
+  return deleted;
+}
+
+/** The keys under `prefix`, one listing page at a time.
+ *
+ * A generator so that the continuation-token loop exists once, and so `deletePrefix` can act on a
+ * page without waiting for the whole listing. Yields only non-empty pages, which is what lets its
+ * callers skip guarding against a delete that names no keys — S3 rejects those.
+ */
+async function* listKeyPages(
+  store: BlobStore,
+  prefix: string,
+  options: PagingOptions,
+): AsyncGenerator<string[]> {
+  let continuationToken: string | undefined;
 
   do {
     const listing = await store.client.send(
@@ -77,15 +171,10 @@ export async function deletePrefix(
 
     // S3 does not return an entry without a key; dropping one is still better than asserting.
     const keys = (listing.Contents ?? []).map(({ Key }) => Key).filter((key) => key !== undefined);
-    if (keys.length > 0) {
-      await deleteKeys(store, keys);
-      deleted += keys.length;
-    }
+    if (keys.length > 0) yield keys;
 
     continuationToken = listing.NextContinuationToken;
   } while (continuationToken);
-
-  return deleted;
 }
 
 /** Delete one request's worth of keys, at most `MAX_KEYS_PER_REQUEST` of them. */
@@ -103,5 +192,19 @@ async function deleteKeys(store: BlobStore, keys: readonly string[]): Promise<vo
   if (errors.length > 0) {
     const described = errors.map(({ Key, Code, Message }) => `${Key} (${Code}: ${Message})`);
     throw new Error(`Failed to delete ${errors.length} object(s): ${described.join(', ')}`);
+  }
+}
+
+/** Await a command, turning "no such object" into `undefined` instead of a throw.
+ *
+ * Takes the promise rather than a thunk: the command is already in flight, and there is
+ * nothing to retry here.
+ */
+async function undefinedIfMissing<T>(operation: Promise<T>): Promise<T | undefined> {
+  try {
+    return await operation;
+  } catch (error) {
+    if (isNotFoundError(error)) return undefined;
+    throw error;
   }
 }
