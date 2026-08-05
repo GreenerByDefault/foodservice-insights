@@ -74,6 +74,14 @@
           "suspicious": { "noExplicitAny": "off" }
         }
       }
+    },
+    {
+      "includes": ["packages/db/src/generated/**"],
+      "linter": {
+        "rules": {
+          "complexity": { "noBannedTypes": "off" }
+        }
+      }
     }
   ]
 }
