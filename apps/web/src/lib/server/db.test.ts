@@ -12,8 +12,6 @@ afterAll(async () => {
 
 test('queries the database through the app handle, rolling back after', async () => {
   const id = await withRollback(database(), async (transaction) => {
-    // Through the shared fixtures, which create the organization a report needs — and which are
-    // exported from `@gbd/db/testing` precisely so the app's tests can reach them.
     const report = await insertReport(transaction, { name: 'From the web app' });
 
     expect(report).toMatchObject({ name: 'From the web app', countsBasis: 'people' });

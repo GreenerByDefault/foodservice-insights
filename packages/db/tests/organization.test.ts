@@ -1,11 +1,5 @@
 /** The auth side of the schema: users mirrored from `auth.users`, organizations, membership, and
- * invites.
- *
- * The one-admin-per-organization rule is enforced by deferred constraint triggers, which fire at
- * COMMIT — and `withRollback` never commits. So every test that touches them ends with
- * `SET CONSTRAINTS ALL IMMEDIATE`, which checks the outstanding events there and then. Leave it
- * out and the test silently asserts nothing, including the ones expecting success.
- */
+ * invites. */
 
 import { sql } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
@@ -43,14 +37,6 @@ describe('app_user', () => {
     });
   });
 
-  test('takes a blank display name as none at all', async () => {
-    const user = await withRollback(DATABASE, async (transaction) => {
-      return await insertAppUser(transaction, { displayName: '   ' });
-    });
-
-    expect(user.displayName).toBeNull();
-  });
-
   test('is deleted with the auth.users row it mirrors', async () => {
     const remaining = await withRollback(DATABASE, async (transaction) => {
       const user = await insertAppUser(transaction);
@@ -81,6 +67,22 @@ describe('app_user', () => {
     });
   });
 
+  test('cannot have created more than 5 organizations', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const user = await insertAppUser(transaction);
+      await transaction
+        .updateTable('appUser')
+        .set({ organizationsCreatedCount: 6 })
+        .where('id', '=', user.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'app_user_organizations_created_count_max',
+    });
+  });
+
   test('cannot exist without an auth.users row', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       await transaction
@@ -99,6 +101,16 @@ describe('organization', () => {
       const name = `Duplicate ${crypto.randomUUID()}`;
       await insertOrganization(transaction, { name });
       await insertOrganization(transaction, { name });
+    });
+
+    await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
+  });
+
+  test('rejects a name that is a duplicate only by case', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      const suffix = crypto.randomUUID();
+      await insertOrganization(transaction, { name: `Acme ${suffix}` });
+      await insertOrganization(transaction, { name: `acme ${suffix}` });
     });
 
     await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
@@ -139,32 +151,31 @@ describe('organization', () => {
       constraint: 'organization_member_at_least_one_admin',
     });
   });
-
-  test('bumps updated_at on update', async () => {
-    // `now()` is the transaction's start time, so a bump is only observable against a row that
-    // was inserted claiming an older one.
-    const updatedAt = await withRollback(DATABASE, async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      await transaction
-        .updateTable('organization')
-        .set({ updatedAt: new Date('2020-01-01T00:00:00Z') })
-        .where('id', '=', organization.id)
-        .execute();
-
-      const updated = await transaction
-        .updateTable('organization')
-        .set({ name: `Renamed ${crypto.randomUUID()}` })
-        .where('id', '=', organization.id)
-        .returning('updatedAt')
-        .executeTakeFirstOrThrow();
-      return updated.updatedAt;
-    });
-
-    expect(updatedAt.getFullYear()).toBeGreaterThan(2020);
-  });
 });
 
 describe('organization_member', () => {
+  test('its at-least-one-admin trigger is deferred to commit', async () => {
+    // Not provocable from a single transaction: this is a property of the trigger's definition,
+    // not of a row. `withRollback` never commits, which is exactly why every test above that
+    // relies on the deferral has to force it with `checkDeferredConstraints` — asserting the
+    // definition here is what stops a refactor making it immediate (and those tests silently
+    // asserting nothing) without anyone noticing.
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const result = await sql<{ name: string; deferrable: boolean; deferred: boolean }>`
+        SELECT tgname AS name, tgdeferrable AS deferrable, tginitdeferred AS deferred
+        FROM pg_trigger
+        WHERE tgname IN ('organization_member_at_least_one_admin', 'organization_has_a_member')
+        ORDER BY tgname
+      `.execute(transaction);
+      return result.rows;
+    });
+
+    expect(rows).toEqual([
+      { name: 'organization_has_a_member', deferrable: true, deferred: true },
+      { name: 'organization_member_at_least_one_admin', deferrable: true, deferred: true },
+    ]);
+  });
+
   test('rejects removing the last admin', async () => {
     const remove = withRollback(DATABASE, async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
@@ -303,6 +314,38 @@ describe('organization_member', () => {
       constraint: 'organization_member_at_least_one_admin',
     });
   });
+
+  test('counts a superadmin as an organization’s admin when they hold the seat themselves', async () => {
+    // The mirror image of the previous test: is_superadmin never enters the trigger's query, so
+    // nothing stops a superadmin from also being a plain admin — the seat a regular user fills
+    // when they create an organization. Demoting the *other* admin should succeed because the
+    // superadmin's own admin row keeps the organization compliant.
+    const roles = await withRollback(DATABASE, async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
+      await transaction
+        .insertInto('organizationMember')
+        .values({ userId: superadmin.id, organizationId: organization.id, role: 'admin' })
+        .execute();
+
+      await transaction
+        .updateTable('organizationMember')
+        .set({ role: 'member' })
+        .where('organizationId', '=', organization.id)
+        .where('userId', '=', admin.id)
+        .execute();
+      await checkDeferredConstraints(transaction);
+
+      return await transaction
+        .selectFrom('organizationMember')
+        .select('role')
+        .where('organizationId', '=', organization.id)
+        .orderBy('role')
+        .execute();
+    });
+
+    expect(roles).toEqual([{ role: 'member' }, { role: 'admin' }]);
+  });
 });
 
 describe('organization_invite', () => {
@@ -368,20 +411,22 @@ describe('organization_invite', () => {
     });
   });
 
-  test('lets a resent invite supersede an expired one', async () => {
-    // The uniqueness is partial, so the audit trail of superseded invites keeps accumulating.
+  test('lets a resent invite supersede a live one', async () => {
+    // Re-inviting restarts the clock on a new row. The uniqueness is partial, so the superseded row
+    // survives as the audit trail rather than being overwritten.
     const statuses = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
-      const first = await transaction
+      await transaction
         .insertInto('organizationInvite')
         .values(anInvite(organization.id, 'ada@example.test'))
-        .returning('id')
-        .executeTakeFirstOrThrow();
+        .execute();
 
       await transaction
         .updateTable('organizationInvite')
-        .set({ status: 'expired' })
-        .where('id', '=', first.id)
+        .set({ status: 'superseded' })
+        .where('organizationId', '=', organization.id)
+        .where('email', '=', 'ada@example.test')
+        .where('status', '=', 'pending')
         .execute();
       await transaction
         .insertInto('organizationInvite')
@@ -396,6 +441,6 @@ describe('organization_invite', () => {
         .execute();
     });
 
-    expect(statuses.map((row) => row.status).sort()).toEqual(['expired', 'pending']);
+    expect(statuses.map((row) => row.status)).toEqual(['superseded', 'pending']);
   });
 });

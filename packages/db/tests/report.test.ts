@@ -1,10 +1,5 @@
 /** `report` and the two tables that record an upload: `input_file` for one that was accepted,
- * `rejected_upload` for one that never became a report.
- *
- * The first two tests are about the toolchain rather than the schema — that Kanel's camelCase
- * hook and Kysely's `CamelCasePlugin` still agree, and that `withRollback` leaves nothing behind.
- * They are the pairing most likely to drift silently, so they stay.
- */
+ * `rejected_upload` for one that never became a report. */
 
 import { afterAll, describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
@@ -26,47 +21,6 @@ afterAll(async () => {
 });
 
 describe('report', () => {
-  test('round-trips camelCase properties, enums, and jsonb', async () => {
-    const inserted = await withRollback(DATABASE, async (transaction) => {
-      // Every property here is camelCase while every column is snake_case. This only compiles
-      // and only runs because Kanel's camelCase hook and Kysely's CamelCasePlugin agree.
-      return await insertReport(transaction, {
-        name: 'Q1 procurement',
-        siteName: 'Main dining hall',
-      });
-    });
-
-    expect(inserted).toMatchObject({
-      name: 'Q1 procurement',
-      siteName: 'Main dining hall',
-      countsBasis: 'people',
-      unitSystem: 'lb',
-      monthlyCounts: { '2026-01': 120, '2026-02': 135 },
-    });
-    expect(inserted.createdAt).toBeInstanceOf(Date);
-    expect(inserted.deletedAt).toBeNull();
-  });
-
-  test('withRollback commits nothing', async () => {
-    const id = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertReport(transaction);
-
-      // Visible inside the transaction...
-      await expect(
-        transaction.selectFrom('report').select('id').where('id', '=', id).executeTakeFirst(),
-      ).resolves.toMatchObject({ id });
-
-      return id;
-    });
-
-    // ...and gone once it rolls back.
-    const afterRollback = await DATABASE.selectFrom('report')
-      .select('id')
-      .where('id', '=', id)
-      .executeTakeFirst();
-    expect(afterRollback).toBeUndefined();
-  });
-
   test('rejects a soft delete that predates creation', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction, {
@@ -79,7 +33,6 @@ describe('report', () => {
         .execute();
     });
 
-    // Naming the constraint proves *this* check fired, not some other failure.
     await expect(insert).rejects.toMatchObject({
       code: POSTGRES_CODE_CHECK_VIOLATION,
       constraint: 'report_deleted_at_after_created_at',
@@ -103,8 +56,6 @@ describe('report', () => {
     });
   });
 
-  // Stringified because node-postgres renders a JS array as a Postgres array literal rather than
-  // as JSON, which the column would reject before the check ever runs.
   test.each([
     ['an array', JSON.stringify([1, 2, 3])],
     ['a bare number', JSON.stringify(42)],
@@ -138,8 +89,6 @@ describe('report', () => {
   });
 
   test('outlives the user who created it, forgetting only who they were', async () => {
-    // REQUIREMENTS.md: deleting an account does not delete that member's reports; the app shows
-    // a deleted user instead, and the raw id survives in the audit trail.
     const report = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const author = await insertAppUser(transaction);
@@ -233,8 +182,6 @@ describe('input_file', () => {
 
 describe('rejected_upload', () => {
   test('stores the metadata that got the upload rejected, however invalid', async () => {
-    // The mirrored columns are unconstrained text on purpose: a row is here precisely because
-    // its input was not valid, so it has to hold values no enum or check would accept.
     const stored = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       return await transaction

@@ -1,14 +1,14 @@
-/** The analysis attempt status machine, and the result files an attempt produces.
+/** The analysis attempt state machine, and the result files an attempt produces.
  *
  * These constraints are the coordination point between the web app and the workers, and several
- * exist specifically to make the reaping race in `ARCHITECTURE.md` safe. They are concurrency
- * control, not defensive decoration, so each one is asserted by name.
+ * exist specifically to make the reaping race in `ARCHITECTURE.md` safe.
  *
  * Note the precedence: the insert trigger is BEFORE ROW, so it runs before any check constraint
  * is evaluated. A bad `attempt_number` on a fresh report is therefore reported by the trigger,
  * and the range check can only be reached by taking the legitimate route to a sixth attempt.
  */
 
+import { sql } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
@@ -316,6 +316,25 @@ describe('starting a new attempt', () => {
       code: POSTGRES_CODE_CHECK_VIOLATION,
       constraint: 'analysis_attempt_attempt_number_range',
     });
+  });
+});
+
+describe('at most one active attempt per report', () => {
+  // Not provocable from a single transaction: `analysis_attempt_new_attempt_only_after_failure`
+  // already rejects every sequential path to a second active attempt. Asserting the index exists
+  // is what stops a refactor removing it silently.
+  test('is enforced by a partial unique index', async () => {
+    const index = await withRollback(DATABASE, async (transaction) => {
+      const { rows } = await sql<{ indexdef: string }>`
+        SELECT indexdef FROM pg_indexes
+        WHERE schemaname = 'public' AND indexname = 'analysis_attempt_one_active_per_report'
+      `.execute(transaction);
+      return rows[0]?.indexdef;
+    });
+
+    expect(index).toMatch(/UNIQUE INDEX/);
+    expect(index).toMatch(/\(report_id\)/);
+    expect(index).toMatch(/WHERE .*'pending'.*'processing'/);
   });
 });
 

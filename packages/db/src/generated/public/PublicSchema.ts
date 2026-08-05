@@ -12,6 +12,8 @@ import type { default as ResultFileTable } from './ResultFile.js';
 export default interface PublicSchema {
   auditEvent: AuditEventTable;
 
+  rejectedUpload: RejectedUploadTable;
+
   appUser: AppUserTable;
 
   report: ReportTable;
@@ -21,8 +23,6 @@ export default interface PublicSchema {
   resultFile: ResultFileTable;
 
   analysisAttempt: AnalysisAttemptTable;
-
-  rejectedUpload: RejectedUploadTable;
 
   organizationInvite: OrganizationInviteTable;
 

@@ -8,7 +8,7 @@ export type RejectedUploadId = string & { __brand: 'public.rejected_upload' };
 
 /**
  * Represents the table public.rejected_upload
- * An upload that failed validation and never became a report. Debugging only; not exposed publicly.
+ * An upload that failed validation and never became a report.
  */
 export default interface RejectedUploadTable {
   id: ColumnType<RejectedUploadId, RejectedUploadId | undefined, RejectedUploadId>;

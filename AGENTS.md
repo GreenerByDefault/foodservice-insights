@@ -99,8 +99,7 @@ keep every document either accurate or obviously dead.
   chance someone will want to relitigate the decision.
 - **Mark anything unresolved `**Open:**`** so it is greppable, and leave it where it belongs
   rather than in a separate list of open questions that will drift.
-- **One source of truth per fact, named explicitly.** Kysely migrations own the schema; the
-  Supabase CLI's `migrations/` is unused. When two files could both plausibly answer a
+- **One source of truth per fact, named explicitly.** When two files could both plausibly answer a
   question, say in one of them which one wins.
 - **A doc written before its code is a spec, and says so** in a status block naming what replaces it.
 

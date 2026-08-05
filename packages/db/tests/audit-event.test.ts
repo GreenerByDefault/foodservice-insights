@@ -1,10 +1,3 @@
-/** `audit_event`: append-only, and deliberately unconstrained by foreign keys.
- *
- * Both properties exist for the same reason. Users and organizations can be hard-deleted, but
- * their IDs have to survive here — a foreign key would either block the delete or erase the
- * evidence, and an UPDATE or DELETE would let someone edit the record of what they did.
- */
-
 import { afterAll, describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import { POSTGRES_CODE_CHECK_VIOLATION } from '../src/postgres-codes.ts';
@@ -43,7 +36,7 @@ describe('audit_event', () => {
   });
 
   test('outlives the user and organization it names', async () => {
-    const stored = await withRollback(DATABASE, async (transaction) => {
+    const { stored, actor, organization } = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const actor = await insertAppUser(transaction);
 
@@ -56,15 +49,17 @@ describe('audit_event', () => {
       await transaction.deleteFrom('organization').where('id', '=', organization.id).execute();
       await transaction.deleteFrom('auth.users').where('id', '=', actor.id).execute();
 
-      return await transaction
+      const stored = await transaction
         .selectFrom('auditEvent')
         .selectAll()
         .where('id', '=', event.id)
         .executeTakeFirstOrThrow();
+
+      return { stored, actor, organization };
     });
 
-    expect(stored.actorUserId).not.toBeNull();
-    expect(stored.organizationId).not.toBeNull();
+    expect(stored.actorUserId).toBe(actor.id);
+    expect(stored.organizationId).toBe(organization.id);
   });
 
   test('rejects an update', async () => {

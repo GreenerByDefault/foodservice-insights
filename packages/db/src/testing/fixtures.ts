@@ -2,10 +2,11 @@
  * parents that constraint's table requires.
  *
  * Every helper takes a `DatabaseExecutor` first, like every other query helper, and creates any
- * parent it was not given. They insert real rows through the real triggers — `insertAppUser` gets
- * its `app_user` from the trigger on `auth.users` rather than writing one, and
- * `insertAnalysisAttempt` walks the status machine one `UPDATE` at a time — so a fixture that
- * still works is itself evidence the schema behaves.
+ * parent it was not given. Where a table's invariant is enforced by a trigger rather than a plain
+ * constraint, the helper goes through that trigger instead of writing the row directly —
+ * `insertAppUser` gets its `app_user` from the trigger on `auth.users`, and `insertOrganization`
+ * relies on the deferred trigger that requires an admin. A fixture that still works is itself
+ * evidence the schema behaves.
  *
  * Values that must be unique are randomised, because tests run concurrently against one database.
  */
@@ -32,16 +33,19 @@ export async function insertAppUser(
     .values({
       id: crypto.randomUUID() as AppUser['id'],
       email: `${crypto.randomUUID()}@example.test`,
-      rawUserMetaData: overrides.displayName ? { display_name: overrides.displayName } : null,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
 
-  // Written by the `on_auth_user_created` trigger, not by us.
-  if (overrides.isSuperadmin !== undefined) {
+  // The `app_user` row itself is written by the `on_auth_user_created` trigger, not by us.
+  // These fields have to be set manually afterwards.
+  if (overrides.displayName !== undefined || overrides.isSuperadmin !== undefined) {
     await database
       .updateTable('appUser')
-      .set({ isSuperadmin: overrides.isSuperadmin })
+      .set({
+        ...(overrides.displayName !== undefined ? { displayName: overrides.displayName } : {}),
+        ...(overrides.isSuperadmin !== undefined ? { isSuperadmin: overrides.isSuperadmin } : {}),
+      })
       .where('id', '=', id)
       .execute();
   }
@@ -127,11 +131,9 @@ export async function insertInputFile(
     .executeTakeFirstOrThrow();
 }
 
-/** An attempt in `status`, reached by the transitions the status machine actually permits.
- *
- * Terminal states cannot be inserted directly and cannot be assembled across two statements,
- * because checks are not deferrable — so this walks pending, then processing, then the terminal
- * update, exactly as a worker would.
+/** An attempt in `status`, with whatever other columns that status's CHECK constraints require —
+ * `finished_at` for a terminal status, `worker_id`/`locked_at`/`last_heartbeat_at` for
+ * `processing`. See `analysis_attempt` in schema.sql for the constraints themselves.
  */
 export async function insertAnalysisAttempt(
   database: DatabaseExecutor,
@@ -144,48 +146,22 @@ export async function insertAnalysisAttempt(
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
   const status = overrides.status ?? 'pending';
 
-  const pending = await database
+  const isProcessing = status === 'processing';
+  const isTerminal = status === 'succeeded' || status === 'failed' || status === 'canceled';
+
+  return await database
     .insertInto('analysisAttempt')
     .values({
       reportId,
       attemptNumber: overrides.attemptNumber ?? 1,
-      status: 'pending',
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  if (status === 'pending') return pending;
-
-  // A `canceled` attempt may never have been claimed, so it skips straight to terminal.
-  if (status !== 'canceled') {
-    await database
-      .updateTable('analysisAttempt')
-      .set({
-        status: 'processing',
-        workerId: 'test-worker',
-        lockedAt: new Date(),
-        lastHeartbeatAt: new Date(),
-      })
-      .where('id', '=', pending.id)
-      .execute();
-  }
-
-  if (status === 'processing') {
-    return await database
-      .selectFrom('analysisAttempt')
-      .selectAll()
-      .where('id', '=', pending.id)
-      .executeTakeFirstOrThrow();
-  }
-
-  return await database
-    .updateTable('analysisAttempt')
-    .set({
       status,
-      finishedAt: new Date(),
-      failureReason: status === 'failed' ? 'child_crashed' : null,
+      ...(isProcessing
+        ? { workerId: 'test-worker', lockedAt: new Date(), lastHeartbeatAt: new Date() }
+        : {}),
+      ...(isTerminal
+        ? { finishedAt: new Date(), failureReason: status === 'failed' ? 'child_crashed' : null }
+        : {}),
     })
-    .where('id', '=', pending.id)
     .returningAll()
     .executeTakeFirstOrThrow();
 }

@@ -1,13 +1,11 @@
-/** The schema-wide conventions from `README.md`, asserted against the catalog instead of
- * remembered.
- *
- * Also here: the invariants that no single transaction can violate, and so have nothing to
- * assert against except their own existence.
+/** The schema-wide conventions from `README.md`, asserted against the whole catalog, plus the
+ * toolchain-level guarantees every other test in this package depends on.
  */
 
 import { sql } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
+import { insertOrganization, insertReport } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 afterAll(async () => {
@@ -53,6 +51,93 @@ describe('conventions', () => {
 
     expect(rows.map((row) => row.name)).toEqual([]);
   });
+
+  test('every updated_at column has a trigger that maintains it', async () => {
+    const { rows } = await withRollback(DATABASE, async (transaction) => {
+      return await sql<{ name: string }>`
+        SELECT c.relname AS name
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'updated_at' AND NOT a.attisdropped
+        WHERE n.nspname = 'public'
+          AND c.relkind = 'r'
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_trigger t
+            JOIN pg_proc p ON p.oid = t.tgfoid
+            WHERE t.tgrelid = c.oid AND p.proname = 'set_updated_at' AND NOT t.tgisinternal
+          )
+      `.execute(transaction);
+    });
+
+    expect(rows.map((row) => row.name)).toEqual([]);
+  });
+
+  test('set_updated_at bumps the column on update', async () => {
+    // `now()` is the transaction's start time, so a bump is only observable against a row that
+    // was inserted claiming an older one. Exercised through `organization`, one of several
+    // tables the trigger above proves are wired to this same function.
+    const updatedAt = await withRollback(DATABASE, async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      await transaction
+        .updateTable('organization')
+        .set({ updatedAt: new Date('2020-01-01T00:00:00Z') })
+        .where('id', '=', organization.id)
+        .execute();
+
+      const updated = await transaction
+        .updateTable('organization')
+        .set({ name: `Renamed ${crypto.randomUUID()}` })
+        .where('id', '=', organization.id)
+        .returning('updatedAt')
+        .executeTakeFirstOrThrow();
+      return updated.updatedAt;
+    });
+
+    expect(updatedAt.getFullYear()).toBeGreaterThan(2020);
+  });
+});
+
+describe('withRollback', () => {
+  test('commits nothing', async () => {
+    const id = await withRollback(DATABASE, async (transaction) => {
+      const { id } = await insertReport(transaction);
+
+      // Visible inside the transaction...
+      await expect(
+        transaction.selectFrom('report').select('id').where('id', '=', id).executeTakeFirst(),
+      ).resolves.toMatchObject({ id });
+
+      return id;
+    });
+
+    // ...and gone once it rolls back.
+    const afterRollback = await DATABASE.selectFrom('report')
+      .select('id')
+      .where('id', '=', id)
+      .executeTakeFirst();
+    expect(afterRollback).toBeUndefined();
+  });
+});
+
+describe('camelCase, enums, and jsonb', () => {
+  test('round-trip through Kanel and CamelCasePlugin', async () => {
+    const inserted = await withRollback(DATABASE, async (transaction) => {
+      return await insertReport(transaction, {
+        name: 'Q1 procurement',
+        siteName: 'Main dining hall',
+      });
+    });
+
+    expect(inserted).toMatchObject({
+      name: 'Q1 procurement',
+      siteName: 'Main dining hall',
+      countsBasis: 'people',
+      unitSystem: 'lb',
+      monthlyCounts: { '2026-01': 120, '2026-02': 135 },
+    });
+    expect(inserted.createdAt).toBeInstanceOf(Date);
+    expect(inserted.deletedAt).toBeNull();
+  });
 });
 
 describe('uuidv7', () => {
@@ -90,59 +175,5 @@ describe('uuidv7', () => {
 
     expect(Number(row?.distinctCount)).toBe(1000);
     expect(row?.ordered).toBe(true);
-  });
-});
-
-describe('invariants with no single-transaction counterexample', () => {
-  // These three cannot be provoked from one transaction — the first because the insert trigger
-  // already rejects every sequential path to it, the others because they are properties of a
-  // definition rather than of a row. Asserting they exist is what stops a refactor removing them
-  // silently.
-
-  test('at most one active attempt per report is enforced by a partial unique index', async () => {
-    const index = await withRollback(DATABASE, async (transaction) => {
-      const { rows } = await sql<{ indexdef: string }>`
-        SELECT indexdef FROM pg_indexes
-        WHERE schemaname = 'public' AND indexname = 'analysis_attempt_one_active_per_report'
-      `.execute(transaction);
-      return rows[0]?.indexdef;
-    });
-
-    expect(index).toMatch(/UNIQUE INDEX/);
-    expect(index).toMatch(/\(report_id\)/);
-    expect(index).toMatch(/WHERE .*'pending'.*'processing'/);
-  });
-
-  test('the admin constraint triggers are deferred to commit', async () => {
-    const rows = await withRollback(DATABASE, async (transaction) => {
-      const result = await sql<{ name: string; deferrable: boolean; deferred: boolean }>`
-        SELECT tgname AS name, tgdeferrable AS deferrable, tginitdeferred AS deferred
-        FROM pg_trigger
-        WHERE tgname IN ('organization_member_at_least_one_admin', 'organization_has_a_member')
-        ORDER BY tgname
-      `.execute(transaction);
-      return result.rows;
-    });
-
-    expect(rows).toEqual([
-      { name: 'organization_has_a_member', deferrable: true, deferred: true },
-      { name: 'organization_member_at_least_one_admin', deferrable: true, deferred: true },
-    ]);
-  });
-
-  test('the auth.users trigger function is SECURITY DEFINER with a pinned search_path', async () => {
-    // Supabase Auth connects as a role with no rights on `app_user`, so without SECURITY DEFINER
-    // every signup fails — and with it, a mutable search_path is an escalation path. Neither is
-    // observable from a test connecting as the owner, so assert the definition instead.
-    const row = await withRollback(DATABASE, async (transaction) => {
-      const { rows } = await sql<{ securityDefiner: boolean; config: string[] | null }>`
-        SELECT prosecdef AS "securityDefiner", proconfig AS config
-        FROM pg_proc WHERE proname = 'handle_new_auth_user'
-      `.execute(transaction);
-      return rows[0];
-    });
-
-    expect(row?.securityDefiner).toBe(true);
-    expect(row?.config).toEqual(['search_path=""']);
   });
 });

@@ -101,7 +101,8 @@ CREATE TYPE "public"."organization_invite_status" AS ENUM (
     'accepted',
     'declined',
     'revoked',
-    'expired'
+    'expired',
+    'superseded'
 );
 
 
@@ -270,14 +271,8 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_auth_user"() RETURNS "trigger"
     SET "search_path" TO ''
     AS $$
     BEGIN
-      INSERT INTO public.app_user (id, display_name)
-      VALUES (
-        NEW.id,
-        nullif(trim(coalesce(NEW.raw_user_meta_data ->> 'display_name',
-                             NEW.raw_user_meta_data ->> 'full_name',
-                             NEW.raw_user_meta_data ->> 'name',
-                             '')), '')
-      )
+      INSERT INTO public.app_user (id)
+      VALUES (NEW.id)
       ON CONFLICT (id) DO NOTHING;
       RETURN NULL;
     END;
@@ -342,7 +337,7 @@ CREATE OR REPLACE FUNCTION "public"."organization_member_check_admin_remains"() 
       END IF;
 
       -- app_user.is_superadmin is deliberately not consulted: a superadmin is admin everywhere
-      -- but fills no organization's admin seat. See ARCHITECTURE.md § Auth.
+      -- but fills no organization's admin seat.
       IF EXISTS (
         SELECT 1 FROM organization_member
         WHERE organization_id = affected_organization_id AND role = 'admin'
@@ -479,6 +474,7 @@ CREATE TABLE IF NOT EXISTS "public"."app_user" (
     "is_superadmin" boolean DEFAULT false NOT NULL,
     "organizations_created_count" integer DEFAULT 0 NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "app_user_organizations_created_count_max" CHECK (("organizations_created_count" <= 5)),
     CONSTRAINT "app_user_organizations_created_count_non_negative" CHECK (("organizations_created_count" >= 0))
 );
 
@@ -655,7 +651,7 @@ ALTER TABLE "public"."rejected_upload" OWNER TO "postgres";
 -- Name: TABLE "rejected_upload"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE "public"."rejected_upload" IS 'An upload that failed validation and never became a report. Debugging only; not exposed publicly.';
+COMMENT ON TABLE "public"."rejected_upload" IS 'An upload that failed validation and never became a report.';
 
 
 --
@@ -800,14 +796,6 @@ ALTER TABLE ONLY "public"."organization_member"
 
 
 --
--- Name: organization organization_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY "public"."organization"
-    ADD CONSTRAINT "organization_name_key" UNIQUE ("name");
-
-
---
 -- Name: organization organization_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -922,6 +910,13 @@ CREATE INDEX "organization_invite_pending_by_email" ON "public"."organization_in
 --
 
 CREATE INDEX "organization_member_organization_id_user_id" ON "public"."organization_member" USING "btree" ("organization_id", "user_id");
+
+
+--
+-- Name: organization_name_unique_ci; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX "organization_name_unique_ci" ON "public"."organization" USING "btree" ("lower"("name"));
 
 
 --

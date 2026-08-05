@@ -1,18 +1,5 @@
-/** The whole schema, in one migration because nothing is deployed yet.
- *
- * Once anything is deployed, migrations are forward-only — see ARCHITECTURE.md § Hosting.
- * Until then this file is edited in place and both stacks are dropped and rebuilt.
- *
- * Every check, unique constraint, index, and trigger is named explicitly: `packages/db/tests/`
- * asserts those names, so an unnamed constraint is an untestable one. Triggers raise with
- * `ERRCODE = 'check_violation'` and an explicit `CONSTRAINT`, so a trigger violation and a real
- * check violation arrive at node-postgres as the same `{ code, constraint }` shape and tests do
- * not have to care which mechanism enforced an invariant.
- *
- * For the model and the reasoning behind it, see `README.md`.
- */
-
 import { type Kysely, sql } from 'kysely';
+import { updatedAtTrigger } from './_shared.ts';
 
 export async function up(database: Kysely<any>): Promise<void> {
   await functions(database);
@@ -63,7 +50,8 @@ async function functions(database: Kysely<any>): Promise<void> {
       'Time-ordered UUID v7. Replace with the built-in on Postgres 18.'
   `.execute(database);
 
-  // So no query can forget. Every table with an `updated_at` gets the matching trigger below.
+  // A trigger sets updated_at on every UPDATE, so callers can't forget it and it can't drift from
+  // the truth. `updatedAtTrigger` in `_shared.ts` attaches this to a table.
   await sql`
     CREATE FUNCTION set_updated_at() RETURNS trigger
     LANGUAGE plpgsql AS $$
@@ -75,15 +63,6 @@ async function functions(database: Kysely<any>): Promise<void> {
   `.execute(database);
 }
 
-/** Attach `set_updated_at()` to a table. */
-async function updatedAtTrigger(database: Kysely<any>, table: string): Promise<void> {
-  await sql`
-    CREATE TRIGGER ${sql.raw(`${table}_set_updated_at`)}
-      BEFORE UPDATE ON ${sql.table(table)}
-      FOR EACH ROW EXECUTE FUNCTION set_updated_at()
-  `.execute(database);
-}
-
 // ---------------------------------------------------------------------------
 // Users and organizations
 // ---------------------------------------------------------------------------
@@ -92,7 +71,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
   await database.schema.createType('organization_role').asEnum(['member', 'admin']).execute();
   await database.schema
     .createType('organization_invite_status')
-    .asEnum(['pending', 'accepted', 'declined', 'revoked', 'expired'])
+    .asEnum(['pending', 'accepted', 'declined', 'revoked', 'expired', 'superseded'])
     .execute();
 
   // --- app_user -------------------------------------------------------------
@@ -110,6 +89,10 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
       'app_user_organizations_created_count_non_negative',
       sql`organizations_created_count >= 0`,
     )
+    .addCheckConstraint(
+      'app_user_organizations_created_count_max',
+      sql`organizations_created_count <= 5`,
+    )
     .execute();
 
   await sql`
@@ -119,27 +102,17 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
 
   await updatedAtTrigger(database, 'app_user');
 
-  // Must live in `public`: the `postgres` role has TRIGGER and REFERENCES on `auth.users` but no
-  // CREATE on schema `auth`, so the widely-copied `auth.handle_new_user()` form fails here.
-  //
-  // SECURITY DEFINER because GoTrue connects as `supabase_auth_admin`, which has no rights on
-  // `public.app_user`; without it every signup fails. That makes a mutable search_path an
-  // escalation path, hence the empty one and the fully-qualified names. Any exception raised in
-  // here reaches the user as an opaque "Database error saving new user", so it does the least
-  // possible work and cannot fail on a replay.
+  // SECURITY DEFINER because Supabase Auth inserts into auth.users as its own role, which has no
+  // grants on app_user — without it every signup fails. That in turn makes an unpinned search_path
+  // an escalation path (Supabase's linter flags it as `function_search_path_mutable`), so it is
+  // pinned empty and the body schema-qualifies every name.
   await sql`
     CREATE FUNCTION handle_new_auth_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
     AS $$
     BEGIN
-      INSERT INTO public.app_user (id, display_name)
-      VALUES (
-        NEW.id,
-        nullif(trim(coalesce(NEW.raw_user_meta_data ->> 'display_name',
-                             NEW.raw_user_meta_data ->> 'full_name',
-                             NEW.raw_user_meta_data ->> 'name',
-                             '')), '')
-      )
+      INSERT INTO public.app_user (id)
+      VALUES (NEW.id)
       ON CONFLICT (id) DO NOTHING;
       RETURN NULL;
     END;
@@ -157,13 +130,19 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
   await database.schema
     .createTable('organization')
     .addColumn('id', 'uuid', (column) => column.primaryKey().defaultTo(sql`uuidv7()`))
-    .addColumn('name', 'text', (column) => column.notNull().unique())
+    .addColumn('name', 'text', (column) => column.notNull())
     .addColumn('created_by_user_id', 'uuid', (column) =>
       column.references('app_user.id').onDelete('set null'),
     )
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .execute();
+
+  // A unique index on lower(name) rather than a plain unique constraint, so "Acme" and "acme"
+  // are treated as the same organization while the row keeps its original display casing.
+  await sql`
+    CREATE UNIQUE INDEX organization_name_unique_ci ON organization (lower(name))
+  `.execute(database);
 
   await database.schema
     .createIndex('organization_created_by_user_id')
@@ -224,7 +203,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
       END IF;
 
       -- app_user.is_superadmin is deliberately not consulted: a superadmin is admin everywhere
-      -- but fills no organization's admin seat. See ARCHITECTURE.md § Auth.
+      -- but fills no organization's admin seat.
       IF EXISTS (
         SELECT 1 FROM organization_member
         WHERE organization_id = affected_organization_id AND role = 'admin'
@@ -300,8 +279,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addColumn('expires_at', 'timestamptz', (column) => column.notNull())
     .addColumn('status', sql`organization_invite_status`, (column) => column.notNull())
-    // Stored lowercased rather than `citext`, so matching an invite to a verified email needs no
-    // extension and no Kanel type mapping. Callers lowercase; this makes forgetting a hard error.
+    // Callers must lowercase emails.
     .addCheckConstraint('organization_invite_email_is_lowercase', sql`email = lower(email)`)
     .addCheckConstraint(
       'organization_invite_expires_at_after_created_at',
@@ -309,7 +287,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     )
     .execute();
 
-  // Only one live invite per address at a time. Expired and revoked rows stay for the audit trail.
+  // Only one live invite per address at a time; every dead status stays for the audit trail.
   await database.schema
     .createIndex('organization_invite_one_pending_per_email')
     .on('organization_invite')
@@ -471,7 +449,7 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
 
   await sql`
     COMMENT ON TABLE rejected_upload IS
-      'An upload that failed validation and never became a report. Debugging only; not exposed publicly.'
+      'An upload that failed validation and never became a report.'
   `.execute(database);
 
   await sql`
@@ -535,7 +513,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'report_id',
       'attempt_number',
     ])
-    // The retry limit from REQUIREMENTS.md § Abuse limits.
+    // Limit number of retries.
     .addCheckConstraint(
       'analysis_attempt_attempt_number_range',
       sql`attempt_number BETWEEN 1 AND 5`,
@@ -830,8 +808,6 @@ async function audit(database: Kysely<any>): Promise<void> {
       ON audit_event (organization_id, occurred_at DESC)
   `.execute(database);
 
-  // Revoking UPDATE and DELETE would not do it: the app connects as an owner role, and owners
-  // are not subject to their own table's privileges. A trigger holds regardless of who connects.
   await sql`
     CREATE FUNCTION audit_event_reject_mutation() RETURNS trigger
     LANGUAGE plpgsql AS $$
