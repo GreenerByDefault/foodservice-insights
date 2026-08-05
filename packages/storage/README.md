@@ -2,8 +2,8 @@
 
 The blob store, reached through its S3 API. Used by both the web app and the worker parent.
 
-> **Status: the key layout below is still a spec.** The code here is generic — a client, and the
-> few operations the setup itself needs. Nothing in it builds or knows the keys described under
+> **Status: the key layout below is still a spec.** The code here is generic — a client, and
+> operations on objects and prefixes. Nothing in it builds or knows the keys described under
 > [Key layout](#key-layout). Delete that section once the code that constructs those keys lands,
 > and let the code carry the detail.
 
