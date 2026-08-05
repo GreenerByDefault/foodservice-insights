@@ -40,7 +40,7 @@ function exportTypeAsDefault(_path, lines) {
 module.exports = {
   connection: requireEnv('DB_CONNECTION_STRING'),
 
-  schemas: ['public'],
+  schemas: ['public', 'auth'],
 
   outputPath: './src/generated',
 
