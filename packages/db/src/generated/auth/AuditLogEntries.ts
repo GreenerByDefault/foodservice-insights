@@ -15,8 +15,6 @@ export default interface AuditLogEntriesTable {
   payload: ColumnType<unknown | null, unknown | null, unknown | null>;
 
   createdAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  ipAddress: ColumnType<string, string | undefined, string>;
 }
 
 export type AuditLogEntries = Selectable<AuditLogEntriesTable>;
