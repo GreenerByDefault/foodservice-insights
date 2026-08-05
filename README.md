@@ -10,7 +10,7 @@ recommendations.
 | --- | --- |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the system fits together, and why |
 | [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
-| [`packages/db/SCHEMA.md`](packages/db/SCHEMA.md) | Database schema |
+| [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
 | [`AGENTS.md`](AGENTS.md) | How we write code here |
 
 This file covers everything operational: prerequisites, commands, repo layout, and testing.
@@ -166,7 +166,7 @@ A pull request runs only the jobs its changes can affect; `main` runs everything
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
 | `pnpm truncate` | Delete every row and every object, keeping the schema and the bucket |
-| `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) from the live database |
+| `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) and [`packages/db/schema.sql`](packages/db/schema.sql) from the live database |
 
 `migrate` and `truncate` act on both stores. Use a pnpm filter to reach just one:
 `pnpm --filter @gbd/storage run migrate`.
@@ -175,10 +175,11 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
 ### Add a database migration
 
-1. Add a file to `packages/db/migrations/`, numbered in sequence.
+1. Add a file to `packages/db/migrations/`, numbered in sequence. Name every constraint, index,
+   and trigger you add.
 2. `pnpm migrate`
-3. `pnpm db:gen-types`, and commit the regenerated types alongside the migration.
-4. Add a test to `packages/db/tests/` for each new constraint or trigger.
+3. `pnpm db:gen-types`, and commit the regenerated files alongside the migration.
+4. Add a test to `packages/db/tests/` for each new constraint or trigger, asserting its name.
 
 Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
 Keep them backwards-compatible with the running app, since migrations run *before* the new
@@ -215,7 +216,7 @@ Supabase Studio for the dev stack is at <http://localhost:55323>. For logs:
 docker logs -f supabase_db_fsi-dev
 ```
 
-To see a query plan, per [`SCHEMA.md`](packages/db/SCHEMA.md#conventions)'s
+To see a query plan, per [`packages/db/README.md`](packages/db/README.md#conventions)'s
 `EXPLAIN ANALYZE` convention:
 
 ```typescript

@@ -115,14 +115,15 @@ jobs:
       - run: pnpm migrate
         env:
           TEST_DB: '1'
-      - name: Regenerate types and check nothing changed
+      - name: Regenerate types and schema dump, and check nothing changed
         env:
           TEST_DB: '1'
         run: |
           pnpm db:gen-types
-          if ! git diff --exit-code --quiet packages/db/src/generated; then
-            echo '::error::packages/db/src/generated is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
-            git diff packages/db/src/generated
+          if ! git diff --exit-code --quiet packages/db/src/generated packages/db/schema.sql; then
+            echo '::error::packages/db/src/generated or packages/db/schema.sql is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
+            echo '::notice::If you ran that locally and still see a diff, your local Supabase CLI version probably differs from the one pinned in .github/actions/setup-supabase/action.yml. Run `brew upgrade supabase`, then bump the pinned `version:` in that file to match `supabase --version`, and regenerate.'
+            git diff packages/db/src/generated packages/db/schema.sql
             exit 1
           fi
 

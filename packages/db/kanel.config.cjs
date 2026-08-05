@@ -53,6 +53,9 @@ module.exports = {
 
   preRenderHooks: [makeKyselyHook(), kyselyCamelCaseHook],
   postRenderHooks: [exportTypeAsDefault],
-  typeFilter: kyselyTypeFilter,
+
+  typeFilter: (type) =>
+    kyselyTypeFilter(type) && type.kind !== 'function' && type.kind !== 'procedure',
+
   enumStyle: 'type',
 };

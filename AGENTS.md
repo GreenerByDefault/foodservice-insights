@@ -102,8 +102,7 @@ keep every document either accurate or obviously dead.
 - **One source of truth per fact, named explicitly.** Kysely migrations own the schema; the
   Supabase CLI's `migrations/` is unused. When two files could both plausibly answer a
   question, say in one of them which one wins.
-- **A doc written before its code is a spec, and says so** in a status block naming what
-  replaces it. [`packages/db/SCHEMA.md`](packages/db/SCHEMA.md) is the current example.
+- **A doc written before its code is a spec, and says so** in a status block naming what replaces it.
 
 ## TypeScript and Svelte
 
@@ -136,9 +135,9 @@ keep every document either accurate or obviously dead.
   bare CLI finds neither stack and offers to create a third.
 - **Write migration columns in snake_case.** `CamelCasePlugin` translates identifiers, so a
   `site_name` column is what makes `siteName` work in queries.
-- **`packages/db/src/generated/` is Kanel output**: committed, verified by CI, and deleted
-  wholesale on every run. Nothing hand-written goes in it — `src/schema.ts` is its companion.
-  Run `pnpm db:gen-types` after every migration and commit the result.
+- **To read the schema, don't read the migrations.** `packages/db/schema.sql` is the current state
+  with every constraint, index, and trigger; `packages/db/src/generated/` is what you can query in TypeScript.
+  [`packages/db/README.md`](packages/db/README.md) covers the model and which file answers what.
 - **Query helpers take `db: DatabaseExecutor` as their first parameter**, so tests can pass a
   rolled-back transaction where the app passes its long-lived handle. For route handlers, put
   the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
