@@ -22,15 +22,9 @@ export type ObjectBody = Uint8Array | string;
 
 /** What may be written alongside an object's bytes.
  *
- * The content type is set at write time so the stored object is self-describing: a download
- * reaches the blob store directly, since `/file/:id` redirects to a signed URL, and this is the
- * header the browser then acts on without the reader having to supply it.
- *
  * Notably *not* here: the download filename. Supabase Storage silently discards a
  * `Content-Disposition` given to `PutObject` but does honour a `response-content-disposition`
- * override on a read, so the filename has to go on the signed URL — see `signedObjectUrl`. Which
- * is the better home for it anyway: the filename belongs to the link we hand out, not to the
- * stored bytes.
+ * override on a read, so the filename goes on the signed URL instead — see `signedObjectUrl`.
  */
 export type PutObjectOptions = {
   contentType?: string;
@@ -127,9 +121,6 @@ export async function listObjectKeys(
  *
  * Deletes each listing page as it arrives instead of collecting every key first, so memory is
  * bounded by one request.
- *
- * This is the primitive that makes deleting one organization's files a single call — see the key
- * layout in this package's README.
  */
 export async function deletePrefix(
   store: BlobStore,

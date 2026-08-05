@@ -1,10 +1,8 @@
 /** Proves a signed URL is honoured by a real Supabase Storage S3 endpoint.
  *
- * Every fetch here is a plain `fetch()` with no SDK and no credentials, which is exactly the
- * request a browser makes once `/file/:id` redirects it. That is the point of testing against the
- * real endpoint: whether our path-style, explicitly-credentialed client produces a URL Supabase
- * accepts — and whether Supabase honours the response-header overrides we depend on — is not
- * something a fake can answer.
+ * Every fetch here is a plain `fetch()` with no SDK and no credentials — the request a browser
+ * makes once `/file/:id` redirects it. It checks that Supabase accepts our path-style,
+ * explicitly-credentialed URL and honours the response-header overrides we depend on.
  */
 
 import { afterAll, describe, expect, test } from 'vitest';
@@ -18,6 +16,7 @@ afterAll(() => {
 });
 
 const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const EXPIRES_IN_SECONDS = 60;
 
 /** Strip the signature, leaving the URL that would reach the object if the bucket were public. */
 function withoutSignature(signed: string): string {
@@ -31,7 +30,11 @@ describe('signedObjectUrl', () => {
     await withTemporaryPrefix(BLOB_STORE, async (prefix) => {
       await putObject(BLOB_STORE, `${prefix}logo.png`, PNG_HEADER, { contentType: 'image/png' });
 
-      const response = await fetch(await signedObjectUrl(BLOB_STORE, `${prefix}logo.png`));
+      const response = await fetch(
+        await signedObjectUrl(BLOB_STORE, `${prefix}logo.png`, {
+          expiresInSeconds: EXPIRES_IN_SECONDS,
+        }),
+      );
 
       expect(response.ok).toBe(true);
       expect(response.headers.get('content-type')).toBe('image/png');
@@ -43,15 +46,17 @@ describe('signedObjectUrl', () => {
     await withTemporaryPrefix(BLOB_STORE, async (prefix) => {
       await putObject(BLOB_STORE, `${prefix}logo.png`, PNG_HEADER);
 
-      const signed = await signedObjectUrl(BLOB_STORE, `${prefix}logo.png`);
+      const signed = await signedObjectUrl(BLOB_STORE, `${prefix}logo.png`, {
+        expiresInSeconds: EXPIRES_IN_SECONDS,
+      });
       const response = await fetch(withoutSignature(signed));
 
       expect(response.ok).toBe(false);
     });
   });
 
-  // Asserting the parameter rather than sleeping past a real expiry: the wait would be the
-  // slowest, flakiest test here, and the signing library owns enforcement anyway.
+  // Asserts the signed param instead of waiting out a real expiry: that would make this the
+  // slowest test here, and whether the expiry is enforced is S3's contract to keep, not ours to verify.
   test('signs for the requested lifetime', async () => {
     const signed = await signedObjectUrl(BLOB_STORE, 'whatever.png', { expiresInSeconds: 42 });
 
@@ -62,7 +67,9 @@ describe('signedObjectUrl', () => {
   // Callers that need a 404 up front check `objectExists` first.
   test('signs a key with nothing at it, and that URL fails when used', async () => {
     await withTemporaryPrefix(BLOB_STORE, async (prefix) => {
-      const signed = await signedObjectUrl(BLOB_STORE, `${prefix}not-there.png`);
+      const signed = await signedObjectUrl(BLOB_STORE, `${prefix}not-there.png`, {
+        expiresInSeconds: EXPIRES_IN_SECONDS,
+      });
 
       expect(signed).toContain('X-Amz-Signature');
       expect((await fetch(signed)).ok).toBe(false);
@@ -83,6 +90,7 @@ describe('downloadFilename', () => {
 
       const response = await fetch(
         await signedObjectUrl(BLOB_STORE, `${prefix}b0dd.pdf`, {
+          expiresInSeconds: EXPIRES_IN_SECONDS,
           downloadFilename: '2026 report.pdf',
         }),
       );
@@ -94,7 +102,9 @@ describe('downloadFilename', () => {
   });
 
   test('is absent unless asked for, so a plain read is not a download', async () => {
-    const signed = await signedObjectUrl(BLOB_STORE, 'whatever.pdf');
+    const signed = await signedObjectUrl(BLOB_STORE, 'whatever.pdf', {
+      expiresInSeconds: EXPIRES_IN_SECONDS,
+    });
 
     expect(new URL(signed).searchParams.has('response-content-disposition')).toBe(false);
   });
@@ -104,6 +114,7 @@ describe('downloadFilename', () => {
   // still travels intact in `filename*`.
   test('escapes a filename a user chose', async () => {
     const signed = await signedObjectUrl(BLOB_STORE, 'whatever.pdf', {
+      expiresInSeconds: EXPIRES_IN_SECONDS,
       downloadFilename: 'Café "2026"\r\n\\ report.pdf',
     });
 
@@ -115,6 +126,7 @@ describe('downloadFilename', () => {
 
   test('carries a wholly non-ASCII filename in the extended form', async () => {
     const signed = await signedObjectUrl(BLOB_STORE, 'whatever.pdf', {
+      expiresInSeconds: EXPIRES_IN_SECONDS,
       downloadFilename: '日本語.pdf',
     });
 

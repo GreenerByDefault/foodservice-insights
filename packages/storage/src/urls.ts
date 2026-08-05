@@ -2,24 +2,12 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { BlobStore } from './client.ts';
 
-/** How long a signed URL stays valid.
- *
- * Short, because nobody keeps one: the user's link is our own `/file/:id`, and the signed URL is
- * an internal hop the browser follows immediately. That is why a short expiry here does not
- * contradict REQUIREMENTS.md rejecting expiring links — see ARCHITECTURE.md's *File links*. Long
- * enough, though, that a slow client still gets its download started.
- */
-const DEFAULT_EXPIRES_IN_SECONDS = 60;
-
 export type SignedUrlOptions = {
-  /** How long the URL stays valid. Keep it short; see `DEFAULT_EXPIRES_IN_SECONDS`. */
-  expiresInSeconds?: number;
+  /** How long the URL stays valid. */
+  expiresInSeconds: number;
 
-  /** The name to save the file as, rather than the key's last segment, which is a UUID.
-   *
-   * A read-time choice rather than something written onto the object, because Supabase Storage
-   * discards a `Content-Disposition` given to `PutObject` but does honour the
-   * `response-content-disposition` override on a read.
+  /** Set this to make the URL a download, saved under this name rather than the key's UUID.
+   * Leave it unset for something meant to display inline, like a chart image.
    */
   downloadFilename?: string;
 };
@@ -29,14 +17,14 @@ export type SignedUrlOptions = {
  * This is how a private bucket serves a download: the route checks the database for whether the
  * file is still accessible, then redirects here.
  *
- * Signing happens locally and reaches the blob store not at all, so this succeeds for a key with
- * nothing at it and the resulting URL fails when used. A caller that needs to answer "is it
- * there?" first should use `objectExists`.
+ * Signing happens locally and does not reach the blob store, so this succeeds for a key with
+ * nothing at it, and the resulting URL would fail when used. A caller that needs to answer "is it
+ * there?" should first use `objectExists`.
  */
 export async function signedObjectUrl(
   store: BlobStore,
   key: string,
-  options: SignedUrlOptions = {},
+  options: SignedUrlOptions,
 ): Promise<string> {
   return await getSignedUrl(
     store.client,
@@ -47,7 +35,7 @@ export async function signedObjectUrl(
         ? attachmentDisposition(options.downloadFilename)
         : undefined,
     }),
-    { expiresIn: options.expiresInSeconds ?? DEFAULT_EXPIRES_IN_SECONDS },
+    { expiresIn: options.expiresInSeconds },
   );
 }
 
