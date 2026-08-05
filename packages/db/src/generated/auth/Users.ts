@@ -20,7 +20,7 @@ export default interface UsersTable {
 
   encryptedPassword: ColumnType<string | null, string | null, string | null>;
 
-  confirmedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  emailConfirmedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   invitedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
@@ -32,7 +32,7 @@ export default interface UsersTable {
 
   recoverySentAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  emailChangeToken: ColumnType<string | null, string | null, string | null>;
+  emailChangeTokenNew: ColumnType<string | null, string | null, string | null>;
 
   emailChange: ColumnType<string | null, string | null, string | null>;
 
@@ -49,6 +49,35 @@ export default interface UsersTable {
   createdAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   updatedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  phone: ColumnType<string | null, string | null, string | null>;
+
+  phoneConfirmedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  phoneChange: ColumnType<string | null, string | null, string | null>;
+
+  phoneChangeToken: ColumnType<string | null, string | null, string | null>;
+
+  phoneChangeSentAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  confirmedAt: ColumnType<Date | null, never, never>;
+
+  emailChangeTokenCurrent: ColumnType<string | null, string | null, string | null>;
+
+  emailChangeConfirmStatus: ColumnType<number | null, number | null, number | null>;
+
+  bannedUntil: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  reauthenticationToken: ColumnType<string | null, string | null, string | null>;
+
+  reauthenticationSentAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  /** Auth: Set this column to true when the account comes from SSO. These accounts can have duplicate emails. */
+  isSsoUser: ColumnType<boolean, boolean | undefined, boolean>;
+
+  deletedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  isAnonymous: ColumnType<boolean, boolean | undefined, boolean>;
 }
 
 export type Users = Selectable<UsersTable>;

@@ -27,7 +27,7 @@ enabled = false
 port = 55321
 
 [auth]
-enabled = false
+enabled = true
 site_url = "http://localhost:5173"
 
 # Catches outbound email so nothing escapes locally. Web UI on `port`.

@@ -27,7 +27,7 @@ enabled = false
 port = 65321
 
 [auth]
-enabled = false
+enabled = true
 site_url = "http://localhost:5173"
 
 # Raised so tests are fast and deterministic rather than throttled.

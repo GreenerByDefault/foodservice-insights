@@ -1,4 +1,5 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { SessionsId } from './Sessions.js';
 
 /** Identifier type for auth.refresh_tokens */
 export type RefreshTokensId = string & { __brand: 'auth.refresh_tokens' };
@@ -21,6 +22,10 @@ export default interface RefreshTokensTable {
   createdAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   updatedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  parent: ColumnType<string | null, string | null, string | null>;
+
+  sessionId: ColumnType<SessionsId | null, SessionsId | null, SessionsId | null>;
 }
 
 export type RefreshTokens = Selectable<RefreshTokensTable>;
