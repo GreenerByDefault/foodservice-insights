@@ -309,6 +309,24 @@ CREATE OR REPLACE FUNCTION "public"."organization_check_has_member"() RETURNS "t
 ALTER FUNCTION "public"."organization_check_has_member"() OWNER TO "postgres";
 
 --
+-- Name: organization_count_against_creator(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."organization_count_against_creator"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+    BEGIN
+      UPDATE app_user
+         SET organizations_created_count = organizations_created_count + 1
+       WHERE id = NEW.created_by_user_id;
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."organization_count_against_creator"() OWNER TO "postgres";
+
+--
 -- Name: organization_member_check_admin_remains(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1008,6 +1026,13 @@ CREATE OR REPLACE TRIGGER "app_user_set_updated_at" BEFORE UPDATE ON "public"."a
 --
 
 CREATE OR REPLACE TRIGGER "audit_event_is_append_only" BEFORE DELETE OR UPDATE ON "public"."audit_event" FOR EACH ROW EXECUTE FUNCTION "public"."audit_event_reject_mutation"();
+
+
+--
+-- Name: organization organization_count_against_creator; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "organization_count_against_creator" AFTER INSERT ON "public"."organization" FOR EACH ROW WHEN (("new"."created_by_user_id" IS NOT NULL)) EXECUTE FUNCTION "public"."organization_count_against_creator"();
 
 
 --

@@ -152,6 +152,36 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
 
   await updatedAtTrigger(database, 'organization');
 
+  // The counter `app_user_organizations_created_count_max` limits, maintained here rather than by
+  // the app, because that is what makes the limit hold when two requests arrive at once: the
+  // read-modify-write is one UPDATE, so the second creation waits on the first's row lock and then
+  // counts from what it committed. An app-side `SELECT` followed by `SET count = $n` loses one of
+  // the two and lets an extra organization through. See `tests/concurrency.test.ts`.
+  //
+  // It only ever counts up. The column records organizations *created*, so deleting one does not
+  // hand the quota back — otherwise the limit would be trivial to walk around.
+  await sql`
+    CREATE FUNCTION organization_count_against_creator() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE app_user
+         SET organizations_created_count = organizations_created_count + 1
+       WHERE id = NEW.created_by_user_id;
+      RETURN NULL;
+    END;
+    $$
+  `.execute(database);
+
+  // `created_by_user_id` is nullable — it is set to null when the creator deletes their account —
+  // and an organization nobody claims to have created counts against nobody.
+  await sql`
+    CREATE TRIGGER organization_count_against_creator
+      AFTER INSERT ON organization
+      FOR EACH ROW
+      WHEN (NEW.created_by_user_id IS NOT NULL)
+      EXECUTE FUNCTION organization_count_against_creator()
+  `.execute(database);
+
   // --- organization_member --------------------------------------------------
 
   await database.schema
@@ -585,11 +615,21 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at, failure_reason and the ai_* columns in one UPDATE.'
   `.execute(database);
 
-  // One active attempt per report — the constraint that makes the reaping race in
-  // ARCHITECTURE.md § Heartbeats safe. Two concurrent retries both pass the insert trigger
-  // (neither sees the other's uncommitted row) and are serialized here instead: the loser blocks
-  // on the index and then fails with a unique violation, which callers should surface as a
-  // conflict rather than an error.
+  // At most one active attempt per report.
+  //
+  // It is not what serializes two concurrent retries, though it looks like it: both pass the
+  // insert trigger, neither seeing the other's uncommitted row, and then both write to
+  // `analysis_attempt_report_id_attempt_number` as well as to this index. Postgres maintains
+  // indexes in OID order, and the composite one was created with the table, so that is the one
+  // that blocks and the one whose name a caller sees. `tests/concurrency.test.ts` pins that down.
+  //
+  // Keep this index anyway, for three things the composite one does not do:
+  //   1. It states a different invariant — at most one *active* attempt, a property of state,
+  //      rather than uniqueness of numbering. The two coincide only because the insert trigger
+  //      ties attempt_number to the sequence; loosen that and the composite stops covering it.
+  //   2. It survives trigger bypass — `session_replication_role = 'replica'`, some restore paths —
+  //      where the insert trigger is the only other thing enforcing one-active.
+  //   3. It is the cheap access path for "does this report have an active attempt?".
   await database.schema
     .createIndex('analysis_attempt_one_active_per_report')
     .on('analysis_attempt')

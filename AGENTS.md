@@ -142,7 +142,9 @@ keep every document either accurate or obviously dead.
   the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
   alongside `GET`/`POST` — and have the handler call it with `database()`. Call `database()`
   inside the handler, never at module scope.
-- **Database tests must use `withRollback`** to enable safe concurrency.
+- **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
+  test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
+  express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
 - **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 
 ## Repo mechanics

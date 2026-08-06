@@ -23,6 +23,9 @@ rolled-back transaction where the app passes its long-lived handle.
 - **Everything outside the web app** imports `DATABASE` from `@gbd/db/env`.
 - **Tests** build rows with the fixtures in [`src/testing/fixtures.ts`](src/testing/fixtures.ts),
   exported from `@gbd/db/testing`, rather than inserting rows directly.
+- **Tests that need two transactions at once** — anything about a lock, a block, or a second
+  snapshot — use [`src/testing/concurrency.ts`](src/testing/concurrency.ts) instead of
+  `withRollback`, which cannot express any of them and would make such a test pass vacuously.
 
 ## The model
 
@@ -55,6 +58,9 @@ Design reasoning:
   `rejection_reason` is ours rather than the user's, so that one is an enum.
 - **Superadmin is a boolean on `app_user`, not a membership row.** See
   [`ARCHITECTURE.md`](../../ARCHITECTURE.md#auth).
+- **`app_user.organizations_created_count` is maintained by a trigger, not by the app.** The limit
+  it feeds only holds if the read and the write are one statement. Application code must never
+  write that column.
 
 ## Conventions
 
@@ -91,9 +97,23 @@ code that writes to this column:
 
 - **Open:** the AI metadata fields on `analysis_attempt` are a placeholder and may change.
   `result_metadata` will probably be promoted to structured columns once its shape is scoped.
-- **Open:** the queue-claiming `FOR UPDATE SKIP LOCKED` query needs a concurrency test, which
-  `withRollback` cannot express — `SKIP LOCKED` never skips a transaction's own locks, so it needs
-  two committed connections. It belongs with the worker's queue code, which does not exist yet.
+- **Open:** the queue-claiming `FOR UPDATE SKIP LOCKED` query is tested in
+  [`tests/concurrency.test.ts`](tests/concurrency.test.ts), but only as a *copy* of the one in
+  [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing yet ties a worker to it,
+  because the worker's queue code does not exist. Move the query into that code when it lands and
+  point the test at it.
+- **Open:** the hourly and weekly report limits in
+  [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits) still have the race the organization
+  creation limit no longer has — two uploads that each count four and then both insert. Closing it
+  means putting the count and the insert under one lock, per organization *and* per user, which
+  needs the upload path to exist first so it can fix the order the two are taken in.
+- **Open:** nothing stops a retry racing a soft delete. Inserting an `analysis_attempt` takes only
+  a `KEY SHARE` lock on its `report`, which does not conflict with the `UPDATE` that sets
+  `deleted_at`, so a report can be deleted and gain a sixth attempt at the same moment — and the
+  worker then analyses it and emails about it. The UI hides retry on a deleted report, so this is
+  only the window between the click and the delete. Closing it means the insert reading
+  `deleted_at` under `FOR NO KEY UPDATE`, which needs the product to first commit to "a deleted
+  report gets no new attempts" as an invariant rather than a UI affordance.
 - **Open:** "exactly one `input_file` per report" is enforced only as *at most* one. The app writes
   both in a single transaction; a deferred constraint trigger would make it *exactly* one, at the
   cost of every report fixture needing a file.

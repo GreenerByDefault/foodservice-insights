@@ -320,9 +320,12 @@ describe('starting a new attempt', () => {
 });
 
 describe('at most one active attempt per report', () => {
-  // Not provocable from a single transaction: `analysis_attempt_new_attempt_only_after_failure`
-  // already rejects every sequential path to a second active attempt. Asserting the index exists
-  // is what stops a refactor removing it silently.
+  // Not provocable at all, from one transaction or two.
+  // `analysis_attempt_new_attempt_only_after_failure` rejects every sequential path to a second
+  // active attempt, and on the concurrent path — two simultaneous retries, in
+  // `concurrency.test.ts` — the composite unique constraint reports first. So this index is
+  // covered by its definition rather than by behaviour, and asserting the definition is what stops
+  // a refactor removing it silently. The migration says what it buys that the composite does not.
   test('is enforced by a partial unique index', async () => {
     const index = await withRollback(DATABASE, async (transaction) => {
       const { rows } = await sql<{ indexdef: string }>`

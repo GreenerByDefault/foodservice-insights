@@ -1,3 +1,11 @@
+export type { BlockedStatement, ConcurrentTransaction, Trash } from './concurrency.ts';
+export {
+  fixtureOrganizationName,
+  insertFixtureOrganization,
+  sendBlockingStatement,
+  withCommittedFixture,
+  withConcurrentTransactions,
+} from './concurrency.ts';
 export {
   aChecksum,
   insertAnalysisAttempt,

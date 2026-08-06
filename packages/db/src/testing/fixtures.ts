@@ -141,6 +141,7 @@ export async function insertAnalysisAttempt(
     reportId?: Report['id'];
     attemptNumber?: number;
     status?: AnalysisAttemptStatus;
+    workerId?: string;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -156,7 +157,11 @@ export async function insertAnalysisAttempt(
       attemptNumber: overrides.attemptNumber ?? 1,
       status,
       ...(isProcessing
-        ? { workerId: 'test-worker', lockedAt: new Date(), lastHeartbeatAt: new Date() }
+        ? {
+            workerId: overrides.workerId ?? 'test-worker',
+            lockedAt: new Date(),
+            lastHeartbeatAt: new Date(),
+          }
         : {}),
       ...(isTerminal
         ? { finishedAt: new Date(), failureReason: status === 'failed' ? 'child_crashed' : null }

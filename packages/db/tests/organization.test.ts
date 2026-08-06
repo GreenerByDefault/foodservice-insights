@@ -116,6 +116,41 @@ describe('organization', () => {
     await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
   });
 
+  test('counts against the user who created it', async () => {
+    const count = await withRollback(DATABASE, async (transaction) => {
+      const { admin } = await insertOrganization(transaction);
+      const user = await transaction
+        .selectFrom('appUser')
+        .select('organizationsCreatedCount')
+        .where('id', '=', admin.id)
+        .executeTakeFirstOrThrow();
+      return user.organizationsCreatedCount;
+    });
+
+    expect(count).toBe(1);
+  });
+
+  test('is refused once its creator has created five', async () => {
+    // The abuse limit from REQUIREMENTS.md. The counter is maintained by a trigger rather than by
+    // the app because that is what holds when two creations arrive at once — see
+    // `tests/concurrency.test.ts`. These five need no members of their own: the trigger that would
+    // ask for one is deferred, and this transaction never reaches a commit.
+    const insert = withRollback(DATABASE, async (transaction) => {
+      const { admin } = await insertOrganization(transaction);
+      for (let number = 2; number <= 6; number++) {
+        await transaction
+          .insertInto('organization')
+          .values({ name: `Extra ${crypto.randomUUID()}`, createdByUserId: admin.id })
+          .execute();
+      }
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'app_user_organizations_created_count_max',
+    });
+  });
+
   test('cannot be created with no members at all', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       await transaction
