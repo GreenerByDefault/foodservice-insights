@@ -27,21 +27,18 @@ migrations.
 
 ## Storing this product's files
 
-The bucket is private, and its key layout lives in [`src/keys.ts`](src/keys.ts).
+The bucket is private. Its key layout, and the rules that hold it together, live in
+[`src/keys.ts`](src/keys.ts).
 
-`putInputFile`, `putResultFile`, and `putRejectedUpload` are how a file gets written. Each builds
-its own key and returns the metadata its database row needs, so the object and the row cannot
-disagree; the caller writes the row, inside its own transaction. Nothing reads a file by rebuilding
-its key — every reader takes `storage_key` off the row.
+`putInputFile`, `putResultFile`, and `putRejectedUpload` write a file and return the metadata its
+database row needs, so the object and the row cannot disagree. The caller writes the row itself,
+inside its own transaction. Deleting an organization's files is one `deletePrefix` over
+`organizationPrefix(id)`.
 
-Everything an organization owns lives under `organizationPrefix(id)`, so deleting an organization's
-files is one `deletePrefix`.
+That is why a blob store package depends on `@gbd/db`: keys are made of row ids, and taking them
+branded is what stops a report id being written where a file id belongs. **The dependency is
+type-only and should stay that way** — needing a runtime import from `@gbd/db` here is the signal
+to split these files into their own package.
 
-This is why a blob store package depends on `@gbd/db`: keys are made of row ids, and taking them
-branded is what stops a report id being written where a file id belongs. The dependency is
-type-only, and should stay that way — wanting a *runtime* import from `@gbd/db` here would be the
-signal to split these two files into their own package rather than to widen this.
-
-Tests that exercise any of this wrap their work in `withTemporaryOrganization` rather than
-`withTemporaryPrefix`, because real keys start at `org/{id}/` rather than wherever a test would
-prefer.
+Tests use `withTemporaryOrganization` rather than `withTemporaryPrefix`, because real keys start at
+`org/{id}/`.

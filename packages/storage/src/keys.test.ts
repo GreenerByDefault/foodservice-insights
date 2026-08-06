@@ -1,8 +1,7 @@
 /** The key layout, asserted as exact strings.
  *
- * These golden strings are the layout: they are what `keys.ts`'s header diagram describes, in a
- * form that cannot quietly stop being true. Changing one is changing where a file lives, which is
- * a decision about objects already in the bucket, not a test to update.
+ * Changing one of these is changing where a file lives — a decision about objects already in the
+ * bucket, not a test to update.
  *
  * Pure, so this file needs no blob store and no bucket.
  */
@@ -112,22 +111,18 @@ describe('the layout', () => {
 });
 
 describe('the organization prefix', () => {
-  // The rule that makes deleting an organization one `deletePrefix`. `organizationScoped` is what
-  // enforces it, so a key kind added later gets this for free — but only for as long as it goes
-  // through it, which is what this checks.
+  // The rule that makes deleting an organization one `deletePrefix`. `organizationScoped` enforces
+  // it; this checks that every builder still goes through it.
   test.each(EVERY_KEY)('covers the %s key', (_description, key) => {
     expect(key.startsWith(organizationPrefix(ORGANIZATION_ID))).toBe(true);
   });
 
-  // `deletePrefix` matches the string, not path segments. Without the trailing slash, deleting
-  // one organization would reach into any other whose id merely began the same way.
   test('ends in a slash, so it can only match whole segments', () => {
     expect(organizationPrefix(ORGANIZATION_ID)).toBe('org/organization-1/');
   });
 });
 
-// A leading or doubled slash is legal in S3 and creates an object at a key nobody will look for,
-// so it fails here rather than in a bucket.
+// A leading or doubled slash is legal in S3, and creates an object at a key nobody will look for.
 describe('every key', () => {
   test.each(EVERY_KEY)('%s has no empty path segment', (_description, key) => {
     expect(key.split('/').filter((segment) => segment === '')).toEqual([]);

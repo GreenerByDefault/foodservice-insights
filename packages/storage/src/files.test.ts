@@ -1,12 +1,11 @@
 /** The three writes this product performs, against a real Supabase Storage S3 endpoint.
  *
- * Unmocked for the reason `objects.test.ts` gives. What matters here is that the row a caller is
- * about to insert describes the object that now exists, and only the real store can say that.
+ * Unmocked for the reason `objects.test.ts` gives.
  *
  * Deliberately not covered: inserting a `StoredFile` into `input_file`. That would make this
- * package's tests need a migrated database as well as a bucket, to prove something the type
- * already gives us — `packages/db/tests/report.test.ts` covers the columns accepting these values.
- * It lands naturally with the upload route, whose tests run against both.
+ * package's tests need a migrated database as well as a bucket, and
+ * `packages/db/tests/report.test.ts` already covers the columns accepting these values. It lands
+ * with the upload route, whose tests run against both.
  */
 
 import { createHash } from 'node:crypto';
@@ -51,8 +50,8 @@ describe('putInputFile', () => {
     });
   });
 
-  // The whole point of returning a `StoredFile`: the row the caller is about to write has to
-  // describe the object that now exists, not what the caller believed it was sending.
+  // The point of returning a `StoredFile`: the row has to describe the object that now exists,
+  // not what the caller believed it was sending.
   test('describes the object the store actually holds', async () => {
     await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
       const stored = await putInputFile(
@@ -89,8 +88,8 @@ describe('putInputFile', () => {
         CSV,
       );
 
-      // Compared against a plain `Uint8Array`, which also pins down that the digest is not left as
-      // the `Buffer` it arrives as — a `Buffer` satisfies the type but serialises differently.
+      // A plain `Uint8Array`, which also pins down that the digest is not left as the `Buffer` it
+      // arrives as — a `Buffer` satisfies the type but serialises differently.
       expect(stored.checksumSha256).toEqual(
         Uint8Array.from(createHash('sha256').update(CSV).digest()),
       );
@@ -129,8 +128,6 @@ describe('putResultFile', () => {
 });
 
 describe('putRejectedUpload', () => {
-  // A rejected upload is rejected because of what it turned out to be, so it is stored as opaque
-  // bytes rather than as the CSV it claimed to be.
   test('stores the bytes without labelling them CSV', async () => {
     await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
       const stored = await putRejectedUpload(
@@ -147,8 +144,8 @@ describe('putRejectedUpload', () => {
   });
 });
 
-/** What REQUIREMENTS.md requires of an admin deleting an organization: its files go, all of them,
- * and nobody else's do. The layout exists to make that one call.
+/** What REQUIREMENTS.md asks of an admin deleting an organization. The layout exists to make it
+ * one call.
  */
 describe('deleting an organization', () => {
   test('takes every kind of file it owns, and nothing another organization owns', async () => {

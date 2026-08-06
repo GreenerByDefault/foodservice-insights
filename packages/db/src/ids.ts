@@ -1,16 +1,16 @@
 /** The branded row ids, and the two of them the application mints rather than the database.
  *
- * The types are re-exported from here so that another package can name an id without importing
- * out of `src/generated/`, which Kanel deletes and rewrites on every run.
+ * The types are re-exported here so another package can name an id without importing out of
+ * `src/generated/`, which Kanel deletes and rewrites on every run.
  *
  * A file's blob store key contains the file's own id, and `storage_key` is `NOT NULL`, so that id
- * has to exist before its row is inserted. That is only true of `input_file` and `result_file`,
- * which is why only they have a minter — and why they are also the two tables whose default is
- * `gen_random_uuid()` rather than `uuidv7()`. Every other table keeps its time-ordered id from
- * the database.
+ * has to exist before its row is inserted. Only `input_file` and `result_file` work that way, so
+ * only they have a minter; every other table keeps the id its default gives it. Both mint v4 to
+ * match the `gen_random_uuid()` default they would otherwise have used.
  *
- * These two functions are the only place in the codebase that casts a string to a branded id.
- * Anywhere else doing it has given up what the brand is for.
+ * Application code should take an id from here or from a row, never by casting — a cast throws
+ * away what the brand is for. Test fixtures are the exception, since their job is to conjure ids
+ * for rows that do not exist.
  */
 
 import type { InputFileId } from './generated/public/InputFile.ts';

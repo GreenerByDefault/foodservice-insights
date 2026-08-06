@@ -1,13 +1,11 @@
 /** Writing one of this product's files, and describing it the way its database row will.
  *
- * The split against `objects.ts`: that file is generic S3 with no product knowledge, whereas this
- * one and `keys.ts` know what a report is. Nothing here touches the database — the row belongs in
- * the caller's transaction, which this package knows nothing about.
+ * `objects.ts` is generic S3 with no product knowledge; this file and `keys.ts` know what a report
+ * is. Neither touches the database — the row belongs in the caller's transaction.
  *
- * **Store the object before inserting the row.** The other order writes a row pointing at nothing
- * if the upload then fails, which every reader would have to defend against; this order leaks an
- * unreferenced object if the transaction rolls back, which nothing has to defend against.
- * [`REQUIREMENTS.md`](../../../REQUIREMENTS.md#out-of-scope) already accepts orphaned objects.
+ * **Store the object before inserting the row.** The other order can leave a row pointing at
+ * nothing, which every reader would have to defend against. This order can leak an unreferenced
+ * object, which [`REQUIREMENTS.md`](../../../REQUIREMENTS.md#out-of-scope) already accepts.
  */
 
 import { createHash } from 'node:crypto';
@@ -33,22 +31,20 @@ import { putObject } from './objects.ts';
 
 /** What a stored file's database row needs to know about it.
  *
- * The field names are `input_file`'s and `result_file`'s column names, so a caller can spread this
- * straight into an insert alongside the columns only it knows — `report_id`, `original_filename`,
- * `kind`. That is the point of returning it: one function produces both the object and the
- * description of it, so the two cannot disagree about size, type, or contents.
+ * The field names are `input_file`'s and `result_file`'s columns, so a caller spreads this into its
+ * insert alongside the columns only it knows. One function producing both the object and its
+ * description is what stops the two disagreeing.
  *
- * `rejected_upload` is the exception. It records only the key, the size, and the filename, under
- * `input_file_*` names, so it uses two of these four fields and writes them out by hand.
+ * `rejected_upload` is the exception: it records only the key, size and filename, under
+ * `input_file_*` names.
  */
 export type StoredFile = {
   storageKey: string;
   byteSize: number;
   contentType: string;
 
-  /** A `Uint8Array` rather than a `Buffer` so that nothing Node-specific leaks into this type;
-   * `pg` accepts any typed-array view for a `bytea` column. Always the 32 bytes that
-   * `input_file` and `result_file` both check for.
+  /** The 32 bytes both tables check for. A `Uint8Array` rather than a `Buffer` to keep anything
+   * Node-specific out of this type; `pg` takes any typed-array view for a `bytea`.
    */
   checksumSha256: Uint8Array;
 };
@@ -90,9 +86,8 @@ export async function putRejectedUpload(
 
 /** Write `body` to `key`, and report what its row should say about it.
  *
- * Private, and reached only through the three functions above, so that a key and the content type
- * it is served with always come from the same place. A public version taking both would let a
- * caller store a `.csv` as a PDF.
+ * Private, so a key and the content type it is served with always come from the same place — a
+ * public version taking both would let a caller store a `.csv` as a PDF.
  */
 async function storeFile(
   store: BlobStore,
@@ -106,23 +101,18 @@ async function storeFile(
 
 /** Everything about a file that can be worked out from its bytes alone.
  *
- * Pure, and separate from the write, so the description is testable without a blob store — and so
- * that checking a file we read back against its recorded checksum later needs no new code.
- *
- * Takes only bytes, never a string: `byte_size` has to be the encoded length, and `body.length` on
- * a string silently differs from it for any non-ASCII input.
+ * Takes bytes and never a string: `byte_size` has to be the encoded length, which `body.length` on
+ * a string silently is not for any non-ASCII input.
  *
  * *Rejected: also sending S3's `ChecksumSHA256` header.* The SDK already sends a CRC32 of every
- * upload, and the digest recorded here is the durable check; a header whose verification by
- * Supabase Storage we have not confirmed would look like integrity without being it.
+ * upload, and whether Supabase Storage verifies a supplied digest is unconfirmed.
  */
 function describeFile(body: Uint8Array, contentType: string): Omit<StoredFile, 'storageKey'> {
   return {
     byteSize: body.byteLength,
     contentType,
-    // Copied out of the `Buffer` that `digest()` returns, so the value really is the plain
-    // `Uint8Array` the type promises. A `Buffer` would satisfy the type while still serialising
-    // and comparing as something else — 32 bytes is nothing to copy for that.
+    // Copied out of the `Buffer` `digest()` returns, so the value is the plain `Uint8Array` the
+    // type promises — a `Buffer` would satisfy the type but serialise as something else.
     checksumSha256: Uint8Array.from(createHash('sha256').update(body).digest()),
   };
 }

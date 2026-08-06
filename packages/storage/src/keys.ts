@@ -9,19 +9,15 @@
  *             /result/{result_file_id}.{ext}
  * ```
  *
- * Three rules hold the layout together:
+ * Three rules hold it together:
  *
  * 1. **Everything an organization owns is under one prefix**, so deleting an organization's files
- *    is a single `deletePrefix(store, organizationPrefix(id))`. `organizationScoped` makes that
- *    true by construction rather than by every builder remembering it.
- * 2. **A path segment is an id or a fixed name, never anything a user typed.** Filenames, report
- *    names and chart keys all live in the database instead. So a key needs no escaping, and the
- *    branded id types mean it needs no validation either — an `OrganizationId` can only have come
- *    from a row or from `newInputFileId`-style minting, never from a request body.
- * 3. **Keys are only ever built on the write path.** Every reader — the file download route, the
- *    worker fetching its input — takes `storage_key` off the row instead. That means these
- *    builders have exactly three call sites, and that changing the layout later would not strand
- *    the objects already written under the old one.
+ *    is a single `deletePrefix`.
+ * 2. **A segment is an id or a fixed name, never anything a user typed** — filenames, report names
+ *    and chart keys stay in the database. So a key needs no escaping, and branded ids mean it
+ *    needs no validation: an `OrganizationId` cannot have come from a request body.
+ * 3. **Keys are only ever built on the write path.** Every reader takes `storage_key` off the row,
+ *    so changing the layout later would not strand the objects already written under the old one.
  */
 
 import type {
@@ -34,30 +30,21 @@ import type {
   ResultFileKind,
 } from '@gbd/db';
 
-/** What an input file is stored and served as.
- *
- * Only CSV, because that is the only thing the web server accepts — see
- * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#input-file-upload-and-validation) for why the
- * client converts XLSX rather than us taking it.
+/** Only CSV, because that is all the web server accepts — see
+ * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#input-file-upload-and-validation).
  */
 export const CSV_CONTENT_TYPE = 'text/csv';
 
-/** What a rejected upload is stored as.
- *
- * Deliberately not `text/csv`: an upload is rejected precisely because of what it turned out to
- * be, and `unparseable` and `csv_injection` are two of the reasons. These bytes are kept only for
- * debugging, so they are labelled as the opaque blob they are rather than as something a browser
- * might feel invited to interpret. What the user called the file is in
- * `rejected_upload.input_file_original_filename`.
+/** Deliberately not `text/csv`. An upload is rejected for what it turned out to be — two of the
+ * reasons are `unparseable` and `csv_injection` — so its bytes are labelled as the opaque blob
+ * they are rather than as something a browser might interpret.
  */
 export const REJECTED_UPLOAD_CONTENT_TYPE = 'application/octet-stream';
 
-/** How each kind of result file is stored, keyed by the database's own `result_file_kind`.
+/** How each kind of result file is stored.
  *
- * Keyed by that enum rather than by a extension-shaped union of our own, so there is one
- * vocabulary for "what kind of file is this": the `kind` written to `result_file` and the
- * extension its key ends in provably come from the same entry, and no caller can ask for a
- * result file in a format no result file has.
+ * Keyed by the database's own `result_file_kind`, so the `kind` written to `result_file` and the
+ * extension its key ends in come from one entry.
  *
  * **Open:** charts are PNG until the AI library's output has been reviewed.
  */
@@ -70,13 +57,8 @@ export const RESULT_FILE_FORMATS = {
   chart: { extension: 'png', contentType: 'image/png' },
 } as const satisfies Record<ResultFileKind, { extension: string; contentType: string }>;
 
-/** Everything an organization owns, and nothing else, starts with this.
- *
- * The trailing slash is load-bearing. `deletePrefix` matches on the string, not on path segments,
- * so without it `org/{id}` would also reach into a differently-named neighbour.
- *
- * One positional parameter rather than the object the other builders take, because a single
- * argument cannot be passed in the wrong place.
+/** The trailing slash is load-bearing: `deletePrefix` matches the string, not path segments, so
+ * `org/{id}` alone would reach into a differently-named neighbour.
  */
 export function organizationPrefix(organizationId: OrganizationId): string {
   return `org/${organizationId}/`;
@@ -121,10 +103,8 @@ export function resultFileKey(ids: {
   );
 }
 
-/** Join `segments` beneath an organization's prefix.
- *
- * Every builder above goes through this instead of assembling its own string, so a builder added
- * later cannot forget the organization prefix that rule 1 depends on.
+/** Join `segments` beneath an organization's prefix, so a builder added later cannot forget
+ * rule 1.
  */
 function organizationScoped(organizationId: OrganizationId, ...segments: string[]): string {
   return `${organizationPrefix(organizationId)}${segments.join('/')}`;
