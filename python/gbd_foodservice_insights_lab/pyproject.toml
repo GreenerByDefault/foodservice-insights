@@ -1,16 +1,16 @@
 [project]
-name = "foodservice-insights-lab"
+name = "gbd-foodservice-insights-lab"
 version = "0.0.0"
 description = "Experiments against the analysis library. Ships nothing; nothing imports it."
 requires-python = ">=3.13"
-dependencies = ["foodservice-insights"]
+dependencies = ["gbd-foodservice-insights"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/foodservice_insights_lab"]
+packages = ["src/gbd_foodservice_insights_lab"]
 
 [tool.uv.sources]
-foodservice-insights = { workspace = true }
+gbd-foodservice-insights = { workspace = true }

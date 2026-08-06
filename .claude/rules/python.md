@@ -37,14 +37,14 @@ touched the lab.
 
 ## The lab boundary
 
-`foodservice_insights_lab` is where data scientists experiment without the product's
+`gbd_foodservice_insights_lab` is where data scientists experiment without the product's
 constraints, so its code carries none of the product's guarantees.
 
 - **Nothing we ship may import it.** Ruff enforces this; the root `pyproject.toml` holds the
   rule and the reasoning.
-- **The lab may import whatever it likes**, including `foodservice_insights`. The dependency
+- **The lab may import whatever it likes**, including `gbd_foodservice_insights`. The dependency
   runs one way only.
-- Put code in the lab when it is exploratory, and move it into `foodservice_insights` when
+- Put code in the lab when it is exploratory, and move it into `gbd_foodservice_insights` when
   the worker needs it — not the other way around.
 
 ## Style

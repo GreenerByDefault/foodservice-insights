@@ -2,11 +2,11 @@
 workspace dependency on `gbd-foodservice-insights` break."""
 
 import gbd_foodservice_insights
-import worker_child
+import gbd_foodservice_insights_lab
 
 
 def test_package_is_importable() -> None:
-    assert worker_child.__name__ == "worker_child"
+    assert gbd_foodservice_insights_lab.__name__ == "gbd_foodservice_insights_lab"
 
 
 def test_analysis_library_is_reachable() -> None:

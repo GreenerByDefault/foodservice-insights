@@ -1,5 +1,5 @@
 {
-  "name": "foodservice-insights",
+  "name": "gbd-foodservice-insights",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.18.0",

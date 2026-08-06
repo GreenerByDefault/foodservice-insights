@@ -36,10 +36,10 @@ select = [
 # the worker image, and `.github/filters.yml` skips CI for other areas on the strength of
 # nothing depending on it. Reversing that decision means editing this block.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"foodservice_insights_lab".msg = "Product code must not import the lab. See python/AGENTS.md."
+"gbd_foodservice_insights_lab".msg = "Product code must not import the lab. See python/AGENTS.md."
 
 [tool.ruff.lint.per-file-ignores]
-"python/foodservice_insights_lab/**" = ["TID251"]
+"python/gbd_foodservice_insights_lab/**" = ["TID251"]
 
 [tool.pytest.ini_options]
 minversion = "9"

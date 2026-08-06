@@ -4,8 +4,8 @@ requires-python = ">=3.13"
 
 [manifest]
 members = [
-    "foodservice-insights",
-    "foodservice-insights-lab",
+    "gbd-foodservice-insights",
+    "gbd-foodservice-insights-lab",
     "worker-child",
 ]
 
@@ -36,20 +36,20 @@ wheels = [
 ]
 
 [[package]]
-name = "foodservice-insights"
+name = "gbd-foodservice-insights"
 version = "0.0.0"
-source = { editable = "python/foodservice_insights" }
+source = { editable = "python/gbd_foodservice_insights" }
 
 [[package]]
-name = "foodservice-insights-lab"
+name = "gbd-foodservice-insights-lab"
 version = "0.0.0"
-source = { editable = "python/foodservice_insights_lab" }
+source = { editable = "python/gbd_foodservice_insights_lab" }
 dependencies = [
-    { name = "foodservice-insights" },
+    { name = "gbd-foodservice-insights" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "foodservice-insights", editable = "python/foodservice_insights" }]
+requires-dist = [{ name = "gbd-foodservice-insights", editable = "python/gbd_foodservice_insights" }]
 
 [[package]]
 name = "iniconfig"
@@ -171,8 +171,8 @@ name = "worker-child"
 version = "0.0.0"
 source = { editable = "python/worker_child" }
 dependencies = [
-    { name = "foodservice-insights" },
+    { name = "gbd-foodservice-insights" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "foodservice-insights", editable = "python/foodservice_insights" }]
+requires-dist = [{ name = "gbd-foodservice-insights", editable = "python/gbd_foodservice_insights" }]

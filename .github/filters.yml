@@ -20,7 +20,7 @@ ts:
   - '!**/README.md'
   - '!LICENSE'
 
-# `foodservice_insights` and `worker_child`. Python imports no TypeScript, and no Python in
+# `gbd_foodservice_insights` and `worker_child`. Python imports no TypeScript, and no Python in
 # the product imports the lab.
 python:
   - '**'
@@ -32,7 +32,7 @@ python:
   - '!scripts/supabase'
   - '!.env.example'
   - '!.env.test'
-  - '!python/foodservice_insights_lab/**'
+  - '!python/gbd_foodservice_insights_lab/**'
   - '!package.json'
   - '!pnpm-lock.yaml'
   - '!pnpm-workspace.yaml'
@@ -45,7 +45,7 @@ python:
   - '!**/README.md'
   - '!LICENSE'
 
-# foodservice_insights_lab depends on foodservice_insights, so a core change reaches it;
+# gbd_foodservice_insights_lab depends on gbd_foodservice_insights, so a core change reaches it;
 # nothing depends on the lab, so it reaches nothing else. Same as `python` minus the lab
 # exclusion.
 python_lab:
@@ -74,7 +74,7 @@ python_lab:
 # exclusion, since nothing imports it and it's not in the worker image.
 system:
   - '**'
-  - '!python/foodservice_insights_lab/**'
+  - '!python/gbd_foodservice_insights_lab/**'
   - '!.claude/**'
   - '!*.md'
   - '!**/README.md'

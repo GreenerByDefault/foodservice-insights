@@ -6,7 +6,7 @@ How the system fits together, and why. For *what* the product must do, see
 
 **tl;dr:** A SvelteKit web app (frontend and backend together) accepts a CSV upload, writes it to
 a blob store, and enqueues an analysis attempt in Postgres. A long-running worker claims attempts
-off that queue and spawns Python child processes that run the `foodservice_insights` AI library. The
+off that queue and spawns Python child processes that run the `gbd_foodservice_insights` AI library. The
 worker writes results back to the database and blob store; the web app learns of completion by
 polling the database. Postgres, auth, and the blob store are all Supabase.
 
@@ -25,7 +25,7 @@ keep settled decisions settled — read them before proposing a change.
 | Migrations | Kysely |
 | Styling | Tailwind and shadcn-svelte |
 | Worker parent process | TypeScript on Node.js |
-| Worker child process | Python, running `foodservice_insights` |
+| Worker child process | Python, running `gbd_foodservice_insights` |
 | Queue | Postgres |
 | Unit and component tests | vitest |
 | End-to-end tests | Playwright |
@@ -40,9 +40,9 @@ keep settled decisions settled — read them before proposing a change.
 | `apps/web` | TypeScript | Frontend, backend routes, upload validation, file links |
 | Worker parent | TypeScript | Queue claiming, child process lifecycle, DB and blob store writes, email |
 | `packages/*` | TypeScript | Shared database, storage, and domain code |
-| `python/worker_child` | Python | One analysis run, via `foodservice_insights` |
-| `python/foodservice_insights` | Python | The AI analysis library |
-| `python/foodservice_insights_lab` | Python | Data-science experiments. Ships nothing |
+| `python/worker_child` | Python | One analysis run, via `gbd_foodservice_insights` |
+| `python/gbd_foodservice_insights` | Python | The AI analysis library |
+| `python/gbd_foodservice_insights_lab` | Python | Data-science experiments. Ships nothing |
 
 Only the web app and the worker parent touch the database and blob store. The child process
 touches neither; it reads and writes a run directory the parent sets up for it.
@@ -160,13 +160,13 @@ This gives the semantics we need: roughly FIFO, concurrency-safe, and atomic.
 > The detail in this section moves to `apps/worker/README.md` when that package lands. The seams
 > — the queue contract above, and the parent ↔ child run directory — stay here.
 
-`foodservice_insights` is heavily IO-bound with many API calls: light CPU, moderate memory, no GPU.
+`gbd_foodservice_insights` is heavily IO-bound with many API calls: light CPU, moderate memory, no GPU.
 
 The worker is a long-running process in a Docker container. It uses no web framework — it does not
 serve requests.
 
 The worker has a **parent process** that spawns up to 3 **child processes** running
-`foodservice_insights`. Each child is a separate Python process for isolation (spawn, don't fork).
+`gbd_foodservice_insights`. Each child is a separate Python process for isolation (spawn, don't fork).
 **Only the parent interacts with the database and blob store**, which simplifies the child and
 shrinks the security blast radius.
 
@@ -174,7 +174,7 @@ Parent lifecycle:
 
 1. Pull an analysis attempt from the queue, if current attempts < 3.
 2. Fetch the input file from the blob store.
-3. Spawn a child process to run `foodservice_insights`, setting up a folder with the required inputs.
+3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
 4. The child runs. On completion, it saves results to its folder and terminates, which signals
    success.
 5. Upload the result files to the blob store, save metadata to the database, and email the result.
@@ -217,11 +217,11 @@ Three independent levers:
 
 | Lever | Effect |
 | --- | --- |
-| `ThreadPoolExecutor` inside `foodservice_insights` | Speeds up an *individual* attempt |
+| `ThreadPoolExecutor` inside `gbd_foodservice_insights` | Speeds up an *individual* attempt |
 | More child processes per worker (vertical) | More concurrent attempts; limited by CPU and memory contention |
 | More workers (horizontal) | More concurrent attempts |
 
-Note that `asyncio` is *not* the right tool inside `foodservice_insights`; use
+Note that `asyncio` is *not* the right tool inside `gbd_foodservice_insights`; use
 `ThreadPoolExecutor`.
 
 Every lever multiplies API load: `max concurrent API calls = workers × child processes × threads`.
@@ -283,7 +283,7 @@ The client will likely do a quick structural check for better UX, such as confir
 has 3 columns. Because the server has already validated fully, the worker does not need to
 re-validate exhaustively.
 
-`foodservice_insights` is already written to reduce prompt injection risk — for example, all output
+`gbd_foodservice_insights` is already written to reduce prompt injection risk — for example, all output
 belongs to a fixed set of values.
 
 ## Secrets management

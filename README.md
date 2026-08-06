@@ -26,16 +26,16 @@ Everything above that heading is common to both.
 ## Repo layout
 
 ```
-apps/web/                           SvelteKit app
-packages/core/                      Shared TypeScript values and helpers
-packages/db/                        Kysely client, migrations, and generated types
-packages/storage/                   Blob store client and object operations
-python/foodservice_insights/        The AI analysis library
-python/worker_child/                One analysis run, spawned by the worker parent
-python/foodservice_insights_lab/    Data-science experiments; ships nothing
-supabase-dev/                       Local Supabase stack for development
-supabase-test/                      Local Supabase stack for tests
-tests/e2e/                          Whole-system e2e tests
+apps/web/                               SvelteKit app
+packages/core/                          Shared TypeScript values and helpers
+packages/db/                            Kysely client, migrations, and generated types
+packages/storage/                       Blob store client and object operations
+python/gbd_foodservice_insights/        The AI analysis library
+python/worker_child/                    One analysis run, spawned by the worker parent
+python/gbd_foodservice_insights_lab/    Data-science experiments; ships nothing
+supabase-dev/                           Local Supabase stack for development
+supabase-test/                          Local Supabase stack for tests
+tests/e2e/                              Whole-system e2e tests
 ```
 
 Internal TypeScript packages are referenced by name (e.g. `@gbd/core`). No TypeScript imports

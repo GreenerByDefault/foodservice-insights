@@ -3,7 +3,7 @@ name = "worker-child"
 version = "0.0.0"
 description = "One analysis run, spawned as a child process by the TypeScript worker parent."
 requires-python = ">=3.13"
-dependencies = ["foodservice-insights"]
+dependencies = ["gbd-foodservice-insights"]
 
 [build-system]
 requires = ["hatchling"]
@@ -13,4 +13,4 @@ build-backend = "hatchling.build"
 packages = ["src/worker_child"]
 
 [tool.uv.sources]
-foodservice-insights = { workspace = true }
+gbd-foodservice-insights = { workspace = true }
