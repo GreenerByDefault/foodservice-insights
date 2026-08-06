@@ -170,6 +170,8 @@ Email OTP (one-time passcode).
 - Only the person who controls the invited email address can accept. Forwarding the link does
   not grant access.
 - Invites expire after 14 days. An admin can revoke a pending invite at any time.
+- An admin can re-invite an address that already has an invite outstanding. That sends a fresh
+  email and restarts the 14 days with a new invite.
 
 ### Login flow
 

@@ -2,7 +2,7 @@
  * Delete it once we have real tests that exercise the database.
  */
 
-import { withRollback } from '@gbd/db/testing';
+import { insertReport, withRollback } from '@gbd/db/testing';
 import { afterAll, expect, test } from 'vitest';
 import { closeDatabase, database } from './db.ts';
 
@@ -12,18 +12,9 @@ afterAll(async () => {
 
 test('queries the database through the app handle, rolling back after', async () => {
   const id = await withRollback(database(), async (transaction) => {
-    const report = await transaction
-      .insertInto('report')
-      .values({
-        name: 'From the web app',
-        countsBasis: 'meals',
-        monthlyCounts: { '2026-01': 40 },
-        unitSystem: 'kg',
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    const report = await insertReport(transaction, { name: 'From the web app' });
 
-    expect(report).toMatchObject({ name: 'From the web app', countsBasis: 'meals' });
+    expect(report).toMatchObject({ name: 'From the web app', countsBasis: 'people' });
     return report.id;
   });
 

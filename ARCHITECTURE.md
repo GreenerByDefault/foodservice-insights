@@ -200,7 +200,7 @@ notice it is itself hung:
 Defense 3 introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
 tolerate this** — see the terminal-state and status invariants in
-[`packages/db/SCHEMA.md`](packages/db/SCHEMA.md).
+[`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-status-machine).
 
 ### Canceling
 
@@ -322,5 +322,6 @@ analysis attempt state machine, and the audit trail all live there. A `report` i
 upload; it has exactly one `input_file` and one or more `analysis_attempt` rows, each of which
 produces `result_file` rows.
 
-The schema, its invariants, and the reasoning behind them are in
-[`packages/db/SCHEMA.md`](packages/db/SCHEMA.md).
+The model and the reasoning behind it are in
+[`packages/db/README.md`](packages/db/README.md), which also names which generated artifact
+answers which question about the schema.
