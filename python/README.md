@@ -1,9 +1,10 @@
 # Python
 
 The AI analysis library, the worker's child process, and the data-science lab. This file is
-the Python counterpart to the root [`README.md`](../README.md), which covers TypeScript — the
-two stacks share no toolchain, so you should not need that one. It has the repo layout;
-[`AGENTS.md`](AGENTS.md) has how we write Python here.
+the Python counterpart to the root [`README.md`](../README.md), whose TypeScript half you
+should not need — the two stacks share no toolchain. Go there for the repo layout, the
+documentation index, and what CI runs.
+[`.claude/rules/python.md`](../.claude/rules/python.md) has how we write Python here.
 
 ## Getting started
 
@@ -36,7 +37,7 @@ an edit takes effect immediately, with no rebuild and no re-sync.
 ## Everyday commands
 
 Run these from anywhere in the repo; `just` searches upward for the
-[`justfile`](../justfile). Each recipe is exactly what CI runs.
+[`Justfile`](../Justfile). Each recipe is exactly what CI runs.
 
 | Command | What it does |
 | --- | --- |
@@ -80,7 +81,7 @@ package resolves to the same version.
 Create `python/<name>/` with a `pyproject.toml` and `src/<name>/`. The root
 `pyproject.toml`'s workspace globs `python/*`, so nothing else needs editing — but check
 whether [`../.github/filters.yml`](../.github/filters.yml) and the
-[`justfile`](../justfile) need to know about it.
+[`Justfile`](../Justfile) need to know about it.
 
 ### API keys
 

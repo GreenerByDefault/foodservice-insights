@@ -4,10 +4,14 @@ Greener by Default's foodservice emissions analysis tool. Customers upload procu
 data and get back a report on the climate impact of their food purchasing, with
 recommendations.
 
-Two stacks live here, and they share no toolchain. **If you are working on Python, read
-[`python/README.md`](python/README.md) instead of this file** — it is the same kind of
-document for uv, `just`, ruff, ty, and pytest. The rest of this file is TypeScript: pnpm,
-Turborepo, Supabase, vitest, and Playwright. Only the docs below are common to both.
+Two stacks live here, and they share no toolchain. Pick yours:
+
+| Working on | Start here |
+| --- | --- |
+| **TypeScript** — the web app, the worker parent, `packages/*` | [TypeScript](#typescript), below |
+| **Python** — the analysis library, the worker child, the lab | [`python/README.md`](python/README.md) |
+
+Everything above that heading is common to both.
 
 ## Documentation
 
@@ -15,13 +19,9 @@ Turborepo, Supabase, vitest, and Playwright. Only the docs below are common to b
 | --- | --- |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the system fits together, and why |
 | [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
-| [`AGENTS.md`](AGENTS.md) | How we write code here |
+| [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
-| [`python/AGENTS.md`](python/AGENTS.md) | How we write Python here |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
-
-This file covers everything operational on the TypeScript side: prerequisites, commands,
-repo layout, and testing.
 
 ## Repo layout
 
@@ -42,7 +42,16 @@ Internal TypeScript packages are referenced by name (e.g. `@gbd/core`). No TypeS
 Python and no Python imports TypeScript; the worker parent reaches its child by spawning a
 process, which is the only seam between them.
 
-## Getting started
+## What CI runs
+
+A pull request runs only the jobs its changes can affect; `main` runs everything. A
+TypeScript-only change skips every Python job, and vice versa. See
+[`.github/filters.yml`](.github/filters.yml) for the rules.
+
+## TypeScript
+
+Everything from here down is the TypeScript stack: pnpm, Turborepo, Supabase, vitest, and
+Playwright. For the Python equivalents, see [`python/README.md`](python/README.md).
 
 ### Prerequisites
 
@@ -104,10 +113,10 @@ pnpm migrate
 
 The test stack does that for itself whenever you run the tests.
 
-## Everyday commands
+### Everyday commands
 
 Run these from the repo root. Each one fans out across the TypeScript workspace through
-Turborepo. The Python equivalents are `just` recipes — see [`python/README.md`](python/README.md).
+Turborepo.
 
 | Command | What it does |
 | --- | --- |
@@ -126,7 +135,7 @@ To run the production build, use `pnpm --filter @gbd/web start`, then go to
 <http://localhost:3000> — not the `0.0.0.0:3000` the server logs, which is unreachable on
 macOS.
 
-## Testing
+### Testing
 
 | Tier | Location | Runner | Naming |
 | --- | --- | --- | --- |
@@ -149,7 +158,7 @@ pnpm --filter @gbd/web test:e2e -- --ui
 CI uploads a Playwright report as a build artifact on failure. Download it and open the
 trace with `npx playwright show-trace <path-to-zip>`.
 
-### Tests and the database
+#### Tests and the database
 
 **The test stack must be running** for any vitest Node test by running `TEST_DB=1 scripts/supabase start`.
 A fair number of tests query Postgres or the blob store. The test scripts apply migrations and create
@@ -171,14 +180,9 @@ Meanwhile, E2E tests commit transactions to the database and leave objects in th
 
 If the test database gets into a strange state, [reset it](#reset-a-database).
 
-### What CI runs
+### Occasional tasks
 
-A pull request runs only the jobs its changes can affect; `main` runs everything. See
-[`.github/filters.yml`](.github/filters.yml) for the rules.
-
-## Occasional tasks
-
-### Database and blob store commands
+#### Database and blob store commands
 
 | Command | What it does |
 | --- | --- |
@@ -191,7 +195,7 @@ A pull request runs only the jobs its changes can affect; `main` runs everything
 
 Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
-### Add a database migration
+#### Add a database migration
 
 1. Add a file to `packages/db/migrations/`, numbered in sequence. Name every constraint, index,
    and trigger you add.
@@ -203,7 +207,7 @@ Once anything is deployed, migrations are forward-only: fix forward rather than 
 Keep them backwards-compatible with the running app, since migrations run *before* the new
 code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
 
-### Reset a database
+#### Reset a database
 
 Clear the dev data, keeping the schema and the bucket:
 
@@ -226,7 +230,7 @@ TEST_DB=1 scripts/supabase db reset
 TEST_DB=1 pnpm migrate
 ```
 
-### Debug the database
+#### Debug the database
 
 Supabase Studio for the dev stack is at <http://localhost:55323>. For logs:
 
@@ -241,7 +245,7 @@ To see a query plan, per [`packages/db/README.md`](packages/db/README.md#convent
 console.error(JSON.stringify(await query.explain('json', sql`analyze`), null, 2));
 ```
 
-### Add a shadcn-svelte component
+#### Add a shadcn-svelte component
 
 UI components are vendored from [shadcn-svelte](https://www.shadcn-svelte.com) into `apps/web/src/lib/components/ui/`, so we own them outright.
 

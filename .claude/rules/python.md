@@ -1,19 +1,26 @@
-# Python agent guide
+---
+paths:
+  - "python/**"
+  - "scripts/**/*.py"
+  - "pyproject.toml"
+  - "uv.lock"
+  - "Justfile"
+  - ".python-version"
+---
 
-[`README.md`](README.md) is the source of truth for prerequisites, commands, and testing —
-read it first, and prefer it over this file for anything factual. The root
-[`AGENTS.md`](../AGENTS.md) carries everything that applies to both stacks: development
-principles, the documentation rules, PR sizing. **Those apply here too.** This file covers
-only what is specific to Python.
+# Python
+
+The universal rules in [`AGENTS.md`](../../AGENTS.md) apply here too — development
+principles, the documentation rules, PR sizing. This file is only what is specific to
+Python; nothing on the TypeScript side applies, since the two stacks share no toolchain.
+[`python/README.md`](../../python/README.md) covers what to run.
+
+Verify a change with `just lint && just check && just test`, plus `just test-lab` if you
+touched the lab.
 
 > **Status:** the packages are scaffolding. The analysis library moves in from the
 > `catering_analysis` repo in a later change, and the conventions its authors already follow
 > merge into this file then — see [Open](#open).
-
-## Verifying a change
-
-`just lint && just check && just test` from the repo root, plus `just test-lab` if you
-touched the lab.
 
 ## The workspace
 
@@ -48,8 +55,6 @@ constraints, so its code carries none of the product's guarantees.
   library largely is not annotated yet; where a ported module is too noisy to fix now, add a
   scoped `[[tool.ty.overrides]]` entry rather than loosening the global rules.
 - **Prefer `pathlib` over `os.path`**, and pass paths as `Path`.
-- Everything else the root [`AGENTS.md`](../AGENTS.md) says about functional style,
-  immutability, early returns, and making illegal states unrepresentable applies here.
 
 ## Open
 
