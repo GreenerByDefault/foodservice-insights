@@ -7,8 +7,6 @@ export {
 } from './client.ts';
 export { isBucketAlreadyExistsError, isNotFoundError } from './errors.ts';
 export { putInputFile, putRejectedUpload, putResultFile, type StoredFile } from './files.ts';
-// Only the organization prefix: every other key is built by the `put*` functions above. See
-// `keys.ts`.
 export { organizationPrefix } from './keys.ts';
 export {
   deletePrefix,

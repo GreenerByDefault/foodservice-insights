@@ -1,12 +1,4 @@
-/** The three writes this product performs, against a real Supabase Storage S3 endpoint.
- *
- * Unmocked for the reason `objects.test.ts` gives.
- *
- * Deliberately not covered: inserting a `StoredFile` into `input_file`. That would make this
- * package's tests need a migrated database as well as a bucket, and
- * `packages/db/tests/report.test.ts` already covers the columns accepting these values. It lands
- * with the upload route, whose tests run against both.
- */
+/** The three writes this product performs, against a real Supabase Storage S3 endpoint. */
 
 import { createHash } from 'node:crypto';
 import type { AnalysisAttemptId, RejectedUploadId, ReportId } from '@gbd/db';
@@ -50,9 +42,9 @@ describe('putInputFile', () => {
     });
   });
 
-  // The point of returning a `StoredFile`: the row has to describe the object that now exists,
-  // not what the caller believed it was sending.
-  test('describes the object the store actually holds', async () => {
+  // `putInputFile` computes `byteSize` and `contentType` itself rather than trusting the
+  // caller, so check them against `headObject`, an independent read of what S3 recorded.
+  test('reports metadata matching what the store recorded', async () => {
     await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
       const stored = await putInputFile(
         BLOB_STORE,
@@ -88,8 +80,10 @@ describe('putInputFile', () => {
         CSV,
       );
 
-      // A plain `Uint8Array`, which also pins down that the digest is not left as the `Buffer` it
-      // arrives as — a `Buffer` satisfies the type but serialises differently.
+      // Wrap the expected digest in `Uint8Array.from`: `createHash().digest()` returns a
+      // `Buffer`, which is itself a `Uint8Array` but which `toEqual` treats as unequal to a
+      // plain one of the same bytes. This also pins down that `stored.checksumSha256` isn't
+      // left as a `Buffer` either.
       expect(stored.checksumSha256).toEqual(
         Uint8Array.from(createHash('sha256').update(CSV).digest()),
       );
@@ -99,7 +93,7 @@ describe('putInputFile', () => {
 });
 
 describe('putResultFile', () => {
-  test('gives each kind its own key, served as the type that kind is stored in', async () => {
+  test('gives each kind its own storage key', async () => {
     await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
       const location = {
         organizationId,
@@ -114,6 +108,23 @@ describe('putResultFile', () => {
       );
 
       expect(new Set(stored.map(({ storageKey }) => storageKey)).size).toBe(3);
+    });
+  });
+
+  test('stores each kind under its content type', async () => {
+    await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
+      const location = {
+        organizationId,
+        reportId: aReportId(),
+        analysisAttemptId: anAnalysisAttemptId(),
+      };
+
+      const stored = await Promise.all(
+        (['pdf', 'xlsx', 'chart'] as const).map(async (kind) =>
+          putResultFile(BLOB_STORE, { ...location, resultFileId: newResultFileId(), kind }, PDF),
+        ),
+      );
+
       expect(stored.map(({ contentType }) => contentType)).toEqual([
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -144,11 +155,8 @@ describe('putRejectedUpload', () => {
   });
 });
 
-/** What REQUIREMENTS.md asks of an admin deleting an organization. The layout exists to make it
- * one call.
- */
 describe('deleting an organization', () => {
-  test('takes every kind of file it owns, and nothing another organization owns', async () => {
+  test('removes every kind of file it owns, and nothing another organization owns', async () => {
     await withTemporaryOrganization(BLOB_STORE, async (doomed) => {
       await withTemporaryOrganization(BLOB_STORE, async (kept) => {
         const reportId = aReportId();

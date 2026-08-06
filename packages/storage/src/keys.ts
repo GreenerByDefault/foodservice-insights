@@ -16,8 +16,8 @@
  * 2. **A segment is an id or a fixed name, never anything a user typed** — filenames, report names
  *    and chart keys stay in the database. So a key needs no escaping, and branded ids mean it
  *    needs no validation: an `OrganizationId` cannot have come from a request body.
- * 3. **Keys are only ever built on the write path.** Every reader takes `storage_key` off the row,
- *    so changing the layout later would not strand the objects already written under the old one.
+ * 3. **Keys are only ever built on the write path.** Every reader takes `storage_key` off the database
+ *    row, so changing the layout later would not strand the objects already written under the old one.
  */
 
 import type {
@@ -30,9 +30,6 @@ import type {
   ResultFileKind,
 } from '@gbd/db';
 
-/** Only CSV, because that is all the web server accepts — see
- * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#input-file-upload-and-validation).
- */
 export const CSV_CONTENT_TYPE = 'text/csv';
 
 /** Deliberately not `text/csv`. An upload is rejected for what it turned out to be — two of the

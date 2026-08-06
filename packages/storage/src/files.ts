@@ -1,11 +1,7 @@
 /** Writing one of this product's files, and describing it the way its database row will.
  *
- * `objects.ts` is generic S3 with no product knowledge; this file and `keys.ts` know what a report
- * is. Neither touches the database — the row belongs in the caller's transaction.
- *
- * **Store the object before inserting the row.** The other order can leave a row pointing at
- * nothing, which every reader would have to defend against. This order can leak an unreferenced
- * object, which [`REQUIREMENTS.md`](../../../REQUIREMENTS.md#out-of-scope) already accepts.
+ * The caller should store the object before inserting the database row to ensure the reference
+ * actually exists in the blob store.
  */
 
 import { createHash } from 'node:crypto';
@@ -29,15 +25,7 @@ import {
 } from './keys.ts';
 import { putObject } from './objects.ts';
 
-/** What a stored file's database row needs to know about it.
- *
- * The field names are `input_file`'s and `result_file`'s columns, so a caller spreads this into its
- * insert alongside the columns only it knows. One function producing both the object and its
- * description is what stops the two disagreeing.
- *
- * `rejected_upload` is the exception: it records only the key, size and filename, under
- * `input_file_*` names.
- */
+/** What a stored file's database row needs to know about it. */
 export type StoredFile = {
   storageKey: string;
   byteSize: number;
@@ -84,11 +72,7 @@ export async function putRejectedUpload(
   return await storeFile(store, rejectedUploadKey(ids), body, REJECTED_UPLOAD_CONTENT_TYPE);
 }
 
-/** Write `body` to `key`, and report what its row should say about it.
- *
- * Private, so a key and the content type it is served with always come from the same place — a
- * public version taking both would let a caller store a `.csv` as a PDF.
- */
+/** Write `body` to `key`. */
 async function storeFile(
   store: BlobStore,
   key: string,
@@ -99,14 +83,7 @@ async function storeFile(
   return { storageKey: key, ...describeFile(body, contentType) };
 }
 
-/** Everything about a file that can be worked out from its bytes alone.
- *
- * Takes bytes and never a string: `byte_size` has to be the encoded length, which `body.length` on
- * a string silently is not for any non-ASCII input.
- *
- * *Rejected: also sending S3's `ChecksumSHA256` header.* The SDK already sends a CRC32 of every
- * upload, and whether Supabase Storage verifies a supplied digest is unconfirmed.
- */
+/** Everything about a file that can be worked out from its bytes alone. */
 function describeFile(body: Uint8Array, contentType: string): Omit<StoredFile, 'storageKey'> {
   return {
     byteSize: body.byteLength,

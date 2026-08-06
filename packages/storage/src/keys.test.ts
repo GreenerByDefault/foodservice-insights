@@ -1,11 +1,3 @@
-/** The key layout, asserted as exact strings.
- *
- * Changing one of these is changing where a file lives — a decision about objects already in the
- * bucket, not a test to update.
- *
- * Pure, so this file needs no blob store and no bucket.
- */
-
 import type {
   AnalysisAttemptId,
   InputFileId,

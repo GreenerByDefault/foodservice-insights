@@ -35,10 +35,5 @@ database row needs, so the object and the row cannot disagree. The caller writes
 inside its own transaction. Deleting an organization's files is one `deletePrefix` over
 `organizationPrefix(id)`.
 
-That is why a blob store package depends on `@gbd/db`: keys are made of row ids, and taking them
-branded is what stops a report id being written where a file id belongs. **The dependency is
-type-only and should stay that way** — needing a runtime import from `@gbd/db` here is the signal
-to split these files into their own package.
-
 Tests use `withTemporaryOrganization` rather than `withTemporaryPrefix`, because real keys start at
 `org/{id}/`.
