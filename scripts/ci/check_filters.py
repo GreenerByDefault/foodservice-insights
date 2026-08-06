@@ -69,9 +69,7 @@ def problem_with(exclusion: Exclusion, tracked: int) -> str | None:
 def format_problem(exclusion: Exclusion, problem: str, style: OutputStyle) -> str:
     message = f"'!{exclusion.glob}' {problem}"
     if style == "github":
-        return (
-            f"::error file={FILTERS_PATH},line={exclusion.line_number}::{message}"
-        )
+        return f"::error file={FILTERS_PATH},line={exclusion.line_number}::{message}"
     return f"{FILTERS_PATH}:{exclusion.line_number}: {message}"
 
 

@@ -10,15 +10,18 @@
 # TypeScript never imports Python. (We use `system` for e2e tests.)
 ts:
   - '**'
-  - '!python/**' # planned
-  - '!pyproject.toml' # planned
-  - '!uv.lock' # planned
+  - '!python/**'
+  - '!pyproject.toml'
+  - '!uv.lock'
+  - '!Justfile'
+  - '!.python-version'
+  - '!.claude/**'
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'
 
-# `catering_analysis` and `worker_child`. Python imports no TypeScript, and no Python in
-# the product imports the lab package.
+# `gbd_foodservice_insights` and `worker_child`. Python imports no TypeScript, and no Python in
+# the product imports the lab.
 python:
   - '**'
   - '!apps/**'
@@ -29,19 +32,22 @@ python:
   - '!scripts/supabase'
   - '!.env.example'
   - '!.env.test'
-  - '!python/catering_analysis_lab/**' # planned
+  - '!python/gbd_foodservice_insights_lab/**'
   - '!package.json'
   - '!pnpm-lock.yaml'
   - '!pnpm-workspace.yaml'
   - '!tsconfig.base.json'
   - '!turbo.json'
   - '!biome.json'
+  - '!.nvmrc'
+  - '!.claude/**'
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'
 
-# catering_analysis_lab depends on catering_analysis, so a core change reaches it; nothing
-# depends on the lab, so it reaches nothing else. Same as `python` minus the lab exclusion.
+# gbd_foodservice_insights_lab depends on gbd_foodservice_insights, so a core change reaches it;
+# nothing depends on the lab, so it reaches nothing else. Same as `python` minus the lab
+# exclusion.
 python_lab:
   - '**'
   - '!apps/**'
@@ -58,6 +64,8 @@ python_lab:
   - '!tsconfig.base.json'
   - '!turbo.json'
   - '!biome.json'
+  - '!.nvmrc'
+  - '!.claude/**'
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'
@@ -66,7 +74,8 @@ python_lab:
 # exclusion, since nothing imports it and it's not in the worker image.
 system:
   - '**'
-  - '!python/catering_analysis_lab/**' # planned
+  - '!python/gbd_foodservice_insights_lab/**'
+  - '!.claude/**'
   - '!*.md'
   - '!**/README.md'
   - '!LICENSE'

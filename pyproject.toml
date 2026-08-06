@@ -1,0 +1,50 @@
+# The Python workspace root. It is not a package itself; it exists to hold the uv workspace,
+# one lockfile covering every member, and the tool config they all inherit.
+
+[tool.uv.workspace]
+members = ["python/*"]
+
+# Dev tools are here for consistent versions across the repo, but runtime dependencies
+# should go in projects' pyproject.toml.
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-xdist>=3.8",
+    "ruff>=0.16.1",
+    "ty>=0.0.68",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports, which enforces the lab boundary below
+    "RUF", # ruff-specific
+]
+
+# Enforce that nothing may import gbd_foodservice_insights_lab.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"gbd_foodservice_insights_lab".msg = "Product code must not import the lab. See python/AGENTS.md."
+
+[tool.ruff.lint.per-file-ignores]
+"python/gbd_foodservice_insights_lab/**" = ["TID251"]
+
+[tool.pytest.ini_options]
+minversion = "9"
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+testpaths = ["python"]
+markers = [
+    "slow: takes long enough that you would not want it in the default run",
+    "llm: calls a real LLM API",
+]
+
+[tool.ty.environment]
+python-version = "3.13"
