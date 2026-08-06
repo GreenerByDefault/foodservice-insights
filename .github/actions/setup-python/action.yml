@@ -7,8 +7,8 @@ runs:
     - uses: astral-sh/setup-uv@v9.0.0
       with:
         enable-cache: true
-
-    # `--locked` rather than `--frozen`: it fails when `uv.lock` is stale relative to the
-    # pyproject files, the way `verifyDepsBeforeRun` does for pnpm.
     - run: uv sync --locked --all-packages
       shell: bash
+    - uses: extractions/setup-just@v3
+      with:
+        just-version: 1.58.0

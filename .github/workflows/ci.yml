@@ -160,8 +160,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
-      - run: uv run just lint
-      - run: uv run just check
+      - run: just lint
+      - run: just check
 
   py-unit:
     name: 'Python: unit tests'
@@ -172,7 +172,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
-      - run: uv run just test
+      - run: just test
 
   py-lab:
     name: 'Python: lab tests'
@@ -183,7 +183,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
-      - run: uv run just test-lab
+      - run: just test-lab
 
   system-e2e:
     name: 'System e2e tests'

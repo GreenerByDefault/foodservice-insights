@@ -13,9 +13,6 @@ dev = [
     "pytest-xdist>=3.8",
     "ruff>=0.16.1",
     "ty>=0.0.68",
-    # The `just` binary, so CI gets a lockfile-pinned copy without another setup action.
-    # `brew install just` is nicer locally; both run the same `justfile`.
-    "rust-just>=1.44",
 ]
 
 [tool.ruff]
