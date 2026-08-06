@@ -1,6 +1,3 @@
-"""The imports below are the test: they fail if the src layout, the editable install, or the
-workspace dependency on `gbd-foodservice-insights` break."""
-
 import gbd_foodservice_insights
 import worker_child
 

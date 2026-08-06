@@ -32,8 +32,7 @@ touched the lab.
   to the *closest* `pyproject.toml` that has one, so a local section silently replaces the
   root config — including the lab ban — rather than extending it.
 - **Packaged assets live inside `src/<package>/`.** Hatchling ships every non-Python file
-  under the package directory and nothing outside it, so a data file placed beside `src/`
-  is missing at runtime rather than failing the build.
+  under the package directory and nothing outside it.
 
 ## The lab boundary
 
@@ -49,11 +48,10 @@ constraints, so its code carries none of the product's guarantees.
 
 ## Style
 
-- **Tests live in `<package>/tests/`, not beside the code.** This differs from the TypeScript
-  side, which colocates.
-- **ty is the typechecker**, not mypy or pyright. Annotate new code even though the ported
+- **Tests live in `<package>/tests/`, not beside the code.**
+- **ty is the typechecker**. Annotate new code even though the ported
   library largely is not annotated yet; where a ported module is too noisy to fix now, add a
-  scoped `[[tool.ty.overrides]]` entry rather than loosening the global rules.
+  scoped `[[tool.ty.overrides]]` entry or inline ignore comment rather than loosening the global rules.
 - **Prefer `pathlib` over `os.path`**, and pass paths as `Path`.
 
 ## Open

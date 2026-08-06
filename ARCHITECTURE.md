@@ -47,9 +47,6 @@ keep settled decisions settled — read them before proposing a change.
 Only the web app and the worker parent touch the database and blob store. The child process
 touches neither; it reads and writes a run directory the parent sets up for it.
 
-**Nothing we ship imports the lab** — it is absent from the worker image, and CI skips jobs on
-the strength of that. The repo root's `pyproject.toml` enforces it and holds the reasoning.
-
 ## Supabase: database, auth, and blob store
 
 Supabase provides the Postgres database, the blob store (Supabase Storage), and auth (Supabase
