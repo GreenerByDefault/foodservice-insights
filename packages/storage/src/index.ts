@@ -6,6 +6,8 @@ export {
   shutdownBlobStore,
 } from './client.ts';
 export { isBucketAlreadyExistsError, isNotFoundError } from './errors.ts';
+export { putInputFile, putRejectedUpload, putResultFile, type StoredFile } from './files.ts';
+export { organizationPrefix } from './keys.ts';
 export {
   deletePrefix,
   getObject,

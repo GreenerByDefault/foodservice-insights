@@ -1,2 +1,3 @@
 export { setup } from './global-setup.ts';
+export { withTemporaryOrganization } from './organizations.ts';
 export { withTemporaryPrefix } from './prefixes.ts';

@@ -262,6 +262,9 @@ importers:
       '@gbd/core':
         specifier: workspace:*
         version: link:../core
+      '@gbd/db':
+        specifier: workspace:*
+        version: link:../db
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
