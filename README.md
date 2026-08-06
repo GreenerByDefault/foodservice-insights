@@ -143,7 +143,10 @@ the bucket created before tests run.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
 `@gbd/db/testing`, which rolls the transaction back however the test ends. It's necessary for
-isolation.
+isolation. The one exception is a test *about* concurrency, which needs two transactions at once
+and so has to commit; those use the harness in
+[`packages/db/src/testing/concurrency.ts`](packages/db/src/testing/concurrency.ts), which cleans up
+after itself.
 
 **Every test that touches the blob store must wrap its keys in `withTemporaryPrefix`**, from
 `@gbd/storage/testing`, which deletes everything under its prefix however the test ends. It's
