@@ -1,0 +1,67 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm fmt *)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm check *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm test:unit *)",
+      "Bash(pnpm test:e2e *)",
+
+      "Bash(pnpm --filter @gbd/db check)",
+      "Bash(pnpm --filter @gbd/db build)",
+      "Bash(pnpm --filter @gbd/db run build)",
+      "Bash(pnpm --filter @gbd/db test:unit *)",
+      "Bash(pnpm --filter @gbd/db run test:unit *)",
+      "Bash(pnpm --filter @gbd/db exec vitest run *)",
+      "Bash(pnpm --filter @gbd/db run gen-types)",
+      "Bash(pnpm db:gen-types)",
+
+      "Bash(pnpm --filter @gbd/web check)",
+      "Bash(pnpm --filter @gbd/web build)",
+      "Bash(pnpm --filter @gbd/web run build)",
+      "Bash(pnpm --filter @gbd/web test:unit *)",
+      "Bash(pnpm --filter @gbd/web run test:unit *)",
+      "Bash(pnpm --filter @gbd/web test:e2e *)",
+      "Bash(pnpm --filter @gbd/web run test:e2e *)",
+
+      "Bash(pnpm --filter @gbd/core check)",
+      "Bash(pnpm --filter @gbd/core build)",
+      "Bash(pnpm --filter @gbd/core run build)",
+      "Bash(pnpm --filter @gbd/core test:unit *)",
+      "Bash(pnpm --filter @gbd/core run test:unit *)",
+
+      "Bash(pnpm --filter @gbd/storage check)",
+      "Bash(pnpm --filter @gbd/storage build)",
+      "Bash(pnpm --filter @gbd/storage run build)",
+      "Bash(pnpm --filter @gbd/storage test:unit *)",
+      "Bash(pnpm --filter @gbd/storage run test:unit *)",
+      "Bash(pnpm storage:ensure-bucket)",
+
+      "Bash(scripts/supabase *)",
+      "Bash(TEST_DB=1 scripts/supabase *)",
+      "Bash(TEST_DB=1 pnpm migrate)",
+      "Bash(TEST_DB=1 pnpm truncate)",
+      "Bash(TEST_DB=1 pnpm --filter @gbd/db run migrate)",
+      "Bash(TEST_DB=1 pnpm --filter @gbd/db run truncate)",
+      "Bash(TEST_DB=1 pnpm --filter @gbd/db run gen-types)",
+      "Bash(TEST_DB=1 pnpm db:gen-types)",
+      "Bash(TEST_DB=1 pnpm storage:ensure-bucket)",
+
+      "Bash(just fmt *)",
+      "Bash(just lint *)",
+      "Bash(just check *)",
+      "Bash(just test *)",
+      "Bash(just test-lab *)",
+      "Bash(just sync)",
+      "Bash(python3 scripts/ci/check_filters.py)",
+
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(rg *)"
+    ]
+  }
+}
