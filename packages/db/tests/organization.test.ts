@@ -5,11 +5,19 @@ import { sql } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { AppUser } from '../src/generated/public/AppUser.ts';
+import type { OrganizationId } from '../src/generated/public/Organization.ts';
 import {
   POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '../src/postgres-codes.ts';
+import {
+  fixtureOrganizationName,
+  insertFixtureOrganization,
+  sendBlockingStatement,
+  withCommittedFixture,
+  withConcurrentTransactions,
+} from '../src/testing/concurrency.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
@@ -17,10 +25,10 @@ afterAll(async () => {
   await DATABASE.destroy();
 });
 
+type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
+
 /** Force the deferred constraint triggers to run now rather than at a commit that never comes. */
-async function checkDeferredConstraints(
-  transaction: Parameters<Parameters<typeof withRollback>[1]>[0],
-) {
+async function checkDeferredConstraints(transaction: Transaction) {
   await sql`SET CONSTRAINTS ALL IMMEDIATE`.execute(transaction);
 }
 
@@ -96,6 +104,24 @@ describe('app_user', () => {
 });
 
 describe('organization', () => {
+  /** An organization and its one admin, as the app would write them: two statements in one
+   * transaction, which is what `organization_has_a_member` being deferred is for. */
+  async function createOrganization(
+    transaction: Transaction,
+    admin: AppUser,
+  ): Promise<OrganizationId> {
+    const organization = await transaction
+      .insertInto('organization')
+      .values({ name: fixtureOrganizationName(), createdByUserId: admin.id })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await transaction
+      .insertInto('organizationMember')
+      .values({ userId: admin.id, organizationId: organization.id, role: 'admin' })
+      .execute();
+    return organization.id;
+  }
+
   test('rejects a duplicate name', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const name = `Duplicate ${crypto.randomUUID()}`;
@@ -131,10 +157,6 @@ describe('organization', () => {
   });
 
   test('is refused once its creator has created five', async () => {
-    // The abuse limit from REQUIREMENTS.md. The counter is maintained by a trigger rather than by
-    // the app because that is what holds when two creations arrive at once — see
-    // `tests/concurrency.test.ts`. These five need no members of their own: the trigger that would
-    // ask for one is deferred, and this transaction never reaches a commit.
     const insert = withRollback(DATABASE, async (transaction) => {
       const { admin } = await insertOrganization(transaction);
       for (let number = 2; number <= 6; number++) {
@@ -149,6 +171,48 @@ describe('organization', () => {
       code: POSTGRES_CODE_CHECK_VIOLATION,
       constraint: 'app_user_organizations_created_count_max',
     });
+  });
+
+  test('refuses the second of two concurrent creations at the limit', async () => {
+    // Proves the row lock in `organization_count_against_creator` (migrations/001_initial_schema.ts)
+    // actually serializes: without it, both creations would read count=4 and only one increment
+    // would stick, letting a sixth organization through.
+    await withCommittedFixture(
+      DATABASE,
+      async (transaction, trash) => {
+        const user = await insertAppUser(transaction);
+        trash.user(user.id);
+        await transaction
+          .updateTable('appUser')
+          .set({ organizationsCreatedCount: 4 })
+          .where('id', '=', user.id)
+          .execute();
+        return user;
+      },
+      async (user, trash) => {
+        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+          const fifth = await createOrganization(alpha.transaction, user);
+
+          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+            createOrganization(transaction, user),
+          );
+
+          await alpha.transaction.commit().execute();
+          trash.organization(fifth);
+
+          await expect(blocked.result).rejects.toMatchObject({
+            code: POSTGRES_CODE_CHECK_VIOLATION,
+            constraint: 'app_user_organizations_created_count_max',
+          });
+        });
+
+        const after = await DATABASE.selectFrom('appUser')
+          .select('organizationsCreatedCount')
+          .where('id', '=', user.id)
+          .executeTakeFirstOrThrow();
+        expect(after.organizationsCreatedCount).toBe(5);
+      },
+    );
   });
 
   test('cannot be created with no members at all', async () => {
@@ -189,6 +253,19 @@ describe('organization', () => {
 });
 
 describe('organization_member', () => {
+  async function demote(
+    transaction: Transaction,
+    organizationId: OrganizationId,
+    userId: AppUser['id'],
+  ): Promise<void> {
+    await transaction
+      .updateTable('organizationMember')
+      .set({ role: 'member' })
+      .where('organizationId', '=', organizationId)
+      .where('userId', '=', userId)
+      .execute();
+  }
+
   test('its at-least-one-admin trigger is deferred to commit', async () => {
     // Not provocable from a single transaction: this is a property of the trigger's definition,
     // not of a row. `withRollback` never commits, which is exactly why every test above that
@@ -237,21 +314,72 @@ describe('organization_member', () => {
   });
 
   test('rejects demoting the last admin', async () => {
-    const demote = withRollback(DATABASE, async (transaction) => {
+    const demoted = withRollback(DATABASE, async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
-      await transaction
-        .updateTable('organizationMember')
-        .set({ role: 'member' })
-        .where('organizationId', '=', organization.id)
-        .where('userId', '=', admin.id)
-        .execute();
+      await demote(transaction, organization.id, admin.id);
       await checkDeferredConstraints(transaction);
     });
 
-    await expect(demote).rejects.toMatchObject({
+    await expect(demoted).rejects.toMatchObject({
       code: POSTGRES_CODE_CHECK_VIOLATION,
       constraint: 'organization_member_at_least_one_admin',
     });
+  });
+
+  test('refuses the second of two concurrent demotions', async () => {
+    // Neither demotion is illegitimate on its own — each leaves the other admin standing. Only
+    // together do they empty the organization, and the row lock the trigger takes is the only
+    // thing that can see that.
+    await withCommittedFixture(
+      DATABASE,
+      async (transaction, trash) => {
+        const { organization, admin } = await insertFixtureOrganization(transaction, trash);
+        const second = await insertAppUser(transaction);
+        trash.user(second.id);
+        await transaction
+          .insertInto('organizationMember')
+          .values({ userId: second.id, organizationId: organization.id, role: 'admin' })
+          .execute();
+        return { organizationId: organization.id, first: admin, second };
+      },
+      async ({ organizationId, first, second }) => {
+        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+          await demote(alpha.transaction, organizationId, first.id);
+          // Fire alpha's deferred trigger now. It takes the organization's row lock, passes, and
+          // alpha holds that lock until it commits. `<name>` rather than `ALL`, which would also
+          // flip `organization_has_a_member` and every foreign key.
+          await sql`SET CONSTRAINTS organization_member_at_least_one_admin IMMEDIATE`.execute(
+            alpha.transaction,
+          );
+
+          await demote(beta.transaction, organizationId, second.id);
+          // Beta blocks inside a real COMMIT rather than a `SET CONSTRAINTS`, so what is under
+          // test is the path production takes.
+          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+            transaction.commit().execute(),
+          );
+
+          await alpha.transaction.commit().execute();
+          // Not decoration: an alpha killed by a session timeout while idle would release the
+          // lock, and beta would then find an admin still standing and commit happily.
+          expect(alpha.transaction.isCommitted).toBe(true);
+
+          // Beta re-read under a fresh snapshot once the lock was granted, and saw alpha's
+          // committed demotion beside its own.
+          await expect(blocked.result).rejects.toMatchObject({
+            code: POSTGRES_CODE_CHECK_VIOLATION,
+            constraint: 'organization_member_at_least_one_admin',
+          });
+        });
+
+        const admins = await DATABASE.selectFrom('organizationMember')
+          .select('userId')
+          .where('organizationId', '=', organizationId)
+          .where('role', '=', 'admin')
+          .execute();
+        expect(admins.map((row) => row.userId)).toEqual([second.id]);
+      },
+    );
   });
 
   test('permits handing the role over, demoting before promoting', async () => {

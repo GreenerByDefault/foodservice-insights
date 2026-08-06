@@ -18,6 +18,12 @@ import {
   POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '../src/postgres-codes.ts';
+import {
+  insertFixtureOrganization,
+  sendBlockingStatement,
+  withCommittedFixture,
+  withConcurrentTransactions,
+} from '../src/testing/concurrency.ts';
 import { aChecksum, insertAnalysisAttempt, insertReport } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
@@ -297,6 +303,54 @@ describe('starting a new attempt', () => {
     });
   });
 
+  test('refuses the second of two concurrent retries', async () => {
+    // REQUIREMENTS.md allows one retry at a time per report, and the insert trigger cannot enforce
+    // that alone: it reads the latest attempt under its own snapshot, so both of these see attempt
+    // 1 failed and both are waved through. The unique index they then both write to is what
+    // actually serialises them.
+    await withCommittedFixture(
+      DATABASE,
+      async (transaction, trash) => {
+        const { organization } = await insertFixtureOrganization(transaction, trash);
+        const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+        return report;
+      },
+      async (report) => {
+        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+          await alpha.transaction
+            .insertInto('analysisAttempt')
+            .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+            .execute();
+
+          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+            transaction
+              .insertInto('analysisAttempt')
+              .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+              .execute(),
+          );
+
+          await alpha.transaction.commit().execute();
+
+          // `analysis_attempt_one_active_per_report` is violated too; the composite one reports
+          // because Postgres maintains indexes in OID order and it was created with the table.
+          // Callers should surface either as a conflict rather than an error.
+          await expect(blocked.result).rejects.toMatchObject({
+            code: POSTGRES_CODE_UNIQUE_VIOLATION,
+            constraint: 'analysis_attempt_report_id_attempt_number',
+          });
+        });
+
+        const attempts = await DATABASE.selectFrom('analysisAttempt')
+          .select('attemptNumber')
+          .where('reportId', '=', report.id)
+          .orderBy('attemptNumber')
+          .execute();
+        expect(attempts.map((row) => row.attemptNumber)).toEqual([1, 2]);
+      },
+    );
+  });
+
   test('stops at five attempts', async () => {
     // The retry limit from REQUIREMENTS.md. Reaching it is the only way past the insert trigger
     // to the range check, since the trigger rejects any number that is not latest + 1.
@@ -320,24 +374,114 @@ describe('starting a new attempt', () => {
 });
 
 describe('at most one active attempt per report', () => {
-  // Not provocable at all, from one transaction or two.
-  // `analysis_attempt_new_attempt_only_after_failure` rejects every sequential path to a second
-  // active attempt, and on the concurrent path — two simultaneous retries, in
-  // `concurrency.test.ts` — the composite unique constraint reports first. So this index is
-  // covered by its definition rather than by behaviour, and asserting the definition is what stops
-  // a refactor removing it silently. The migration says what it buys that the composite does not.
-  test('is enforced by a partial unique index', async () => {
-    const index = await withRollback(DATABASE, async (transaction) => {
-      const { rows } = await sql<{ indexdef: string }>`
-        SELECT indexdef FROM pg_indexes
-        WHERE schemaname = 'public' AND indexname = 'analysis_attempt_one_active_per_report'
+  // There is no violation left to provoke: the insert trigger rejects every sequential path to a
+  // second active attempt, and on the concurrent path above the composite unique constraint
+  // reports first. So the definition is all there is to assert, and the word worth asserting is
+  // `UNIQUE` — drop the partiality and three tests above fail, but demote this to a plain index
+  // and nothing else in the suite notices. The migration says why the index is worth keeping.
+  test('still has its partial unique index', async () => {
+    const definition = await withRollback(DATABASE, async (transaction) => {
+      const { rows } = await sql<{ definition: string | null }>`
+        SELECT pg_get_indexdef(to_regclass('public.analysis_attempt_one_active_per_report'))
+          AS definition
       `.execute(transaction);
-      return rows[0]?.indexdef;
+      return rows[0]?.definition ?? 'no such index';
     });
 
-    expect(index).toMatch(/UNIQUE INDEX/);
-    expect(index).toMatch(/\(report_id\)/);
-    expect(index).toMatch(/WHERE .*'pending'.*'processing'/);
+    // Deliberately not an exact match: how Postgres renders the predicate is a detail of its
+    // version, and this schema expects to move to 18.
+    expect(definition).toMatch(/^CREATE UNIQUE INDEX .* \(report_id\) WHERE /);
+  });
+});
+
+describe('the worker queue', () => {
+  // Claiming is the one place the schema is a queue rather than a record, and none of it is
+  // visible from a single transaction: `SKIP LOCKED` never skips a transaction's own locks.
+
+  /** The claim from `ARCHITECTURE.md` § Worker queue. The `report_id` filter is the one addition:
+   * every test file shares this database, so the queue has to be narrowed to this test's rows. */
+  async function claim(
+    transaction: Transaction,
+    workerId: string,
+    reportIds: Report['id'][],
+  ): Promise<string | undefined> {
+    const { rows } = await sql<{ id: string }>`
+      UPDATE analysis_attempt
+      SET status = 'processing', worker_id = ${workerId}, locked_at = now(), last_heartbeat_at = now()
+      WHERE id = (
+        SELECT id FROM analysis_attempt
+        WHERE status = 'pending' AND report_id = ANY(${reportIds}::uuid[])
+        ORDER BY created_at
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      RETURNING id
+    `.execute(transaction);
+    return rows[0]?.id;
+  }
+
+  /** `count` reports in one organization, each with a pending attempt waiting to be claimed. */
+  async function withPendingAttempts(
+    count: number,
+    body: (reportIds: Report['id'][]) => Promise<void>,
+  ): Promise<void> {
+    await withCommittedFixture(
+      DATABASE,
+      async (transaction, trash) => {
+        const { organization } = await insertFixtureOrganization(transaction, trash);
+        const reportIds: Report['id'][] = [];
+        for (let index = 0; index < count; index++) {
+          const report = await insertReport(transaction, { organizationId: organization.id });
+          await insertAnalysisAttempt(transaction, { reportId: report.id });
+          reportIds.push(report.id);
+        }
+        return reportIds;
+      },
+      body,
+    );
+  }
+
+  test('never hands the same attempt to two workers', async () => {
+    await withPendingAttempts(1, async (reportIds) => {
+      await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+        expect(await claim(alpha.transaction, 'worker-a', reportIds)).toBeDefined();
+
+        // `SKIP LOCKED` steps over the row alpha holds rather than queueing behind it. That this
+        // resolves at all is half the assertion — a claim that waited would come back as a lock
+        // timeout, and a worker that blocks on a busy queue is not a working queue.
+        expect(await claim(beta.transaction, 'worker-b', reportIds)).toBeUndefined();
+
+        await alpha.transaction.commit().execute();
+      });
+
+      const workers = await DATABASE.selectFrom('analysisAttempt')
+        .select('workerId')
+        .where('reportId', 'in', reportIds)
+        .execute();
+      expect(workers.map((row) => row.workerId)).toEqual(['worker-a']);
+    });
+  });
+
+  test('hands two workers different attempts', async () => {
+    await withPendingAttempts(2, async (reportIds) => {
+      const claimed = await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+        const byAlpha = await claim(alpha.transaction, 'worker-a', reportIds);
+        const byBeta = await claim(beta.transaction, 'worker-b', reportIds);
+        await alpha.transaction.commit().execute();
+        await beta.transaction.commit().execute();
+        return [byAlpha, byBeta];
+      });
+
+      expect(claimed.filter((id) => id !== undefined)).toHaveLength(2);
+      expect(claimed[0]).not.toBe(claimed[1]);
+
+      const workers = await DATABASE.selectFrom('analysisAttempt')
+        .select('workerId')
+        .where('reportId', 'in', reportIds)
+        .orderBy('workerId')
+        .execute();
+      expect(workers.map((row) => row.workerId)).toEqual(['worker-a', 'worker-b']);
+    });
   });
 });
 
@@ -405,6 +549,115 @@ describe('a terminal attempt is final', () => {
     });
 
     expect(rows).toBe(1);
+  });
+
+  describe('the reaping race itself', () => {
+    // The tests above only approximate this: they prove an already-terminal row rejects an
+    // update, never that a *blocked* worker re-reads one.
+    const ORIGINAL_WORKER = 'worker-a';
+    const REAPING_WORKER = 'worker-b';
+
+    /** A committed attempt in `processing`, claimed by the worker that is about to hang. */
+    async function withProcessingAttempt(
+      body: (attempt: AnalysisAttempt) => Promise<void>,
+    ): Promise<void> {
+      await withCommittedFixture(
+        DATABASE,
+        async (transaction, trash) => {
+          const { organization } = await insertFixtureOrganization(transaction, trash);
+          const report = await insertReport(transaction, { organizationId: organization.id });
+          return await insertAnalysisAttempt(transaction, {
+            reportId: report.id,
+            status: 'processing',
+            workerId: ORIGINAL_WORKER,
+          });
+        },
+        body,
+      );
+    }
+
+    /** Another worker declares the attempt hung, and holds the row. */
+    async function reap(transaction: Transaction, attempt: AnalysisAttempt): Promise<void> {
+      const reaped = await transaction
+        .updateTable('analysisAttempt')
+        .set({
+          status: 'failed',
+          finishedAt: new Date(),
+          failureReason: 'hung',
+          reapedByWorkerId: REAPING_WORKER,
+        })
+        .where('id', '=', attempt.id)
+        .where('status', '=', 'processing')
+        .executeTakeFirstOrThrow();
+      expect(Number(reaped.numUpdatedRows)).toBe(1);
+    }
+
+    test('makes a guarded update from the reaped worker a silent no-op', async () => {
+      await withProcessingAttempt(async (attempt) => {
+        await withConcurrentTransactions(DATABASE, async (reaper, original) => {
+          await reap(reaper.transaction, attempt);
+
+          // The `WHERE status = 'processing' AND workerId = ...` guard is the pattern
+          // [Heartbeats, hangs, and reaping](../../ARCHITECTURE.md#heartbeats-hangs-and-reaping)
+          // prescribes for a worker finishing up after it may have been reaped.
+          const blocked = await sendBlockingStatement(DATABASE, original, reaper, (transaction) =>
+            transaction
+              .updateTable('analysisAttempt')
+              .set({ status: 'succeeded', finishedAt: new Date() })
+              .where('id', '=', attempt.id)
+              .where('status', '=', 'processing')
+              .where('workerId', '=', ORIGINAL_WORKER)
+              .executeTakeFirstOrThrow(),
+          );
+
+          await reaper.transaction.commit().execute();
+
+          // Postgres re-evaluates the WHERE against the row as it now stands, where
+          // `status = 'processing'` no longer holds. Losing the race is a zero-row update.
+          const result = await blocked.result;
+          expect(Number(result.numUpdatedRows)).toBe(0);
+        });
+
+        const after = await DATABASE.selectFrom('analysisAttempt')
+          .select(['status', 'reapedByWorkerId'])
+          .where('id', '=', attempt.id)
+          .executeTakeFirstOrThrow();
+        expect(after).toEqual({ status: 'failed', reapedByWorkerId: REAPING_WORKER });
+      });
+    });
+
+    test('rejects an unguarded update from the reaped worker', async () => {
+      // The backstop for a statement that forgets the guard. The trigger's `WHEN` clause sees the
+      // re-fetched row rather than the one this statement planned against, and only because this
+      // is a BEFORE ROW trigger — Postgres re-evaluates before firing those and later for
+      // everything else. Making this a CHECK constraint or a statement-level trigger would
+      // destroy that.
+      await withProcessingAttempt(async (attempt) => {
+        await withConcurrentTransactions(DATABASE, async (reaper, original) => {
+          await reap(reaper.transaction, attempt);
+
+          const blocked = await sendBlockingStatement(DATABASE, original, reaper, (transaction) =>
+            transaction
+              .updateTable('analysisAttempt')
+              .set({ status: 'succeeded', finishedAt: new Date() })
+              .where('id', '=', attempt.id)
+              .executeTakeFirstOrThrow(),
+          );
+
+          await reaper.transaction.commit().execute();
+
+          // Asserting on the constraint name, not just the code, matters here: this update also
+          // leaves `failure_reason = 'hung'` beside `status = 'succeeded'`, independently
+          // violating `analysis_attempt_failure_reason_iff_failed`. Both are 23514, and the
+          // trigger only wins the race because BEFORE ROW triggers run ahead of constraint
+          // evaluation.
+          await expect(blocked.result).rejects.toMatchObject({
+            code: POSTGRES_CODE_CHECK_VIOLATION,
+            constraint: 'analysis_attempt_terminal_is_final',
+          });
+        });
+      });
+    });
   });
 });
 

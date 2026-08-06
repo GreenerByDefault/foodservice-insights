@@ -617,11 +617,10 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
 
   // At most one active attempt per report.
   //
-  // It is not what serializes two concurrent retries, though it looks like it: both pass the
-  // insert trigger, neither seeing the other's uncommitted row, and then both write to
-  // `analysis_attempt_report_id_attempt_number` as well as to this index. Postgres maintains
-  // indexes in OID order, and the composite one was created with the table, so that is the one
-  // that blocks and the one whose name a caller sees. `tests/concurrency.test.ts` pins that down.
+  // It is not what serializes two concurrent retries, though it looks like it: they also both
+  // write to `analysis_attempt_report_id_attempt_number`, and Postgres maintains indexes in OID
+  // order, so the composite one — created with the table — is what blocks and what a caller sees
+  // named. `tests/analysis-attempt.test.ts` pins that down.
   //
   // Keep this index anyway, for three things the composite one does not do:
   //   1. It states a different invariant — at most one *active* attempt, a property of state,

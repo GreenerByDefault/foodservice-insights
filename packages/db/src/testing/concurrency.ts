@@ -1,12 +1,9 @@
 /** Tests for the invariants that only exist between two transactions.
  *
- * `withRollback` is the rule everywhere else, and it cannot express these: a single transaction
- * never blocks on its own locks and never sees another snapshot, so a schema whose locking was
- * deleted outright still passes every test written that way. Anything about a lock, a block, or a
- * cross-transaction snapshot has to commit.
- *
- * **Wrapping one of these tests in `withRollback` does not fail it — it silently makes it prove
- * nothing.** That is the trap this module exists to keep out of the suite.
+ * `withRollback` is the rule everywhere else and cannot express these: a single transaction never
+ * blocks on its own locks and never sees another snapshot, so a schema whose locking was deleted
+ * outright still passes every test written that way. **Wrapping one of these tests in
+ * `withRollback` does not fail it — it silently makes it prove nothing.**
  *
  * Committing is safe here despite the no-truncate isolation model (see `global-setup.ts`) because
  * every row a test commits hangs off an organization it created, and `withCommittedFixture` deletes
@@ -84,13 +81,10 @@ export async function withConcurrentTransactions<T>(
 async function openTransaction(database: Kysely<Database>): Promise<ConcurrentTransaction> {
   const transaction = await database.startTransaction().execute();
 
-  // A transaction here exists to sit idle holding a lock, which is precisely what the pool's
-  // `idle_in_transaction_session_timeout` kills. Being killed would look like the schema allowing
-  // the write the test expected it to refuse, so the test would pass for the wrong reason.
-  //
-  // `lock_timeout` takes over the job of bounding the damage: a wait that outlives the test now
-  // fails in seconds, and `asHarnessFailure` below labels it rather than letting it read as a
-  // schema error.
+  // These transactions exist to sit idle holding a lock, which is exactly what the pool's
+  // `idle_in_transaction_session_timeout` kills — and being killed looks identical to the schema
+  // allowing the write the test expected it to refuse. `lock_timeout` takes over the job of
+  // bounding the damage, and `asHarnessFailure` labels it so it cannot read as a schema error.
   await sql`SET LOCAL idle_in_transaction_session_timeout = 0`.execute(transaction);
   await sql`SET LOCAL lock_timeout = ${sql.lit(LOCK_TIMEOUT_MS)}`.execute(transaction);
 
@@ -146,14 +140,11 @@ export interface BlockedStatement<T> {
 /** Dispatch `statement` on `blocked`, and resolve once it is genuinely waiting on a lock held by
  * `blockedBy`.
  *
- * Throwing when the statement *doesn't* block is the point. Every test here is of the form "the
- * second writer must not get through", and every one of them passes trivially against a schema
- * that lost its locking — the second writer sails past and the assertion about the final state is
- * the only thing left to catch it, which it usually can't. So a statement that completes without
- * blocking fails here, loudly, rather than downstream.
+ * Throwing when the statement *doesn't* block is the point. Every test using this is of the form
+ * "the second writer must not get through", and every one of them passes trivially against a
+ * schema that lost its locking. Failing here is what stops that.
  *
- * The returned promise is deliberately left pending; the result is wrapped in an object because an
- * `async` function cannot return an unresolved promise.
+ * The result is wrapped in an object because an `async` function cannot return a pending promise.
  */
 export async function sendBlockingStatement<T>(
   database: Kysely<Database>,
@@ -292,10 +283,10 @@ export async function withCommittedFixture<F, T>(
   try {
     return await body(fixture, trash);
   } finally {
-    // One transaction, so the order of the deletes cannot matter. The at-least-one-admin trigger is
-    // deferred, and by commit time both the organizations and their members are gone — which is the
-    // case that trigger returns early for. Splitting these would reintroduce the ordering: deleting
-    // the users first cascades away the members and strands a live organization with no admin.
+    // One transaction, so the order of the deletes cannot matter: the at-least-one-admin trigger is
+    // deferred, and by commit time the organizations are gone too, which is the case it returns
+    // early for. Split them and the order matters again — deleting the users first cascades away
+    // the members and strands a live organization with no admin.
     await database.transaction().execute(async (transaction) => {
       if (organizationIds.length > 0) {
         await transaction.deleteFrom('organization').where('id', 'in', organizationIds).execute();

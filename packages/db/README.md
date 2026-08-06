@@ -98,8 +98,8 @@ code that writes to this column:
 - **Open:** the AI metadata fields on `analysis_attempt` are a placeholder and may change.
   `result_metadata` will probably be promoted to structured columns once its shape is scoped.
 - **Open:** the queue-claiming `FOR UPDATE SKIP LOCKED` query is tested in
-  [`tests/concurrency.test.ts`](tests/concurrency.test.ts), but only as a *copy* of the one in
-  [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing yet ties a worker to it,
+  [`tests/analysis-attempt.test.ts`](tests/analysis-attempt.test.ts), but only as a *copy* of the
+  one in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing yet ties a worker to it,
   because the worker's queue code does not exist. Move the query into that code when it lands and
   point the test at it.
 - **Open:** the hourly and weekly report limits in
