@@ -34,6 +34,7 @@ __pycache__/
 .venv/
 .ruff_cache/
 .pytest_cache/
+.ty_cache/
 *.egg-info/
 
 # Local agent state

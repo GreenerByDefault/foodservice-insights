@@ -58,9 +58,9 @@ jobs:
 
           # area <name> <filter-result> [file the area's workspace must have]
           #
-          # TODO: once python/ and tests/e2e/ are permanent fixtures, the third argument's
-          # existence check is always true. Drop it and the [ -f ] line, and call area with
-          # just <name> <filter-result> everywhere.
+          # TODO: once tests/e2e/ is a permanent fixture, the third argument's existence
+          # check is always true. Drop it and the [ -f ] line, and call area with just
+          # <name> <filter-result> everywhere.
           area() {
             if [ -n "${3:-}" ] && [ ! -f "$3" ]; then emit "$1" false; return; fi
             if [ "$UNFILTERED" = 'true' ] || [ "$2" = 'true' ]; then emit "$1" true; return; fi
@@ -68,8 +68,8 @@ jobs:
           }
 
           area ts "$TS"
-          area python "$PYTHON" pyproject.toml
-          area python_lab "$PYTHON_LAB" pyproject.toml
+          area python "$PYTHON"
+          area python_lab "$PYTHON_LAB"
           area system "$SYSTEM" tests/e2e/package.json
 
   ts-static:
@@ -160,8 +160,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
+      - run: uv run just lint
+      - run: uv run just check
 
   py-unit:
     name: 'Python: unit tests'
@@ -172,7 +172,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
-      - run: uv run pytest python/catering_analysis python/worker_child
+      - run: uv run just test
 
   py-lab:
     name: 'Python: lab tests'
@@ -183,7 +183,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
-      - run: uv run pytest python/catering_analysis_lab
+      - run: uv run just test-lab
 
   system-e2e:
     name: 'System e2e tests'

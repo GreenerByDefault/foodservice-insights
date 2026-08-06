@@ -1,8 +1,9 @@
 # Agent guide
 
 [`README.md`](README.md) is the source of truth for prerequisites, commands, repo layout,
-and the testing tiers. Read it first, and prefer it over this file for anything factual —
-duplicated facts drift. This file covers how we want code written and the traps that
+and the testing tiers — [`python/README.md`](python/README.md) is its counterpart for the
+Python stack. Read the relevant one first, and prefer it over this file for anything factual
+— duplicated facts drift. This file covers how we want code written and the traps that
 produce a confusing failure a long way from the cause.
 
 For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how
@@ -10,13 +11,21 @@ the system fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — 
 particular, both files record *rejected* alternatives, so check them before proposing a
 design change.
 
-This repo is TypeScript today and will grow Python workspaces.
+**Two stacks live here.** Everything through [Off limits](#off-limits) applies to both. After
+that the guide splits: [TypeScript and Svelte](#typescript-and-svelte), and
+[Python](#python), which points at [`python/AGENTS.md`](python/AGENTS.md).
 
 ## Verifying a change
 
-Run `pnpm lint && pnpm check && pnpm test` from the repo root before saying a change
-works. A change that typechecks but has not been run is not verified. Report what you
-actually ran; if something is failing or you skipped a step, say so.
+Run the checks for the stack you changed, from the repo root, before saying a change works:
+
+| Stack | Command |
+| --- | --- |
+| TypeScript | `pnpm lint && pnpm check && pnpm test` |
+| Python | `just lint && just check && just test` |
+
+A change that typechecks but has not been run is not verified. Report what you actually ran;
+if something is failing or you skipped a step, say so.
 
 ## General development principles
 
@@ -103,6 +112,24 @@ keep every document either accurate or obviously dead.
   question, say in one of them which one wins.
 - **A doc written before its code is a spec, and says so** in a status block naming what replaces it.
 
+## PRs and sizing changes
+
+- We squash-merge PRs. So, your PR can have as many commits as you want; it all gets
+  combined. That means a PR is the "atomic unit" for changes
+- Keep PRs as small and focused as feasible. Smaller PRs are easier for coworkers to
+  review, future developers to understand, and better to Git bisect to identify which
+  commit changed functionality
+- To keep PRs smaller, use "prefactor" PRs when possible (aka stacked PRs). They refactor the code in
+  anticipation of the new feature, but don't yet add the new feature.
+- It can be helpful to merge code to main even if it isn't yet ready for the end-user to
+  consume. Consider techniques like feature gates. However, the code should be in a good
+  state before being merged.
+
+## Off limits
+
+- Do not touch CI, adapters, or deployment configuration unless that is the task.
+- Do not commit secrets or real customer data.
+
 ## TypeScript and Svelte
 
 - **Svelte 5 runes only.** Never `export let` or `<slot>`. Most Svelte code in training
@@ -125,7 +152,7 @@ keep every document either accurate or obviously dead.
   README.
 - **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
 
-## Database
+### Database
 
 - **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, `migrate` and `truncate`,
   Kanel, and vitest. Without it, you are pointed at the dev database and blob store. The 
@@ -147,7 +174,7 @@ keep every document either accurate or obviously dead.
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
 - **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 
-## Repo mechanics
+### Repo mechanics
 
 - **Dependency versions go in the `catalog:` block of
   [`pnpm-workspace.yaml`](pnpm-workspace.yaml)**, and packages reference them as
@@ -160,23 +187,8 @@ keep every document either accurate or obviously dead.
   rely on `prepare`, which pnpm runs only for some invocations.
 - **Quote parentheses in shell commands.** Route groups mean paths like
   `'src/routes/(app)'` need quoting or the shell mangles them.
-- Do not touch CI, adapters, or deployment configuration unless that is the task.
-- Do not commit secrets or real customer data.
 
-## PRs and sizing changes
-
-- We squash-merge PRs. So, your PR can have as many commits as you want; it all gets
-  combined. That means a PR is the "atomic unit" for changes
-- Keep PRs as small and focused as feasible. Smaller PRs are easier for coworkers to
-  review, future developers to understand, and better to Git bisect to identify which
-  commit changed functionality
-- To keep PRs smaller, use "prefactor" PRs when possible (aka stacked PRs). They refactor the code in
-  anticipation of the new feature, but don't yet add the new feature.
-- It can be helpful to merge code to main even if it isn't yet ready for the end-user to
-  consume. Consider techniques like feature gates. However, the code should be in a good
-  state before being merged.
-
-## Svelte MCP server
+### Svelte MCP server
 
 You have access to the Svelte MCP server, which carries the full Svelte 5 and SvelteKit
 documentation. Use it rather than recalling API details.
@@ -186,3 +198,9 @@ documentation. Use it rather than recalling API details.
 - **`get-documentation`** — fetch every section the task touches, not just one.
 - **`svelte-autofixer`** — run this on any Svelte code you write before showing it.
   Keep calling it until it returns no issues.
+
+## Python
+
+[`python/AGENTS.md`](python/AGENTS.md) has the rules: the uv workspace, ruff, ty, pytest, and
+the boundary that keeps the lab out of anything we ship. Nothing on the TypeScript side above
+applies — the two stacks share no toolchain.

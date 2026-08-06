@@ -8,5 +8,7 @@ runs:
       with:
         enable-cache: true
 
-    - run: uv sync --frozen --all-packages
+    # `--locked` rather than `--frozen`: it fails when `uv.lock` is stale relative to the
+    # pyproject files, the way `verifyDepsBeforeRun` does for pnpm.
+    - run: uv sync --locked --all-packages
       shell: bash

@@ -1,0 +1,59 @@
+# The Python workspace root. It is not a package itself; it exists to hold the uv workspace,
+# one lockfile covering every member, and the tool config they all inherit. TypeScript is a
+# separate stack with its own root — see `package.json` and `pnpm-workspace.yaml`.
+
+[tool.uv.workspace]
+members = ["python/*"]
+
+# One resolution for the whole workspace, so every member runs the same versions. Runtime
+# dependencies belong to the member that imports them, never here.
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-xdist>=3.8",
+    "ruff>=0.16.1",
+    "ty>=0.0.68",
+    # The `just` binary, so CI gets a lockfile-pinned copy without another setup action.
+    # `brew install just` is nicer locally; both run the same `justfile`.
+    "rust-just>=1.44",
+]
+
+[tool.ruff]
+line-length = 100 # Matches Biome's lineWidth for TypeScript, in `biome.json`.
+target-version = "py313" # There is no `[project]` here to infer `requires-python` from.
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports, which enforces the lab boundary below
+    "RUF", # ruff-specific
+]
+
+# The lab is where data scientists experiment free of the product's constraints, so its code
+# carries none of the product's guarantees. Nothing we ship may import it: it is absent from
+# the worker image, and `.github/filters.yml` skips CI for other areas on the strength of
+# nothing depending on it. Reversing that decision means editing this block.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"foodservice_insights_lab".msg = "Product code must not import the lab. See python/AGENTS.md."
+
+[tool.ruff.lint.per-file-ignores]
+"python/foodservice_insights_lab/**" = ["TID251"]
+
+[tool.pytest.ini_options]
+minversion = "9"
+# `importlib` import mode: each package has its own non-package `tests/`, and the default
+# `prepend` mode refuses two same-named test files across packages.
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+testpaths = ["python"]
+markers = [
+    "slow: takes long enough that you would not want it in the default run",
+    "llm: calls a real LLM API",
+]
+
+[tool.ty.environment]
+python-version = "3.13"

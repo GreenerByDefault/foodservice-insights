@@ -4,30 +4,43 @@ Greener by Default's foodservice emissions analysis tool. Customers upload procu
 data and get back a report on the climate impact of their food purchasing, with
 recommendations.
 
+Two stacks live here, and they share no toolchain. **If you are working on Python, read
+[`python/README.md`](python/README.md) instead of this file** — it is the same kind of
+document for uv, `just`, ruff, ty, and pytest. The rest of this file is TypeScript: pnpm,
+Turborepo, Supabase, vitest, and Playwright. Only the docs below are common to both.
+
 ## Documentation
 
 | Doc | What it covers |
 | --- | --- |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the system fits together, and why |
 | [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
-| [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
 | [`AGENTS.md`](AGENTS.md) | How we write code here |
+| [`python/README.md`](python/README.md) | Running and testing the Python stack |
+| [`python/AGENTS.md`](python/AGENTS.md) | How we write Python here |
+| [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
 
-This file covers everything operational: prerequisites, commands, repo layout, and testing.
+This file covers everything operational on the TypeScript side: prerequisites, commands,
+repo layout, and testing.
 
 ## Repo layout
 
 ```
-apps/web/           SvelteKit app
-packages/core/      Shared TypeScript values and helpers
-packages/db/        Kysely client, migrations, and generated types
-packages/storage/   Blob store client and object operations
-supabase-dev/       Local Supabase stack for development
-supabase-test/      Local Supabase stack for tests
-tests/e2e/          Whole-system e2e tests
+apps/web/                           SvelteKit app
+packages/core/                      Shared TypeScript values and helpers
+packages/db/                        Kysely client, migrations, and generated types
+packages/storage/                   Blob store client and object operations
+python/foodservice_insights/        The AI analysis library
+python/worker_child/                One analysis run, spawned by the worker parent
+python/foodservice_insights_lab/    Data-science experiments; ships nothing
+supabase-dev/                       Local Supabase stack for development
+supabase-test/                      Local Supabase stack for tests
+tests/e2e/                          Whole-system e2e tests
 ```
 
-Internal TypeScript packages are referenced by name (e.g. `@gbd/core`).
+Internal TypeScript packages are referenced by name (e.g. `@gbd/core`). No TypeScript imports
+Python and no Python imports TypeScript; the worker parent reaches its child by spawning a
+process, which is the only seam between them.
 
 ## Getting started
 
@@ -93,7 +106,8 @@ The test stack does that for itself whenever you run the tests.
 
 ## Everyday commands
 
-Run these from the repo root. Each one fans out across the workspace through Turborepo.
+Run these from the repo root. Each one fans out across the TypeScript workspace through
+Turborepo. The Python equivalents are `just` recipes — see [`python/README.md`](python/README.md).
 
 | Command | What it does |
 | --- | --- |

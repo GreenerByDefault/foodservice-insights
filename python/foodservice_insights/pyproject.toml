@@ -1,0 +1,15 @@
+[project]
+name = "foodservice-insights"
+version = "0.0.0"
+description = "The AI analysis library: categorization, emissions, and report generation."
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Hatchling ships every non-Python file inside the package directory, so the packaged data
+# files and prompts need no glob list for a new file extension to fall out of.
+[tool.hatch.build.targets.wheel]
+packages = ["src/foodservice_insights"]
