@@ -1,4 +1,17 @@
 export { initializeDatabase, shutdownDatabase } from './client.ts';
+export {
+  type AnalysisAttemptId,
+  type AuditEventId,
+  type InputFileId,
+  newInputFileId,
+  newResultFileId,
+  type OrganizationId,
+  type OrganizationInviteId,
+  type RejectedUploadId,
+  type ReportId,
+  type ResultFileId,
+  type ResultFileKind,
+} from './ids.ts';
 export { migrateToLatest } from './migrate.ts';
 export {
   POSTGRES_CODE_CHECK_VIOLATION,

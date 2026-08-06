@@ -2,11 +2,6 @@
 
 The blob store, reached through its S3 API. Used by both the web app and the worker parent.
 
-> **Status: the key layout below is still a spec.** The code here is generic — a client, and
-> operations on objects and prefixes. Nothing in it builds or knows the keys described under
-> [Key layout](#key-layout). Delete that section once the code that constructs those keys lands,
-> and let the code carry the detail.
-
 For how the blob store fits into the wider system, and why it is Supabase Storage over S3 rather
 than the Supabase JavaScript SDK, see [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
 
@@ -30,18 +25,23 @@ The bucket has to exist before anything can be written to it. Tests create it th
 `globalSetup`; for the dev stack, `pnpm migrate` creates it alongside applying the database's
 migrations.
 
-## Key layout
+## Storing this product's files
 
-The bucket is private.
+The bucket is private, and its key layout lives in [`src/keys.ts`](src/keys.ts).
 
-```
-org/{org_id}
-    /rejected-upload/{rejected_upload_id}.csv
-    /report/{report_id}
-        /input/{input_file_id}.csv
-        /analysis_attempt/{analysis_attempt_id}
-            /result/{result_file_id}.{ext}
-```
+`putInputFile`, `putResultFile`, and `putRejectedUpload` are how a file gets written. Each builds
+its own key and returns the metadata its database row needs, so the object and the row cannot
+disagree; the caller writes the row, inside its own transaction. Nothing reads a file by rebuilding
+its key — every reader takes `storage_key` off the row.
 
-Keying everything under `org/{org_id}` means deleting an organization's files is a single
-`deletePrefix`.
+Everything an organization owns lives under `organizationPrefix(id)`, so deleting an organization's
+files is one `deletePrefix`.
+
+This is why a blob store package depends on `@gbd/db`: keys are made of row ids, and taking them
+branded is what stops a report id being written where a file id belongs. The dependency is
+type-only, and should stay that way — wanting a *runtime* import from `@gbd/db` here would be the
+signal to split these two files into their own package rather than to widen this.
+
+Tests that exercise any of this wrap their work in `withTemporaryOrganization` rather than
+`withTemporaryPrefix`, because real keys start at `org/{id}/` rather than wherever a test would
+prefer.

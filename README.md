@@ -150,7 +150,8 @@ after itself.
 
 **Every test that touches the blob store must wrap its keys in `withTemporaryPrefix`**, from
 `@gbd/storage/testing`, which deletes everything under its prefix however the test ends. It's
-necessary for isolation.
+necessary for isolation. Use its sibling `withTemporaryOrganization` instead when the code under
+test builds real keys, which start at an organization rather than at a prefix of your choosing.
 
 Meanwhile, E2E tests commit transactions to the database and leave objects in the blob store. So, Playwright truncates both before runs. Tests should generate random IDs with `crypto.randomUUID()` to avoid clashes between tests.
 
