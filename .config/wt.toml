@@ -1,0 +1,6 @@
+# Worktrunk project config: https://worktrunk.dev/config
+
+# Commands to run after creation.
+[post-start]
+copy = "wt step copy-ignored"
+python-env = "uv sync"

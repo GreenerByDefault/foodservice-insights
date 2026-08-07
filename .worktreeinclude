@@ -1,0 +1,7 @@
+# Selects which gitignored files `wt step copy-ignored` copies into new worktrees.
+
+.env
+.claude/settings.local.json
+
+# pnpm workspace deps. Reflink-copied, not symlinked
+node_modules/
