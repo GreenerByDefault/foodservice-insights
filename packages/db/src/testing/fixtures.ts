@@ -17,6 +17,8 @@ import type { AppUser } from '../generated/public/AppUser.ts';
 import type { InputFile } from '../generated/public/InputFile.ts';
 import type { Organization } from '../generated/public/Organization.ts';
 import type { Report } from '../generated/public/Report.ts';
+import type { ResultFile } from '../generated/public/ResultFile.ts';
+import type ResultFileKind from '../generated/public/ResultFileKind.ts';
 import type { DatabaseExecutor } from '../schema.ts';
 
 /** A 32-byte checksum, the only length `checksum_sha256` accepts. */
@@ -166,6 +168,44 @@ export async function insertAnalysisAttempt(
       ...(isTerminal
         ? { finishedAt: new Date(), failureReason: status === 'failed' ? 'child_crashed' : null }
         : {}),
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
+
+const RESULT_FILE_TEST_CONTENT_TYPE: Record<ResultFileKind, string> = {
+  pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  chart: 'image/png',
+};
+
+/** A result file for `kind`, with `chart_key` set iff `kind` is `chart` — what
+ * `result_file_chart_key_iff_chart` requires.
+ */
+export async function insertResultFile(
+  database: DatabaseExecutor,
+  overrides: {
+    analysisAttemptId?: AnalysisAttempt['id'];
+    kind?: ResultFileKind;
+    chartKey?: string;
+    storageKey?: string;
+  } = {},
+): Promise<ResultFile> {
+  const analysisAttemptId =
+    overrides.analysisAttemptId ?? (await insertAnalysisAttempt(database)).id;
+  const kind = overrides.kind ?? 'chart';
+  const extension = kind === 'chart' ? 'png' : kind;
+
+  return await database
+    .insertInto('resultFile')
+    .values({
+      analysisAttemptId,
+      kind,
+      chartKey: kind === 'chart' ? (overrides.chartKey ?? 'total-spend') : null,
+      storageKey: overrides.storageKey ?? `org/test/${crypto.randomUUID()}.${extension}`,
+      byteSize: 1024,
+      contentType: RESULT_FILE_TEST_CONTENT_TYPE[kind],
+      checksumSha256: aChecksum(),
     })
     .returningAll()
     .executeTakeFirstOrThrow();

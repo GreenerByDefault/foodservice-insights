@@ -17,7 +17,8 @@
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
     "@gbd/storage": "workspace:*",
-    "kysely": "catalog:"
+    "kysely": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "catalog:",

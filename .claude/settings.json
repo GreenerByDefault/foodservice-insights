@@ -49,8 +49,11 @@
       "Bash(TEST_DB=1 scripts/supabase *)",
       "Bash(TEST_DB=1 pnpm migrate)",
       "Bash(TEST_DB=1 pnpm truncate)",
+      "Bash(TEST_DB=1 pnpm --filter @gbd/db migrate)",
       "Bash(TEST_DB=1 pnpm --filter @gbd/db run migrate)",
+      "Bash(TEST_DB=1 pnpm --filter @gbd/db truncate)",
       "Bash(TEST_DB=1 pnpm --filter @gbd/db run truncate)",
+      "Bash(TEST_DB=1 pnpm --filter @gbd/db gen-types)",
       "Bash(TEST_DB=1 pnpm --filter @gbd/db run gen-types)",
       "Bash(TEST_DB=1 pnpm db:gen-types)",
       "Bash(TEST_DB=1 pnpm storage:ensure-bucket)",
@@ -67,7 +70,11 @@
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)",
-      "Bash(rg *)"
+      "Bash(rg *)",
+      "Bash(xargs cat)",
+
+      "mcp__svelte__svelte-autofixer"
     ]
-  }
+  },
+  "enabledMcpjsonServers": ["svelte"]
 }
