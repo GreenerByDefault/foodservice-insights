@@ -1,21 +1,6 @@
 # Worktrunk project config: https://worktrunk.dev/config
-#
-# New worktrees start cold — no local .env, no node_modules, no Python venv.
-# post-start hooks backfill that so a fresh worktree is immediately usable.
 
+# Commands to run after creation.
 [post-start]
-# Copies only what .worktreeinclude allows (see that file for what and why).
-# Runs in the background so worktree creation isn't blocked on it.
 copy = "wt step copy-ignored"
-
-# node_modules is reflink-copied by the step above, not symlinked: this is a
-# pnpm workspace with node_modules in root, apps/web, and every packages/*,
-# so a hand-maintained symlink hook would need updating every time a package
-# is added, and a shared symlink would mean one worktree's `pnpm install`
-# mutates node_modules under every other worktree — exactly the concurrency
-# hazard worktrees are meant to avoid. pnpm's content-addressable store
-# already dedupes the real package contents, so the reflink copy is cheap.
-#
-# The venv can't be copied (absolute paths), so recreate it directly instead;
-# uv sync is fast enough that this isn't worth backgrounding.
 python-env = "uv sync"
