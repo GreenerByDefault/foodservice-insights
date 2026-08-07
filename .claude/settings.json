@@ -70,6 +70,7 @@
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)",
+      "Bash(git mv *)",
       "Bash(rg *)",
       "Bash(xargs cat)",
 

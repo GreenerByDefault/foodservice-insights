@@ -101,6 +101,9 @@ refresh.
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
 
+**Until Supabase Auth lands, the hook loads a seeded placeholder identity** instead of validating
+a JWT — see `@gbd/db/seed`. Everything downstream of `locals` is already the shape above.
+
 **Superadmin status lives solely on `app_user.is_superadmin`**, not as an `organization_member`
 row. All superadmin behavior is a separate computed path (`is_superadmin OR role = 'admin'`)
 rather than a variant of membership-table logic.
@@ -118,6 +121,10 @@ The client polls the server roughly every 10 seconds.
 
 The server enqueues new analysis attempts. **Workers pull from the queue; the server never talks
 to a worker.**
+
+An accepted upload writes its `report`, `input_file` and `analysis_attempt` in **one transaction**,
+after the object is already in the blob store. That is what a worker relies on: a claim query
+cannot wait for an `input_file` row that has not committed yet.
 
 The worker writes results — including failures — directly to the database and blob store. It does
 not talk back to the server. The server discovers that a worker has finished by reading the

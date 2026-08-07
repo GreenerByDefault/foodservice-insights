@@ -7,4 +7,7 @@ import { Button } from '$lib/components/ui/button/index.js';
 
 <p class="text-muted-foreground">Boilerplate only. Real features arrive in later phases.</p>
 
-<Button href="/health" variant="outline">Check health</Button>
+<div class="flex gap-2">
+  <Button href="/reports/new">Upload a report</Button>
+  <Button href="/health" variant="outline">Check health</Button>
+</div>

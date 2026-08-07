@@ -21,6 +21,7 @@ Everything above that heading is common to both.
 | [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
+| [`apps/web/README.md`](apps/web/README.md) | How the web app's routes, errors, and placeholder session are organised |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
 | [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract, and how to change it |
 
