@@ -186,6 +186,7 @@ If the test database gets into a strange state, [reset it](#reset-a-database).
 | Command | What it does |
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
+| `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands (safe to re-run) |
 | `pnpm truncate` | Delete every row and every object, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) and [`packages/db/schema.sql`](packages/db/schema.sql) from the live database |
 
@@ -208,10 +209,12 @@ code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
 
 #### Reset a database
 
-Clear the dev data, keeping the schema and the bucket:
+Clear the dev data, keeping the schema and the bucket. The app needs the placeholder identity
+back before it will run, so re-seed it:
 
 ```sh
 pnpm truncate
+pnpm seed
 ```
 
 Rebuild the dev database from nothing, when the schema itself is wrong. A reset takes the blob
@@ -220,6 +223,7 @@ store's bucket with it, which `pnpm migrate` puts back:
 ```sh
 scripts/supabase db reset
 pnpm migrate
+pnpm seed
 ```
 
 Same for the test database, when it gets into a strange state:
@@ -227,6 +231,7 @@ Same for the test database, when it gets into a strange state:
 ```sh
 TEST_DB=1 scripts/supabase db reset
 TEST_DB=1 pnpm migrate
+TEST_DB=1 pnpm seed
 ```
 
 #### Debug the database

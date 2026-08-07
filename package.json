@@ -17,6 +17,7 @@
     "lint": "biome ci .",
     "fmt": "biome check --write .",
     "migrate": "turbo run migrate",
+    "seed": "turbo run seed",
     "truncate": "turbo run truncate",
     "db:gen-types": "turbo run gen-types"
   },
