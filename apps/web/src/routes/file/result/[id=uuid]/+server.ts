@@ -1,16 +1,4 @@
-/** The stable link to a result file: a PDF, an XLSX, or one of a report's chart PNGs.
- *
- * **Deliberately unauthenticated**, and for the same reason as `/file/input` — see that route's
- * comment and ARCHITECTURE.md § File links.
- *
- * **Charts render inline; PDFs and XLSX download as attachments.** `result_file` has no
- * user-entered filename the way `input_file` does — the worker names it only by `kind` — so this
- * is the one place that decides what a result download is called: `{report name} - {kind}.{ext}`.
- * Charts get no `downloadFilename` at all, which is what keeps `Content-Disposition` off the
- * response so an `<img>` can point straight at this route. Because the redirect below is minted
- * fresh on every request, a chart embedded in a report page never goes stale — only the signed
- * URL expires, not the link the page holds.
- */
+/** The stable, unauthenticated link to a result file. */
 
 import type { DatabaseExecutor, ResultFileId } from '@gbd/db';
 import { type BlobStore, RESULT_FILE_FORMATS } from '@gbd/storage';
@@ -42,7 +30,7 @@ export async function _downloadResultFile(
   const downloadFilename =
     file.kind === 'chart'
       ? undefined
-      : `${file.name ?? 'report'} - ${file.kind}.${RESULT_FILE_FORMATS[file.kind].extension}`;
+      : `${file.name ?? 'report'}.${RESULT_FILE_FORMATS[file.kind].extension}`;
 
   return await redirectToSignedUrl(store, file.storageKey, downloadFilename);
 }

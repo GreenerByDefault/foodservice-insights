@@ -1,14 +1,3 @@
-/** What a test of a file route needs before it can call one: an organization that exists in the
- * database, and a blob store whose objects get cleaned up.
- *
- * Not a `.test.ts` file, so no runner picks it up.
- *
- * There is no `Session` here, unlike the auth PR's eventual fixtures — these routes are
- * deliberately unauthenticated, per ARCHITECTURE.md § File links. Once that PR lands and needs its
- * own `withReportFixtures`-style helper with a session, reconcile the two rather than keeping this
- * as a second, parallel one.
- */
-
 import type { Database, OrganizationId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { type BlobStore, deletePrefix, organizationPrefix } from '@gbd/storage';

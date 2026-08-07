@@ -36,8 +36,6 @@ export async function redirectToSignedUrl(
     downloadFilename,
   });
 
-  // Built by hand rather than with `redirect()`, which takes no headers — and this one needs
-  // `no-store`, because caching a redirect to a URL that expires in a minute is a bug.
   return new Response(null, {
     status: 302,
     headers: { location: url, 'cache-control': 'no-store' },

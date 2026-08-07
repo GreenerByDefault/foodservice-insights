@@ -90,7 +90,7 @@ describe('_downloadResultFile', () => {
       const location = response.headers.get('location') ?? '';
       const download = await fetch(location);
 
-      expect(download.headers.get('content-disposition')).toContain('Q1 procurement - pdf.pdf');
+      expect(download.headers.get('content-disposition')).toContain('Q1 procurement.pdf');
     });
   });
 

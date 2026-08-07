@@ -40,7 +40,6 @@ describe('_downloadInputFile', () => {
       const response = await _downloadInputFile(transaction, store, inputFileId);
 
       expect(response.status).toBe(302);
-      // Caching a redirect to a URL that expires in a minute would hand out a dead link.
       expect(response.headers.get('cache-control')).toBe('no-store');
 
       // The end of the chain: following the signed URL returns what we stored. Nothing else in

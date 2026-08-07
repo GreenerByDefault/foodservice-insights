@@ -1,11 +1,4 @@
-/** The stable link to an uploaded input file.
- *
- * **Deliberately unauthenticated.** REQUIREMENTS.md makes these links public and non-expiring —
- * anyone holding one can download the file — so Supabase Auth will not touch this route. What it
- * does check is whether the file is still *accessible*: a soft-deleted report's links stop
- * working while its objects stay in the blob store for debugging. That is the whole reason
- * downloads go through the server instead of a public bucket, per ARCHITECTURE.md § File links.
- */
+/** The stable, unauthenticated link to an uploaded input file. */
 
 import type { DatabaseExecutor, InputFileId } from '@gbd/db';
 import type { BlobStore } from '@gbd/storage';
