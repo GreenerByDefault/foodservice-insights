@@ -1,7 +1,3 @@
-"""Reading a contract document without a validation library — `worker_child` has no runtime
-dependencies.
-"""
-
 import json
 import re
 from collections.abc import Mapping

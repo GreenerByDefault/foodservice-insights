@@ -1,8 +1,4 @@
-"""The child's half of the run-directory contract, checked against `contract/contract.json`.
-
-Not read from that file at runtime: hatchling ships only `src/worker_child/`, so an installed
-wheel must not need the repo checkout.
-"""
+"""The child's half of the run-directory contract, checked against `contract/contract.json`."""
 
 import re
 from typing import Final, Literal, get_args

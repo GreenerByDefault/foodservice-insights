@@ -1,6 +1,5 @@
 """The four documents that cross the run directory: the child parses `run.json` and builds the
-other three as payload dicts. Keys are camelCase, matching the parent's Kysely columns.
-"""
+other three as payload dicts."""
 
 import re
 from collections.abc import Mapping, Sequence
@@ -128,8 +127,6 @@ def failure_payload(
     detail: str,
     traceback: str | None = None,
 ) -> dict[str, Any]:
-    # No analysisAttemptId: a child that can't parse run.json doesn't know it, and reporting
-    # that is what `contract_violation` is for.
     _require(reason in CHILD_FAILURE_REASONS, f"'{reason}' is not a reason a child may claim")
     _require(bool(detail), "detail must not be empty")
     return {"reason": reason, "detail": detail, "traceback": traceback}

@@ -83,7 +83,9 @@ def test_rejects_bytes_that_are_not_json_at_all() -> None:
         parse_run_manifest('{"analysisAttemptId":')
 
 
-# --- What the child writes ----------------------------------------------------------------
+# ---------------------------------------------------------------------------------------
+# What the child writes
+# ---------------------------------------------------------------------------------------
 
 
 def test_progress_payload_is_the_fixture() -> None:
@@ -142,7 +144,9 @@ def test_refuses_to_write_duplicate_chart_keys() -> None:
         )
 
 
-# --- The cross-language number traps -------------------------------------------------------
+# ---------------------------------------------------------------------------------------
+# Cross-language traps
+# ---------------------------------------------------------------------------------------
 
 
 def test_accepts_a_whole_number_written_as_a_float() -> None:
