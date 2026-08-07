@@ -1,4 +1,4 @@
-/** Where every file lives in a run directory — the only seam between the parent and its child.
+/** Where every file lives in the worker's run directory.
  *
  * ```
  * <runRoot>/{analysis_attempt_id}
@@ -12,7 +12,7 @@
  * means the parent broke its own contract. The parent never lists `output/files` — it derives
  * each expected path from the chart keys `result.json` declares plus the two fixed report names,
  * which makes traversal impossible by construction. A path segment is always an id or a fixed
- * name, never anything a user typed, matching `packages/storage/src/keys.ts`.
+ * name, never anything a user typed.
  *
  * `work/` exists because the analysis library writes CSV intermediates; the child's working
  * directory is `work/`, so a stray relative write lands in scratch rather than among the results.
@@ -35,9 +35,6 @@ export type RunDirectoryEntry = keyof typeof RUN_DIRECTORY;
 
 export const DIRECTORIES_CREATED_BY_PARENT = ['input', 'output', 'output/files', 'work'] as const;
 
-/** Keyed by the database's own `result_file_kind`. `chart` is absent because charts are named
- * from their key instead — `satisfies` makes a fourth kind a compile error here.
- */
 export const RESULT_FILE_NAMES = {
   pdf: 'report.pdf',
   xlsx: 'report.xlsx',

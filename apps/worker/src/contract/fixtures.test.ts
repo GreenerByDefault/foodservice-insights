@@ -1,11 +1,4 @@
-/** The parent's half of the golden fixtures in `contract/fixtures/`.
- *
- * The two stacks validate with different machinery — valibot here, a hand-written cursor over
- * `json.loads` there — so these fixtures are the only thing that proves they agree. The Python
- * counterpart is `python/worker_child/tests/test_fixtures.py`, and it plays the opposite role on
- * each document: whichever side *writes* a message in production asserts its writer reproduces
- * the fixture, and the side that reads it asserts its parser accepts it.
- */
+/** The parent's half of the golden fixtures in `contract/fixtures/`. */
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -93,8 +86,6 @@ describe('valid fixtures', () => {
       },
     };
 
-    // Parsed values, never bytes: Biome formats `contract/**/*.json`, and the contract must not
-    // be coupled to the formatter.
     expect(buildRunManifest(input)).toEqual(JSON.parse(read('valid', 'run.json')));
   });
 
@@ -133,17 +124,12 @@ describe('invalid fixtures', () => {
   });
 
   test('rejects bytes that are not JSON at all', () => {
-    // Deliberately generated rather than committed: Biome parses `contract/fixtures/`, so a
-    // malformed file could not live there.
     expect(() => parseProgress('{"sequence":')).toThrow(ContractError);
   });
 });
 
 describe('the cross-language number traps', () => {
-  // Neither can be expressed as a fixture on both sides at once, so they are pinned here and
-  // mirrored in `test_fixtures.py`.
-
-  test('accepts a whole number written as a float, which JSON.parse cannot distinguish', () => {
+  test('accepts a whole number written as a float, which JavaScript JSON.parse cannot distinguish', () => {
     expect(parseProgress('{"sequence": 7.0}').sequence).toBe(7);
   });
 

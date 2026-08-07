@@ -27,8 +27,3 @@ The layout itself, and why it is shaped this way, is documented on
 Two constraints on fixtures. Every file under `invalid/` must be **syntactically valid JSON** —
 Biome parses this directory in CI, so malformed bytes belong in a test that generates them.
 And both sides compare **parsed values, never bytes**, because Biome also formats these files.
-
-A change anywhere under `contract/` runs both stacks' CI jobs, which is the point of this
-directory living at the repo root — see the comment at the top of
-[`.github/filters.yml`](../.github/filters.yml). Prose in this README does not: `!**/README.md`
-excludes it from both filters, so nothing enforceable may live here.

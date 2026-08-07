@@ -1,7 +1,4 @@
-/** The vocabularies the parent and child must spell identically. Duplicated in
- * `python/worker_child/src/worker_child/contract.py`; `contract.test.ts` checks both halves
- * against `contract/contract.json`.
- */
+/** The vocabularies the parent and child must spell identically from `contract/contract.json`. */
 
 import type { AnalysisFailureReason, CountsBasis, UnitSystem } from '@gbd/db';
 
@@ -9,8 +6,7 @@ export const INVOCATION = {
   module: 'worker_child',
   positionalArguments: ['runDirectory'],
   workingDirectory: 'work',
-  // The only secrets the child may see. The parent replaces its environment rather than
-  // extending it, so DB and blob store credentials never reach the child.
+  // The only secrets the child may see.
   secretEnvironmentVariables: ['GEMINI_API_KEY', 'LLM_WHISPERER_API_KEY', 'OPENAI_API_KEY'],
 } as const;
 
@@ -23,7 +19,7 @@ export const COUNTS_BASES = ['people', 'meals'] as const satisfies readonly Coun
 export const UNIT_SYSTEMS = ['lb', 'kg'] as const satisfies readonly UnitSystem[];
 
 /** `satisfies Record<AnalysisFailureReason, …>` makes a new database enum value a compile error
- * here until someone assigns it an owner. A child claiming a parent-only reason is not believed.
+ * here until someone assigns it an owner.
  */
 export const FAILURE_REASON_CLAIMANT = {
   child_crashed: 'parent',
