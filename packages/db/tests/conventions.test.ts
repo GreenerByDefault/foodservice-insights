@@ -7,6 +7,7 @@ import { afterAll, describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import { insertOrganization, insertReport } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
+import { uuidV7, uuidV7Timestamp } from '../src/uuid.ts';
 
 afterAll(async () => {
   await DATABASE.destroy();
@@ -175,5 +176,21 @@ describe('uuidv7', () => {
 
     expect(Number(row?.distinctCount)).toBe(1000);
     expect(row?.ordered).toBe(true);
+  });
+
+  test('agrees with the TypeScript implementation in `src/uuid.ts`', async () => {
+    const generated = uuidV7();
+
+    const row = await withRollback(DATABASE, async (transaction) => {
+      const { rows } = await sql<{ version: number; timestampMs: string }>`
+        SELECT
+          uuid_extract_version(${generated}::uuid) AS version,
+          ('x' || substr(replace(${generated}, '-', ''), 1, 12))::bit(48)::bigint AS "timestampMs"
+      `.execute(transaction);
+      return rows[0];
+    });
+
+    expect(row?.version).toBe(7);
+    expect(Number(row?.timestampMs)).toBe(uuidV7Timestamp(generated));
   });
 });

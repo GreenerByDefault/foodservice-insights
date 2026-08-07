@@ -6,6 +6,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./env": "./dist/env.js",
+    "./seed": "./dist/seed.js",
     "./testing": "./dist/testing/index.js"
   },
   "scripts": {
@@ -14,6 +15,7 @@
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
     "migrate": "node scripts/migrate.ts",
+    "seed": "node scripts/seed.ts",
     "truncate": "node scripts/truncate.ts",
     "gen-types": "kanel && biome check --write src/generated && node scripts/dump-schema.ts"
   },

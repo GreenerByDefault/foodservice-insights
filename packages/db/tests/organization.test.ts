@@ -19,18 +19,13 @@ import {
   withConcurrentTransactions,
 } from '../src/testing/concurrency.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
-import { withRollback } from '../src/testing/transactions.ts';
+import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 
 afterAll(async () => {
   await DATABASE.destroy();
 });
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
-
-/** Force the deferred constraint triggers to run now rather than at a commit that never comes. */
-async function checkDeferredConstraints(transaction: Transaction) {
-  await sql`SET CONSTRAINTS ALL IMMEDIATE`.execute(transaction);
-}
 
 describe('app_user', () => {
   test('is created by a trigger when auth.users gains a row', async () => {

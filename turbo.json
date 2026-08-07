@@ -47,6 +47,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "seed": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "truncate": {
       "dependsOn": ["^build"],
       "cache": false

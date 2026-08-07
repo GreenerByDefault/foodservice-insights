@@ -1,4 +1,4 @@
-import type { Kysely, Transaction } from 'kysely';
+import { type Kysely, sql, type Transaction } from 'kysely';
 import type { Database } from '../schema.ts';
 
 /** Thrown to force a rollback. Never escapes `withRollback`. */
@@ -30,4 +30,9 @@ export async function withRollback<T>(
 
   if (!outcome) throw new Error('withRollback: the transaction body never completed');
   return outcome.value;
+}
+
+/** Force the deferred constraint triggers to run now rather than at a commit that never comes. */
+export async function checkDeferredConstraints(transaction: Transaction<Database>) {
+  await sql`SET CONSTRAINTS ALL IMMEDIATE`.execute(transaction);
 }
