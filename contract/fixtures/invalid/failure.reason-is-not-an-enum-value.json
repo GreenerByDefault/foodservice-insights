@@ -1,5 +1,4 @@
 {
-  "contractVersion": 1,
   "reason": "bad_input",
   "detail": "Gemini returned 429 on 6 consecutive attempts over 214s (model gemini-2.5-pro)",
   "traceback": "Traceback (most recent call last):\n  File \"categorize.py\", line 88, in categorize\n    raise UpstreamError(response)\n"

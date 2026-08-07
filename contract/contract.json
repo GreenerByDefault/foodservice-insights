@@ -1,6 +1,5 @@
 {
   "$comment": "The worker parent <-> child contract. Neither side reads this file at runtime: both copy it into their own constants and assert equality in a unit test. See contract/README.md.",
-  "contractVersion": 1,
   "invocation": {
     "module": "worker_child",
     "positionalArguments": ["runDirectory"],

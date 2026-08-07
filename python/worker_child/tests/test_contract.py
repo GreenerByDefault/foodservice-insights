@@ -1,9 +1,6 @@
-"""The child's half of the contract, checked against `contract/contract.json`.
-
-`contract.json` is the tiebreaker between the two stacks, not a runtime input. Renaming a path
+"""The child's half of the contract, checked against `contract/contract.json`. Renaming a path
 here without renaming it in `apps/worker/src/contract/` fails this test — which matters because
-`.github/filters.yml` skips every TypeScript job for a Python-only change, so the other half's
-tests may never run.
+`.github/filters.yml` skips every TypeScript job for a Python-only change.
 """
 
 import json
@@ -20,13 +17,7 @@ CONTRACT: dict[str, Any] = json.loads(
 
 
 def test_repo_root_resolved_to_the_right_place() -> None:
-    # Guards the `parents[3]` above: a moved test file would otherwise read some other JSON, or
-    # nothing, and the rest of this module would fail in a way that hides the real cause.
     assert (REPO_ROOT / "pnpm-workspace.yaml").is_file()
-
-
-def test_agrees_on_the_contract_version() -> None:
-    assert CONTRACT["contractVersion"] == contract.CONTRACT_VERSION
 
 
 def test_agrees_on_how_the_child_is_invoked() -> None:
@@ -56,8 +47,6 @@ def test_agrees_on_the_result_file_names() -> None:
     assert result_files["pdf"] == contract.PDF_FILE_NAME
     assert result_files["xlsx"] == contract.XLSX_FILE_NAME
 
-    # A golden value rather than a duplicated template, so a changed derivation on either side
-    # shows up as a mismatched string instead of two rules that merely look alike.
     example = result_files["chartExample"]
     assert contract.chart_file_name(example["chartKey"]) == example["fileName"]
 

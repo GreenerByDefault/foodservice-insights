@@ -1,14 +1,8 @@
-"""Reading a contract document, without a validation library.
+"""Reading a contract document without a validation library.
 
-`worker_child` has no runtime dependencies, and this is the one place that would otherwise
-justify one. The parent uses valibot, so the two sides do not share validation semantics — which
-is why the golden fixtures in `contract/fixtures/` are load-bearing rather than decorative. Two
-disagreements this file has to resolve deliberately, both pinned by fixtures:
-
-- **`bool` is a subclass of `int`**, so a JSON `true` would sail through an `isinstance(v, int)`
-  check as `1`. JavaScript has no such problem, so the trap is invisible from the other side.
-- **`json.loads` distinguishes `1.0` from `1`, and `JSON.parse` cannot.** Valibot accepts both
-  because `Number.isInteger(1.0)` is true, so this side accepts a float with no fractional part.
+`worker_child` has no runtime dependencies. The parent uses valibot, so the two sides don't share
+validation semantics — the golden fixtures in `contract/fixtures/` are what proves they agree,
+including on `bool` vs `int` and `1.0` vs `1`, which Python and JS treat differently.
 """
 
 import json
@@ -23,11 +17,8 @@ class ContractError(Exception):
 
 
 class Fields:
-    """A cursor over one JSON object that records which keys it reads.
-
-    `done()` then rejects whatever is left over, so refusing unknown fields costs nothing and
-    cannot drift: there is no second list of field names to keep in step with the first. The
-    mutable `_seen` set never escapes a parse function, which is what earns a class here.
+    """A cursor over one JSON object that records which keys it reads, so `done()` can reject
+    whatever is left over.
     """
 
     def __init__(self, path: str, source: Mapping[str, Any]) -> None:
@@ -86,8 +77,6 @@ class Fields:
 
     def _object(self, key: str) -> Mapping[str, Any]:
         value = self._take(key)
-        # `dict` and not `Mapping`: `json.loads` produces dicts, and a list would otherwise slip
-        # through any check based on "is it iterable".
         if not isinstance(value, dict):
             raise self._fail(key, "an object")
         return value
@@ -114,16 +103,12 @@ class Fields:
         return ContractError(f"{self._path}.{key}: expected {expected}")
 
 
-def root_fields(document: str, text: str, version: int) -> Fields:
-    """Parse `text` as a contract document and check its version before anything reads a field."""
+def parse_object(document: str, text: str) -> Fields:
+    """Parse `text` as a JSON object and wrap it for field-by-field reading."""
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as cause:
         raise ContractError(f"{document}: not valid JSON") from cause
     if not isinstance(parsed, dict):
         raise ContractError(f"{document}: expected a JSON object")
-
-    fields = Fields(document, parsed)
-    if fields.integer("contractVersion", minimum=1) != version:
-        raise ContractError(f"{document}: contractVersion must be {version}")
-    return fields
+    return Fields(document, parsed)

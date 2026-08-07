@@ -1,11 +1,8 @@
 """The child's half of the golden fixtures in `contract/fixtures/`.
 
-Each side plays its production role, so neither needs code it would not otherwise have. The child
-reads `run.json` and writes the other three, so here `run.json` is parsed and the rest are
-reproduced by their payload builders. `apps/worker/src/contract/fixtures.test.ts` is the mirror.
-
-The two stacks validate with different machinery — valibot there, a hand-written cursor over
-`json.loads` here — which is what makes these fixtures load-bearing rather than decorative.
+Each side plays its production role: the child reads `run.json` and writes the other three, so
+here `run.json` is parsed and the rest are reproduced by their payload builders.
+`apps/worker/src/contract/fixtures.test.ts` is the mirror.
 """
 
 import json
@@ -25,12 +22,10 @@ from worker_child.parse import ContractError
 
 FIXTURES = Path(__file__).resolve().parents[3] / "contract" / "fixtures"
 
-# Every fixture's filename starts with the document it belongs to. Both stacks know this same set,
-# so a typo in a filename fails in both rather than being silently skipped by each.
 DOCUMENTS = frozenset({"run", "progress", "result", "failure"})
 
-# The child only reads `run.json`; it writes the rest, so it has no parser for them and the
-# TypeScript side is what rejects their invalid fixtures.
+# The child only reads `run.json`; it writes the rest, so the TypeScript side is what rejects
+# their invalid fixtures.
 PARSED_BY_THE_CHILD = frozenset({"run"})
 
 
@@ -62,8 +57,6 @@ def test_names_every_fixture_after_a_document_both_stacks_know() -> None:
 
 
 def test_covers_every_document() -> None:
-    # Without this a moved or emptied directory would make every parametrised test below vanish
-    # and the file would pass having asserted nothing.
     assert VALID == ["failure.json", "progress.json", "result.json", "run.json"]
     assert REJECTED_HERE != []
 
@@ -95,14 +88,13 @@ def test_rejects_bytes_that_are_not_json_at_all() -> None:
     # Generated rather than committed: Biome parses `contract/fixtures/`, so a malformed file
     # could not live there.
     with pytest.raises(ContractError):
-        parse_run_manifest('{"contractVersion": 1,')
+        parse_run_manifest('{"analysisAttemptId":')
 
 
 # --- What the child writes ----------------------------------------------------------------
 #
 # The strong form: the fixture is a golden output, so any change to a payload builder has to
 # change the fixture too — and a fixture change is a `contract/` change, which runs both stacks.
-# Compared as parsed values, never bytes, because Biome formats these files.
 
 
 def test_progress_payload_is_the_fixture() -> None:
@@ -124,8 +116,6 @@ def test_result_payload_is_the_fixture() -> None:
     )
 
     assert payload == load("valid", "result.json")
-    # The cost is a string all the way across, because `ai_cost_usd` is `numeric(10,4)` and a
-    # float would arrive at the parent as 2.4712999999999997.
     assert payload["ai"]["costUsd"] == "2.4713"
 
 
@@ -170,8 +160,7 @@ def test_refuses_to_write_duplicate_chart_keys() -> None:
 
 
 def test_accepts_a_whole_number_written_as_a_float() -> None:
-    # `JSON.parse` cannot tell 184320.0 from 184320, so this side has to accept both or the two
-    # parsers would disagree about a document neither considers unusual.
+    # `JSON.parse` cannot tell 184320.0 from 184320, so this side has to accept both.
     manifest = json.loads(read("valid", "run.json"))
     manifest["inputFile"]["byteSize"] = 184320.0
 
@@ -179,8 +168,7 @@ def test_accepts_a_whole_number_written_as_a_float() -> None:
 
 
 def test_rejects_a_boolean_where_a_number_belongs() -> None:
-    # `bool` subclasses `int`, so `True` would otherwise arrive as 1. JavaScript has no such
-    # problem, which is why this trap needs a test on this side specifically.
+    # `bool` subclasses `int`, so `True` would otherwise arrive as 1.
     manifest = json.loads(read("valid", "run.json"))
     manifest["inputFile"]["byteSize"] = True
 

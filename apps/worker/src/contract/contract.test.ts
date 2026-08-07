@@ -1,9 +1,6 @@
-/** The parent's half of the contract, checked against `contract/contract.json`.
- *
- * `contract.json` is the tiebreaker between the two stacks, not a runtime input: nothing reads it
- * outside this test and its Python counterpart. Renaming a path on one side alone therefore fails
- * that side's own unit tests, which is what makes the path-filtered CI in `.github/filters.yml`
- * safe — the other stack's jobs may never run.
+/** The parent's half of the contract, checked against `contract/contract.json`. Renaming a path
+ * on one side alone fails that side's own tests, which is what makes the path-filtered CI in
+ * `.github/filters.yml` safe — the other stack's jobs may never run.
  */
 
 import { readFileSync } from 'node:fs';
@@ -18,7 +15,6 @@ import {
   RUN_DIRECTORY,
 } from './layout.ts';
 import {
-  CONTRACT_VERSION,
   COUNTS_BASES,
   EXIT_CODES,
   FAILURE_REASON_CLAIMANT,
@@ -31,10 +27,6 @@ const contract = JSON.parse(
 );
 
 describe('contract/contract.json', () => {
-  test('agrees on the contract version', () => {
-    expect(contract.contractVersion).toBe(CONTRACT_VERSION);
-  });
-
   test('agrees on how the child is invoked', () => {
     expect(contract.invocation).toEqual(INVOCATION);
   });

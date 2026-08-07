@@ -27,9 +27,9 @@ def run_directory(tmp_path: Path) -> Path:
 
 def test_leaves_no_temporary_file_behind(run_directory: Path) -> None:
     path = run_directory / contract.PROGRESS
-    write_json_atomically(path, {"contractVersion": 1, "sequence": 1})
+    write_json_atomically(path, {"sequence": 1})
 
-    assert json.loads(path.read_text(encoding="utf-8")) == {"contractVersion": 1, "sequence": 1}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"sequence": 1}
     assert files_in(path.parent) == ["progress.json"]
 
 
@@ -37,10 +37,10 @@ def test_replaces_rather_than_truncating(run_directory: Path) -> None:
     # The parent polls this file while the child rewrites it. Replacing by rename is what makes a
     # torn read impossible: a reader holds the old inode or the new one, never a mixture.
     path = run_directory / contract.PROGRESS
-    write_json_atomically(path, {"contractVersion": 1, "sequence": 1})
+    write_json_atomically(path, {"sequence": 1})
     first_inode = path.stat().st_ino
 
-    write_json_atomically(path, {"contractVersion": 1, "sequence": 2})
+    write_json_atomically(path, {"sequence": 2})
 
     assert path.stat().st_ino != first_inode
     assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == 2
@@ -52,7 +52,7 @@ def test_refuses_to_write_nan(run_directory: Path) -> None:
     # document it cannot read.
     path = run_directory / contract.RESULT
     with pytest.raises(ValueError):
-        write_json_atomically(path, {"contractVersion": 1, "resultMetadata": float("nan")})
+        write_json_atomically(path, {"resultMetadata": float("nan")})
 
     assert not path.exists()
     assert files_in(path.parent) == []

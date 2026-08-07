@@ -24,9 +24,6 @@ import {
 
 const FIXTURES = join(findRepoRoot(), 'contract', 'fixtures');
 
-/** Every fixture's filename starts with the document it belongs to. Both stacks know this same
- * set, so a typo in a filename fails in both rather than being silently skipped by each.
- */
 const PARSERS = {
   run: parseRunManifest,
   progress: parseProgress,
@@ -80,9 +77,6 @@ describe('valid fixtures', () => {
   });
 
   test('run.json is what the parent writes', () => {
-    // The parent is the producer here, so this is the strong form: the fixture is a golden
-    // output, and any change to `buildRunManifest` has to change the fixture too — which is a
-    // `contract/` change, which runs both stacks' CI.
     const input: RunManifestInput = {
       analysisAttemptId: '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f' as AnalysisAttemptId,
       report: {
@@ -110,7 +104,6 @@ describe('valid fixtures', () => {
     expect(result.charts).toEqual(['emissions_by_month', 'emissions_by_category', 'top_products']);
     expect(result.ai.model).toBe('gemini-2.5-pro');
     expect(result.ai.inputTokens).toBe(918342);
-    // A string all the way to Kysely, because `ai_cost_usd` is `numeric(10,4)`.
     expect(result.ai.costUsd).toBe('2.4713');
     expect(result.resultMetadata).toEqual({
       rowsIn: 4821,
@@ -142,7 +135,7 @@ describe('invalid fixtures', () => {
   test('rejects bytes that are not JSON at all', () => {
     // Deliberately generated rather than committed: Biome parses `contract/fixtures/`, so a
     // malformed file could not live there.
-    expect(() => parseProgress('{"contractVersion": 1,')).toThrow(ContractError);
+    expect(() => parseProgress('{"sequence":')).toThrow(ContractError);
   });
 });
 
@@ -151,13 +144,12 @@ describe('the cross-language number traps', () => {
   // mirrored in `test_fixtures.py`.
 
   test('accepts a whole number written as a float, which JSON.parse cannot distinguish', () => {
-    // `json.loads` in Python *can* tell 7.0 from 7, so the Python side has to agree to accept it.
-    expect(parseProgress('{"contractVersion": 1, "sequence": 7.0}').sequence).toBe(7);
+    expect(parseProgress('{"sequence": 7.0}').sequence).toBe(7);
   });
 
   test('rejects a boolean where a number belongs', () => {
-    // Free here — `true` is not a JS number. In Python `bool` subclasses `int`, so that side has
-    // to reject it explicitly. `progress.sequence-is-a-bool.json` is the fixture that pins it.
-    expect(() => parseProgress('{"contractVersion": 1, "sequence": true}')).toThrow(ContractError);
+    // `progress.sequence-is-a-bool.json` pins the same case in Python, where `bool` subclasses
+    // `int` and needs an explicit check.
+    expect(() => parseProgress('{"sequence": true}')).toThrow(ContractError);
   });
 });

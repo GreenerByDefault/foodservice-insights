@@ -1,12 +1,5 @@
-"""The four documents that cross the run directory, and the child's half of them.
-
-The child reads one and writes three, so this module is asymmetric on purpose: `run.json` gets a
-parser, and the rest get payload builders. The parent's half is
-`apps/worker/src/contract/messages.ts`.
-
-Keys are camelCase across the seam, because the parent's fields come off Kysely rows already
-camelCase and go straight back into camelCase columns. This module is where that translation
-happens, once.
+"""The four documents that cross the run directory: the child parses `run.json` and builds the
+other three as payload dicts. Keys are camelCase, matching the parent's Kysely columns.
 """
 
 import re
@@ -18,20 +11,16 @@ from typing import Any
 from worker_child.contract import (
     CHART_KEY_PATTERN,
     CHILD_FAILURE_REASONS,
-    CONTRACT_VERSION,
     COUNTS_BASES,
     UNIT_SYSTEMS,
     ChildFailureReason,
     CountsBasis,
     UnitSystem,
 )
-from worker_child.parse import ContractError, root_fields
+from worker_child.parse import ContractError, parse_object
 
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 SHA_256_PATTERN = re.compile(r"[0-9a-f]{64}")
-
-# Lowercase hex, matching what Postgres emits. Deliberately spelled out rather than deferring to
-# each language's idea of a UUID, so both sides accept exactly the same set.
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -63,15 +52,13 @@ class AiUsage:
     model: str
     input_tokens: int
     output_tokens: int
-    # A Decimal, because `ai_cost_usd` is `numeric(10,4)` and it crosses the seam as a string.
-    # A float would hand the parent 2.4712999999999997 for 2.4713.
+    # `ai_cost_usd` is `numeric(10,4)`; a float would lose precision crossing to JSON.
     cost_usd: Decimal
     metadata: Mapping[str, Any]
 
 
 def parse_run_manifest(text: str) -> RunManifest:
-    """Read `input/run.json`, the one document the parent writes and the child reads."""
-    root = root_fields("run.json", text, CONTRACT_VERSION)
+    root = parse_object("run.json", text)
     analysis_attempt_id = root.matching("analysisAttemptId", UUID_PATTERN)
     report = root.nested("report")
     input_file = root.nested("inputFile")
@@ -99,14 +86,9 @@ def parse_run_manifest(text: str) -> RunManifest:
 
 
 def progress_payload(sequence: int) -> dict[str, Any]:
-    """Liveness, and nothing else.
-
-    The parent measures a hang from this counter rather than from a timestamp or an mtime: a
-    child rewriting identical content cannot look alive, and no clock crosses the seam.
-    """
     if sequence < 1:
         raise ContractError(f"progress.json: sequence must be >= 1, got {sequence}")
-    return {"contractVersion": CONTRACT_VERSION, "sequence": sequence}
+    return {"sequence": sequence}
 
 
 def result_payload(
@@ -116,11 +98,6 @@ def result_payload(
     ai: AiUsage,
     result_metadata: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """The success verdict.
-
-    The PDF and the XLSX are not listed: they are mandatory by type, so a success that lacks
-    either cannot be expressed. Charts are listed by key, and the parent derives each filename.
-    """
     _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
     for chart_key in charts:
         _require(
@@ -132,7 +109,6 @@ def result_payload(
     _require(ai.cost_usd >= 0, "cost must not be negative")
 
     return {
-        "contractVersion": CONTRACT_VERSION,
         "analysisAttemptId": analysis_attempt_id,
         "charts": list(charts),
         "ai": {
@@ -152,28 +128,14 @@ def failure_payload(
     detail: str,
     traceback: str | None = None,
 ) -> dict[str, Any]:
-    """The failure verdict.
-
-    No `analysisAttemptId`, unlike the success verdict: a child that cannot parse `run.json` does
-    not know the attempt id, and reporting exactly that is what `contract_violation` is for. The
-    parent knows which attempt it spawned from the directory it built.
-    """
+    # No analysisAttemptId: a child that can't parse run.json doesn't know it, and reporting
+    # that is what `contract_violation` is for.
     _require(reason in CHILD_FAILURE_REASONS, f"'{reason}' is not a reason a child may claim")
     _require(bool(detail), "detail must not be empty")
-    return {
-        "contractVersion": CONTRACT_VERSION,
-        "reason": reason,
-        "detail": detail,
-        "traceback": traceback,
-    }
+    return {"reason": reason, "detail": detail, "traceback": traceback}
 
 
 def _opaque(value: Mapping[str, Any], name: str) -> dict[str, Any]:
-    """A bag the parent stores without inspecting, straight into a jsonb column.
-
-    Anything the parent branches on is a declared field; anything else lands here. What actually
-    goes in is unknown until the analysis library is ported — see `REQUIREMENTS.md`.
-    """
     if not isinstance(value, Mapping):
         raise ContractError(f"{name} must be a JSON object")
     return dict(value)
