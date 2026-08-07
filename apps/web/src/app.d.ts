@@ -7,13 +7,11 @@ declare global {
   namespace App {
     interface Error {
       message: string;
-      /** A stable name for the failure, so the client can branch on something other than prose. */
-      code?: 'unauthenticated' | 'forbidden' | 'not_found';
+      /** A stable name for the failure. */
+      code?: 'unauthenticated' | 'forbidden' | 'not_found' | 'service_unavailable';
     }
     interface Locals {
-      /** Set on every request by `handle` in `hooks.server.ts`. Null when nobody is signed in, or
-       * when the database could not be reached.
-       */
+      /** Set on every request by `handle` in `hooks.server.ts`. Null when nobody is signed in. */
       auth: AuthContext | null;
     }
     // `PageData` is left to the generated `$types`, which already know what each `load` returns.

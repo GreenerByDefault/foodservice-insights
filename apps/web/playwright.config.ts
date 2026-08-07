@@ -25,8 +25,7 @@ export default defineConfig({
     // them up to date with the code. We use `pnpm -r`, rather than the `turbo run` the root scripts
     // use, because Turbo is already running this task.
     //
-    // Seeding is not optional: the truncate above removes the phase-one placeholder identity, and
-    // without it every page under `(app)` fails. See `$lib/server/auth/identify`.
+    // Seeding is only temporary until we add full auth. We should remove it afterwards.
     command:
       'pnpm -r run truncate && pnpm -r run migrate && pnpm -r run seed && ' +
       'node --env-file-if-exists=../../.env.test build/index.js',

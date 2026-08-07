@@ -1,4 +1,4 @@
-import type { Handle, RequestEvent, ServerInit } from '@sveltejs/kit';
+import { error, type Handle, type RequestEvent, type ServerInit } from '@sveltejs/kit';
 import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
 import type { AuthContext } from '$lib/server/auth/types';
@@ -15,11 +15,7 @@ function applySecurityHeaders(response: Response): Response {
   return response;
 }
 
-/** Identify the caller, then look up what they may do, once per request.
- *
- * Claims come from the database rather than the token, so they cannot go stale. Routes read the
- * result off `locals` through the guards in `$lib/server/auth/guards`.
- */
+/** Identify the caller, then look up what they may do, once per request. */
 async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
   if (event.url.pathname === HEALTH_PATH) return null;
 
@@ -30,15 +26,14 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
   try {
     auth = await loadAuthorization(database(), userId);
   } catch (cause) {
-    // An unreachable database should be a 401, not a 500 on every route at once.
-    console.error('Could not load authorization; treating the request as signed out:', cause);
-    return null;
+    console.error('Could not load authorization; the database is unreachable:', cause);
+    error(503, { message: 'The service is temporarily unavailable', code: 'service_unavailable' });
   }
 
   if (!auth) {
-    // Loud on purpose. Silently returning null here turns an unseeded database into unexplained
-    // 401s everywhere. Drop the `pnpm seed` sentence when `identifyUser` starts reading a real JWT,
-    // at which point this only means a token for a user who has since been deleted.
+    // Temporary: with the placeholder `identifyUser`, a missing row only means an unseeded
+    // database, so we throw loudly. Once it reads a real JWT, a missing row is a deleted user's
+    // still-valid token — a normal case — so replace this throw with `error(401, ...)`.
     throw new Error(
       `Identified user ${userId} has no row in the database. ` +
         'If this is the phase-one placeholder, run `pnpm seed` (or `TEST_DB=1 pnpm seed`).',

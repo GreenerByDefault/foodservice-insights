@@ -11,8 +11,10 @@ import type { AuthContext } from './types.ts';
 
 /** The signed-in user, or a 401.
  *
- * Phase one cannot be signed out, so this only fires if the database is unreachable. Once there is
- * a sign-in page, pages should redirect there instead; API routes keep the 401.
+ * A database outage never reaches here: `handle` in `hooks.server.ts` 503s before a route's `load`
+ * runs. So in phase one, which has no real sign-out yet, this guard cannot currently fire at all —
+ * it exists for when there is a sign-in page, at which point pages should redirect there instead;
+ * API routes keep the 401.
  */
 export function requireAuth(locals: App.Locals): AuthContext {
   if (!locals.auth) error(401, { message: 'Not signed in', code: 'unauthenticated' });

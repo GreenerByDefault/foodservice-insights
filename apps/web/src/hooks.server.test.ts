@@ -1,5 +1,5 @@
 import type { UserId } from '@gbd/db';
-import type { RequestEvent } from '@sveltejs/kit';
+import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
@@ -7,8 +7,8 @@ import { closeDatabase } from '$lib/server/db';
 import { anAuthContext } from '$lib/server/tests/fixtures';
 import { handle } from './hooks.server.ts';
 
-// The hook's job is the wiring — what it does with an identity and an authorization lookup — so
-// both are stubbed here. They are tested for real in `$lib/server/auth/authorization.test.ts`.
+// This file tests only the hook's wiring, so identification and authorization are stubbed.
+// See $lib/server/auth/authorization.test.ts for their tests.
 vi.mock('$lib/server/auth/identify', () => ({ identifyUser: vi.fn() }));
 vi.mock('$lib/server/auth/authorization', () => ({ loadAuthorization: vi.fn() }));
 
@@ -71,19 +71,23 @@ describe('handle', () => {
     expect(authorization.loadAuthorization).not.toHaveBeenCalled();
   });
 
-  test('treats an unreachable database as signed out rather than failing the request', async () => {
+  test('503s an unreachable database', async () => {
     vi.mocked(authorization.loadAuthorization).mockRejectedValue(new Error('connection refused'));
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const event = anEvent();
 
-    const response = await handle({ event, resolve: respond });
-
-    expect(response.status).toBe(200);
-    expect(event.locals.auth).toBeNull();
+    try {
+      await handle({ event: anEvent(), resolve: respond });
+      expect.unreachable('handle should have thrown');
+    } catch (thrown) {
+      if (!isHttpError(thrown)) throw thrown;
+      expect(thrown.status).toBe(503);
+      expect(thrown.body.code).toBe('service_unavailable');
+    }
     logged.mockRestore();
   });
 
-  test('fails loudly when the identified user has no row, rather than 401ing silently', async () => {
+  // This test is temporary and should be deleted when adding proper auth with JWTs.
+  test('fails loudly when the identified user has no database row, rather than 401ing silently', async () => {
     vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
 
     await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(/pnpm seed/);

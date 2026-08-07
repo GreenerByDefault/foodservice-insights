@@ -21,8 +21,9 @@ Everything above that heading is common to both.
 | [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
+| [`apps/web/README.md`](apps/web/README.md) | The web app's design |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
-| [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract, and how to change it |
+| [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract |
 
 ## Repo layout
 
@@ -186,7 +187,7 @@ If the test database gets into a strange state, [reset it](#reset-a-database).
 | Command | What it does |
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
-| `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands. Required — without it the web app serves no page (safe to re-run) |
+| `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands. Required. |
 | `pnpm truncate` | Delete every row and every object, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) and [`packages/db/schema.sql`](packages/db/schema.sql) from the live database |
 
