@@ -95,8 +95,10 @@ code that writes to this column:
 
 ## Open questions
 
-- **Open:** the AI metadata fields on `analysis_attempt` are a placeholder and may change.
-  `result_metadata` will probably be promoted to structured columns once its shape is scoped.
+- **Open:** the AI metadata fields on `analysis_attempt` are a placeholder and may change. The
+  worker child fills `ai_metadata` and `result_metadata` from two deliberately opaque bags in
+  [`contract/`](../../contract/), so their shape is unconstrained until the analysis library is
+  ported. Deciding which keys graduate out of those bags into structured columns is a follow-up.
 - **Open:** the queue-claiming `FOR UPDATE SKIP LOCKED` query is tested in
   [`tests/analysis-attempt.test.ts`](tests/analysis-attempt.test.ts), but only as a *copy* of the
   one in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing yet ties a worker to it,

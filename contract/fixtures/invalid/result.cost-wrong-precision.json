@@ -1,0 +1,20 @@
+{
+  "contractVersion": 1,
+  "analysisAttemptId": "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "charts": ["emissions_by_month", "emissions_by_category", "top_products"],
+  "ai": {
+    "model": "gemini-2.5-pro",
+    "inputTokens": 918342,
+    "outputTokens": 41207,
+    "costUsd": "2.47",
+    "metadata": {
+      "providerRequests": 41,
+      "promptCacheHitRate": 0.62
+    }
+  },
+  "resultMetadata": {
+    "rowsIn": 4821,
+    "rowsCategorized": 4790,
+    "productsUncategorized": 31
+  }
+}

@@ -172,16 +172,14 @@ Parent lifecycle:
 1. Pull an analysis attempt from the queue, if current attempts < 3.
 2. Fetch the input file from the blob store.
 3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
-4. The child runs. On completion, it saves results to its folder and terminates, which signals
-   success.
+4. The child runs, writes its results into that folder, and exits.
+  - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
 5. Upload the result files to the blob store, save metadata to the database, and email the result.
 
 Whenever a child fails in any way — including being killed by its parent — the parent marks the
 analysis attempt failed and sends an email.
 
-- *Rejected: writing the parent in Python too.* The parent benefits from
-  reusing the web app's TypeScript database and blob store code, and Node's async model suits an
-  IO-bound, concurrent parent.
+Refer to [`contract/`](contract/) for the worker ↔ child contract.
 
 ### Heartbeats, hangs, and reaping
 

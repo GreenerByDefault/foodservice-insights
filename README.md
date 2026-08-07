@@ -22,25 +22,24 @@ Everything above that heading is common to both.
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
+| [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract, and how to change it |
 
 ## Repo layout
 
 ```
 apps/web/                               SvelteKit app
+apps/worker/                            Worker parent: queue, child processes, DB and blob writes
 packages/core/                          Shared TypeScript values and helpers
 packages/db/                            Kysely client, migrations, and generated types
 packages/storage/                       Blob store client and object operations
 python/gbd_foodservice_insights/        The AI analysis library
 python/worker_child/                    One analysis run, spawned by the worker parent
 python/gbd_foodservice_insights_lab/    Data-science experiments; ships nothing
+contract/                               The worker parent ↔ child contract, parsed by both stacks
 supabase-dev/                           Local Supabase stack for development
 supabase-test/                          Local Supabase stack for tests
 tests/e2e/                              Whole-system e2e tests
 ```
-
-Internal TypeScript packages are referenced by name (e.g. `@gbd/core`). No TypeScript imports
-Python and no Python imports TypeScript; the worker parent reaches its child by spawning a
-process, which is the only seam between them.
 
 ## What CI runs
 

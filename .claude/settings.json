@@ -26,6 +26,12 @@
       "Bash(pnpm --filter @gbd/web test:e2e *)",
       "Bash(pnpm --filter @gbd/web run test:e2e *)",
 
+      "Bash(pnpm --filter @gbd/worker check *)",
+      "Bash(pnpm --filter @gbd/worker build *)",
+      "Bash(pnpm --filter @gbd/worker run build *)",
+      "Bash(pnpm --filter @gbd/worker test:unit *)",
+      "Bash(pnpm --filter @gbd/worker run test:unit *)",
+
       "Bash(pnpm --filter @gbd/core check)",
       "Bash(pnpm --filter @gbd/core build)",
       "Bash(pnpm --filter @gbd/core run build)",

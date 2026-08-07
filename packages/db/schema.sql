@@ -59,6 +59,7 @@ CREATE TYPE "public"."analysis_failure_reason" AS ENUM (
     'hung',
     'hard_timeout',
     'infrastructure',
+    'contract_violation',
     'upstream_api',
     'unknown'
 );

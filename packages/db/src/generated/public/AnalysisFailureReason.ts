@@ -4,6 +4,7 @@ type AnalysisFailureReason =
   | 'hung'
   | 'hard_timeout'
   | 'infrastructure'
+  | 'contract_violation'
   | 'upstream_api'
   | 'unknown';
 

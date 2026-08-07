@@ -1,0 +1,6 @@
+{
+  "contractVersion": 1,
+  "reason": "upstream_api",
+  "detail": "",
+  "traceback": "Traceback (most recent call last):\n  File \"categorize.py\", line 88, in categorize\n    raise UpstreamError(response)\n"
+}
