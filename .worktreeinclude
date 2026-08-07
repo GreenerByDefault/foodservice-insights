@@ -1,0 +1,15 @@
+# Selects which gitignored files `wt step copy-ignored` copies into new
+# worktrees (allow-list: a file must be gitignored AND match here). See
+# .config/wt.toml for when this runs, AGENTS.md's per-stack rules for why
+# .venv is deliberately absent.
+
+# Local secrets — every worktree needs these to run anything.
+.env
+
+# Local Claude Code state (approvals, permissions) — without this, every
+# new worktree starts from scratch.
+.claude/settings.local.json
+
+# pnpm workspace deps (root + every app/package). Reflink-copied, not
+# symlinked — see .config/wt.toml for why.
+node_modules/
