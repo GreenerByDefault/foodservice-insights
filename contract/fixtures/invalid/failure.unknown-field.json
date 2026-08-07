@@ -1,0 +1,6 @@
+{
+  "reason": "upstream_api",
+  "detail": "Gemini returned 429 on 6 consecutive attempts over 214s (model gemini-2.5-pro)",
+  "traceback": "Traceback (most recent call last):\n  File \"categorize.py\", line 88, in categorize\n    raise UpstreamError(response)\n",
+  "analysisAttemptId": "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+}

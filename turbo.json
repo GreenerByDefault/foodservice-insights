@@ -1,7 +1,13 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json", ".nvmrc", "pnpm-workspace.yaml", ".env.test"],
+  "globalDependencies": [
+    "tsconfig.base.json",
+    ".nvmrc",
+    "pnpm-workspace.yaml",
+    ".env.test",
+    "contract/**"
+  ],
   "globalEnv": ["TEST_DB"],
   "globalPassThroughEnv": [
     "PLAYWRIGHT_*",

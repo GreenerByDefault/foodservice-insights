@@ -505,7 +505,15 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .execute();
   await database.schema
     .createType('analysis_failure_reason')
-    .asEnum(['child_crashed', 'hung', 'hard_timeout', 'infrastructure', 'upstream_api', 'unknown'])
+    .asEnum([
+      'child_crashed',
+      'hung',
+      'hard_timeout',
+      'infrastructure',
+      'contract_violation',
+      'upstream_api',
+      'unknown',
+    ])
     .execute();
   await database.schema.createType('result_file_kind').asEnum(['pdf', 'xlsx', 'chart']).execute();
 

@@ -1,0 +1,14 @@
+// Emits `dist/`, which is what the container runs. `tsconfig.json` is still the config for
+// typechecking, and covers the test files this one excludes.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

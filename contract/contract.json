@@ -1,0 +1,44 @@
+{
+  "$comment": "The worker parent <-> child contract. Neither side reads this file at runtime: both copy it into their own constants and assert equality in a unit test. See contract/README.md.",
+  "invocation": {
+    "module": "worker_child",
+    "positionalArguments": ["runDirectory"],
+    "workingDirectory": "work",
+    "secretEnvironmentVariables": ["GEMINI_API_KEY", "LLM_WHISPERER_API_KEY", "OPENAI_API_KEY"]
+  },
+  "runDirectory": {
+    "manifest": "input/run.json",
+    "inputCsv": "input/input.csv",
+    "progress": "output/progress.json",
+    "result": "output/result.json",
+    "failure": "output/failure.json",
+    "resultFilesDirectory": "output/files",
+    "workDirectory": "work",
+    "directoriesCreatedByParent": ["input", "output", "output/files", "work"]
+  },
+  "resultFiles": {
+    "pdf": "report.pdf",
+    "xlsx": "report.xlsx",
+    "chartExample": {
+      "chartKey": "emissions_by_month",
+      "fileName": "chart-emissions_by_month.png"
+    }
+  },
+  "reportEnums": {
+    "countsBasis": ["people", "meals"],
+    "unitSystem": ["lb", "kg"]
+  },
+  "exitCodes": {
+    "wroteResult": 0,
+    "wroteFailure": 1
+  },
+  "failureReasonClaimants": {
+    "child_crashed": "parent",
+    "contract_violation": "either",
+    "hard_timeout": "parent",
+    "hung": "parent",
+    "infrastructure": "parent",
+    "unknown": "child",
+    "upstream_api": "child"
+  }
+}

@@ -1,7 +1,9 @@
 export { initializeDatabase, shutdownDatabase } from './client.ts';
 export {
   type AnalysisAttemptId,
+  type AnalysisFailureReason,
   type AuditEventId,
+  type CountsBasis,
   type InputFileId,
   newInputFileId,
   newResultFileId,
@@ -11,6 +13,7 @@ export {
   type ReportId,
   type ResultFileId,
   type ResultFileKind,
+  type UnitSystem,
 } from './ids.ts';
 export { migrateToLatest } from './migrate.ts';
 export {
