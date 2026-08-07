@@ -1,7 +1,4 @@
-"""The child's half of the contract, checked against `contract/contract.json`. Renaming a path
-here without renaming it in `apps/worker/src/contract/` fails this test — which matters because
-`.github/filters.yml` skips every TypeScript job for a Python-only change.
-"""
+"""The child's half of the contract, checked against `contract/contract.json`."""
 
 import json
 from pathlib import Path

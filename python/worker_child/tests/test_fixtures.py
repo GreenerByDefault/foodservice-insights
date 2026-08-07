@@ -1,9 +1,4 @@
-"""The child's half of the golden fixtures in `contract/fixtures/`.
-
-Each side plays its production role: the child reads `run.json` and writes the other three, so
-here `run.json` is parsed and the rest are reproduced by their payload builders.
-`apps/worker/src/contract/fixtures.test.ts` is the mirror.
-"""
+"""The child's half of the golden fixtures in `contract/fixtures/`."""
 
 import json
 from decimal import Decimal
@@ -24,8 +19,7 @@ FIXTURES = Path(__file__).resolve().parents[3] / "contract" / "fixtures"
 
 DOCUMENTS = frozenset({"run", "progress", "result", "failure"})
 
-# The child only reads `run.json`; it writes the rest, so the TypeScript side is what rejects
-# their invalid fixtures.
+# The child only reads `run.json`; it writes the rest.
 PARSED_BY_THE_CHILD = frozenset({"run"})
 
 
@@ -85,16 +79,11 @@ def test_rejects_an_invalid_fixture(name: str) -> None:
 
 
 def test_rejects_bytes_that_are_not_json_at_all() -> None:
-    # Generated rather than committed: Biome parses `contract/fixtures/`, so a malformed file
-    # could not live there.
     with pytest.raises(ContractError):
         parse_run_manifest('{"analysisAttemptId":')
 
 
 # --- What the child writes ----------------------------------------------------------------
-#
-# The strong form: the fixture is a golden output, so any change to a payload builder has to
-# change the fixture too — and a fixture change is a `contract/` change, which runs both stacks.
 
 
 def test_progress_payload_is_the_fixture() -> None:
@@ -154,13 +143,10 @@ def test_refuses_to_write_duplicate_chart_keys() -> None:
 
 
 # --- The cross-language number traps -------------------------------------------------------
-#
-# Neither can be expressed as a fixture on both sides at once, so they are pinned here and
-# mirrored in `apps/worker/src/contract/fixtures.test.ts`.
 
 
 def test_accepts_a_whole_number_written_as_a_float() -> None:
-    # `JSON.parse` cannot tell 184320.0 from 184320, so this side has to accept both.
+    # JavaScript's JSON.parse cannot tell 184320.0 from 184320, so this side has to accept both.
     manifest = json.loads(read("valid", "run.json"))
     manifest["inputFile"]["byteSize"] = 184320.0
 

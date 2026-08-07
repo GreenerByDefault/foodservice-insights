@@ -1,8 +1,5 @@
-"""Reading a contract document without a validation library.
-
-`worker_child` has no runtime dependencies. The parent uses valibot, so the two sides don't share
-validation semantics — the golden fixtures in `contract/fixtures/` are what proves they agree,
-including on `bool` vs `int` and `1.0` vs `1`, which Python and JS treat differently.
+"""Reading a contract document without a validation library — `worker_child` has no runtime
+dependencies.
 """
 
 import json

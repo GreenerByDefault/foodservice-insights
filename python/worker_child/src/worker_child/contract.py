@@ -1,5 +1,4 @@
-"""The child's half of the run-directory contract. Duplicated in `apps/worker/src/contract/`;
-`tests/test_contract.py` checks this half against `contract/contract.json`.
+"""The child's half of the run-directory contract, checked against `contract/contract.json`.
 
 Not read from that file at runtime: hatchling ships only `src/worker_child/`, so an installed
 wheel must not need the repo checkout.
