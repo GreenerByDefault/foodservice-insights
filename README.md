@@ -186,7 +186,7 @@ If the test database gets into a strange state, [reset it](#reset-a-database).
 | Command | What it does |
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
-| `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands (safe to re-run) |
+| `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands. Required — without it the web app serves no page (safe to re-run) |
 | `pnpm truncate` | Delete every row and every object, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) and [`packages/db/schema.sql`](packages/db/schema.sql) from the live database |
 

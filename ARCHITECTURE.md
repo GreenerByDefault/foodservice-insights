@@ -93,10 +93,15 @@ user's authorization in the database: which organizations they belong to, and th
 It stores that result in SvelteKit's `locals`, where server files like `+layout.server.ts` and
 `+page.server.ts` can read it, for example to 401 an unauthorized request.
 
-The client gets the user from the root `+layout.server.ts`'s `load()`, which passes it down to
-`.svelte` files. When the frontend changes auth state, such as logging out, it calls
-`invalidateAll()` so that SvelteKit re-runs the server `load()` functions without a full page
-refresh.
+The client gets the user from the `(app)` route group's `+layout.server.ts`, which both guards
+every page inside the group and passes the user down to `.svelte` files. Routes outside the group —
+the health probe, and the deliberately public file links — are not guarded. When the frontend
+changes auth state, such as logging out, it calls `invalidateAll()` so that SvelteKit re-runs the
+server `load()` functions without a full page refresh.
+
+**Until sign-in exists, only the identity check is stubbed.** `identifyUser` in
+`apps/web/src/lib/server/auth/identify.ts` returns the seeded placeholder user instead of validating
+a JWT; everything downstream of it is the design above. The reasoning is in that file.
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
