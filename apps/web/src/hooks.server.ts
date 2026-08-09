@@ -1,6 +1,12 @@
-import type { Handle, ServerInit } from '@sveltejs/kit';
-import { closeDatabase } from '$lib/server/db';
+import { error, type Handle, type RequestEvent, type ServerInit } from '@sveltejs/kit';
+import { loadAuthorization } from '$lib/server/auth/authorization';
+import { identifyUser } from '$lib/server/auth/identify';
+import type { AuthContext } from '$lib/server/auth/types';
+import { closeDatabase, database } from '$lib/server/db';
 import { closeBlobStore } from '$lib/server/storage';
+
+/** The liveness probe reports on the database, so it must be able to answer without one. */
+const HEALTH_PATH = '/health';
 
 function applySecurityHeaders(response: Response): Response {
   response.headers.set('X-Frame-Options', 'DENY');
@@ -9,7 +15,35 @@ function applySecurityHeaders(response: Response): Response {
   return response;
 }
 
+/** Identify the caller, then look up what they may do, once per request. */
+async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
+  if (event.url.pathname === HEALTH_PATH) return null;
+
+  const userId = await identifyUser(event);
+  if (!userId) return null;
+
+  let auth: AuthContext | null;
+  try {
+    auth = await loadAuthorization(database(), userId);
+  } catch (cause) {
+    console.error('Could not load authorization; the database is unreachable:', cause);
+    error(503, { message: 'The service is temporarily unavailable', code: 'service_unavailable' });
+  }
+
+  if (!auth) {
+    // Temporary: with the placeholder `identifyUser`, a missing row only means an unseeded
+    // database, so we throw loudly. Once it reads a real JWT, a missing row is a deleted user's
+    // still-valid token — a normal case — so replace this throw with `error(401, ...)`.
+    throw new Error(
+      `Identified user ${userId} has no row in the database. ` +
+        'If this is the phase-one placeholder, run `pnpm seed` (or `TEST_DB=1 pnpm seed`).',
+    );
+  }
+  return auth;
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
+  event.locals.auth = await resolveAuth(event);
   const response = await resolve(event);
   return applySecurityHeaders(response);
 };

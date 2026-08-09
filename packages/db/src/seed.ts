@@ -2,8 +2,8 @@
  *
  * Phase 1 has no sign-in, so these rows stand in for whoever would have been authenticated. When
  * auth arrives, delete this file along with `scripts/seed.ts`, the `seed` task in `turbo.json`,
- * and the placeholder lookup in `apps/web/src/hooks.server.ts`. Nothing else should refer to
- * these constants.
+ * the seed step in `apps/web/playwright.config.ts`, and the stand-in body of `identifyUser` in
+ * `apps/web/src/lib/server/auth/identify.ts`. Nothing else should refer to these constants.
  */
 
 import type { DatabaseExecutor } from './schema.ts';
