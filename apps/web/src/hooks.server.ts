@@ -1,8 +1,8 @@
-import { error, type Handle, type RequestEvent, type ServerInit } from '@sveltejs/kit';
+import type { Handle, RequestEvent, ServerInit } from '@sveltejs/kit';
 import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
 import type { AuthContext } from '$lib/server/auth/types';
-import { closeDatabase, database } from '$lib/server/db';
+import { closeDatabase, database, withDbErrorHandling } from '$lib/server/db';
 import { closeBlobStore } from '$lib/server/storage';
 
 /** The liveness probe reports on the database, so it must be able to answer without one. */
@@ -22,13 +22,12 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
   const userId = await identifyUser(event);
   if (!userId) return null;
 
-  let auth: AuthContext | null;
-  try {
-    auth = await loadAuthorization(database(), userId);
-  } catch (cause) {
-    console.error('Could not load authorization; the database is unreachable:', cause);
-    error(503, { message: 'The service is temporarily unavailable', code: 'service_unavailable' });
-  }
+  const auth = await withDbErrorHandling(() => loadAuthorization(database(), userId), {
+    action: 'load authorization',
+    context: { userId },
+    status: 503,
+    body: { message: 'The service is temporarily unavailable', code: 'service_unavailable' },
+  });
 
   if (!auth) {
     // Temporary: with the placeholder `identifyUser`, a missing row only means an unseeded
