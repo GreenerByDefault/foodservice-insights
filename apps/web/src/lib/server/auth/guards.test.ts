@@ -44,7 +44,6 @@ describe('requireMembership', () => {
     expect(requireMembership(memberOf('member'), ORGANIZATION_ID)).toBe('member');
   });
 
-  // 403 would tell an outsider the organization exists.
   test('404s a non-member rather than 403ing them', () => {
     expect(statusOf(() => requireMembership(anAuthContext(), ORGANIZATION_ID))).toEqual({
       status: 404,
@@ -64,7 +63,6 @@ describe('requireOrganizationAdmin', () => {
     expect(() => requireOrganizationAdmin(superadmin, ORGANIZATION_ID)).not.toThrow();
   });
 
-  // A member already knows the organization exists, so 403 leaks nothing here.
   test('403s a plain member', () => {
     expect(statusOf(() => requireOrganizationAdmin(memberOf('member'), ORGANIZATION_ID))).toEqual({
       status: 403,

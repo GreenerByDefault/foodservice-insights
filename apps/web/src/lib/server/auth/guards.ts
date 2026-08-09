@@ -1,21 +1,11 @@
-/** The checks a route makes before doing anything.
- *
- * All pure: they read an `AuthContext` the hook already loaded, so a guard never costs a query and
- * is testable without a database.
- */
+/** The checks a route makes before doing anything. */
 
 import type { OrganizationId, OrganizationRole } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import { effectiveRole } from './authorization.ts';
 import type { AuthContext } from './types.ts';
 
-/** The signed-in user, or a 401.
- *
- * A database outage never reaches here: `handle` in `hooks.server.ts` 503s before a route's `load`
- * runs. So in phase one, which has no real sign-out yet, this guard cannot currently fire at all —
- * it exists for when there is a sign-in page, at which point pages should redirect there instead;
- * API routes keep the 401.
- */
+/** The signed-in user, or a 401. */
 export function requireAuth(locals: App.Locals): AuthContext {
   if (!locals.auth) error(401, { message: 'Not signed in', code: 'unauthenticated' });
   return locals.auth;
@@ -37,8 +27,8 @@ export function requireMembership(
 
 /** Like `requireMembership`, but 403s a member who is not an admin.
  *
- * 403 is safe here where it is not in `requireMembership`: reaching this point already proves
- * membership, so the status reveals nothing the caller did not know.
+ * 403 is safe here because reaching this point already proves membership, so the
+ * status reveals nothing the caller did not know.
  */
 export function requireOrganizationAdmin(auth: AuthContext, organizationId: OrganizationId): void {
   if (requireMembership(auth, organizationId) !== 'admin') {

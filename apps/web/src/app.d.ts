@@ -14,7 +14,7 @@ declare global {
       /** Set on every request by `handle` in `hooks.server.ts`. Null when nobody is signed in. */
       auth: AuthContext | null;
     }
-    // `PageData` is left to the generated `$types`, which already know what each `load` returns.
+    // interface PageData {}
     // interface PageState {}
     // interface Platform {}
   }

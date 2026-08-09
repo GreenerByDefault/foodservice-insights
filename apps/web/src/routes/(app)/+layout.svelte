@@ -8,8 +8,6 @@ let { data, children }: LayoutProps = $props();
 const organizationName = $derived(data.auth.memberships[0]?.organizationName ?? 'No organization');
 </script>
 
-<!-- The page shell lives here rather than in the root layout, so the header is a sibling of
-     `<main>` and keeps its `banner` role. -->
 <div class="mx-auto flex min-h-svh max-w-2xl flex-col gap-4 p-8">
   <header class="flex items-baseline justify-between gap-4 text-sm">
     <span class="font-medium">{organizationName}</span>

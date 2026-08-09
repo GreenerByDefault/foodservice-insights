@@ -1,32 +1,21 @@
-/** Turning a user id into what that user is allowed to do.
- *
- * Claims are read from the database on every request rather than carried in the JWT, so they can
- * never be stale — see the Auth section of ARCHITECTURE.md.
- */
+/** What a user ID is allowed to do. */
 
 import type { DatabaseExecutor, OrganizationId, OrganizationRole, UserId } from '@gbd/db';
 import type { AuthContext, Membership } from './types.ts';
 
-/** The user and every organization they belong to, or null if there is no such user.
- *
- * Two reads rather than one join, because a user with no memberships still has an identity, and a
- * left join would make every caller sort that out from nullable columns. Both are indexed: the
- * first on `app_user`'s primary key, the second on `organization_member`'s, whose leading column is
- * `user_id`.
- */
+/** The user and every organization they belong to, or null if there is no such user. */
 export async function loadAuthorization(
   db: DatabaseExecutor,
   userId: UserId,
 ): Promise<AuthContext | null> {
+  // Two reads rather than one join, because a user with no memberships still has an identity,
+  // and a left join would make every caller sort that out from nullable columns. Both are
+  // indexed: this one on `app_user`'s primary key, the membership query below on
+  // `organization_member`'s, whose leading column is `user_id`.
   const user = await db
     .selectFrom('appUser')
     .innerJoin('auth.users', 'auth.users.id', 'appUser.id')
-    .select([
-      'appUser.id as id',
-      'appUser.displayName as displayName',
-      'appUser.isSuperadmin as isSuperadmin',
-      'auth.users.email as email',
-    ])
+    .select(['appUser.id', 'appUser.displayName', 'appUser.isSuperadmin', 'auth.users.email'])
     .where('appUser.id', '=', userId)
     .executeTakeFirst();
 
@@ -65,12 +54,7 @@ export async function loadAuthorization(
   };
 }
 
-/** What `auth` may do in `organizationId`, or null if it may do nothing there.
- *
- * A superadmin is an admin everywhere, which is why this is a computed path and not a lookup in
- * `memberships`. Superadmins hold no `organization_member` row — deliberately, so they never fill
- * an organization's required admin seat.
- */
+/** What `auth` may do in `organizationId`, or null if it may do nothing there. */
 export function effectiveRole(
   auth: AuthContext,
   organizationId: OrganizationId,

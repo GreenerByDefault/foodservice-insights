@@ -6,12 +6,7 @@ import type { AuthContext, AuthenticatedUser, Membership } from '../auth/types.t
 import { database } from '../db.ts';
 import { blobStore } from '../storage.ts';
 
-/** An `AuthContext` with no database behind it.
- *
- * The guards and anything they gate are pure functions of this value, so most tests of authorized
- * behaviour need a plausible context rather than real rows. Tests of `loadAuthorization` itself,
- * which is where the context comes from, use real rows instead.
- */
+/** An `AuthContext` with no database behind it. */
 export function anAuthContext(
   overrides: { user?: Partial<AuthenticatedUser>; memberships?: readonly Membership[] } = {},
 ): AuthContext {
