@@ -1,20 +1,12 @@
 import { MAX_UPLOAD_BYTES } from '@gbd/upload';
-import { sql } from 'kysely';
-import { afterAll, describe, expect, test } from 'vitest';
-import { closeDatabase, database } from '$lib/server/db';
+import { describe, expect, test } from 'vitest';
 import {
-  COUNTS_BASES,
   FIELD,
   MAX_MONTHS,
   type RawSubmission,
   readSubmission,
-  UNIT_SYSTEMS,
   validateSubmission,
 } from './submission.ts';
-
-afterAll(async () => {
-  await closeDatabase();
-});
 
 const CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
 
@@ -47,14 +39,17 @@ describe('validateSubmission', () => {
     });
   });
 
-  test('trims optional text, and stores blank as null', async () => {
-    const outcome = await validateSubmission(
-      aSubmission({ name: '  Q1 procurement  ', siteName: '   ' }),
-    );
+  describe('optional text fields', () => {
+    test.for(['name', 'siteName'] as const)('trims %s', async (field) => {
+      const outcome = await validateSubmission(aSubmission({ [field]: '  Q1 procurement  ' }));
 
-    expect(outcome).toMatchObject({
-      ok: true,
-      metadata: { name: 'Q1 procurement', siteName: null },
+      expect(outcome).toMatchObject({ ok: true, metadata: { [field]: 'Q1 procurement' } });
+    });
+
+    test.for(['name', 'siteName'] as const)('stores a blank %s as null', async (field) => {
+      const outcome = await validateSubmission(aSubmission({ [field]: '   ' }));
+
+      expect(outcome).toMatchObject({ ok: true, metadata: { [field]: null } });
     });
   });
 
@@ -74,17 +69,20 @@ describe('validateSubmission', () => {
 
   describe('rejects', () => {
     test.for([
-      ['no file at all', { file: null }, 'other'],
-      ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty'],
+      // A file rejection has no metadata field to name, so `field` is null for those rows.
+      ['no file at all', { file: null }, 'other', null],
+      ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty', null],
       [
         'a file of only whitespace',
         { file: new File(['﻿ \n\n  '], 'blank.csv', { type: 'text/csv' }) },
         'empty',
+        null,
       ],
       [
         'a file that is really a PDF',
         { file: new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }) },
         'unparseable',
+        null,
       ],
       [
         'a file that is really an XLSX, however it is labelled',
@@ -92,28 +90,80 @@ describe('validateSubmission', () => {
           file: new File([Uint8Array.of(0x50, 0x4b, 0x03, 0x04)], 'data.csv', { type: 'text/csv' }),
         },
         'unparseable',
+        null,
       ],
-      ['a missing counts basis', { countsBasis: null }, 'invalid_metadata'],
-      ['a counts basis outside the enum', { countsBasis: 'guesses' }, 'invalid_metadata'],
-      ['a unit system outside the enum', { unitSystem: 'stone' }, 'invalid_metadata'],
-      ['monthly counts that are not JSON', { monthlyCounts: '{oops' }, 'invalid_metadata'],
-      ['missing monthly counts', { monthlyCounts: null }, 'invalid_metadata'],
-      ['monthly counts that are empty', { monthlyCounts: '{}' }, 'invalid_metadata'],
-      ['monthly counts that are an array', { monthlyCounts: '[1, 2]' }, 'invalid_metadata'],
-      ['a month key that is not YYYY-MM', { monthlyCounts: '{"Jan 2026": 1}' }, 'invalid_metadata'],
-      ['a month outside 01-12', { monthlyCounts: '{"2026-13": 1}' }, 'invalid_metadata'],
-      ['a negative count', { monthlyCounts: '{"2026-01": -1}' }, 'invalid_metadata'],
-      ['a fractional count', { monthlyCounts: '{"2026-01": 1.5}' }, 'invalid_metadata'],
-      ['a count that is a string', { monthlyCounts: '{"2026-01": "120"}' }, 'invalid_metadata'],
-      ['an over-long report name', { name: 'x'.repeat(1000) }, 'invalid_metadata'],
-      ['an over-long site name', { siteName: 'x'.repeat(1000) }, 'invalid_metadata'],
-    ] as const)('%s', async ([, overrides, reason]) => {
+      ['a missing counts basis', { countsBasis: null }, 'invalid_metadata', 'countsBasis'],
+      [
+        'a counts basis outside the enum',
+        { countsBasis: 'guesses' },
+        'invalid_metadata',
+        'countsBasis',
+      ],
+      ['a unit system outside the enum', { unitSystem: 'stone' }, 'invalid_metadata', 'unitSystem'],
+      [
+        'monthly counts that are not JSON',
+        { monthlyCounts: '{oops' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      ['missing monthly counts', { monthlyCounts: null }, 'invalid_metadata', 'monthlyCounts'],
+      [
+        'monthly counts that are empty',
+        { monthlyCounts: '{}' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      [
+        'monthly counts that are an array',
+        { monthlyCounts: '[1, 2]' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      [
+        'a month key that is not YYYY-MM',
+        { monthlyCounts: '{"Jan 2026": 1}' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      [
+        'a month outside 01-12',
+        { monthlyCounts: '{"2026-13": 1}' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      [
+        'a negative count',
+        { monthlyCounts: '{"2026-01": -1}' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      [
+        'a fractional count',
+        { monthlyCounts: '{"2026-01": 1.5}' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      [
+        'a count that is a string',
+        { monthlyCounts: '{"2026-01": "120"}' },
+        'invalid_metadata',
+        'monthlyCounts',
+      ],
+      ['an over-long report name', { name: 'x'.repeat(1000) }, 'invalid_metadata', 'name'],
+      ['an over-long site name', { siteName: 'x'.repeat(1000) }, 'invalid_metadata', 'siteName'],
+    ] as const)('%s', async ([, overrides, reason, field]) => {
       const outcome = await validateSubmission(aSubmission(overrides));
 
-      expect(outcome).toMatchObject({ ok: false, rejection: { reason } });
+      expect(outcome).toMatchObject({
+        ok: false,
+        rejection: {
+          reason,
+          ...(field ? { message: `Check these fields: ${field}.` } : {}),
+        },
+      });
     });
 
-    test('too many months', async () => {
+    test('monthly counts with more months than MAX_MONTHS allows', async () => {
       const counts = Object.fromEntries(
         Array.from({ length: MAX_MONTHS + 1 }, (_, index) => [
           `${2000 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`,
@@ -128,7 +178,8 @@ describe('validateSubmission', () => {
       expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'invalid_metadata' } });
     });
 
-    test('a file over the size cap', async () => {
+    test('a file over the size cap, reported before its content is even sniffed', async () => {
+      // anOversizedFile's bytes carry a PDF signature, so this test also shows precedence.
       const outcome = await validateSubmission(aSubmission({ file: anOversizedFile('big.csv') }));
 
       expect(outcome).toMatchObject({
@@ -175,14 +226,6 @@ describe('validateSubmission', () => {
       description: { originalFilename: 'big.csv', byteSize: MAX_UPLOAD_BYTES + 1 },
       bytes: null,
     });
-  });
-
-  test('reports the size problem first, so a huge non-CSV is not called a non-CSV', async () => {
-    // Precedence matters because the reason is what gets recorded, and "too large" is the one
-    // the user can act on.
-    const outcome = await validateSubmission(aSubmission({ file: anOversizedFile('big.pdf') }));
-
-    expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'too_large' } });
   });
 
   test('reports a file problem before a metadata one', async () => {
@@ -237,27 +280,5 @@ describe('readSubmission', () => {
     form.set(FIELD.file, new File([], '', { type: 'application/octet-stream' }));
 
     expect(readSubmission(form).file).toBeNull();
-  });
-});
-
-describe('the picklists', () => {
-  // `satisfies` in `submission.ts` catches a value the enum never had. This catches the other
-  // direction: an enum that grew a value the form does not offer.
-  test('match the database enums exactly', async () => {
-    // enumlabel is a `name`, and pg hands back a `name[]` as an unparsed string, so the cast to
-    // text is what makes this an array on this side.
-    const { rows } = await sql<{ name: string; values: string[] }>`
-      SELECT t.typname AS name, array_agg(e.enumlabel::text ORDER BY e.enumsortorder) AS values
-      FROM pg_type t
-      JOIN pg_enum e ON e.enumtypid = t.oid
-      WHERE t.typname IN ('counts_basis', 'unit_system')
-      GROUP BY t.typname
-    `.execute(database());
-
-    const byName = Object.fromEntries(rows.map(({ name, values }) => [name, values]));
-    expect(byName).toEqual({
-      counts_basis: [...COUNTS_BASES],
-      unit_system: [...UNIT_SYSTEMS],
-    });
   });
 });

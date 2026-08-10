@@ -29,10 +29,7 @@ export type FileFixtures = {
   transaction: Transaction<Database>;
   store: BlobStore;
   organizationId: OrganizationId;
-  /** The organization's admin, which `insertOrganization` has to create anyway. Anything a test
-   * attributes to a user — an upload, a report — can use this rather than making a second one.
-   */
-  userId: UserId;
+  adminUserId: UserId;
 };
 
 /** Run `fn` against a real organization, and undo everything it wrote.
@@ -49,7 +46,7 @@ export async function withFileFixtures<T>(fn: (fixtures: FileFixtures) => Promis
         transaction,
         store: blobStore(),
         organizationId: organization.id,
-        userId: admin.id,
+        adminUserId: admin.id,
       });
     } finally {
       await deletePrefix(blobStore(), organizationPrefix(organization.id));

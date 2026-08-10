@@ -9,6 +9,7 @@
  * what the two worker processes have agreed to exchange.
  */
 
+import { exhaustiveArray } from '@gbd/core';
 import type { CountsBasis, RejectedUploadReason, UnitSystem } from '@gbd/db';
 import { checkUploadBytes, MAX_UPLOAD_BYTES } from '@gbd/upload';
 import * as v from 'valibot';
@@ -37,11 +38,8 @@ export const FIELD = {
   file: 'file',
 } as const;
 
-/** `satisfies` makes a value the database enum does not have a compile error. The reverse — an
- * enum that grows a value — is caught by `submission.test.ts` against `enum_range`.
- */
-export const COUNTS_BASES = ['people', 'meals'] as const satisfies readonly CountsBasis[];
-export const UNIT_SYSTEMS = ['lb', 'kg'] as const satisfies readonly UnitSystem[];
+export const COUNTS_BASES = exhaustiveArray<CountsBasis>()(['people', 'meals']);
+export const UNIT_SYSTEMS = exhaustiveArray<UnitSystem>()(['lb', 'kg']);
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 

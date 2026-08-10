@@ -52,11 +52,11 @@ function createUploadRequest(overrides: SubmissionOverrides = {}): Request {
 
 describe('a valid upload', () => {
   test('answers 201 with the new report', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, userId }) => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const response = await _createReport(
         transaction,
         store,
-        { organizationId, userId },
+        { organizationId, userId: adminUserId },
         createUploadRequest(),
       );
 
@@ -69,11 +69,11 @@ describe('a valid upload', () => {
   });
 
   test('writes the report, its input file, and an attempt for a worker to claim', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, userId }) => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const response = await _createReport(
         transaction,
         store,
-        { organizationId, userId },
+        { organizationId, userId: adminUserId },
         createUploadRequest(),
       );
       const { reportId } = (await response.json()) as { reportId: ReportId };
@@ -85,7 +85,7 @@ describe('a valid upload', () => {
         .executeTakeFirstOrThrow();
       expect(report).toMatchObject({
         organizationId,
-        createdByUserId: userId,
+        createdByUserId: adminUserId,
         name: 'Q1 procurement',
         siteName: 'Main dining hall',
         countsBasis: 'people',
@@ -113,7 +113,7 @@ describe('a valid upload', () => {
       expect(attempt).toMatchObject({
         attemptNumber: 1,
         status: 'pending',
-        requestedByUserId: userId,
+        requestedByUserId: adminUserId,
         workerId: null,
         lockedAt: null,
         lastHeartbeatAt: null,
@@ -123,11 +123,11 @@ describe('a valid upload', () => {
   });
 
   test('stores the bytes where the row says they are', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, userId }) => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const response = await _createReport(
         transaction,
         store,
-        { organizationId, userId },
+        { organizationId, userId: adminUserId },
         createUploadRequest(),
       );
       const { reportId } = (await response.json()) as { reportId: ReportId };
@@ -151,11 +151,11 @@ describe('a valid upload', () => {
 
 describe('a rejected upload', () => {
   async function reject(overrides: SubmissionOverrides) {
-    return await withFileFixtures(async ({ transaction, store, organizationId, userId }) => {
+    return await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const failure = await _createReport(
         transaction,
         store,
-        { organizationId, userId },
+        { organizationId, userId: adminUserId },
         createUploadRequest(overrides),
       ).catch((error: unknown) => error);
 
