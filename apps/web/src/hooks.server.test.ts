@@ -1,11 +1,11 @@
 import type { UserId } from '@gbd/db';
-import { isHttpError, type RequestEvent } from '@sveltejs/kit';
+import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
 import { closeDatabase } from '$lib/server/db';
 import { anAuthContext } from '$lib/server/tests/fixtures';
-import { handle } from './hooks.server.ts';
+import { handle, handleError } from './hooks.server.ts';
 
 // This file tests only the hook's wiring, so identification and authorization are stubbed.
 // See $lib/server/auth/authorization.test.ts for their tests.
@@ -23,9 +23,21 @@ afterAll(async () => {
   await closeDatabase();
 });
 
-/** The parts of a request `handle` actually reads. */
+/** The parts of a request the hooks actually read. */
 function anEvent(pathname = '/'): RequestEvent {
-  return { url: new URL(`http://localhost${pathname}`), locals: {} } as RequestEvent;
+  return {
+    url: new URL(`http://localhost${pathname}`),
+    request: new Request(`http://localhost${pathname}`),
+    route: { id: null },
+    locals: {},
+  } as RequestEvent;
+}
+
+/** `handleError` may return nothing, and may be async. Ours is neither. */
+async function bodyFrom(input: Parameters<HandleServerError>[0]): Promise<App.Error> {
+  const body = await handleError(input);
+  if (!body) throw new Error('Expected handleError to return a body.');
+  return body;
 }
 
 const respond = async () => new Response('ok');
@@ -91,5 +103,41 @@ describe('handle', () => {
     vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
 
     await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(/pnpm seed/);
+  });
+});
+
+describe('handleError', () => {
+  test('logs an unexpected failure with enough to find it again, and tells the client none of it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const cause = new Error('password authentication failed for user "app"');
+
+    const body = await bodyFrom({
+      error: cause,
+      event: anEvent('/reports'),
+      status: 500,
+      message: 'Internal Error',
+    });
+
+    expect(logged).toHaveBeenCalledWith(
+      'Unhandled server error',
+      expect.objectContaining({ status: 500, path: '/reports', error: cause }),
+    );
+    expect(JSON.stringify(body)).not.toContain('password authentication');
+    logged.mockRestore();
+  });
+
+  test('stays quiet about a 404, which is not a failure of ours', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const body = await bodyFrom({
+      error: new Error('Not found'),
+      event: anEvent('/no-such-page'),
+      status: 404,
+      message: 'Not Found',
+    });
+
+    expect(body).toEqual({ message: 'Not Found', code: 'not_found' });
+    expect(logged).not.toHaveBeenCalled();
+    logged.mockRestore();
   });
 });

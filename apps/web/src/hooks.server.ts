@@ -1,4 +1,5 @@
-import type { Handle, RequestEvent, ServerInit } from '@sveltejs/kit';
+import type { Handle, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
+import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
 import type { AuthContext } from '$lib/server/auth/types';
@@ -45,6 +46,27 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.auth = await resolveAuth(event);
   const response = await resolve(event);
   return applySecurityHeaders(response);
+};
+
+/** The last resort for a failure no route anticipated. */
+export const handleError: HandleServerError = ({ error: cause, event, status, message }) => {
+  // 404s come through here too. A missing page is not a failure of ours, and logging every crawler
+  // that guesses a URL would bury the failures that are.
+  if (status === 404) return { message, code: 'not_found' };
+
+  // Enough of a fingerprint to find this line again from a user saying "it broke around 2pm".
+  console.error('Unhandled server error', {
+    status,
+    method: event.request.method,
+    path: event.url.pathname,
+    routeId: event.route.id,
+    userId: event.locals.auth?.user.id,
+    error: cause,
+  });
+  // SvelteKit skips this hook for an expected `error()`, so `cause` is always a bug or an outage,
+  // whose message and stack may say more about the system than a stranger should learn. None of it
+  // crosses back to the client; it stays in the log line above.
+  return { message: UNEXPECTED_ERROR_MESSAGE };
 };
 
 /** Release the connection pool and blob store sockets on shutdown, so a redeploy leaks neither.

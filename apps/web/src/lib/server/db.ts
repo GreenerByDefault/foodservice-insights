@@ -1,6 +1,7 @@
 import { type Database, initializeDatabase, shutdownDatabase } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
+import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { requireVar } from './env.ts';
 
 let handle: Kysely<Database> | undefined;
@@ -44,9 +45,6 @@ export async function withDbErrorHandling<T>(
     return await fn();
   } catch (cause) {
     console.error(`Unexpected failure to ${options.action}`, { ...options.context, error: cause });
-    error(
-      options.status ?? 500,
-      options.body ?? { message: 'Something went wrong. Please try again.' },
-    );
+    error(options.status ?? 500, options.body ?? { message: UNEXPECTED_ERROR_MESSAGE });
   }
 }

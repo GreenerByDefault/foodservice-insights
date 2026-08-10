@@ -218,6 +218,9 @@
       "mcp__svelte__get-documentation",
       "mcp__svelte__svelte-autofixer",
 
+      "Skill(prune-comments)",
+      "Skill(prune-comments:*)",
+
       "WebFetch(domain:svelte.dev)",
       "WebFetch(domain:kit.svelte.dev)",
       "WebFetch(domain:supabase.com)",
