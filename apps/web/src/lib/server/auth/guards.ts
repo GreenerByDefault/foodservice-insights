@@ -1,9 +1,9 @@
 /** The checks a route makes before doing anything. */
 
-import type { OrganizationId, OrganizationRole } from '@gbd/db';
+import type { OrganizationId } from '@gbd/db';
 import { error } from '@sveltejs/kit';
-import { effectiveRole } from './authorization.ts';
-import type { AuthContext } from './types.ts';
+import { findOrganizationAccess } from './authorization.ts';
+import type { AuthContext, OrganizationAccess } from './types.ts';
 
 /** The signed-in user, or a 401. */
 export function requireAuth(locals: App.Locals): AuthContext {
@@ -11,27 +11,28 @@ export function requireAuth(locals: App.Locals): AuthContext {
   return locals.auth;
 }
 
-/** The user's role in `organizationId`, or a 404.
+/** The user's access to `organizationId`, or a 404.
  *
- * 404 rather than 403, everywhere: whether an organization exists and whether you belong to it must
- * be indistinguishable, or the error code itself leaks the customer list.
+ * 404 rather than 403, everywhere: whether an organization exists and whether you may act in it
+ * must be indistinguishable, or the error code itself leaks the customer list. An id no
+ * organization has takes the same path, since it can be in nobody's list.
  */
-export function requireMembership(
+export function requireOrganizationAccess(
   auth: AuthContext,
   organizationId: OrganizationId,
-): OrganizationRole {
-  const role = effectiveRole(auth, organizationId);
-  if (!role) error(404, { message: 'Not found', code: 'not_found' });
-  return role;
+): OrganizationAccess {
+  const access = findOrganizationAccess(auth, organizationId);
+  if (!access) error(404, { message: 'Not found', code: 'not_found' });
+  return access;
 }
 
-/** Like `requireMembership`, but 403s a member who is not an admin.
+/** Like `requireOrganizationAccess`, but 403s someone who is not an admin.
  *
- * 403 is safe here because reaching this point already proves membership, so the
+ * 403 is safe here because reaching this point already proves access, so the
  * status reveals nothing the caller did not know.
  */
 export function requireOrganizationAdmin(auth: AuthContext, organizationId: OrganizationId): void {
-  if (requireMembership(auth, organizationId) !== 'admin') {
+  if (requireOrganizationAccess(auth, organizationId).role !== 'admin') {
     error(403, { message: 'Only an admin can do that', code: 'forbidden' });
   }
 }

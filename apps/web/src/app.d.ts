@@ -1,8 +1,8 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 
+import type { OrganizationId } from '@gbd/db';
 import type { AuthContext } from '$lib/server/auth/types.ts';
-import type { OrganizationSummary } from '$lib/server/organizations.ts';
 
 declare global {
   namespace App {
@@ -20,7 +20,7 @@ declare global {
        * `orgs/[organizationId]`. Declared here so the `(app)` shell above that layout can read it
        * off `page.data` and show it in the switcher; absent on routes that act on no organization.
        */
-      organization?: OrganizationSummary;
+      organization?: { id: OrganizationId; name: string };
     }
     // interface PageState {}
     // interface Platform {}

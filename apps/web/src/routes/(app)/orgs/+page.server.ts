@@ -10,36 +10,23 @@ import { sql } from 'kysely';
 import { requireAuth } from '$lib/server/auth/guards';
 import type { AuthContext } from '$lib/server/auth/types';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import type { OrganizationSummary } from '$lib/server/organizations';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals, parent }) => {
-  const auth = requireAuth(locals);
-  const { switchableOrganizations } = await parent();
-
-  const destination = await _resolvePostSignInDestination(
-    database(),
-    auth,
-    switchableOrganizations,
-  );
+export const load: PageServerLoad = async ({ locals }) => {
+  const destination = await _resolvePostSignInDestination(database(), requireAuth(locals));
   if (destination) redirect(303, destination);
 };
 
-/** The next page, or null to stay here and pick one.
- *
- * Branches on what the user can switch to rather than on their memberships, because a superadmin
- * has no membership rows and would otherwise be sent off to create an organization.
- */
+/** The next page, or null to stay here and pick one. */
 export async function _resolvePostSignInDestination(
   db: DatabaseExecutor,
   auth: AuthContext,
-  switchableOrganizations: readonly OrganizationSummary[],
 ): Promise<string | null> {
   if (await hasLiveInvite(db, auth)) return '/invites';
-  if (switchableOrganizations.length === 0) return '/orgs/new';
+  if (auth.organizations.length === 0) return '/orgs/new';
 
-  const only = switchableOrganizations.length === 1 ? switchableOrganizations[0] : undefined;
-  return only ? `/orgs/${only.id}` : null;
+  const only = auth.organizations.length === 1 ? auth.organizations[0] : undefined;
+  return only ? `/orgs/${only.organizationId}` : null;
 }
 
 /** Whether an invite is waiting that has not run out.

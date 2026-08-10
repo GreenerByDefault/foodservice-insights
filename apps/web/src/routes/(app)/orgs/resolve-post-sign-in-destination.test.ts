@@ -2,8 +2,8 @@ import type { Database, OrganizationId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
 import { expect, test } from 'vitest';
+import type { OrganizationAccess } from '$lib/server/auth/types';
 import { database } from '$lib/server/db';
-import type { OrganizationSummary } from '$lib/server/organizations';
 import { anAuthContext } from '$lib/server/tests/fixtures';
 import { _resolvePostSignInDestination } from './+page.server.ts';
 
@@ -12,8 +12,12 @@ function anEmail(): string {
   return `${crypto.randomUUID()}@example.test`;
 }
 
-function anOrganization(name: string): OrganizationSummary {
-  return { id: crypto.randomUUID() as OrganizationId, name };
+function accessTo(name: string): OrganizationAccess {
+  return {
+    organizationId: crypto.randomUUID() as OrganizationId,
+    organizationName: name,
+    role: 'member',
+  };
 }
 
 const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
@@ -51,11 +55,9 @@ test('a waiting invite comes before anything else, even for an existing member',
   await withRollback(database(), async (transaction) => {
     const email = anEmail();
     await inviteExpiring(transaction, email, IN_A_WEEK);
-    const auth = anAuthContext({ user: { email } });
+    const auth = anAuthContext({ user: { email }, organizations: [accessTo('Acme Foods')] });
 
-    await expect(
-      _resolvePostSignInDestination(transaction, auth, [anOrganization('Acme Foods')]),
-    ).resolves.toBe('/invites');
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe('/invites');
   });
 });
 
@@ -63,43 +65,41 @@ test('an invite past its deadline is ignored, however its status still reads', a
   await withRollback(database(), async (transaction) => {
     const email = anEmail();
     await inviteExpiring(transaction, email, A_WEEK_AGO);
-    const auth = anAuthContext({ user: { email } });
-    const organization = anOrganization('Acme Foods');
+    const access = accessTo('Acme Foods');
+    const auth = anAuthContext({ user: { email }, organizations: [access] });
 
-    await expect(_resolvePostSignInDestination(transaction, auth, [organization])).resolves.toBe(
-      `/orgs/${organization.id}`,
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
+      `/orgs/${access.organizationId}`,
     );
   });
 });
 
-test('somebody who belongs nowhere is sent to create an organization', async () => {
+test('somebody who can reach nowhere is sent to create an organization', async () => {
   await withRollback(database(), async (transaction) => {
     const auth = anAuthContext({ user: { email: anEmail() } });
 
-    await expect(_resolvePostSignInDestination(transaction, auth, [])).resolves.toBe('/orgs/new');
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe('/orgs/new');
   });
 });
 
 test('one organization skips the picker', async () => {
   await withRollback(database(), async (transaction) => {
-    const auth = anAuthContext({ user: { email: anEmail() } });
-    const organization = anOrganization('Acme Foods');
+    const access = accessTo('Acme Foods');
+    const auth = anAuthContext({ user: { email: anEmail() }, organizations: [access] });
 
-    await expect(_resolvePostSignInDestination(transaction, auth, [organization])).resolves.toBe(
-      `/orgs/${organization.id}`,
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
+      `/orgs/${access.organizationId}`,
     );
   });
 });
 
 test('several organizations means staying on the picker', async () => {
   await withRollback(database(), async (transaction) => {
-    const auth = anAuthContext({ user: { email: anEmail() } });
+    const auth = anAuthContext({
+      user: { email: anEmail() },
+      organizations: [accessTo('Acme Foods'), accessTo('Zenith Dining')],
+    });
 
-    await expect(
-      _resolvePostSignInDestination(transaction, auth, [
-        anOrganization('Acme Foods'),
-        anOrganization('Zenith Dining'),
-      ]),
-    ).resolves.toBeNull();
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBeNull();
   });
 });

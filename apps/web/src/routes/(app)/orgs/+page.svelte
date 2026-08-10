@@ -10,9 +10,11 @@ let { data }: PageProps = $props();
 <h1 class="text-2xl font-semibold tracking-tight">Choose an organization</h1>
 
 <ul class="flex flex-col gap-2">
-  {#each data.switchableOrganizations as organization (organization.id)}
+  {#each data.auth.organizations as organization (organization.organizationId)}
     <li>
-      <a class="underline hover:no-underline" href="/orgs/{organization.id}">{organization.name}</a>
+      <a class="underline hover:no-underline" href="/orgs/{organization.organizationId}">
+        {organization.organizationName}
+      </a>
     </li>
   {/each}
 </ul>

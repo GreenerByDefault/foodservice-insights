@@ -1,7 +1,5 @@
 import type { OrganizationId } from '@gbd/db';
-import { requireAuth } from '$lib/server/auth/guards';
-import { database } from '$lib/server/db';
-import { resolveOrganization } from '$lib/server/organizations';
+import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
 import type { LayoutServerLoad } from './$types';
 
 /** Settle which organization everything below this point acts on, once.
@@ -11,9 +9,9 @@ import type { LayoutServerLoad } from './$types';
  * does — `Acme Foods`, `Acme  Foods` and `Acme-Foods` are three legal names and one slug — so
  * unique names would not give unique slugs. This parameter could accept either later.
  */
-export const load: LayoutServerLoad = async ({ locals, params }) =>
-  await resolveOrganization(
-    database(),
-    requireAuth(locals),
-    params.organizationId as OrganizationId,
-  );
+export const load: LayoutServerLoad = ({ locals, params }) => {
+  const organizationId = params.organizationId as OrganizationId;
+  const { organizationName, role } = requireOrganizationAccess(requireAuth(locals), organizationId);
+
+  return { organization: { id: organizationId, name: organizationName }, role };
+};
