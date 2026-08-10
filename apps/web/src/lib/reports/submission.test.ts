@@ -168,8 +168,6 @@ describe('validateSubmission', () => {
   });
 
   test('describes an oversized file without reading it', async () => {
-    // The row still records what was attempted; the blob store gets nothing, because storing a
-    // file we refused for its size would defeat the cap it failed.
     const outcome = await validateSubmission(aSubmission({ file: anOversizedFile('big.csv') }));
 
     expect(outcome).toMatchObject({

@@ -105,7 +105,6 @@ describe('a valid upload', () => {
         byteSize: A_CSV.length,
       });
 
-      // The attempt a worker claims. Unclaimed, numbered 1, and attributed to the uploader.
       const attempt = await transaction
         .selectFrom('analysisAttempt')
         .selectAll()
@@ -248,8 +247,6 @@ describe('a rejected upload', () => {
     const { failure, recorded } = await reject({ file: oversized });
 
     expect(failure).toMatchObject({ status: 400, body: { code: 'too_large' } });
-    // The row remembers what was attempted; the blob store never receives a file we refused for
-    // being too large in the first place.
     expect(recorded).toMatchObject({
       rejectionReason: 'too_large',
       inputFileOriginalFilename: 'big.csv',
