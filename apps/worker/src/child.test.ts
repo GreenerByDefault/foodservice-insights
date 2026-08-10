@@ -22,7 +22,7 @@ import {
   fakeChildSentinelPath,
 } from './testing/fake-child.ts';
 import { withTemporaryRunRoot } from './testing/run-root.ts';
-import { waitUntil } from './testing/wait.ts';
+import { waitUntil } from './testing/waitUntil.ts';
 
 const ATTEMPT_ID = '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f' as AnalysisAttemptId;
 
