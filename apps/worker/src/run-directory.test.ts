@@ -33,6 +33,19 @@ const MANIFEST = buildRunManifest({
   },
 });
 
+const RESULT = {
+  analysisAttemptId: ATTEMPT_ID,
+  charts: ['emissions_by_month'],
+  ai: {
+    model: 'gemini-2.5-pro',
+    inputTokens: 12_000,
+    outputTokens: 900,
+    costUsd: '1.2345',
+    metadata: {},
+  },
+  resultMetadata: {},
+};
+
 async function directoriesUnder(root: string): Promise<string[]> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   return entries
@@ -93,12 +106,14 @@ describe('the documents the child writes', () => {
     await withTemporaryRunRoot(async (runRoot) => {
       const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
       await writeFile(runPath(runDirectory, 'progress'), '{"sequence": 7}');
+      await writeFile(runPath(runDirectory, 'result'), JSON.stringify(RESULT));
       await writeFile(
         runPath(runDirectory, 'failure'),
         '{"reason": "upstream_api", "detail": "429", "traceback": null}',
       );
 
       expect(await readProgress(runDirectory)).toEqual({ sequence: 7 });
+      expect(await readResult(runDirectory)).toEqual(RESULT);
       expect(await readFailure(runDirectory)).toMatchObject({ reason: 'upstream_api' });
     });
   });

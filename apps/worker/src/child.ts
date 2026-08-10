@@ -36,6 +36,8 @@ export type SpawnChildOptions = {
   /** Where the allowlist below reads from. Defaults to this process's own environment. */
   environment?: NodeJS.ProcessEnv;
 
+  /** Defaults to `STDERR_TAIL_BYTES`. A test overrides it to assert the bound without producing
+   * eight kilobytes of stderr. */
   stderrTailBytes?: number;
 };
 
@@ -142,24 +144,14 @@ function childEnvironment(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 type BoundedTail = { push(chunk: Buffer): void; text(): string };
 
-/** Keeps roughly the last `limit` bytes written to it, so a child that logs for twenty minutes
- * costs the parent a fixed amount of memory. */
+/** Keeps the last `limit` bytes written to it, so a child that logs for twenty minutes costs the
+ * parent a fixed amount of memory. */
 function boundedTail(limit: number): BoundedTail {
-  const chunks: Buffer[] = [];
-  let size = 0;
+  let tail = Buffer.alloc(0);
   return {
     push(chunk) {
-      chunks.push(chunk);
-      size += chunk.byteLength;
-      // Drop leading chunks while the ones behind them still cover the limit on their own.
-      for (let leading = chunks[0]; leading !== undefined; leading = chunks[0]) {
-        if (chunks.length <= 1 || size - leading.byteLength < limit) break;
-        chunks.shift();
-        size -= leading.byteLength;
-      }
+      tail = Buffer.concat([tail, chunk]).subarray(-limit);
     },
-    text() {
-      return Buffer.concat(chunks).subarray(-limit).toString('utf8');
-    },
+    text: () => tail.toString('utf8'),
   };
 }

@@ -169,6 +169,21 @@ describe('how a child ends', () => {
       });
     });
   });
+
+  // What `STDERR_FLUSH_MS` exists for. The grandchild outlives the child holding the write end of
+  // stderr, so the pipe never closes — a parent that waited for it would never report this exit.
+  test('a traceback still comes back when a leaked grandchild holds stderr open', async () => {
+    const traceback = 'Traceback (most recent call last):\n  ZeroDivisionError\n';
+    const steps: FakeChildStep[] = [
+      { step: 'spawnGrandchild', holdingStderr: true },
+      { step: 'writeStderr', text: traceback },
+      { step: 'exit', code: 1 },
+    ];
+
+    await runScenario(steps, {}, async (child) => {
+      expect(await child.exited).toEqual({ kind: 'exited', exitCode: 1, stderrTail: traceback });
+    });
+  });
 });
 
 describe('killing a child', () => {

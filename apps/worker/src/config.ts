@@ -3,6 +3,13 @@
  * **Open:** every duration below is a placeholder nobody has measured. `staleAfterMs` is the one
  * that matters most — it has to exceed the longest valid API call the analysis library makes,
  * including its backoff, or a healthy run is killed as hung.
+ *
+ * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing constructs a
+ * `WorkerConfig` yet, so no field here has been exercised by anything. What the next change owes
+ * this file: an entrypoint that builds one by reading `workerId`, `runRoot`, and `childCommand`
+ * out of the environment over these defaults, and a loop that actually enforces
+ * `superviseIntervalMs`, `staleAfterMs`, `hardCeilingMs`, and `drainGraceMs` — `killGraceMs` is
+ * the only one anything reads today. Drop any field still unread when that lands.
  */
 
 import type { ChildCommand } from './child.ts';

@@ -15,6 +15,13 @@
  * `python/worker_child` answers those, and the golden fixtures in
  * [`contract/fixtures/`](../../../../contract/fixtures/) are what keep the two halves spelling the
  * documents identically in the meantime.
+ *
+ * **Placeholder — delete this paragraph once the supervision loop lands.** The `result`, `failure`,
+ * `writeRaw`, and `crash` steps and `fakeResultFileContents` have no caller: they are here for the
+ * tests of the code that reads those documents and uploads the files a result declares. So
+ * `writeResult` has never run, and neither its derivation of the declared file names nor its
+ * `withoutFiles` filtering is verified — treat it as a first draft to fix, not a helper to trust.
+ * Delete whatever is still uncalled when that change lands.
  */
 
 import { spawn } from 'node:child_process';
@@ -52,8 +59,10 @@ export type FakeChildStep =
   | { step: 'waitFor'; sentinel: string }
   /** Install a SIGTERM handler that does nothing, so only SIGKILL can end this process. */
   | { step: 'ignoreSigterm' }
-  /** Spawn a long-lived subprocess and record its pid, standing in for the analysis library's own. */
-  | { step: 'spawnGrandchild' }
+  /** Spawn a long-lived subprocess and record its pid, standing in for the analysis library's own.
+   * `holdingStderr` hands it this process's stderr, which is what keeps that pipe open after this
+   * process has exited. */
+  | { step: 'spawnGrandchild'; holdingStderr?: boolean }
   | { step: 'writeStderr'; text: string }
   /** Never exit, and never reach the steps after this one. */
   | { step: 'hang' }
@@ -191,7 +200,7 @@ async function runStep(
       return;
 
     case 'spawnGrandchild':
-      return await spawnGrandchild(runDirectory);
+      return await spawnGrandchild(step, runDirectory);
 
     case 'writeStderr':
       return await new Promise<void>((resolve, reject) => {
@@ -235,12 +244,17 @@ async function writeResult(
 }
 
 /** Not `detached`, so the grandchild stays in this process's group and the parent's group kill
- * reaches it — that is the leak being tested. Its stdio is closed rather than inherited so that it
- * cannot also hold the parent's stderr pipe open, which is a different failure. */
-async function spawnGrandchild(runDirectory: string): Promise<void> {
+ * reaches it — that is the leak being tested. Its stdio is closed unless the step asks otherwise,
+ * because holding the parent's stderr pipe open is a separate failure a test opts into. */
+async function spawnGrandchild(
+  step: Extract<FakeChildStep, { step: 'spawnGrandchild' }>,
+  runDirectory: string,
+): Promise<void> {
   const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)'], {
-    stdio: 'ignore',
+    stdio: step.holdingStderr ? ['ignore', 'ignore', 'inherit'] : 'ignore',
   });
+  // Otherwise this process could never reach an `exit` step: an alive child refs the event loop.
+  grandchild.unref();
   await writeAtomically(fakeChildFilePath(runDirectory, 'grandchildPid'), String(grandchild.pid));
 }
 
