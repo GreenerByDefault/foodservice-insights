@@ -175,7 +175,13 @@ describe('validateSubmission', () => {
         aSubmission({ monthlyCounts: JSON.stringify(counts) }),
       );
 
-      expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'invalid_metadata' } });
+      expect(outcome).toMatchObject({
+        ok: false,
+        rejection: {
+          reason: 'invalid_metadata',
+          message: 'Check these fields: monthlyCounts.',
+        },
+      });
     });
 
     test('a file over the size cap, reported before its content is even sniffed', async () => {
@@ -195,7 +201,10 @@ describe('validateSubmission', () => {
 
       expect(outcome).toMatchObject({
         ok: false,
-        rejection: { message: 'Check these fields: countsBasis, unitSystem.' },
+        rejection: {
+          reason: 'invalid_metadata',
+          message: 'Check these fields: countsBasis, unitSystem.',
+        },
       });
     });
   });
