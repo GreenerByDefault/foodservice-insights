@@ -15,10 +15,10 @@ they load when you touch that stack's files:
 | --- | --- | --- |
 | TypeScript — `apps/`, `packages/` | [`.claude/rules/typescript.md`](.claude/rules/typescript.md) | [`README.md`](README.md) |
 | Python — `python/` | [`.claude/rules/python.md`](.claude/rules/python.md) | [`python/README.md`](python/README.md) |
-| A doc — any `.md` | [`.claude/rules/docs.md`](.claude/rules/docs.md) | |
 
-If you are about to write or change one of those and its rule file has not appeared in your
-context, read it first.
+If you are about to change one of those stacks and its rule file has not appeared in your
+context, read it first. Writing or changing a doc is covered by the `writing-docs` skill —
+where a doc belongs, how long it should be, and what must never go in one.
 
 For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how the system
 fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — both record *rejected*
@@ -68,34 +68,24 @@ if something is failing or you skipped a step, say so.
 
 ### Comments
 
-Length is not the test. The test is whether a reader could recover the fact from the code, the
-types, or the test name.
+Prefer self-documenting code: a good name beats a comment explaining a bad one. What survives
+that is worth a great deal, because it is what the code cannot say — a performance
+consideration, a security invariant, a subtle edge case, a constraint arriving from outside the
+file. Write those, and give them the room they need.
+[`packages/storage/src/keys.ts`](packages/storage/src/keys.ts) opens with 21 lines and earns
+every one; a diagram or a numbered list of invariants is a fine way to spend them.
 
-- **A comment carrying an unrecoverable fact runs as long as it needs**, wherever it sits. A
-  file's map — a layout, a contract, invariants holding across the file — in
-  [`packages/storage/src/keys.ts`](packages/storage/src/keys.ts) and
-  [`apps/worker/src/contract/layout.ts`](apps/worker/src/contract/layout.ts). A single
-  function's trap in [`packages/storage/src/errors.ts`](packages/storage/src/errors.ts).
-  Diagrams and numbered rules are fine.
+The test is whether a reader could recover the fact from the code, the types, or the test name.
+If not, write it. If so, the comment is a second copy of something that will drift.
+
+- **Put it on the thing it explains** — the line, or the file header when it holds across the
+  file. Not in a doc comment one level up.
 - **Do not narrate the design of a function whose signature already shows it.** The shape to
   avoid is a summary line, a blank `*`, then a paragraph of rationale. Keep the summary; drop
   the paragraph.
-- **Rationale worth keeping goes on the line it defends**, not up in the doc comment.
-- **Do not replace reasoning with a pointer.** "See [`ARCHITECTURE.md`](ARCHITECTURE.md) § Auth"
-  in place of the fact is the thing to avoid; citing a doc as the source of a fact is fine, as
-  [`authorization.ts`](apps/web/src/lib/server/auth/authorization.ts) does.
-- No restating the test name above the test, and no reassurance prose.
-
-The prose voice of this file is not the target voice for code comments. The recurring edit, from
-[`apps/web/src/lib/server/auth/guards.ts`](apps/web/src/lib/server/auth/guards.ts):
-
-```ts
- /** The checks a route makes before doing anything.
-- *
-- * All pure: they read an `AuthContext` the hook already loaded, so a guard never costs a query
-- * and is testable without a database.
-  */
-```
+- **Cite a doc as the source of a fact, not as a substitute for one.**
+- **Do not restate the test name above the test**, and skip prose that only reassures the
+  reader.
 
 ### Style
 
