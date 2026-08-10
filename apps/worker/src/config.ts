@@ -2,8 +2,7 @@
  *
  * **Open:** every duration below is a placeholder nobody has measured. `staleAfterMs` is the one
  * that matters most — it has to exceed the longest valid API call the analysis library makes,
- * including its backoff, or a healthy run is killed as hung. The starting values come from the
- * guesses in [ARCHITECTURE.md](../../../ARCHITECTURE.md#heartbeats-hangs-and-reaping).
+ * including its backoff, or a healthy run is killed as hung.
  */
 
 import type { ChildCommand } from './child.ts';
