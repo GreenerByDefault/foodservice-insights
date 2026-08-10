@@ -89,16 +89,26 @@ describe('loadAuthorization', () => {
       const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
 
       const auth = await loadAuthorization(transaction, superadmin.id);
+      const organizations = auth?.organizations ?? [];
 
-      expect(auth?.organizations).toEqual([
-        { organizationId: apple.id, organizationName: 'Apple Co', role: 'admin' },
-        { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
-        // Remove this entry once removing PLACEHOLDER_ORGANIZATION_ID.
-        {
+      // The seeded placeholder org may or may not exist depending on test DB state, so check it
+      // separately from the orgs this test created. Remove once PLACEHOLDER_ORGANIZATION_ID is gone.
+      const placeholder = organizations.find(
+        (org) => org.organizationId === PLACEHOLDER_ORGANIZATION_ID,
+      );
+      if (placeholder) {
+        expect(placeholder).toEqual({
           organizationId: PLACEHOLDER_ORGANIZATION_ID,
           organizationName: PLACEHOLDER_ORGANIZATION_NAME,
           role: 'admin',
-        },
+        });
+      }
+
+      expect(
+        organizations.filter((org) => org.organizationId !== PLACEHOLDER_ORGANIZATION_ID),
+      ).toEqual([
+        { organizationId: apple.id, organizationName: 'Apple Co', role: 'admin' },
+        { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
       ]);
     });
   });
