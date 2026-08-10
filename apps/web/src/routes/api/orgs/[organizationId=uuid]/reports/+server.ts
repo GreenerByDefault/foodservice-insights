@@ -172,7 +172,7 @@ async function recordRejection(
   store: BlobStore,
   uploader: Uploader,
   raw: RawSubmission,
-  upload: { description: FileDescription | null; bytes: Uint8Array | null },
+  upload: { fileDescription: FileDescription | null; bytes: Uint8Array | null },
   rejection: Rejection,
 ): Promise<void> {
   const { organizationId, userId } = uploader;
@@ -197,8 +197,8 @@ async function recordRejection(
         reportMonthlyCounts: asJsonOrNull(raw.monthlyCounts),
         reportUnitSystem: raw.unitSystem,
         inputFileStorageKey: stored?.storageKey ?? null,
-        inputFileByteSize: upload.description?.byteSize ?? null,
-        inputFileOriginalFilename: upload.description?.originalFilename ?? null,
+        inputFileByteSize: upload.fileDescription?.byteSize ?? null,
+        inputFileOriginalFilename: upload.fileDescription?.originalFilename ?? null,
         rejectionReason: rejection.reason,
         rejectionDetail: rejection.detail ?? null,
       })

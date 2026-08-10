@@ -13,11 +13,10 @@ import { exhaustiveArray } from '@gbd/core';
 import type { CountsBasis, RejectedUploadReason, UnitSystem } from '@gbd/db';
 import { checkUploadBytes, MAX_UPLOAD_BYTES } from '@gbd/upload';
 import * as v from 'valibot';
+import { readFile, readText } from '$lib/forms/form-data';
+import { describeIssues, fieldsWithIssues, optionalText, parsedJson } from '$lib/forms/validation';
 
-/** Caps on the free text and the metadata an upload carries. No database CHECK enforces these —
- * they exist to bound the payload, per REQUIREMENTS.md § Abuse limits, not to describe the
- * column. The limits on the file itself live in `@gbd/upload`, which the browser shares.
- */
+/** Caps on the free text and the metadata an upload carries. */
 export const MAX_REPORT_NAME_LENGTH = 200;
 export const MAX_SITE_NAME_LENGTH = 200;
 export const MAX_ORIGINAL_FILENAME_LENGTH = 255;
@@ -45,11 +44,7 @@ const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(0));
 
-/** `report.monthly_counts` as the database describes it: month to count, keyed `YYYY-MM`.
- *
- * Exported because it is also how a caller narrows the column on the way back out — Kysely
- * types `jsonb` as `unknown`.
- */
+/** `report.monthly_counts` as month to count, keyed `YYYY-MM`.*/
 export const MonthlyCountsSchema = v.pipe(
   v.record(v.pipe(v.string(), v.regex(MONTH_PATTERN, 'is not a YYYY-MM month')), wholeNumber),
   v.check((counts) => Object.keys(counts).length > 0, 'needs at least one month'),
@@ -60,30 +55,6 @@ export const MonthlyCountsSchema = v.pipe(
 );
 
 export type MonthlyCounts = v.InferOutput<typeof MonthlyCountsSchema>;
-
-/** A text field the user may leave blank. Empty becomes `null`, which is what the column holds. */
-function optionalText(maxLength: number) {
-  return v.pipe(
-    v.nullable(v.string()),
-    v.transform((value) => value?.trim() ?? ''),
-    v.maxLength(maxLength),
-    v.transform((value) => value || null),
-  );
-}
-
-/** `JSON.parse` as a pipe step, so malformed input becomes an issue rather than a throw. */
-const parsedJson = v.rawTransform<string | null, unknown>(({ dataset, addIssue, NEVER }) => {
-  if (dataset.value === null) {
-    addIssue({ message: 'is required' });
-    return NEVER;
-  }
-  try {
-    return JSON.parse(dataset.value);
-  } catch {
-    addIssue({ message: 'is not valid JSON' });
-    return NEVER;
-  }
-});
 
 export const ReportMetadataSchema = v.object({
   name: optionalText(MAX_REPORT_NAME_LENGTH),
@@ -107,7 +78,6 @@ export type RawSubmission = {
   file: File | null;
 };
 
-/** What the request claimed about the file, knowable without reading it. */
 export type FileDescription = {
   originalFilename: string;
   byteSize: number;
@@ -128,9 +98,9 @@ export type ValidatedSubmission =
   | {
       ok: false;
       rejection: Rejection;
-      /** For the `rejected_upload` row. Null only when the request carried no file at all. */
-      description: FileDescription | null;
-      /** For the blob store. Null when we refused the file without reading it. */
+      /** Null only when the request carried no file at all. */
+      fileDescription: FileDescription | null;
+      /** For the blob store. Null when we refused the file before reading it. */
       bytes: Uint8Array | null;
     };
 
@@ -145,17 +115,12 @@ export function readSubmission(form: FormData): RawSubmission {
   };
 }
 
-/** Decide whether `raw` becomes a report.
- *
- * A rejection carries the bytes back where we have them, because REQUIREMENTS.md requires that
- * even an invalid upload is stored. The one exception is a file refused for its size, which is
- * never read — see below.
- */
+/** Decide whether `raw` becomes a report. */
 export async function validateSubmission(raw: RawSubmission): Promise<ValidatedSubmission> {
   if (!raw.file) {
     return {
       ok: false,
-      description: null,
+      fileDescription: null,
       bytes: null,
       rejection: {
         reason: 'other',
@@ -165,25 +130,22 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     };
   }
 
-  const description: FileDescription = {
-    // Truncated rather than rejected: an absurd filename is not the user's problem to fix, and
-    // it never reaches a storage key — see `keys.ts`.
+  const fileDescription: FileDescription = {
+    // Truncate long file names rather than reject them.
     originalFilename: raw.file.name.slice(0, MAX_ORIGINAL_FILENAME_LENGTH),
     byteSize: raw.file.size,
   };
 
-  // Before `arrayBuffer()`, so an oversized file is never copied — and, more to the point, never
-  // written to the blob store. Keeping a rejected upload is a support affordance; keeping one
-  // that we refused precisely for its size would defeat the cap it failed.
-  if (description.byteSize > MAX_UPLOAD_BYTES) {
+  if (fileDescription.byteSize > MAX_UPLOAD_BYTES) {
     return {
       ok: false,
-      description,
+      fileDescription,
+      // We don't upload large files to the blob store.
       bytes: null,
       rejection: {
         reason: 'too_large',
         message: `That file is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024}MB.`,
-        detail: `${description.byteSize} bytes`,
+        detail: `${fileDescription.byteSize} bytes`,
       },
     };
   }
@@ -191,7 +153,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
   const bytes = new Uint8Array(await raw.file.arrayBuffer());
 
   const fileRejection = checkUploadBytes(bytes);
-  if (fileRejection) return { ok: false, description, bytes, rejection: fileRejection };
+  if (fileRejection) return { ok: false, fileDescription, bytes, rejection: fileRejection };
 
   const parsed = v.safeParse(ReportMetadataSchema, {
     name: raw.name,
@@ -203,7 +165,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
   if (!parsed.success) {
     return {
       ok: false,
-      description,
+      fileDescription,
       bytes,
       rejection: {
         reason: 'invalid_metadata',
@@ -213,28 +175,5 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     };
   }
 
-  return { ok: true, file: { ...description, bytes }, metadata: parsed.output };
-}
-
-function readText(form: FormData, field: string): string | null {
-  const value = form.get(field);
-  return typeof value === 'string' ? value : null;
-}
-
-function readFile(form: FormData, field: string): File | null {
-  const value = form.get(field);
-  if (!(value instanceof File)) return null;
-  // A file input the user never touched still submits a part, with no name and no bytes. That
-  // is "no file chosen", not an empty file.
-  if (value.name === '' && value.size === 0) return null;
-  return value;
-}
-
-function fieldsWithIssues(issues: readonly v.BaseIssue<unknown>[]): string[] {
-  const fields = issues.map((issue) => v.getDotPath(issue)?.split('.')[0] ?? 'the form');
-  return [...new Set(fields)];
-}
-
-function describeIssues(issues: readonly v.BaseIssue<unknown>[]): string {
-  return issues.map((issue) => `${v.getDotPath(issue) ?? '<root>'}: ${issue.message}`).join('; ');
+  return { ok: true, file: { ...fileDescription, bytes }, metadata: parsed.output };
 }

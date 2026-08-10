@@ -216,7 +216,7 @@ describe('validateSubmission', () => {
 
     expect(outcome).toMatchObject({
       ok: false,
-      description: { originalFilename: 'report.pdf', byteSize: 8 },
+      fileDescription: { originalFilename: 'report.pdf', byteSize: 8 },
       bytes: new TextEncoder().encode('%PDF-1.7'),
     });
   });
@@ -224,7 +224,7 @@ describe('validateSubmission', () => {
   test('has nothing to keep when no file arrived', async () => {
     const outcome = await validateSubmission(aSubmission({ file: null }));
 
-    expect(outcome).toMatchObject({ ok: false, description: null, bytes: null });
+    expect(outcome).toMatchObject({ ok: false, fileDescription: null, bytes: null });
   });
 
   test('describes an oversized file without reading it', async () => {
@@ -232,7 +232,7 @@ describe('validateSubmission', () => {
 
     expect(outcome).toMatchObject({
       ok: false,
-      description: { originalFilename: 'big.csv', byteSize: MAX_UPLOAD_BYTES + 1 },
+      fileDescription: { originalFilename: 'big.csv', byteSize: MAX_UPLOAD_BYTES + 1 },
       bytes: null,
     });
   });
