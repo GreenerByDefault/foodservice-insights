@@ -1,5 +1,3 @@
-/** Accepting an upload: one report, its input file, and the attempt a worker will claim. */
-
 import type {
   Database,
   DatabaseExecutor,
@@ -25,19 +23,8 @@ import { database, withDbErrorHandling } from '$lib/server/db';
 import { blobStore } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
-/** Who is uploading, and where to. */
 export type Uploader = { organizationId: OrganizationId; userId: UserId };
 
-/** The upload: validate, store the file, write the rows, enqueue the first attempt. Answers 201
- * with a `location` header pointing at the new report.
- *
- * Authorize the organization *before* validating anything, because a file that fails validation is
- * still recorded — and `rejected_upload.organization_id` is `NOT NULL` with a foreign key, so there
- * is nowhere to write the rejection until the organization is known to be real and the caller's.
- *
- * The file arrives on this request rather than through a presigned URL: at a 10MB cap the server has
- * to read it to validate it anyway.
- */
 export const POST: RequestHandler = async ({ request, params, locals }) => {
   const auth = requireAuth(locals);
   const organizationId = params.organizationId as OrganizationId;
@@ -70,10 +57,8 @@ export async function _createReport(
   const reportId = newReportId();
   const inputFileId = newInputFileId();
 
-  // The object goes first, so no row ever points at bytes that are not there. The reverse
-  // failure — the transaction below not committing — orphans the object, which
-  // REQUIREMENTS.md § Out of scope accepts. It is deliberately outside the transaction: a
-  // 10MB upload must not hold a database connection open while it happens.
+  // Upload the object before touching the database, so that no row
+  // ever points at bytes that are not there.
   const stored = await putInputFile(
     store,
     { organizationId, reportId, inputFileId },
@@ -102,11 +87,6 @@ export async function _createReport(
   );
 }
 
-/** Every row one accepted upload produces.
- *
- * The contract with the worker is that a claim query must never find a `pending` attempt whose
- * `input_file` has not committed yet, because it has no way to wait for one.
- */
 async function insertReport(
   transaction: Transaction<Database>,
   input: {
@@ -162,11 +142,7 @@ async function insertReport(
 }
 
 /** Keep a rejected upload: the bytes in the blob store, the reason and the raw metadata in
- * `rejected_upload`. REQUIREMENTS.md § Errors during upload and processing requires both.
- *
- * `bytes` is null for a file we refused without reading — see `validateSubmission` — so the row
- * records what was attempted while the blob store gets nothing.
- */
+ * `rejected_upload`. */
 async function recordRejection(
   db: DatabaseExecutor,
   store: BlobStore,
@@ -183,8 +159,7 @@ async function recordRejection(
       ? await putRejectedUpload(store, { organizationId, rejectedUploadId }, upload.bytes)
       : undefined;
 
-    // The raw strings, not the parsed values: the row exists precisely because they did not
-    // parse, and the text columns are typed to hold whatever arrived.
+    // We store the raw strings, not the parsed values.
     await db
       .insertInto('rejectedUpload')
       .values({
@@ -204,9 +179,8 @@ async function recordRejection(
       })
       .execute();
   } catch (cause) {
-    // Bookkeeping, so it must not change the answer — which is why this does not go through
-    // `withDbErrorHandling`. The upload is invalid either way, and a 500 here would tell the
-    // user to retry something that cannot ever succeed.
+    // We do not error() if the database fails because the database is only for
+    // our own recording with rejections. This is why we don't use withDbErrorHandling.
     console.error('Could not record a rejected upload', {
       organizationId,
       reason: rejection.reason,
@@ -216,7 +190,7 @@ async function recordRejection(
 }
 
 /** `report_monthly_counts` is `jsonb`, so text that is not JSON cannot be stored in it at all.
- * What it was is in `rejection_detail` instead.
+ * Instead, store the raw value in `rejection_detail`.
  */
 function asJsonOrNull(text: string | null): string | null {
   if (text === null) return null;
