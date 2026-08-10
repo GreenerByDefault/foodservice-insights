@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No `types` entry, deliberately: the base's `"types": []` is what keeps `@types/node` out,
+    // so `Buffer` and friends are a compile error. The browser runs this same code, and anything
+    // Node-only in it would only surface in a user's tab.
+    //
+    // That guard is enforced by `tsconfig.build.json`, not by this file. `include` here covers
+    // `vitest.config.ts` and `*.test.ts`, and vitest's own declarations pull in `@types/node`
+    // transitively, which puts the Node globals back. The build config excludes both, so
+    // `pnpm build` — which `pnpm check` runs first — is what actually fails on a `Buffer`.
+    //
+    // `dom` is for `TextDecoder`, which the base's `"lib": ["esnext"]` does not declare. It also
+    // lets `document` typecheck, which is the accepted cost: a `document` reference fails loudly
+    // on the first server call, whereas a `Buffer` in the browser fails subtly.
+    "lib": ["esnext", "dom"],
+
+    // Overrides the base's bundler settings, which would accept an extensionless relative
+    // import that Node then rejects at runtime.
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
+  },
+  "include": ["src/**/*.ts", "vitest.config.ts"]
+}

@@ -17,7 +17,7 @@ A user can upload a CSV or XLSX file matching a predefined column format.
   - date ordered: date
   - amount ordered: number
 - The website provides clear instructions for the file format.
-- Max file size: 10MB.
+- Max file size: [`packages/upload/src/limits.ts`](packages/upload/src/limits.ts).
 - The user provides additional metadata:
   - a map of each month to the number of diners or meals
   - site name (optional)

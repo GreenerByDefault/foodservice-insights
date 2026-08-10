@@ -101,6 +101,14 @@
       "Bash(pnpm --filter @gbd/storage run test:unit *)",
       "Bash(pnpm --filter @gbd/storage exec vitest run *)",
 
+      "Bash(pnpm --filter @gbd/upload check)",
+      "Bash(pnpm --filter @gbd/upload run check)",
+      "Bash(pnpm --filter @gbd/upload build)",
+      "Bash(pnpm --filter @gbd/upload run build)",
+      "Bash(pnpm --filter @gbd/upload test:unit *)",
+      "Bash(pnpm --filter @gbd/upload run test:unit *)",
+      "Bash(pnpm --filter @gbd/upload exec vitest run *)",
+
       "Bash(pnpm migrate)",
       "Bash(pnpm run migrate)",
       "Bash(pnpm seed)",

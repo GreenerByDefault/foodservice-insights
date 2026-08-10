@@ -29,6 +29,10 @@ export type FileFixtures = {
   transaction: Transaction<Database>;
   store: BlobStore;
   organizationId: OrganizationId;
+  /** The organization's admin, which `insertOrganization` has to create anyway. Anything a test
+   * attributes to a user — an upload, a report — can use this rather than making a second one.
+   */
+  userId: UserId;
 };
 
 /** Run `fn` against a real organization, and undo everything it wrote.
@@ -38,10 +42,15 @@ export type FileFixtures = {
  */
 export async function withFileFixtures<T>(fn: (fixtures: FileFixtures) => Promise<T>): Promise<T> {
   return await withRollback(database(), async (transaction) => {
-    const { organization } = await insertOrganization(transaction);
+    const { organization, admin } = await insertOrganization(transaction);
 
     try {
-      return await fn({ transaction, store: blobStore(), organizationId: organization.id });
+      return await fn({
+        transaction,
+        store: blobStore(),
+        organizationId: organization.id,
+        userId: admin.id,
+      });
     } finally {
       await deletePrefix(blobStore(), organizationPrefix(organization.id));
     }
