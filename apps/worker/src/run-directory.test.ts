@@ -68,7 +68,7 @@ describe('createRunDirectory', () => {
 });
 
 describe('the inputs the parent writes', () => {
-  test('the manifest round-trips through the parser the child uses', async () => {
+  test('the manifest the parent writes parses back to the same value', async () => {
     await withTemporaryRunRoot(async (runRoot) => {
       const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
       await writeManifest(runDirectory, MANIFEST);
@@ -135,8 +135,9 @@ describe('removeRunDirectory', () => {
       await writeManifest(runDirectory, MANIFEST);
 
       await removeRunDirectory(runDirectory);
-      await removeRunDirectory(runDirectory);
+      expect(await directoriesUnder(runRoot)).toEqual([]);
 
+      await removeRunDirectory(runDirectory);
       expect(await directoriesUnder(runRoot)).toEqual([]);
     });
   });
