@@ -1,4 +1,5 @@
 import type { OrganizationId, UserId } from '@gbd/db';
+import { PLACEHOLDER_ORGANIZATION_ID, PLACEHOLDER_ORGANIZATION_NAME } from '@gbd/db/seed';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { afterAll, describe, expect, test } from 'vitest';
 import { anAuthContext } from '$lib/server/tests/fixtures';
@@ -89,13 +90,16 @@ describe('loadAuthorization', () => {
 
       const auth = await loadAuthorization(transaction, superadmin.id);
 
-      // Containment rather than equality: this scan also sees whatever the seeded database holds.
-      expect(auth?.organizations).toEqual(
-        expect.arrayContaining([
-          { organizationId: apple.id, organizationName: 'Apple Co', role: 'admin' },
-          { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
-        ]),
-      );
+      expect(auth?.organizations).toEqual([
+        { organizationId: apple.id, organizationName: 'Apple Co', role: 'admin' },
+        { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
+        // Remove this entry once removing PLACEHOLDER_ORGANIZATION_ID.
+        {
+          organizationId: PLACEHOLDER_ORGANIZATION_ID,
+          organizationName: PLACEHOLDER_ORGANIZATION_NAME,
+          role: 'admin',
+        },
+      ]);
     });
   });
 

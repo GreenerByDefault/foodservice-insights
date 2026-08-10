@@ -61,13 +61,6 @@ async function memberOrganizations(
     .execute();
 }
 
-/** Admin access to every organization, which is what being a superadmin means.
- *
- * Materialized here so that no check further down has to know superadmins exist: `admin` on a row
- * that is present behaves the same however it got there, and an id nobody has simply is not in the
- * list. The cost is a scan of `organization` on each request a superadmin makes — bounded by the
- * customer count, paid by nobody else.
- */
 async function everyOrganization(db: DatabaseExecutor): Promise<OrganizationAccess[]> {
   const organizations = await db
     .selectFrom('organization')

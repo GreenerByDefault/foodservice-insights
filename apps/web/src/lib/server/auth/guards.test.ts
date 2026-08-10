@@ -40,7 +40,7 @@ describe('requireAuth', () => {
 });
 
 describe('requireOrganizationAccess', () => {
-  test('returns the access, name and all', () => {
+  test('returns the access', () => {
     expect(requireOrganizationAccess(withRoleIn('member'), ORGANIZATION_ID)).toEqual({
       organizationId: ORGANIZATION_ID,
       organizationName: 'Acme Foods',

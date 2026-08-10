@@ -12,10 +12,6 @@ const currentOrganization = $derived(page.data.organization);
 
 <div class="mx-auto flex min-h-svh max-w-4xl flex-col gap-6 p-8">
   <header class="flex items-baseline justify-between gap-4 text-sm">
-    <!-- Plain links inside a native disclosure, rather than a scripted menu, so the switcher costs
-         nothing to make keyboard- and screen-reader-accessible. Every entry points at an
-         organization's root: switching cannot preserve a deeper path, because a report belongs to
-         one organization and has no counterpart in another. -->
     <details class="relative">
       <summary class="cursor-pointer font-medium">
         {currentOrganization?.name ?? 'Choose an organization'}
@@ -40,8 +36,9 @@ const currentOrganization = $derived(page.data.organization);
       </ul>
     </details>
 
-    <!-- Signing out is a browser-side Supabase call, so it arrives as a component with the rest of
-         auth rather than as a link to a route. -->
+    <!-- Signing out is a browser-side Supabase call, so it will arrives as a component with the rest of
+         auth, rather than as a link to a route. -->
+
     <a class="text-muted-foreground hover:text-foreground" href="/account">
       {data.auth.user.email}
     </a>

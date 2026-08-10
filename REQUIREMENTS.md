@@ -175,15 +175,11 @@ Email OTP (one-time passcode).
 
 ### Login flow
 
-```mermaid
-flowchart TD
-    otp([OTP verified]) --> invite{"Pending invite?<br/>match on verified email"}
-    invite -->|live| accept["Accept / decline screen"]
-    invite -->|expired| notice["One-time expiry notice"] --> member
-    invite -->|none| member{"Existing membership?<br/>any org, any role"}
-    member -->|yes| dash["Org dashboard<br/>picker if more than one"]
-    member -->|no| create["Create an org<br/>the only fallback"]
-```
+After OTP verification, where the user lands (a live invite, an org, the org picker, or
+`/orgs/new`) is decided by
+[`_resolvePostSignInDestination`](apps/web/src/routes/(app)/orgs/+page.server.ts). The invite
+branch's own behavior — accept/decline, the one-time expiry notice — is the Invite flow section
+above.
 
 ### Audit trail
 

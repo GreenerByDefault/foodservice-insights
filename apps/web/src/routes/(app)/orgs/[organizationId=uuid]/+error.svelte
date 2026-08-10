@@ -3,6 +3,5 @@ import { page } from '$app/state';
 import ErrorPage from '$lib/components/error-page.svelte';
 </script>
 
-<!-- Keeps the organization's nav in place when something below it fails, most often a report id
-     that belongs to another organization and so reads as a 404. -->
+<!-- This error route exists to keep the organization's nav in place when something below it fails. -->
 <ErrorPage status={page.status} />

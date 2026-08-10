@@ -1,4 +1,4 @@
-import type { Database, OrganizationId } from '@gbd/db';
+import type { Database, OrganizationId, OrganizationInviteStatus } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
 import { expect, test } from 'vitest';
@@ -7,8 +7,8 @@ import { database } from '$lib/server/db';
 import { anAuthContext } from '$lib/server/tests/fixtures';
 import { _resolvePostSignInDestination } from './+page.server.ts';
 
-/** A unique address per test, so no test can see another's invite. */
 function anEmail(): string {
+  // A unique address per test, so no test can see another's invite.
   return `${crypto.randomUUID()}@example.test`;
 }
 
@@ -22,7 +22,7 @@ function accessTo(name: string): OrganizationAccess {
 
 const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
-/** A pending invite for `email` that runs out at `expiresAt`.
+/** An invite for `email` that runs out at `expiresAt`.
  *
  * `created_at` is backdated a full invite lifetime rather than left to default, because
  * `organization_invite_expires_at_after_created_at` refuses a row that is already expired the
@@ -32,6 +32,7 @@ async function inviteExpiring(
   transaction: Transaction<Database>,
   email: string,
   expiresAt: Date,
+  status: OrganizationInviteStatus = 'pending',
 ): Promise<void> {
   const { organization } = await insertOrganization(transaction);
 
@@ -41,7 +42,7 @@ async function inviteExpiring(
       organizationId: organization.id,
       email,
       role: 'member',
-      status: 'pending',
+      status,
       createdAt: new Date(expiresAt.getTime() - INVITE_LIFETIME_MS),
       expiresAt,
     })
@@ -71,6 +72,29 @@ test('an invite past its deadline is ignored, however its status still reads', a
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
       `/orgs/${access.organizationId}`,
     );
+  });
+});
+
+test('an accepted invite is ignored even though it has not expired', async () => {
+  await withRollback(database(), async (transaction) => {
+    const email = anEmail();
+    await inviteExpiring(transaction, email, IN_A_WEEK, 'accepted');
+    const access = accessTo('Acme Foods');
+    const auth = anAuthContext({ user: { email }, organizations: [access] });
+
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
+      `/orgs/${access.organizationId}`,
+    );
+  });
+});
+
+test('a waiting invite is found regardless of the case the sign-in email arrives in', async () => {
+  await withRollback(database(), async (transaction) => {
+    const email = anEmail();
+    await inviteExpiring(transaction, email, IN_A_WEEK);
+    const auth = anAuthContext({ user: { email: email.toUpperCase() } });
+
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe('/invites');
   });
 });
 
