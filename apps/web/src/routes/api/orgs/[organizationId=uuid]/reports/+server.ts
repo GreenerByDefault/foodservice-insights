@@ -1,9 +1,17 @@
 /** Accepting an upload: one report, its input file, and the attempt a worker will claim. */
 
-import type { DatabaseExecutor, InputFileId, OrganizationId, ReportId, UserId } from '@gbd/db';
+import type {
+  Database,
+  DatabaseExecutor,
+  InputFileId,
+  OrganizationId,
+  ReportId,
+  UserId,
+} from '@gbd/db';
 import { newInputFileId, newRejectedUploadId, newReportId, withTransaction } from '@gbd/db';
 import { type BlobStore, putInputFile, putRejectedUpload, type StoredFile } from '@gbd/storage';
 import { error, json } from '@sveltejs/kit';
+import type { Transaction } from 'kysely';
 import type {
   FileDescription,
   RawSubmission,
@@ -43,11 +51,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
   );
 };
 
-/** Store an accepted upload, or record a rejected one and answer 400.
- *
- * Takes its database and blob store rather than reaching for them, so a test can hand it a
- * rolled-back transaction and drive the whole handler.
- */
+/** Store an accepted upload, or record a rejected one and answer 400. */
 export async function _createReport(
   db: DatabaseExecutor,
   store: BlobStore,
@@ -100,13 +104,11 @@ export async function _createReport(
 
 /** Every row one accepted upload produces.
  *
- * One transaction, and that is the contract with the worker: a claim query must never find a
- * `pending` attempt whose `input_file` has not committed yet, because it has no way to wait for
- * one. `withTransaction` is what lets a test still call this with its own transaction —
- * `packages/db/src/transactions.test.ts` is what covers the atomicity itself.
+ * The contract with the worker is that a claim query must never find a `pending` attempt whose
+ * `input_file` has not committed yet, because it has no way to wait for one.
  */
 async function insertReport(
-  db: DatabaseExecutor,
+  transaction: Transaction<Database>,
   input: {
     reportId: ReportId;
     organizationId: OrganizationId;
@@ -117,7 +119,7 @@ async function insertReport(
     file: UploadedFile;
   },
 ): Promise<void> {
-  await db
+  await transaction
     .insertInto('report')
     .values({
       id: input.reportId,
@@ -133,7 +135,7 @@ async function insertReport(
 
   // Every column but the filename is what the blob store recorded, never what the client
   // claimed — including the content type.
-  await db
+  await transaction
     .insertInto('inputFile')
     .values({
       id: input.inputFileId,
@@ -148,7 +150,7 @@ async function insertReport(
 
   // Leaving `workerId`, `lockedAt` and `lastHeartbeatAt` unset is what satisfies
   // `analysis_attempt_pending_is_unclaimed`; number 1 is what the first-attempt trigger wants.
-  await db
+  await transaction
     .insertInto('analysisAttempt')
     .values({
       reportId: input.reportId,
