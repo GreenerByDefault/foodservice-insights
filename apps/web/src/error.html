@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Error %sveltekit.status%</title>
+    <!-- Comments here are served to whoever hit the error, so keep them free of anything internal.
+         This is the fallback for a failure caught before the router could render a page. It reaches
+         neither the app's stylesheet nor its components, so the values below are copied from
+         routes/layout.css and will drift from it; keep the file small enough that drift is cheap.
+         Echoing the message is safe because every message reaching this page is one we wrote. -->
+    <style>
+    body {
+      margin: 0;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 2rem;
+      box-sizing: border-box;
+      max-width: 42rem;
+      margin-inline: auto;
+      background: oklch(1 0 0);
+      color: oklch(0.145 0 0);
+      font-family: "Inter Variable", system-ui, sans-serif;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.875rem;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+    p {
+      margin: 0;
+      color: oklch(0.556 0 0);
+    }
+    .status {
+      font-size: 0.875rem;
+    }
+    </style>
+  </head>
+  <body>
+    <h1>This page couldn't load</h1>
+    <p>%sveltekit.error.message%</p>
+    <p class="status">Error %sveltekit.status%</p>
+  </body>
+</html>

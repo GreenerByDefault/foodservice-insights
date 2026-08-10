@@ -3,6 +3,13 @@
 The SvelteKit app: frontend and backend together. For how it fits into the wider system, see
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
 
+## Errors
+
+**What a route passes to `error()` is for callers reading the JSON body, not for the screen.** Page
+copy comes from the status alone, in `src/lib/errors/messages.ts` — so a new message is written
+there, not at the call site. The cause of an unexpected failure never leaves the server: `handleError`
+in `hooks.server.ts` logs it and hands the client a generic message.
+
 ## Auth
 
 The frontend uses Supabase Auth to log in, sign up, and log out. Supabase updates its own
