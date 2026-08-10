@@ -1,5 +1,6 @@
 // Emits `dist/`, which is what the container runs. `tsconfig.json` is still the config for
-// typechecking, and covers the test files this one excludes.
+// typechecking, and covers the test files and harness this one excludes — `src/testing/` holds a
+// stand-in for the child process.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -10,5 +11,5 @@
     "declarationMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/testing/**"]
 }

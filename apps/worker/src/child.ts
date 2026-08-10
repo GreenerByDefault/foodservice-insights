@@ -1,0 +1,165 @@
+/** Spawning the analysis child, and watching how it dies. Everything the parent and child agree on
+ * lives in [`contract/`](./contract/); what is here is only what the operating system makes true.
+ */
+
+import { type ChildProcess, spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import { runPath } from './contract/layout.ts';
+import { INVOCATION } from './contract/names.ts';
+
+/** What to run — and nothing else, because `spawnChild` appends the run directory and owns `cwd`,
+ * `env`, `stdio`, and `detached` itself. That narrowness is what lets a test swap in a scripted
+ * stand-in for the child without widening anything else across the seam.
+ */
+export type ChildCommand = {
+  executable: string;
+  leadingArguments: readonly string[];
+};
+
+export type ChildOutcome =
+  | { kind: 'exited'; exitCode: number; stderrTail: string }
+  | { kind: 'signaled'; signal: NodeJS.Signals; stderrTail: string }
+  | { kind: 'spawn-failed'; error: Error };
+
+export type RunningChild = {
+  readonly exited: Promise<ChildOutcome>;
+
+  /** Terminate the child and everything it spawned. Safe to call more than once, and safe to call
+   * on a child that has already exited. */
+  kill(): void;
+};
+
+export type SpawnChildOptions = {
+  /** How long the child has to exit on SIGTERM before `kill()` escalates to SIGKILL. */
+  killGraceMs: number;
+
+  /** Where the allowlist below reads from. Defaults to this process's own environment. */
+  environment?: NodeJS.ProcessEnv;
+
+  stderrTailBytes?: number;
+};
+
+/** Enough of a Python traceback to diagnose a crash, and little enough to put in a database column.
+ * On a crash this is the only diagnostic the child leaves behind. */
+const STDERR_TAIL_BYTES = 8_000;
+
+/** How long to keep reading stderr after the child has exited.
+ *
+ * Only the child's own exit is waited on, never the closing of its stderr pipe: a leaked grandchild
+ * holds that pipe open indefinitely, and a parent that waited for it would never learn the child had
+ * finished. This window is what stops the last few bytes of a traceback being lost to that race.
+ */
+const STDERR_FLUSH_MS = 250;
+
+/** Everything the child may see that is not a secret. An allowlist rather than a denylist, because
+ * the parent's `DB_CONNECTION_STRING` and S3 credentials must never cross this seam and a denylist
+ * silently passes through whatever variable someone adds next. Holding no credentials for either
+ * store is what makes ARCHITECTURE.md's "shrinks the security blast radius" true rather than
+ * aspirational.
+ */
+const INHERITED_ENVIRONMENT_VARIABLES = ['PATH', 'HOME', 'LANG', 'TZ'] as const;
+
+export function spawnChild(
+  command: ChildCommand,
+  runDirectory: string,
+  options: SpawnChildOptions,
+): RunningChild {
+  const child = spawn(command.executable, [...command.leadingArguments, runDirectory], {
+    cwd: runPath(runDirectory, 'workDirectory'),
+    env: childEnvironment(options.environment ?? process.env),
+    // Nothing crosses the seam over a pipe, so stdout has no reader; stderr is kept for diagnostics.
+    stdio: ['ignore', 'ignore', 'pipe'],
+    // Makes the child a process group leader, which is what `signalGroup` needs.
+    detached: true,
+  });
+
+  const stderr = boundedTail(options.stderrTailBytes ?? STDERR_TAIL_BYTES);
+  child.stderr?.on('data', (chunk: Buffer) => {
+    stderr.push(chunk);
+  });
+
+  const stderrEnded = new Promise<void>((resolve) => {
+    if (child.stderr === null) {
+      resolve();
+      return;
+    }
+    child.stderr.on('end', () => resolve());
+    child.stderr.on('error', () => resolve());
+  });
+
+  const exited = new Promise<ChildOutcome>((resolve) => {
+    // Reached when the program does not exist or cannot be executed; a child that started and then
+    // failed reports that through its exit status instead.
+    child.once('error', (error) => resolve({ kind: 'spawn-failed', error }));
+
+    child.once('exit', async (exitCode, signal) => {
+      await Promise.race([stderrEnded, delay(STDERR_FLUSH_MS)]);
+      resolve(
+        signal === null
+          ? { kind: 'exited', exitCode: exitCode ?? 0, stderrTail: stderr.text() }
+          : { kind: 'signaled', signal, stderrTail: stderr.text() },
+      );
+    });
+  });
+
+  let killing = false;
+  return {
+    exited,
+    kill: () => {
+      if (killing) return;
+      killing = true;
+      signalGroup(child, 'SIGTERM');
+      const escalation = setTimeout(() => signalGroup(child, 'SIGKILL'), options.killGraceMs);
+      void exited.finally(() => {
+        clearTimeout(escalation);
+      });
+    },
+  };
+}
+
+/** The negative pid is the entire point. The analysis library spawns subprocesses of its own, and
+ * signalling the pid alone leaves them running — a leaked Python process goes on burning API quota
+ * long after the attempt it belonged to has been marked failed.
+ */
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    // ESRCH: nothing in the group is left to signal, which is the state we were aiming for anyway.
+  }
+}
+
+function childEnvironment(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const allowed = [...INHERITED_ENVIRONMENT_VARIABLES, ...INVOCATION.secretEnvironmentVariables];
+  return Object.fromEntries(
+    allowed.flatMap((name) => {
+      const value = parent[name];
+      return value === undefined ? [] : [[name, value] as const];
+    }),
+  );
+}
+
+type BoundedTail = { push(chunk: Buffer): void; text(): string };
+
+/** Keeps roughly the last `limit` bytes written to it, so a child that logs for twenty minutes
+ * costs the parent a fixed amount of memory. */
+function boundedTail(limit: number): BoundedTail {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  return {
+    push(chunk) {
+      chunks.push(chunk);
+      size += chunk.byteLength;
+      // Drop leading chunks while the ones behind them still cover the limit on their own.
+      for (let leading = chunks[0]; leading !== undefined; leading = chunks[0]) {
+        if (chunks.length <= 1 || size - leading.byteLength < limit) break;
+        chunks.shift();
+        size -= leading.byteLength;
+      }
+    },
+    text() {
+      return Buffer.concat(chunks).subarray(-limit).toString('utf8');
+    },
+  };
+}
