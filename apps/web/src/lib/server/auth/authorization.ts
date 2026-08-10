@@ -1,14 +1,14 @@
 /** What a user ID is allowed to do. */
 
-import type { DatabaseExecutor, OrganizationId, OrganizationRole, UserId } from '@gbd/db';
-import type { AuthContext, Membership } from './types.ts';
+import type { DatabaseExecutor, OrganizationId, UserId } from '@gbd/db';
+import type { AuthContext, OrganizationAccess } from './types.ts';
 
-/** The user and every organization they belong to, or null if there is no such user. */
+/** The user and every organization they may act in, or null if there is no such user. */
 export async function loadAuthorization(
   db: DatabaseExecutor,
   userId: UserId,
 ): Promise<AuthContext | null> {
-  // Two reads rather than one join, because a user with no memberships still has an identity,
+  // Two reads rather than one join, because a user with no organizations still has an identity,
   // and a left join would make every caller sort that out from nullable columns. Both are
   // indexed: this one on `app_user`'s primary key, the membership query below on
   // `organization_member`'s, whose leading column is `user_id`.
@@ -30,7 +30,24 @@ export async function loadAuthorization(
     );
   }
 
-  const memberships = await db
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      isSuperadmin: user.isSuperadmin,
+    },
+    organizations: user.isSuperadmin
+      ? await everyOrganization(db)
+      : await memberOrganizations(db, userId),
+  };
+}
+
+async function memberOrganizations(
+  db: DatabaseExecutor,
+  userId: UserId,
+): Promise<OrganizationAccess[]> {
+  return await db
     .selectFrom('organizationMember')
     .innerJoin('organization', 'organization.id', 'organizationMember.organizationId')
     .select([
@@ -42,30 +59,25 @@ export async function loadAuthorization(
     // By name, not by when they joined, so the organization switcher has a stable order.
     .orderBy('organization.name')
     .execute();
-
-  return {
-    user: {
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      isSuperadmin: user.isSuperadmin,
-    },
-    memberships,
-  };
 }
 
-/** What `auth` may do in `organizationId`, or null if it may do nothing there. */
-export function effectiveRole(
-  auth: AuthContext,
-  organizationId: OrganizationId,
-): OrganizationRole | null {
-  if (auth.user.isSuperadmin) return 'admin';
-  return findMembership(auth, organizationId)?.role ?? null;
+async function everyOrganization(db: DatabaseExecutor): Promise<OrganizationAccess[]> {
+  const organizations = await db
+    .selectFrom('organization')
+    .select(['id', 'name'])
+    .orderBy('name')
+    .execute();
+
+  return organizations.map(({ id, name }) => ({
+    organizationId: id,
+    organizationName: name,
+    role: 'admin',
+  }));
 }
 
-export function findMembership(
+export function findOrganizationAccess(
   auth: AuthContext,
   organizationId: OrganizationId,
-): Membership | undefined {
-  return auth.memberships.find((membership) => membership.organizationId === organizationId);
+): OrganizationAccess | undefined {
+  return auth.organizations.find((access) => access.organizationId === organizationId);
 }

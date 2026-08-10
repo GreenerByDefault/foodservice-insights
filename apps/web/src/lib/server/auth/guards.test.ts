@@ -2,7 +2,7 @@ import type { OrganizationId } from '@gbd/db';
 import { isHttpError } from '@sveltejs/kit';
 import { describe, expect, test } from 'vitest';
 import { anAuthContext } from '$lib/server/tests/fixtures';
-import { requireAuth, requireMembership, requireOrganizationAdmin } from './guards.ts';
+import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
 import type { AuthContext } from './types.ts';
 
 const ORGANIZATION_ID = crypto.randomUUID() as OrganizationId;
@@ -18,9 +18,9 @@ function statusOf(call: () => unknown): { status: number; code?: string } {
   throw new Error('Expected the guard to throw, but it returned.');
 }
 
-function memberOf(role: 'member' | 'admin'): AuthContext {
+function withRoleIn(role: 'member' | 'admin'): AuthContext {
   return anAuthContext({
-    memberships: [{ organizationId: ORGANIZATION_ID, organizationName: 'Acme Foods', role }],
+    organizations: [{ organizationId: ORGANIZATION_ID, organizationName: 'Acme Foods', role }],
   });
 }
 
@@ -39,13 +39,17 @@ describe('requireAuth', () => {
   });
 });
 
-describe('requireMembership', () => {
-  test('returns the role', () => {
-    expect(requireMembership(memberOf('member'), ORGANIZATION_ID)).toBe('member');
+describe('requireOrganizationAccess', () => {
+  test('returns the access', () => {
+    expect(requireOrganizationAccess(withRoleIn('member'), ORGANIZATION_ID)).toEqual({
+      organizationId: ORGANIZATION_ID,
+      organizationName: 'Acme Foods',
+      role: 'member',
+    });
   });
 
-  test('404s a non-member rather than 403ing them', () => {
-    expect(statusOf(() => requireMembership(anAuthContext(), ORGANIZATION_ID))).toEqual({
+  test('404s someone with no access rather than 403ing them', () => {
+    expect(statusOf(() => requireOrganizationAccess(anAuthContext(), ORGANIZATION_ID))).toEqual({
       status: 404,
       code: 'not_found',
     });
@@ -54,20 +58,13 @@ describe('requireMembership', () => {
 
 describe('requireOrganizationAdmin', () => {
   test('lets an admin through', () => {
-    expect(() => requireOrganizationAdmin(memberOf('admin'), ORGANIZATION_ID)).not.toThrow();
-  });
-
-  test('lets a superadmin through without a membership', () => {
-    const superadmin = anAuthContext({ user: { isSuperadmin: true } });
-
-    expect(() => requireOrganizationAdmin(superadmin, ORGANIZATION_ID)).not.toThrow();
+    expect(() => requireOrganizationAdmin(withRoleIn('admin'), ORGANIZATION_ID)).not.toThrow();
   });
 
   test('403s a plain member', () => {
-    expect(statusOf(() => requireOrganizationAdmin(memberOf('member'), ORGANIZATION_ID))).toEqual({
-      status: 403,
-      code: 'forbidden',
-    });
+    expect(statusOf(() => requireOrganizationAdmin(withRoleIn('member'), ORGANIZATION_ID))).toEqual(
+      { status: 403, code: 'forbidden' },
+    );
   });
 
   test('404s an outsider', () => {

@@ -1,20 +1,50 @@
 <script lang="ts">
+import { page } from '$app/state';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();
 
-// Phase one has exactly one organization. When a user can belong to several, this becomes the
-// switcher REQUIREMENTS.md describes, reading the active one off the request rather than the list.
-const organizationName = $derived(data.auth.memberships[0]?.organizationName ?? 'No organization');
+// Published by the layout under `orgs/[organizationId]`, which sits *below* this one. `page.data`
+// is every load's data merged together, so the shell can read what a descendant resolved. Absent
+// on the routes that act on no organization, such as `/account`.
+const currentOrganization = $derived(page.data.organization);
 </script>
 
-<div class="mx-auto flex min-h-svh max-w-2xl flex-col gap-4 p-8">
+<div class="mx-auto flex min-h-svh max-w-4xl flex-col gap-6 p-8">
   <header class="flex items-baseline justify-between gap-4 text-sm">
-    <span class="font-medium">{organizationName}</span>
-    <span class="text-muted-foreground">{data.auth.user.email}</span>
+    <details class="relative">
+      <summary class="cursor-pointer font-medium">
+        {currentOrganization?.name ?? 'Choose an organization'}
+      </summary>
+
+      <ul class="absolute left-0 z-10 mt-2 min-w-56 rounded-md border bg-background p-1 shadow-md">
+        {#each data.auth.organizations as organization (organization.organizationId)}
+          <li>
+            <a
+              class="block rounded-sm px-2 py-1 hover:bg-muted"
+              href="/orgs/{organization.organizationId}"
+            >
+              {organization.organizationName}
+            </a>
+          </li>
+        {/each}
+        <li>
+          <a class="block rounded-sm px-2 py-1 hover:bg-muted" href="/orgs/new">
+            New organization
+          </a>
+        </li>
+      </ul>
+    </details>
+
+    <!-- Signing out is a browser-side Supabase call, so it will arrives as a component with the rest of
+         auth, rather than as a link to a route. -->
+
+    <a class="text-muted-foreground hover:text-foreground" href="/account">
+      {data.auth.user.email}
+    </a>
   </header>
 
-  <main class="flex flex-1 flex-col items-start justify-center gap-4">
+  <main class="flex flex-1 flex-col items-start gap-4">
     {@render children()}
   </main>
 </div>

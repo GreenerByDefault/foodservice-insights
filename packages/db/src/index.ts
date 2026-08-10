@@ -21,6 +21,7 @@ export {
   newResultFileId,
   type OrganizationId,
   type OrganizationInviteId,
+  type OrganizationInviteStatus,
   type OrganizationRole,
   type RejectedUploadId,
   type RejectedUploadReason,
