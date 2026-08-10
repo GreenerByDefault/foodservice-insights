@@ -2,7 +2,8 @@
 paths:
   - "apps/**"
   - "packages/**"
-  - "tests/e2e/**"
+  - "tests/**"
+  - "contract/**"
   - "package.json"
   - "pnpm-workspace.yaml"
   - "turbo.json"

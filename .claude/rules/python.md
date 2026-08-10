@@ -2,6 +2,7 @@
 paths:
   - "python/**"
   - "scripts/**/*.py"
+  - "contract/**"
   - "pyproject.toml"
   - "uv.lock"
   - "Justfile"

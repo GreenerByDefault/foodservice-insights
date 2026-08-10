@@ -17,7 +17,8 @@ they load when you touch that stack's files:
 | Python — `python/` | [`.claude/rules/python.md`](.claude/rules/python.md) | [`python/README.md`](python/README.md) |
 
 If you are about to change one of those stacks and its rule file has not appeared in your
-context, read it first.
+context, read it first. Writing or changing a doc is covered by the `writing-docs` skill —
+where a doc belongs, how long it should be, and what must never go in one.
 
 For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how the system
 fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — both record *rejected*
@@ -65,11 +66,29 @@ if something is failing or you skipped a step, say so.
 - It's often useful to extract pure functions from impure functions. Pure functions are
   much easier to test, and they are easier to reason with.
 
+### Comments
+
+Prefer self-documenting code: a good name beats a comment explaining a bad one. What survives
+that is worth a great deal, because it is what the code cannot say — a performance
+consideration, a security invariant, a subtle edge case, a constraint arriving from outside the
+file. Write those, and give them the room they need.
+[`packages/storage/src/keys.ts`](packages/storage/src/keys.ts) opens with 21 lines and earns
+every one; a diagram or a numbered list of invariants is a fine way to spend them.
+
+The test is whether a reader could recover the fact from the code, the types, or the test name.
+If not, write it. If so, the comment is a second copy of something that will drift.
+
+- **Put it on the thing it explains** — the line, or the file header when it holds across the
+  file. Not in a doc comment one level up.
+- **Do not narrate the design of a function whose signature already shows it.** The shape to
+  avoid is a summary line, a blank `*`, then a paragraph of rationale. Keep the summary; drop
+  the paragraph.
+- **Cite a doc as the source of a fact, not as a substitute for one.**
+- **Do not restate the test name above the test**, and skip prose that only reassures the
+  reader.
+
 ### Style
 
-- With comments, prefer self-documenting code. However, comments can be very helpful,
-  especially to give context that cannot be intuited, such as performance or safety
-  considerations, or subtle edge cases.
 - Prefer the standard library. When that is not possible, consider using third-party
   libraries, but usually prefer first-party code if it's simple to write because of supply
   chain security being such a pain.
@@ -80,44 +99,6 @@ if something is failing or you skipped a step, say so.
   adding new functionality, you should generally add tests.
 - We care about our tests being fast, concurrent, and maintainable. Do not exhaustively
   test things already handled by the standard library and third-party dependencies.
-
-## Documentation
-
-Our worry is not too few docs; it is docs that quietly stop being true. These rules exist to
-keep every document either accurate or obviously dead.
-
-- **A doc lives at the highest point in the tree that contains all the code it describes.**
-  Something spanning more than one component goes in [`ARCHITECTURE.md`](ARCHITECTURE.md) —
-  a colocated doc cannot own a seam between two components. Something about one package
-  goes in that package. Product intent, owned by no code, goes in a root doc like
-  [`REQUIREMENTS.md`](REQUIREMENTS.md). Once there is more than one such doc, that's the
-  signal to introduce a `docs/` folder — not before.
-- **But a decision that one file enacts is documented on that file**, in a comment, even when
-  its consequences reach other components. Ask which single file someone would have to edit to
-  reverse the decision, and put the reasoning there; only split it out when no one file owns
-  it. [`ARCHITECTURE.md`](ARCHITECTURE.md) then gets a few lines at most — the consequences
-  other components must know, and where the reasoning lives.
-- **A README covers what a developer runs, not how the build is wired.** Everyone reads it,
-  so keep config and build mechanics out of it unless an everyday command actually changed.
-- **Say it once, and briefly.** State the rule or the non-obvious constraint and stop. Do not
-  walk through the mechanism, the failure it prevented, or what CI does about it — those are
-  the sentences that rot first, and length in a doc everyone reads is a cost paid repeatedly.
-- **Never restate in prose what the code already states.** No schemas, file trees, or config
-  values. Name the file that holds the fact instead. A number copied into a doc is a number
-  that will disagree with the code within a month.
-- **Prefer documentation that executes.** A schema invariant belongs in a test that asserts
-  the database rejects the violation. A cross-language contract belongs in golden fixtures
-  that both sides parse. Those cannot rot silently; prose can.
-- **Docs carry intent; code carries mechanism.** If a refactor that changes no behaviour
-  would force you to edit a doc, that doc is describing mechanism — fix the doc.
-- **Record rejected alternatives as one-liners** (`*Rejected: X because Y.*`), wherever the
-  decision itself is documented — a code comment counts. But only do this if there's a good
-  chance someone will want to relitigate the decision.
-- **Mark anything unresolved `**Open:**`** so it is greppable, and leave it where it belongs
-  rather than in a separate list of open questions that will drift.
-- **One source of truth per fact, named explicitly.** When two files could both plausibly answer a
-  question, say in one of them which one wins.
-- **A doc written before its code is a spec, and says so** in a status block naming what replaces it.
 
 ## PRs and sizing changes
 
