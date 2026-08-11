@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "test": "pnpm run test:unit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
