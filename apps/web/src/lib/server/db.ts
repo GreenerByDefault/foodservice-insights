@@ -1,4 +1,4 @@
-import { type Database, initializeDatabase, shutdownDatabase } from '@gbd/db';
+import { type Database, initializeDatabase, isDatabaseError, shutdownDatabase } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
@@ -36,7 +36,12 @@ interface DbCallOptions {
   body?: App.Error;
 }
 
-/** Run a database call, turning a failure into a logged, generic HTTP error. */
+/** Run a database call, turning a database failure into a logged, generic HTTP error.
+ *
+ * Only `isDatabaseError` failures are handled; any other exception is rethrown. `fn` can fail
+ * for reasons that have nothing to do with Postgres, and reporting those as a database outage
+ * would hide what actually failed.
+ */
 export async function withDbErrorHandling<T>(
   fn: () => Promise<T>,
   options: DbCallOptions,
@@ -44,6 +49,7 @@ export async function withDbErrorHandling<T>(
   try {
     return await fn();
   } catch (cause) {
+    if (!isDatabaseError(cause)) throw cause;
     console.error(`Unexpected failure to ${options.action}`, { ...options.context, error: cause });
     error(options.status ?? 500, options.body ?? { message: UNEXPECTED_ERROR_MESSAGE });
   }

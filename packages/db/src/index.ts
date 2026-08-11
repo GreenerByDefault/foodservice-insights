@@ -1,4 +1,4 @@
-export { initializeDatabase, shutdownDatabase } from './client.ts';
+export { initializeDatabase, isDatabaseError, shutdownDatabase } from './client.ts';
 export { migrateToLatest } from './migrate.ts';
 export {
   POSTGRES_CODE_CHECK_VIOLATION,
