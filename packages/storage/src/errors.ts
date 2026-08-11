@@ -7,10 +7,11 @@
  * `NotFound` with no code in the body. Checking for either name alone silently misses the other
  * operation. Any further read we add needs its name checked against this set.
  *
- * `NoSuchBucket` is deliberately absent, but that is not enough to make a missing bucket loud:
- * Supabase Storage answers a read against a bucket that does not exist with the *same* 404 and the
- * same name as a key that does not exist, so a misconfigured bucket reads as an empty one no
- * matter what this set says. Only checking the bucket itself can tell them apart.
+ * **Bug:** a read against a bucket that does not exist lands here as `undefined` too, so a
+ * misconfigured `S3_BUCKET` reads as an empty store instead of failing. Leaving `NoSuchBucket` out
+ * of this set is not enough to prevent it — Supabase Storage answers a missing bucket with the same
+ * 404, name and code as a missing key, so nothing here can tell the two apart. Only a check against
+ * the bucket itself can: https://github.com/GreenerByDefault/foodservice-insights/issues/40.
  */
 const NOT_FOUND_ERROR_NAMES: ReadonlySet<string> = new Set(['NoSuchKey', 'NotFound']);
 
@@ -58,9 +59,6 @@ export function isBucketAlreadyExistsError(error: unknown): boolean {
  * Wrap the request and nothing else. What this turns into a `BlobStoreError` is a request failing,
  * so anything else inside the callback — building the arguments, handling the result — would be
  * reported as an outage when it is a bug.
- *
- * `operation` is the S3 command name, so a log line says which request failed without the reader
- * having to unwrap `cause`.
  */
 export async function blobStoreRequest<T>(operation: string, send: () => Promise<T>): Promise<T> {
   try {
@@ -70,8 +68,10 @@ export async function blobStoreRequest<T>(operation: string, send: () => Promise
   }
 }
 
-/** The same relabelling, for a caller that first has to branch on the raw error — see
- * `undefinedIfMissing`, which recognises a missing object before anything is relabelled.
+/** Build a `BlobStoreError` from a raw SDK error.
+ *
+ * Use this instead of `blobStoreRequest` when the caller needs to branch on the raw error before
+ * it gets relabelled — for example, to treat "not found" as a result rather than a failure.
  */
 export function asBlobStoreError(operation: string, cause: unknown): BlobStoreError {
   return new BlobStoreError(`${operation} failed`, { cause });

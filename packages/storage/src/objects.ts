@@ -75,8 +75,6 @@ export async function putObject(
 
 /** Read a whole object into memory, or `undefined` if there is nothing at `key`. */
 export async function getObject(store: BlobStore, key: string): Promise<Uint8Array | undefined> {
-  // Reading the body is part of the same request, not a step after it: `GetObject` answers with a
-  // stream, so a connection lost halfway through arrives here rather than from `send`.
   return await undefinedIfMissing('GetObject', async () => {
     const response = await store.client.send(
       new GetObjectCommand({ Bucket: store.bucket, Key: key }),
