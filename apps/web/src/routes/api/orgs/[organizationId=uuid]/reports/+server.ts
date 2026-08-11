@@ -169,7 +169,7 @@ async function recordRejection(
         reportName: raw.name,
         reportSiteName: raw.siteName,
         reportCountsBasis: raw.countsBasis,
-        reportMonthlyCounts: asJsonOrNull(raw.monthlyCounts),
+        reportMonthlyCounts: raw.monthlyCounts,
         reportUnitSystem: raw.unitSystem,
         inputFileStorageKey: stored?.storageKey ?? null,
         inputFileByteSize: upload.fileDescription?.byteSize ?? null,
@@ -186,18 +186,5 @@ async function recordRejection(
       reason: rejection.reason,
       cause,
     });
-  }
-}
-
-/** `report_monthly_counts` is `jsonb`, so text that is not JSON cannot be stored in it at all.
- * Instead, store the raw value in `rejection_detail`.
- */
-function asJsonOrNull(text: string | null): string | null {
-  if (text === null) return null;
-  try {
-    JSON.parse(text);
-    return text;
-  } catch {
-    return null;
   }
 }

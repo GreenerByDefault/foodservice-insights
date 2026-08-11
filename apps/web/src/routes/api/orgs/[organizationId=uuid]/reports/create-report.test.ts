@@ -210,7 +210,7 @@ describe('a rejected upload', () => {
       reportSiteName: 'Main dining hall',
       reportCountsBasis: 'guesses',
       reportUnitSystem: 'lb',
-      reportMonthlyCounts: { '2026-01': 120, '2026-02': 135 },
+      reportMonthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
     });
   });
 
@@ -224,10 +224,10 @@ describe('a rejected upload', () => {
     });
   });
 
-  test('drops monthly counts that are not JSON, since the column is jsonb', async () => {
+  test('keeps monthly counts that are not JSON', async () => {
     const { recorded } = await reject({ monthlyCounts: '{oops' });
 
-    expect(recorded).toMatchObject({ reportMonthlyCounts: null });
+    expect(recorded).toMatchObject({ reportMonthlyCounts: '{oops' });
     expect(recorded?.rejectionDetail).toContain('not valid JSON');
   });
 
