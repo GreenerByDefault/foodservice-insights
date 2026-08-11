@@ -59,7 +59,6 @@ async function pendingAttempt(
   return { attemptId: attempt.id, reportIds: [report.id] };
 }
 
-/** An attempt this worker has already claimed. */
 async function claimedAttempt(
   transaction: Transaction,
   workerId: string,
@@ -195,8 +194,7 @@ describe('claiming', () => {
     expect(second).toBeUndefined();
   });
 
-  // `SKIP LOCKED` is invisible from a single transaction, so these two go through the concurrency
-  // harness. They are the tests `packages/db` used to run against its own copy of this query.
+  // These two are the tests `packages/db` used to run against its own copy of this query.
   describe('under concurrency', () => {
     /** `count` reports in one organization, each with a pending attempt waiting to be claimed. */
     async function withPendingAttempts(
@@ -284,7 +282,6 @@ describe('loadAttemptInputs', () => {
         storageKey: loaded.inputFile.storageKey,
         originalFilename: loaded.inputFile.originalFilename,
         byteSize: loaded.inputFile.byteSize,
-        // The column is `bytea`; the manifest carries hex.
         checksumSha256: (loaded.inputFile.checksumSha256 as Buffer).toString('hex'),
       },
       report: {
@@ -412,7 +409,6 @@ describe('finishing', () => {
       aiModel: 'gemini-3-pro',
       aiInputTokens: 41_000,
       aiOutputTokens: 2_500,
-      // A string end to end: `numeric(10,4)` does not survive a round trip through float64.
       aiCostUsd: '12.3400',
       aiMetadata: { promptVersion: 7 },
       resultMetadata: { rows: 1_234 },
@@ -474,7 +470,6 @@ describe('finishing', () => {
   });
 
   describe('losing the race', () => {
-    /** Claim an attempt, let another writer finish it, then try to finish it ourselves. */
     async function afterBeingReaped(
       finish: (
         transaction: Transaction,

@@ -6,8 +6,7 @@
  *
  * 1. **A transition to a terminal status is one `UPDATE`.** Checks cannot be deferred, so
  *    `status`, `finished_at`, `failure_reason` and the `ai_*` columns are set together or the
- *    row is rejected part-way. `finishTerminal` is the only statement that writes them, so
- *    there is one place for that to stay true.
+ *    row is rejected part-way.
  * 2. **Terminal updates are guarded** by `status = 'processing' AND worker_id = $ours`. Losing
  *    the reaping race is then a zero-row update — a `false` return — rather than the
  *    `analysis_attempt_terminal_is_final` exception, which is the database's backstop for a
@@ -44,11 +43,8 @@ export type ClaimOptions = {
   candidateReports?: readonly ReportId[];
 };
 
-/** Take the oldest pending attempt, or `undefined` if there is nothing to take.
- *
- * The statement is the one in [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#worker-queue), and
- * `SKIP LOCKED` is the whole of the concurrency control: a second worker steps over the row this
- * one holds rather than queueing behind it, so a busy queue never blocks a claim.
+/** Take the oldest pending attempt, or `undefined` if there is nothing to take. The statement is
+ * the one in [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#worker-queue).
  */
 export async function claimNextAttempt(
   db: DatabaseExecutor,
@@ -77,12 +73,14 @@ function nextPendingAttempt(
   const pending = db.selectFrom('analysisAttempt').select('id').where('status', '=', 'pending');
 
   return (
-    candidateReports === undefined ? pending : pending.where('reportId', 'in', candidateReports)
-  )
-    .orderBy('createdAt')
-    .forUpdate()
-    .skipLocked()
-    .limit(1);
+    (candidateReports === undefined ? pending : pending.where('reportId', 'in', candidateReports))
+      .orderBy('createdAt')
+      .forUpdate()
+      // The whole of the concurrency control: a second worker steps over the row this one holds
+      // rather than queueing behind it, so a busy queue never blocks a claim.
+      .skipLocked()
+      .limit(1)
+  );
 }
 
 /** Everything spawning a child for an attempt needs: the manifest's contents, and the ids that
@@ -196,12 +194,7 @@ export type ResultFileRecord = {
   checksumSha256: Buffer;
 };
 
-/** Record a successful attempt and the files it produced.
- *
- * Returns whether we still owned the attempt. A `false` here leaves the files uploaded but
- * unrecorded, which is the same orphaning any failed transaction produces here and is accepted
- * for the same reason.
- */
+/** Record a successful attempt and the files it produced. Returns whether we still owned it. */
 export async function finishSucceeded(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
@@ -218,8 +211,8 @@ export async function finishSucceeded(
       aiModel: ai.model,
       aiInputTokens: ai.inputTokens,
       aiOutputTokens: ai.outputTokens,
-      // Stays the string the child sent all the way to the column. `ai_cost_usd` is
-      // `numeric(10,4)` and float64 cannot round-trip it; `contract/messages.ts` says the same.
+      // Stays the string the child sent, all the way to the column: `ai_cost_usd` is
+      // `numeric(10,4)`, which float64 cannot round-trip.
       aiCostUsd: ai.costUsd,
       aiMetadata: ai.metadata,
       resultMetadata,
