@@ -1,20 +1,10 @@
 import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
-import { DatabaseError, Pool } from 'pg';
-import { POSTGRES_CODE_IDLE_SESSION_TIMEOUT } from './postgres-codes.ts';
+import { Pool } from 'pg';
+import { isTransientDatabaseError } from './errors.ts';
 import type { Database } from './schema.ts';
 
 /** How long we give the pool to drain before giving up on a clean shutdown. */
 const SHUTDOWN_TIMEOUT_MS = 5_000;
-
-/** Whether a thrown value is a genuine Postgres failure — a constraint violation, a lock
- * timeout, a dropped connection — rather than a bug in the code that called the database.
- *
- * Kysely rethrows the driver's error unchanged, so a Postgres failure arrives as `pg`'s own
- * `DatabaseError`.
- */
-export function isDatabaseError(error: unknown): error is DatabaseError {
-  return error instanceof DatabaseError;
-}
 
 /** Build a database handle over its own connection pool.
  *
@@ -53,11 +43,12 @@ export function initializeDatabase(connectionString: string): Kysely<Database> {
       '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=60000 -c idle_session_timeout=600000',
   });
 
-  // Without these two handlers, an unhandled pool error takes down the whole process.
-  // The following disconnects are expected rather than exceptional.
+  // Without these two handlers, an unhandled pool error takes down the whole process. A dropped
+  // connection is expected rather than exceptional here, because the timeouts above cause them on
+  // purpose.
   pool.on('error', (error) => {
-    if (error instanceof DatabaseError && error.code === POSTGRES_CODE_IDLE_SESSION_TIMEOUT) {
-      console.warn('Database connection closed by idle_session_timeout');
+    if (isTransientDatabaseError(error)) {
+      console.warn('Database connection dropped:', error.message);
       return;
     }
     console.error('Unexpected database error:', error);
@@ -65,11 +56,8 @@ export function initializeDatabase(connectionString: string): Kysely<Database> {
 
   pool.on('connect', (client) => {
     client.on('error', (error) => {
-      if (
-        error.message?.includes('Connection terminated unexpectedly') ||
-        error.message?.includes('terminating connection due to idle-session timeout')
-      ) {
-        console.warn('Database client disconnected, usually by idle_session_timeout');
+      if (isTransientDatabaseError(error)) {
+        console.warn('Database client disconnected:', error.message);
         return;
       }
       console.error('Unexpected database client error:', error);

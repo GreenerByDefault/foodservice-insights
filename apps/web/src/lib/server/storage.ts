@@ -40,14 +40,10 @@ export async function closeBlobStore(): Promise<void> {
 }
 
 interface BlobStoreCallOptions {
-  /** What we were trying to do, for the log line: "Unexpected failure to <action>". */
+  /** What we were trying to do, for the log line: "Could not reach the blob store to <action>". */
   action: string;
   /** Structured context — storage keys, entity IDs — logged next to the error. Never sent to the client. */
   context?: Record<string, unknown>;
-  /** HTTP status returned to the caller. Defaults to 503. */
-  status?: number;
-  /** Body sent to the caller. Defaults to a message that reveals nothing about the failure. */
-  body?: App.Error;
 }
 
 /** Run a blob store call, turning a blob store failure into a logged, generic HTTP error.
@@ -56,10 +52,8 @@ interface BlobStoreCallOptions {
  * `withDbErrorHandling` rethrows: `fn` can fail for reasons that have nothing to do with the blob
  * store, and reporting those as an outage would hide what actually failed.
  *
- * Defaults to 503 where `withDbErrorHandling` defaults to 500. A database error is as often a
- * constraint we violated — our own bug, which retrying will not fix — as it is an outage. A blob
- * store error is not: every one of them means the request did not reach the store or came back
- * refused, and 503 is what tells the user that waiting is worth it.
+ * Always a 503, where `withDbErrorHandling` has to choose: every `BlobStoreError` means the request
+ * did not reach the store or came back refused, so waiting is always worth it.
  */
 export async function withBlobStoreErrorHandling<T>(
   fn: () => Promise<T>,
@@ -69,7 +63,10 @@ export async function withBlobStoreErrorHandling<T>(
     return await fn();
   } catch (cause) {
     if (!isBlobStoreError(cause)) throw cause;
-    console.error(`Unexpected failure to ${options.action}`, { ...options.context, error: cause });
-    error(options.status ?? 503, options.body ?? SERVICE_UNAVAILABLE_ERROR);
+    console.error(`Could not reach the blob store to ${options.action}`, {
+      ...options.context,
+      error: cause,
+    });
+    error(503, SERVICE_UNAVAILABLE_ERROR);
   }
 }

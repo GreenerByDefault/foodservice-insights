@@ -1,5 +1,5 @@
 import type { UserId } from '@gbd/db';
-import { aDatabaseError } from '@gbd/db/testing';
+import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
@@ -85,9 +85,7 @@ describe('handle', () => {
   });
 
   test('503s an unreachable database', async () => {
-    vi.mocked(authorization.loadAuthorization).mockRejectedValue(
-      aDatabaseError('connection refused'),
-    );
+    vi.mocked(authorization.loadAuthorization).mockRejectedValue(anUnreachableDatabaseError());
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -97,6 +95,24 @@ describe('handle', () => {
       if (!isHttpError(thrown)) throw thrown;
       expect(thrown.status).toBe(503);
       expect(thrown.body.code).toBe('service_unavailable');
+    }
+    logged.mockRestore();
+  });
+
+  // Authorization is a plain read, so Postgres refusing it is our bug rather than something the
+  // user can wait out.
+  test('500s a statement Postgres refused, rather than reporting an outage', async () => {
+    vi.mocked(authorization.loadAuthorization).mockRejectedValue(
+      aDatabaseError('column "emial" does not exist', '42703'),
+    );
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await handle({ event: anEvent(), resolve: respond });
+      expect.unreachable('handle should have thrown');
+    } catch (thrown) {
+      if (!isHttpError(thrown)) throw thrown;
+      expect(thrown.status).toBe(500);
     }
     logged.mockRestore();
   });

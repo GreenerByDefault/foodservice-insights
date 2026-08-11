@@ -37,7 +37,7 @@ test('withBlobStoreErrorHandling returns the value on success', async () => {
   ).resolves.toBe('ok');
 });
 
-test('withBlobStoreErrorHandling logs context and 503s by default on a blob store failure', async () => {
+test('withBlobStoreErrorHandling logs context and 503s a blob store failure', async () => {
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   try {
@@ -52,26 +52,8 @@ test('withBlobStoreErrorHandling logs context and 503s by default on a blob stor
 
     expect(logged).toHaveBeenCalledTimes(1);
     const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
-    expect(message).toBe('Unexpected failure to store a widget');
+    expect(message).toBe('Could not reach the blob store to store a widget');
     expect(meta).toMatchObject({ widgetId: 'abc' });
-  } finally {
-    logged.mockRestore();
-  }
-});
-
-test('withBlobStoreErrorHandling supports an overridden status and body', async () => {
-  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-  try {
-    const thrown = await withBlobStoreErrorHandling(blobStoreOutage, {
-      action: 'read a widget',
-      status: 500,
-      body: { message: 'Something went wrong' },
-    }).catch((error: unknown) => error);
-
-    if (!isHttpError(thrown)) throw thrown;
-    expect(thrown.status).toBe(500);
-    expect(thrown.body).toEqual({ message: 'Something went wrong' });
   } finally {
     logged.mockRestore();
   }
