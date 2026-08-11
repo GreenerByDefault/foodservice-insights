@@ -7,10 +7,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { runPath } from './contract/layout.ts';
 import { INVOCATION } from './contract/names.ts';
 
-/** What to run — and nothing else, because `spawnChild` appends the run directory and owns `cwd`,
- * `env`, `stdio`, and `detached` itself. That narrowness is what lets a test swap in a scripted
- * stand-in for the child without widening anything else across the seam.
- */
 export type ChildCommand = {
   executable: string;
   leadingArguments: readonly string[];
@@ -53,12 +49,7 @@ const STDERR_TAIL_BYTES = 8_000;
  */
 const STDERR_FLUSH_MS = 250;
 
-/** Everything the child may see that is not a secret. An allowlist rather than a denylist, because
- * the parent's `DB_CONNECTION_STRING` and S3 credentials must never cross this seam and a denylist
- * silently passes through whatever variable someone adds next. Holding no credentials for either
- * store is what makes ARCHITECTURE.md's "shrinks the security blast radius" true rather than
- * aspirational.
- */
+/** Everything the child may see in addition to the contract's secret allowlist. */
 const INHERITED_ENVIRONMENT_VARIABLES = ['PATH', 'HOME', 'LANG', 'TZ'] as const;
 
 export function spawnChild(
@@ -119,13 +110,11 @@ export function spawnChild(
   };
 }
 
-/** The negative pid is the entire point. The analysis library spawns subprocesses of its own, and
- * signalling the pid alone leaves them running — a leaked Python process goes on burning API quota
- * long after the attempt it belonged to has been marked failed.
- */
+/** Kill the child and all of its own spawned processes. */
 function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   if (child.pid === undefined) return;
   try {
+    // A negative pid signals the whole process group, not just the child.
     process.kill(-child.pid, signal);
   } catch {
     // ESRCH: nothing in the group is left to signal, which is the state we were aiming for anyway.

@@ -7,7 +7,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AnalysisAttemptId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
@@ -18,8 +18,8 @@ import { createRunDirectory, readProgress } from './run-directory.ts';
 import {
   type FakeChildStep,
   fakeChildCommand,
-  fakeChildFilePath,
-  fakeChildSentinelPath,
+  fakeChildWorkDirectoryFilePath,
+  releaseFakeChild,
 } from './testing/fake-child.ts';
 import { withTemporaryRunRoot } from './testing/run-root.ts';
 import { waitUntil } from './testing/waitUntil.ts';
@@ -81,13 +81,15 @@ function isRunning(pid: number): boolean {
 }
 
 describe('how the child is invoked', () => {
-  test('the run directory is the last argument, after the command owns the rest', async () => {
+  test('the run directory is the last argument', async () => {
     const steps: FakeChildStep[] = [{ step: 'dumpArgv' }, { step: 'exit', code: 0 }];
 
     await runScenario(steps, {}, async (child, runDirectory) => {
       await child.exited;
 
-      const argv = JSON.parse(await readFile(fakeChildFilePath(runDirectory, 'argv'), 'utf8'));
+      const argv = JSON.parse(
+        await readFile(fakeChildWorkDirectoryFilePath(runDirectory, 'argv'), 'utf8'),
+      );
 
       expect(argv.slice(1)).toEqual([...fakeChildCommand(steps).leadingArguments, runDirectory]);
     });
@@ -99,22 +101,20 @@ describe('how the child is invoked', () => {
     await runScenario(steps, {}, async (child, runDirectory) => {
       await child.exited;
 
-      expect(await readFile(fakeChildFilePath(runDirectory, 'cwd'), 'utf8')).toBe(
+      expect(await readFile(fakeChildWorkDirectoryFilePath(runDirectory, 'cwd'), 'utf8')).toBe(
         runPath(runDirectory, 'workDirectory'),
       );
     });
   });
 
-  // The negative of this is the whole point: `DB_CONNECTION_STRING` and the S3 credentials are in
-  // the environment the parent spawns from, and the child must not be able to reach either store.
-  test('the child sees the allowlist and its three secrets, and nothing else the parent holds', async () => {
+  test('the child only sees the env var allowlist', async () => {
     const steps: FakeChildStep[] = [{ step: 'dumpEnvironment' }, { step: 'exit', code: 0 }];
 
     await runScenario(steps, { environment: PARENT_ENVIRONMENT }, async (child, runDirectory) => {
       await child.exited;
 
       const environment: NodeJS.ProcessEnv = JSON.parse(
-        await readFile(fakeChildFilePath(runDirectory, 'environment'), 'utf8'),
+        await readFile(fakeChildWorkDirectoryFilePath(runDirectory, 'environment'), 'utf8'),
       );
 
       // Narrowed to the parent's own variables, because the child's runtime adds some of its own —
@@ -225,7 +225,7 @@ describe('killing a child', () => {
     const steps: FakeChildStep[] = [{ step: 'spawnGrandchild' }, { step: 'hang' }];
 
     await runScenario(steps, {}, async (child, runDirectory) => {
-      const pidFile = fakeChildFilePath(runDirectory, 'grandchildPid');
+      const pidFile = fakeChildWorkDirectoryFilePath(runDirectory, 'grandchildPid');
       await waitUntil(() => existsSync(pidFile), 'the child has spawned a subprocess of its own');
       const grandchild = Number(await readFile(pidFile, 'utf8'));
       expect(isRunning(grandchild)).toBe(true);
@@ -249,7 +249,7 @@ describe('the scenario seam the rest of the worker tests are built on', () => {
     await runScenario(steps, {}, async (child, runDirectory) => {
       expect(await readProgress(runDirectory)).toBeUndefined();
 
-      await writeFile(fakeChildSentinelPath(runDirectory, 'go'), '');
+      await releaseFakeChild(runDirectory, 'go');
 
       expect(await child.exited).toMatchObject({ kind: 'exited', exitCode: 0 });
       expect(await readProgress(runDirectory)).toEqual({ sequence: 1 });

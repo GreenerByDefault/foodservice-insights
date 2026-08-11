@@ -1,27 +1,19 @@
 /** A stand-in for `python/worker_child`, driven by a script the test hands it.
  *
  * Tests spawn this through the same `spawnChild` production uses, so everything between the parent
- * and the child is real: real argv, real `cwd`, real environment, real process group, real signals,
- * real atomic writes, real exit codes. That is the point — a mocked `spawn` proves only that we
- * call the SDK the way we call it, and every failure this layer actually produces (a leaked
- * grandchild, a SIGTERM the child ignores, an exit with nothing written) is one a mock cannot
- * produce. The same argument [`@gbd/storage`](../../../../packages/storage/src/objects.test.ts)
- * makes for not faking S3.
+ * and the child is real: real argv, `cwd`, environment, process group, signals, atomic writes, exit
+ * codes. A mocked `spawn` would only prove we call the SDK the way we call it — it can't produce a
+ * leaked grandchild, an ignored SIGTERM, or an exit with nothing written, which are the failures
+ * this layer actually has to survive.
  *
- * What it does have: the file layout, the write-by-rename discipline, the exit codes, and the
- * process behaviour the parent has to survive. What it does not have: any of the analysis library,
- * so nothing here says whether the real child writes a *correct* `result.json` or a `progress.json`
- * often enough to stay under the staleness threshold. Only an end-to-end run against
- * `python/worker_child` answers those, and the golden fixtures in
- * [`contract/fixtures/`](../../../../contract/fixtures/) are what keep the two halves spelling the
- * documents identically in the meantime.
+ * What it does not have is any of the analysis library, so nothing here says whether the real child
+ * writes a *correct* `result.json` or a `progress.json` often enough to stay under the staleness
+ * threshold — only an end-to-end run against `python/worker_child` and the golden fixtures in
+ * `contract/fixtures/` answer that.
  *
- * **Placeholder — delete this paragraph once the supervision loop lands.** The `result`, `failure`,
- * `writeRaw`, and `crash` steps and `fakeResultFileContents` have no caller: they are here for the
- * tests of the code that reads those documents and uploads the files a result declares. So
- * `writeResult` has never run, and neither its derivation of the declared file names nor its
- * `withoutFiles` filtering is verified — treat it as a first draft to fix, not a helper to trust.
- * Delete whatever is still uncalled when that change lands.
+ * **Placeholder** The `result`, `failure`, `writeRaw`, and `crash` steps and `fakeResultFileContents` have no
+ * caller yet — they exist for tests of the code that reads those documents and uploads the files a
+ * result declares, which hasn't landed. Treat `writeResult` as unverified until something calls it.
  */
 
 import { spawn } from 'node:child_process';
@@ -55,7 +47,7 @@ export type FakeChildStep =
   | { step: 'dumpArgv' }
   | { step: 'dumpCwd' }
   | { step: 'dumpEnvironment' }
-  /** Block until the test creates `fakeChildSentinelPath(runDirectory, name)`. */
+  /** Block until the test calls `releaseFakeChild(runDirectory, name)`. */
   | { step: 'waitFor'; sentinel: string }
   /** Install a SIGTERM handler that does nothing, so only SIGKILL can end this process. */
   | { step: 'ignoreSigterm' }
@@ -111,14 +103,19 @@ export function fakeChildCommand(steps: readonly FakeChildStep[]): ChildCommand 
   };
 }
 
-export function fakeChildFilePath(
+export function fakeChildWorkDirectoryFilePath(
   runDirectory: string,
   file: keyof typeof FAKE_CHILD_FILES,
 ): string {
   return join(runPath(runDirectory, 'workDirectory'), FAKE_CHILD_FILES[file]);
 }
 
-export function fakeChildSentinelPath(runDirectory: string, sentinel: string): string {
+/** Let a child parked on a `waitFor` step with this name run on. */
+export async function releaseFakeChild(runDirectory: string, sentinel: string): Promise<void> {
+  await writeFile(sentinelPath(runDirectory, sentinel), '');
+}
+
+function sentinelPath(runDirectory: string, sentinel: string): string {
   return join(runPath(runDirectory, 'workDirectory'), sentinel);
 }
 
@@ -176,21 +173,24 @@ async function runStep(
 
     case 'dumpArgv':
       return await writeAtomically(
-        fakeChildFilePath(runDirectory, 'argv'),
+        fakeChildWorkDirectoryFilePath(runDirectory, 'argv'),
         JSON.stringify(process.argv),
       );
 
     case 'dumpCwd':
-      return await writeAtomically(fakeChildFilePath(runDirectory, 'cwd'), process.cwd());
+      return await writeAtomically(
+        fakeChildWorkDirectoryFilePath(runDirectory, 'cwd'),
+        process.cwd(),
+      );
 
     case 'dumpEnvironment':
       return await writeAtomically(
-        fakeChildFilePath(runDirectory, 'environment'),
+        fakeChildWorkDirectoryFilePath(runDirectory, 'environment'),
         JSON.stringify(process.env),
       );
 
     case 'waitFor': {
-      const sentinel = fakeChildSentinelPath(runDirectory, step.sentinel);
+      const sentinel = sentinelPath(runDirectory, step.sentinel);
       while (!existsSync(sentinel)) await delay(SENTINEL_POLL_INTERVAL_MS);
       return;
     }
@@ -243,19 +243,23 @@ async function writeResult(
   );
 }
 
-/** Not `detached`, so the grandchild stays in this process's group and the parent's group kill
- * reaches it — that is the leak being tested. Its stdio is closed unless the step asks otherwise,
- * because holding the parent's stderr pipe open is a separate failure a test opts into. */
+/** Stands in for the subprocesses the analysis library spawns, so a test can check the parent's kill
+ * reaches them. */
 async function spawnGrandchild(
   step: Extract<FakeChildStep, { step: 'spawnGrandchild' }>,
   runDirectory: string,
 ): Promise<void> {
   const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)'], {
+    // Holding the parent's stderr pipe open is a separate failure a test opts into.
     stdio: step.holdingStderr ? ['ignore', 'ignore', 'inherit'] : 'ignore',
+    // Not `detached`: staying in this process's group is what the parent's group kill relies on.
   });
-  // Otherwise this process could never reach an `exit` step: an alive child refs the event loop.
+  // Unref, otherwise this process could never reach an `exit` step: an alive child refs the event loop.
   grandchild.unref();
-  await writeAtomically(fakeChildFilePath(runDirectory, 'grandchildPid'), String(grandchild.pid));
+  await writeAtomically(
+    fakeChildWorkDirectoryFilePath(runDirectory, 'grandchildPid'),
+    String(grandchild.pid),
+  );
 }
 
 /** Write by rename, as the real child does — the parent's readers are built on never being able to
