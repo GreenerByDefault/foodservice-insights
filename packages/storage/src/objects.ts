@@ -51,7 +51,7 @@ export type PagingOptions = {
 /** Write an object, replacing whatever was at `key`.
  *
  * Takes only in-memory bodies. A stream would have to arrive with its `ContentLength` already
- * known or go through a multipart upload. REQUIREMENTS.md caps uploads at 10MB, so holding
+ * known or go through a multipart upload. `MAX_UPLOAD_BYTES` caps uploads at 10MB, so holding
  * the whole body in memory costs nothing.
  */
 export async function putObject(

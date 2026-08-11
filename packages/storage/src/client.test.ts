@@ -72,8 +72,7 @@ test('keeps trying a write the store answers with a 500', async () => {
   expect(attempts()).toBe(MAX_ATTEMPTS);
 });
 
-// Limits a hundredth of the real ones, so the test is quick; only their ratio matters here. What
-// the real ones would cost, and why, is on `requestDeadlineMs`.
+// Limits are much shorter than the real ones, so the test is quick; only their ratio matters here.
 test('gives up on a store that never answers once the deadline passes', async () => {
   const attemptTimeoutMs = 5_000;
   const { store: hanging, attempts } = await failingStore('never answers', {
