@@ -1,6 +1,6 @@
 import { CreateBucketCommand } from '@aws-sdk/client-s3';
 import type { BlobStore } from './client.ts';
-import { isBucketAlreadyExistsError } from './errors.ts';
+import { asBlobStoreError, isBucketAlreadyExistsError } from './errors.ts';
 import { deletePrefix } from './objects.ts';
 
 /** Create the store's bucket, unless it already exists.
@@ -12,9 +12,9 @@ import { deletePrefix } from './objects.ts';
 export async function ensureBucket(store: BlobStore): Promise<void> {
   try {
     await store.client.send(new CreateBucketCommand({ Bucket: store.bucket }));
-  } catch (error) {
-    if (isBucketAlreadyExistsError(error)) return;
-    throw error;
+  } catch (cause) {
+    if (isBucketAlreadyExistsError(cause)) return;
+    throw asBlobStoreError('CreateBucket', cause);
   }
 }
 

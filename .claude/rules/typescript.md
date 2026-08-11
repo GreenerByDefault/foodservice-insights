@@ -65,6 +65,15 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
 - **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 
+## Blob store
+
+- **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
+  (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. It defaults to
+  503, not 500: a blob store failure always means we could not reach the store, so retrying helps.
+- **Classify a blob store failure with `isBlobStoreError`, never by an SDK error shape.** Everything
+  `@gbd/storage` fails with is a `BlobStoreError`, because a reply from the service and a timed-out
+  socket look nothing alike and only the package knows both.
+
 ## Repo mechanics
 
 - **Dependency versions go in the `catalog:` block of

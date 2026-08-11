@@ -1,5 +1,5 @@
 import type { Handle, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
-import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
 import type { AuthContext } from '$lib/server/auth/types';
@@ -27,7 +27,7 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
     action: 'load authorization',
     context: { userId },
     status: 503,
-    body: { message: 'The service is temporarily unavailable', code: 'service_unavailable' },
+    body: SERVICE_UNAVAILABLE_ERROR,
   });
 
   if (!auth) {
