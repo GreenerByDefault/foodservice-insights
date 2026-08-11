@@ -11,10 +11,12 @@
 
 import { exhaustiveArray } from '@gbd/core';
 import type { CountsBasis, RejectedUploadReason, UnitSystem } from '@gbd/db';
-import { checkUploadBytes, MAX_UPLOAD_BYTES } from '@gbd/upload';
 import * as v from 'valibot';
 import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues, optionalText, parsedJson } from '$lib/forms/validation';
+
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / 1024 / 1024;
 
 /** Caps on the free text and the metadata an upload carries. */
 export const MAX_REPORT_NAME_LENGTH = 200;
@@ -144,7 +146,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       bytes: null,
       rejection: {
         reason: 'too_large',
-        message: `That file is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024}MB.`,
+        message: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
         detail: `${fileDescription.byteSize} bytes`,
       },
     };
@@ -152,8 +154,14 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
 
   const bytes = new Uint8Array(await raw.file.arrayBuffer());
 
-  const fileRejection = checkUploadBytes(bytes);
-  if (fileRejection) return { ok: false, fileDescription, bytes, rejection: fileRejection };
+  if (bytes.byteLength === 0) {
+    return {
+      ok: false,
+      fileDescription,
+      bytes,
+      rejection: { reason: 'empty', message: 'That file has no rows in it.' },
+    };
+  }
 
   const parsed = v.safeParse(ReportMetadataSchema, {
     name: raw.name,

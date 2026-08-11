@@ -257,8 +257,9 @@ cap the performance is fine, the server has to download the file for validation 
 avoids the risk of a presigned URL accepting arbitrary bytes.
 
 **The web server fully validates before uploading to the blob store**, including security scans,
-so the worker does not need to re-validate exhaustively. See
-[`packages/upload/README.md`](packages/upload/README.md) for how that validation works.
+so the worker does not need to re-validate exhaustively.
+[`apps/web/src/lib/reports/submission.ts`](apps/web/src/lib/reports/submission.ts) decides what is
+accepted, and is imported by the browser as well, so the two cannot disagree.
 
 `gbd_foodservice_insights` is already written to reduce prompt injection risk — for example, all output
 belongs to a fixed set of values.

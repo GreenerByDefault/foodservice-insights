@@ -17,7 +17,6 @@
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
     "@gbd/storage": "workspace:*",
-    "@gbd/upload": "workspace:*",
     "kysely": "catalog:",
     "valibot": "catalog:"
   },

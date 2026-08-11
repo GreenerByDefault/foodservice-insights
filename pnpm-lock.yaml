@@ -131,9 +131,6 @@ importers:
       '@gbd/storage':
         specifier: workspace:*
         version: link:../../packages/storage
-      '@gbd/upload':
-        specifier: workspace:*
-        version: link:../../packages/upload
       kysely:
         specifier: 'catalog:'
         version: 0.29.4
@@ -300,18 +297,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
-
-  packages/upload:
-    devDependencies:
-      '@gbd/db':
-        specifier: workspace:*
-        version: link:../db
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

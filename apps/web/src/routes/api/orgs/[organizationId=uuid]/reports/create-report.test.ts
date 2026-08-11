@@ -6,9 +6,8 @@
 
 import type { RejectedUploadReason, ReportId } from '@gbd/db';
 import { getObject } from '@gbd/storage';
-import { MAX_UPLOAD_BYTES } from '@gbd/upload';
 import { afterAll, describe, expect, test } from 'vitest';
-import { FIELD } from '$lib/reports/submission';
+import { FIELD, MAX_UPLOAD_BYTES } from '$lib/reports/submission';
 import { closeDatabase } from '$lib/server/db';
 import { closeBlobStore } from '$lib/server/storage';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
@@ -181,11 +180,6 @@ describe('a rejected upload', () => {
 
   test.for([
     ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty'],
-    [
-      'a file that is really a PDF',
-      { file: new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }) },
-      'unparseable',
-    ],
     ['a counts basis outside the enum', { countsBasis: 'guesses' }, 'invalid_metadata'],
     ['monthly counts that are not JSON', { monthlyCounts: '{oops' }, 'invalid_metadata'],
     ['no file at all', { file: null }, 'other'],
@@ -199,15 +193,13 @@ describe('a rejected upload', () => {
   });
 
   test('keeps the file that was refused', async () => {
-    const { recorded, bytes } = await reject({
-      file: new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }),
-    });
+    const { recorded, bytes } = await reject({ countsBasis: 'guesses' });
 
     expect(recorded).toMatchObject({
-      inputFileOriginalFilename: 'report.pdf',
-      inputFileByteSize: 8,
+      inputFileOriginalFilename: 'procurement.csv',
+      inputFileByteSize: A_CSV.length,
     });
-    expect(new TextDecoder().decode(bytes)).toBe('%PDF-1.7');
+    expect(new TextDecoder().decode(bytes)).toBe(A_CSV);
   });
 
   test('records the metadata exactly as it was submitted', async () => {

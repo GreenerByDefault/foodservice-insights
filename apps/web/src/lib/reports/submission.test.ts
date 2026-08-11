@@ -1,8 +1,8 @@
-import { MAX_UPLOAD_BYTES } from '@gbd/upload';
 import { describe, expect, test } from 'vitest';
 import {
   FIELD,
   MAX_MONTHS,
+  MAX_UPLOAD_BYTES,
   type RawSubmission,
   readSubmission,
   validateSubmission,
@@ -72,26 +72,6 @@ describe('validateSubmission', () => {
       // A file rejection has no metadata field to name, so `field` is null for those rows.
       ['no file at all', { file: null }, 'other', null],
       ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty', null],
-      [
-        'a file of only whitespace',
-        { file: new File(['﻿ \n\n  '], 'blank.csv', { type: 'text/csv' }) },
-        'empty',
-        null,
-      ],
-      [
-        'a file that is really a PDF',
-        { file: new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }) },
-        'unparseable',
-        null,
-      ],
-      [
-        'a file that is really an XLSX, however it is labelled',
-        {
-          file: new File([Uint8Array.of(0x50, 0x4b, 0x03, 0x04)], 'data.csv', { type: 'text/csv' }),
-        },
-        'unparseable',
-        null,
-      ],
       ['a missing counts basis', { countsBasis: null }, 'invalid_metadata', 'countsBasis'],
       [
         'a counts basis outside the enum',
@@ -184,8 +164,7 @@ describe('validateSubmission', () => {
       });
     });
 
-    test('a file over the size cap, reported before its content is even sniffed', async () => {
-      // anOversizedFile's bytes carry a PDF signature, so this test also shows precedence.
+    test('a file over the size cap, reported before its content is read', async () => {
       const outcome = await validateSubmission(aSubmission({ file: anOversizedFile('big.csv') }));
 
       expect(outcome).toMatchObject({
@@ -210,14 +189,12 @@ describe('validateSubmission', () => {
   });
 
   test('keeps the bytes of a rejected file, so the caller can store it', async () => {
-    const outcome = await validateSubmission(
-      aSubmission({ file: new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }) }),
-    );
+    const outcome = await validateSubmission(aSubmission({ countsBasis: 'guesses' }));
 
     expect(outcome).toMatchObject({
       ok: false,
-      fileDescription: { originalFilename: 'report.pdf', byteSize: 8 },
-      bytes: new TextEncoder().encode('%PDF-1.7'),
+      fileDescription: { originalFilename: 'procurement.csv', byteSize: CSV.length },
+      bytes: new TextEncoder().encode(CSV),
     });
   });
 
@@ -246,10 +223,9 @@ describe('validateSubmission', () => {
   });
 });
 
-/** One byte over the cap, and a PDF signature so precedence is observable. */
+/** One byte over the cap. */
 function anOversizedFile(name: string): File {
-  const padding = 'x'.repeat(MAX_UPLOAD_BYTES + 1 - '%PDF-1.7'.length);
-  return new File([`%PDF-1.7${padding}`], name);
+  return new File(['x'.repeat(MAX_UPLOAD_BYTES + 1)], name);
 }
 
 describe('readSubmission', () => {
