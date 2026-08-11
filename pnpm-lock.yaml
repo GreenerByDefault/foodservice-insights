@@ -216,6 +216,9 @@ importers:
       '@gbd/db':
         specifier: workspace:*
         version: link:../../packages/db
+      kysely:
+        specifier: 'catalog:'
+        version: 0.29.4
       valibot:
         specifier: 'catalog:'
         version: 1.4.2(typescript@6.0.3)
