@@ -90,6 +90,8 @@ export function buildRunManifest(input: RunManifestInput): RunManifest {
   return validate(RunManifestSchema, 'run.json', input);
 }
 
+// The real child parses `run.json` in Python; this exists only so this stack's own tests can
+// round-trip what `buildRunManifest` produced and check it against the golden fixtures.
 export function parseRunManifest(text: string): RunManifest {
   return parseDocument(RunManifestSchema, 'run.json', text);
 }

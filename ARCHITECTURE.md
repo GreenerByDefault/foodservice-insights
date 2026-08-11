@@ -171,10 +171,11 @@ notice it is itself hung:
 
 1. **The child heartbeats** by updating a file every time it makes progress, such as finishing an
    API call. The parent checks that file roughly every 30 seconds and writes it to the database.
-   If the child has not progressed in n minutes, the parent kills it as hung. The threshold must
-   exceed the longest valid API call including backoff.
-2. **The parent hard-kills** a child after a fixed ceiling no matter what, as a safety net for
-   hung attempts. **Open:** 20 minutes?
+   If the child has not progressed in `staleAfterMs`, the parent kills it as hung. The threshold
+   must exceed the longest valid API call including backoff — see
+   [`config.ts`](apps/worker/src/config.ts).
+2. **The parent hard-kills** a child after `hardCeilingMs` no matter what, as a safety net for
+   hung attempts — see [`config.ts`](apps/worker/src/config.ts).
 3. **Other workers reap.** A parent can crash and leave its children orphaned, so every worker
    proactively looks for `processing` attempts with no heartbeat in the last k minutes, marks them
    failed, and sends an email. **Open:** 10 minutes?
