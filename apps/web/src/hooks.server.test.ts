@@ -1,4 +1,5 @@
 import type { UserId } from '@gbd/db';
+import { aDatabaseError } from '@gbd/db/testing';
 import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
@@ -84,7 +85,9 @@ describe('handle', () => {
   });
 
   test('503s an unreachable database', async () => {
-    vi.mocked(authorization.loadAuthorization).mockRejectedValue(new Error('connection refused'));
+    vi.mocked(authorization.loadAuthorization).mockRejectedValue(
+      aDatabaseError('connection refused'),
+    );
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -96,6 +99,15 @@ describe('handle', () => {
       expect(thrown.body.code).toBe('service_unavailable');
     }
     logged.mockRestore();
+  });
+
+  // `loadAuthorization` can also fail for reasons that have nothing to do with reachability,
+  // such as a data invariant it checks itself.
+  test('does not 503 an authorization failure that is not a database error', async () => {
+    const cause = new Error('the user has no email');
+    vi.mocked(authorization.loadAuthorization).mockRejectedValue(cause);
+
+    await expect(handle({ event: anEvent(), resolve: respond })).rejects.toBe(cause);
   });
 
   // This test is temporary and should be deleted when adding proper auth with JWTs.
