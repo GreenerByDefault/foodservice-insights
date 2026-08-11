@@ -19,7 +19,6 @@
 import type {
   AnalysisAttemptId,
   AnalysisFailureReason,
-  CountsBasis,
   Database,
   DatabaseExecutor,
   InputFileId,
@@ -27,11 +26,11 @@ import type {
   ReportId,
   ResultFileId,
   ResultFileKind,
-  UnitSystem,
 } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
+import type { StoredFile } from '@gbd/storage';
 import { sql, type Updateable } from 'kysely';
-import type { ChildResult } from './contract/messages.ts';
+import type { ChildResult, RunManifestInput } from './contract/messages.ts';
 
 export type ClaimOptions = {
   /** Narrows the queue to attempts on these reports.
@@ -39,6 +38,10 @@ export type ClaimOptions = {
    * **Test isolation only; production passes nothing.** Turbo runs every package's `test:unit`
    * concurrently against one database, so a worker that claimed globally would take attempts
    * belonging to another test file and fail it from the outside.
+   *
+   * **Open:** the shared test database is the real cause, and every queue-wide query the worker
+   * grows — the cross-worker reaper first — will need the same parameter. A test database per
+   * package would delete this one instead of spreading it.
    */
   candidateReports?: readonly ReportId[];
 };
@@ -89,21 +92,10 @@ function nextPendingAttempt(
 export type AttemptInputs = {
   organizationId: OrganizationId;
   reportId: ReportId;
-  inputFile: {
-    id: InputFileId;
-    storageKey: string;
-    originalFilename: string;
-    byteSize: number;
-    /** Hex, because that is what `run.json` carries. The column is `bytea`. */
-    checksumSha256: string;
-  };
-  report: {
-    name: string | null;
-    siteName: string | null;
-    countsBasis: CountsBasis;
-    unitSystem: UnitSystem;
-    monthlyCounts: unknown;
-  };
+  /** The manifest's fields — `checksumSha256` is hex there, `bytea` in the column — plus the id
+   * and key that fetch the object. */
+  inputFile: RunManifestInput['inputFile'] & { id: InputFileId; storageKey: string };
+  report: RunManifestInput['report'];
 };
 
 /** Throws if the attempt, its report, or its input file is missing. A claimed attempt has all
@@ -119,19 +111,20 @@ export async function loadAttemptInputs(
     .selectFrom('analysisAttempt')
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
     .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
+    // The two ids are aliased because the join has two of them; nothing else here collides.
     .select([
       'report.id as reportId',
-      'report.organizationId as organizationId',
-      'report.name as name',
-      'report.siteName as siteName',
-      'report.countsBasis as countsBasis',
-      'report.unitSystem as unitSystem',
-      'report.monthlyCounts as monthlyCounts',
       'inputFile.id as inputFileId',
-      'inputFile.storageKey as storageKey',
-      'inputFile.originalFilename as originalFilename',
-      'inputFile.byteSize as byteSize',
-      'inputFile.checksumSha256 as checksumSha256',
+      'report.organizationId',
+      'report.name',
+      'report.siteName',
+      'report.countsBasis',
+      'report.unitSystem',
+      'report.monthlyCounts',
+      'inputFile.storageKey',
+      'inputFile.originalFilename',
+      'inputFile.byteSize',
+      'inputFile.checksumSha256',
     ])
     .where('analysisAttempt.id', '=', attemptId)
     .executeTakeFirstOrThrow();
@@ -181,18 +174,17 @@ export async function heartbeat(
   return held === undefined ? { kind: 'lost' } : { kind: 'held', ...held };
 }
 
-/** A result file that has already been uploaded, ready to be recorded. */
-export type ResultFileRecord = {
+/** A result file that has already been uploaded, ready to be recorded.
+ *
+ * Built on `StoredFile` so that what `putResultFile` returns is what this takes, unmodified — the
+ * content type recorded on the row is then the one the object was actually stored with. The union
+ * is `result_file_chart_key_iff_chart` in the type system, so a chart with no key cannot be built
+ * rather than being rejected by Postgres after the upload has already happened.
+ */
+export type ResultFileRecord = StoredFile & {
   /** Minted by the caller, because the storage key is built from it before the upload. */
   id: ResultFileId;
-  kind: ResultFileKind;
-  /** Set if and only if `kind` is `chart` — `result_file_chart_key_iff_chart`. */
-  chartKey: string | null;
-  storageKey: string;
-  byteSize: number;
-  contentType: string;
-  checksumSha256: Buffer;
-};
+} & ({ kind: 'chart'; chartKey: string } | { kind: Exclude<ResultFileKind, 'chart'> });
 
 /** Record a successful attempt and the files it produced. Returns whether we still owned it. */
 export async function finishSucceeded(
@@ -224,14 +216,9 @@ export async function finishSucceeded(
         .insertInto('resultFile')
         .values(
           outcome.resultFiles.map((file) => ({
-            id: file.id,
+            ...file,
             analysisAttemptId: attemptId,
-            kind: file.kind,
-            chartKey: file.chartKey,
-            storageKey: file.storageKey,
-            byteSize: file.byteSize,
-            contentType: file.contentType,
-            checksumSha256: file.checksumSha256,
+            chartKey: file.kind === 'chart' ? file.chartKey : null,
           })),
         )
         .execute();

@@ -216,6 +216,9 @@ importers:
       '@gbd/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@gbd/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       kysely:
         specifier: 'catalog:'
         version: 0.29.4

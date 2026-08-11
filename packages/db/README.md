@@ -93,10 +93,9 @@ code that writes to this column:
 - **Guard terminal updates** with `WHERE id = $1 AND status = 'processing' AND worker_id = $2`, so
   losing the reaping race is a zero-row update rather than an exception.
 
-The claim from [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) and every terminal
-transition live in [`apps/worker/src/queue.ts`](../../apps/worker/src/queue.ts), and are tested
-beside it rather than here: a test in this package importing the worker would make `@gbd/db`
-depend on a package that depends on `@gbd/db`.
+This package owns the invariants; who claims an attempt and when is the worker's policy, so the
+claim from [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) and every terminal transition
+live in [`apps/worker/src/queue.ts`](../../apps/worker/src/queue.ts) and are tested beside it.
 
 ## Open questions
 

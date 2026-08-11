@@ -11,9 +11,12 @@
 
 import {
   type AnalysisAttemptId,
+  type Database,
   type DatabaseExecutor,
   newResultFileId,
+  type OrganizationId,
   type ReportId,
+  type ResultFileKind,
 } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import {
@@ -27,7 +30,8 @@ import {
   withConcurrentTransactions,
   withRollback,
 } from '@gbd/db/testing';
-import { sql } from 'kysely';
+import { RESULT_FILE_FORMATS } from '@gbd/storage';
+import { sql, type Transaction } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
 import {
@@ -44,23 +48,38 @@ afterAll(async () => {
   await shutdown();
 });
 
-type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
-
 function aWorkerId(): string {
   return `test-worker-${crypto.randomUUID()}`;
 }
 
 /** A pending attempt on a report of its own, plus the narrowing every claim in this file needs. */
 async function pendingAttempt(
-  transaction: Transaction,
+  transaction: Transaction<Database>,
 ): Promise<{ attemptId: AnalysisAttemptId; reportIds: ReportId[] }> {
   const report = await insertReport(transaction);
   const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
   return { attemptId: attempt.id, reportIds: [report.id] };
 }
 
+/** A pending attempt created `minutes` ago. One per report, because at most one attempt per report
+ * may be active. */
+async function agedAttempt(
+  transaction: Transaction<Database>,
+  organizationId: OrganizationId,
+  minutes: number,
+): Promise<{ attemptId: AnalysisAttemptId; reportId: ReportId }> {
+  const report = await insertReport(transaction, { organizationId });
+  const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
+  await transaction
+    .updateTable('analysisAttempt')
+    .set({ createdAt: sql<Date>`now() - make_interval(mins => ${minutes})` })
+    .where('id', '=', attempt.id)
+    .execute();
+  return { attemptId: attempt.id, reportId: report.id };
+}
+
 async function claimedAttempt(
-  transaction: Transaction,
+  transaction: Transaction<Database>,
   workerId: string,
 ): Promise<AnalysisAttemptId> {
   const { reportIds } = await pendingAttempt(transaction);
@@ -76,7 +95,10 @@ async function claimedAttempt(
  * what gives them somewhere to move from. All three go together, because the schema requires
  * `created_at <= locked_at <= last_heartbeat_at`.
  */
-async function backdate(transaction: Transaction, attemptId: AnalysisAttemptId): Promise<void> {
+async function backdate(
+  transaction: Transaction<Database>,
+  attemptId: AnalysisAttemptId,
+): Promise<void> {
   const fiveMinutesAgo = sql<Date>`now() - interval '5 minutes'`;
   await transaction
     .updateTable('analysisAttempt')
@@ -87,8 +109,14 @@ async function backdate(transaction: Transaction, attemptId: AnalysisAttemptId):
 
 /** What the cross-worker reaper will do once it exists: end an attempt this worker still believes
  * it owns. The rows it leaves behind are what every "we lost the race" test starts from.
+ *
+ * **Open:** an imitation, so these tests are only as good as it is. Point them at the real reaper
+ * when defense 3 in `ARCHITECTURE.md` § Heartbeats, hangs and reaping lands.
  */
-async function reap(transaction: Transaction, attemptId: AnalysisAttemptId): Promise<void> {
+async function reap(
+  transaction: Transaction<Database>,
+  attemptId: AnalysisAttemptId,
+): Promise<void> {
   await transaction
     .updateTable('analysisAttempt')
     .set({
@@ -129,17 +157,18 @@ const A_RESULT: ChildResult = {
   resultMetadata: { rows: 1_234 },
 };
 
-function aResultFile(overrides: Partial<ResultFileRecord> = {}): ResultFileRecord {
-  return {
+/** Stands in for what `putResultFile` returns, down to taking its extension and content type from
+ * the same map the upload would. */
+function aResultFile(kind: ResultFileKind = 'pdf', chartKey = 'total_spend'): ResultFileRecord {
+  const { extension, contentType } = RESULT_FILE_FORMATS[kind];
+  const stored = {
     id: newResultFileId(),
-    kind: 'pdf',
-    chartKey: null,
-    storageKey: `org/test/${crypto.randomUUID()}.pdf`,
+    storageKey: `org/test/${crypto.randomUUID()}.${extension}`,
     byteSize: 2_048,
-    contentType: 'application/pdf',
+    contentType,
     checksumSha256: aChecksum(),
-    ...overrides,
   };
+  return kind === 'chart' ? { ...stored, kind, chartKey } : { ...stored, kind };
 }
 
 describe('claiming', () => {
@@ -147,41 +176,31 @@ describe('claiming', () => {
     const claimed = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
 
-      // One attempt per report, because at most one attempt per report may be active. Their
-      // `created_at` is assigned deliberately rather than by insertion order, so the assertion
-      // cannot pass on a query that has no `ORDER BY` at all.
-      const ages = [3, 9, 1];
-      const attempts = [];
-      for (const minutes of ages) {
-        const report = await insertReport(transaction, { organizationId: organization.id });
-        const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
-        await transaction
-          .updateTable('analysisAttempt')
-          .set({ createdAt: sql<Date>`now() - make_interval(mins => ${minutes})` })
-          .where('id', '=', attempt.id)
-          .execute();
-        attempts.push({ minutes, id: attempt.id, reportId: report.id });
-      }
+      // The oldest is inserted second, so a query with no `ORDER BY` cannot pass by taking
+      // whichever row it reaches first.
+      const newer = await agedAttempt(transaction, organization.id, 3);
+      const oldest = await agedAttempt(transaction, organization.id, 9);
+      const newest = await agedAttempt(transaction, organization.id, 1);
 
       const claimedId = await claimNextAttempt(transaction, aWorkerId(), {
-        candidateReports: attempts.map(({ reportId }) => reportId),
+        candidateReports: [newer.reportId, oldest.reportId, newest.reportId],
       });
-      return { claimedId, oldest: attempts.find(({ minutes }) => minutes === 9)?.id };
+      return { claimedId, oldest: oldest.attemptId };
     });
 
     expect(claimed.claimedId).toBe(claimed.oldest);
   });
 
   test('marks the attempt as this worker processing it', async () => {
+    const workerId = aWorkerId();
     const attempt = await withRollback(DATABASE, async (transaction) => {
-      const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
-      return { workerId, row: await readAttempt(transaction, attemptId) };
+      return await readAttempt(transaction, attemptId);
     });
 
-    expect(attempt.row).toMatchObject({ status: 'processing', workerId: attempt.workerId });
-    expect(attempt.row.lockedAt).toBeInstanceOf(Date);
-    expect(attempt.row.lastHeartbeatAt).toBeInstanceOf(Date);
+    expect(attempt).toMatchObject({ status: 'processing', workerId });
+    expect(attempt.lockedAt).toBeInstanceOf(Date);
+    expect(attempt.lastHeartbeatAt).toBeInstanceOf(Date);
   });
 
   test('finds nothing once the only attempt is claimed', async () => {
@@ -375,14 +394,11 @@ describe('finishing', () => {
     // That this does not raise `analysis_attempt_terminal_is_final` is the assertion that the
     // terminal transition is a single UPDATE: a second statement touching the same row after it
     // reached `succeeded` would be rejected by the trigger.
+    const workerId = aWorkerId();
+    const resultFiles = [aResultFile(), aResultFile('xlsx'), aResultFile('chart', 'total_spend')];
+
     const finished = await withRollback(DATABASE, async (transaction) => {
-      const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
-      const resultFiles = [
-        aResultFile(),
-        aResultFile({ kind: 'xlsx', contentType: 'application/vnd.ms-excel' }),
-        aResultFile({ kind: 'chart', chartKey: 'total_spend', contentType: 'image/png' }),
-      ];
 
       const won = await finishSucceeded(transaction, attemptId, workerId, {
         result: A_RESULT,
@@ -398,7 +414,6 @@ describe('finishing', () => {
           .where('analysisAttemptId', '=', attemptId)
           .orderBy('kind')
           .execute(),
-        expectedKeys: resultFiles.map((file) => file.storageKey).sort(),
       };
     });
 
@@ -414,7 +429,9 @@ describe('finishing', () => {
       resultMetadata: { rows: 1_234 },
     });
     expect(finished.attempt.finishedAt).toBeInstanceOf(Date);
-    expect(finished.files.map((file) => file.storageKey).sort()).toEqual(finished.expectedKeys);
+    expect(finished.files.map((file) => file.storageKey).sort()).toEqual(
+      resultFiles.map((file) => file.storageKey).sort(),
+    );
     expect(finished.files.find((file) => file.kind === 'chart')?.chartKey).toBe('total_spend');
   });
 
@@ -472,7 +489,7 @@ describe('finishing', () => {
   describe('losing the race', () => {
     async function afterBeingReaped(
       finish: (
-        transaction: Transaction,
+        transaction: Transaction<Database>,
         attemptId: AnalysisAttemptId,
         workerId: string,
       ) => Promise<boolean>,
