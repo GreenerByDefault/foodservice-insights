@@ -22,10 +22,8 @@ A missing object is `undefined`, not an exception. Everything else that fails th
 `BlobStoreError`, so a caller can tell the blob store failing apart from a bug of its own with
 `isBlobStoreError`.
 
-**Bug:** a missing bucket reads as an empty store rather than failing, so a misconfigured `S3_BUCKET`
-404s every download instead of saying anything is wrong —
-[issue 40](https://github.com/GreenerByDefault/foodservice-insights/issues/40), and
-[`src/errors.ts`](src/errors.ts) for why nothing in this package can detect it.
+Unfortunately, a missing bucket reads as an empty store, rather than failing when reading a key, per
+[`src/errors.ts`](src/errors.ts). Instead, you can use `bucketExists` to check the bucket itself.
 
 The bucket has to exist before anything can be written to it. Tests create it themselves through
 `globalSetup`; for the dev stack, `pnpm migrate` creates it alongside applying the database's

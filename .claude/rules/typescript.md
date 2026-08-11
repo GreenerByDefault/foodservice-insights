@@ -57,7 +57,9 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   rolled-back transaction where the app passes its long-lived handle. For route handlers, put
   the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
   alongside `GET`/`POST` — and have the handler call it with `database()`. Call `database()`
-  inside the handler, never at module scope.
+  inside the handler, never at module scope. Name that function's test file without a `+`
+  prefix (e.g. `check-health.test.ts`, not `+server.test.ts`) — SvelteKit reserves `+` names,
+  and the build fails on one it doesn't recognize.
 - **Route handlers wrap DB calls in `withDbErrorHandling`** (`apps/web/src/lib/server/db.ts`),
   so a failure is logged with context instead of leaking to the client.
 - **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a

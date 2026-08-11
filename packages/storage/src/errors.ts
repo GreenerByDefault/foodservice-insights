@@ -7,11 +7,11 @@
  * `NotFound` with no code in the body. Checking for either name alone silently misses the other
  * operation. Any further read we add needs its name checked against this set.
  *
- * **Bug:** a read against a bucket that does not exist lands here as `undefined` too, so a
- * misconfigured `S3_BUCKET` reads as an empty store instead of failing. Leaving `NoSuchBucket` out
- * of this set is not enough to prevent it — Supabase Storage answers a missing bucket with the same
- * 404, name and code as a missing key, so nothing here can tell the two apart. Only a check against
- * the bucket itself can: https://github.com/GreenerByDefault/foodservice-insights/issues/40.
+ * A read against a bucket that does not exist also lands here as `undefined`, so a misconfigured
+ * `S3_BUCKET` reads as an empty store instead of failing. Leaving `NoSuchBucket` out of this set is
+ * not enough to prevent it — Supabase Storage answers a missing bucket with the same 404, name and
+ * code as a missing key, so nothing here can tell the two apart. `bucketExists` in `buckets.ts` is
+ * the check that can, since a `HeadBucket` carries no key to be ambiguous about.
  */
 const NOT_FOUND_ERROR_NAMES: ReadonlySet<string> = new Set(['NoSuchKey', 'NotFound']);
 
