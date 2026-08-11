@@ -1,4 +1,4 @@
-export { ensureBucket } from './buckets.ts';
+export { bucketExists, ensureBucket } from './buckets.ts';
 export {
   type BlobStore,
   type BlobStoreConfig,
