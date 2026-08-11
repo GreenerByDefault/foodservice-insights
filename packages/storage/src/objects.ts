@@ -6,7 +6,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { type BlobStore, sendOptions } from './client.ts';
-import { isNotFoundError } from './errors.ts';
+import { asBlobStoreError, BlobStoreError, blobStoreRequest, isNotFoundError } from './errors.ts';
 
 /** The most keys that either `ListObjectsV2` or `DeleteObjects` will accept in one request.
  *
@@ -60,23 +60,28 @@ export async function putObject(
   body: ObjectBody,
   options: PutObjectOptions = {},
 ): Promise<void> {
-  await store.client.send(
-    new PutObjectCommand({
-      Bucket: store.bucket,
-      Key: key,
-      Body: body,
-      ContentType: options.contentType,
-    }),
-    sendOptions(store),
+  await blobStoreRequest('PutObject', () =>
+    store.client.send(
+      new PutObjectCommand({
+        Bucket: store.bucket,
+        Key: key,
+        Body: body,
+        ContentType: options.contentType,
+      }),
+      sendOptions(store),
+    ),
   );
 }
 
 /** Read a whole object into memory, or `undefined` if there is nothing at `key`. */
 export async function getObject(store: BlobStore, key: string): Promise<Uint8Array | undefined> {
-  const response = await undefinedIfMissing(
-    store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: key }), sendOptions(store)),
-  );
-  return await response?.Body?.transformToByteArray();
+  return await undefinedIfMissing('GetObject', async () => {
+    const response = await store.client.send(
+      new GetObjectCommand({ Bucket: store.bucket, Key: key }),
+      sendOptions(store),
+    );
+    return await response.Body?.transformToByteArray();
+  });
 }
 
 /** Read an object's metadata without its bytes, or `undefined` if there is nothing at `key`. */
@@ -84,7 +89,7 @@ export async function headObject(
   store: BlobStore,
   key: string,
 ): Promise<ObjectMetadata | undefined> {
-  const response = await undefinedIfMissing(
+  const response = await undefinedIfMissing('HeadObject', () =>
     store.client.send(
       new HeadObjectCommand({ Bucket: store.bucket, Key: key }),
       sendOptions(store),
@@ -155,14 +160,16 @@ async function* listKeyPages(
   let continuationToken: string | undefined;
 
   do {
-    const listing = await store.client.send(
-      new ListObjectsV2Command({
-        Bucket: store.bucket,
-        Prefix: prefix,
-        ContinuationToken: continuationToken,
-        MaxKeys: options.pageSize ?? MAX_KEYS_PER_REQUEST,
-      }),
-      sendOptions(store),
+    const listing = await blobStoreRequest('ListObjectsV2', () =>
+      store.client.send(
+        new ListObjectsV2Command({
+          Bucket: store.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+          MaxKeys: options.pageSize ?? MAX_KEYS_PER_REQUEST,
+        }),
+        sendOptions(store),
+      ),
     );
 
     // S3 does not return an entry without a key; dropping one is still better than asserting.
@@ -175,12 +182,14 @@ async function* listKeyPages(
 
 /** Delete one request's worth of keys, at most `MAX_KEYS_PER_REQUEST` of them. */
 async function deleteKeys(store: BlobStore, keys: readonly string[]): Promise<void> {
-  const response = await store.client.send(
-    new DeleteObjectsCommand({
-      Bucket: store.bucket,
-      Delete: { Objects: keys.map((key) => ({ Key: key })) },
-    }),
-    sendOptions(store),
+  const response = await blobStoreRequest('DeleteObjects', () =>
+    store.client.send(
+      new DeleteObjectsCommand({
+        Bucket: store.bucket,
+        Delete: { Objects: keys.map((key) => ({ Key: key })) },
+      }),
+      sendOptions(store),
+    ),
   );
 
   // A per-key failure comes back in the response body instead of throwing, so without this a
@@ -188,20 +197,25 @@ async function deleteKeys(store: BlobStore, keys: readonly string[]): Promise<vo
   const errors = response.Errors ?? [];
   if (errors.length > 0) {
     const described = errors.map(({ Key, Code, Message }) => `${Key} (${Code}: ${Message})`);
-    throw new Error(`Failed to delete ${errors.length} object(s): ${described.join(', ')}`);
+    throw new BlobStoreError(
+      `DeleteObjects failed for ${errors.length} object(s): ${described.join(', ')}`,
+    );
   }
 }
 
-/** Await a command, turning "no such object" into `undefined` instead of a throw.
+/** Await one request, turning "no such object" into `undefined` instead of a throw.
  *
- * Takes the promise rather than a thunk: the command is already in flight, and there is
- * nothing to retry here.
+ * The missing-object check has to happen here, on the error the SDK raised, because
+ * `asBlobStoreError` is what everything else becomes.
  */
-async function undefinedIfMissing<T>(operation: Promise<T>): Promise<T | undefined> {
+async function undefinedIfMissing<T>(
+  operation: string,
+  send: () => Promise<T>,
+): Promise<T | undefined> {
   try {
-    return await operation;
-  } catch (error) {
-    if (isNotFoundError(error)) return undefined;
-    throw error;
+    return await send();
+  } catch (cause) {
+    if (isNotFoundError(cause)) return undefined;
+    throw asBlobStoreError(operation, cause);
   }
 }

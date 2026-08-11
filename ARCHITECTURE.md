@@ -287,7 +287,7 @@ handling.
 | Failure | Response |
 | --- | --- |
 | Web server does not respond to the client | The client sets timeouts, and retries automatically where appropriate |
-| Web server or worker has trouble with Supabase Storage | Timeouts on transactions; a timed-out upload fails the request with a 500. Uploads use `async`/`await` so they do not block the server |
+| Web server or worker has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
 | Web server or worker has trouble with Supabase | Timeouts on transactions; return a 500 |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |

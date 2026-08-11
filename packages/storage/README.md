@@ -18,8 +18,14 @@ your caller already has:
 - **Helper functions** should take a `BlobStore` parameter rather than reaching for either, so a
   test can pass one and the app can pass its own.
 
-A missing object is `undefined`, not an exception. A missing *bucket* still throws, because that
-is a misconfiguration rather than an expected outcome.
+A missing object is `undefined`, not an exception. Everything else that fails throws a
+`BlobStoreError`, so a caller can tell the blob store failing apart from a bug of its own with
+`isBlobStoreError`.
+
+**Bug:** a missing bucket reads as an empty store rather than failing, so a misconfigured `S3_BUCKET`
+404s every download instead of saying anything is wrong —
+[issue 40](https://github.com/GreenerByDefault/foodservice-insights/issues/40), and
+[`src/errors.ts`](src/errors.ts) for why nothing in this package can detect it.
 
 The bucket has to exist before anything can be written to it. Tests create it themselves through
 `globalSetup`; for the dev stack, `pnpm migrate` creates it alongside applying the database's

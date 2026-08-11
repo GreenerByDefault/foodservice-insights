@@ -65,9 +65,12 @@ async function failingStore(
 test('keeps trying a write the store answers with a 500', async () => {
   const { store: failing, attempts } = await failingStore('fails fast');
 
-  await expect(putObject(failing, 'probe.bin', new Uint8Array([1, 2, 3]))).rejects.toThrow(
-    'Internal Server Error',
-  );
+  // `putObject` relabels every failure as a `BlobStoreError`; the SDK's own message survives on
+  // `cause`, which is where this asserts against it.
+  await expect(putObject(failing, 'probe.bin', new Uint8Array([1, 2, 3]))).rejects.toMatchObject({
+    name: 'BlobStoreError',
+    cause: expect.objectContaining({ message: expect.stringContaining('Internal Server Error') }),
+  });
 
   expect(attempts()).toBe(MAX_ATTEMPTS);
 });
@@ -81,9 +84,10 @@ test('gives up on a store that never answers once the deadline passes', async ()
   });
 
   const started = Date.now();
-  await expect(putObject(hanging, 'probe.bin', new Uint8Array([1, 2, 3]))).rejects.toThrow(
-    /aborted/i,
-  );
+  await expect(putObject(hanging, 'probe.bin', new Uint8Array([1, 2, 3]))).rejects.toMatchObject({
+    name: 'BlobStoreError',
+    cause: expect.objectContaining({ message: expect.stringMatching(/aborted/i) }),
+  });
   const elapsed = Date.now() - started;
 
   // Well short of even one attempt timing out, so the deadline is what ended it. The slack is for

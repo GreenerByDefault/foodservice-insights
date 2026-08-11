@@ -1,11 +1,13 @@
-/** These tests are only placeholders to prove the blob store wiring works.
- * Delete them once we have real tests that exercise the blob store.
- */
-
 import { getObject, putObject } from '@gbd/storage';
-import { withTemporaryPrefix } from '@gbd/storage/testing';
-import { afterAll, expect, test } from 'vitest';
-import { blobStore, closeBlobStore } from './storage.ts';
+import { aBlobStoreError, withTemporaryPrefix } from '@gbd/storage/testing';
+import { isHttpError } from '@sveltejs/kit';
+import { afterAll, expect, test, vi } from 'vitest';
+import { blobStore, closeBlobStore, withBlobStoreErrorHandling } from './storage.ts';
+
+/** That a real failure arrives as a `BlobStoreError` is `@gbd/storage`'s own test, against its real
+ * endpoint. These only need something that is one.
+ */
+const blobStoreOutage = () => Promise.reject(aBlobStoreError('connection refused'));
 
 afterAll(async () => {
   await closeBlobStore();
@@ -27,4 +29,64 @@ test('writes and reads through the app handle, cleaning up after', async () => {
 
 test('returns the same handle every time, so the app holds one client', () => {
   expect(blobStore()).toBe(blobStore());
+});
+
+test('withBlobStoreErrorHandling returns the value on success', async () => {
+  await expect(
+    withBlobStoreErrorHandling(() => Promise.resolve('ok'), { action: 'do a thing' }),
+  ).resolves.toBe('ok');
+});
+
+test('withBlobStoreErrorHandling logs context and 503s by default on a blob store failure', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+  try {
+    const thrown = await withBlobStoreErrorHandling(blobStoreOutage, {
+      action: 'store a widget',
+      context: { widgetId: 'abc' },
+    }).catch((error: unknown) => error);
+
+    if (!isHttpError(thrown)) throw thrown;
+    expect(thrown.status).toBe(503);
+    expect(thrown.body.code).toBe('service_unavailable');
+
+    expect(logged).toHaveBeenCalledTimes(1);
+    const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
+    expect(message).toBe('Unexpected failure to store a widget');
+    expect(meta).toMatchObject({ widgetId: 'abc' });
+  } finally {
+    logged.mockRestore();
+  }
+});
+
+test('withBlobStoreErrorHandling supports an overridden status and body', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+  try {
+    const thrown = await withBlobStoreErrorHandling(blobStoreOutage, {
+      action: 'read a widget',
+      status: 500,
+      body: { message: 'Something went wrong' },
+    }).catch((error: unknown) => error);
+
+    if (!isHttpError(thrown)) throw thrown;
+    expect(thrown.status).toBe(500);
+    expect(thrown.body).toEqual({ message: 'Something went wrong' });
+  } finally {
+    logged.mockRestore();
+  }
+});
+
+test('withBlobStoreErrorHandling rethrows a failure that is not from the blob store', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const cause = new Error('a bug unrelated to the blob store');
+
+  try {
+    await expect(
+      withBlobStoreErrorHandling(() => Promise.reject(cause), { action: 'do a thing' }),
+    ).rejects.toBe(cause);
+    expect(logged).not.toHaveBeenCalled();
+  } finally {
+    logged.mockRestore();
+  }
 });

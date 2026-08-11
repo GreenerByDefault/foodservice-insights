@@ -20,7 +20,7 @@ import type {
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { blobStore } from '$lib/server/storage';
+import { blobStore, withBlobStoreErrorHandling } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
 export type Uploader = { organizationId: OrganizationId; userId: UserId };
@@ -59,10 +59,9 @@ export async function _createReport(
 
   // Upload the object before touching the database, so that no row
   // ever points at bytes that are not there.
-  const stored = await putInputFile(
-    store,
-    { organizationId, reportId, inputFileId },
-    outcome.file.bytes,
+  const stored = await withBlobStoreErrorHandling(
+    () => putInputFile(store, { organizationId, reportId, inputFileId }, outcome.file.bytes),
+    { action: 'store an uploaded input file', context: { organizationId, reportId, inputFileId } },
   );
 
   await withDbErrorHandling(
@@ -179,8 +178,9 @@ async function recordRejection(
       })
       .execute();
   } catch (cause) {
-    // We do not error() if the database fails because the database is only for
-    // our own recording with rejections. This is why we don't use withDbErrorHandling.
+    // The blob store and the database are both only for our own records here, and the answer is
+    // already the 400 telling the user why their file was rejected. So neither failing is raised —
+    // which is why there is no `withDbErrorHandling` or `withBlobStoreErrorHandling` above.
     console.error('Could not record a rejected upload', {
       organizationId,
       reason: rejection.reason,
