@@ -5,7 +5,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import type { BlobStore } from './client.ts';
+import { type BlobStore, sendOptions } from './client.ts';
 import { asBlobStoreError, BlobStoreError, blobStoreRequest, isNotFoundError } from './errors.ts';
 
 /** The most keys that either `ListObjectsV2` or `DeleteObjects` will accept in one request.
@@ -51,7 +51,7 @@ export type PagingOptions = {
 /** Write an object, replacing whatever was at `key`.
  *
  * Takes only in-memory bodies. A stream would have to arrive with its `ContentLength` already
- * known or go through a multipart upload. REQUIREMENTS.md caps uploads at 10MB, so holding
+ * known or go through a multipart upload. `MAX_UPLOAD_BYTES` caps uploads at 10MB, so holding
  * the whole body in memory costs nothing.
  */
 export async function putObject(
@@ -68,6 +68,7 @@ export async function putObject(
         Body: body,
         ContentType: options.contentType,
       }),
+      sendOptions(store),
     ),
   );
 }
@@ -79,6 +80,7 @@ export async function getObject(store: BlobStore, key: string): Promise<Uint8Arr
   return await undefinedIfMissing('GetObject', async () => {
     const response = await store.client.send(
       new GetObjectCommand({ Bucket: store.bucket, Key: key }),
+      sendOptions(store),
     );
     return await response.Body?.transformToByteArray();
   });
@@ -90,7 +92,10 @@ export async function headObject(
   key: string,
 ): Promise<ObjectMetadata | undefined> {
   const response = await undefinedIfMissing('HeadObject', () =>
-    store.client.send(new HeadObjectCommand({ Bucket: store.bucket, Key: key })),
+    store.client.send(
+      new HeadObjectCommand({ Bucket: store.bucket, Key: key }),
+      sendOptions(store),
+    ),
   );
   if (!response) return undefined;
 
@@ -165,6 +170,7 @@ async function* listKeyPages(
           ContinuationToken: continuationToken,
           MaxKeys: options.pageSize ?? MAX_KEYS_PER_REQUEST,
         }),
+        sendOptions(store),
       ),
     );
 
@@ -184,6 +190,7 @@ async function deleteKeys(store: BlobStore, keys: readonly string[]): Promise<vo
         Bucket: store.bucket,
         Delete: { Objects: keys.map((key) => ({ Key: key })) },
       }),
+      sendOptions(store),
     ),
   );
 

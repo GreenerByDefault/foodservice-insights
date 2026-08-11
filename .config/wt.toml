@@ -4,3 +4,4 @@
 [post-start]
 copy = "wt step copy-ignored"
 python-env = "uv sync"
+pnpm-env = "pnpm install"

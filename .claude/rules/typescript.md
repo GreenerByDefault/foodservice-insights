@@ -87,6 +87,9 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   rely on `prepare`, which pnpm runs only for some invocations.
 - **Quote parentheses in shell commands.** Route groups mean paths like
   `'src/routes/(app)'` need quoting or the shell mangles them.
+- **`lint` and `fmt` exist only at the root** — Biome runs repo-wide, so there is no per-package
+  lint. Every package has `test`, `check`, and `build`; scope one with
+  `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
 
 ## Svelte MCP server
 

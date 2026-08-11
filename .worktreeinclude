@@ -3,5 +3,3 @@
 .env
 .claude/settings.local.json
 
-# pnpm workspace deps. Reflink-copied, not symlinked
-node_modules/

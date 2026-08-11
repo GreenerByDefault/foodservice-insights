@@ -156,7 +156,7 @@ pnpm --filter @gbd/web test:e2e -- --ui
 ```
 
 CI uploads a Playwright report as a build artifact on failure. Download it and open the
-trace with `npx playwright show-trace <path-to-zip>`.
+trace with `pnpm exec playwright show-trace <path-to-zip>`.
 
 #### Tests and the database
 
