@@ -1,9 +1,3 @@
-/** The whole `POST /api/orgs/[organizationId]/reports` handler, driven with the multipart request
- * the form sends.
- *
- * Named without a `+`, which would make SvelteKit treat it as a route file.
- */
-
 import type { RejectedUploadReason, ReportId } from '@gbd/db';
 import { getObject } from '@gbd/storage';
 import { afterAll, describe, expect, test } from 'vitest';
@@ -142,7 +136,7 @@ describe('a valid upload', () => {
       // The column is CHECKed at 32 bytes, so a wrong-shaped digest would never have inserted.
       expect(Buffer.from(inputFile.checksumSha256 as Uint8Array)).toHaveLength(32);
 
-      // Deleting an organization has to be one prefix delete — see `@gbd/storage`'s keys.ts.
+      // Deleting an organization is one prefix delete.
       expect(inputFile.storageKey.startsWith(`org/${organizationId}/`)).toBe(true);
     });
   });

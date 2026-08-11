@@ -26,11 +26,9 @@ export const MAX_ORIGINAL_FILENAME_LENGTH = 255;
 /** Enough for a decade of monthly figures, which is far past any plausible submission. */
 export const MAX_MONTHS = 120;
 
-/** The form field names, so the form and the parser cannot drift apart.
- *
- * `report-name` rather than `name` so that iOS does not offer to autofill a person's name.
- */
+/** The form field names, so the form and the parser cannot drift apart. */
 export const FIELD = {
+  // We use `report-name` rather than `name` so that iOS does not offer to autofill a person's name.
   name: 'report-name',
   siteName: 'site-name',
   countsBasis: 'counts-basis',
