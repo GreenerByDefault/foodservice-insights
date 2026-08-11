@@ -19,6 +19,10 @@ already is, so there is no `?next=` to carry anywhere.
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
+## Forms
+
+**A form's own schema lives with its feature**. What is not specific to one form lives in `src/lib/forms/`.
+
 ## Errors
 
 **What a route passes to `error()` is for callers reading the JSON body, not for the screen.** Page

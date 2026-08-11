@@ -250,17 +250,17 @@ Routing downloads through our server also means we can add server-side download 
 
 ## Input file upload and validation
 
-**The web server accepts only CSV.** XLSX carries much more risk — zip bombs, macros — so the
-client converts XLSX to CSV before uploading. The conversion must be careful with Excel dates.
+**The web server accepts only CSV**; the client converts XLSX to CSV before uploading, taking
+care with Excel dates.
 
-**The file is sent directly to the web server**, not through a presigned upload URL. At a 10MB cap
-the performance is fine, the server has to download the file for validation anyway, and it avoids
-the risk of a presigned URL accepting arbitrary bytes.
+**The file is sent directly to the web server**, not through a presigned upload URL. At a 10MB
+cap the performance is fine, the server has to download the file for validation anyway, and it
+avoids the risk of a presigned URL accepting arbitrary bytes.
 
-**The web server fully validates before uploading to the blob store**, including security scans.
-The client will likely do a quick structural check for better UX, such as confirming the header
-has 3 columns. Because the server has already validated fully, the worker does not need to
-re-validate exhaustively.
+**The web server fully validates before uploading to the blob store**, including security scans,
+so the worker does not need to re-validate exhaustively.
+[`apps/web/src/lib/reports/submission.ts`](apps/web/src/lib/reports/submission.ts) decides what is
+accepted, and is imported by the browser as well, so the two cannot disagree.
 
 `gbd_foodservice_insights` is already written to reduce prompt injection risk — for example, all output
 belongs to a fixed set of values.

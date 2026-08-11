@@ -23,7 +23,7 @@ export default interface RejectedUploadTable {
 
   reportCountsBasis: ColumnType<string | null, string | null, string | null>;
 
-  reportMonthlyCounts: ColumnType<unknown | null, unknown | null, unknown | null>;
+  reportMonthlyCounts: ColumnType<string | null, string | null, string | null>;
 
   reportUnitSystem: ColumnType<string | null, string | null, string | null>;
 

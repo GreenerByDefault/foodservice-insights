@@ -190,8 +190,7 @@ describe('rejected_upload', () => {
           organizationId: organization.id,
           reportCountsBasis: 'sandwiches',
           reportUnitSystem: 'furlongs',
-          // `report` requires a jsonb object here; this column takes whatever arrived.
-          reportMonthlyCounts: JSON.stringify('not even an object'),
+          reportMonthlyCounts: '{oops',
           rejectionReason: 'bad_columns',
           rejectionDetail: 'expected 3 columns, found 7',
         })
@@ -202,6 +201,7 @@ describe('rejected_upload', () => {
     expect(stored).toMatchObject({
       reportCountsBasis: 'sandwiches',
       reportUnitSystem: 'furlongs',
+      reportMonthlyCounts: '{oops',
       rejectionReason: 'bad_columns',
     });
   });

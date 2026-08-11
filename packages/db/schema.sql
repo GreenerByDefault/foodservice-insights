@@ -653,7 +653,7 @@ CREATE TABLE IF NOT EXISTS "public"."rejected_upload" (
     "report_name" "text",
     "report_site_name" "text",
     "report_counts_basis" "text",
-    "report_monthly_counts" "jsonb",
+    "report_monthly_counts" "text",
     "report_unit_system" "text",
     "input_file_storage_key" "text",
     "input_file_byte_size" integer,

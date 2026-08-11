@@ -466,7 +466,7 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
     .addColumn('report_name', 'text')
     .addColumn('report_site_name', 'text')
     .addColumn('report_counts_basis', 'text')
-    .addColumn('report_monthly_counts', 'jsonb')
+    .addColumn('report_monthly_counts', 'text')
     .addColumn('report_unit_system', 'text')
     .addColumn('input_file_storage_key', 'text')
     .addColumn('input_file_byte_size', 'integer')
