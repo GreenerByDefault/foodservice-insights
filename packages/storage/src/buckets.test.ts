@@ -18,7 +18,7 @@ describe('bucketExists', () => {
     expect(await bucketExists(BLOB_STORE)).toBe(true);
   });
 
-  test('false for a bucket that is not — the check issue #40 needed', async () => {
+  test('false for a bucket that is not', async () => {
     // Same endpoint and credentials as BLOB_STORE, pointed at a bucket that was never created.
     const missingBucket = initializeBlobStore({
       endpoint: requireEnv('S3_ENDPOINT'),

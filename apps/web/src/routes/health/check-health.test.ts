@@ -29,8 +29,7 @@ describe('_checkHealth', () => {
   });
 
   test('degraded when the bucket does not exist', async () => {
-    // Same endpoint and credentials as blobStore(), pointed at a bucket that was never created —
-    // this is the issue #40 case: a misconfigured S3_BUCKET.
+    // Same endpoint and credentials as blobStore(), pointed at a bucket that was never created.
     const missingBucket = initializeBlobStore({
       endpoint: requireVar('S3_ENDPOINT'),
       region: requireVar('S3_REGION'),

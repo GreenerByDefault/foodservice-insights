@@ -22,8 +22,8 @@ A missing object is `undefined`, not an exception. Everything else that fails th
 `BlobStoreError`, so a caller can tell the blob store failing apart from a bug of its own with
 `isBlobStoreError`.
 
-A missing bucket reads as an empty store rather than failing when read by key — see
-[`src/errors.ts`](src/errors.ts). `bucketExists` checks the bucket itself instead.
+Unfortunately, a missing bucket reads as an empty store, rather than failing when reading a key, per
+[`src/errors.ts`](src/errors.ts). Instead, you can use `bucketExists` to check the bucket itself.
 
 The bucket has to exist before anything can be written to it. Tests create it themselves through
 `globalSetup`; for the dev stack, `pnpm migrate` creates it alongside applying the database's
