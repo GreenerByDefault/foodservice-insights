@@ -1,17 +1,14 @@
-import { isPermanentDatabaseError } from '@gbd/db';
+import { isPermanentDatabaseError, isTransientDatabaseError } from '@gbd/db';
 import {
   aDatabaseError,
   anUnreachableDatabaseError,
+  divideByZero,
   insertReport,
   withRollback,
 } from '@gbd/db/testing';
 import { error, isHttpError } from '@sveltejs/kit';
-import { sql } from 'kysely';
 import { afterAll, expect, test, vi } from 'vitest';
 import { closeDatabase, database, withDbErrorHandling } from './db.ts';
-
-/** A genuine Postgres failure, to exercise the path `withDbErrorHandling` converts. */
-const divideByZero = () => sql`select 1 / 0`.execute(database());
 
 afterAll(async () => {
   await closeDatabase();
@@ -43,7 +40,7 @@ test('withDbErrorHandling logs context and 500s a statement Postgres refused', a
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   try {
-    const thrown = await withDbErrorHandling(divideByZero, {
+    const thrown = await withDbErrorHandling(() => divideByZero(database()), {
       action: 'load a widget',
       context: { widgetId: 'abc' },
     }).catch((error: unknown) => error);
@@ -83,6 +80,7 @@ test('withDbErrorHandling logs context and 503s an unreachable database', async 
     const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
     expect(message).toBe('Could not reach the database to load a widget');
     expect(meta).toMatchObject({ widgetId: 'abc' });
+    expect(isTransientDatabaseError(meta.error)).toBe(true);
   } finally {
     logged.mockRestore();
   }
@@ -100,16 +98,19 @@ test('withDbErrorHandling 503s a statement the database gave up on', async () =>
 
     if (!isHttpError(thrown)) throw thrown;
     expect(thrown.status).toBe(503);
+
+    expect(logged).toHaveBeenCalledTimes(1);
+    const [, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
+    expect(isTransientDatabaseError(meta.error)).toBe(true);
   } finally {
     logged.mockRestore();
   }
 });
 
-// What the retry endpoint will rely on to answer 409 for a violation it expects.
 test('withDbErrorHandling passes through the answer a caller gave itself', async () => {
   const conflict = async () => {
     try {
-      await divideByZero();
+      await divideByZero(database());
     } catch {
       error(409, { message: 'That report already has an attempt running' });
     }

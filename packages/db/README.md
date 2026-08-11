@@ -27,11 +27,10 @@ rolled-back transaction where the app passes its long-lived handle.
   snapshot — use [`src/testing/concurrency.ts`](src/testing/concurrency.ts) instead of
   `withRollback`, which cannot express any of them and would make such a test pass vacuously.
 
-A statement Postgres refused and a database we never reached are different answers, and they arrive
-as different classes: only the first is a `DatabaseError`. So `isTransientDatabaseError` and
-`isPermanentDatabaseError` are what tell them apart — `instanceof DatabaseError` cannot, because it
-never sees an outage at all. Both live in [`src/errors.ts`](src/errors.ts), with why each family
-looks the way it does.
+A statement Postgres refused and a database we never reached fail differently, but only the former
+is a `DatabaseError` — so `instanceof DatabaseError` cannot tell them apart. Use
+`isTransientDatabaseError` and `isPermanentDatabaseError` instead; see
+[`src/errors.ts`](src/errors.ts) for why each family looks the way it does.
 
 ## The model
 

@@ -69,8 +69,8 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   untouched. Checking for the condition beforehand instead duplicates the constraint and still
   races.
 - **Classify a database failure with `isTransientDatabaseError` or `isPermanentDatabaseError`, never
-  `instanceof DatabaseError`.** Postgres cannot reply when it is down, so an outage is a bare
-  `Error` from the driver or the socket and no `DatabaseError` ever arrives.
+  `instanceof DatabaseError`** — an outage never arrives as one. See
+  [`packages/db/README.md`](../../packages/db/README.md#using-it).
 - **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
   test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
@@ -80,8 +80,8 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
 
 - **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
   (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
-  where the database wrapper has to choose: a blob store failure only ever means we could not reach
-  the store, so retrying helps.
+  unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
+  ever means we could not reach the store, so retrying helps.
 - **Classify a blob store failure with `isBlobStoreError`, never by an SDK error shape.** Everything
   `@gbd/storage` fails with is a `BlobStoreError`, because a reply from the service and a timed-out
   socket look nothing alike and only the package knows both.

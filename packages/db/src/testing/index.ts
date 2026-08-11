@@ -6,7 +6,7 @@ export {
   withCommittedFixture,
   withConcurrentTransactions,
 } from './concurrency.ts';
-export { aDatabaseError, anUnreachableDatabaseError } from './errors.ts';
+export { aDatabaseError, anUnreachableDatabaseError, divideByZero } from './errors.ts';
 export {
   aChecksum,
   insertAnalysisAttempt,

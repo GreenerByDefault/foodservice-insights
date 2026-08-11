@@ -52,8 +52,9 @@ interface BlobStoreCallOptions {
  * `withDbErrorHandling` rethrows: `fn` can fail for reasons that have nothing to do with the blob
  * store, and reporting those as an outage would hide what actually failed.
  *
- * Always a 503, where `withDbErrorHandling` has to choose: every `BlobStoreError` means the request
- * did not reach the store or came back refused, so waiting is always worth it.
+ * Always a 503, unlike `withDbErrorHandling`, which has to choose between 503 and 500: every
+ * `BlobStoreError` means the request did not reach the store or came back refused, so waiting is
+ * always worth it.
  */
 export async function withBlobStoreErrorHandling<T>(
   fn: () => Promise<T>,

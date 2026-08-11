@@ -32,7 +32,8 @@ export async function closeDatabase(): Promise<void> {
 }
 
 interface DbCallOptions {
-  /** What we were trying to do, for the log line: "... failure to <action>". */
+  /** What we were trying to do, for the log line: "Could not reach the database to <action>" or
+   * "Unexpected failure to <action>". */
   action: string;
   /** Structured context — entity IDs, etc. — logged next to the error. Never sent to the client. */
   context?: Record<string, unknown>;
