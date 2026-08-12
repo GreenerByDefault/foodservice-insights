@@ -178,8 +178,7 @@ nothing — the fast majority — name the project:
 pnpm --filter @gbd/web exec vitest run --project unit
 ```
 
-`@gbd/db` and `@gbd/storage` take the same flag. `@gbd/core` and `@gbd/worker` have no integration
-tests, so their whole suite already runs with nothing up.
+Every package except `@gbd/core` splits its suite that way.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
 `@gbd/db/testing`, which rolls the transaction back however the test ends. It's necessary for
