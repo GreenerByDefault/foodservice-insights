@@ -97,6 +97,15 @@ The client polls the server roughly every 10 seconds.
   minimal and stateless simplifies performance and leaves the door open to horizontally scaling
   the web server.
 
+**A failed poll is not a failed analysis.** The two are independent: a poll that does not reach
+the server says nothing about the attempt, so the client keeps the last known state on screen,
+backs off, and carries on polling. Only a terminal `analysis_attempt.status` may offer a retry,
+because a retry costs a worker run.
+
+- *Rejected: retrying an upload automatically.* A request that may already have enqueued an
+  attempt cannot be retried safely, and a lost response is exactly the case where we cannot tell
+  whether it did.
+
 ## Server ↔ worker
 
 The server enqueues new analysis attempts. **Workers pull from the queue; the server never talks
@@ -286,7 +295,7 @@ handling.
 
 | Failure | Response |
 | --- | --- |
-| Web server does not respond to the client | The client sets timeouts, and retries automatically where appropriate |
+| Web server does not respond to the client | The client sets timeouts, and retries automatically only where the request cannot have started an analysis |
 | Web server or worker has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
 | Web server or worker has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
