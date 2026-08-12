@@ -19,7 +19,7 @@ export default defineConfig({
   },
   webServer: {
     // Runs the real adapter-node output, not `vite preview`, so e2e exercises the
-    // deployed artifact. `turbo run test:e2e` depends on `build`.
+    // deployed artifact. `turbo run test:e2e` depends on `build` running first.
     //
     // These tests commit, so we first clear both the database and the blob store, then bring
     // them up to date with the code. We use `pnpm -r`, rather than the `turbo run` the root scripts
@@ -28,7 +28,7 @@ export default defineConfig({
     // Seeding is only temporary until we add full auth. We should remove it afterwards.
     command:
       'pnpm -r run truncate && pnpm -r run migrate && pnpm -r run seed && ' +
-      'node --env-file-if-exists=../../.env.test build/index.js',
+      'node --env-file-if-exists=../../.env.test start.js',
     env: {
       PORT: String(PORT),
       // adapter-node rejects cross-site POSTs with 403 unless ORIGIN is set.
