@@ -16,10 +16,10 @@ import type {
 } from '@gbd/db';
 import type { BlobStore } from './client.ts';
 import {
-  CSV_CONTENT_TYPE,
-  inputFileKey,
+  NORMALIZED_CSV_CONTENT_TYPE,
+  normalizedInputFileKey,
+  OPAQUE_CSV_CONTENT_TYPE,
   originalInputFileKey,
-  REJECTED_UPLOAD_CONTENT_TYPE,
   RESULT_FILE_FORMATS,
   rejectedUploadKey,
   resultFileKey,
@@ -38,9 +38,6 @@ export type StoredFile = {
   checksumSha256: Uint8Array;
 };
 
-/** The bytes as received and the bytes the worker should read. Equal when validation had nothing
- * to fix, which is the common case.
- */
 export type InputFileBytes = { original: Uint8Array; normalized: Uint8Array };
 
 export type StoredInputFile = StoredFile & { isModified: boolean };
@@ -50,22 +47,15 @@ export async function putInputFile(
   ids: { organizationId: OrganizationId; reportId: ReportId; inputFileId: InputFileId },
   bytes: InputFileBytes,
 ): Promise<StoredInputFile> {
-  // Compared here rather than reported by the validator: byte equality *is* the condition under
-  // which the original needs its own object, so it cannot drift from what was written.
   const isModified = Buffer.compare(bytes.original, bytes.normalized) !== 0;
-
-  // Concurrent, not sequential. The ordering rule in this file's header — object before row —
-  // does not reach the original, because no row will point at it. So two writes cost the slower
-  // one rather than the sum.
   const [stored] = await Promise.all([
-    storeFile(store, inputFileKey(ids), bytes.normalized, CSV_CONTENT_TYPE),
+    storeFile(store, normalizedInputFileKey(ids), bytes.normalized, NORMALIZED_CSV_CONTENT_TYPE),
     isModified
       ? putObject(store, originalInputFileKey(ids), bytes.original, {
-          contentType: REJECTED_UPLOAD_CONTENT_TYPE,
+          contentType: OPAQUE_CSV_CONTENT_TYPE,
         })
       : Promise.resolve(),
   ]);
-
   return { ...stored, isModified };
 }
 
@@ -93,7 +83,7 @@ export async function putRejectedUpload(
   ids: { organizationId: OrganizationId; rejectedUploadId: RejectedUploadId },
   body: Uint8Array,
 ): Promise<StoredFile> {
-  return await storeFile(store, rejectedUploadKey(ids), body, REJECTED_UPLOAD_CONTENT_TYPE);
+  return await storeFile(store, rejectedUploadKey(ids), body, OPAQUE_CSV_CONTENT_TYPE);
 }
 
 /** Write `body` to `key`. */

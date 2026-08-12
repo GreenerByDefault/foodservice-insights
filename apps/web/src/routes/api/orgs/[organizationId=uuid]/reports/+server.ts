@@ -60,9 +60,6 @@ export async function _createReport(
 
   // Upload the object before touching the database, so that no row
   // ever points at bytes that are not there.
-  //
-  // Nothing normalizes the upload yet, so `original` and `normalized` are the same bytes and
-  // `isModified` is always `false` until `validateCsv` lands.
   const stored = await withBlobStoreErrorHandling(
     () =>
       putInputFile(

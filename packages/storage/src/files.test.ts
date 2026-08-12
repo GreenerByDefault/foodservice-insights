@@ -14,12 +14,11 @@ afterAll(() => {
   shutdown();
 });
 
-/** A CSV with a non-ASCII name in it, so that a byte count taken from a string's length rather
- * than its encoding would come out short.
- */
-const CSV = new TextEncoder().encode('product,date,amount\ncafé au lait,2026-01-05,12\n');
+// Has a non-ASCII name, so that a byte count taken from a string's length rather than its
+// encoding would come out short.
+const ORIGINAL_CSV = new TextEncoder().encode('product,date,amount\ncafé au lait,2026-01-05,12\n');
 
-/** A CSV that differs from `CSV`, so a test can tell the normalized bytes from the original. */
+// Differs from `ORIGINAL_CSV`, so a test can tell the normalized bytes from the original.
 const NORMALIZED_CSV = new TextEncoder().encode(
   'product,date,amount\ncafe au lait,2026-01-05,12\n',
 );
@@ -40,10 +39,10 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        { original: CSV, normalized: CSV },
+        { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
       );
 
-      expect(await getObject(BLOB_STORE, stored.storageKey)).toEqual(CSV);
+      expect(await getObject(BLOB_STORE, stored.storageKey)).toEqual(ORIGINAL_CSV);
     });
   });
 
@@ -54,7 +53,7 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        { original: CSV, normalized: CSV },
+        { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
       );
 
       expect(await headObject(BLOB_STORE, stored.storageKey)).toMatchObject({
@@ -69,10 +68,10 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        { original: CSV, normalized: CSV },
+        { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
       );
 
-      expect(stored.byteSize).toBe(CSV.byteLength);
+      expect(stored.byteSize).toBe(ORIGINAL_CSV.byteLength);
     });
   });
 
@@ -82,7 +81,7 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        { original: CSV, normalized: CSV },
+        { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
       );
 
       // Wrap the expected digest in `Uint8Array.from`: `createHash().digest()` returns a
@@ -90,7 +89,7 @@ describe('putInputFile', () => {
       // plain one of the same bytes. This also pins down that `stored.checksumSha256` isn't
       // left as a `Buffer` either.
       expect(stored.checksumSha256).toEqual(
-        Uint8Array.from(createHash('sha256').update(CSV).digest()),
+        Uint8Array.from(createHash('sha256').update(ORIGINAL_CSV).digest()),
       );
       expect(stored.checksumSha256.byteLength).toBe(32);
     });
@@ -102,7 +101,7 @@ describe('putInputFile', () => {
         const stored = await putInputFile(
           BLOB_STORE,
           { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-          { original: CSV, normalized: CSV },
+          { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
         );
 
         expect(stored.isModified).toBe(false);
@@ -116,16 +115,15 @@ describe('putInputFile', () => {
       await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
         const ids = { organizationId, reportId: aReportId(), inputFileId: newInputFileId() };
         const stored = await putInputFile(BLOB_STORE, ids, {
-          original: CSV,
+          original: ORIGINAL_CSV,
           normalized: NORMALIZED_CSV,
         });
 
         expect(stored.isModified).toBe(true);
         expect(await getObject(BLOB_STORE, stored.storageKey)).toEqual(NORMALIZED_CSV);
-        expect(await getObject(BLOB_STORE, originalInputFileKey(ids))).toEqual(CSV);
+        expect(await getObject(BLOB_STORE, originalInputFileKey(ids))).toEqual(ORIGINAL_CSV);
 
-        // The schema decision this PR makes: the row describes the file the worker reads, not the
-        // one the user sent. Reversed, this should fail loudly.
+        // The byteSize and checksumSha256 are for the normalized CSV, not the input one.
         expect(stored.byteSize).toBe(NORMALIZED_CSV.byteLength);
         expect(stored.checksumSha256).toEqual(
           Uint8Array.from(createHash('sha256').update(NORMALIZED_CSV).digest()),
@@ -187,7 +185,7 @@ describe('putRejectedUpload', () => {
       const stored = await putRejectedUpload(
         BLOB_STORE,
         { organizationId, rejectedUploadId: crypto.randomUUID() as RejectedUploadId },
-        CSV,
+        ORIGINAL_CSV,
       );
 
       expect(stored.contentType).toBe('application/octet-stream');
@@ -206,12 +204,12 @@ describe('deleting an organization', () => {
         await putRejectedUpload(
           BLOB_STORE,
           { organizationId: doomed, rejectedUploadId: crypto.randomUUID() as RejectedUploadId },
-          CSV,
+          ORIGINAL_CSV,
         );
         await putInputFile(
           BLOB_STORE,
           { organizationId: doomed, reportId, inputFileId: newInputFileId() },
-          { original: CSV, normalized: CSV },
+          { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
         );
         await putResultFile(
           BLOB_STORE,
@@ -227,7 +225,7 @@ describe('deleting an organization', () => {
         const survivor = await putInputFile(
           BLOB_STORE,
           { organizationId: kept, reportId: aReportId(), inputFileId: newInputFileId() },
-          { original: CSV, normalized: CSV },
+          { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
         );
 
         expect(await deletePrefix(BLOB_STORE, organizationPrefix(doomed))).toBe(3);

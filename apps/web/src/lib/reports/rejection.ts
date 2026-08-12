@@ -1,7 +1,5 @@
 /** Why an upload never became a report.
  *
- * Its own file so that `csv/` can import it without a cycle through `submission.ts`.
- *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.
  */

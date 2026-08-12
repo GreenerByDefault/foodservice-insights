@@ -50,10 +50,9 @@ Users, organizations, membership, and invites make up the auth side of the schem
 
 Design reasoning:
 
-- **`input_file.storage_key` points at the file the worker reads.** Once validation can rewrite an
-  upload, that is the *normalized* CSV, not necessarily the bytes the user sent — `byte_size`,
-  `content_type`, and `checksum_sha256` describe that same object. `is_modified` says whether it
-  differs from what arrived.
+- **`input_file.storage_key` points at the normalized CSV file the worker reads.** `input_file.is_modified` says whether it
+  differs from the original iput file, which is stored at
+  a separate hardcoded path.
 - **`input_file` and `result_file` are their own tables, not columns on `report` and
   `analysis_attempt`,** because files are exposed publicly through a `/file/:id` route. A file
   needs its own identifier to be addressable. Those two tables are also the only ones with v4

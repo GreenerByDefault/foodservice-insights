@@ -10,18 +10,13 @@
  *             /result/{result_file_id}.{ext}
  * ```
  *
- * Three rules hold it together:
+ * Two rules hold it together:
  *
  * 1. **Everything an organization owns is under one prefix**, so deleting an organization's files
  *    is a single `deletePrefix`.
  * 2. **A segment is an id or a fixed name, never anything a user typed** — filenames, report names
  *    and chart keys stay in the database. So a key needs no escaping, and branded ids mean it
  *    needs no validation: an `OrganizationId` cannot have come from a request body.
- * 3. **Keys are only ever built on the write path.** Every reader takes `storage_key` off the database
- *    row, so changing the layout later would not strand the objects already written under the old one.
- *    The one exception is the object `originalInputFileKey` builds: no row references it, so no
- *    reader takes its key off anything — only a developer in the Storage console ever fetches it, by
- *    hand, and `input_file.is_modified` is what says whether it is there at all.
  */
 
 import type {
@@ -34,17 +29,12 @@ import type {
   ResultFileKind,
 } from '@gbd/db';
 
-export const CSV_CONTENT_TYPE = 'text/csv';
+export const NORMALIZED_CSV_CONTENT_TYPE = 'text/csv';
 
-/** Deliberately not `text/csv`. An upload is rejected for what it turned out to be — two of the
- * reasons are `unparseable` and `csv_injection` — so its bytes are labelled as the opaque blob
- * they are rather than as something a browser might interpret.
- *
- * The original input file shares this for the same reason: the normalizer's Windows-1252 fallback
- * means it may not be UTF-8, and `text/csv` would invite a browser to render bytes whose encoding
- * we deliberately did not commit to.
+/** Not `text/csv`: a rejected upload's bytes may be `csv_injection`, and the original input
+ * file's encoding may not be UTF-8 — neither is safe for a browser to render as text.
  */
-export const REJECTED_UPLOAD_CONTENT_TYPE = 'application/octet-stream';
+export const OPAQUE_CSV_CONTENT_TYPE = 'application/octet-stream';
 
 /** How each kind of result file is stored.
  *
@@ -76,7 +66,7 @@ export function rejectedUploadKey(ids: {
   return organizationScoped(ids.organizationId, 'rejected-upload', `${ids.rejectedUploadId}.csv`);
 }
 
-export function inputFileKey(ids: {
+export function normalizedInputFileKey(ids: {
   organizationId: OrganizationId;
   reportId: ReportId;
   inputFileId: InputFileId;
