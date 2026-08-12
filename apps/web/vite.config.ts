@@ -48,17 +48,8 @@ export default defineConfig(({ command }) => ({
   test: {
     expect: { requireAssertions: true },
 
-    /** One project per thing a test can need, selected by suffix:
-     *
-     * - `unit` — nothing. No Docker, no browser.
-     * - `integration` (`*.integration.test.ts`) — the Supabase test stack.
-     * - `component` (`*.svelte.test.ts`) — a real Chromium.
-     *
-     * The suffix, not the directory, because the requirement doesn't follow the directory:
-     * `lib/server/auth/guards.test.ts` is pure and `routes/health/` talks to both stores. And the
-     * bare suffix is the *pure* one, so a mislabelled test fails loudly on a refused connection
-     * rather than quietly costing everyone a container.
-     */
+    // One project per thing a test can need: `unit` nothing, `integration` the Supabase test
+    // stack, `component` a real Chromium.
     projects: [
       {
         extends: './vite.config.ts',

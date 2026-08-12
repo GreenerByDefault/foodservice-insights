@@ -36,11 +36,8 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   server. Getting this wrong silently bundles the package instead of failing.
 - **Test file suffixes are load-bearing**: each runner and vitest project selects files by
   suffix, so a misnamed test is either skipped or picked up by the wrong one. See the table in
-  [`README.md`](../../README.md).
-- **A test that needs Postgres or the blob store is named `*.integration.test.ts`**; anything
-  else is `*.test.ts` and must run with nothing up. Judge by what the test reaches, not by which
-  directory it sits in — there are pure tests under `src/lib/server/` and integration tests under
-  `src/routes/`. A test that opens only a socket it started itself still counts as a unit test.
+  [`README.md`](../../README.md). Pick the suffix by what the test reaches, not by which directory
+  it sits in.
 - **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
 
 ## Database

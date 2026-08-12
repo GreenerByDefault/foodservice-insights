@@ -152,12 +152,6 @@ Unit, integration and component tests are colocated with the code they cover; th
 invariants in [`packages/db/tests/`](packages/db/tests/) are the exception, since they belong to the
 schema rather than to any one module.
 
-The suffix, not the directory, because the requirement does not follow the directory —
-`apps/web/src/lib/server/auth/guards.test.ts` is pure, and `src/routes/health/` talks to both
-stores. Note which way round the default runs: the *bare* suffix is the one that needs nothing, so
-a database test that forgets `.integration` fails immediately on a refused connection instead of
-quietly making everyone else's run slower.
-
 **Component tests** render a single component in a real browser via
 `vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
 e2e tests for anything that is really about one component's behaviour.
