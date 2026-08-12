@@ -1,7 +1,7 @@
 import type { OrganizationId } from '@gbd/db';
 import { isHttpError } from '@sveltejs/kit';
 import { describe, expect, test } from 'vitest';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext } from '$lib/server/tests/auth-context';
 import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
 import type { AuthContext } from './types.ts';
 

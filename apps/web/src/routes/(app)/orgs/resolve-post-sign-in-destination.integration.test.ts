@@ -4,7 +4,7 @@ import type { Transaction } from 'kysely';
 import { expect, test } from 'vitest';
 import type { OrganizationAccess } from '$lib/server/auth/types';
 import { database } from '$lib/server/db';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext } from '$lib/server/tests/auth-context';
 import { _resolvePostSignInDestination } from './+page.server.ts';
 
 function anEmail(): string {

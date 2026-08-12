@@ -4,8 +4,8 @@ import type { Database, DatabaseExecutor } from './schema.ts';
 /** Run `fn` in a transaction, joining `db`'s own if it already is one.
  *
  * Joining rather than nesting is what lets `db` be a rolled-back test transaction: Kysely
- * throws on `db.transaction()` if `db` is already a `Transaction`. See `transactions.test.ts`
- * for the atomicity this buys and its trade-off.
+ * throws on `db.transaction()` if `db` is already a `Transaction`. See
+ * `transactions.integration.test.ts` for the atomicity this buys and its trade-off.
  */
 export async function withTransaction<T>(
   db: DatabaseExecutor,

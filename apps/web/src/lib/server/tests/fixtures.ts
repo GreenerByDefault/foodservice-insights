@@ -2,28 +2,8 @@ import type { Database, OrganizationId, UserId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { type BlobStore, deletePrefix, organizationPrefix } from '@gbd/storage';
 import type { Transaction } from 'kysely';
-import type { AuthContext, AuthenticatedUser, OrganizationAccess } from '../auth/types.ts';
 import { database } from '../db.ts';
 import { blobStore } from '../storage.ts';
-
-/** An `AuthContext` with no database behind it. */
-export function anAuthContext(
-  overrides: {
-    user?: Partial<AuthenticatedUser>;
-    organizations?: readonly OrganizationAccess[];
-  } = {},
-): AuthContext {
-  return {
-    user: {
-      id: crypto.randomUUID() as UserId,
-      email: 'member@example.test',
-      displayName: null,
-      isSuperadmin: false,
-      ...overrides.user,
-    },
-    organizations: overrides.organizations ?? [],
-  };
-}
 
 export type FileFixtures = {
   transaction: Transaction<Database>;

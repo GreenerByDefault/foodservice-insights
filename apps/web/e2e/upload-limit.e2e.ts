@@ -3,7 +3,8 @@
  * `BODY_SIZE_LIMIT` only exists in the built server, and only when `start.js` is what started it —
  * so this is the one place the wiring can be checked.
  *
- * The rest of the upload rules are covered against the test database in `create-report.test.ts`.
+ * The rest of the upload rules are covered against the test database in
+ * `create-report.integration.test.ts`.
  */
 
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';

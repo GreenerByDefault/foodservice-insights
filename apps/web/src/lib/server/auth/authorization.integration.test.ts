@@ -2,7 +2,7 @@ import type { OrganizationId, UserId } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID, PLACEHOLDER_ORGANIZATION_NAME } from '@gbd/db/seed';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { afterAll, describe, expect, test } from 'vitest';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext } from '$lib/server/tests/auth-context';
 import { closeDatabase, database } from '../db.ts';
 import { findOrganizationAccess, loadAuthorization } from './authorization.ts';
 

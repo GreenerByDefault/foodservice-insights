@@ -1,5 +1,5 @@
-/** Deliberately unmocked, per `objects.test.ts` — a fake S3 could confirm we call the SDK the
- * way we call it, not that a missing bucket really answers the way `bucketExists` assumes.
+/** Deliberately unmocked, per `objects.integration.test.ts` — a fake S3 could confirm we call the
+ * SDK the way we call it, not that a missing bucket really answers the way `bucketExists` assumes.
  */
 
 import { requireEnv } from '@gbd/core/env';

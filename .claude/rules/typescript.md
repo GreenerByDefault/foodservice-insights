@@ -34,9 +34,13 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   server code imports it. `apps/web/vite.config.ts` derives the list of packages to leave
   unbundled from `dependencies`, because those are the ones installed next to the built
   server. Getting this wrong silently bundles the package instead of failing.
-- **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
-  misnamed test is either skipped or picked up by the wrong runner. See the table in
+- **Test file suffixes are load-bearing**: each runner and vitest project selects files by
+  suffix, so a misnamed test is either skipped or picked up by the wrong one. See the table in
   [`README.md`](../../README.md).
+- **A test that needs Postgres or the blob store is named `*.integration.test.ts`**; anything
+  else is `*.test.ts` and must run with nothing up. Judge by what the test reaches, not by which
+  directory it sits in — there are pure tests under `src/lib/server/` and integration tests under
+  `src/routes/`. A test that opens only a socket it started itself still counts as a unit test.
 - **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
 
 ## Database
@@ -58,8 +62,8 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
   alongside `GET`/`POST` — and have the handler call it with `database()`. Call `database()`
   inside the handler, never at module scope. Name that function's test file without a `+`
-  prefix (e.g. `check-health.test.ts`, not `+server.test.ts`) — SvelteKit reserves `+` names,
-  and the build fails on one it doesn't recognize.
+  prefix (e.g. `check-health.integration.test.ts`, not `+server.test.ts`) — SvelteKit reserves `+`
+  names, and the build fails on one it doesn't recognize.
 - **Route handlers wrap DB calls in `withDbErrorHandling`** (`apps/web/src/lib/server/db.ts`),
   so a failure is logged with context instead of leaking to the client. It splits three ways —
   a statement we could not complete is a 503, one Postgres refused is a 500, anything else is

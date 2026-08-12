@@ -137,13 +137,26 @@ macOS.
 
 ### Testing
 
-| Tier | Location | Runner | Naming |
+**A test's suffix declares what it needs to run**, and that is what puts it in one runner or
+vitest project rather than another:
+
+| Tier | Naming | Runner | Needs |
 | --- | --- | --- | --- |
-| Unit | Colocated with the code | vitest, node | `*.test.ts` |
-| Component | Colocated with the component | vitest, real Chromium | `*.svelte.test.ts` |
-| Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
-| Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
-| System e2e | `tests/e2e/` (not yet) | Playwright | `*.e2e.ts` |
+| Unit | `*.test.ts` | vitest, node | nothing — no Docker, no browser |
+| Integration | `*.integration.test.ts` | vitest, node | the Supabase test stack |
+| Component | `*.svelte.test.ts` | vitest, real Chromium | a browser |
+| Web e2e | `*.e2e.ts` in `apps/web/e2e/` | Playwright | the built server and both stores |
+| System e2e | `*.e2e.ts` in `tests/e2e/` (not yet) | Playwright | everything |
+
+Unit, integration and component tests are colocated with the code they cover; the database
+invariants in [`packages/db/tests/`](packages/db/tests/) are the exception, since they belong to the
+schema rather than to any one module.
+
+The suffix, not the directory, because the requirement does not follow the directory —
+`apps/web/src/lib/server/auth/guards.test.ts` is pure, and `src/routes/health/` talks to both
+stores. Note which way round the default runs: the *bare* suffix is the one that needs nothing, so
+a database test that forgets `.integration` fails immediately on a refused connection instead of
+quietly making everyone else's run slower.
 
 **Component tests** render a single component in a real browser via
 `vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
@@ -160,9 +173,19 @@ trace with `pnpm exec playwright show-trace <path-to-zip>`.
 
 #### Tests and the database
 
-**The test stack must be running** for any vitest Node test by running `TEST_DB=1 scripts/supabase start`.
-A fair number of tests query Postgres or the blob store. The test scripts apply migrations and create
-the bucket created before tests run.
+**The test stack must be running** for any `*.integration.test.ts`: `TEST_DB=1 scripts/supabase start`.
+Those are the tests that query Postgres or the blob store. The test scripts apply migrations and
+create the bucket before tests run.
+
+`pnpm test:unit` runs every vitest project, so it needs the stack. To run only the tests that need
+nothing — the fast majority — name the project:
+
+```sh
+pnpm --filter @gbd/web exec vitest run --project unit
+```
+
+`@gbd/db` and `@gbd/storage` take the same flag. `@gbd/core` and `@gbd/worker` have no integration
+tests, so their whole suite already runs with nothing up.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
 `@gbd/db/testing`, which rolls the transaction back however the test ends. It's necessary for

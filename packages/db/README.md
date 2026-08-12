@@ -90,8 +90,8 @@ must not be able to overwrite a verdict another worker already reached.
 
 The invariants themselves are the named constraints and triggers in
 [`migrations/`](migrations/), each with a test in
-[`tests/analysis-attempt.test.ts`](tests/analysis-attempt.test.ts). Two consequences apply to any
-code that writes to this column:
+[`tests/analysis-attempt.integration.test.ts`](tests/analysis-attempt.integration.test.ts). Two
+consequences apply to any code that writes to this column:
 
 - **A transition to a terminal status must be one `UPDATE`.** Checks cannot be deferred, so
   `status`, `finished_at`, `failure_reason`, and the `ai_*` columns have to be set together.
@@ -105,10 +105,10 @@ code that writes to this column:
   [`contract/`](../../contract/), so their shape is unconstrained until the analysis library is
   ported. Deciding which keys graduate out of those bags into structured columns is a follow-up.
 - **Open:** the queue-claiming `FOR UPDATE SKIP LOCKED` query is tested in
-  [`tests/analysis-attempt.test.ts`](tests/analysis-attempt.test.ts), but only as a *copy* of the
-  one in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing yet ties a worker to it,
-  because the worker's queue code does not exist. Move the query into that code when it lands and
-  point the test at it.
+  [`tests/analysis-attempt.integration.test.ts`](tests/analysis-attempt.integration.test.ts), but
+  only as a *copy* of the one in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing
+  yet ties a worker to it, because the worker's queue code does not exist. Move the query into that
+  code when it lands and point the test at it.
 - **Open:** the hourly and weekly report limits in
   [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits) still have the race the organization
   creation limit no longer has — two uploads that each count four and then both insert. Closing it

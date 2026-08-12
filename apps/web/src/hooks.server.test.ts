@@ -5,11 +5,11 @@ import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
 import { closeDatabase } from '$lib/server/db';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext } from '$lib/server/tests/auth-context';
 import { handle, handleError } from './hooks.server.ts';
 
 // This file tests only the hook's wiring, so identification and authorization are stubbed.
-// See $lib/server/auth/authorization.test.ts for their tests.
+// See $lib/server/auth/authorization.integration.test.ts for their tests.
 vi.mock('$lib/server/auth/identify', () => ({ identifyUser: vi.fn() }));
 vi.mock('$lib/server/auth/authorization', () => ({ loadAuthorization: vi.fn() }));
 

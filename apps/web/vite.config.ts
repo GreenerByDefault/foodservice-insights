@@ -47,28 +47,48 @@ export default defineConfig(({ command }) => ({
   ],
   test: {
     expect: { requireAssertions: true },
+
+    /** One project per thing a test can need, selected by suffix:
+     *
+     * - `unit` — nothing. No Docker, no browser.
+     * - `integration` (`*.integration.test.ts`) — the Supabase test stack.
+     * - `component` (`*.svelte.test.ts`) — a real Chromium.
+     *
+     * The suffix, not the directory, because the requirement doesn't follow the directory:
+     * `lib/server/auth/guards.test.ts` is pure and `routes/health/` talks to both stores. And the
+     * bare suffix is the *pure* one, so a mislabelled test fails loudly on a refused connection
+     * rather than quietly costing everyone a container.
+     */
     projects: [
       {
         extends: './vite.config.ts',
         test: {
-          name: 'client',
+          name: 'component',
           browser: {
             enabled: true,
             provider: playwright({ actionTimeout: 5_000 }),
             instances: [{ browser: 'chromium', headless: true }],
           },
-          include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+          include: ['src/**/*.svelte.test.ts'],
           exclude: ['src/lib/server/**'],
         },
       },
       {
         extends: './vite.config.ts',
         test: {
-          name: 'server',
+          name: 'unit',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+          exclude: ['src/**/*.svelte.test.ts', 'src/**/*.integration.test.ts'],
+        },
+      },
+      {
+        extends: './vite.config.ts',
+        test: {
+          name: 'integration',
           environment: 'node',
           globalSetup: ['./src/lib/server/tests/global-setup.ts'],
-          include: ['src/**/*.{test,spec}.{js,ts}'],
-          exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+          include: ['src/**/*.integration.test.ts'],
         },
       },
     ],
