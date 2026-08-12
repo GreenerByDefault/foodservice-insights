@@ -14,7 +14,7 @@ import type { CountsBasis, RejectedUploadReason, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
 import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues, optionalText, parsedJson } from '$lib/forms/validation';
-import { MAX_UPLOAD_BYTES } from '../../../upload-limit.js';
+import { MAX_UPLOAD_BYTES } from './upload-limit.js';
 
 export { MAX_UPLOAD_BYTES };
 export const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / 1024 / 1024;
