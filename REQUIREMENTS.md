@@ -34,16 +34,20 @@ data and generate a PDF and an XLSX file.
 
 ### Errors during upload and processing
 
-- **Upload issues:** the app indicates there was a problem and lets the user try again.
-- **Invalid files** are rejected with a clear error.
+Three distinct failures can reach the user, and each calls for a different answer:
+
+- **Their file was rejected:** a clear error naming what to fix.
   - Catch errors as early as feasible — a client-side check gives better UX, but the server must
     still validate for security.
   - Rejected files are kept in the blob store.
-- **Internal errors:**
-  - The user can retry a failed attempt without re-uploading the file or re-entering metadata.
+- **We could not be reached:** the app says so and keeps trying by itself. It never presents this
+  as the analysis failing, and never offers a retry.
+  - If an upload's outcome is unknown, the app says it is unknown and links to the report list
+    rather than resubmitting.
+- **The analysis failed:** the user can retry without re-uploading the file or re-entering
+  metadata.
   - The server allows only one retry at a time per report.
-  - The error message makes clear this was not a problem with their file, and that retrying may
-    help.
+  - The error message makes clear this was not a problem with their file.
 
 ### Persistence
 
