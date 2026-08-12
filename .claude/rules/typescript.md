@@ -61,7 +61,16 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   prefix (e.g. `check-health.test.ts`, not `+server.test.ts`) — SvelteKit reserves `+` names,
   and the build fails on one it doesn't recognize.
 - **Route handlers wrap DB calls in `withDbErrorHandling`** (`apps/web/src/lib/server/db.ts`),
-  so a failure is logged with context instead of leaking to the client.
+  so a failure is logged with context instead of leaking to the client. It splits three ways —
+  a statement we could not complete is a 503, one Postgres refused is a 500, anything else is
+  rethrown — and the status is not the caller's to pass in.
+- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** Answer it
+  with `error()` there; an `HttpError` is no kind of database failure, so it passes back out
+  untouched. Checking for the condition beforehand instead duplicates the constraint and still
+  races.
+- **Classify a database failure with `isTransientDatabaseError` or `isPermanentDatabaseError`, never
+  `instanceof DatabaseError`** — an outage never arrives as one. See
+  [`packages/db/README.md`](../../packages/db/README.md#using-it).
 - **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
   test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
@@ -70,8 +79,9 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
 ## Blob store
 
 - **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
-  (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. It defaults to
-  503, not 500: a blob store failure always means we could not reach the store, so retrying helps.
+  (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
+  unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
+  ever means we could not reach the store, so retrying helps.
 - **Classify a blob store failure with `isBlobStoreError`, never by an SDK error shape.** Everything
   `@gbd/storage` fails with is a `BlobStoreError`, because a reply from the service and a timed-out
   socket look nothing alike and only the package knows both.

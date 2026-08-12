@@ -1,5 +1,5 @@
 import type { Handle, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
-import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
 import type { AuthContext } from '$lib/server/auth/types';
@@ -26,8 +26,6 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
   const auth = await withDbErrorHandling(() => loadAuthorization(database(), userId), {
     action: 'load authorization',
     context: { userId },
-    status: 503,
-    body: SERVICE_UNAVAILABLE_ERROR,
   });
 
   if (!auth) {

@@ -1,6 +1,5 @@
-import { withRollback } from '@gbd/db/testing';
+import { divideByZero, withRollback } from '@gbd/db/testing';
 import { initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
-import { sql } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { closeDatabase, database } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
@@ -20,9 +19,9 @@ describe('_checkHealth', () => {
 
   test('degraded when the database is unreachable', async () => {
     await withRollback(database(), async (transaction) => {
-      // Per `db.test.ts`'s `divideByZero`, but the point here is what it leaves behind: an
-      // aborted transaction, so `_checkHealth`'s own `SELECT 1` fails too.
-      await sql`select 1 / 0`.execute(transaction).catch(() => {});
+      // The point here is what `divideByZero` leaves behind: an aborted transaction, so
+      // `_checkHealth`'s own `SELECT 1` fails too.
+      await divideByZero(transaction).catch(() => {});
 
       expect(await _checkHealth(transaction, blobStore())).toEqual({ status: 'degraded' });
     });

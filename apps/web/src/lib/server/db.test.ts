@@ -1,12 +1,14 @@
-import { isDatabaseError } from '@gbd/db';
-import { insertReport, withRollback } from '@gbd/db/testing';
-import { isHttpError } from '@sveltejs/kit';
-import { sql } from 'kysely';
+import { isPermanentDatabaseError, isTransientDatabaseError } from '@gbd/db';
+import {
+  aDatabaseError,
+  anUnreachableDatabaseError,
+  divideByZero,
+  insertReport,
+  withRollback,
+} from '@gbd/db/testing';
+import { error, isHttpError } from '@sveltejs/kit';
 import { afterAll, expect, test, vi } from 'vitest';
 import { closeDatabase, database, withDbErrorHandling } from './db.ts';
-
-/** A genuine Postgres failure, to exercise the path `withDbErrorHandling` converts. */
-const divideByZero = () => sql`select 1 / 0`.execute(database());
 
 afterAll(async () => {
   await closeDatabase();
@@ -34,11 +36,11 @@ test('withDbErrorHandling returns the value on success', async () => {
   ).resolves.toBe('ok');
 });
 
-test('withDbErrorHandling logs context and 500s by default on a database failure', async () => {
+test('withDbErrorHandling logs context and 500s a statement Postgres refused', async () => {
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   try {
-    const thrown = await withDbErrorHandling(divideByZero, {
+    const thrown = await withDbErrorHandling(() => divideByZero(database()), {
       action: 'load a widget',
       context: { widgetId: 'abc' },
     }).catch((error: unknown) => error);
@@ -50,31 +52,76 @@ test('withDbErrorHandling logs context and 500s by default on a database failure
     const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
     expect(message).toBe('Unexpected failure to load a widget');
     expect(meta).toMatchObject({ widgetId: 'abc' });
-    expect(isDatabaseError(meta.error)).toBe(true);
+    expect(isPermanentDatabaseError(meta.error)).toBe(true);
   } finally {
     logged.mockRestore();
   }
 });
 
-test('withDbErrorHandling supports an overridden status and body', async () => {
+/** That a real outage arrives in this shape is `@gbd/db`'s own test, against a closed port. This
+ * only needs something that is one.
+ */
+const databaseIsDown = () => Promise.reject(anUnreachableDatabaseError());
+
+test('withDbErrorHandling logs context and 503s an unreachable database', async () => {
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   try {
-    const thrown = await withDbErrorHandling(divideByZero, {
-      action: 'load authorization',
-      status: 503,
-      body: { message: 'The service is temporarily unavailable', code: 'service_unavailable' },
+    const thrown = await withDbErrorHandling(databaseIsDown, {
+      action: 'load a widget',
+      context: { widgetId: 'abc' },
     }).catch((error: unknown) => error);
 
     if (!isHttpError(thrown)) throw thrown;
     expect(thrown.status).toBe(503);
-    expect(thrown.body).toEqual({
-      message: 'The service is temporarily unavailable',
-      code: 'service_unavailable',
-    });
+    expect(thrown.body.code).toBe('service_unavailable');
+
+    expect(logged).toHaveBeenCalledTimes(1);
+    const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
+    expect(message).toBe('Could not reach the database to load a widget');
+    expect(meta).toMatchObject({ widgetId: 'abc' });
+    expect(isTransientDatabaseError(meta.error)).toBe(true);
   } finally {
     logged.mockRestore();
   }
+});
+
+test('withDbErrorHandling 503s a statement the database gave up on', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const canceled = () =>
+    Promise.reject(aDatabaseError('canceling statement due to timeout', '57014'));
+
+  try {
+    const thrown = await withDbErrorHandling(canceled, { action: 'load a widget' }).catch(
+      (error: unknown) => error,
+    );
+
+    if (!isHttpError(thrown)) throw thrown;
+    expect(thrown.status).toBe(503);
+
+    expect(logged).toHaveBeenCalledTimes(1);
+    const [, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
+    expect(isTransientDatabaseError(meta.error)).toBe(true);
+  } finally {
+    logged.mockRestore();
+  }
+});
+
+test('withDbErrorHandling passes through the answer a caller gave itself', async () => {
+  const conflict = async () => {
+    try {
+      await divideByZero(database());
+    } catch {
+      error(409, { message: 'That report already has an attempt running' });
+    }
+  };
+
+  const thrown = await withDbErrorHandling(conflict, { action: 'enqueue a retry' }).catch(
+    (cause: unknown) => cause,
+  );
+
+  if (!isHttpError(thrown)) throw thrown;
+  expect(thrown.status).toBe(409);
 });
 
 test('withDbErrorHandling rethrows a failure that is not from the database', async () => {

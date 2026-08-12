@@ -288,7 +288,7 @@ handling.
 | --- | --- |
 | Web server does not respond to the client | The client sets timeouts, and retries automatically where appropriate |
 | Web server or worker has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
-| Web server or worker has trouble with Supabase | Timeouts on transactions; return a 500 |
+| Web server or worker has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its heartbeat file, which triggers both parent-side and other-worker defenses — see [Heartbeats, hangs, and reaping](#heartbeats-hangs-and-reaping) |
