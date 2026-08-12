@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import {
-  FIELD,
-  MAX_MONTHS,
-  MAX_UPLOAD_BYTES,
-  type RawSubmission,
-  readSubmission,
-  validateSubmission,
-} from './submission.ts';
+import { MAX_MONTHS, MAX_UPLOAD_BYTES } from './limits.ts';
+import { FIELD } from './metadata.ts';
+import { type RawSubmission, readSubmission, validateSubmission } from './submission.ts';
 
 const CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
 

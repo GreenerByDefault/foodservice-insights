@@ -141,6 +141,33 @@ describe('camelCase, enums, and jsonb', () => {
   });
 });
 
+describe('rejected_upload_reason', () => {
+  // Pinned so `bad_rows` — added for row-level CSV validation, not yet raised anywhere — is on
+  // the enum before anything depends on it existing.
+  test('has exactly these members, in this order', async () => {
+    const { rows } = await withRollback(DATABASE, async (transaction) => {
+      return await sql<{ label: string }>`
+        SELECT e.enumlabel AS label
+        FROM pg_enum e
+        JOIN pg_type t ON t.oid = e.enumtypid
+        WHERE t.typname = 'rejected_upload_reason'
+        ORDER BY e.enumsortorder
+      `.execute(transaction);
+    });
+
+    expect(rows.map((row) => row.label)).toEqual([
+      'invalid_metadata',
+      'too_large',
+      'bad_columns',
+      'unparseable',
+      'csv_injection',
+      'empty',
+      'bad_rows',
+      'other',
+    ]);
+  });
+});
+
 describe('uuidv7', () => {
   test('produces version 7 ids carrying the current time', async () => {
     // Postgres 17 has no `uuidv7()` and its `uuid_extract_timestamp` handles only version 1, so

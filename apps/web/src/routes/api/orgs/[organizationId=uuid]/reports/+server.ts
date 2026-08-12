@@ -7,16 +7,17 @@ import type {
   UserId,
 } from '@gbd/db';
 import { newInputFileId, newRejectedUploadId, newReportId, withTransaction } from '@gbd/db';
-import { type BlobStore, putInputFile, putRejectedUpload, type StoredFile } from '@gbd/storage';
+import {
+  type BlobStore,
+  putInputFile,
+  putRejectedUpload,
+  type StoredInputFile,
+} from '@gbd/storage';
 import { error, json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
-import type {
-  FileDescription,
-  RawSubmission,
-  Rejection,
-  ReportMetadata,
-  UploadedFile,
-} from '$lib/reports/submission';
+import type { ReportMetadata } from '$lib/reports/metadata';
+import type { Rejection } from '$lib/reports/rejection';
+import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
@@ -59,8 +60,16 @@ export async function _createReport(
 
   // Upload the object before touching the database, so that no row
   // ever points at bytes that are not there.
+  //
+  // Nothing normalizes the upload yet, so `original` and `normalized` are the same bytes and
+  // `isModified` is always `false` until `validateCsv` lands.
   const stored = await withBlobStoreErrorHandling(
-    () => putInputFile(store, { organizationId, reportId, inputFileId }, outcome.file.bytes),
+    () =>
+      putInputFile(
+        store,
+        { organizationId, reportId, inputFileId },
+        { original: outcome.file.bytes, normalized: outcome.file.bytes },
+      ),
     { action: 'store an uploaded input file', context: { organizationId, reportId, inputFileId } },
   );
 
@@ -94,7 +103,7 @@ async function insertReport(
     userId: UserId;
     inputFileId: InputFileId;
     metadata: ReportMetadata;
-    stored: StoredFile;
+    stored: StoredInputFile;
     file: UploadedFile;
   },
 ): Promise<void> {
@@ -124,6 +133,7 @@ async function insertReport(
       contentType: input.stored.contentType,
       originalFilename: input.file.originalFilename,
       checksumSha256: input.stored.checksumSha256,
+      isModified: input.stored.isModified,
     })
     .execute();
 

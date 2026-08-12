@@ -5,6 +5,7 @@
  *     /rejected-upload/{rejected_upload_id}.csv
  *     /report/{report_id}
  *         /input/{input_file_id}.csv
+ *         /input/{input_file_id}-original.csv
  *         /analysis-attempt/{analysis_attempt_id}
  *             /result/{result_file_id}.{ext}
  * ```
@@ -18,6 +19,9 @@
  *    needs no validation: an `OrganizationId` cannot have come from a request body.
  * 3. **Keys are only ever built on the write path.** Every reader takes `storage_key` off the database
  *    row, so changing the layout later would not strand the objects already written under the old one.
+ *    The one exception is the object `originalInputFileKey` builds: no row references it, so no
+ *    reader takes its key off anything — only a developer in the Storage console ever fetches it, by
+ *    hand, and `input_file.is_modified` is what says whether it is there at all.
  */
 
 import type {
@@ -35,6 +39,10 @@ export const CSV_CONTENT_TYPE = 'text/csv';
 /** Deliberately not `text/csv`. An upload is rejected for what it turned out to be — two of the
  * reasons are `unparseable` and `csv_injection` — so its bytes are labelled as the opaque blob
  * they are rather than as something a browser might interpret.
+ *
+ * The original input file shares this for the same reason: the normalizer's Windows-1252 fallback
+ * means it may not be UTF-8, and `text/csv` would invite a browser to render bytes whose encoding
+ * we deliberately did not commit to.
  */
 export const REJECTED_UPLOAD_CONTENT_TYPE = 'application/octet-stream';
 
@@ -79,6 +87,23 @@ export function inputFileKey(ids: {
     ids.reportId,
     'input',
     `${ids.inputFileId}.csv`,
+  );
+}
+
+/** The upload as the user sent it, kept only for date-order-inference forensics. See this file's
+ * header — no row anywhere holds this key.
+ */
+export function originalInputFileKey(ids: {
+  organizationId: OrganizationId;
+  reportId: ReportId;
+  inputFileId: InputFileId;
+}): string {
+  return organizationScoped(
+    ids.organizationId,
+    'report',
+    ids.reportId,
+    'input',
+    `${ids.inputFileId}-original.csv`,
   );
 }
 

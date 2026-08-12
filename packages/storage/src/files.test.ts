@@ -6,7 +6,7 @@ import { newInputFileId, newResultFileId } from '@gbd/db';
 import { afterAll, describe, expect, test } from 'vitest';
 import { BLOB_STORE, shutdown } from './env.ts';
 import { putInputFile, putRejectedUpload, putResultFile } from './files.ts';
-import { organizationPrefix } from './keys.ts';
+import { organizationPrefix, originalInputFileKey } from './keys.ts';
 import { deletePrefix, getObject, headObject, listObjectKeys } from './objects.ts';
 import { withTemporaryOrganization } from './testing/organizations.ts';
 
@@ -18,6 +18,11 @@ afterAll(() => {
  * than its encoding would come out short.
  */
 const CSV = new TextEncoder().encode('product,date,amount\ncafé au lait,2026-01-05,12\n');
+
+/** A CSV that differs from `CSV`, so a test can tell the normalized bytes from the original. */
+const NORMALIZED_CSV = new TextEncoder().encode(
+  'product,date,amount\ncafe au lait,2026-01-05,12\n',
+);
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
 
@@ -35,7 +40,7 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        CSV,
+        { original: CSV, normalized: CSV },
       );
 
       expect(await getObject(BLOB_STORE, stored.storageKey)).toEqual(CSV);
@@ -49,7 +54,7 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        CSV,
+        { original: CSV, normalized: CSV },
       );
 
       expect(await headObject(BLOB_STORE, stored.storageKey)).toMatchObject({
@@ -64,7 +69,7 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        CSV,
+        { original: CSV, normalized: CSV },
       );
 
       expect(stored.byteSize).toBe(CSV.byteLength);
@@ -77,7 +82,7 @@ describe('putInputFile', () => {
       const stored = await putInputFile(
         BLOB_STORE,
         { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
-        CSV,
+        { original: CSV, normalized: CSV },
       );
 
       // Wrap the expected digest in `Uint8Array.from`: `createHash().digest()` returns a
@@ -88,6 +93,44 @@ describe('putInputFile', () => {
         Uint8Array.from(createHash('sha256').update(CSV).digest()),
       );
       expect(stored.checksumSha256.byteLength).toBe(32);
+    });
+  });
+
+  describe('isModified', () => {
+    test('is false for equal buffers, and writes no other object', async () => {
+      await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
+        const stored = await putInputFile(
+          BLOB_STORE,
+          { organizationId, reportId: aReportId(), inputFileId: newInputFileId() },
+          { original: CSV, normalized: CSV },
+        );
+
+        expect(stored.isModified).toBe(false);
+        expect(await listObjectKeys(BLOB_STORE, organizationPrefix(organizationId))).toEqual([
+          stored.storageKey,
+        ]);
+      });
+    });
+
+    test('is true for differing buffers, and keeps each at its own key', async () => {
+      await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
+        const ids = { organizationId, reportId: aReportId(), inputFileId: newInputFileId() };
+        const stored = await putInputFile(BLOB_STORE, ids, {
+          original: CSV,
+          normalized: NORMALIZED_CSV,
+        });
+
+        expect(stored.isModified).toBe(true);
+        expect(await getObject(BLOB_STORE, stored.storageKey)).toEqual(NORMALIZED_CSV);
+        expect(await getObject(BLOB_STORE, originalInputFileKey(ids))).toEqual(CSV);
+
+        // The schema decision this PR makes: the row describes the file the worker reads, not the
+        // one the user sent. Reversed, this should fail loudly.
+        expect(stored.byteSize).toBe(NORMALIZED_CSV.byteLength);
+        expect(stored.checksumSha256).toEqual(
+          Uint8Array.from(createHash('sha256').update(NORMALIZED_CSV).digest()),
+        );
+      });
     });
   });
 });
@@ -168,7 +211,7 @@ describe('deleting an organization', () => {
         await putInputFile(
           BLOB_STORE,
           { organizationId: doomed, reportId, inputFileId: newInputFileId() },
-          CSV,
+          { original: CSV, normalized: CSV },
         );
         await putResultFile(
           BLOB_STORE,
@@ -184,7 +227,7 @@ describe('deleting an organization', () => {
         const survivor = await putInputFile(
           BLOB_STORE,
           { organizationId: kept, reportId: aReportId(), inputFileId: newInputFileId() },
-          CSV,
+          { original: CSV, normalized: CSV },
         );
 
         expect(await deletePrefix(BLOB_STORE, organizationPrefix(doomed))).toBe(3);

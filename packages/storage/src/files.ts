@@ -18,6 +18,7 @@ import type { BlobStore } from './client.ts';
 import {
   CSV_CONTENT_TYPE,
   inputFileKey,
+  originalInputFileKey,
   REJECTED_UPLOAD_CONTENT_TYPE,
   RESULT_FILE_FORMATS,
   rejectedUploadKey,
@@ -37,12 +38,35 @@ export type StoredFile = {
   checksumSha256: Uint8Array;
 };
 
+/** The bytes as received and the bytes the worker should read. Equal when validation had nothing
+ * to fix, which is the common case.
+ */
+export type InputFileBytes = { original: Uint8Array; normalized: Uint8Array };
+
+export type StoredInputFile = StoredFile & { isModified: boolean };
+
 export async function putInputFile(
   store: BlobStore,
   ids: { organizationId: OrganizationId; reportId: ReportId; inputFileId: InputFileId },
-  body: Uint8Array,
-): Promise<StoredFile> {
-  return await storeFile(store, inputFileKey(ids), body, CSV_CONTENT_TYPE);
+  bytes: InputFileBytes,
+): Promise<StoredInputFile> {
+  // Compared here rather than reported by the validator: byte equality *is* the condition under
+  // which the original needs its own object, so it cannot drift from what was written.
+  const isModified = Buffer.compare(bytes.original, bytes.normalized) !== 0;
+
+  // Concurrent, not sequential. The ordering rule in this file's header — object before row —
+  // does not reach the original, because no row will point at it. So two writes cost the slower
+  // one rather than the sum.
+  const [stored] = await Promise.all([
+    storeFile(store, inputFileKey(ids), bytes.normalized, CSV_CONTENT_TYPE),
+    isModified
+      ? putObject(store, originalInputFileKey(ids), bytes.original, {
+          contentType: REJECTED_UPLOAD_CONTENT_TYPE,
+        })
+      : Promise.resolve(),
+  ]);
+
+  return { ...stored, isModified };
 }
 
 export async function putResultFile(

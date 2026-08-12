@@ -9,65 +9,12 @@
  * what the two worker processes have agreed to exchange.
  */
 
-import { exhaustiveArray } from '@gbd/core';
-import type { CountsBasis, RejectedUploadReason, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
 import { readFile, readText } from '$lib/forms/form-data';
-import { describeIssues, fieldsWithIssues, optionalText, parsedJson } from '$lib/forms/validation';
-import { MAX_UPLOAD_BYTES } from './upload-limit.js';
-
-export { MAX_UPLOAD_BYTES };
-export const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / 1024 / 1024;
-
-/** Caps on the free text and the metadata an upload carries. */
-export const MAX_REPORT_NAME_LENGTH = 200;
-export const MAX_SITE_NAME_LENGTH = 200;
-export const MAX_ORIGINAL_FILENAME_LENGTH = 255;
-
-/** Enough for a decade of monthly figures, which is far past any plausible submission. */
-export const MAX_MONTHS = 120;
-
-/** The form field names, so the form and the parser cannot drift apart. */
-export const FIELD = {
-  // We use `report-name` rather than `name` so that iOS does not offer to autofill a person's name.
-  name: 'report-name',
-  siteName: 'site-name',
-  countsBasis: 'counts-basis',
-  unitSystem: 'unit-system',
-  monthlyCounts: 'monthly-counts',
-  file: 'file',
-} as const;
-
-export const COUNTS_BASES = exhaustiveArray<CountsBasis>()(['people', 'meals']);
-export const UNIT_SYSTEMS = exhaustiveArray<UnitSystem>()(['lb', 'kg']);
-
-const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
-
-const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(0));
-
-/** `report.monthly_counts` as month to count, keyed `YYYY-MM`.*/
-export const MonthlyCountsSchema = v.pipe(
-  v.record(v.pipe(v.string(), v.regex(MONTH_PATTERN, 'is not a YYYY-MM month')), wholeNumber),
-  v.check((counts) => Object.keys(counts).length > 0, 'needs at least one month'),
-  v.check(
-    (counts) => Object.keys(counts).length <= MAX_MONTHS,
-    `covers at most ${MAX_MONTHS} months`,
-  ),
-);
-
-export type MonthlyCounts = v.InferOutput<typeof MonthlyCountsSchema>;
-
-export const ReportMetadataSchema = v.object({
-  name: optionalText(MAX_REPORT_NAME_LENGTH),
-  siteName: optionalText(MAX_SITE_NAME_LENGTH),
-  countsBasis: v.picklist(COUNTS_BASES),
-  unitSystem: v.picklist(UNIT_SYSTEMS),
-  // One JSON field rather than a form field per month: the column is `jsonb`, and the browser
-  // has to serialise the map somehow.
-  monthlyCounts: v.pipe(v.nullable(v.string()), parsedJson, MonthlyCountsSchema),
-});
-
-export type ReportMetadata = v.InferOutput<typeof ReportMetadataSchema>;
+import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
+import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
+import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
+import type { Rejection } from './rejection.ts';
 
 /** Exactly what arrived, before anything has judged it. Recorded verbatim on a rejection. */
 export type RawSubmission = {
@@ -85,14 +32,6 @@ export type FileDescription = {
 };
 
 export type UploadedFile = FileDescription & { bytes: Uint8Array };
-
-export type Rejection = {
-  reason: RejectedUploadReason;
-  /** Safe to show the user. */
-  message: string;
-  /** For `rejected_upload.rejection_detail`. Never shown. */
-  detail?: string;
-};
 
 export type ValidatedSubmission =
   | { ok: true; metadata: ReportMetadata; file: UploadedFile }

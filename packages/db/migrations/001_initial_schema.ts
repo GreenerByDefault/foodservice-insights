@@ -365,6 +365,7 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
       'unparseable',
       'csv_injection',
       'empty',
+      'bad_rows',
       'other',
     ])
     .execute();
@@ -441,6 +442,7 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
     .addColumn('content_type', 'text', (column) => column.notNull())
     .addColumn('original_filename', 'text', (column) => column.notNull())
     .addColumn('checksum_sha256', 'bytea', (column) => column.notNull())
+    .addColumn('is_modified', 'boolean', (column) => column.notNull())
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addCheckConstraint('input_file_byte_size_positive', sql`byte_size > 0`)
     .addCheckConstraint(
@@ -448,6 +450,11 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
       sql`octet_length(checksum_sha256) = 32`,
     )
     .execute();
+
+  await sql`
+    COMMENT ON COLUMN input_file.is_modified IS
+      'Whether storage_key holds bytes the user did not send. When true, the upload as received is at the same key suffixed -original, which no row references. When false, storage_key is it.'
+  `.execute(database);
 
   // --- rejected_upload ------------------------------------------------------
 
