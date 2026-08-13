@@ -235,31 +235,18 @@ never the local no-progress and hard-ceiling checks, which read the clock and th
 parent that gives up on recording a verdict stops renewing the lease first, so reaping can
 converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
 
-*Rejected: propagating the child's progress timestamp into the database.* `progress.json` carries
-only a `sequence`, no timestamp, so the parent's `lastProgressAt` is *the parent's own clock* at
-the moment it observed the counter move — a worker-clock value. Writing that into
-`lease_renewed_at` puts it in a column that `analysis_attempt_lease_renewed_after_claimed_at` and
-`analysis_attempt_finished_at_after_lease_renewed` compare against the *database's* `now()`.
-Negative skew → SQLSTATE 23514, a permanent error, so the bounded transient retry rethrows and
-every later tick fails identically: the parent never writes again and a healthy attempt gets
-reaped. Positive skew is worse — a `lease_renewed_at` seconds in the DB's future makes the row
-unfinishable by the parent *and* unreapable by the reaper until the DB clock catches up.
-Propagation also forces the reaper's expiry to be several times the supervise interval slower,
-which delays recovering a genuinely abandoned attempt and blocks the user's retry that much longer.
+*Rejected: propagating the child's progress timestamp into the database* — it is a worker-clock
+value, and the columns it would land in are compared against the database's own `now()`; see the
+`COMMENT ON COLUMN lease_renewed_at` in the migration for the failure mode.
 
-*Rejected: a reaper that excludes its own `worker_id`.* This looks defensive and is a bug: with one
-worker, an abandoned row would never be reaped by the only process that will ever see it. A live
-supervisor's own renewals already keep its rows outside the expiry window, so a row of yours that
-*is* expired is one you genuinely stopped supervising.
+*Rejected: a reaper that excludes its own `worker_id`* — with one worker, an abandoned row would
+then never be reaped by the only process that will ever see it.
 
-**The reaper itself, specified but not yet built** (tracked as an **Open** on
-[`packages/db/README.md`](packages/db/README.md#open-questions)): two independent predicates —
-lease expiry, and a ceiling on `claimed_at` that is fully independent of anything parent-local —
-each a single statement with the predicate inside the `UPDATE` itself, not a preceding `SELECT`, so
-READ COMMITTED re-evaluation lets a concurrent renewal win the race; a `LIMIT`, so one bad failover
-window cannot fan out into a mass mailing; a branch on `cancel_requested_at` that writes `canceled`
-with no email instead of `failed('abandoned')`; and the rule that **only the writer whose `UPDATE`
-returned a row may email**, which the existing guarded-update pattern gives for free.
+**Open:** the reaper is specified but not built — two independent `UPDATE`-only predicates (lease
+expiry, and a `claimed_at` ceiling independent of anything parent-local), a `LIMIT`, a
+`cancel_requested_at` branch to `canceled` with no email, and only the writer whose `UPDATE`
+returned a row may email. Tracked on
+[`packages/db/README.md`](packages/db/README.md#open-questions).
 
 ### Canceling
 

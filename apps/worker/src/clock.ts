@@ -14,11 +14,5 @@
 
 export type Clock = { now(): number };
 
-// `performance.now()`, not `Date.now()`. `Clock.now()` is used exclusively for interval
-// arithmetic — how long since the child last progressed, how long the attempt has run — and an
-// NTP step backwards in `Date.now()` would make `now - lastProgressAt` negative. That disables
-// both local kills at once (Axis A silently off) while the lease keeps renewing on the database's
-// own clock (Axis B still reporting health) — the worst kind of failure, one that looks healthy.
-// `performance.now()` has an arbitrary origin, which is why `manualClock`'s arbitrary starting
-// point already suits this.
+// `performance.now()`, not `Date.now()` to avoid Network Time Protocol (NTP) issues.
 export const SYSTEM_CLOCK: Clock = { now: () => performance.now() };
