@@ -1,4 +1,4 @@
-/** A claimed attempt real enough for `attempt.test.ts` to run `startAttempt`/`settleAttempt`
+/** A claimed attempt real enough for `attempt-lifecycle.test.ts` to run `startAttempt`/`settleAttempt`
  * against: a committed organization/report/input file, a real object at the input file's storage
  * key, and a run root of its own.
  *

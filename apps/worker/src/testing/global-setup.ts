@@ -1,4 +1,4 @@
-/** vitest `globalSetup` for the worker's tests. Both are needed: `attempt.test.ts` claims real
+/** vitest `globalSetup` for the worker's tests. Both are needed: `attempt-lifecycle.test.ts` claims real
  * rows and uploads to a real bucket, so both stores have to exist before any test file runs. */
 
 import { setup as setUpDatabase } from '@gbd/db/testing';

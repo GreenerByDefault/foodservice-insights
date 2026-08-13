@@ -16,7 +16,7 @@ import {
   recordVerdict,
   settleAttempt,
   startAttempt,
-} from './attempt.ts';
+} from './attempt-lifecycle.ts';
 import { chartFileName, RESULT_FILE_NAMES } from './contract/layout.ts';
 import type { AttemptFixture } from './testing/attempt-fixture.ts';
 import { withAttemptFixture } from './testing/attempt-fixture.ts';

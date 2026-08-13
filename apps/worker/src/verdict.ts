@@ -1,6 +1,6 @@
 /** What a child's ending *means* — pure, so the ~20-case matrix below runs in milliseconds and
  * needs no fixture beyond the values it switches on. Everything that produces those values (a
- * process exit, a file read) lives in [`attempt.ts`](./attempt.ts).
+ * process exit, a file read) lives in [`attempt-lifecycle.ts`](./attempt-lifecycle.ts).
  */
 
 import type { AnalysisFailureReason } from '@gbd/db';

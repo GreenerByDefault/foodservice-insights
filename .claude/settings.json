@@ -88,6 +88,8 @@
       "Bash(gh search *)",
       "Bash(gh release list *)",
 
+      "Bash(cat *)",
+      "Bash(grep *)",
       "Bash(rg *)",
       "Bash(sd *)",
       "Bash(xargs cat)",
