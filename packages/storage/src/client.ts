@@ -34,10 +34,10 @@ export type BlobStoreLimits = {
   /** The wall clock one request gets, retries and backoff included.
    *
    * This is a failsafe under `MAX_ATTEMPTS`: a count is a poor proxy for time. Against a store
-   * that fails fast, `MAX_ATTEMPTS` retries wait out the ~15.5s backoff schedule, but against one
-   * that accepts sockets and never answers, they take `MAX_ATTEMPTS × attemptTimeoutMs` — three
-   * minutes, with no route timeout above it to cut in. 45s leaves faster failures untouched and
-   * turns that three minutes into about 47s.
+   * that fails fast, `MAX_ATTEMPTS` retries wait out the backoff schedule (see `retryDelayBaseMs`),
+   * but against one that accepts sockets and never answers, they take
+   * `MAX_ATTEMPTS × attemptTimeoutMs` — three minutes, with no route timeout above it to cut in.
+   * 45s leaves faster failures untouched and turns that three minutes into about 47s.
    *
    * Lower here catches a hung upload sooner. Enforcement can overshoot this by up to the
    * longest backoff sleep — see `sendOptions`.
@@ -54,11 +54,9 @@ export const DEFAULT_LIMITS: BlobStoreLimits = {
 
 /** How many times to try a request the SDK considers retryable, the first attempt included.
  *
- * Every operation here is idempotent, so an extra attempt costs only the wait. Six of them,
- * doubling from `retryDelayBaseMs`, ride out a store that browns out for several seconds, not
- * just one that hiccups once. Going higher than six buys little, since `requestDeadlineMs` is
- * the real bound on waiting. If an outage lasts longer than that, a user will need to initiate
- * a retry on their analysis.
+ * Every operation here is idempotent, so an extra attempt costs only the wait. Going higher
+ * than six buys little, since `requestDeadlineMs` is the real bound on waiting. If an outage
+ * lasts longer than that, a user will need to initiate a retry on their analysis.
  */
 export const MAX_ATTEMPTS = 6;
 
