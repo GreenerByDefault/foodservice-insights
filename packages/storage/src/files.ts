@@ -38,20 +38,20 @@ export type StoredFile = {
   checksumSha256: Uint8Array;
 };
 
-export type InputFileBytes = { original: Uint8Array; normalized: Uint8Array };
+export type InputFileVariants = { original: Uint8Array; normalized: Uint8Array };
 
 export type StoredInputFile = StoredFile & { isModified: boolean };
 
 export async function putInputFile(
   store: BlobStore,
   ids: { organizationId: OrganizationId; reportId: ReportId; inputFileId: InputFileId },
-  bytes: InputFileBytes,
+  variants: InputFileVariants,
 ): Promise<StoredInputFile> {
-  const isModified = Buffer.compare(bytes.original, bytes.normalized) !== 0;
+  const isModified = Buffer.compare(variants.original, variants.normalized) !== 0;
   const [stored] = await Promise.all([
-    storeFile(store, normalizedInputFileKey(ids), bytes.normalized, NORMALIZED_CSV_CONTENT_TYPE),
+    storeFile(store, normalizedInputFileKey(ids), variants.normalized, NORMALIZED_CSV_CONTENT_TYPE),
     isModified
-      ? putObject(store, originalInputFileKey(ids), bytes.original, {
+      ? putObject(store, originalInputFileKey(ids), variants.original, {
           contentType: OPAQUE_CSV_CONTENT_TYPE,
         })
       : Promise.resolve(),

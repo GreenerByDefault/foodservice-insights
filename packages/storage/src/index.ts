@@ -12,7 +12,7 @@ export {
   isNotFoundError,
 } from './errors.ts';
 export {
-  type InputFileBytes,
+  type InputFileVariants,
   putInputFile,
   putRejectedUpload,
   putResultFile,

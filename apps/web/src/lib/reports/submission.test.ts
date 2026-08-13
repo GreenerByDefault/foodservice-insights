@@ -41,7 +41,7 @@ describe('validateSubmission', () => {
     expect(outcome).toMatchObject({
       ok: true,
       file: {
-        bytes: {
+        variants: {
           original: new TextEncoder().encode(CSV),
           normalized: new TextEncoder().encode(CSV),
         },
