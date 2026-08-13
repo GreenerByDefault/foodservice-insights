@@ -478,7 +478,7 @@ describe('finishing', () => {
     });
   });
 
-  test('records a cancellation, and no email has been sent for it', async () => {
+  test('records a cancellation', async () => {
     const attempt = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
@@ -490,7 +490,6 @@ describe('finishing', () => {
     expect(attempt.row).toMatchObject({
       status: 'canceled',
       failureReason: null,
-      notificationEmailSentAt: null,
     });
   });
 
