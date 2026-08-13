@@ -101,17 +101,16 @@ code that writes to this column:
 - **Guard terminal updates** with `WHERE id = $1 AND status = 'processing' AND worker_id = $2`, so
   losing the reaping race is a zero-row update rather than an exception.
 
+This package owns the invariants; who claims an attempt and when is the worker's policy, so the
+claim from [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) and every terminal transition
+live in [`apps/worker/src/queue.ts`](../../apps/worker/src/queue.ts) and are tested beside it.
+
 ## Open questions
 
 - **Open:** the AI metadata fields on `analysis_attempt` are a placeholder and may change. The
   worker child fills `ai_metadata` and `result_metadata` from two deliberately opaque bags in
   [`contract/`](../../contract/), so their shape is unconstrained until the analysis library is
   ported. Deciding which keys graduate out of those bags into structured columns is a follow-up.
-- **Open:** the queue-claiming `FOR UPDATE SKIP LOCKED` query is tested in
-  [`tests/analysis-attempt.test.ts`](tests/analysis-attempt.test.ts), but only as a *copy* of the
-  one in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) — nothing yet ties a worker to it,
-  because the worker's queue code does not exist. Move the query into that code when it lands and
-  point the test at it.
 - **Open:** the hourly and weekly report limits in
   [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits) still have the race the organization
   creation limit no longer has — two uploads that each count four and then both insert. Closing it

@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     expect: { requireAssertions: true },
+    globalSetup: ['./src/testing/global-setup.ts'],
   },
 });

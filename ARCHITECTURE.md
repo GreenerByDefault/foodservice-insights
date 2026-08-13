@@ -117,22 +117,10 @@ database.
 
 ## Worker queue
 
-The queue is Postgres. A worker claims an attempt with a single statement:
-
-```sql
-UPDATE analysis_attempt
-SET status = 'processing', worker_id = $1, claimed_at = now(), lease_renewed_at = now()
-WHERE id = (
-  SELECT id FROM analysis_attempt
-  WHERE status = 'pending'
-  ORDER BY created_at
-  FOR UPDATE SKIP LOCKED
-  LIMIT 1
-)
-RETURNING *;
-```
-
-This gives the semantics we need: roughly FIFO, concurrency-safe, and atomic.
+The queue is Postgres. A worker claims the oldest pending attempt with a single guarded
+`UPDATE ... FOR UPDATE SKIP LOCKED`, giving the semantics we need: roughly FIFO,
+concurrency-safe, and atomic. The statement lives in
+[`claimNextAttempt`](apps/worker/src/queue.ts), which this section is the contract for.
 
 - *Rejected: a dedicated queue service such as Celery or Redis.* Postgres keeps the
   infrastructure smaller by having fewer components. The risk is that Postgres is not built for
