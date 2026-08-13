@@ -66,6 +66,10 @@ export class MissingInputFileError extends Error {
   }
 }
 
+// -------------------------------------------------------------
+// Starting an attempt
+// -------------------------------------------------------------
+
 /** Load a claimed attempt's inputs, build its run directory, and spawn its child. */
 export async function startAttempt(
   deps: AttemptDeps,
@@ -110,6 +114,10 @@ export async function startAttempt(
   }
 }
 
+// -------------------------------------------------------------
+// Reading how the child ended
+// -------------------------------------------------------------
+
 /** What `result.json` declares, whichever fixed name or chart key produced it — the directory is
  * never listed, so this is the only way a path is derived (`contract/layout.ts`).
  */
@@ -147,27 +155,34 @@ export async function readChildEnding(
   outcome: ChildOutcome,
   kill?: Kill,
 ): Promise<ReadEnding> {
-  const empty: ReadEnding = {
+  const notRead: ReadEnding = {
     outcome,
     kill,
-    missingResultFiles: [],
+    read: { kind: 'not-read' },
     resultFileContents: new Map(),
   };
-  if (outcome.kind !== 'exited') return empty;
+  if (outcome.kind !== 'exited') return notRead;
 
   try {
     if (outcome.exitCode === 0) {
       const result = await readResult(prepared.runDirectory);
-      if (result === undefined) return empty;
+      if (result === undefined) return notRead;
       const { missing, contents } = await readDeclaredResultFiles(prepared.runDirectory, result);
-      return { outcome, kill, result, missingResultFiles: missing, resultFileContents: contents };
+      return {
+        outcome,
+        kill,
+        read: { kind: 'result', result, missingResultFiles: missing },
+        resultFileContents: contents,
+      };
     }
     if (outcome.exitCode === 1) {
-      return { ...empty, failure: await readFailure(prepared.runDirectory) };
+      const failure = await readFailure(prepared.runDirectory);
+      if (failure === undefined) return notRead;
+      return { ...notRead, read: { kind: 'failure', failure } };
     }
-    return empty;
-  } catch (readError) {
-    return { ...empty, readError };
+    return notRead;
+  } catch (error) {
+    return { ...notRead, read: { kind: 'read-error', error } };
   }
 }
 
@@ -191,6 +206,10 @@ function undefinedIfMissing(error: unknown): undefined {
   if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
   throw error;
 }
+
+// -------------------------------------------------------------
+// Recording a verdict
+// -------------------------------------------------------------
 
 /** A verdict with everything its `finish*` write needs attached, so `recordVerdict` never has to
  * look anything up itself.
@@ -235,6 +254,10 @@ function writeVerdict(
       return finishCanceled(deps.db, attemptId, deps.workerId);
   }
 }
+
+// -------------------------------------------------------------
+// Settling an attempt
+// -------------------------------------------------------------
 
 export type SettleOutcome =
   | { kind: 'recorded' }
@@ -325,6 +348,10 @@ async function uploadResultFile(
     ? { ...stored, id, kind: 'chart', chartKey: file.chartKey }
     : { ...stored, id, kind: file.kind };
 }
+
+// -------------------------------------------------------------
+// Failing a claimed attempt outright
+// -------------------------------------------------------------
 
 /** What to record when processing a claimed attempt throws before a verdict was ever classified —
  * `startAttempt` failing, most likely. A `MissingInputFileError` is deterministic, so it is
