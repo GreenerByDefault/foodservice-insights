@@ -194,6 +194,12 @@ hung, does not realize it. **All database updates to an analysis attempt must be
 tolerate this** — see the terminal-state and status invariants in
 [`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-status-machine).
 
+When the parent's own database calls fail, **an error is not a verdict**: a zero-row guarded
+update is the only "we lost the attempt". A *thrown* heartbeat error skips that write but
+never the local stale and hard-ceiling checks, which read the clock and the progress file. A
+parent that gives up on recording a verdict stops heartbeating first, so reaping can converge the
+attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
+
 ### Canceling
 
 When a user cancels, the web server marks the analysis attempt canceled in the database. The
@@ -296,8 +302,9 @@ handling.
 | Failure | Response |
 | --- | --- |
 | Web server does not respond to the client | The client sets timeouts, and retries automatically only where the request cannot have started an analysis |
-| Web server or worker has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
-| Web server or worker has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
+| Web server has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
+| Web server has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
+| Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its heartbeat file, which triggers both parent-side and other-worker defenses — see [Heartbeats, hangs, and reaping](#heartbeats-hangs-and-reaping) |

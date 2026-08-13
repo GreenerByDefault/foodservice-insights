@@ -27,7 +27,7 @@ export const FAILURE_REASON_CLAIMANT = {
   hard_timeout: 'parent',
   hung: 'parent',
   infrastructure: 'parent',
-  unknown: 'child',
+  unknown: 'either',
   upstream_api: 'child',
 } as const satisfies Record<AnalysisFailureReason, 'parent' | 'child' | 'either'>;
 

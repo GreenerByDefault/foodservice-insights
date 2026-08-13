@@ -7,12 +7,13 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
-    "test:unit": "vitest run",
+    "test:unit": "TEST_DB=1 vitest run",
     "test": "pnpm run test:unit"
   },
   "dependencies": {
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
+    "@gbd/storage": "workspace:*",
     "valibot": "catalog:"
   },
   "devDependencies": {
