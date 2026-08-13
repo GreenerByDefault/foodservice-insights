@@ -51,6 +51,9 @@ catalog:
   # --- Blob store -------------------------------------------------------------
   '@aws-sdk/client-s3': ^3.1105.0
   '@aws-sdk/s3-request-presigner': ^3.1105.0
+  # Only for `ConfiguredRetryStrategy`; keep the range within what `@aws-sdk/client-s3`
+  # itself depends on, so one copy resolves.
+  '@smithy/core': ^3.31.1
 
   # --- Validation -------------------------------------------------------------
   valibot: ^1.4.2

@@ -24,6 +24,9 @@ catalogs:
     '@playwright/test':
       specifier: 1.62.1
       version: 1.62.1
+    '@smithy/core':
+      specifier: ^3.31.1
+      version: 3.31.1
     '@sveltejs/adapter-node':
       specifier: ^5.5.7
       version: 5.5.7
@@ -299,6 +302,9 @@ importers:
       '@gbd/db':
         specifier: workspace:*
         version: link:../db
+      '@smithy/core':
+        specifier: 'catalog:'
+        version: 3.31.1
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

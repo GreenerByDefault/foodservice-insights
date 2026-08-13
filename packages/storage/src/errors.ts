@@ -74,5 +74,27 @@ export async function blobStoreRequest<T>(operation: string, send: () => Promise
  * it gets relabelled — for example, to treat "not found" as a result rather than a failure.
  */
 export function asBlobStoreError(operation: string, cause: unknown): BlobStoreError {
-  return new BlobStoreError(`${operation} failed`, { cause });
+  return new BlobStoreError(`${operation} failed`, { cause: withoutHttpExchange(cause) });
+}
+
+/** The fields the SDK hangs the raw HTTP exchange on. `$response` holds sockets, buffers, and the
+ * signed request; `$responseBodyText` can hold a whole response body. Serialized by a logger or a
+ * test reporter, either one is megabytes per error, so neither may survive onto `cause`.
+ */
+const HTTP_EXCHANGE_FIELDS: ReadonlySet<string> = new Set(['$response', '$responseBodyText']);
+
+/** Copy an SDK error without the raw HTTP exchange it drags along.
+ *
+ * A copy rather than a `delete`, because the SDK defines `$response` as non-configurable. The
+ * copy keeps everything that says why: name, message, stack, and the SDK's enumerable fields —
+ * `Code`, `$fault`, and `$metadata` with its status code and attempt count.
+ */
+function withoutHttpExchange(cause: unknown): unknown {
+  if (!(cause instanceof Error) || !('$response' in cause)) return cause;
+
+  const copy = new Error(cause.message);
+  copy.name = cause.name;
+  copy.stack = cause.stack;
+  const kept = Object.entries(cause).filter(([key]) => !HTTP_EXCHANGE_FIELDS.has(key));
+  return Object.assign(copy, Object.fromEntries(kept));
 }
