@@ -1,4 +1,5 @@
 import { S3Client } from '@aws-sdk/client-s3';
+import { ConfiguredRetryStrategy } from '@smithy/core/retry';
 
 /** The time limits on reaching the store. Each bounds *one request*, so a function that pages, like
  * `deletePrefix`, takes as long as its data needs.
@@ -20,16 +21,26 @@ export type BlobStoreLimits = {
    */
   attemptTimeoutMs: number;
 
+  /** The wait before the first retry; each later retry doubles it (500ms → 1s → 2s → 4s → 8s).
+   *
+   * Passed to the SDK in place of its default backoff, which draws each delay at random from
+   * under `100ms × 2^attempt` — so all of `MAX_ATTEMPTS` land inside ~3 seconds. A CI flake
+   * showed Supabase Storage answering 500 for longer than that, failing every attempt while
+   * `requestDeadlineMs` still had 42s to give. Retries have to spread over time, not just
+   * count: doubling deterministically from this base waits 31× the base in total.
+   */
+  retryDelayBaseMs: number;
+
   /** The wall clock one request gets, retries and backoff included.
    *
    * This is a failsafe under `MAX_ATTEMPTS`: a count is a poor proxy for time. Against a store
-   * that fails fast, `MAX_ATTEMPTS` retries take 1.3s, but against one that accepts sockets and
-   * never answers, they take `MAX_ATTEMPTS × attemptTimeoutMs` — three minutes, with no route
-   * timeout above it to cut in. 45s leaves fast failures untouched and turns that three minutes
-   * into about 47s.
+   * that fails fast, `MAX_ATTEMPTS` retries wait out the ~15.5s backoff schedule, but against one
+   * that accepts sockets and never answers, they take `MAX_ATTEMPTS × attemptTimeoutMs` — three
+   * minutes, with no route timeout above it to cut in. 45s leaves faster failures untouched and
+   * turns that three minutes into about 47s.
    *
-   * Lower here catches a hung upload sooner. Enforcement can overshoot this by a couple
-   * seconds — see `sendOptions`.
+   * Lower here catches a hung upload sooner. Enforcement can overshoot this by up to the
+   * longest backoff sleep — see `sendOptions`.
    */
   requestDeadlineMs: number;
 };
@@ -37,15 +48,17 @@ export type BlobStoreLimits = {
 export const DEFAULT_LIMITS: BlobStoreLimits = {
   connectionTimeoutMs: 5_000,
   attemptTimeoutMs: 30_000,
+  retryDelayBaseMs: 500,
   requestDeadlineMs: 45_000,
 };
 
 /** How many times to try a request the SDK considers retryable, the first attempt included.
  *
- * Every operation here is idempotent, so an extra attempt costs only the wait. Three of them span
- * under 300ms of backoff, too little to outlast the momentary 500 that failed a CI run. Going higher
- * than six buys little, since `requestDeadlineMs` is the real bound on waiting. If an outage lasts
- * longer than that, a user will need to initiate a retry on their analysis.
+ * Every operation here is idempotent, so an extra attempt costs only the wait. Six of them,
+ * doubling from `retryDelayBaseMs`, ride out a store that browns out for several seconds, not
+ * just one that hiccups once. Going higher than six buys little, since `requestDeadlineMs` is
+ * the real bound on waiting. If an outage lasts longer than that, a user will need to initiate
+ * a retry on their analysis.
  */
 export const MAX_ATTEMPTS = 6;
 
@@ -80,8 +93,9 @@ export type BlobStore = {
  * `AbortSignal` instead.
  */
 export function sendOptions(store: BlobStore): { abortSignal: AbortSignal } {
-  // Aborts an attempt in flight, but overshoots by up to ~2s, because a backoff sleep carries
-  // on sleeping.
+  // Aborts an attempt in flight, but a backoff sleep carries on sleeping — the SDK's cooldown
+  // ignores the signal — so this overshoots by up to the longest remaining sleep, 8s at the
+  // default `retryDelayBaseMs`.
   return { abortSignal: AbortSignal.timeout(store.requestDeadlineMs) };
 }
 
@@ -108,7 +122,14 @@ export function initializeBlobStore(config: BlobStoreConfig): BlobStore {
       secretAccessKey: config.secretAccessKey,
     },
 
+    // The strategy is what enforces the attempt count; `maxAttempts` is repeated because it is
+    // what stamps the `amz-sdk-request: attempt=n; max=m` header the strategy does not control.
     maxAttempts: MAX_ATTEMPTS,
+    retryStrategy: new ConfiguredRetryStrategy(
+      MAX_ATTEMPTS,
+      (attempt: number) => limits.retryDelayBaseMs * 2 ** (attempt - 1),
+    ),
+
     requestHandler: {
       connectionTimeout: limits.connectionTimeoutMs,
       requestTimeout: limits.attemptTimeoutMs,
