@@ -7,20 +7,21 @@ import type {
   UserId,
 } from '@gbd/db';
 import { newInputFileId, newRejectedUploadId, newReportId, withTransaction } from '@gbd/db';
-import { type BlobStore, putInputFile, putRejectedUpload, type StoredFile } from '@gbd/storage';
+import {
+  type BlobStore,
+  putInputFile,
+  putRejectedUpload,
+  type StoredInputFile,
+} from '@gbd/storage';
 import { error, json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
-import type {
-  FileDescription,
-  RawSubmission,
-  Rejection,
-  ReportMetadata,
-  UploadedFile,
-} from '$lib/reports/submission';
+import type { ReportMetadata } from '$lib/reports/metadata';
+import type { Rejection } from '$lib/reports/rejection';
+import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { blobStore } from '$lib/server/storage';
+import { blobStore, withBlobStoreErrorHandling } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
 export type Uploader = { organizationId: OrganizationId; userId: UserId };
@@ -57,12 +58,11 @@ export async function _createReport(
   const reportId = newReportId();
   const inputFileId = newInputFileId();
 
-  // Upload the object before touching the database, so that no row
+  // Upload the objects before touching the database, so that no row
   // ever points at bytes that are not there.
-  const stored = await putInputFile(
-    store,
-    { organizationId, reportId, inputFileId },
-    outcome.file.bytes,
+  const stored = await withBlobStoreErrorHandling(
+    () => putInputFile(store, { organizationId, reportId, inputFileId }, outcome.file.variants),
+    { action: 'store an uploaded input file', context: { organizationId, reportId, inputFileId } },
   );
 
   await withDbErrorHandling(
@@ -95,7 +95,7 @@ async function insertReport(
     userId: UserId;
     inputFileId: InputFileId;
     metadata: ReportMetadata;
-    stored: StoredFile;
+    stored: StoredInputFile;
     file: UploadedFile;
   },
 ): Promise<void> {
@@ -125,6 +125,7 @@ async function insertReport(
       contentType: input.stored.contentType,
       originalFilename: input.file.originalFilename,
       checksumSha256: input.stored.checksumSha256,
+      isModified: input.stored.isModified,
     })
     .execute();
 
@@ -179,8 +180,9 @@ async function recordRejection(
       })
       .execute();
   } catch (cause) {
-    // We do not error() if the database fails because the database is only for
-    // our own recording with rejections. This is why we don't use withDbErrorHandling.
+    // The blob store and the database are both only for our own records here, and the answer is
+    // already the 400 telling the user why their file was rejected. So neither failing is raised —
+    // which is why there is no `withDbErrorHandling` or `withBlobStoreErrorHandling` above.
     console.error('Could not record a rejected upload', {
       organizationId,
       reason: rejection.reason,

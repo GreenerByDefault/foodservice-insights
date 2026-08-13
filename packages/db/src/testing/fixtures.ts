@@ -128,6 +128,7 @@ export async function insertInputFile(
       contentType: 'text/csv',
       originalFilename: 'procurement.csv',
       checksumSha256: aChecksum(),
+      isModified: false,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

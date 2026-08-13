@@ -8,6 +8,7 @@
 
 import { type BlobStore, objectExists, signedObjectUrl } from '@gbd/storage';
 import { error } from '@sveltejs/kit';
+import { withBlobStoreErrorHandling } from './storage.ts';
 
 /** Long enough to survive a slow redirect and a retry, short enough that a leaked signed URL is
  * worthless. The link the user holds is ours, and it does not expire; only this does.
@@ -26,7 +27,12 @@ export async function redirectToSignedUrl(
 ): Promise<Response> {
   // Signing never reaches the blob store, so without this a key with nothing behind it would
   // hand the user a URL that fails with an S3 error document.
-  if (!(await objectExists(store, storageKey))) {
+  const exists = await withBlobStoreErrorHandling(() => objectExists(store, storageKey), {
+    action: 'check whether a file is in the blob store',
+    context: { storageKey },
+  });
+
+  if (!exists) {
     console.error('A file row points at an object that is not there', { storageKey });
     error(404, { message: 'That file is not available.' });
   }

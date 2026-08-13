@@ -132,6 +132,7 @@ CREATE TYPE "public"."rejected_upload_reason" AS ENUM (
     'unparseable',
     'csv_injection',
     'empty',
+    'bad_rows',
     'other'
 );
 
@@ -559,6 +560,7 @@ CREATE TABLE IF NOT EXISTS "public"."input_file" (
     "content_type" "text" NOT NULL,
     "original_filename" "text" NOT NULL,
     "checksum_sha256" "bytea" NOT NULL,
+    "is_modified" boolean NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     CONSTRAINT "input_file_byte_size_positive" CHECK (("byte_size" > 0)),
     CONSTRAINT "input_file_checksum_sha256_length" CHECK (("octet_length"("checksum_sha256") = 32))
@@ -566,6 +568,13 @@ CREATE TABLE IF NOT EXISTS "public"."input_file" (
 
 
 ALTER TABLE "public"."input_file" OWNER TO "postgres";
+
+--
+-- Name: COLUMN "input_file"."is_modified"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."input_file"."is_modified" IS 'Whether storage_key holds bytes the user did not send. When true, the upload as received is at the same key suffixed -original, which no row references. When false, storage_key is it.';
+
 
 --
 -- Name: kysely_migration; Type: TABLE; Schema: public; Owner: postgres

@@ -1,12 +1,24 @@
-export { ensureBucket } from './buckets.ts';
+export { bucketExists, ensureBucket } from './buckets.ts';
 export {
   type BlobStore,
   type BlobStoreConfig,
   initializeBlobStore,
   shutdownBlobStore,
 } from './client.ts';
-export { isBucketAlreadyExistsError, isNotFoundError } from './errors.ts';
-export { putInputFile, putRejectedUpload, putResultFile, type StoredFile } from './files.ts';
+export {
+  BlobStoreError,
+  isBlobStoreError,
+  isBucketAlreadyExistsError,
+  isNotFoundError,
+} from './errors.ts';
+export {
+  type InputFileVariants,
+  putInputFile,
+  putRejectedUpload,
+  putResultFile,
+  type StoredFile,
+  type StoredInputFile,
+} from './files.ts';
 export { organizationPrefix, RESULT_FILE_FORMATS } from './keys.ts';
 export {
   deletePrefix,

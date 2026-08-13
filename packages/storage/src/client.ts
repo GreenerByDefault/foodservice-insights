@@ -1,13 +1,53 @@
 import { S3Client } from '@aws-sdk/client-s3';
 
-/** How long to wait for a connection to open. */
-const CONNECTION_TIMEOUT_MS = 5_000;
+/** The time limits on reaching the store. Each bounds *one request*, so a function that pages, like
+ * `deletePrefix`, takes as long as its data needs.
+ */
+export type BlobStoreLimits = {
+  /** How long to wait for a connection to open. Both ends being us-east, a TCP and TLS handshake is
+   * single-digit milliseconds, so this is only reached when the network blackholes rather than
+   * refuses.
+   */
+  connectionTimeoutMs: number;
 
-/** How long to wait for a whole request to finish. */
-const REQUEST_TIMEOUT_MS = 30_000;
+  /** How long one attempt may take.
+   *
+   * The clock is reset only by bytes arriving *back*, and a write gets nothing back until the body
+   * is sent and the store has processed it. So, this is a cap on the slowest legitimate upload rather
+   * than only a stall detector, and cutting it fails every attempt of an upload that would have
+   * finished. `MAX_UPLOAD_BYTES` caps an upload at 10MB, which 30s carries down to 2.7Mbit/s; in-region,
+   * a real upload should be under a second.
+   */
+  attemptTimeoutMs: number;
 
-/** How many times to try a request the SDK considers retryable, the first attempt included. */
-const MAX_ATTEMPTS = 3;
+  /** The wall clock one request gets, retries and backoff included.
+   *
+   * This is a failsafe under `MAX_ATTEMPTS`: a count is a poor proxy for time. Against a store
+   * that fails fast, `MAX_ATTEMPTS` retries take 1.3s, but against one that accepts sockets and
+   * never answers, they take `MAX_ATTEMPTS × attemptTimeoutMs` — three minutes, with no route
+   * timeout above it to cut in. 45s leaves fast failures untouched and turns that three minutes
+   * into about 47s.
+   *
+   * Lower here catches a hung upload sooner. Enforcement can overshoot this by a couple
+   * seconds — see `sendOptions`.
+   */
+  requestDeadlineMs: number;
+};
+
+export const DEFAULT_LIMITS: BlobStoreLimits = {
+  connectionTimeoutMs: 5_000,
+  attemptTimeoutMs: 30_000,
+  requestDeadlineMs: 45_000,
+};
+
+/** How many times to try a request the SDK considers retryable, the first attempt included.
+ *
+ * Every operation here is idempotent, so an extra attempt costs only the wait. Three of them span
+ * under 300ms of backoff, too little to outlast the momentary 500 that failed a CI run. Going higher
+ * than six buys little, since `requestDeadlineMs` is the real bound on waiting. If an outage lasts
+ * longer than that, a user will need to initiate a retry on their analysis.
+ */
+export const MAX_ATTEMPTS = 6;
 
 export type BlobStoreConfig = {
   /** The S3 API endpoint. For Supabase, this ends in `/storage/v1/s3`. */
@@ -16,6 +56,7 @@ export type BlobStoreConfig = {
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
+  limits?: Partial<BlobStoreLimits>;
 };
 
 /** A bucket, plus a client that can reach it.
@@ -27,7 +68,22 @@ export type BlobStoreConfig = {
 export type BlobStore = {
   readonly client: S3Client;
   readonly bucket: string;
+
+  /** Carried on the handle because a deadline can only be set per send — see `sendOptions`. */
+  readonly requestDeadlineMs: number;
 };
+
+/** The options every `client.send` in this package passes, which is how `requestDeadlineMs` is
+ * enforced.
+ *
+ * The SDK has no setting for a deadline spanning retries, so this builds one from an
+ * `AbortSignal` instead.
+ */
+export function sendOptions(store: BlobStore): { abortSignal: AbortSignal } {
+  // Aborts an attempt in flight, but overshoots by up to ~2s, because a backoff sleep carries
+  // on sleeping.
+  return { abortSignal: AbortSignal.timeout(store.requestDeadlineMs) };
+}
 
 /** Build a blob store handle over its own HTTP connection pool.
  *
@@ -36,6 +92,8 @@ export type BlobStore = {
  * an S3 client only opens sockets when a request is actually made.
  */
 export function initializeBlobStore(config: BlobStoreConfig): BlobStore {
+  const limits = { ...DEFAULT_LIMITS, ...config.limits };
+
   const client = new S3Client({
     endpoint: config.endpoint,
     region: config.region,
@@ -52,12 +110,17 @@ export function initializeBlobStore(config: BlobStoreConfig): BlobStore {
 
     maxAttempts: MAX_ATTEMPTS,
     requestHandler: {
-      connectionTimeout: CONNECTION_TIMEOUT_MS,
-      requestTimeout: REQUEST_TIMEOUT_MS,
+      connectionTimeout: limits.connectionTimeoutMs,
+      requestTimeout: limits.attemptTimeoutMs,
+
+      // Without this, the SDK treats `requestTimeout` as advisory.
+      // With this set, the client throws TimeoutError. TimeoutError
+      // is handled by maxAttempts.
+      throwOnRequestTimeout: true,
     },
   });
 
-  return { client, bucket: config.bucket };
+  return { client, bucket: config.bucket, requestDeadlineMs: limits.requestDeadlineMs };
 }
 
 /** Release the sockets a blob store is holding.

@@ -1,9 +1,9 @@
 export { initializeDatabase, shutdownDatabase } from './client.ts';
+export { isPermanentDatabaseError, isTransientDatabaseError } from './errors.ts';
 export { migrateToLatest } from './migrate.ts';
 export {
   POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
-  POSTGRES_CODE_IDLE_SESSION_TIMEOUT,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from './postgres-codes.ts';
 export type { Database, DatabaseExecutor } from './schema.ts';

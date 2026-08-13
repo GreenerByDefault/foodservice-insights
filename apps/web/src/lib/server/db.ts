@@ -1,7 +1,13 @@
-import { type Database, initializeDatabase, shutdownDatabase } from '@gbd/db';
+import {
+  type Database,
+  initializeDatabase,
+  isPermanentDatabaseError,
+  isTransientDatabaseError,
+  shutdownDatabase,
+} from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
-import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { requireVar } from './env.ts';
 
 let handle: Kysely<Database> | undefined;
@@ -26,17 +32,22 @@ export async function closeDatabase(): Promise<void> {
 }
 
 interface DbCallOptions {
-  /** What we were trying to do, for the log line: "Unexpected failure to <action>". */
+  /** What we were trying to do, for the log line: "Could not reach the database to <action>" or
+   * "Unexpected failure to <action>". */
   action: string;
   /** Structured context — entity IDs, etc. — logged next to the error. Never sent to the client. */
   context?: Record<string, unknown>;
-  /** HTTP status returned to the caller. Defaults to 500. */
-  status?: number;
-  /** Body sent to the caller. Defaults to a message that reveals nothing about the failure. */
-  body?: App.Error;
 }
 
-/** Run a database call, turning a failure into a logged, generic HTTP error. */
+/** Run a database call, turning a database failure into a logged, generic HTTP error.
+ *
+ * Anything that is neither transient nor permanent is rethrown: `fn` can fail for reasons that have
+ * nothing to do with Postgres, and reporting those as a database problem would hide what actually
+ * failed.
+ *
+ * A caller that *expects* a violation handles it inside `fn` and answers for itself: an `HttpError`
+ * is no kind of database failure, so it passes straight back out through here.
+ */
 export async function withDbErrorHandling<T>(
   fn: () => Promise<T>,
   options: DbCallOptions,
@@ -44,7 +55,15 @@ export async function withDbErrorHandling<T>(
   try {
     return await fn();
   } catch (cause) {
+    if (isTransientDatabaseError(cause)) {
+      console.error(`Could not reach the database to ${options.action}`, {
+        ...options.context,
+        error: cause,
+      });
+      error(503, SERVICE_UNAVAILABLE_ERROR);
+    }
+    if (!isPermanentDatabaseError(cause)) throw cause;
     console.error(`Unexpected failure to ${options.action}`, { ...options.context, error: cause });
-    error(options.status ?? 500, options.body ?? { message: UNEXPECTED_ERROR_MESSAGE });
+    error(500, { message: UNEXPECTED_ERROR_MESSAGE });
   }
 }

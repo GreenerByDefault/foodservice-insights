@@ -16,9 +16,10 @@ import type {
 } from '@gbd/db';
 import type { BlobStore } from './client.ts';
 import {
-  CSV_CONTENT_TYPE,
-  inputFileKey,
-  REJECTED_UPLOAD_CONTENT_TYPE,
+  NORMALIZED_CSV_CONTENT_TYPE,
+  normalizedInputFileKey,
+  OPAQUE_CSV_CONTENT_TYPE,
+  originalInputFileKey,
   RESULT_FILE_FORMATS,
   rejectedUploadKey,
   resultFileKey,
@@ -37,12 +38,25 @@ export type StoredFile = {
   checksumSha256: Uint8Array;
 };
 
+export type InputFileVariants = { original: Uint8Array; normalized: Uint8Array };
+
+export type StoredInputFile = StoredFile & { isModified: boolean };
+
 export async function putInputFile(
   store: BlobStore,
   ids: { organizationId: OrganizationId; reportId: ReportId; inputFileId: InputFileId },
-  body: Uint8Array,
-): Promise<StoredFile> {
-  return await storeFile(store, inputFileKey(ids), body, CSV_CONTENT_TYPE);
+  variants: InputFileVariants,
+): Promise<StoredInputFile> {
+  const isModified = Buffer.compare(variants.original, variants.normalized) !== 0;
+  const [stored] = await Promise.all([
+    storeFile(store, normalizedInputFileKey(ids), variants.normalized, NORMALIZED_CSV_CONTENT_TYPE),
+    isModified
+      ? putObject(store, originalInputFileKey(ids), variants.original, {
+          contentType: OPAQUE_CSV_CONTENT_TYPE,
+        })
+      : Promise.resolve(),
+  ]);
+  return { ...stored, isModified };
 }
 
 export async function putResultFile(
@@ -69,7 +83,7 @@ export async function putRejectedUpload(
   ids: { organizationId: OrganizationId; rejectedUploadId: RejectedUploadId },
   body: Uint8Array,
 ): Promise<StoredFile> {
-  return await storeFile(store, rejectedUploadKey(ids), body, REJECTED_UPLOAD_CONTENT_TYPE);
+  return await storeFile(store, rejectedUploadKey(ids), body, OPAQUE_CSV_CONTENT_TYPE);
 }
 
 /** Write `body` to `key`. */

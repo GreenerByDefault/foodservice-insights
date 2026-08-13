@@ -1,4 +1,11 @@
-import { type BlobStore, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
+import {
+  type BlobStore,
+  initializeBlobStore,
+  isBlobStoreError,
+  shutdownBlobStore,
+} from '@gbd/storage';
+import { error } from '@sveltejs/kit';
+import { SERVICE_UNAVAILABLE_ERROR } from '$lib/errors/messages';
 import { requireVar } from './env.ts';
 
 let handle: BlobStore | undefined;
@@ -30,4 +37,37 @@ export async function closeBlobStore(): Promise<void> {
   const opened = handle;
   handle = undefined;
   if (opened) shutdownBlobStore(opened);
+}
+
+interface BlobStoreCallOptions {
+  /** What we were trying to do, for the log line: "Could not reach the blob store to <action>". */
+  action: string;
+  /** Structured context — storage keys, entity IDs — logged next to the error. Never sent to the client. */
+  context?: Record<string, unknown>;
+}
+
+/** Run a blob store call, turning a blob store failure into a logged, generic HTTP error.
+ *
+ * Only `isBlobStoreError` failures are handled; any other exception is rethrown, for the reason
+ * `withDbErrorHandling` rethrows: `fn` can fail for reasons that have nothing to do with the blob
+ * store, and reporting those as an outage would hide what actually failed.
+ *
+ * Always a 503, unlike `withDbErrorHandling`, which has to choose between 503 and 500: every
+ * `BlobStoreError` means the request did not reach the store or came back refused, so waiting is
+ * always worth it.
+ */
+export async function withBlobStoreErrorHandling<T>(
+  fn: () => Promise<T>,
+  options: BlobStoreCallOptions,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (cause) {
+    if (!isBlobStoreError(cause)) throw cause;
+    console.error(`Could not reach the blob store to ${options.action}`, {
+      ...options.context,
+      error: cause,
+    });
+    error(503, SERVICE_UNAVAILABLE_ERROR);
+  }
 }

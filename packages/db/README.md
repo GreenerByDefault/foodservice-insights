@@ -27,6 +27,11 @@ rolled-back transaction where the app passes its long-lived handle.
   snapshot — use [`src/testing/concurrency.ts`](src/testing/concurrency.ts) instead of
   `withRollback`, which cannot express any of them and would make such a test pass vacuously.
 
+A statement Postgres refused and a database we never reached fail differently, but only the former
+is a `DatabaseError` — so `instanceof DatabaseError` cannot tell them apart. Use
+`isTransientDatabaseError` and `isPermanentDatabaseError` instead; see
+[`src/errors.ts`](src/errors.ts) for why each family looks the way it does.
+
 ## The model
 
 A **`report`** is one accepted upload. It has exactly one **`input_file`** and one or more
@@ -45,6 +50,9 @@ Users, organizations, membership, and invites make up the auth side of the schem
 
 Design reasoning:
 
+- **`input_file.storage_key` points at the normalized CSV file the worker reads.** `input_file.is_modified` says whether it
+  differs from the original iput file, which is stored at
+  a separate hardcoded path.
 - **`input_file` and `result_file` are their own tables, not columns on `report` and
   `analysis_attempt`,** because files are exposed publicly through a `/file/:id` route. A file
   needs its own identifier to be addressable. Those two tables are also the only ones with v4

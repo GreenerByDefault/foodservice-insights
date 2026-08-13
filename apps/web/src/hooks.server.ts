@@ -26,8 +26,6 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
   const auth = await withDbErrorHandling(() => loadAuthorization(database(), userId), {
     action: 'load authorization',
     context: { userId },
-    status: 503,
-    body: { message: 'The service is temporarily unavailable', code: 'service_unavailable' },
   });
 
   if (!auth) {

@@ -38,7 +38,7 @@
     "hard_timeout": "parent",
     "hung": "parent",
     "infrastructure": "parent",
-    "unknown": "child",
+    "unknown": "either",
     "upstream_api": "child"
   }
 }
