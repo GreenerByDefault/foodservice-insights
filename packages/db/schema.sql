@@ -62,7 +62,8 @@ CREATE TYPE "public"."analysis_failure_reason" AS ENUM (
     'contract_violation',
     'upstream_api',
     'abandoned',
-    'unknown'
+    'unknown',
+    'shut_down'
 );
 
 

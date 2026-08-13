@@ -70,7 +70,8 @@ def test_claims_exactly_the_reasons_the_parent_grants_a_child() -> None:
 
 
 @pytest.mark.parametrize(
-    "reason", ["child_crashed", "hung", "hard_timeout", "infrastructure", "abandoned"]
+    "reason",
+    ["child_crashed", "hung", "hard_timeout", "infrastructure", "abandoned", "shut_down"],
 )
 def test_does_not_claim_a_parent_only_reason(reason: str) -> None:
     # The parent saw the kill itself, so a child claiming one of these is not believed.
