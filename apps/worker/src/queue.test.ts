@@ -519,7 +519,12 @@ describe('finishing', () => {
         attemptId: AnalysisAttemptId,
         workerId: string,
       ) => Promise<boolean>,
-    ): Promise<{ won: boolean; status: string; failureReason: string | null }> {
+    ): Promise<{
+      won: boolean;
+      status: string;
+      failureReason: string | null;
+      resultFiles: unknown[];
+    }> {
       return await withRollback(DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
@@ -527,13 +532,20 @@ describe('finishing', () => {
 
         const won = await finish(transaction, attemptId, workerId);
         const row = await readAttempt(transaction, attemptId);
-        return { won, status: row.status, failureReason: row.failureReason };
+        const resultFiles = await transaction
+          .selectFrom('resultFile')
+          .selectAll()
+          .where('analysisAttemptId', '=', attemptId)
+          .execute();
+        return { won, status: row.status, failureReason: row.failureReason, resultFiles };
       });
     }
 
     // Losing has to be a zero-row update rather than an exception, so that the ordinary end of an
-    // attempt the reaper already ended is not itself an error the worker has to handle.
-    test('a success returns false and leaves the other verdict standing', async () => {
+    // attempt the reaper already ended is not itself an error the worker has to handle. A lost
+    // success must also leave no result files behind, since those are only meaningful alongside
+    // the verdict that produced them.
+    test('a success returns false, leaves the other verdict standing, and records no result files', async () => {
       const outcome = await afterBeingReaped(
         async (transaction, attemptId, workerId) =>
           await finishSucceeded(transaction, attemptId, workerId, {
@@ -542,27 +554,12 @@ describe('finishing', () => {
           }),
       );
 
-      expect(outcome).toEqual({ won: false, status: 'failed', failureReason: 'hung' });
-    });
-
-    test('a lost success records no result files', async () => {
-      const files = await withRollback(DATABASE, async (transaction) => {
-        const workerId = aWorkerId();
-        const attemptId = await claimedAttempt(transaction, workerId);
-        await simulateReap(transaction, attemptId);
-
-        await finishSucceeded(transaction, attemptId, workerId, {
-          result: A_RESULT,
-          resultFiles: [aResultFile()],
-        });
-        return await transaction
-          .selectFrom('resultFile')
-          .selectAll()
-          .where('analysisAttemptId', '=', attemptId)
-          .execute();
+      expect(outcome).toEqual({
+        won: false,
+        status: 'failed',
+        failureReason: 'hung',
+        resultFiles: [],
       });
-
-      expect(files).toEqual([]);
     });
 
     test('a failure returns false and leaves the other verdict standing', async () => {
@@ -574,13 +571,23 @@ describe('finishing', () => {
           }),
       );
 
-      expect(outcome).toEqual({ won: false, status: 'failed', failureReason: 'hung' });
+      expect(outcome).toEqual({
+        won: false,
+        status: 'failed',
+        failureReason: 'hung',
+        resultFiles: [],
+      });
     });
 
     test('a cancellation returns false and leaves the other verdict standing', async () => {
       const outcome = await afterBeingReaped(finishCanceled);
 
-      expect(outcome).toEqual({ won: false, status: 'failed', failureReason: 'hung' });
+      expect(outcome).toEqual({
+        won: false,
+        status: 'failed',
+        failureReason: 'hung',
+        resultFiles: [],
+      });
     });
   });
 
