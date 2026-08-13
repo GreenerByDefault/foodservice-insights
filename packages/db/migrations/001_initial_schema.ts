@@ -521,6 +521,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'upstream_api',
       'abandoned',
       'unknown',
+      'shut_down',
     ])
     .execute();
   await database.schema.createType('result_file_kind').asEnum(['pdf', 'xlsx', 'chart']).execute();
