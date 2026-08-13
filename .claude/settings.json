@@ -84,6 +84,8 @@
       "Bash(gh issue view *)",
       "Bash(gh issue list *)",
       "Bash(gh repo view *)",
+      "Bash(gh search *)",
+      "Bash(gh release list *)",
 
       "Bash(rg *)",
       "Bash(sd *)",
@@ -114,6 +116,8 @@
       "Bash(python3 --version)",
       "Bash(just --version)",
 
+      "WebSearch",
+
       "mcp__svelte__list-sections",
       "mcp__svelte__get-documentation",
       "mcp__svelte__svelte-autofixer",
@@ -132,7 +136,9 @@
       "WebFetch(domain:pnpm.io)",
       "WebFetch(domain:docs.astral.sh)",
       "WebFetch(domain:docs.claude.com)",
-      "WebFetch(domain:code.claude.com)"
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ]
   },
 
