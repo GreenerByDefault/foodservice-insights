@@ -10,6 +10,7 @@ import {
   MAX_ATTEMPTS,
   shutdownBlobStore,
 } from './client.ts';
+import { isBlobStoreError } from './errors.ts';
 import { putObject } from './objects.ts';
 
 let server: Server | undefined;
@@ -61,25 +62,44 @@ async function failingStore(
 }
 
 // Counting attempts is the only way to notice the budget being narrowed back to the SDK's default
-// of three, which is the flake this guards against.
-test('keeps trying a write the store answers with a 500', async () => {
-  const { store: failing, attempts } = await failingStore('fails fast');
+// of three, and elapsed time the only way to notice the backoff schedule being dropped for the
+// SDK's default jitter — each is a flake this guards against.
+test('keeps trying a write the store answers with a 500, waiting between tries', async () => {
+  const retryDelayBaseMs = 10;
+  const { store: failing, attempts } = await failingStore('fails fast', { retryDelayBaseMs });
+
+  const started = Date.now();
+  const thrown = await putObject(failing, 'probe.bin', new Uint8Array([1, 2, 3])).catch(
+    (error: unknown) => error,
+  );
+  const elapsed = Date.now() - started;
 
   // `putObject` relabels every failure as a `BlobStoreError`; the SDK's own message survives on
   // `cause`, which is where this asserts against it.
-  await expect(putObject(failing, 'probe.bin', new Uint8Array([1, 2, 3]))).rejects.toMatchObject({
-    name: 'BlobStoreError',
-    cause: expect.objectContaining({ message: expect.stringContaining('Internal Server Error') }),
+  if (!isBlobStoreError(thrown)) throw thrown;
+  expect(thrown.cause).toMatchObject({
+    message: expect.stringContaining('Internal Server Error'),
   });
-
   expect(attempts()).toBe(MAX_ATTEMPTS);
+
+  // The five retries double from the base: 10+20+40+80+160ms. Elapsed only has a lower bound —
+  // an upper one would flake on a slow runner.
+  expect(elapsed).toBeGreaterThanOrEqual(31 * retryDelayBaseMs);
+
+  // `$metadata` (status code, attempts) survives on the cause; `$response` must not — it drags
+  // the whole HTTP exchange into whatever serializes the error.
+  expect(thrown.cause).toHaveProperty('$metadata');
+  expect(thrown.cause).not.toHaveProperty('$response');
 });
 
-// Limits are much shorter than the real ones, so the test is quick; only their ratio matters here.
+// Limits are much shorter than the real ones, so the test is quick; only their ratio matters
+// here. `retryDelayBaseMs` has to shrink with them: an aborted attempt still gets retried, and
+// the deadline cannot interrupt a backoff sleep, so real-sized sleeps would dominate `elapsed`.
 test('gives up on a store that never answers once the deadline passes', async () => {
   const attemptTimeoutMs = 5_000;
   const { store: hanging, attempts } = await failingStore('never answers', {
     attemptTimeoutMs,
+    retryDelayBaseMs: 1,
     requestDeadlineMs: 300,
   });
 
