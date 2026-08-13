@@ -33,9 +33,7 @@ export type HeaderResolution =
 
 /** Which column is which, given a header record.
  *
- * Columns we do not need are ignored rather than rejected: a real export has twenty of them, and
- * an ignored column reaches neither the analysis nor the CSV we emit — which is also what keeps
- * supplier and price data out of the workbook the customer gets back.
+ * Columns we do not need are ignored rather than rejected.
  */
 export function resolveHeader(fields: readonly string[]): HeaderResolution {
   const matches = new Map<RequiredColumn, { index: number; header: string }[]>(
