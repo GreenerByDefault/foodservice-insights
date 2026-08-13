@@ -557,4 +557,50 @@ describe('finishing', () => {
       expect(outcome).toEqual({ won: false, status: 'failed', failureReason: 'hung' });
     });
   });
+
+  // Simulates the retry `retryOnTransientDbError` performs when a COMMIT lands but its ack is
+  // lost: the caller sees an error and calls the same `finish*` again, unaware the first call
+  // already won.
+  describe('replayed after a lost commit ack', () => {
+    test('a second finishFailed returns false and changes nothing', async () => {
+      const outcome = await withRollback(DATABASE, async (transaction) => {
+        const workerId = aWorkerId();
+        const attemptId = await claimedAttempt(transaction, workerId);
+        const failure = { reason: 'child_crashed' as const, detail: 'exit code 1' };
+
+        const first = await finishFailed(transaction, attemptId, workerId, failure);
+        const second = await finishFailed(transaction, attemptId, workerId, failure);
+        return { first, second, row: await readAttempt(transaction, attemptId) };
+      });
+
+      expect(outcome.first).toBe(true);
+      expect(outcome.second).toBe(false);
+      expect(outcome.row).toMatchObject({ status: 'failed', failureReason: 'child_crashed' });
+    });
+
+    test('a second finishSucceeded returns false and inserts no more result files', async () => {
+      const outcome = await withRollback(DATABASE, async (transaction) => {
+        const workerId = aWorkerId();
+        const attemptId = await claimedAttempt(transaction, workerId);
+        const succeed = () =>
+          finishSucceeded(transaction, attemptId, workerId, {
+            result: A_RESULT,
+            resultFiles: [aResultFile()],
+          });
+
+        const first = await succeed();
+        const second = await succeed();
+        const files = await transaction
+          .selectFrom('resultFile')
+          .selectAll()
+          .where('analysisAttemptId', '=', attemptId)
+          .execute();
+        return { first, second, filesCount: files.length };
+      });
+
+      expect(outcome.first).toBe(true);
+      expect(outcome.second).toBe(false);
+      expect(outcome.filesCount).toBe(1);
+    });
+  });
 });

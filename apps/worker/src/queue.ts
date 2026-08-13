@@ -186,7 +186,16 @@ export type ResultFileRecord = StoredFile & {
   id: ResultFileId;
 } & ({ kind: 'chart'; chartKey: string } | { kind: Exclude<ResultFileKind, 'chart'> });
 
-/** Record a successful attempt and the files it produced. Returns whether we still owned it. */
+/** Record a successful attempt and the files it produced. Returns whether we still owned it.
+ *
+ * The guarded update doubles as the retry idempotency key: if the COMMIT lands but its ack is
+ * lost to a transient error and `retryOnTransientDbError` calls this again, the retry's UPDATE
+ * matches zero rows — the first call already moved `status` off `processing` — and returns
+ * `false` before it can insert `result_file` a second time. Under that retry, `false` can
+ * therefore mean either "another writer reached a verdict first" or "our own first attempt
+ * already committed"; the data is correct either way, and a `status, worker_id` read-back would
+ * disambiguate the two if a consumer (the deferred email) ever needs to.
+ */
 export async function finishSucceeded(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
@@ -227,7 +236,9 @@ export async function finishSucceeded(
   });
 }
 
-/** Returns whether we still owned the attempt. */
+/** Returns whether we still owned the attempt. `false` under retry has the same residual
+ * ambiguity as `finishSucceeded`'s: it can mean another writer's verdict stands, or that our own
+ * first attempt already committed. */
 export async function finishFailed(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
@@ -241,7 +252,8 @@ export async function finishFailed(
   });
 }
 
-/** Returns whether we still owned the attempt. */
+/** Returns whether we still owned the attempt. Same residual ambiguity under retry as
+ * `finishSucceeded`'s. */
 export async function finishCanceled(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
