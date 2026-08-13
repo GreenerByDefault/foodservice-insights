@@ -58,15 +58,10 @@ export async function _createReport(
   const reportId = newReportId();
   const inputFileId = newInputFileId();
 
-  // Upload the object before touching the database, so that no row
+  // Upload the objects before touching the database, so that no row
   // ever points at bytes that are not there.
   const stored = await withBlobStoreErrorHandling(
-    () =>
-      putInputFile(
-        store,
-        { organizationId, reportId, inputFileId },
-        { original: outcome.file.bytes, normalized: outcome.file.bytes },
-      ),
+    () => putInputFile(store, { organizationId, reportId, inputFileId }, outcome.file.bytes),
     { action: 'store an uploaded input file', context: { organizationId, reportId, inputFileId } },
   );
 

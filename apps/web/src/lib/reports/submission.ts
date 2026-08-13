@@ -9,6 +9,7 @@
  * what the two worker processes have agreed to exchange.
  */
 
+import type { InputFileBytes } from '@gbd/storage';
 import * as v from 'valibot';
 import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
@@ -31,7 +32,7 @@ export type FileDescription = {
   byteSize: number;
 };
 
-export type UploadedFile = FileDescription & { bytes: Uint8Array };
+export type UploadedFile = FileDescription & { bytes: InputFileBytes };
 
 export type ValidatedSubmission =
   | { ok: true; metadata: ReportMetadata; file: UploadedFile }
@@ -121,5 +122,9 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     };
   }
 
-  return { ok: true, file: { ...fileDescription, bytes }, metadata: parsed.output };
+  return {
+    ok: true,
+    file: { ...fileDescription, bytes: { original: bytes, normalized: bytes } },
+    metadata: parsed.output,
+  };
 }

@@ -34,6 +34,21 @@ describe('validateSubmission', () => {
     });
   });
 
+  // TODO: change this test when the normalize changes the file.
+  test('reports the normalized bytes as the same bytes it received, until a normalizer exists', async () => {
+    const outcome = await validateSubmission(aSubmission());
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      file: {
+        bytes: {
+          original: new TextEncoder().encode(CSV),
+          normalized: new TextEncoder().encode(CSV),
+        },
+      },
+    });
+  });
+
   describe('optional text fields', () => {
     test.for(['name', 'siteName'] as const)('trims %s', async (field) => {
       const outcome = await validateSubmission(aSubmission({ [field]: '  Q1 procurement  ' }));
