@@ -519,8 +519,8 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'infrastructure',
       'contract_violation',
       'upstream_api',
-      'unknown',
       'abandoned',
+      'unknown',
     ])
     .execute();
   await database.schema.createType('result_file_kind').asEnum(['pdf', 'xlsx', 'chart']).execute();
@@ -633,7 +633,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
 
   await sql`
     COMMENT ON COLUMN analysis_attempt.lease_renewed_at IS
-      'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. Not the child''s progress: the child''s liveness never reaches the database. Set from the database''s clock on both write and read, so reaping never depends on worker clocks.'
+      'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it.'
   `.execute(database);
 
   // At most one active attempt per report.

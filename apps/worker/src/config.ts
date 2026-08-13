@@ -19,9 +19,6 @@
  * - `T > A_max + S` — progress is *sampled* every `S`, so an observed gap overstates the real one
  *   by up to `S`.
  * - `H ≥ T + S` — otherwise the ceiling always fires first and the `hung` verdict is dead code.
- *
- * Deliberately not added here: `leaseExpiresAfterMs` or a claim ceiling. This file's own rule is
- * to drop any field nothing reads, and the reaper that would read them is deferred.
  */
 
 import type { ChildCommand } from './child.ts';

@@ -61,8 +61,8 @@ CREATE TYPE "public"."analysis_failure_reason" AS ENUM (
     'infrastructure',
     'contract_violation',
     'upstream_api',
-    'unknown',
-    'abandoned'
+    'abandoned',
+    'unknown'
 );
 
 
@@ -489,7 +489,7 @@ COMMENT ON TABLE "public"."analysis_attempt" IS 'The queue and state machine bet
 -- Name: COLUMN "analysis_attempt"."lease_renewed_at"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN "public"."analysis_attempt"."lease_renewed_at" IS 'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. Not the child''s progress: the child''s liveness never reaches the database. Set from the database''s clock on both write and read, so reaping never depends on worker clocks.';
+COMMENT ON COLUMN "public"."analysis_attempt"."lease_renewed_at" IS 'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it.';
 
 
 --

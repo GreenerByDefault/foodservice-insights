@@ -28,7 +28,7 @@ export default interface AnalysisAttemptTable {
 
   claimedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  /** When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. Not the child's progress: the child's liveness never reaches the database. Set from the database's clock on both write and read, so reaping never depends on worker clocks. */
+  /** When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. */
   leaseRenewedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   finishedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
