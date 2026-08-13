@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { MAX_FUTURE_DAYS } from '../limits.ts';
 import {
   applyOrder,
   bothReadings,
@@ -90,7 +91,7 @@ describe('readDate', () => {
       ['Mar 32 2025', 'not a real calendar date'],
       ['13/13/2025', 'not a real calendar date'],
       ['1999-12-31', 'is before 2000-01-01'],
-      ['2027-01-01', 'more than 30 days from now'],
+      ['2027-01-01', `more than ${MAX_FUTURE_DAYS} days from now`],
     ] as const)('"%s", saying it %s', ([raw, problem]) => {
       const reading = readDate(raw, BOUNDS);
 

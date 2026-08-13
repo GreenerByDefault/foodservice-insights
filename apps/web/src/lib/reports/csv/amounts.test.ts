@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { MAX_AMOUNT_DIGITS } from '../limits.ts';
 import { readAmount } from './amounts.ts';
 
 describe('readAmount', () => {
@@ -16,7 +17,8 @@ describe('readAmount', () => {
   });
 
   test('accepts a number right at the digit cap', () => {
-    expect(readAmount('1'.repeat(15))).toEqual({ ok: true, value: Number('1'.repeat(15)) });
+    const digits = '1'.repeat(MAX_AMOUNT_DIGITS);
+    expect(readAmount(digits)).toEqual({ ok: true, value: Number(digits) });
   });
 
   describe('rejects', () => {
@@ -53,16 +55,18 @@ describe('readAmount', () => {
       ['   ', 'is empty'],
     ] as const)('"%s", saying it %s', ([raw, problem]) => {
       const reading = readAmount(raw);
-
       expect(reading).toMatchObject({ ok: false });
       expect(reading.ok ? '' : reading.problem).toContain(problem);
     });
 
-    test.for([16, 400])('a number with %i digits, one more than the cap allows', (length) => {
-      expect(readAmount('1'.repeat(length))).toEqual({
-        ok: false,
-        problem: 'has more digits than any real weight',
-      });
-    });
+    test.for([MAX_AMOUNT_DIGITS + 1, 400])(
+      'a number with %i digits, one more than the cap allows',
+      (length) => {
+        expect(readAmount('1'.repeat(length))).toEqual({
+          ok: false,
+          problem: 'has more digits than any real weight',
+        });
+      },
+    );
   });
 });
