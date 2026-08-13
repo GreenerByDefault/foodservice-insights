@@ -30,6 +30,10 @@ export type DateBounds = { earliest: string; latest: string };
 
 export type ResolvedDate = { ok: true; iso: string } | { ok: false; problem: string };
 
+// ------------------------------------------------------------------
+// Recognizing a cell
+// ------------------------------------------------------------------
+
 const YEAR_FIRST = /^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})$/;
 /** A timestamp a database export attached to what is really just a date. The time is dropped
  * outright rather than converted for a timezone: the calendar day is all the analysis keys on,
@@ -136,6 +140,10 @@ export function readDate(raw: string, bounds: DateBounds): DateReading {
  */
 const FIRST_OF_THE_MONTH = 1;
 
+// ------------------------------------------------------------------
+// Resolving column-wide order
+// ------------------------------------------------------------------
+
 /** Which reading a value rules out, if any. `13/04/2025` can only be day-first. */
 export function orderProvenBy(reading: DateReading): DateOrder | undefined {
   if (reading.kind !== 'numeric') return undefined;
@@ -197,6 +205,10 @@ export function bothReadings(reading: Extract<DateReading, { kind: 'numeric' }>)
 }
 
 const ANY_DATE: DateBounds = { earliest: '0000-01-01', latest: '9999-12-31' };
+
+// ------------------------------------------------------------------
+// Internal helpers
+// ------------------------------------------------------------------
 
 function numeric(first: number, second: number, year: number): DateReading {
   if (first > 12 && second > 12) return { kind: 'invalid', problem: NOT_A_DATE };

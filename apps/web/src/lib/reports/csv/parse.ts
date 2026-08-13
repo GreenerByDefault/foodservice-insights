@@ -70,6 +70,10 @@ export function* parseCsv(text: string, delimiter: string): Generator<CsvRecord>
   }
 }
 
+// ------------------------------------------------------------------
+// Internal helpers
+// ------------------------------------------------------------------
+
 type Cursor = { index: number; line: number };
 type FieldRead = Cursor & { field: string };
 
