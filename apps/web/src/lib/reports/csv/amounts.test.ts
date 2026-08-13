@@ -37,7 +37,7 @@ describe('readAmount', () => {
       ['12¢', 'is money, not a weight'],
       ['1e3', 'scientific notation'],
       ['1.5E+10', 'scientific notation'],
-      ['(50)', 'bracketed negative'],
+      ['(50)', 'negative number written in parentheses'],
       ['-5', 'is negative'],
       ['1.234,56', 'has a comma we cannot read'],
       ['1,5', 'has a comma we cannot read'],

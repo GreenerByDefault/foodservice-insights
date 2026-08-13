@@ -33,17 +33,25 @@ const HAS_LETTER = /[a-z]/i;
 const HAS_DIGIT = /\d/;
 
 const UNIT_ADVICE =
-  'the unit for the whole file is the lb or kg choice on the form, so the column holds plain numbers';
+  'the lb or kg choice on the form sets the unit for the whole file, so this column should hold plain numbers with no unit';
 
 export function readAmount(raw: string): AmountReading {
   const trimmed = raw.trim();
   if (trimmed === '') return { ok: false, problem: 'is empty' };
 
   if (IN_BRACKETS.test(trimmed)) {
-    return { ok: false, problem: 'is a bracketed negative; remove credit and return rows' };
+    return {
+      ok: false,
+      problem:
+        'is a negative number written in parentheses, an accounting notation for a credit or return; delete that row rather than just removing the parentheses',
+    };
   }
   if (trimmed.startsWith('-')) {
-    return { ok: false, problem: 'is negative; remove credit and return rows' };
+    return {
+      ok: false,
+      problem:
+        'is negative, which usually means a credit or return; delete that row rather than just dropping the minus sign',
+    };
   }
   if (CURRENCY.test(trimmed)) {
     return { ok: false, problem: 'is money, not a weight; check you mapped the right column' };
