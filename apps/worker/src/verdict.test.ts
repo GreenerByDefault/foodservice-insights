@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { ChildOutcome } from './child.ts';
+import { type ChildOutcome, STDERR_TAIL_BYTES } from './child.ts';
 import { ContractError } from './contract/messages.ts';
 import { type ChildEnding, classifyVerdict, type DocumentRead, type Kill } from './verdict.ts';
 
@@ -130,6 +130,18 @@ describe('classifyVerdict', () => {
         reason: 'contract_violation',
         detail: kill.detail,
       });
+    });
+
+    test('a detail past STDERR_TAIL_BYTES is truncated', () => {
+      const kill: Kill = {
+        reason: 'contract-violation',
+        detail: 'x'.repeat(STDERR_TAIL_BYTES + 1),
+      };
+      const verdict = classifyVerdict(anEnding({ kill }));
+      expect(verdict).toMatchObject({ kind: 'failed' });
+      expect((verdict as { detail: string }).detail).toBe(
+        `${'x'.repeat(STDERR_TAIL_BYTES)}… (truncated)`,
+      );
     });
   });
 

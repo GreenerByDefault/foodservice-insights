@@ -4,7 +4,7 @@
  */
 
 import type { AnalysisFailureReason } from '@gbd/db';
-import type { ChildOutcome } from './child.ts';
+import { type ChildOutcome, STDERR_TAIL_BYTES } from './child.ts';
 import { type ChildFailure, type ChildResult, ContractError } from './contract/messages.ts';
 
 /** Why the parent ended the child. */
@@ -40,6 +40,11 @@ export type Verdict =
   | { kind: 'unowned' };
 
 export function classifyVerdict(ending: ChildEnding): Verdict {
+  const verdict = classify(ending);
+  return verdict.kind === 'failed' ? { ...verdict, detail: truncate(verdict.detail) } : verdict;
+}
+
+function classify(ending: ChildEnding): Verdict {
   const { outcome, read, kill } = ending;
 
   // Checked before the child's own verdict: `canceled` is the user's explicit intent, and
@@ -126,4 +131,10 @@ function crashDetail(head: string, stderrTail: string): string {
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function truncate(detail: string): string {
+  return detail.length > STDERR_TAIL_BYTES
+    ? `${detail.slice(0, STDERR_TAIL_BYTES)}… (truncated)`
+    : detail;
 }

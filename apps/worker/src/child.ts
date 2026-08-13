@@ -39,7 +39,7 @@ export type SpawnChildOptions = {
 
 /** Enough of a Python traceback to diagnose a crash, and little enough to put in a database column.
  * On a crash this is the only diagnostic the child leaves behind. */
-const STDERR_TAIL_BYTES = 8_000;
+export const STDERR_TAIL_BYTES = 8_000;
 
 /** How long to keep reading stderr after the child has exited.
  *
