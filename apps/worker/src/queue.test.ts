@@ -445,12 +445,12 @@ describe('finishing', () => {
     expect(finished.attempt).toMatchObject({
       status: 'succeeded',
       failureReason: null,
-      aiModel: 'gemini-3-pro',
-      aiInputTokens: 41_000,
-      aiOutputTokens: 2_500,
-      aiCostUsd: '12.3400',
-      aiMetadata: { promptVersion: 7 },
-      resultMetadata: { rows: 1_234 },
+      aiModel: A_RESULT.ai.model,
+      aiInputTokens: A_RESULT.ai.inputTokens,
+      aiOutputTokens: A_RESULT.ai.outputTokens,
+      aiCostUsd: A_RESULT.ai.costUsd,
+      aiMetadata: A_RESULT.ai.metadata,
+      resultMetadata: A_RESULT.resultMetadata,
     });
     expect(finished.attempt.finishedAt).toBeInstanceOf(Date);
     expect(finished.files.map((file) => file.storageKey).sort()).toEqual(
