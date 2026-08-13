@@ -72,9 +72,6 @@ const MONTH_NUMBERS = new Map<string, number>(
   ].flatMap((names, index) => names.map((name): [string, number] => [name, index + 1])),
 );
 
-/** Two-digit years follow `strptime`'s pivot, which is what US exports are written against. */
-const TWO_DIGIT_YEAR_PIVOT = 68;
-
 const NOT_A_DATE = 'is not a real calendar date';
 
 export function readDate(raw: string, bounds: DateBounds): DateReading {
@@ -235,10 +232,11 @@ function dated(year: number, month: number, day: number, bounds: DateBounds): Da
     : { kind: 'invalid', problem: resolved.problem };
 }
 
+/** A two-digit year is always a 21st-century one; nothing this tool ingests predates 2000. */
 function expandYear(token: string | undefined): number {
   const year = Number(token);
   if (token?.length !== 2) return year;
-  return year <= TWO_DIGIT_YEAR_PIVOT ? 2000 + year : 1900 + year;
+  return 2000 + year;
 }
 
 function toIso(year: number, month: number, day: number, bounds: DateBounds): ResolvedDate {

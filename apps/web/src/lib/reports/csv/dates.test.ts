@@ -69,8 +69,8 @@ describe('readDate', () => {
   test.for([
     ['00', 2000],
     ['68', 2068],
-    ['69', 1969],
-    ['99', 1999],
+    ['69', 2069],
+    ['99', 2099],
   ] as const)('expands the two-digit year %s to %i', ([suffix, year]) => {
     expect(readDate(`01/02/${suffix}`, ANY_YEAR)).toMatchObject({ kind: 'numeric', year });
   });
