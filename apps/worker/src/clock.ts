@@ -14,4 +14,5 @@
 
 export type Clock = { now(): number };
 
-export const SYSTEM_CLOCK: Clock = { now: () => Date.now() };
+// `performance.now()`, not `Date.now()` to avoid Network Time Protocol (NTP) issues.
+export const SYSTEM_CLOCK: Clock = { now: () => performance.now() };

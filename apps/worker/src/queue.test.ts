@@ -39,9 +39,9 @@ import {
   finishCanceled,
   finishFailed,
   finishSucceeded,
-  heartbeat,
   loadAttemptInputs,
   type ResultFileRecord,
+  renewLease,
 } from './queue.ts';
 
 afterAll(async () => {
@@ -101,9 +101,9 @@ async function claimedAttempt(
 /** Move an attempt's whole timeline into the past.
  *
  * `now()` is the transaction's start time, so every statement in a rolled-back test shares one
- * value and a heartbeat could never be seen to move. Backdating the columns it must overtake is
- * what gives them somewhere to move from. All three go together, because the schema requires
- * `created_at <= locked_at <= last_heartbeat_at`.
+ * value and a lease renewal could never be seen to move. Backdating the columns it must overtake
+ * is what gives them somewhere to move from. All three go together, because the schema requires
+ * `created_at <= claimed_at <= lease_renewed_at`.
  */
 async function backdate(
   transaction: Transaction<Database>,
@@ -112,7 +112,7 @@ async function backdate(
   const fiveMinutesAgo = sql<Date>`now() - interval '5 minutes'`;
   await transaction
     .updateTable('analysisAttempt')
-    .set({ createdAt: fiveMinutesAgo, lockedAt: fiveMinutesAgo, lastHeartbeatAt: fiveMinutesAgo })
+    .set({ createdAt: fiveMinutesAgo, claimedAt: fiveMinutesAgo, leaseRenewedAt: fiveMinutesAgo })
     .where('id', '=', attemptId)
     .execute();
 }
@@ -121,7 +121,7 @@ async function backdate(
  * it owns. The rows it leaves behind are what every "we lost the race" test starts from.
  *
  * **Open:** an imitation, so these tests are only as good as it is. Point them at the real reaper
- * when defense 3 in `ARCHITECTURE.md` § Heartbeats, hangs and reaping lands.
+ * when defense 3 in `ARCHITECTURE.md` § Progress, leases, and reaping lands.
  */
 async function simulateReap(
   transaction: Transaction<Database>,
@@ -141,9 +141,9 @@ async function simulateReap(
 }
 
 /** Null only on an attempt nobody has claimed, which no caller here is looking at. */
-function beatingSince(attempt: { lastHeartbeatAt: Date | null }): number {
-  if (attempt.lastHeartbeatAt === null) throw new Error('the attempt has never been claimed');
-  return attempt.lastHeartbeatAt.getTime();
+function renewedSince(attempt: { leaseRenewedAt: Date | null }): number {
+  if (attempt.leaseRenewedAt === null) throw new Error('the attempt has never been claimed');
+  return attempt.leaseRenewedAt.getTime();
 }
 
 async function readAttempt(db: DatabaseExecutor, attemptId: AnalysisAttemptId) {
@@ -205,9 +205,9 @@ describe('claiming', () => {
     const workerId = aWorkerId();
     const attempt = await withRollback(DATABASE, async (transaction) => {
       const { attemptId: pendingId, reportIds } = await pendingAttempt(transaction);
-      // Backdate creation before claiming, so `lockedAt` and `lastHeartbeatAt` land measurably
+      // Backdate creation before claiming, so `claimedAt` and `leaseRenewedAt` land measurably
       // after `createdAt` instead of sharing the transaction's start time with it — the same
-      // trick `backdate` uses for the heartbeat tests below.
+      // trick `backdate` uses for the lease renewal tests below.
       await backdateCreation(transaction, pendingId, 5);
       const attemptId = await claimNextAttempt(transaction, workerId, {
         candidateReports: reportIds,
@@ -217,13 +217,13 @@ describe('claiming', () => {
     });
 
     expect(attempt).toMatchObject({ status: 'processing', workerId });
-    expect(attempt.lockedAt).toBeInstanceOf(Date);
-    expect(attempt.lastHeartbeatAt).toBeInstanceOf(Date);
+    expect(attempt.claimedAt).toBeInstanceOf(Date);
+    expect(attempt.leaseRenewedAt).toBeInstanceOf(Date);
     // The claim sets both columns from a single `now()`, so they must be identical.
-    expect(attempt.lockedAt?.getTime()).toBe(attempt.lastHeartbeatAt?.getTime());
+    expect(attempt.claimedAt?.getTime()).toBe(attempt.leaseRenewedAt?.getTime());
     // And that value has to be later than creation, or the columns could be defaulting to
     // `created_at` instead of the moment of the claim.
-    expect(attempt.lockedAt?.getTime()).toBeGreaterThan(attempt.createdAt.getTime());
+    expect(attempt.claimedAt?.getTime()).toBeGreaterThan(attempt.createdAt.getTime());
   });
 
   test('finds nothing once the only attempt is claimed', async () => {
@@ -358,25 +358,25 @@ describe('loadAttemptInputs', () => {
   });
 });
 
-describe('heartbeat', () => {
-  test('moves last_heartbeat_at while the attempt is still ours', async () => {
-    const beat = await withRollback(DATABASE, async (transaction) => {
+describe('renewLease', () => {
+  test('moves lease_renewed_at while the attempt is still ours', async () => {
+    const renewal = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       await backdate(transaction, attemptId);
       const before = await readAttempt(transaction, attemptId);
 
-      const result = await heartbeat(transaction, attemptId, workerId);
+      const result = await renewLease(transaction, attemptId, workerId);
       const after = await readAttempt(transaction, attemptId);
-      return { result, before: beatingSince(before), after: beatingSince(after) };
+      return { result, before: renewedSince(before), after: renewedSince(after) };
     });
 
-    expect(beat.result).toEqual({ kind: 'held', cancelRequestedAt: null });
-    expect(beat.after).toBeGreaterThan(beat.before);
+    expect(renewal.result).toEqual({ kind: 'held', cancelRequestedAt: null });
+    expect(renewal.after).toBeGreaterThan(renewal.before);
   });
 
   test('reports a cancellation request', async () => {
-    const beat = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       await transaction
@@ -384,32 +384,32 @@ describe('heartbeat', () => {
         .set({ cancelRequestedAt: sql<Date>`now()` })
         .where('id', '=', attemptId)
         .execute();
-      const result = await heartbeat(transaction, attemptId, workerId);
+      const result = await renewLease(transaction, attemptId, workerId);
       const { cancelRequestedAt } = await readAttempt(transaction, attemptId);
       return { result, cancelRequestedAt };
     });
 
-    expect(beat.result).toEqual({ kind: 'held', cancelRequestedAt: beat.cancelRequestedAt });
+    expect(renewal.result).toEqual({ kind: 'held', cancelRequestedAt: renewal.cancelRequestedAt });
   });
 
   test('is lost once another writer has finished the attempt', async () => {
-    const beat = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       await simulateReap(transaction, attemptId);
-      return await heartbeat(transaction, attemptId, workerId);
+      return await renewLease(transaction, attemptId, workerId);
     });
 
-    expect(beat).toEqual({ kind: 'lost' });
+    expect(renewal).toEqual({ kind: 'lost' });
   });
 
   test('is lost when the attempt belongs to a different worker', async () => {
-    const beat = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, aWorkerId());
-      return await heartbeat(transaction, attemptId, aWorkerId());
+      return await renewLease(transaction, attemptId, aWorkerId());
     });
 
-    expect(beat).toEqual({ kind: 'lost' });
+    expect(renewal).toEqual({ kind: 'lost' });
   });
 });
 

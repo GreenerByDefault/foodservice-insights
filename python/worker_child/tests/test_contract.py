@@ -69,7 +69,9 @@ def test_claims_exactly_the_reasons_the_parent_grants_a_child() -> None:
     assert sorted(contract.CHILD_FAILURE_REASONS) == granted
 
 
-@pytest.mark.parametrize("reason", ["child_crashed", "hung", "hard_timeout", "infrastructure"])
+@pytest.mark.parametrize(
+    "reason", ["child_crashed", "hung", "hard_timeout", "infrastructure", "abandoned"]
+)
 def test_does_not_claim_a_parent_only_reason(reason: str) -> None:
     # The parent saw the kill itself, so a child claiming one of these is not believed.
     assert CONTRACT["failureReasonClaimants"][reason] == "parent"

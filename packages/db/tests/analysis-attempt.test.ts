@@ -40,8 +40,8 @@ async function fail(transaction: Transaction, attemptId: AnalysisAttempt['id']):
     .set({
       status: 'processing',
       workerId: 'w1',
-      lockedAt: new Date(),
-      lastHeartbeatAt: new Date(),
+      claimedAt: new Date(),
+      leaseRenewedAt: new Date(),
     })
     .where('id', '=', attemptId)
     .execute();
@@ -58,7 +58,7 @@ describe('analysis_attempt column invariants', () => {
       const attempt = await insertAnalysisAttempt(transaction);
       await transaction
         .updateTable('analysisAttempt')
-        .set({ workerId: 'w1', lockedAt: new Date() })
+        .set({ workerId: 'w1', claimedAt: new Date() })
         .where('id', '=', attempt.id)
         .execute();
     });
@@ -161,7 +161,7 @@ describe('analysis_attempt column invariants', () => {
     });
   });
 
-  // The timestamps must satisfy finished_at >= last_heartbeat_at >= locked_at >= created_at, and
+  // The timestamps must satisfy finished_at >= lease_renewed_at >= claimed_at >= created_at, and
   // each is pinned to created_at directly as well. Every case below is built so that exactly one
   // of those checks is violated — otherwise the constraint that reports is whichever Postgres
   // happens to evaluate first, and the test would be asserting nothing in particular.
@@ -175,34 +175,34 @@ describe('analysis_attempt column invariants', () => {
     {
       description: 'a claim that predates the attempt',
       from: 'processing' as const,
-      patch: () => ({ lockedAt: LONG_AGO }),
-      constraint: 'analysis_attempt_locked_at_after_created_at',
+      patch: () => ({ claimedAt: LONG_AGO }),
+      constraint: 'analysis_attempt_claimed_at_after_created_at',
     },
     {
-      description: 'a heartbeat older than the claim it belongs to',
+      description: 'a lease renewal older than the claim it belongs to',
       from: 'processing' as const,
-      patch: () => ({ lockedAt: anHourFromNow() }),
-      constraint: 'analysis_attempt_heartbeat_after_locked_at',
+      patch: () => ({ claimedAt: anHourFromNow() }),
+      constraint: 'analysis_attempt_lease_renewed_after_claimed_at',
     },
     {
-      description: 'a heartbeat that predates the attempt',
+      description: 'a lease renewal that predates the attempt',
       from: 'pending' as const,
       patch: () => ({
         status: 'canceled' as const,
         finishedAt: new Date(),
-        lastHeartbeatAt: LONG_AGO,
+        leaseRenewedAt: LONG_AGO,
       }),
-      constraint: 'analysis_attempt_heartbeat_after_created_at',
+      constraint: 'analysis_attempt_lease_renewed_after_created_at',
     },
     {
-      description: 'finishing before the last heartbeat',
+      description: 'finishing before the last lease renewal',
       from: 'processing' as const,
       patch: () => ({
         status: 'succeeded' as const,
         finishedAt: new Date(),
-        lastHeartbeatAt: anHourFromNow(),
+        leaseRenewedAt: anHourFromNow(),
       }),
-      constraint: 'analysis_attempt_finished_at_after_heartbeat',
+      constraint: 'analysis_attempt_finished_at_after_lease_renewed',
     },
     {
       description: 'a cancellation that predates the attempt',
@@ -507,7 +507,7 @@ describe('a terminal attempt is final', () => {
           await reap(reaper.transaction, attempt);
 
           // The `WHERE status = 'processing' AND workerId = ...` guard is the pattern
-          // [Heartbeats, hangs, and reaping](../../ARCHITECTURE.md#heartbeats-hangs-and-reaping)
+          // [Progress, leases, and reaping](../../ARCHITECTURE.md#progress-leases-and-reaping)
           // prescribes for a worker finishing up after it may have been reaped.
           const blocked = await sendBlockingStatement(DATABASE, original, reaper, (transaction) =>
             transaction

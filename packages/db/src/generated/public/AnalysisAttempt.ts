@@ -26,9 +26,10 @@ export default interface AnalysisAttemptTable {
 
   workerId: ColumnType<string | null, string | null, string | null>;
 
-  lockedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  claimedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  lastHeartbeatAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  /** When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. */
+  leaseRenewedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   finishedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 

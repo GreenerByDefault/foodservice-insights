@@ -39,6 +39,7 @@
     "hung": "parent",
     "infrastructure": "parent",
     "unknown": "either",
-    "upstream_api": "child"
+    "upstream_api": "child",
+    "abandoned": "parent"
   }
 }

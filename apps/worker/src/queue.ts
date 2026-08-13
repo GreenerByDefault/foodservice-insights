@@ -57,8 +57,8 @@ export async function claimNextAttempt(
     .set({
       status: 'processing',
       workerId,
-      lockedAt: sql<Date>`now()`,
-      lastHeartbeatAt: sql<Date>`now()`,
+      claimedAt: sql<Date>`now()`,
+      leaseRenewedAt: sql<Date>`now()`,
     })
     .where('id', '=', nextPendingAttempt(db, options.candidateReports))
     .returning('id')
@@ -142,24 +142,24 @@ export async function loadAttemptInputs(
 }
 
 // -----------------------------------------------------
-// Heartbeats
+// Lease renewal
 // -----------------------------------------------------
 
 /** `lost` means the attempt is no longer ours: another writer reached a verdict for it, or the
  * cross-worker reaper took it away. Either way there is nothing left for us to record. */
-export type Heartbeat = { kind: 'held'; cancelRequestedAt: Date | null } | { kind: 'lost' };
+export type Lease = { kind: 'held'; cancelRequestedAt: Date | null } | { kind: 'lost' };
 
 /** One statement per attempt per supervision tick, answering both questions that tick has: do we
  * still own this attempt, and has someone asked for it to be canceled.
  */
-export async function heartbeat(
+export async function renewLease(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   workerId: string,
-): Promise<Heartbeat> {
+): Promise<Lease> {
   const held = await db
     .updateTable('analysisAttempt')
-    .set({ lastHeartbeatAt: sql<Date>`now()` })
+    .set({ leaseRenewedAt: sql<Date>`now()` })
     .where('id', '=', attemptId)
     .where('status', '=', 'processing')
     .where('workerId', '=', workerId)

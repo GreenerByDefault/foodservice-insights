@@ -161,21 +161,58 @@ analysis attempt failed and sends an email.
 
 Refer to [`contract/`](contract/) for the worker ↔ child contract.
 
-### Heartbeats, hangs, and reaping
+### Progress, leases, and reaping
+
+Catching a hung or crashed analysis means answering two different questions — is the *child*
+still making progress, and does the *parent* still get to act on that — and each has to keep
+working when the other's machinery is down. That split is **two independent axes**, and mixing
+them forfeits what each is for:
+
+| | Axis A — child liveness | Axis B — supervisor authority |
+| --- | --- | --- |
+| Medium | the filesystem | Postgres |
+| Signal | `progress.json` `sequence` → parent's `lastProgressAt` | the guarded `UPDATE` |
+| Clock | the parent's, only ever as a difference | the database's, on both write and read |
+| Answers | should I kill this child? | may I still write this attempt's verdict, and is anyone still watching it? |
+| Survives a DB outage | **yes, by design** | no |
+| Survives losing the container | no | **yes, that is its whole job** |
+
+Because Axis B reads and writes the *database's* `now()`, cross-worker liveness never depends on
+worker clocks agreeing. Because Axis A only ever subtracts the *parent's* clock, it keeps working
+through a total database outage. **Never write the child's progress timestamp into the
+database** — see *Rejected* below for why that specific mistake is not just untidy but unsafe.
+
+The one rule that resolves the two axes into one design:
+
+> **A worker renews the lease on an attempt if and only if it has just checked that attempt's
+> child and will still reach a verdict for it.**
+
+Child progress is an *input* to the renewal decision, never the value written. "Has someone taken
+this attempt?" is the renewal's *answer*. "Tell other parents I am alive" is its *effect*.
+
+That rule has a corollary: a parent that cannot evaluate its child's health must **stop
+renewing**, so the reaper converges the attempt. This is the same shape as "an error is not a
+verdict" below: *the write fails ⇒ still run the checks; the checks cannot be evaluated ⇒ skip the
+write.* The two rules this adds on top — a renewal asserts that the checks ran, and fencing once a
+lease has expired — are decided in
+[`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
 
 Three layered defenses, because a hung analysis has to be caught even if the process that should
 notice it is itself hung:
 
-1. **The child heartbeats** by updating a file every time it makes progress, such as finishing an
-   API call. The parent checks that file roughly every 30 seconds and writes it to the database.
-   If the child has not progressed in `staleAfterMs`, the parent kills it as hung. The threshold
-   must exceed the longest valid API call including backoff — see
-   [`config.ts`](apps/worker/src/config.ts).
+1. **The child reports progress** by updating a file every time it makes progress, such as
+   finishing an API call. The parent checks that file roughly every 30 seconds. If the child has
+   not progressed in `noProgressAfterMs`, the parent kills it as hung. The threshold must exceed
+   the longest valid API call including backoff — see [`config.ts`](apps/worker/src/config.ts).
 2. **The parent hard-kills** a child after `hardCeilingMs` no matter what, as a safety net for
    hung attempts — see [`config.ts`](apps/worker/src/config.ts).
-3. **Other workers reap.** A parent can crash and leave its children orphaned, so every worker
-   proactively looks for `processing` attempts with no heartbeat in the last k minutes, marks them
-   failed, and sends an email. **Open:** 10 minutes?
+3. **Other workers reap.** The reaper exists for the *row*, not the processes: the parent is PID 1
+   in its container, so killing it tears down the PID namespace and takes every child with it, and
+   the PaaS restarts the container — there is no orphan class of process to worry about. What can
+   happen is a container dying (e.g. OOM) and leaving its claimed attempts stuck `processing`,
+   with nobody left to reach a verdict and nothing else to ever converge them. So, every worker
+   proactively looks for `processing` attempts whose lease has expired, marks them
+   `failed('abandoned')`, and sends an email.
 
 Defense 3 introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
@@ -183,10 +220,10 @@ tolerate this** — see the terminal-state and status invariants in
 [`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-status-machine).
 
 When the parent's own database calls fail, **an error is not a verdict**: a zero-row guarded
-update is the only "we lost the attempt". A *thrown* heartbeat error skips that write but
-never the local stale and hard-ceiling checks, which read the clock and the progress file. A
-parent that gives up on recording a verdict stops heartbeating first, so reaping can converge the
-attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
+update is the only "we lost the attempt". A *thrown* lease-renewal error skips that write but
+never the local no-progress and hard-ceiling checks, which read the clock and the progress file. A
+parent that gives up on recording a verdict stops renewing the lease first, so reaping can
+converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
 
 ### Canceling
 
@@ -295,10 +332,10 @@ handling.
 | Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
-| Worker child process hangs | The child stops updating its heartbeat file, which triggers both parent-side and other-worker defenses — see [Heartbeats, hangs, and reaping](#heartbeats-hangs-and-reaping) |
+| Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [Progress, leases, and reaping](#progress-leases-and-reaping) |
 | A third-party API rate limits us, e.g. Gemini | The child retries with backoff, then fails; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk |
 | Workers cannot keep up with demand | Alert on attempts waiting too long to be claimed |
-| Workers fail unexpectedly, e.g. a code regression | Alert when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
+| Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. Alert when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
 | Email is slow or down | Auth stops working — **Open:** can we alert on this? The worker times out its email request; email is best effort |
 | Database exhausts connections | Clients and the database periodically terminate connections, plus timeouts, to limit zombie connections. Use connection pools and cap the number of connections |
 
