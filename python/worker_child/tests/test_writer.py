@@ -50,7 +50,7 @@ def test_refuses_to_write_nan(run_directory: Path) -> None:
     assert files_in(path.parent) == []
 
 
-def test_heartbeats_with_a_strictly_increasing_sequence(run_directory: Path) -> None:
+def test_reports_progress_with_a_strictly_increasing_sequence(run_directory: Path) -> None:
     advance = progress_reporter(run_directory)
     path = run_directory / contract.PROGRESS
 

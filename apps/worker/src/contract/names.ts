@@ -29,11 +29,12 @@ export const FAILURE_REASON_CLAIMANT = {
   infrastructure: 'parent',
   unknown: 'either',
   upstream_api: 'child',
+  abandoned: 'parent',
 } as const satisfies Record<AnalysisFailureReason, 'parent' | 'child' | 'either'>;
 
 export type FailureReasonClaimant = (typeof FAILURE_REASON_CLAIMANT)[AnalysisFailureReason];
 
 export const CHILD_FAILURE_REASONS = Object.entries(FAILURE_REASON_CLAIMANT)
-  .filter(([, claimant]) => claimant !== 'parent')
+  .filter(([, claimant]) => claimant === 'child' || claimant === 'either')
   .map(([reason]) => reason as AnalysisFailureReason)
   .sort();

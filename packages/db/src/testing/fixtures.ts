@@ -135,7 +135,7 @@ export async function insertInputFile(
 }
 
 /** An attempt in `status`, with whatever other columns that status's CHECK constraints require —
- * `finished_at` for a terminal status, `worker_id`/`locked_at`/`last_heartbeat_at` for
+ * `finished_at` for a terminal status, `worker_id`/`claimed_at`/`lease_renewed_at` for
  * `processing`. See `analysis_attempt` in schema.sql for the constraints themselves.
  */
 export async function insertAnalysisAttempt(
@@ -162,8 +162,8 @@ export async function insertAnalysisAttempt(
       ...(isProcessing
         ? {
             workerId: overrides.workerId ?? 'test-worker',
-            lockedAt: new Date(),
-            lastHeartbeatAt: new Date(),
+            claimedAt: new Date(),
+            leaseRenewedAt: new Date(),
           }
         : {}),
       ...(isTerminal
