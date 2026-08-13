@@ -28,7 +28,7 @@ export type BlobStoreLimits = {
    * to ride out a real outage while `requestDeadlineMs` still has 42s to give. Retries have
    * to spread over time, not just count: doubling deterministically from this base waits 31×
    * the base in total.
-   * 
+   *
    * Note that no retry schedule survives a *persistent* failure.
    */
   retryDelayBaseMs: number;
