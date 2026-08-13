@@ -34,8 +34,8 @@ import {
 import { isBlobStoreError } from '@gbd/storage';
 
 /** A verdict for an attempt the worker's own machinery failed, as opposed to one the child
- * reached. The other `AnalysisFailureReason`s describe the child and belong to the verdict
- * table, so this type cannot carry them.
+ * reached — the other `AnalysisFailureReason`s describe the child and belong to the verdict
+ * table.
  */
 export type AttemptFailure = {
   reason: Extract<AnalysisFailureReason, 'infrastructure' | 'unknown'>;

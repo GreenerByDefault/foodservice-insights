@@ -12,7 +12,6 @@ import {
   TRANSIENT_RETRY_WAITS_MS,
 } from './failures.ts';
 
-/** A `sleep` that records what it was asked and resolves immediately. */
 function recordingSleep() {
   const waits: number[] = [];
   const sleep = (ms: number) => {
