@@ -41,9 +41,9 @@ describe('readProduct', () => {
     );
 
     test.for([
-      ['a zero-width space', 'beef​mince'],
-      ['a soft hyphen', 'beef­mince'],
-      ['a bidi override', 'beef‮mince'],
+      ['a zero-width space', 'beef\u200bmince'],
+      ['a soft hyphen', 'beef\u00admince'],
+      ['a bidi override', 'beef\u202emince'],
       ['a tab', 'beef\tmince'],
       ['a line break', 'beef\nmince'],
     ] as const)('%s, which nothing on screen would explain', ([, raw]) => {
