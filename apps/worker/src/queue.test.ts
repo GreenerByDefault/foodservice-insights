@@ -123,7 +123,7 @@ async function backdate(
  * **Open:** an imitation, so these tests are only as good as it is. Point them at the real reaper
  * when defense 3 in `ARCHITECTURE.md` § Heartbeats, hangs and reaping lands.
  */
-async function reap(
+async function simulateReap(
   transaction: Transaction<Database>,
   attemptId: AnalysisAttemptId,
 ): Promise<void> {
@@ -396,7 +396,7 @@ describe('heartbeat', () => {
     const beat = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
-      await reap(transaction, attemptId);
+      await simulateReap(transaction, attemptId);
       return await heartbeat(transaction, attemptId, workerId);
     });
 
@@ -493,9 +493,12 @@ describe('finishing', () => {
     });
   });
 
-  test('refuses to finish an attempt a different worker is running', async () => {
+  test('refuses to finish an attempt still claimed by another live worker', async () => {
     // The `worker_id` half of the guard. Without it a worker that came back from the dead could
     // write its verdict over an attempt somebody else has since picked up and is still running.
+    //
+    // This is the ordinary ownership mismatch; see 'losing the race' below for the reaper, which
+    // ends an attempt without ever claiming it and so isn't guarded by `worker_id` at all.
     const outcome = await withRollback(DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, aWorkerId());
       const won = await finishFailed(transaction, attemptId, aWorkerId(), {
@@ -520,7 +523,7 @@ describe('finishing', () => {
       return await withRollback(DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
-        await reap(transaction, attemptId);
+        await simulateReap(transaction, attemptId);
 
         const won = await finish(transaction, attemptId, workerId);
         const row = await readAttempt(transaction, attemptId);
@@ -546,7 +549,7 @@ describe('finishing', () => {
       const files = await withRollback(DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
-        await reap(transaction, attemptId);
+        await simulateReap(transaction, attemptId);
 
         await finishSucceeded(transaction, attemptId, workerId, {
           result: A_RESULT,

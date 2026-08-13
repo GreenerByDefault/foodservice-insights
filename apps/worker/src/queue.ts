@@ -223,7 +223,7 @@ export async function finishSucceeded(
   return await withTransaction(db, async (transaction) => {
     // The guarded update goes first so that losing the race writes nothing at all: `result_file`
     // rows for an attempt whose verdict is someone else's would be results nothing points at.
-    const won = await finishTerminal(transaction, attemptId, workerId, {
+    const won = await finishIfStillOwned(transaction, attemptId, workerId, {
       status: 'succeeded',
       aiModel: ai.model,
       aiInputTokens: ai.inputTokens,
@@ -261,7 +261,7 @@ export async function finishFailed(
   workerId: string,
   failure: { reason: AnalysisFailureReason; detail: string | null },
 ): Promise<boolean> {
-  return await finishTerminal(db, attemptId, workerId, {
+  return await finishIfStillOwned(db, attemptId, workerId, {
     status: 'failed',
     failureReason: failure.reason,
     failureDetail: failure.detail,
@@ -275,7 +275,7 @@ export async function finishCanceled(
   attemptId: AnalysisAttemptId,
   workerId: string,
 ): Promise<boolean> {
-  return await finishTerminal(db, attemptId, workerId, { status: 'canceled' });
+  return await finishIfStillOwned(db, attemptId, workerId, { status: 'canceled' });
 }
 
 type TerminalColumns = Updateable<Database['analysisAttempt']> & {
@@ -284,8 +284,12 @@ type TerminalColumns = Updateable<Database['analysisAttempt']> & {
 
 /** The one statement that ends an attempt. `finished_at` is set here rather than by each caller,
  * so rule 1 above cannot be broken by adding a fourth verdict.
+ *
+ * Guarded by `worker_id`, not staleness — this is the *owning* worker recording its own verdict.
+ * The reaper ends an attempt it never claimed, so it writes a separate statement with a
+ * different guard rather than calling this one.
  */
-async function finishTerminal(
+async function finishIfStillOwned(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   workerId: string,
