@@ -31,7 +31,7 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { RESULT_FILE_FORMATS } from '@gbd/storage';
-import { sql, type Transaction } from 'kysely';
+import { NoResultError, sql, type Transaction } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
 import {
@@ -236,7 +236,6 @@ describe('claiming', () => {
     expect(second).toBeUndefined();
   });
 
-  // These two are the tests `packages/db` used to run against its own copy of this query.
   describe('under concurrency', () => {
     /** `count` reports in one organization, each with a pending attempt waiting to be claimed. */
     async function withPendingAttempts(
@@ -335,18 +334,18 @@ describe('loadAttemptInputs', () => {
       },
     });
 
-    // The point of the shape: it is exactly what the manifest builder validates, so a column that
-    // arrives in the wrong form is a failure here rather than a rejected `run.json` at runtime.
-    const manifest = buildRunManifest({
-      analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
-      report: loaded.inputs.report,
-      inputFile: {
-        originalFilename: loaded.inputs.inputFile.originalFilename,
-        byteSize: loaded.inputs.inputFile.byteSize,
-        checksumSha256: loaded.inputs.inputFile.checksumSha256,
-      },
-    });
-    expect(manifest.report.monthlyCounts).toEqual({ '2026-03': 900 });
+    // This confirms that the schema's format checks pass too.
+    expect(() =>
+      buildRunManifest({
+        analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
+        report: loaded.inputs.report,
+        inputFile: {
+          originalFilename: loaded.inputs.inputFile.originalFilename,
+          byteSize: loaded.inputs.inputFile.byteSize,
+          checksumSha256: loaded.inputs.inputFile.checksumSha256,
+        },
+      }),
+    ).not.toThrow();
   });
 
   test('throws when the report has no input file', async () => {
@@ -355,7 +354,7 @@ describe('loadAttemptInputs', () => {
       await loadAttemptInputs(transaction, attemptId);
     });
 
-    await expect(load).rejects.toThrow();
+    await expect(load).rejects.toThrow(NoResultError);
   });
 });
 
@@ -385,10 +384,12 @@ describe('heartbeat', () => {
         .set({ cancelRequestedAt: sql<Date>`now()` })
         .where('id', '=', attemptId)
         .execute();
-      return await heartbeat(transaction, attemptId, workerId);
+      const result = await heartbeat(transaction, attemptId, workerId);
+      const { cancelRequestedAt } = await readAttempt(transaction, attemptId);
+      return { result, cancelRequestedAt };
     });
 
-    expect(beat).toEqual({ kind: 'held', cancelRequestedAt: expect.any(Date) });
+    expect(beat.result).toEqual({ kind: 'held', cancelRequestedAt: beat.cancelRequestedAt });
   });
 
   test('is lost once another writer has finished the attempt', async () => {

@@ -32,6 +32,10 @@ import type { StoredFile } from '@gbd/storage';
 import { sql, type Updateable } from 'kysely';
 import type { ChildResult, RunManifestInput } from './contract/messages.ts';
 
+// -----------------------------------------------------
+// Claiming
+// -----------------------------------------------------
+
 export type ClaimOptions = {
   /** Narrows the queue to attempts on these reports.
    *
@@ -85,6 +89,10 @@ function nextPendingAttempt(
       .limit(1)
   );
 }
+
+// -----------------------------------------------------
+// Loading attempt inputs
+// -----------------------------------------------------
 
 /** Everything spawning a child for an attempt needs: the manifest's contents, and the ids that
  * build the input file's storage key.
@@ -149,6 +157,10 @@ export async function loadAttemptInputs(
   };
 }
 
+// -----------------------------------------------------
+// Heartbeats
+// -----------------------------------------------------
+
 /** `lost` means the attempt is no longer ours: another writer reached a verdict for it, or the
  * cross-worker reaper took it away. Either way there is nothing left for us to record. */
 export type Heartbeat = { kind: 'held'; cancelRequestedAt: Date | null } | { kind: 'lost' };
@@ -173,6 +185,10 @@ export async function heartbeat(
 
   return held === undefined ? { kind: 'lost' } : { kind: 'held', ...held };
 }
+
+// -----------------------------------------------------
+// Finishing attempts
+// -----------------------------------------------------
 
 /** A result file that has already been uploaded, ready to be recorded.
  *
