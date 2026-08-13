@@ -61,6 +61,20 @@ async function pendingAttempt(
   return { attemptId: attempt.id, reportIds: [report.id] };
 }
 
+/** Move an attempt's `created_at` into the past, so a later claim's `now()` has somewhere to land
+ * after it. */
+async function backdateCreation(
+  transaction: Transaction<Database>,
+  attemptId: AnalysisAttemptId,
+  minutes: number,
+): Promise<void> {
+  await transaction
+    .updateTable('analysisAttempt')
+    .set({ createdAt: sql<Date>`now() - make_interval(mins => ${minutes})` })
+    .where('id', '=', attemptId)
+    .execute();
+}
+
 /** A pending attempt created `minutes` ago. One per report, because at most one attempt per report
  * may be active. */
 async function agedAttempt(
@@ -70,11 +84,7 @@ async function agedAttempt(
 ): Promise<{ attemptId: AnalysisAttemptId; reportId: ReportId }> {
   const report = await insertReport(transaction, { organizationId });
   const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
-  await transaction
-    .updateTable('analysisAttempt')
-    .set({ createdAt: sql<Date>`now() - make_interval(mins => ${minutes})` })
-    .where('id', '=', attempt.id)
-    .execute();
+  await backdateCreation(transaction, attempt.id, minutes);
   return { attemptId: attempt.id, reportId: report.id };
 }
 
@@ -194,13 +204,26 @@ describe('claiming', () => {
   test('marks the attempt as this worker processing it', async () => {
     const workerId = aWorkerId();
     const attempt = await withRollback(DATABASE, async (transaction) => {
-      const attemptId = await claimedAttempt(transaction, workerId);
+      const { attemptId: pendingId, reportIds } = await pendingAttempt(transaction);
+      // Backdate creation before claiming, so `lockedAt` and `lastHeartbeatAt` land measurably
+      // after `createdAt` instead of sharing the transaction's start time with it — the same
+      // trick `backdate` uses for the heartbeat tests below.
+      await backdateCreation(transaction, pendingId, 5);
+      const attemptId = await claimNextAttempt(transaction, workerId, {
+        candidateReports: reportIds,
+      });
+      if (attemptId === undefined) throw new Error('the fixture attempt was not claimable');
       return await readAttempt(transaction, attemptId);
     });
 
     expect(attempt).toMatchObject({ status: 'processing', workerId });
     expect(attempt.lockedAt).toBeInstanceOf(Date);
     expect(attempt.lastHeartbeatAt).toBeInstanceOf(Date);
+    // The claim sets both columns from a single `now()`, so they must be identical.
+    expect(attempt.lockedAt?.getTime()).toBe(attempt.lastHeartbeatAt?.getTime());
+    // And that value has to be later than creation, or the columns could be defaulting to
+    // `created_at` instead of the moment of the claim.
+    expect(attempt.lockedAt?.getTime()).toBeGreaterThan(attempt.createdAt.getTime());
   });
 
   test('finds nothing once the only attempt is claimed', async () => {
