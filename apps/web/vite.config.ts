@@ -69,6 +69,9 @@ export default defineConfig(({ command }) => ({
           globalSetup: ['./src/lib/server/tests/global-setup.ts'],
           include: ['src/**/*.{test,spec}.{js,ts}'],
           exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+
+          // Supabase Storage can have contention.
+          testTimeout: 30_000,
         },
       },
     ],
