@@ -33,23 +33,14 @@ import {
 } from '@gbd/db';
 import { isBlobStoreError } from '@gbd/storage';
 
-/** A verdict for an attempt the worker's own machinery failed, as opposed to one the child
- * reached — the other `AnalysisFailureReason`s describe the child and belong to the verdict
- * table.
- */
+/** What to record in the database when an analysis fails due
+ * to the parent's own machinery. */
 export type AttemptFailure = {
   reason: Extract<AnalysisFailureReason, 'infrastructure' | 'unknown'>;
   detail: string;
 };
 
-/** Classify an error thrown while processing a claimed attempt.
- *
- * Every failure of the infrastructure we talk to is `infrastructure` — including a statement
- * Postgres *refused*, which is the case we know most about: the SQLSTATE goes in the detail.
- * `unknown` is only what nothing here recognises, most likely a bug in our own pipeline code;
- * keeping it scarce is what makes a count of `unknown` failures a signal that this classifier
- * has a hole.
- */
+/** Build the `AttemptFailure` for an error caught while processing a claimed attempt. */
 export function classifyAttemptFailure(error: unknown): AttemptFailure {
   if (isTransientDatabaseError(error)) {
     return { reason: 'infrastructure', detail: `Could not reach the database: ${describe(error)}` };
@@ -77,20 +68,22 @@ export type Sleep = (ms: number) => Promise<void>;
 
 const SLEEP: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Waits between attempts; one more attempt than waits. This layer bridges *blips* — a reset
- * pooled connection, one dropped packet — not outages, which are the caller's problem (principle
- * 3 above). 250ms clears a connection re-establishment; 2s clears a fast failover.
- *
- * **Open:** placeholders to tune.
- */
+/** Default waits: 250ms clears a connection re-establishment; 2s clears a fast failover. */
 export const TRANSIENT_RETRY_WAITS_MS: readonly number[] = [250, 2_000];
 
 export interface RetryOptions {
-  /** What we were trying to do, for the log line: "Could not reach the database to <action>" —
-   * the same shape as the web app's `withDbErrorHandling`, so one log search spans both apps. */
+  /** What we were trying to do, for the log line: "Could not reach the database to <action>". */
   action: string;
   /** Structured context — entity IDs, etc. — logged next to the error. */
   context?: Record<string, unknown>;
+  /** The wait before each retry.
+   *
+   * The first attempt has no wait, so there is one more attempt than
+   * there are waits.
+   *
+   * This layer bridges *blips* — a reset pooled connection, one dropped packet —
+   * not outages, which are the caller's problem.
+   */
   waitsMs?: readonly number[];
   /** Injected by tests so no assertion waits on the wall clock. */
   sleep?: Sleep;
@@ -98,9 +91,10 @@ export interface RetryOptions {
 
 /** Run a database call again when the statement never completed, up to a small bound.
  *
- * Only transient failures are retried; a statement Postgres refused meets the same refusal every
- * time, and a non-database error is not this function's to interpret — both rethrow immediately.
- * After the last attempt the transient error rethrows for the caller to classify.
+ * Only transient database failures are retried. A statement Postgres refused meets the same
+ * refusal every time; a blob store failure already retried inside `@gbd/storage`; and a
+ * non-database error is not this function's to interpret — all three rethrow immediately.
+ * After the last attempt, the transient error rethrows for the caller to classify.
  *
  * `fn` must run on the pool handle, never inside a caller's transaction: an aborted transaction
  * answers every retry with SQLSTATE 25P02, which is not transient, so the retry silently becomes

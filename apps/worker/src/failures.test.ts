@@ -1,8 +1,3 @@
-/** No database and no wall clock, honestly: the contract under test is classification and
- * scheduling, not SQL. The synthetic errors are the factories each package pins against the real
- * driver or endpoint in its own `errors.test.ts`, so their fidelity is asserted where it can be.
- */
-
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { aBlobStoreError } from '@gbd/storage/testing';
 import { describe, expect, it, vi } from 'vitest';
