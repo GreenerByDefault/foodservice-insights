@@ -1,7 +1,8 @@
 import type { RejectedUploadReason, ReportId } from '@gbd/db';
 import { getObject } from '@gbd/storage';
 import { afterAll, describe, expect, test } from 'vitest';
-import { FIELD, MAX_UPLOAD_BYTES } from '$lib/reports/submission';
+import { MAX_UPLOAD_BYTES } from '$lib/reports/limits';
+import { FIELD } from '$lib/reports/metadata';
 import { closeDatabase } from '$lib/server/db';
 import { closeBlobStore } from '$lib/server/storage';
 import { withFileFixtures } from '$lib/server/tests/fixtures';

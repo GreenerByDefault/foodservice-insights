@@ -6,6 +6,7 @@ type RejectedUploadReason =
   | 'unparseable'
   | 'csv_injection'
   | 'empty'
+  | 'bad_rows'
   | 'other';
 
 export type { RejectedUploadReason as default };

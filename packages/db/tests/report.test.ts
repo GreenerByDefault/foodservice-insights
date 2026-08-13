@@ -147,6 +147,7 @@ describe('input_file', () => {
           contentType: 'text/csv',
           originalFilename: 'procurement.csv',
           checksumSha256: Buffer.from('too short'),
+          isModified: false,
         })
         .execute();
     });
@@ -169,6 +170,7 @@ describe('input_file', () => {
           contentType: 'text/csv',
           originalFilename: 'procurement.csv',
           checksumSha256: aChecksum(),
+          isModified: false,
         })
         .execute();
     });

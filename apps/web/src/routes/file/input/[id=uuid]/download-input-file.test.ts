@@ -22,7 +22,7 @@ describe('_downloadInputFile', () => {
       const stored = await putInputFile(
         store,
         { organizationId, reportId: report.id, inputFileId },
-        CSV,
+        { original: CSV, normalized: CSV },
       );
       await transaction
         .insertInto('inputFile')
@@ -34,6 +34,7 @@ describe('_downloadInputFile', () => {
           contentType: stored.contentType,
           originalFilename: 'procurement.csv',
           checksumSha256: stored.checksumSha256,
+          isModified: stored.isModified,
         })
         .execute();
 

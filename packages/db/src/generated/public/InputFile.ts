@@ -20,6 +20,9 @@ export default interface InputFileTable {
 
   checksumSha256: ColumnType<unknown, unknown, unknown>;
 
+  /** Whether storage_key holds bytes the user did not send. When true, the upload as received is at the same key suffixed -original, which no row references. When false, storage_key is it. */
+  isModified: ColumnType<boolean, boolean, boolean>;
+
   createdAt: ColumnType<Date, Date | string | undefined, Date | string>;
 }
 

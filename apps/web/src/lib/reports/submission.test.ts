@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import {
-  FIELD,
-  MAX_MONTHS,
-  MAX_UPLOAD_BYTES,
-  type RawSubmission,
-  readSubmission,
-  validateSubmission,
-} from './submission.ts';
+import { MAX_MONTHS, MAX_UPLOAD_BYTES } from './limits.ts';
+import { FIELD } from './metadata.ts';
+import { type RawSubmission, readSubmission, validateSubmission } from './submission.ts';
 
 const CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
 
@@ -36,6 +31,21 @@ describe('validateSubmission', () => {
         monthlyCounts: { '2026-01': 120, '2026-02': 135 },
       },
       file: { originalFilename: 'procurement.csv', byteSize: CSV.length },
+    });
+  });
+
+  // TODO: change this test when the normalize changes the file.
+  test('reports the normalized bytes as the same bytes it received, until a normalizer exists', async () => {
+    const outcome = await validateSubmission(aSubmission());
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      file: {
+        variants: {
+          original: new TextEncoder().encode(CSV),
+          normalized: new TextEncoder().encode(CSV),
+        },
+      },
     });
   });
 

@@ -9,8 +9,9 @@ import type {
 } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import {
-  inputFileKey,
+  normalizedInputFileKey,
   organizationPrefix,
+  originalInputFileKey,
   RESULT_FILE_FORMATS,
   rejectedUploadKey,
   resultFileKey,
@@ -32,7 +33,7 @@ const EVERY_KEY: ReadonlyArray<[string, string]> = [
   ],
   [
     'input file',
-    inputFileKey({
+    normalizedInputFileKey({
       organizationId: ORGANIZATION_ID,
       reportId: REPORT_ID,
       inputFileId: INPUT_FILE_ID,
@@ -62,12 +63,22 @@ describe('the layout', () => {
 
   test('puts an input file under its report', () => {
     expect(
-      inputFileKey({
+      normalizedInputFileKey({
         organizationId: ORGANIZATION_ID,
         reportId: REPORT_ID,
         inputFileId: INPUT_FILE_ID,
       }),
     ).toBe('org/organization-1/report/report-1/input/input-file-1.csv');
+  });
+
+  test('puts the original input file alongside the normalized one', () => {
+    expect(
+      originalInputFileKey({
+        organizationId: ORGANIZATION_ID,
+        reportId: REPORT_ID,
+        inputFileId: INPUT_FILE_ID,
+      }),
+    ).toBe('org/organization-1/report/report-1/input/input-file-1-original.csv');
   });
 
   test('puts a result file under the attempt that produced it', () => {
