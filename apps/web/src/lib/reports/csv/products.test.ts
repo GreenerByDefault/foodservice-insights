@@ -10,6 +10,14 @@ describe('readProduct', () => {
     expect(readProduct('Beef, minced (80/20) 5" tray')).toMatchObject({ ok: true });
   });
 
+  test.for([
+    ['a diacritic', 'Café au lait, jalapeño'],
+    ['Hebrew', 'חלה'],
+    ['Mandarin', '豆腐'],
+  ] as const)('keeps %s a real product name carries', ([, raw]) => {
+    expect(readProduct(raw)).toMatchObject({ ok: true });
+  });
+
   describe('rejects', () => {
     test.for(['', '   '])('a blank product (%j)', (raw) => {
       expect(readProduct(raw)).toEqual({ ok: false, problem: 'is empty' });
