@@ -2,7 +2,7 @@
  *
  * Every off-spec input is an error, never a recovery. A library that repairs malformed quoting is
  * the wrong tool here: each repair is a decision about what the user meant, which is exactly what
- * this area refuses to make. So this is hand-written, and it is small.
+ * this area refuses to make.
  *
  * Line endings are already normalized to `\n` by `decode.ts`.
  *
@@ -11,9 +11,13 @@
  */
 
 export type CsvRecord = {
-  /** 1-based line the record starts on, which is the row number the user sees in a spreadsheet —
-   * until a quoted field contains a newline, when the two stop agreeing and the start line is the
-   * more useful of the two.
+  /** 1-based line the record starts on, for error messages.
+   *
+   * A quoted field may itself contain a newline, per RFC 4180, so a record can span more lines
+   * than this one number can capture — it names only where the record began.
+   *
+   * This grammar allows that newline. Whether it belongs in a given column is a semantic
+   * question for that column to answer instead — see `products.ts`, which rejects one.
    */
   line: number;
   fields: string[];
