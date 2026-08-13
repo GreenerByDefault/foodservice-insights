@@ -10,7 +10,7 @@ runs:
     # the regenerated types land in the same commit.
     - uses: supabase/setup-cli@v1
       with:
-        version: 2.111.0
+        version: 2.113.0
 
     # We exclude studio to speed up CI.
     - run: scripts/supabase start -x studio

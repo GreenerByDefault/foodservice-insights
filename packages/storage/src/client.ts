@@ -24,10 +24,12 @@ export type BlobStoreLimits = {
   /** The wait before the first retry; each later retry doubles it (500ms → 1s → 2s → 4s → 8s).
    *
    * Passed to the SDK in place of its default backoff, which draws each delay at random from
-   * under `100ms × 2^attempt` — so all of `MAX_ATTEMPTS` land inside ~3 seconds. A CI flake
-   * showed Supabase Storage answering 500 for longer than that, failing every attempt while
-   * `requestDeadlineMs` still had 42s to give. Retries have to spread over time, not just
-   * count: doubling deterministically from this base waits 31× the base in total.
+   * under `100ms × 2^attempt` — so all of `MAX_ATTEMPTS` land inside ~3 seconds, too little
+   * to ride out a real outage while `requestDeadlineMs` still has 42s to give. Retries have
+   * to spread over time, not just count: doubling deterministically from this base waits 31×
+   * the base in total.
+   * 
+   * Note that no retry schedule survives a *persistent* failure.
    */
   retryDelayBaseMs: number;
 

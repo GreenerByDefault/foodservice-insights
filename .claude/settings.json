@@ -46,6 +46,7 @@
     "allow": [
       "Bash(pnpm:*)",
       "Bash(TEST_DB=1 pnpm:*)",
+      "Bash(TEST_DB=1 npx vitest:*)",
       "Bash(just:*)",
       "Bash(uv:*)",
       "Bash(scripts/supabase:*)",

@@ -20,6 +20,7 @@ const UNREACHABLE_STORE = initializeBlobStore({
   accessKeyId: 'unused',
   secretAccessKey: 'unused',
   bucket: 'unused',
+  limits: { retryDelayBaseMs: 1 },
 });
 
 /** The real endpoint and credentials, aimed at a bucket that was never created. */
