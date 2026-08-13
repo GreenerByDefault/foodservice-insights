@@ -12,8 +12,8 @@
  *    `analysis_attempt_terminal_is_final` exception, which is the database's backstop for a
  *    statement that forgot the guard.
  *
- * Nothing here retries or requeues. Once an attempt leaves the queue it never returns to it:
- * retrying is a user action, per [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#worker-queue).
+ * Nothing here retries or requeues. Once an attempt leaves the queue it never returns to it.
+ * Users initiate retrying an analysis_attempt.
  */
 
 import type {
@@ -42,17 +42,11 @@ export type ClaimOptions = {
    * **Test isolation only; production passes nothing.** Turbo runs every package's `test:unit`
    * concurrently against one database, so a worker that claimed globally would take attempts
    * belonging to another test file and fail it from the outside.
-   *
-   * **Open:** the shared test database is the real cause, and every queue-wide query the worker
-   * grows — the cross-worker reaper first — will need the same parameter. A test database per
-   * package would delete this one instead of spreading it.
    */
   candidateReports?: readonly ReportId[];
 };
 
-/** Take the oldest pending attempt, or `undefined` if there is nothing to take. The statement is
- * the one in [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#worker-queue).
- */
+/** Take the oldest pending attempt, or `undefined` if there is nothing to take. */
 export async function claimNextAttempt(
   db: DatabaseExecutor,
   workerId: string,
@@ -94,23 +88,14 @@ function nextPendingAttempt(
 // Loading attempt inputs
 // -----------------------------------------------------
 
-/** Everything spawning a child for an attempt needs: the manifest's contents, and the ids that
- * build the input file's storage key.
- */
 export type AttemptInputs = {
   organizationId: OrganizationId;
   reportId: ReportId;
-  /** The manifest's fields — `checksumSha256` is hex there, `bytea` in the column — plus the id
-   * and key that fetch the object. */
   inputFile: RunManifestInput['inputFile'] & { id: InputFileId; storageKey: string };
   report: RunManifestInput['report'];
 };
 
-/** Throws if the attempt, its report, or its input file is missing. A claimed attempt has all
- * three — the foreign keys guarantee the first two, and the upload path writes the report and its
- * file in one transaction — so absence is corruption rather than a case to handle, and the caller
- * fails the attempt as `infrastructure`.
- */
+/** Throws if the attempt, its report, or its input file is missing, which would be unexpected. */
 export async function loadAttemptInputs(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
@@ -119,7 +104,6 @@ export async function loadAttemptInputs(
     .selectFrom('analysisAttempt')
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
     .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
-    // The two ids are aliased because the join has two of them; nothing else here collides.
     .select([
       'report.id as reportId',
       'inputFile.id as inputFileId',
@@ -166,8 +150,7 @@ export async function loadAttemptInputs(
 export type Heartbeat = { kind: 'held'; cancelRequestedAt: Date | null } | { kind: 'lost' };
 
 /** One statement per attempt per supervision tick, answering both questions that tick has: do we
- * still own this attempt, and has someone asked for it to be canceled. Splitting them into a read
- * and a write would double the round trips and let the two answers disagree.
+ * still own this attempt, and has someone asked for it to be canceled.
  */
 export async function heartbeat(
   db: DatabaseExecutor,
@@ -193,9 +176,7 @@ export async function heartbeat(
 /** A result file that has already been uploaded, ready to be recorded.
  *
  * Built on `StoredFile` so that what `putResultFile` returns is what this takes, unmodified — the
- * content type recorded on the row is then the one the object was actually stored with. The union
- * is `result_file_chart_key_iff_chart` in the type system, so a chart with no key cannot be built
- * rather than being rejected by Postgres after the upload has already happened.
+ * content type recorded on the row is then the one the object was actually stored with.
  */
 export type ResultFileRecord = StoredFile & {
   /** Minted by the caller, because the storage key is built from it before the upload. */
