@@ -16,3 +16,9 @@ export const MAX_ORIGINAL_FILENAME_LENGTH = 255;
 
 /** Enough for a decade of monthly figures, which is far past any plausible submission. */
 export const MAX_MONTHS = 120;
+
+/** More digits than a double can hold exactly, and far more than any real weight. */
+export const MAX_AMOUNT_DIGITS = 15;
+
+/** Orders this far ahead are a typo or a misread year, not a delivery schedule. */
+export const MAX_FUTURE_DAYS = 30;
