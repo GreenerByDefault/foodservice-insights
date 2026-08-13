@@ -1,3 +1,10 @@
-/** vitest `globalSetup` for the worker's tests. */
+/** vitest `globalSetup` for the worker's tests. Both are needed: `attempt.test.ts` claims real
+ * rows and uploads to a real bucket, so both stores have to exist before any test file runs. */
 
-export { setup } from '@gbd/db/testing';
+import { setup as setUpDatabase } from '@gbd/db/testing';
+import { setup as setUpBlobStore } from '@gbd/storage/testing';
+
+export async function setup(): Promise<void> {
+  await setUpDatabase();
+  await setUpBlobStore();
+}

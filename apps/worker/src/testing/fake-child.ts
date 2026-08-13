@@ -10,10 +10,6 @@
  * writes a *correct* `result.json` or a `progress.json` often enough to stay under the staleness
  * threshold — only an end-to-end run against `python/worker_child` and the golden fixtures in
  * `contract/fixtures/` answer that.
- *
- * **Placeholder** The `result`, `failure`, `writeRaw`, and `crash` steps and `fakeResultFileContents` have no
- * caller yet — they exist for tests of the code that reads those documents and uploads the files a
- * result declares, which hasn't landed. Treat `writeResult` as unverified until something calls it.
  */
 
 import { spawn } from 'node:child_process';
