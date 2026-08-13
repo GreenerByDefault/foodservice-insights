@@ -520,6 +520,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'contract_violation',
       'upstream_api',
       'unknown',
+      'abandoned',
     ])
     .execute();
   await database.schema.createType('result_file_kind').asEnum(['pdf', 'xlsx', 'chart']).execute();
@@ -539,8 +540,8 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     )
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addColumn('worker_id', 'text')
-    .addColumn('locked_at', 'timestamptz')
-    .addColumn('last_heartbeat_at', 'timestamptz')
+    .addColumn('claimed_at', 'timestamptz')
+    .addColumn('lease_renewed_at', 'timestamptz')
     .addColumn('finished_at', 'timestamptz')
     .addColumn('cancel_requested_at', 'timestamptz')
     .addColumn('failure_reason', sql`analysis_failure_reason`)
@@ -565,12 +566,12 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     )
     .addCheckConstraint(
       'analysis_attempt_pending_is_unclaimed',
-      sql`status <> 'pending' OR (worker_id IS NULL AND locked_at IS NULL AND last_heartbeat_at IS NULL)`,
+      sql`status <> 'pending' OR (worker_id IS NULL AND claimed_at IS NULL AND lease_renewed_at IS NULL)`,
     )
     .addCheckConstraint(
       'analysis_attempt_processing_is_claimed',
-      sql`status <> 'processing' OR (worker_id IS NOT NULL AND locked_at IS NOT NULL
-          AND last_heartbeat_at IS NOT NULL AND finished_at IS NULL)`,
+      sql`status <> 'processing' OR (worker_id IS NOT NULL AND claimed_at IS NOT NULL
+          AND lease_renewed_at IS NOT NULL AND finished_at IS NULL)`,
     )
     // `(a) = (b)` is a genuine "if and only if" here: `status` is NOT NULL and `IS NOT NULL` is
     // never unknown, so this cannot pass by evaluating to null the way a check normally can.
@@ -586,32 +587,32 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_notification_requires_finished',
       sql`notification_email_sent_at IS NULL OR finished_at IS NOT NULL`,
     )
-    // finished_at >= last_heartbeat_at >= locked_at >= created_at. Each is also pinned to
+    // finished_at >= lease_renewed_at >= claimed_at >= created_at. Each is also pinned to
     // created_at directly, because the pairwise chain alone has a hole: an attempt canceled
-    // before it was ever claimed has null locked_at and last_heartbeat_at, and nothing would
+    // before it was ever claimed has null claimed_at and lease_renewed_at, and nothing would
     // then stop finished_at from predating created_at.
     //
     // The `IS NULL OR` prefixes are redundant — a check passes when it evaluates to null — but
     // they say out loud which comparisons are optional, so nobody "fixes" a hole that isn't there.
     .addCheckConstraint(
-      'analysis_attempt_locked_at_after_created_at',
-      sql`locked_at IS NULL OR locked_at >= created_at`,
+      'analysis_attempt_claimed_at_after_created_at',
+      sql`claimed_at IS NULL OR claimed_at >= created_at`,
     )
     .addCheckConstraint(
-      'analysis_attempt_heartbeat_after_created_at',
-      sql`last_heartbeat_at IS NULL OR last_heartbeat_at >= created_at`,
+      'analysis_attempt_lease_renewed_after_created_at',
+      sql`lease_renewed_at IS NULL OR lease_renewed_at >= created_at`,
     )
     .addCheckConstraint(
-      'analysis_attempt_heartbeat_after_locked_at',
-      sql`last_heartbeat_at IS NULL OR locked_at IS NULL OR last_heartbeat_at >= locked_at`,
+      'analysis_attempt_lease_renewed_after_claimed_at',
+      sql`lease_renewed_at IS NULL OR claimed_at IS NULL OR lease_renewed_at >= claimed_at`,
     )
     .addCheckConstraint(
       'analysis_attempt_finished_at_after_created_at',
       sql`finished_at IS NULL OR finished_at >= created_at`,
     )
     .addCheckConstraint(
-      'analysis_attempt_finished_at_after_heartbeat',
-      sql`finished_at IS NULL OR last_heartbeat_at IS NULL OR finished_at >= last_heartbeat_at`,
+      'analysis_attempt_finished_at_after_lease_renewed',
+      sql`finished_at IS NULL OR lease_renewed_at IS NULL OR finished_at >= lease_renewed_at`,
     )
     .addCheckConstraint(
       'analysis_attempt_cancel_requested_at_after_created_at',
@@ -628,6 +629,11 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
   await sql`
     COMMENT ON TABLE analysis_attempt IS
       'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at, failure_reason and the ai_* columns in one UPDATE.'
+  `.execute(database);
+
+  await sql`
+    COMMENT ON COLUMN analysis_attempt.lease_renewed_at IS
+      'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. Not the child''s progress: the child''s liveness never reaches the database. Set from the database''s clock on both write and read, so reaping never depends on worker clocks.'
   `.execute(database);
 
   // At most one active attempt per report.
@@ -660,9 +666,9 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .execute();
 
   await database.schema
-    .createIndex('analysis_attempt_processing_heartbeat')
+    .createIndex('analysis_attempt_processing_lease_renewed_at')
     .on('analysis_attempt')
-    .column('last_heartbeat_at')
+    .column('lease_renewed_at')
     .where(sql`status`, '=', sql`'processing'`)
     .execute();
 
@@ -760,7 +766,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
   // race is a zero-row update rather than an exception; this trigger is the backstop for any
   // statement that forgets.
   //
-  // The WHEN clause keeps every heartbeat update out of PL/pgSQL entirely.
+  // The WHEN clause keeps every lease-renewal update out of PL/pgSQL entirely.
   await sql`
     CREATE TRIGGER analysis_attempt_terminal_is_final
       BEFORE UPDATE ON analysis_attempt

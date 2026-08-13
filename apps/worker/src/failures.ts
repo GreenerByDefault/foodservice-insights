@@ -4,26 +4,37 @@
  * (`apps/web/src/lib/server/db.ts`); the worker has no response to shape, so each failure
  * becomes one of three things instead. The principles, resting on two architectural facts —
  * retrying an attempt is a user action, and the cross-worker reaper converges any attempt whose
- * heartbeats stop ([`ARCHITECTURE.md`](../../../ARCHITECTURE.md#heartbeats-hangs-and-reaping)):
+ * lease expires ([`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping)):
  *
  * 1. **An error is not a verdict.** A zero-row guarded update is the only "we lost the attempt".
  *    A *thrown* error means unknown ownership — never kill the child or write a verdict because
- *    of one. A failing heartbeat write skips that tick, but never the local stale and
+ *    of one. A failing lease-renewal write skips that tick, but never the local no-progress and
  *    hard-ceiling checks, which read the clock and the progress file rather than the database.
  * 2. **Loops retry by ticking; attempts fail terminally.** A failure in the claim poll or a
  *    supervise tick is logged and absorbed — the next tick is the retry. A failure while
  *    processing a *claimed* attempt becomes `failed('infrastructure')`, because a claimed
  *    attempt can never return to the queue.
  * 3. **The reaper is the backstop for a verdict we cannot record.** If even `finishFailed`
- *    cannot be written: kill the child first, log loudly, and abandon — and abandoning stops the
- *    heartbeats, or the row would stay `processing` forever and the reaper could never converge
- *    it.
+ *    cannot be written: kill the child first, log loudly, and abandon — and abandoning stops
+ *    renewing the lease, or the row would stay `processing` forever and the reaper could never
+ *    converge it.
  * 4. **Bounded retry only where one transient statement would otherwise terminally fail an
  *    attempt** — loading a claimed attempt's inputs, and the `finish*` writes, which record up
  *    to ~20 minutes of child work and real AI spend. Everything else already retries: the loops
  *    by ticking, and every blob store request inside the SDK (`MAX_ATTEMPTS` in
  *    `packages/storage/src/client.ts`). *Rejected: a second retry layer on blob calls — it would
  *    multiply the worst-case latency for no added coverage.*
+ * 5. **A renewal asserts that the checks ran.** If the progress read throws — `EIO`, `ENOSPC`,
+ *    a `ContractError` from a malformed `progress.json` — skip the renewal rather than treating a
+ *    missing file (`ENOENT`, already mapped to `undefined`) the same as a read we could not
+ *    trust. Renewing anyway would let one bad byte in `progress.json` produce a parent that
+ *    renews forever and never evaluates a threshold. (A `ContractError` there is itself a
+ *    *verdict*, `contract_violation` — not an absorbed tick error.)
+ * 6. **Fencing.** Once the last successful renewal is older than the lease expiry, the parent
+ *    must kill the child and stop, symmetrically with principle 1: the write fails ⇒ still run
+ *    the checks; the checks cannot be evaluated ⇒ skip the write. Otherwise it keeps burning AI
+ *    quota for up to `hardCeilingMs` and then discards a completed, fully-paid-for result on a
+ *    zero-row update.
  */
 
 import {

@@ -34,7 +34,7 @@ def write_json_atomically(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def progress_reporter(run_directory: Path) -> Callable[[], int]:
-    """Returns a callable that heartbeats once per call and returns the sequence written."""
+    """Returns a callable that reports progress once per call and returns the sequence written."""
     path = run_directory / contract.PROGRESS
     sequence = 0
 

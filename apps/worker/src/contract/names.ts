@@ -29,11 +29,17 @@ export const FAILURE_REASON_CLAIMANT = {
   infrastructure: 'parent',
   unknown: 'either',
   upstream_api: 'child',
+  // A parent process writes this, just not the one that claimed the attempt — the reaper is a
+  // purely server-side concern and deliberately has no claimant of its own on this axis, which
+  // exists to answer "may the *child* emit this?".
+  abandoned: 'parent',
 } as const satisfies Record<AnalysisFailureReason, 'parent' | 'child' | 'either'>;
 
 export type FailureReasonClaimant = (typeof FAILURE_REASON_CLAIMANT)[AnalysisFailureReason];
 
+// An allowlist, not a denylist: a future claimant value must be explicitly let onto this axis
+// rather than falling onto it by default the way `claimant !== 'parent'` would.
 export const CHILD_FAILURE_REASONS = Object.entries(FAILURE_REASON_CLAIMANT)
-  .filter(([, claimant]) => claimant !== 'parent')
+  .filter(([, claimant]) => claimant === 'child' || claimant === 'either')
   .map(([reason]) => reason as AnalysisFailureReason)
   .sort();

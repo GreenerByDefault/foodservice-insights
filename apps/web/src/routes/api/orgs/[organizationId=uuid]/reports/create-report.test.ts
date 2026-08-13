@@ -109,8 +109,8 @@ describe('a valid upload', () => {
         status: 'pending',
         requestedByUserId: adminUserId,
         workerId: null,
-        lockedAt: null,
-        lastHeartbeatAt: null,
+        claimedAt: null,
+        leaseRenewedAt: null,
         finishedAt: null,
       });
     });

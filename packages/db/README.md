@@ -88,7 +88,7 @@ Design reasoning:
 `analysis_attempt.status` is the coordination point between the web app and the workers. Its
 constraints are load-bearing concurrency control. Several exist
 to make the reaping race in
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md#heartbeats-hangs-and-reaping) safe: a worker that hangs
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md#progress-leases-and-reaping) safe: a worker that hangs
 must not be able to overwrite a verdict another worker already reached.
 
 The invariants themselves are the named constraints and triggers in

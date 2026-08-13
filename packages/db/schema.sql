@@ -61,7 +61,8 @@ CREATE TYPE "public"."analysis_failure_reason" AS ENUM (
     'infrastructure',
     'contract_violation',
     'upstream_api',
-    'unknown'
+    'unknown',
+    'abandoned'
 );
 
 
@@ -443,8 +444,8 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "requested_by_user_id" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "worker_id" "text",
-    "locked_at" timestamp with time zone,
-    "last_heartbeat_at" timestamp with time zone,
+    "claimed_at" timestamp with time zone,
+    "lease_renewed_at" timestamp with time zone,
     "finished_at" timestamp with time zone,
     "cancel_requested_at" timestamp with time zone,
     "failure_reason" "public"."analysis_failure_reason",
@@ -462,16 +463,16 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     CONSTRAINT "analysis_attempt_ai_output_tokens_non_negative" CHECK (("ai_output_tokens" >= 0)),
     CONSTRAINT "analysis_attempt_attempt_number_range" CHECK ((("attempt_number" >= 1) AND ("attempt_number" <= 5))),
     CONSTRAINT "analysis_attempt_cancel_requested_at_after_created_at" CHECK ((("cancel_requested_at" IS NULL) OR ("cancel_requested_at" >= "created_at"))),
+    CONSTRAINT "analysis_attempt_claimed_at_after_created_at" CHECK ((("claimed_at" IS NULL) OR ("claimed_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_failure_reason_iff_failed" CHECK ((("status" = 'failed'::"public"."analysis_attempt_status") = ("failure_reason" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_finished_at_after_created_at" CHECK ((("finished_at" IS NULL) OR ("finished_at" >= "created_at"))),
-    CONSTRAINT "analysis_attempt_finished_at_after_heartbeat" CHECK ((("finished_at" IS NULL) OR ("last_heartbeat_at" IS NULL) OR ("finished_at" >= "last_heartbeat_at"))),
+    CONSTRAINT "analysis_attempt_finished_at_after_lease_renewed" CHECK ((("finished_at" IS NULL) OR ("lease_renewed_at" IS NULL) OR ("finished_at" >= "lease_renewed_at"))),
     CONSTRAINT "analysis_attempt_finished_at_iff_terminal" CHECK ((("status" = ANY (ARRAY['succeeded'::"public"."analysis_attempt_status", 'failed'::"public"."analysis_attempt_status", 'canceled'::"public"."analysis_attempt_status"])) = ("finished_at" IS NOT NULL))),
-    CONSTRAINT "analysis_attempt_heartbeat_after_created_at" CHECK ((("last_heartbeat_at" IS NULL) OR ("last_heartbeat_at" >= "created_at"))),
-    CONSTRAINT "analysis_attempt_heartbeat_after_locked_at" CHECK ((("last_heartbeat_at" IS NULL) OR ("locked_at" IS NULL) OR ("last_heartbeat_at" >= "locked_at"))),
-    CONSTRAINT "analysis_attempt_locked_at_after_created_at" CHECK ((("locked_at" IS NULL) OR ("locked_at" >= "created_at"))),
+    CONSTRAINT "analysis_attempt_lease_renewed_after_claimed_at" CHECK ((("lease_renewed_at" IS NULL) OR ("claimed_at" IS NULL) OR ("lease_renewed_at" >= "claimed_at"))),
+    CONSTRAINT "analysis_attempt_lease_renewed_after_created_at" CHECK ((("lease_renewed_at" IS NULL) OR ("lease_renewed_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_notification_requires_finished" CHECK ((("notification_email_sent_at" IS NULL) OR ("finished_at" IS NOT NULL))),
-    CONSTRAINT "analysis_attempt_pending_is_unclaimed" CHECK ((("status" <> 'pending'::"public"."analysis_attempt_status") OR (("worker_id" IS NULL) AND ("locked_at" IS NULL) AND ("last_heartbeat_at" IS NULL)))),
-    CONSTRAINT "analysis_attempt_processing_is_claimed" CHECK ((("status" <> 'processing'::"public"."analysis_attempt_status") OR (("worker_id" IS NOT NULL) AND ("locked_at" IS NOT NULL) AND ("last_heartbeat_at" IS NOT NULL) AND ("finished_at" IS NULL))))
+    CONSTRAINT "analysis_attempt_pending_is_unclaimed" CHECK ((("status" <> 'pending'::"public"."analysis_attempt_status") OR (("worker_id" IS NULL) AND ("claimed_at" IS NULL) AND ("lease_renewed_at" IS NULL)))),
+    CONSTRAINT "analysis_attempt_processing_is_claimed" CHECK ((("status" <> 'processing'::"public"."analysis_attempt_status") OR (("worker_id" IS NOT NULL) AND ("claimed_at" IS NOT NULL) AND ("lease_renewed_at" IS NOT NULL) AND ("finished_at" IS NULL))))
 );
 
 
@@ -482,6 +483,13 @@ ALTER TABLE "public"."analysis_attempt" OWNER TO "postgres";
 --
 
 COMMENT ON TABLE "public"."analysis_attempt" IS 'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at, failure_reason and the ai_* columns in one UPDATE.';
+
+
+--
+-- Name: COLUMN "analysis_attempt"."lease_renewed_at"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."lease_renewed_at" IS 'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it. Not the child''s progress: the child''s liveness never reaches the database. Set from the database''s clock on both write and read, so reaping never depends on worker clocks.';
 
 
 --
@@ -878,10 +886,10 @@ CREATE INDEX "analysis_attempt_pending_queue" ON "public"."analysis_attempt" USI
 
 
 --
--- Name: analysis_attempt_processing_heartbeat; Type: INDEX; Schema: public; Owner: postgres
+-- Name: analysis_attempt_processing_lease_renewed_at; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX "analysis_attempt_processing_heartbeat" ON "public"."analysis_attempt" USING "btree" ("last_heartbeat_at") WHERE ("status" = 'processing'::"public"."analysis_attempt_status");
+CREATE INDEX "analysis_attempt_processing_lease_renewed_at" ON "public"."analysis_attempt" USING "btree" ("lease_renewed_at") WHERE ("status" = 'processing'::"public"."analysis_attempt_status");
 
 
 --

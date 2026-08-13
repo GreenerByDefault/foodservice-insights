@@ -6,6 +6,7 @@ type AnalysisFailureReason =
   | 'infrastructure'
   | 'contract_violation'
   | 'upstream_api'
-  | 'unknown';
+  | 'unknown'
+  | 'abandoned';
 
 export type { AnalysisFailureReason as default };

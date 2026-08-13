@@ -129,7 +129,7 @@ async function insertReport(
     })
     .execute();
 
-  // Leaving `workerId`, `lockedAt` and `lastHeartbeatAt` unset is what satisfies
+  // Leaving `workerId`, `claimedAt` and `leaseRenewedAt` unset is what satisfies
   // `analysis_attempt_pending_is_unclaimed`; number 1 is what the first-attempt trigger wants.
   await transaction
     .insertInto('analysisAttempt')
