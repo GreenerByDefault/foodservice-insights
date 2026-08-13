@@ -13,6 +13,7 @@
   "dependencies": {
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
+    "@gbd/storage": "workspace:*",
     "valibot": "catalog:"
   },
   "devDependencies": {
