@@ -58,9 +58,8 @@ export type ReapOptions = {
  * renewing (the container died), or a claim held past the ceiling (the parent renews forever but
  * never finishes).
  *
- * Shared between the candidate subquery and the `UPDATE`'s own `WHERE`, so the
- * two copies the query needs cannot drift apart — see `reapExpiredAttempts` for why both copies
- * have to exist at all.
+ * Shared between the candidate subquery and the `UPDATE`'s own `WHERE`, so the two copies the query
+ * needs cannot drift apart — see `reapExpiredAttempts` for why both have to exist at all.
  */
 function isExpired(
   eb: ExpressionBuilder<Database, 'analysisAttempt'>,
@@ -85,7 +84,9 @@ function expiredCandidates(
     .where('status', '=', 'processing')
     .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
     // Oldest-renewed first, so a sweep capped by `maxAttemptsPerSweep` converges on the
-    // longest-abandoned attempts rather than an arbitrary subset.
+    // longest-abandoned attempts rather than an arbitrary subset. An attempt that trips only the
+    // claimed ceiling has a fresh lease and so sorts last, behind every dead one — deliberate,
+    // since a parent still renewing is still doing something.
     .orderBy('leaseRenewedAt')
     .limit(options.maxAttemptsPerSweep);
 
@@ -96,19 +97,25 @@ function expiredCandidates(
 
 /** End every `processing` attempt this sweep is entitled to reap, in one `UPDATE`.
  *
- * **The expiry predicate is repeated inside the `UPDATE`'s own `WHERE`, never left to a preceding
- * `SELECT`.** Under READ COMMITTED, when this statement's row lock request blocks on a row a
- * concurrent renewal is committing, Postgres re-evaluates that row's top-level `WHERE` against the
- * version the renewal just committed once the lock is released (`EvalPlanQual`) — so a renewal
- * that lands while the reap waits makes the reap a zero-row no-op for that row. That only works
- * because the predicate reads `lease_renewed_at`/`claimed_at` directly in the `UPDATE`'s own
- * `WHERE`; a `SELECT`-then-`UPDATE` computes its candidate list from a snapshot that is already
- * stale by the time the `UPDATE` runs, and would reap an attempt whose parent is demonstrably
- * alive. This is the load-bearing detail of the whole file.
+ * **The expiry predicate is a top-level qual of the `UPDATE` itself.** Under READ COMMITTED, when
+ * this statement's row lock request blocks on a row a concurrent renewal is committing, Postgres
+ * re-evaluates that row's top-level `WHERE` against the version the renewal just committed once the
+ * lock is released (`EvalPlanQual`) — so a renewal that lands while the reap waits makes the reap a
+ * zero-row no-op for that row, and an attempt whose parent is demonstrably alive survives. This is
+ * the load-bearing detail of the whole file.
  *
- * The subquery's only job is `ORDER BY` and `LIMIT` — Postgres `UPDATE` has neither — so the same
- * predicate appears twice: once to pick the candidate ids, once more on the `UPDATE` itself for
- * `EvalPlanQual` to recheck.
+ * `EvalPlanQual` rechecks *only* that top-level qual. It does not re-evaluate the `IN` subplan, so a
+ * candidate id list is stale however it was computed — whether by a preceding `SELECT` or by the
+ * subquery below. Filtering only there and leaving the `UPDATE` to match on id would reap the live
+ * attempt just as surely as a `SELECT`-then-`UPDATE` would. The predicate has to read
+ * `lease_renewed_at`/`claimed_at` on the `UPDATE`, and no arrangement of subqueries substitutes.
+ *
+ * It appears in the subquery too, for a separate reason: Postgres `UPDATE` has no `ORDER BY` or
+ * `LIMIT`, so choosing *which* expired attempts a capped sweep ends needs a subquery, and one that
+ * did not filter would spend the cap on rows the `UPDATE` then discards.
+ *
+ * *Rejected: filtering in the subquery alone, since the `UPDATE` already matches its ids* — the
+ * recheck would have nothing to catch the renewal with; see above.
  *
  * **Does not exclude its own `worker_id`.** With one worker deployed, an abandoned row would
  * otherwise never be reaped by the only process that will ever see it. A live supervisor's own
@@ -117,8 +124,6 @@ function expiredCandidates(
  * supervision loop kills the child.
  *
  * *Rejected: excluding our own `worker_id` from the reap* — see above.
- *
- * *Rejected: a `SELECT` to find expired attempts, then an `UPDATE` to end them* — see above.
  */
 export async function reapExpiredAttempts(
   db: DatabaseExecutor,

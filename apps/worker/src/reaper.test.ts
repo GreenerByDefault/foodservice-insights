@@ -15,7 +15,7 @@ import {
   withConcurrentTransactions,
   withRollback,
 } from '@gbd/db/testing';
-import type { Transaction } from 'kysely';
+import type { ControlledTransaction, Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { markAttemptSucceeded, renewLease } from './queue.ts';
 import { type ReapOptions, reapExpiredAttempts } from './reaper.ts';
@@ -318,49 +318,163 @@ describe('reapExpiredAttempts', () => {
     expect(outcome.succeeded.status).toBe('succeeded');
   });
 
-  // The load-bearing test: the reaper's predicate has to live inside the `UPDATE` itself, not a
-  // preceding `SELECT`, or this race would reap an attempt whose parent is demonstrably alive.
+  test('a capped sweep still reaches a ceiling-expired attempt behind fresher rows', async () => {
+    const outcome = await withRollback(DATABASE, async (transaction) => {
+      // Fresh leases, so only the ceiling condemns the first one. Its lease is the *newest* of the
+      // three, which is exactly what would push it out of a cap that ordered without filtering.
+      const overCeiling = await processingAttempt(transaction, aWorkerId(), {
+        claimedAgo: CLAIMED_CEILING_MS + 60_000,
+        renewedAgo: 0,
+      });
+      const alive = await Promise.all([
+        processingAttempt(transaction, aWorkerId(), { renewedAgo: 120_000 }),
+        processingAttempt(transaction, aWorkerId(), { renewedAgo: 60_000 }),
+      ]);
+
+      const reaped = await reapExpiredAttempts(
+        transaction,
+        aWorkerId(),
+        reapOptions({
+          maxAttemptsPerSweep: 1,
+          candidateReports: [overCeiling.reportId, ...alive.map((one) => one.reportId)],
+        }),
+      );
+      return { reaped, overCeilingId: overCeiling.attemptId };
+    });
+
+    expect(outcome.reaped).toEqual([outcome.overCeilingId]);
+  });
+
+  // The load-bearing test: the expiry predicate has to be a top-level qual of the `UPDATE`, so
+  // `EvalPlanQual` rechecks it against the renewal that committed while the reap was blocked.
+  // Filtering only in the candidate subquery passes every other test in this file and fails here.
   test('a renewal that commits while the reap is blocked on its row makes the reap a zero-row no-op', async () => {
-    const workerId = aWorkerId();
-
-    const result = await withCommittedFixture(
-      DATABASE,
-      async (transaction, trash) => {
-        const { organization } = await insertFixtureOrganization(transaction, trash);
-        const report = await insertReport(transaction, { organizationId: organization.id });
-        const attempt = await insertAnalysisAttempt(transaction, {
-          reportId: report.id,
-          status: 'processing',
-          workerId,
-        });
-        await backdateAttemptTimeline(transaction, attempt.id, {
-          renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
-        });
-        return { attemptId: attempt.id, reportId: report.id };
-      },
-      async ({ attemptId, reportId }) => {
-        const reaped = await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-          // alpha holds the row lock a genuine renewal takes, uncommitted.
-          await renewLease(alpha.transaction, attemptId, workerId);
-
-          // beta's reap has to block on alpha's uncommitted renewal, not skip past it.
-          const blockedReap = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-            reapExpiredAttempts(
-              transaction,
-              aWorkerId(),
-              reapOptions({ candidateReports: [reportId] }),
-            ),
-          );
-
-          await alpha.transaction.commit().execute();
-          return await blockedReap.result;
-        });
-
-        return { reaped, row: await readAttemptRow(DATABASE, attemptId) };
-      },
-    );
+    const result = await raceReapAgainstCommittedRenewal({
+      renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
+    });
 
     expect(result.reaped).toEqual([]);
     expect(result.row).toMatchObject({ status: 'processing', reapedByWorkerId: null });
   });
+
+  // The recheck reads the whole predicate, not just the lease half: a parent that renews forever is
+  // what the ceiling exists for, so renewing at the moment of the sweep must not rescue it either.
+  test('a renewal that commits while the reap is blocked does not rescue a ceiling-expired attempt', async () => {
+    const reaperId = aWorkerId();
+    const result = await raceReapAgainstCommittedRenewal(
+      { claimedAgo: CLAIMED_CEILING_MS + 120_000, renewedAgo: 0 },
+      reaperId,
+    );
+
+    expect(result.reaped).toEqual([result.row.id]);
+    expect(result.row).toMatchObject({
+      status: 'failed',
+      failureReason: 'abandoned',
+      reapedByWorkerId: reaperId,
+    });
+  });
+
+  // A verdict reached by the owning worker is committed, not merely locked, before the reap unblocks
+  // — so this is the `status` guard being rechecked, and a reap that overwrote it would replace a
+  // real result with `failed('abandoned')`.
+  test('a success that commits while the reap is blocked leaves the succeeded row alone', async () => {
+    const workerId = aWorkerId();
+    const result = await raceReapAgainstCommittedWrite(
+      { renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000 },
+      workerId,
+      async (transaction, attemptId) => {
+        await markAttemptSucceeded(transaction, attemptId, workerId, {
+          result: A_MINIMAL_RESULT,
+          resultFiles: [],
+        });
+      },
+    );
+
+    expect(result.reaped).toEqual([]);
+    expect(result.row).toMatchObject({ status: 'succeeded', reapedByWorkerId: null });
+  });
+
+  // Reaping owes a failure email per attempt, so two sweeps racing the same row must not both
+  // claim it — the second has to see the `status` the first committed.
+  test('two reapers racing one attempt reap it exactly once', async () => {
+    const firstReaperId = aWorkerId();
+    const result = await raceReapAgainstCommittedWrite(
+      { renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000 },
+      aWorkerId(),
+      async (transaction, attemptId, reportId) => {
+        const reaped = await reapExpiredAttempts(
+          transaction,
+          firstReaperId,
+          reapOptions({ candidateReports: [reportId] }),
+        );
+        expect(reaped).toEqual([attemptId]);
+      },
+    );
+
+    expect(result.reaped).toEqual([]);
+    expect(result.row).toMatchObject({ status: 'failed', reapedByWorkerId: firstReaperId });
+  });
 });
+
+/** A `processing` attempt, committed, with `first` holding an uncommitted write on its row while a
+ * reap blocks behind it. Commits both, then reports what the reap did and where the row landed.
+ *
+ * Committing the reap is what makes the row assertion mean anything: a rolled-back reap leaves the
+ * row untouched whatever its `WHERE` matched, so a test that only inspects the row afterwards passes
+ * against a reaper with no predicate at all.
+ */
+async function raceReapAgainstCommittedWrite(
+  offsets: TimelineOffsetsMs,
+  ownerId: string,
+  firstWriter: (
+    transaction: ControlledTransaction<Database>,
+    attemptId: AnalysisAttemptId,
+    reportId: ReportId,
+  ) => Promise<void>,
+  reaperId: string = aWorkerId(),
+) {
+  return await withCommittedFixture(
+    DATABASE,
+    async (transaction, trash) => {
+      const { organization } = await insertFixtureOrganization(transaction, trash);
+      const report = await insertReport(transaction, { organizationId: organization.id });
+      const attempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'processing',
+        workerId: ownerId,
+      });
+      await backdateAttemptTimeline(transaction, attempt.id, offsets);
+      return { attemptId: attempt.id, reportId: report.id };
+    },
+    async ({ attemptId, reportId }) => {
+      const reaped = await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+        await firstWriter(alpha.transaction, attemptId, reportId);
+
+        // beta's reap has to block on alpha's uncommitted write, not skip past it.
+        const blockedReap = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+          reapExpiredAttempts(transaction, reaperId, reapOptions({ candidateReports: [reportId] })),
+        );
+
+        await alpha.transaction.commit().execute();
+        const outcome = await blockedReap.result;
+        await beta.transaction.commit().execute();
+        return outcome;
+      });
+
+      return { reaped, row: await readAttemptRow(DATABASE, attemptId) };
+    },
+  );
+}
+
+/** The common case of the above: the uncommitted write is a genuine lease renewal by the owner. */
+async function raceReapAgainstCommittedRenewal(offsets: TimelineOffsetsMs, reaperId?: string) {
+  const ownerId = aWorkerId();
+  return await raceReapAgainstCommittedWrite(
+    offsets,
+    ownerId,
+    async (transaction, attemptId) => {
+      await renewLease(transaction, attemptId, ownerId);
+    },
+    reaperId,
+  );
+}
