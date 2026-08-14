@@ -18,7 +18,7 @@ import {
   type ReportId,
   type ResultFileKind,
 } from '@gbd/db';
-import { DATABASE, shutdown } from '@gbd/db/env';
+import { DATABASE } from '@gbd/db/env';
 import {
   aChecksum,
   insertAnalysisAttempt,
@@ -32,7 +32,7 @@ import {
 } from '@gbd/db/testing';
 import { RESULT_FILE_FORMATS } from '@gbd/storage';
 import { NoResultError, sql, type Transaction } from 'kysely';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
 import {
   claimNextAttempt,
@@ -43,10 +43,6 @@ import {
   type ResultFileRecord,
   renewLease,
 } from './queue.ts';
-
-afterAll(async () => {
-  await shutdown();
-});
 
 function aWorkerId(): string {
   return `test-worker-${crypto.randomUUID()}`;

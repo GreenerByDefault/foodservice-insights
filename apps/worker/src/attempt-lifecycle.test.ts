@@ -7,12 +7,12 @@
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { DATABASE, shutdown } from '@gbd/db/env';
+import { DATABASE } from '@gbd/db/env';
 import { type Breakable, breakableDatabase } from '@gbd/db/testing';
 import { deletePrefix, getObject } from '@gbd/storage';
-import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
+import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
   type AttemptDependencies,
   failClaimedAttempt,
@@ -36,11 +36,6 @@ import {
   fakeResultFileContents,
 } from './testing/fake-child.ts';
 import type { Kill } from './verdict.ts';
-
-afterAll(async () => {
-  await shutdown();
-  shutdownStore();
-});
 
 function aWorkerId(): string {
   return `test-worker-${crypto.randomUUID()}`;

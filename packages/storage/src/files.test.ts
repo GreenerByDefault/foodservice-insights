@@ -3,16 +3,12 @@
 import { createHash } from 'node:crypto';
 import type { AnalysisAttemptId, RejectedUploadId, ReportId } from '@gbd/db';
 import { newInputFileId, newResultFileId } from '@gbd/db';
-import { afterAll, describe, expect, test } from 'vitest';
-import { BLOB_STORE, shutdown } from './env.ts';
+import { describe, expect, test } from 'vitest';
+import { BLOB_STORE } from './env.ts';
 import { putInputFile, putRejectedUpload, putResultFile } from './files.ts';
 import { organizationPrefix, originalInputFileKey } from './keys.ts';
 import { deletePrefix, getObject, headObject, listObjectKeys } from './objects.ts';
 import { withTemporaryOrganization } from './testing/organizations.ts';
-
-afterAll(() => {
-  shutdown();
-});
 
 // Has a non-ASCII name, so that a byte count taken from a string's length rather than its
 // encoding would come out short.
