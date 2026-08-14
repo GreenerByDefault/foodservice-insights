@@ -229,9 +229,6 @@ converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/s
 onto one medium: a parent whose database is down stops being able to answer "should I kill this
 child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
 
-*Rejected: excluding our own `worker_id` from the reap, and a `SELECT` before the reaping
-`UPDATE`.* Reasoning in [`reaper.ts`](apps/worker/src/reaper.ts).
-
 ### Canceling
 
 When a user cancels, the web server marks the analysis attempt canceled in the database. The

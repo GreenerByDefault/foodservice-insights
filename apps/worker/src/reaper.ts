@@ -114,16 +114,12 @@ function expiredCandidates(
  * `LIMIT`, so choosing *which* expired attempts a capped sweep ends needs a subquery, and one that
  * did not filter would spend the cap on rows the `UPDATE` then discards.
  *
- * *Rejected: filtering in the subquery alone, since the `UPDATE` already matches its ids* — the
- * recheck would have nothing to catch the renewal with; see above.
- *
- * **Does not exclude its own `worker_id`.** With one worker deployed, an abandoned row would
- * otherwise never be reaped by the only process that will ever see it. A live supervisor's own
- * renewals already keep its rows outside the expiry window, and a worker that reaps one of its own
- * in-flight attempts needs no special handling: the next `renewLease` returns `lost` and the
- * supervision loop kills the child.
- *
- * *Rejected: excluding our own `worker_id` from the reap* — see above.
+ * **Does not exclude its own `worker_id`.** A live parent kills its own children without the
+ * database's help — for no progress, or for exceeding the total allowable time. This reaping
+ * defends against the parent itself dying, leaving nothing to converge the rows it claimed. So the
+ * filter could only ever matter where that reasoning has already failed — a parent alive but no
+ * longer supervising — which is exactly when we want the reap. Reaping one of our own costs
+ * nothing: the next `renewLease` returns `lost` and the supervision loop kills the child.
  */
 export async function reapExpiredAttempts(
   db: DatabaseExecutor,
