@@ -39,6 +39,13 @@ def test_agrees_on_the_run_directory_layout() -> None:
     }
 
 
+def test_agrees_on_the_input_csv() -> None:
+    assert CONTRACT["inputCsv"] == {
+        "columns": list(contract.INPUT_CSV_COLUMNS),
+        "dateFormat": contract.INPUT_CSV_DATE_FORMAT,
+    }
+
+
 def test_agrees_on_the_result_file_names() -> None:
     result_files = CONTRACT["resultFiles"]
     assert result_files["pdf"] == contract.PDF_FILE_NAME

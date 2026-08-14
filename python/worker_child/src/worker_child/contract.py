@@ -14,6 +14,8 @@ SECRET_ENVIRONMENT_VARIABLES: Final = (
 
 MANIFEST: Final = "input/run.json"
 INPUT_CSV: Final = "input/input.csv"
+INPUT_CSV_COLUMNS: Final = ("product", "date", "weight")
+INPUT_CSV_DATE_FORMAT: Final = "YYYY-MM-DD"
 PROGRESS: Final = "output/progress.json"
 RESULT: Final = "output/result.json"
 FAILURE: Final = "output/failure.json"
