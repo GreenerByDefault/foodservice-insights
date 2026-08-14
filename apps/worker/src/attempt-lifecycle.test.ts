@@ -1,0 +1,600 @@
+/** A child is never mocked — see [`testing/fake-child.ts`](./testing/fake-child.ts) for why — and
+ * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
+ * for the decision `supervise()` will make once the loop that reads a `Clock` lands. Where a store
+ * or a database has to fail, it is a real client aimed at a port nothing listens on
+ * (`unreachableBlobStore`/`unreachableDatabase`) — a genuine failure of the same shape production
+ * would see, not a mock of one.
+ */
+
+import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { shutdownDatabase } from '@gbd/db';
+import { DATABASE, shutdown } from '@gbd/db/env';
+import { unreachableDatabase } from '@gbd/db/testing';
+import { type BlobStore, deletePrefix, getObject, shutdownBlobStore } from '@gbd/storage';
+import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
+import { unreachableBlobStore } from '@gbd/storage/testing';
+import { afterAll, describe, expect, test } from 'vitest';
+import {
+  type AttemptDependencies,
+  failClaimedAttempt,
+  MissingInputFileError,
+  type PendingVerdict,
+  type PreparedAttempt,
+  type ReadEnding,
+  readChildEnding,
+  recordVerdict,
+  resumeSettle,
+  settleAttempt,
+  startAttempt,
+} from './attempt-lifecycle.ts';
+import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/layout.ts';
+import { markAttemptFailed } from './queue.ts';
+import type { AttemptFixture } from './testing/attempt-fixture.ts';
+import { withAttemptFixture } from './testing/attempt-fixture.ts';
+import {
+  type FakeChildStep,
+  fakeChildCommand,
+  fakeResultFileContents,
+} from './testing/fake-child.ts';
+import type { Kill } from './verdict.ts';
+
+afterAll(async () => {
+  await shutdown();
+  shutdownStore();
+});
+
+function aWorkerId(): string {
+  return `test-worker-${crypto.randomUUID()}`;
+}
+
+function dependencies(
+  fixture: AttemptFixture,
+  workerId: string,
+  steps: readonly FakeChildStep[],
+): AttemptDependencies {
+  return {
+    db: DATABASE,
+    store: BLOB_STORE,
+    workerId,
+    runRoot: fixture.runRoot,
+    childCommand: fakeChildCommand(steps),
+    killGraceMs: 2_000,
+  };
+}
+
+async function readAttempt(attemptId: AttemptFixture['attemptId']) {
+  return await DATABASE.selectFrom('analysisAttempt')
+    .selectAll()
+    .where('id', '=', attemptId)
+    .executeTakeFirstOrThrow();
+}
+
+async function readResultFiles(attemptId: AttemptFixture['attemptId']) {
+  return await DATABASE.selectFrom('resultFile')
+    .selectAll()
+    .where('analysisAttemptId', '=', attemptId)
+    .orderBy('kind')
+    .execute();
+}
+
+function fileNameFor(row: { kind: string; chartKey: string | null }): string {
+  return row.kind === 'chart'
+    ? chartFileName(row.chartKey as string)
+    : RESULT_FILE_NAMES[row.kind as 'pdf' | 'xlsx'];
+}
+
+describe('a successful attempt, end to end', () => {
+  test('uploads every declared file and records the ai columns', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'progress', sequence: 1 },
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const outcome = await prepared.child.exited;
+      const ending = await readChildEnding(prepared, outcome);
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(existsSync(prepared.runDirectory)).toBe(false);
+
+      const attempt = await readAttempt(fixture.attemptId);
+      expect(attempt).toMatchObject({
+        status: 'succeeded',
+        aiModel: 'fake-model',
+        aiInputTokens: 1_000,
+        aiOutputTokens: 200,
+        aiCostUsd: '1.2345',
+      });
+      expect(attempt.finishedAt).toBeInstanceOf(Date);
+
+      const resultFiles = await readResultFiles(fixture.attemptId);
+      expect(resultFiles).toHaveLength(3);
+      for (const row of resultFiles) {
+        const fileName = fileNameFor(row);
+        const body = await getObject(BLOB_STORE, row.storageKey);
+        expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
+      }
+      expect(resultFiles.find((row) => row.kind === 'chart')?.chartKey).toBe('total_spend');
+    });
+  });
+});
+
+/** The shape shared by every "parks instead of losing the verdict" test below, whichever
+ * dependency turned out to be unreachable: settle against `broken`, land on `stage`, retire the
+ * broken dependency, then resume against `working` and land on `recorded`.
+ */
+async function expectParkThenResume(
+  fixture: AttemptFixture,
+  working: AttemptDependencies,
+  broken: AttemptDependencies,
+  prepared: PreparedAttempt,
+  ending: ReadEnding,
+  stage: PendingVerdict['stage'],
+  cleanupBroken: () => void | Promise<void>,
+): Promise<void> {
+  const parked = await settleAttempt(broken, prepared, ending);
+  await cleanupBroken();
+
+  expect(parked).toMatchObject({ kind: 'parked', pending: { stage } });
+  expect((await readAttempt(fixture.attemptId)).status).toBe('processing');
+  expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+  // The bytes outlive the run directory, which is what makes the resume below possible.
+  expect(existsSync(prepared.runDirectory)).toBe(false);
+
+  if (parked.kind !== 'parked') throw new Error('expected a parked verdict');
+  const resumed = await resumeSettle(working, prepared, parked.pending);
+
+  expect(resumed).toEqual({ kind: 'recorded' });
+  expect((await readAttempt(fixture.attemptId)).status).toBe('succeeded');
+  const resultFiles = await readResultFiles(fixture.attemptId);
+  expect(resultFiles).toHaveLength(3);
+  for (const row of resultFiles) {
+    const body = await getObject(BLOB_STORE, row.storageKey);
+    expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileNameFor(row)));
+  }
+}
+
+describe('a blob store that cannot be reached', () => {
+  // The limits are cut to milliseconds because the production ones would spend 45 seconds per
+  // upload here.
+  function unreachableStore(): BlobStore {
+    return unreachableBlobStore({
+      bucket: BLOB_STORE.bucket,
+      limits: {
+        connectionTimeoutMs: 100,
+        attemptTimeoutMs: 200,
+        retryDelayBaseMs: 1,
+        requestDeadlineMs: 1_000,
+      },
+    });
+  }
+
+  test('parks the verdict at the upload stage, and a resume lands it once the store is back', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+      const working = dependencies(fixture, workerId, steps);
+      const broken = { ...working, store: unreachableStore() };
+
+      const prepared = await startAttempt(working, fixture.attemptId);
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+
+      await expectParkThenResume(fixture, working, broken, prepared, ending, 'upload', () =>
+        shutdownBlobStore(broken.store),
+      );
+    });
+  });
+
+  test('does not park a verdict that has nothing to upload', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'failure', reason: 'upstream_api', detail: 'the AI provider returned a 503' },
+        { step: 'exit', code: 1 },
+      ];
+      const broken = { ...dependencies(fixture, workerId, steps), store: unreachableStore() };
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+      const settled = await settleAttempt(broken, prepared, ending);
+      shutdownBlobStore(broken.store);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'upstream_api',
+      });
+    });
+  });
+});
+
+describe('a database that cannot be reached', () => {
+  test('parks the verdict at the record stage, and a resume lands it once the database is back', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+      const working = dependencies(fixture, workerId, steps);
+      const unreachable = unreachableDatabase();
+      const broken = { ...working, db: unreachable };
+
+      const prepared = await startAttempt(working, fixture.attemptId);
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+
+      // The store is fine, so the upload stage clears; only the guarded write is left, and that's
+      // what the unreachable database parks.
+      await expectParkThenResume(fixture, working, broken, prepared, ending, 'record', () =>
+        shutdownDatabase(unreachable),
+      );
+    });
+  });
+});
+
+describe('a hung child that finished first', () => {
+  test('is recorded succeeded, not hung', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const outcome = await prepared.child.exited;
+      const ending = await readChildEnding(prepared, outcome, { reason: 'hung' });
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect((await readAttempt(fixture.attemptId)).status).toBe('succeeded');
+    });
+  });
+});
+
+describe('failure rows', () => {
+  async function runAndSettle(
+    fixture: AttemptFixture,
+    workerId: string,
+    steps: readonly FakeChildStep[],
+    kill?: Kill,
+  ) {
+    const prepared = await startAttempt(dependencies(fixture, workerId, steps), fixture.attemptId);
+    const outcome = await prepared.child.exited;
+    const ending = await readChildEnding(prepared, outcome, kill);
+    return {
+      prepared,
+      settled: await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending),
+    };
+  }
+
+  test('a declared chart file missing writes no result_file rows and no objects', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'], withoutFiles: ['chart-total_spend.png'] },
+        { step: 'exit', code: 0 },
+      ];
+
+      const { prepared, settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(existsSync(prepared.runDirectory)).toBe(false);
+      const attempt = await readAttempt(fixture.attemptId);
+      expect(attempt).toMatchObject({ status: 'failed', failureReason: 'contract_violation' });
+      expect(attempt.failureDetail).toContain('chart-total_spend.png');
+      expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+    });
+  });
+
+  test('exit 0 with no result.json', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [{ step: 'exit', code: 0 }];
+
+      const { settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'contract_violation',
+      });
+    });
+  });
+
+  test('a malformed result.json', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'writeRaw', entry: 'result', contents: 'not json' },
+        { step: 'exit', code: 0 },
+      ];
+
+      const { settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'contract_violation',
+      });
+    });
+  });
+
+  test('exit 1 with a failure.json records the reason the child gave', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'failure', reason: 'upstream_api', detail: 'the AI provider returned a 503' },
+        { step: 'exit', code: 1 },
+      ];
+
+      const { settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'upstream_api',
+        failureDetail: 'the AI provider returned a 503',
+      });
+    });
+  });
+
+  test('exit 1 without a failure.json — an uncaught exception, not a document the child chose to skip', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [{ step: 'crash', message: 'ZeroDivisionError' }];
+
+      const { settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'contract_violation',
+      });
+    });
+  });
+
+  test('an unexpected exit code is child_crashed', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [{ step: 'exit', code: 3 }];
+
+      const { settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'child_crashed',
+      });
+    });
+  });
+
+  test('a result file that fails to read for a reason other than missing is infrastructure, not a silent miss', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', withoutFiles: ['report.pdf'] },
+        { step: 'exit', code: 0 },
+      ];
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const outcome = await prepared.child.exited;
+      // A directory where the child would have written report.pdf: readResultFiles must throw
+      // EISDIR rather than treating it the same as a file the child simply never wrote.
+      await mkdir(resultFilePath(prepared.runDirectory, 'report.pdf'));
+
+      const ending = await readChildEnding(prepared, outcome);
+      expect(ending.read).toMatchObject({ kind: 'read-error' });
+
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'infrastructure',
+      });
+    });
+  });
+
+  test('an unrunnable executable is a spawn failure recorded as infrastructure', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const badDependencies: AttemptDependencies = {
+        db: DATABASE,
+        store: BLOB_STORE,
+        workerId,
+        runRoot: fixture.runRoot,
+        childCommand: { executable: `${fixture.runRoot}/not-a-program`, leadingArguments: [] },
+        killGraceMs: 2_000,
+      };
+
+      const prepared = await startAttempt(badDependencies, fixture.attemptId);
+      const outcome = await prepared.child.exited;
+      const ending = await readChildEnding(prepared, outcome);
+      const settled = await settleAttempt(badDependencies, prepared, ending);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'infrastructure',
+      });
+    });
+  });
+
+  test('a missing input object fails the attempt without spawning a child', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      await deletePrefix(BLOB_STORE, fixture.inputCsvStorageKey);
+      const attemptDependencies = dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]);
+
+      const start = startAttempt(attemptDependencies, fixture.attemptId);
+      await expect(start).rejects.toThrow(MissingInputFileError);
+
+      await failClaimedAttempt(
+        attemptDependencies,
+        fixture.attemptId,
+        await start.catch((error) => error),
+      );
+
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'infrastructure',
+      });
+    });
+  });
+
+  test('a startAttempt that throws leaves no run directory behind', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      await deletePrefix(BLOB_STORE, fixture.inputCsvStorageKey);
+      const runDirectory = `${fixture.runRoot}/${fixture.attemptId}`;
+
+      await expect(
+        startAttempt(
+          dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]),
+          fixture.attemptId,
+        ),
+      ).rejects.toThrow(MissingInputFileError);
+
+      expect(existsSync(runDirectory)).toBe(false);
+    });
+  });
+});
+
+describe('kills', () => {
+  const KILLS: readonly Kill[] = [
+    { reason: 'hung' },
+    { reason: 'hard-timeout' },
+    { reason: 'shutting-down' },
+    { reason: 'canceled' },
+    { reason: 'fenced' },
+    { reason: 'lost' },
+    { reason: 'contract-violation', detail: 'progress.json: not valid JSON' },
+  ];
+
+  const EXPECTED: Record<Kill['reason'], { status: string; failureReason: string | null }> = {
+    hung: { status: 'failed', failureReason: 'hung' },
+    'hard-timeout': { status: 'failed', failureReason: 'hard_timeout' },
+    'shutting-down': { status: 'failed', failureReason: 'shut_down' },
+    canceled: { status: 'canceled', failureReason: null },
+    fenced: { status: 'processing', failureReason: null },
+    lost: { status: 'processing', failureReason: null },
+    'contract-violation': { status: 'failed', failureReason: 'contract_violation' },
+  };
+
+  for (const kill of KILLS) {
+    test(`${kill.reason} produces its verdict`, async () => {
+      const workerId = aWorkerId();
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'waitFor', sentinel: 'go' },
+          { step: 'exit', code: 0 },
+        ];
+
+        const prepared = await startAttempt(
+          dependencies(fixture, workerId, steps),
+          fixture.attemptId,
+        );
+        prepared.child.kill();
+        const outcome = await prepared.child.exited;
+        const ending = await readChildEnding(prepared, outcome, kill);
+        const settled = await settleAttempt(
+          dependencies(fixture, workerId, steps),
+          prepared,
+          ending,
+        );
+
+        const expected = EXPECTED[kill.reason];
+        if (expected.status === 'processing') {
+          // fenced/lost write nothing: the attempt is left exactly as claimAndStart left it.
+          expect(settled).toEqual({ kind: 'lost' });
+        } else {
+          expect(settled).toEqual({ kind: 'recorded' });
+        }
+        expect(await readAttempt(fixture.attemptId)).toMatchObject(expected);
+        expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+      });
+    });
+  }
+});
+
+describe('losing the race to record a verdict', () => {
+  test('a writer that finished the attempt first leaves settleAttempt lost, not recorded', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const outcome = await prepared.child.exited;
+      const ending = await readChildEnding(prepared, outcome);
+
+      // Stand in for the reaper (or a retried call that already committed): the attempt is no
+      // longer `processing`, so classifyVerdict's `succeeded` verdict can no longer be written —
+      // exactly the case `kills`' fenced/lost tests don't reach, since those short-circuit to
+      // `unowned` before settleAttempt ever tries a write.
+      await markAttemptFailed(DATABASE, fixture.attemptId, workerId, {
+        reason: 'hard_timeout',
+        detail: 'reaped before this settle ran',
+      });
+
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+
+      expect(settled).toEqual({ kind: 'lost' });
+      expect(existsSync(prepared.runDirectory)).toBe(false);
+      // The reaper's write stands: settleAttempt did not overwrite it with the `succeeded` verdict
+      // it computed.
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'hard_timeout',
+      });
+      // The guarded insert never ran, so no result_file rows exist even though the objects were
+      // already uploaded.
+      expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+    });
+  });
+});
+
+describe('recordVerdict', () => {
+  test('records a failure and returns whether we still owned the attempt', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const attemptDependencies = dependencies(fixture, workerId, []);
+
+      const won = await recordVerdict(attemptDependencies, fixture.attemptId, {
+        kind: 'failed',
+        reason: 'unknown',
+        detail: 'something unexpected',
+      });
+
+      expect(won).toBe(true);
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'unknown',
+        failureDetail: 'something unexpected',
+      });
+    });
+  });
+});
