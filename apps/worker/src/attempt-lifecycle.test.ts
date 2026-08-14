@@ -4,6 +4,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { deletePrefix, getObject } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
@@ -17,7 +18,7 @@ import {
   settleAttempt,
   startAttempt,
 } from './attempt-lifecycle.ts';
-import { chartFileName, RESULT_FILE_NAMES } from './contract/layout.ts';
+import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/layout.ts';
 import type { AttemptFixture } from './testing/attempt-fixture.ts';
 import { withAttemptFixture } from './testing/attempt-fixture.ts';
 import {
@@ -248,6 +249,36 @@ describe('failure rows', () => {
       expect(await readAttempt(fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'child_crashed',
+      });
+    });
+  });
+
+  test('a result file that fails to read for a reason other than missing is infrastructure, not a silent miss', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', withoutFiles: ['report.pdf'] },
+        { step: 'exit', code: 0 },
+      ];
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const outcome = await prepared.child.exited;
+      // A directory where the child would have written report.pdf: readResultFiles must throw
+      // EISDIR rather than treating it the same as a file the child simply never wrote.
+      await mkdir(resultFilePath(prepared.runDirectory, 'report.pdf'));
+
+      const ending = await readChildEnding(prepared, outcome);
+      expect(ending.read).toMatchObject({ kind: 'read-error' });
+
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'infrastructure',
       });
     });
   });

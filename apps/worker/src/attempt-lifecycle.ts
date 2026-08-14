@@ -4,7 +4,6 @@
  * call each of these and what to do with an in-flight record between calls.
  */
 
-import { readFile } from 'node:fs/promises';
 import type { DatabaseExecutor } from '@gbd/db';
 import {
   type AnalysisAttemptId,
@@ -15,7 +14,7 @@ import {
 } from '@gbd/db';
 import { type BlobStore, getObject, putResultFile } from '@gbd/storage';
 import { type ChildCommand, type ChildOutcome, type RunningChild, spawnChild } from './child.ts';
-import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/layout.ts';
+import { chartFileName, RESULT_FILE_NAMES } from './contract/layout.ts';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
 import { classifyAttemptFailure, retryOnTransientDbError } from './failures.ts';
 import {
@@ -29,6 +28,7 @@ import {
   createRunDirectory,
   readFailure,
   readResult,
+  readResultFiles,
   removeRunDirectory,
   writeInputCsv,
   writeManifest,
@@ -165,7 +165,10 @@ export async function readChildEnding(
     if (outcome.exitCode === 0) {
       const result = await readResult(prepared.runDirectory);
       if (result === undefined) return notRead;
-      const { missing, contents } = await readDeclaredResultFiles(prepared.runDirectory, result);
+      const { missing, contents } = await readResultFiles(
+        prepared.runDirectory,
+        declaredResultFiles(result).map((file) => file.fileName),
+      );
       return {
         outcome,
         kill,
@@ -182,27 +185,6 @@ export async function readChildEnding(
   } catch (error) {
     return { ...notRead, read: { kind: 'read-error', error } };
   }
-}
-
-async function readDeclaredResultFiles(
-  runDirectory: string,
-  result: ChildResult,
-): Promise<{ missing: string[]; contents: Map<string, Uint8Array> }> {
-  const missing: string[] = [];
-  const contents = new Map<string, Uint8Array>();
-  for (const file of declaredResultFiles(result)) {
-    const bytes = await readFile(resultFilePath(runDirectory, file.fileName)).catch(
-      undefinedIfMissing,
-    );
-    if (bytes === undefined) missing.push(file.fileName);
-    else contents.set(file.fileName, bytes);
-  }
-  return { missing, contents };
-}
-
-function undefinedIfMissing(error: unknown): undefined {
-  if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-  throw error;
 }
 
 // -------------------------------------------------------------
