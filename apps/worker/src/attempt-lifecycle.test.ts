@@ -2,14 +2,16 @@
  * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
  * for the decision `supervise()` will make once the loop that reads a `Clock` lands. Where a store
  * or a database has to fail and come back, it is a real client that genuinely can
- * (`breakableBlobStore`/`breakableDatabase`).
+ * (`breakableBlobStore` from `@gbd/storage/testing`, `breakableDatabase` from `@gbd/db/testing`).
  */
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { DATABASE, shutdown } from '@gbd/db/env';
+import { type Breakable, breakableDatabase } from '@gbd/db/testing';
 import { deletePrefix, getObject } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
+import { breakableBlobStore } from '@gbd/storage/testing';
 import { afterAll, describe, expect, test } from 'vitest';
 import {
   type AttemptDependencies,
@@ -28,7 +30,6 @@ import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/lay
 import { markAttemptFailed } from './queue.ts';
 import type { AttemptFixture } from './testing/attempt-fixture.ts';
 import { withAttemptFixture } from './testing/attempt-fixture.ts';
-import { type Breakable, breakableBlobStore, breakableDatabase } from './testing/breakable.ts';
 import {
   type FakeChildStep,
   fakeChildCommand,
@@ -126,8 +127,8 @@ describe('a successful attempt, end to end', () => {
 
 /** The shape shared by every "parks instead of losing the verdict" test below, whichever
  * dependency turned out to be unreachable: break it, settle against it, land on `stage`, restore
- * it, then resume and land on `recorded`. 
- * 
+ * it, then resume and land on `recorded`.
+ *
  * `dependencies` carries the same `breakable.service` throughout — recovery is that one
  * handle coming back, not a second object standing in for it.
  */

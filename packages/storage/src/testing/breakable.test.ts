@@ -3,31 +3,10 @@
  * would make every parked-verdict and fencing test built on it pass for the wrong reason.
  */
 
-import { isPermanentDatabaseError, isTransientDatabaseError } from '@gbd/db';
-import { deletePrefix, getObject, isBlobStoreError, putObject } from '@gbd/storage';
-import { sql } from 'kysely';
-import { DatabaseError } from 'pg';
 import { describe, expect, test } from 'vitest';
-import { breakableBlobStore, breakableDatabase } from './breakable.ts';
-
-describe('breakableDatabase', () => {
-  test('a broken proxy fails transiently, and a restored one answers a query', async () => {
-    const breakable = await breakableDatabase();
-    try {
-      breakable.break();
-      const failure = await sql`select 1`.execute(breakable.service).catch((error) => error);
-
-      expect(failure).not.toBeInstanceOf(DatabaseError);
-      expect(isTransientDatabaseError(failure)).toBe(true);
-      expect(isPermanentDatabaseError(failure)).toBe(false);
-
-      breakable.restore();
-      await expect(sql`select 1`.execute(breakable.service)).resolves.toBeDefined();
-    } finally {
-      await breakable.close();
-    }
-  });
-});
+import { isBlobStoreError } from '../errors.ts';
+import { deletePrefix, getObject, putObject } from '../objects.ts';
+import { breakableBlobStore } from './breakable.ts';
 
 describe('breakableBlobStore', () => {
   test('a broken proxy fails as a BlobStoreError, and a restored one round-trips an object', async () => {
