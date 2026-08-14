@@ -13,10 +13,10 @@ import {
   putRejectedUpload,
   type StoredInputFile,
 } from '@gbd/storage';
-import { error, json } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
 import type { ReportMetadata } from '$lib/reports/metadata';
-import type { Rejection } from '$lib/reports/rejection';
+import { type RejectedUploadRecord, rejectionResponse } from '$lib/reports/rejection';
 import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
@@ -51,7 +51,7 @@ export async function _createReport(
 
   if (!outcome.ok) {
     await recordRejection(db, store, uploader, raw, outcome, outcome.rejection);
-    error(400, { message: outcome.rejection.message, code: outcome.rejection.reason });
+    return json(rejectionResponse(outcome.rejection), { status: 400 });
   }
 
   const { organizationId, userId } = uploader;
@@ -150,7 +150,7 @@ async function recordRejection(
   uploader: Uploader,
   raw: RawSubmission,
   upload: { fileDescription: FileDescription | null; bytes: Uint8Array | null },
-  rejection: Rejection,
+  rejection: RejectedUploadRecord,
 ): Promise<void> {
   const { organizationId, userId } = uploader;
 

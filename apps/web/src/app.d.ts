@@ -1,20 +1,20 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 
-import type { OrganizationId, RejectedUploadReason } from '@gbd/db';
+import type { OrganizationId } from '@gbd/db';
 import type { AuthContext } from '$lib/server/auth/types.ts';
 
 declare global {
   namespace App {
     interface Error {
       message: string;
-      /** A stable name for the failure. */
-      code?:
-        | 'unauthenticated'
-        | 'forbidden'
-        | 'not_found'
-        | 'service_unavailable'
-        | RejectedUploadReason;
+      /** A stable name for the failure.
+       *
+       * Deliberately closed, and only for failures any caller handles the same way. This type is
+       * the body of every `error()` in the app, so a code one route sets belongs in that route's
+       * own response type instead.
+       */
+      code?: 'unauthenticated' | 'forbidden' | 'not_found' | 'service_unavailable';
     }
     interface Locals {
       /** Set on every request by `handle` in `hooks.server.ts`. Null when nobody is signed in. */

@@ -15,7 +15,7 @@ import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
 import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
 import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
-import type { Rejection } from './rejection.ts';
+import type { RejectedUploadRecord } from './rejection.ts';
 
 /** Exactly what arrived, before anything has judged it. Recorded verbatim on a rejection. */
 export type RawSubmission = {
@@ -38,7 +38,7 @@ export type ValidatedSubmission =
   | { ok: true; metadata: ReportMetadata; file: UploadedFile }
   | {
       ok: false;
-      rejection: Rejection;
+      rejection: RejectedUploadRecord;
       /** Null only when the request carried no file at all. */
       fileDescription: FileDescription | null;
       /** For the blob store. Null when we refused the file before reading it. */
