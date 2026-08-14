@@ -23,13 +23,14 @@ export const MAX_AMOUNT_DIGITS = 15;
 /** Orders this far ahead are a typo or a misread year, not a delivery schedule. */
 export const MAX_FUTURE_DAYS = 30;
 
-/** Bounds a degenerate header - a file this wide is not one anybody exported.
+/** A real export has only three columns, plus whatever metadata
+ * a site tacks on for its own use. This leaves generous room for that without accepting a file
+ * that is mis-delimited or otherwise corrupt.
  *
- * Not a memory bound, despite the shape: wide rows mean few rows, and a 10MB file at this width
- * is the *cheapest* one to validate. Enforced inside `parseCsv` rather than measured afterwards,
- * because a header of a million commas has to be refused without first being built.
+ * Enforced inside `parseCsv` rather than measured afterwards, because a header of a million
+ * commas has to be refused without first being built.
  */
-export const MAX_COLUMNS = 500;
+export const MAX_COLUMNS = 25;
 
 /** How far past line 1 we tolerate junk — a title, a teammate's note, blank rows — before giving
  * up on finding a header.
