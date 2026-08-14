@@ -54,6 +54,9 @@ catalog:
   # Only for `ConfiguredRetryStrategy`; keep the range within what `@aws-sdk/client-s3`
   # itself depends on, so one copy resolves.
   '@smithy/core': ^3.31.1
+  # Only for the `HttpRequest` type `breakable.ts` needs to redirect a request mid-flight;
+  # keep the range within what `@aws-sdk/client-s3` itself depends on.
+  '@smithy/types': ^4.16.1
 
   # --- Validation -------------------------------------------------------------
   valibot: ^1.4.2

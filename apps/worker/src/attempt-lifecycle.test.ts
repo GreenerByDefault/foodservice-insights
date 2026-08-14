@@ -1,19 +1,15 @@
 /** A child is never mocked — see [`testing/fake-child.ts`](./testing/fake-child.ts) for why — and
  * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
  * for the decision `supervise()` will make once the loop that reads a `Clock` lands. Where a store
- * or a database has to fail, it is a real client aimed at a port nothing listens on
- * (`unreachableBlobStore`/`unreachableDatabase`) — a genuine failure of the same shape production
- * would see, not a mock of one.
+ * or a database has to fail and come back, it is a real client that genuinely can
+ * (`breakableBlobStore`/`breakableDatabase`).
  */
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { shutdownDatabase } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
-import { unreachableDatabase } from '@gbd/db/testing';
-import { type BlobStore, deletePrefix, getObject, shutdownBlobStore } from '@gbd/storage';
+import { deletePrefix, getObject } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
-import { unreachableBlobStore } from '@gbd/storage/testing';
 import { afterAll, describe, expect, test } from 'vitest';
 import {
   type AttemptDependencies,
@@ -32,6 +28,7 @@ import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/lay
 import { markAttemptFailed } from './queue.ts';
 import type { AttemptFixture } from './testing/attempt-fixture.ts';
 import { withAttemptFixture } from './testing/attempt-fixture.ts';
+import { type Breakable, breakableBlobStore, breakableDatabase } from './testing/breakable.ts';
 import {
   type FakeChildStep,
   fakeChildCommand,
@@ -128,20 +125,22 @@ describe('a successful attempt, end to end', () => {
 });
 
 /** The shape shared by every "parks instead of losing the verdict" test below, whichever
- * dependency turned out to be unreachable: settle against `broken`, land on `stage`, retire the
- * broken dependency, then resume against `working` and land on `recorded`.
+ * dependency turned out to be unreachable: break it, settle against it, land on `stage`, restore
+ * it, then resume and land on `recorded`. 
+ * 
+ * `dependencies` carries the same `breakable.service` throughout — recovery is that one
+ * handle coming back, not a second object standing in for it.
  */
 async function expectParkThenResume(
   fixture: AttemptFixture,
-  working: AttemptDependencies,
-  broken: AttemptDependencies,
+  dependencies: AttemptDependencies,
+  breakable: Pick<Breakable<unknown>, 'break' | 'restore'>,
   prepared: PreparedAttempt,
   ending: ReadEnding,
   stage: PendingVerdict['stage'],
-  cleanupBroken: () => void | Promise<void>,
 ): Promise<void> {
-  const parked = await settleAttempt(broken, prepared, ending);
-  await cleanupBroken();
+  breakable.break();
+  const parked = await settleAttempt(dependencies, prepared, ending);
 
   expect(parked).toMatchObject({ kind: 'parked', pending: { stage } });
   expect((await readAttempt(fixture.attemptId)).status).toBe('processing');
@@ -150,7 +149,8 @@ async function expectParkThenResume(
   expect(existsSync(prepared.runDirectory)).toBe(false);
 
   if (parked.kind !== 'parked') throw new Error('expected a parked verdict');
-  const resumed = await resumeSettle(working, prepared, parked.pending);
+  breakable.restore();
+  const resumed = await resumeSettle(dependencies, prepared, parked.pending);
 
   expect(resumed).toEqual({ kind: 'recorded' });
   expect((await readAttempt(fixture.attemptId)).status).toBe('succeeded');
@@ -163,86 +163,87 @@ async function expectParkThenResume(
 }
 
 describe('a blob store that cannot be reached', () => {
-  // The limits are cut to milliseconds because the production ones would spend 45 seconds per
-  // upload here.
-  function unreachableStore(): BlobStore {
-    return unreachableBlobStore({
-      bucket: BLOB_STORE.bucket,
-      limits: {
-        connectionTimeoutMs: 100,
-        attemptTimeoutMs: 200,
-        retryDelayBaseMs: 1,
-        requestDeadlineMs: 1_000,
-      },
-    });
-  }
-
   test('parks the verdict at the upload stage, and a resume lands it once the store is back', async () => {
     const workerId = aWorkerId();
-    await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [
-        { step: 'result', charts: ['total_spend'] },
-        { step: 'exit', code: 0 },
-      ];
-      const working = dependencies(fixture, workerId, steps);
-      const broken = { ...working, store: unreachableStore() };
+    const breakable = await breakableBlobStore();
+    try {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'result', charts: ['total_spend'] },
+          { step: 'exit', code: 0 },
+        ];
+        const working = dependencies(fixture, workerId, steps);
+        const withBreakableStore = { ...working, store: breakable.service };
 
-      const prepared = await startAttempt(working, fixture.attemptId);
-      const ending = await readChildEnding(prepared, await prepared.child.exited);
+        const prepared = await startAttempt(working, fixture.attemptId);
+        const ending = await readChildEnding(prepared, await prepared.child.exited);
 
-      await expectParkThenResume(fixture, working, broken, prepared, ending, 'upload', () =>
-        shutdownBlobStore(broken.store),
-      );
-    });
+        await expectParkThenResume(
+          fixture,
+          withBreakableStore,
+          breakable,
+          prepared,
+          ending,
+          'upload',
+        );
+      });
+    } finally {
+      await breakable.close();
+    }
   });
 
   test('does not park a verdict that has nothing to upload', async () => {
     const workerId = aWorkerId();
-    await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [
-        { step: 'failure', reason: 'upstream_api', detail: 'the AI provider returned a 503' },
-        { step: 'exit', code: 1 },
-      ];
-      const broken = { ...dependencies(fixture, workerId, steps), store: unreachableStore() };
+    const breakable = await breakableBlobStore();
+    try {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'failure', reason: 'upstream_api', detail: 'the AI provider returned a 503' },
+          { step: 'exit', code: 1 },
+        ];
+        const working = dependencies(fixture, workerId, steps);
+        const withBreakableStore = { ...working, store: breakable.service };
 
-      const prepared = await startAttempt(
-        dependencies(fixture, workerId, steps),
-        fixture.attemptId,
-      );
-      const ending = await readChildEnding(prepared, await prepared.child.exited);
-      const settled = await settleAttempt(broken, prepared, ending);
-      shutdownBlobStore(broken.store);
+        const prepared = await startAttempt(working, fixture.attemptId);
+        const ending = await readChildEnding(prepared, await prepared.child.exited);
+        breakable.break();
+        const settled = await settleAttempt(withBreakableStore, prepared, ending);
 
-      expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttempt(fixture.attemptId)).toMatchObject({
-        status: 'failed',
-        failureReason: 'upstream_api',
+        expect(settled).toEqual({ kind: 'recorded' });
+        expect(await readAttempt(fixture.attemptId)).toMatchObject({
+          status: 'failed',
+          failureReason: 'upstream_api',
+        });
       });
-    });
+    } finally {
+      await breakable.close();
+    }
   });
 });
 
 describe('a database that cannot be reached', () => {
   test('parks the verdict at the record stage, and a resume lands it once the database is back', async () => {
     const workerId = aWorkerId();
-    await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [
-        { step: 'result', charts: ['total_spend'] },
-        { step: 'exit', code: 0 },
-      ];
-      const working = dependencies(fixture, workerId, steps);
-      const unreachable = unreachableDatabase();
-      const broken = { ...working, db: unreachable };
+    const breakable = await breakableDatabase();
+    try {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'result', charts: ['total_spend'] },
+          { step: 'exit', code: 0 },
+        ];
+        const working = dependencies(fixture, workerId, steps);
+        const withBreakableDb = { ...working, db: breakable.service };
 
-      const prepared = await startAttempt(working, fixture.attemptId);
-      const ending = await readChildEnding(prepared, await prepared.child.exited);
+        const prepared = await startAttempt(working, fixture.attemptId);
+        const ending = await readChildEnding(prepared, await prepared.child.exited);
 
-      // The store is fine, so the upload stage clears; only the guarded write is left, and that's
-      // what the unreachable database parks.
-      await expectParkThenResume(fixture, working, broken, prepared, ending, 'record', () =>
-        shutdownDatabase(unreachable),
-      );
-    });
+        // The store is fine, so the upload stage clears; only the guarded write is left, and
+        // that's what breaking the database parks.
+        await expectParkThenResume(fixture, withBreakableDb, breakable, prepared, ending, 'record');
+      });
+    } finally {
+      await breakable.close();
+    }
   });
 });
 

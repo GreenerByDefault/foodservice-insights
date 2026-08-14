@@ -18,7 +18,11 @@
     "valibot": "catalog:"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@smithy/types": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
