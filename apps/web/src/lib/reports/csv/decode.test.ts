@@ -1,9 +1,3 @@
-/** Every input here is built byte by byte rather than read from a fixture file. A byte order
- * mark, CRLF, a lone CR, UTF-16 and invalid UTF-8 are exactly what git and an editor normalize on
- * the way in and out, and `.gitattributes` does not protect them today — so a committed fixture
- * would quietly stop testing what it says it tests.
- */
-
 import { describe, expect, test } from 'vitest';
 import { decodeCsv } from './decode.ts';
 
@@ -82,12 +76,18 @@ describe('decodeCsv', () => {
       expect(decoded.ok ? '' : decoded.rejection.message).toContain('Excel');
     });
 
-    test('UTF-16 with no byte order mark, which decodes as valid UTF-8 full of NULs', () => {
-      expect(decodeCsv(utf16('product,date', 'le'))).toMatchObject({
-        ok: false,
-        rejection: { reason: 'unparseable' },
-      });
-    });
+    test.for([
+      ['little', 'le'],
+      ['big', 'be'],
+    ] as const)(
+      'UTF-16 %s-endian with no byte order mark, which decodes as valid UTF-8 full of NULs',
+      ([, endianness]) => {
+        expect(decodeCsv(utf16('product,date', endianness))).toMatchObject({
+          ok: false,
+          rejection: { reason: 'unparseable' },
+        });
+      },
+    );
 
     test('a control character in the middle of otherwise fine text', () => {
       const bytes = concat(utf8('product'), Uint8Array.of(0x01), utf8('date'));
@@ -97,6 +97,20 @@ describe('decodeCsv', () => {
 
     test('a file of nothing but whitespace', () => {
       expect(decodeCsv(utf8(' \n\t\n '))).toMatchObject({
+        ok: false,
+        rejection: { reason: 'empty' },
+      });
+    });
+
+    test('a completely empty file', () => {
+      expect(decodeCsv(new Uint8Array())).toMatchObject({
+        ok: false,
+        rejection: { reason: 'empty' },
+      });
+    });
+
+    test('a file that is only a byte order mark', () => {
+      expect(decodeCsv(Uint8Array.of(0xef, 0xbb, 0xbf))).toMatchObject({
         ok: false,
         rejection: { reason: 'empty' },
       });

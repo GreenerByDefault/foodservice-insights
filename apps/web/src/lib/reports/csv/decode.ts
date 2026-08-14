@@ -8,12 +8,12 @@ import type { RejectedUploadRecord } from '../rejection.ts';
 
 export type Decoded = { ok: true; text: string } | { ok: false; rejection: RejectedUploadRecord };
 
-/** Files people mistake for a CSV, recognised so we can say which one it is.
+/** Files that people mistake for a CSV, recognised so we can say which one it is.
  *
  * This is a diagnostic, not a security control. There is no zip bomb to defend against: we never
  * interpret an upload as an archive, only ever as CSV, so nothing is ever decompressed. What this
  * buys is the difference between "line 1 contains control characters" and "that looks like an
- * Excel file" — by far the most common thing a user gets wrong. Resist growing the list; every
+ * Excel file" — something a user may get wrong. Resist growing the list; every
  * other binary format already lands on the control-character rule below with an honest message.
  *
  * The filename and the browser-supplied content type are never consulted.
@@ -62,16 +62,18 @@ function decodeText(bytes: Uint8Array): string {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    // Windows-1252 cannot fail, every byte being a character there, so a file that is not valid
-    // UTF-8 is read rather than refused. That is safe only because we re-emit UTF-8: the worst
-    // case is mojibake in a product name, which beats refusing what Excel on Windows writes by
-    // default.
+    // Unlike UTF-8, Windows-1252 has no invalid byte sequences — the WHATWG spec maps every one
+    // of the 256 byte values to some character, even the ones Windows-1252 itself leaves
+    // unassigned — so this decode can never throw and needs no further fallback. Reading
+    // non-UTF-8 bytes this way is safe only because we re-emit UTF-8: the worst case is mojibake
+    // in a product name, which beats refusing what Excel on Windows writes by default.
     return new TextDecoder('windows-1252').decode(bytes);
   }
 }
 
-/** Normalized inside a quoted field too, so the CSV we emit has one kind of line ending
- * throughout.
+/** This runs on the raw text before anything parses out quoted fields, so it also normalizes a
+ * line ending that sits inside one — meaning the CSV we emit has one kind of line ending
+ * throughout, and `parse.ts` never has to treat `\r` as data.
  */
 function normalizeLineEndings(text: string): string {
   return text.replace(/\r\n?/g, '\n');
