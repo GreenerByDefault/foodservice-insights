@@ -1,14 +1,15 @@
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { AnalysisAttemptId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
-import { DIRECTORIES_CREATED_BY_PARENT, runPath } from './contract/layout.ts';
+import { DIRECTORIES_CREATED_BY_PARENT, resultFilePath, runPath } from './contract/layout.ts';
 import { buildRunManifest, ContractError, parseRunManifest } from './contract/messages.ts';
 import {
   createRunDirectory,
   readFailure,
   readProgress,
   readResult,
+  readResultFiles,
   removeRunDirectory,
   writeInputCsv,
   writeManifest,
@@ -124,6 +125,50 @@ describe('the documents the child writes', () => {
       await writeFile(runPath(runDirectory, 'progress'), '{"sequence": 0}');
 
       await expect(readProgress(runDirectory)).rejects.toThrow(ContractError);
+    });
+  });
+});
+
+describe('readResultFiles', () => {
+  test('partitions named files into missing and present, reading bytes back exactly', async () => {
+    await withTemporaryRunRoot(async (runRoot) => {
+      const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
+      // Arbitrary bytes, not necessarily valid UTF-8, the same way a chart PNG would arrive.
+      const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
+      await writeFile(resultFilePath(runDirectory, 'report.pdf'), body);
+
+      const read = await readResultFiles(runDirectory, [
+        'report.pdf',
+        'report.xlsx',
+        'chart-total_spend.png',
+      ]);
+
+      expect(read.missing).toEqual(['report.xlsx', 'chart-total_spend.png']);
+      expect([...read.contents].map(([name, bytes]) => [name, new Uint8Array(bytes)])).toEqual([
+        ['report.pdf', body],
+      ]);
+    });
+  });
+
+  test('an empty file list reads nothing', async () => {
+    await withTemporaryRunRoot(async (runRoot) => {
+      const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
+
+      expect(await readResultFiles(runDirectory, [])).toEqual({
+        missing: [],
+        contents: new Map(),
+      });
+    });
+  });
+
+  test('a read failure other than "missing" propagates instead of counting as missing', async () => {
+    await withTemporaryRunRoot(async (runRoot) => {
+      const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
+      // A directory where a file is expected reads as EISDIR, not ENOENT — the parent's own
+      // bug, and not one `readResultFiles` should paper over as an ordinary missing file.
+      await mkdir(resultFilePath(runDirectory, 'report.pdf'));
+
+      await expect(readResultFiles(runDirectory, ['report.pdf'])).rejects.toThrow();
     });
   });
 });
