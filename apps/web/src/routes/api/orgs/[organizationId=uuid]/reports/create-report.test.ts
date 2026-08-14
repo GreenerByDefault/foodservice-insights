@@ -188,8 +188,7 @@ describe('a rejected upload', () => {
     expect(reports).toEqual([]);
   });
 
-  // `toEqual`, not `toMatchObject`: the point is the keys that are absent. `rejectionDetail` is
-  // written for whoever is debugging the submission and must not reach the browser.
+  // `toEqual`, not `toMatchObject`: the point here is the keys that are absent.
   test('answers with the reason and the message, and nothing else', async () => {
     const { refusal } = await reject({ monthlyCounts: '{oops' });
 

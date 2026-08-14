@@ -16,7 +16,7 @@ import {
 import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
 import type { ReportMetadata } from '$lib/reports/metadata';
-import { type Rejection, rejectionResponse } from '$lib/reports/rejection';
+import { type RejectionRecord, rejectionResponse } from '$lib/reports/rejection';
 import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
@@ -150,7 +150,7 @@ async function recordRejection(
   uploader: Uploader,
   raw: RawSubmission,
   upload: { fileDescription: FileDescription | null; bytes: Uint8Array | null },
-  rejection: Rejection,
+  rejection: RejectionRecord,
 ): Promise<void> {
   const { organizationId, userId } = uploader;
 

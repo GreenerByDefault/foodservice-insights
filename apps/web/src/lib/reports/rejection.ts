@@ -6,7 +6,7 @@
 
 import type { RejectedUploadReason } from '@gbd/db';
 
-export type Rejection = {
+export type RejectionRecord = {
   reason: RejectedUploadReason;
   /** Safe to show the user. */
   message: string;
@@ -14,12 +14,10 @@ export type Rejection = {
   detail?: string;
 };
 
-/** The half of a rejection that crosses the wire, and the body of the 400 that
- * `POST /api/orgs/[organizationId]/reports` answers with.
+/** The half of a `RejectionRecord` that crosses the wire.
  *
- * A rejection is an outcome the upload form expects and renders itself, not a failure — so it is
- * returned as data the browser parses against this type, rather than thrown through `error()`,
- * which would put a field only this route sets on the app-wide `App.Error`.
+ * A rejection is an outcome the upload form expects and renders itself, not a failure — see
+ * `App.Error` in `app.d.ts` for why that means returning it as data instead of `error()`.
  */
 export type RejectionResponse = {
   code: RejectedUploadReason;
@@ -29,9 +27,9 @@ export type RejectionResponse = {
 /** Narrow a rejection to what the browser may see.
  *
  * The projection is the point: it makes "`detail` never leaves the server" something the types
- * enforce, so a field added to `Rejection` later is withheld by default rather than by whoever
- * next edits the route.
+ * enforce, so a field added to `RejectionRecord` later is withheld by default rather than by
+ * whoever next edits the route.
  */
-export function rejectionResponse({ reason, message }: Rejection): RejectionResponse {
+export function rejectionResponse({ reason, message }: RejectionRecord): RejectionResponse {
   return { code: reason, message };
 }
