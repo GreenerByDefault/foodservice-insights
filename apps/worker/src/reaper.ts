@@ -104,15 +104,20 @@ function expiredCandidates(
  * zero-row no-op for that row, and an attempt whose parent is demonstrably alive survives. This is
  * the load-bearing detail of the whole file.
  *
- * `EvalPlanQual` rechecks *only* that top-level qual. It does not re-evaluate the `IN` subplan, so a
- * candidate id list is stale however it was computed — whether by a preceding `SELECT` or by the
- * subquery below. Filtering only there and leaving the `UPDATE` to match on id would reap the live
- * attempt just as surely as a `SELECT`-then-`UPDATE` would. The predicate has to read
- * `lease_renewed_at`/`claimed_at` on the `UPDATE`, and no arrangement of subqueries substitutes.
+ * `EvalPlanQual` rechecks *only* that top-level qual — never a subplan. So it makes no difference
+ * whether the candidate id list below is built by a `SELECT` or a subquery: either way, the ids
+ * feeding the `UPDATE`'s `IN` are a snapshot from before the wait, and `EvalPlanQual` will not
+ * refresh them. If the `UPDATE`'s own `WHERE` matched only on those ids, a row that stopped being
+ * expired during the wait would still match and get reaped. The predicate has to be repeated as a
+ * top-level qual of the `UPDATE` itself; filtering it into the id list is not equivalent, however
+ * that list is produced.
  *
- * It appears in the subquery too, for a separate reason: Postgres `UPDATE` has no `ORDER BY` or
- * `LIMIT`, so choosing *which* expired attempts a capped sweep ends needs a subquery, and one that
- * did not filter would spend the cap on rows the `UPDATE` then discards.
+ * The subquery also repeats the predicate for an unrelated, non-correctness reason: Postgres
+ * `UPDATE` has no `ORDER BY` or `LIMIT`, so a subquery is what decides which expired attempts a
+ * capped sweep spends its `maxAttemptsPerSweep` on. An unfiltered subquery would still pick a
+ * `LIMIT`-sized batch of ids, but most would fail the `UPDATE`'s own expiry check and get
+ * discarded — the sweep would return fewer reaps than its cap allowed, not reap anything it
+ * shouldn't.
  *
  * **Does not exclude its own `worker_id`.** A live parent kills its own children without the
  * database's help — for no progress, or for exceeding the total allowable time. This reaping
