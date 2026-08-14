@@ -6,8 +6,8 @@
  * fake cannot produce.
  */
 
-import { afterAll, describe, expect, test } from 'vitest';
-import { BLOB_STORE, shutdown } from './env.ts';
+import { describe, expect, test } from 'vitest';
+import { BLOB_STORE } from './env.ts';
 import {
   deletePrefix,
   getObject,
@@ -17,10 +17,6 @@ import {
   putObject,
 } from './objects.ts';
 import { withTemporaryPrefix } from './testing/prefixes.ts';
-
-afterAll(() => {
-  shutdown();
-});
 
 /** PNG magic bytes. Binary on purpose: a round trip that quietly re-encodes as text fails here,
  * where an ASCII payload would sail through.

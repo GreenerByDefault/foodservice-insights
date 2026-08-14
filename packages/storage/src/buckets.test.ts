@@ -3,15 +3,11 @@
  */
 
 import { requireEnv } from '@gbd/core/env';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { bucketExists } from './buckets.ts';
 import { initializeBlobStore, shutdownBlobStore } from './client.ts';
-import { BLOB_STORE, shutdown } from './env.ts';
+import { BLOB_STORE } from './env.ts';
 import { headObject } from './objects.ts';
-
-afterAll(() => {
-  shutdown();
-});
 
 describe('bucketExists', () => {
   test('true for a bucket that is there', async () => {

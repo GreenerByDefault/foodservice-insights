@@ -5,15 +5,11 @@
  * explicitly-credentialed URL and honours the response-header overrides we depend on.
  */
 
-import { afterAll, describe, expect, test } from 'vitest';
-import { BLOB_STORE, shutdown } from './env.ts';
+import { describe, expect, test } from 'vitest';
+import { BLOB_STORE } from './env.ts';
 import { putObject } from './objects.ts';
 import { withTemporaryPrefix } from './testing/prefixes.ts';
 import { signedObjectUrl } from './urls.ts';
-
-afterAll(() => {
-  shutdown();
-});
 
 const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const EXPIRES_IN_SECONDS = 60;

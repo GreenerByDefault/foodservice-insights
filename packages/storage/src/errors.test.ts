@@ -7,7 +7,7 @@
 
 import { afterAll, expect, test } from 'vitest';
 import { shutdownBlobStore } from './client.ts';
-import { BLOB_STORE, shutdown } from './env.ts';
+import { BLOB_STORE } from './env.ts';
 import { isBlobStoreError } from './errors.ts';
 import { listObjectKeys, putObject } from './objects.ts';
 import { unreachableBlobStore } from './testing/unreachable.ts';
@@ -19,7 +19,6 @@ const MISSING_BUCKET_STORE = { ...BLOB_STORE, bucket: 'no-such-bucket' };
 
 afterAll(() => {
   shutdownBlobStore(UNREACHABLE_STORE);
-  shutdown();
 });
 
 test('a request the service refuses to answer fails as a BlobStoreError', async () => {

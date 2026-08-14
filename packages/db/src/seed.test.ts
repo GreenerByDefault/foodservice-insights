@@ -1,15 +1,11 @@
-import { afterAll, describe, expect, test } from 'vitest';
-import { DATABASE, shutdown } from './env.ts';
+import { describe, expect, test } from 'vitest';
+import { DATABASE } from './env.ts';
 import {
   PLACEHOLDER_ORGANIZATION_ID,
   PLACEHOLDER_USER_ID,
   seedPlaceholderIdentity,
 } from './seed.ts';
 import { checkDeferredConstraints, withRollback } from './testing/transactions.ts';
-
-afterAll(async () => {
-  await shutdown();
-});
 
 describe('seedPlaceholderIdentity', () => {
   test('is idempotent', async () => {

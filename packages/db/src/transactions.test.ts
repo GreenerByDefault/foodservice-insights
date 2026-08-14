@@ -1,13 +1,9 @@
-import { afterAll, describe, expect, test } from 'vitest';
-import { DATABASE, shutdown } from './env.ts';
+import { describe, expect, test } from 'vitest';
+import { DATABASE } from './env.ts';
 import { insertOrganization } from './testing/fixtures.ts';
 import { withRollback } from './testing/transactions.ts';
 import { withTransaction } from './transactions.ts';
 import type { OrganizationId } from './types.ts';
-
-afterAll(async () => {
-  await shutdown();
-});
 
 async function organizationExists(id: OrganizationId): Promise<boolean> {
   const row = await DATABASE.selectFrom('organization')
