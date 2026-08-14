@@ -19,6 +19,7 @@ import {
   startAttempt,
 } from './attempt-lifecycle.ts';
 import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/layout.ts';
+import { markAttemptFailed } from './queue.ts';
 import type { AttemptFixture } from './testing/attempt-fixture.ts';
 import { withAttemptFixture } from './testing/attempt-fixture.ts';
 import {
@@ -403,6 +404,48 @@ describe('kills', () => {
       });
     });
   }
+});
+
+describe('losing the race to record a verdict', () => {
+  test('a writer that finished the attempt first leaves settleAttempt lost, not recorded', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const outcome = await prepared.child.exited;
+      const ending = await readChildEnding(prepared, outcome);
+
+      // Stand in for the reaper (or a retried call that already committed): the attempt is no
+      // longer `processing`, so classifyVerdict's `succeeded` verdict can no longer be written —
+      // exactly the case `kills`' fenced/lost tests don't reach, since those short-circuit to
+      // `unowned` before settleAttempt ever tries a write.
+      await markAttemptFailed(DATABASE, fixture.attemptId, workerId, {
+        reason: 'hard_timeout',
+        detail: 'reaped before this settle ran',
+      });
+
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+
+      expect(settled).toEqual({ kind: 'lost' });
+      expect(existsSync(prepared.runDirectory)).toBe(false);
+      // The reaper's write stands: settleAttempt did not overwrite it with the `succeeded` verdict
+      // it computed.
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'hard_timeout',
+      });
+      // The guarded insert never ran, so no result_file rows exist even though the objects were
+      // already uploaded.
+      expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+    });
+  });
 });
 
 describe('recordVerdict', () => {
