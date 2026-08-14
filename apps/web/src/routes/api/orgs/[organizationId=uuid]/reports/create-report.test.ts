@@ -146,12 +146,13 @@ describe('a valid upload', () => {
 describe('a rejected upload', () => {
   async function reject(overrides: SubmissionOverrides) {
     return await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
-      const failure = await _createReport(
+      const response = await _createReport(
         transaction,
         store,
         { organizationId, userId: adminUserId },
         createUploadRequest(overrides),
-      ).catch((error: unknown) => error);
+      );
+      const refusal = { status: response.status, body: await response.json() };
 
       const recorded = await transaction
         .selectFrom('rejectedUpload')
@@ -169,7 +170,7 @@ describe('a rejected upload', () => {
         .where('organizationId', '=', organizationId)
         .execute();
 
-      return { failure, recorded, bytes, reports };
+      return { refusal, recorded, bytes, reports };
     });
   }
 
@@ -179,12 +180,20 @@ describe('a rejected upload', () => {
     ['monthly counts that are not JSON', { monthlyCounts: '{oops' }, 'invalid_metadata'],
     ['no file at all', { file: null }, 'other'],
   ] as const)('answers 400 and records %s', async ([, overrides, reason]) => {
-    const { failure, recorded, reports } = await reject(overrides);
+    const { refusal, recorded, reports } = await reject(overrides);
 
     // The code the client branches on is the same word the database recorded.
-    expect(failure).toMatchObject({ status: 400, body: { code: reason } });
+    expect(refusal).toMatchObject({ status: 400, body: { code: reason } });
     expect(recorded).toMatchObject({ rejectionReason: reason satisfies RejectedUploadReason });
     expect(reports).toEqual([]);
+  });
+
+  // `toEqual`, not `toMatchObject`: the point is the keys that are absent. `rejectionDetail` is
+  // written for whoever is debugging the submission and must not reach the browser.
+  test('answers with the reason and the message, and nothing else', async () => {
+    const { refusal } = await reject({ monthlyCounts: '{oops' });
+
+    expect(refusal.body).toEqual({ code: 'invalid_metadata', message: expect.any(String) });
   });
 
   test('keeps the file that was refused', async () => {
@@ -231,9 +240,9 @@ describe('a rejected upload', () => {
       type: 'text/csv',
     });
 
-    const { failure, recorded } = await reject({ file: oversized });
+    const { refusal, recorded } = await reject({ file: oversized });
 
-    expect(failure).toMatchObject({ status: 400, body: { code: 'too_large' } });
+    expect(refusal).toMatchObject({ status: 400, body: { code: 'too_large' } });
     expect(recorded).toMatchObject({
       rejectionReason: 'too_large',
       inputFileOriginalFilename: 'big.csv',

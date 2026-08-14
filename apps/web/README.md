@@ -30,6 +30,13 @@ copy comes from the status alone, in `src/lib/errors/messages.ts` — so a new m
 there, not at the call site. The cause of an unexpected failure never leaves the server: `handleError`
 in `hooks.server.ts` logs it and hands the client a generic message.
 
+**An outcome the caller expects is returned, not thrown.** `error()`'s body is typed by the app-wide
+`App.Error`, so anything a route wants to attach has to be declared globally — which is the wrong
+trade for a payload one route sets and one client reads. A route that fails in a way its own UI
+renders answers `json(body, { status })` with a type it owns; a rejected upload is the worked
+example, in `src/lib/reports/rejection.ts`. `error()` is left to the failures every caller handles
+the same way: the auth statuses, a 404, and whatever we did not anticipate.
+
 ## Auth
 
 The frontend uses Supabase Auth to log in, sign up, and log out. Supabase updates its own
