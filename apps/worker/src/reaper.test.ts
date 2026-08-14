@@ -1,16 +1,11 @@
 /** `reapExpiredAttempts` against the real database.
  *
- * Most of these are `withRollback` tests: one transaction sees its own uncommitted writes, so a
- * reap and the fixture it acts on can share one. The exception is the race with a concurrent
- * renewal, which `withRollback` cannot express — see `packages/db/src/testing/concurrency.ts`'s
- * header — and uses `withCommittedFixture` + `withConcurrentTransactions` instead.
- *
  * Every reap narrows the sweep with `candidateReports`. Turbo runs each package's tests
  * concurrently against one database, so a reap without it would end another file's attempts.
  */
 
 import type { AnalysisAttemptId, Database, ReportId } from '@gbd/db';
-import { DATABASE, shutdown } from '@gbd/db/env';
+import { DATABASE } from '@gbd/db/env';
 import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
@@ -21,15 +16,11 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { markAttemptSucceeded, renewLease } from './queue.ts';
 import { type ReapOptions, reapExpiredAttempts } from './reaper.ts';
 import { aResultFile, aWorkerId, readAttemptRow } from './testing/attempt-helpers.ts';
 import { backdateAttemptTimeline, type TimelineOffsetsMs } from './testing/attempt-timeline.ts';
-
-afterAll(async () => {
-  await shutdown();
-});
 
 const LEASE_EXPIRES_AFTER_MS = 5 * 60_000;
 const CLAIMED_CEILING_MS = 20 * 60_000;
