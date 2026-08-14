@@ -1,5 +1,4 @@
 import type { OrganizationId, UserId } from '@gbd/db';
-import { PLACEHOLDER_ORGANIZATION_ID, PLACEHOLDER_ORGANIZATION_NAME } from '@gbd/db/seed';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { afterAll, describe, expect, test } from 'vitest';
 import { anAuthContext } from '$lib/server/tests/fixtures';
@@ -89,24 +88,14 @@ describe('loadAuthorization', () => {
       const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
 
       const auth = await loadAuthorization(transaction, superadmin.id);
-      const organizations = auth?.organizations ?? [];
 
-      // The seeded placeholder org may or may not exist depending on test DB state, so check it
-      // separately from the orgs this test created. Remove once PLACEHOLDER_ORGANIZATION_ID is gone.
-      const placeholder = organizations.find(
-        (org) => org.organizationId === PLACEHOLDER_ORGANIZATION_ID,
+      // A superadmin sees every organization in the database — including the seeded placeholder
+      // and the rows other test files commit for real while this one runs (see
+      // packages/db/src/testing/concurrency.ts) — so assert only on the ones this test created.
+      const created = (auth?.organizations ?? []).filter((org) =>
+        [apple.id, mango.id].includes(org.organizationId),
       );
-      if (placeholder) {
-        expect(placeholder).toEqual({
-          organizationId: PLACEHOLDER_ORGANIZATION_ID,
-          organizationName: PLACEHOLDER_ORGANIZATION_NAME,
-          role: 'admin',
-        });
-      }
-
-      expect(
-        organizations.filter((org) => org.organizationId !== PLACEHOLDER_ORGANIZATION_ID),
-      ).toEqual([
+      expect(created).toEqual([
         { organizationId: apple.id, organizationName: 'Apple Co', role: 'admin' },
         { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
       ]);
