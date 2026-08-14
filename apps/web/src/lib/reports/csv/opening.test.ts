@@ -82,4 +82,40 @@ describe('chooseOpening', () => {
 
     expect(chooseOpening(text)).toMatchObject({ ok: false, problem: { kind: 'bad_header' } });
   });
+
+  test('reports a bad header with an ambiguous column, not just a missing one', () => {
+    // "item" and "product" both alias the product column, and neither other delimiter is present
+    // in the text, so this is the only reading on offer.
+    const text = 'product,item,date,amount\nbeef,foo,2026-01-01,1\n';
+
+    expect(chooseOpening(text)).toEqual({
+      ok: false,
+      problem: {
+        kind: 'bad_header',
+        fields: ['product', 'item', 'date', 'amount'],
+        problem: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
+      },
+    });
+  });
+
+  test('refuses a file too wide on one delimiter even when another reads a valid header', () => {
+    // The comma reading of the junk row is what a naive "widest split wins" reading would miss:
+    // it never gets compared against the semicolon reading below it, because a too-wide row rules
+    // the whole file out before any header search happens.
+    const text = [`${'a,'.repeat(MAX_COLUMNS)}b`, 'product;date;weight'].join('\n');
+
+    expect(chooseOpening(text)).toMatchObject({
+      ok: false,
+      problem: { kind: 'parse_error', error: { failure: 'too_many_columns' } },
+    });
+  });
+
+  test('surfaces a quoting error when no delimiter can even read a row, not just a header problem', () => {
+    const text = '"unterminated\n';
+
+    expect(chooseOpening(text)).toMatchObject({
+      ok: false,
+      problem: { kind: 'parse_error', error: { failure: 'unclosed_quote' } },
+    });
+  });
 });
