@@ -206,13 +206,13 @@ notice it is itself hung:
    the longest valid API call including backoff — see [`config.ts`](apps/worker/src/config.ts).
 2. **The parent hard-kills** a child after `hardCeilingMs` no matter what, as a safety net for
    hung attempts — see [`config.ts`](apps/worker/src/config.ts).
-3. **Other workers reap.** The reaper exists for the *row*, not the processes: the parent is PID 1
-   in its container, so killing it tears down the PID namespace and takes every child with it, and
-   the PaaS restarts the container — there is no orphan class of process to worry about. What can
-   happen is a container dying (e.g. OOM) and leaving its claimed attempts stuck `processing`,
-   with nobody left to reach a verdict and nothing else to ever converge them. So, every worker
-   proactively looks for `processing` attempts whose lease has expired, marks them
-   `failed('abandoned')`, and sends an email.
+3. **Other workers reap**, in [`reaper.ts`](apps/worker/src/reaper.ts). The reaper exists for the
+   *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
+   namespace and takes every child with it, and the PaaS restarts the container — there is no
+   orphan class of process to worry about. What can happen is a container dying (e.g. OOM) and
+   leaving its claimed attempts stuck `processing`, with nobody left to reach a verdict and nothing
+   else to ever converge them. So, every worker proactively looks for `processing` attempts whose
+   lease has expired, marks them `failed('abandoned')`, and sends an email.
 
 Defense 3 introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
@@ -224,6 +224,22 @@ update is the only "we lost the attempt". A *thrown* lease-renewal error skips t
 never the local no-progress and hard-ceiling checks, which read the clock and the progress file. A
 parent that gives up on recording a verdict stops renewing the lease first, so reaping can
 converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
+
+*Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
+onto one medium: a parent whose database is down stops being able to answer "should I kill this
+child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
+
+*Rejected: excluding our own `worker_id` from the reap.* With one worker deployed, an abandoned row
+would otherwise never be reaped by the only process that will ever see it. A live supervisor's own
+renewals already keep its rows outside the expiry window, and a worker that reaps one of its own
+in-flight attempts needs no special handling: the next lease renewal comes back `lost` and the loop
+kills the child.
+
+*Rejected: a `SELECT` to find expired attempts, then an `UPDATE` to end them.* Under READ
+COMMITTED, an `UPDATE` whose own `WHERE` blocks on a row a concurrent renewal is committing
+re-evaluates that row once the lock is released, so a renewal that lands mid-reap makes the reap a
+zero-row no-op for it. A `SELECT`-then-`UPDATE` computes its candidate list from an
+already-stale snapshot and would reap an attempt whose parent is demonstrably alive.
 
 ### Canceling
 

@@ -1,0 +1,142 @@
+/** Defense 3 of [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping): the
+ * reaper exists for the *row*, not the process. A parent that dies (OOM, a killed container)
+ * leaves its claimed attempts stuck `processing` with nobody left to reach a verdict, so every
+ * worker proactively looks for `processing` attempts whose lease has expired and ends them.
+ *
+ * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing calls this on
+ * an interval yet; `run()` is what owes it a `setInterval`-like sweep, via `sweep()`. Its only
+ * caller until then is the test suite.
+ *
+ * **Open:** this only marks the row `failed('abandoned')`. Defense 3 also promises an email, which
+ * waits on the email provider itself being chosen — see `ARCHITECTURE.md`'s Email row.
+ */
+
+import type {
+  AnalysisAttemptId,
+  AnalysisAttemptStatus,
+  AnalysisFailureReason,
+  Database,
+  DatabaseExecutor,
+  ReportId,
+} from '@gbd/db';
+import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
+
+export type ReapOptions = {
+  /** A lease this old with nobody renewing it means the parent that claimed the attempt is gone —
+   * the same `k` the parent fences itself against, so one constant has two readers. */
+  leaseExpiresAfterMs: number;
+  /** Catches the opposite failure: a parent that renews forever but never finishes. Depends on
+   * nothing parent-local, unlike the lease. */
+  claimedCeilingMs: number;
+  /** Bounds one sweep to the oldest `limit` expired attempts, so one bad failover window
+   * converges oldest-first rather than fanning out into a mass mailing in a single pass. */
+  limit: number;
+  /** Narrows the sweep to these reports.
+   *
+   * **Test isolation only; production passes nothing.** Same reasoning as `ClaimOptions` in
+   * `queue.ts`: Turbo runs every package's tests concurrently against one database, so a reap
+   * without it would end another test file's attempts.
+   */
+  candidateReports?: readonly ReportId[];
+};
+
+/** Two independent predicates, either of which condemns a `processing` attempt: a lease nobody is
+ * renewing (the container died), or a claim held past the ceiling (the parent renews forever but
+ * never finishes). Shared between the candidate subquery and the `UPDATE`'s own `WHERE`, so the
+ * two copies the query needs cannot drift apart — see `reapExpiredAttempts` for why both copies
+ * have to exist at all.
+ */
+function isExpired(
+  eb: ExpressionBuilder<Database, 'analysisAttempt'>,
+  leaseExpiresBefore: RawBuilder<Date>,
+  claimedBefore: RawBuilder<Date>,
+) {
+  return eb.or([
+    eb('leaseRenewedAt', '<', leaseExpiresBefore),
+    eb('claimedAt', '<', claimedBefore),
+  ]);
+}
+
+function expiredCandidates(
+  db: DatabaseExecutor,
+  options: ReapOptions,
+  leaseExpiresBefore: RawBuilder<Date>,
+  claimedBefore: RawBuilder<Date>,
+) {
+  const candidates = db
+    .selectFrom('analysisAttempt')
+    .select('id')
+    .where('status', '=', 'processing')
+    .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
+    // Oldest lease first, so a sweep capped by `limit` converges the longest-abandoned attempts
+    // before anything newer.
+    .orderBy('leaseRenewedAt')
+    .limit(options.limit);
+
+  return options.candidateReports === undefined
+    ? candidates
+    : candidates.where('reportId', 'in', options.candidateReports);
+}
+
+/** End every `processing` attempt this sweep is entitled to reap, in one `UPDATE`.
+ *
+ * **The expiry predicate is repeated inside the `UPDATE`'s own `WHERE`, never left to a preceding
+ * `SELECT`.** Under READ COMMITTED, when this statement's row lock request blocks on a row a
+ * concurrent renewal is committing, Postgres re-evaluates that row's top-level `WHERE` against the
+ * version the renewal just committed once the lock is released (`EvalPlanQual`) — so a renewal
+ * that lands while the reap waits makes the reap a zero-row no-op for that row. That only works
+ * because the predicate reads `lease_renewed_at`/`claimed_at` directly in the `UPDATE`'s own
+ * `WHERE`; a `SELECT`-then-`UPDATE` computes its candidate list from a snapshot that is already
+ * stale by the time the `UPDATE` runs, and would reap an attempt whose parent is demonstrably
+ * alive. This is the load-bearing detail of the whole file.
+ *
+ * The subquery's only job is `ORDER BY` and `LIMIT` — Postgres `UPDATE` has neither — so the same
+ * predicate appears twice: once to pick the candidate ids, once more on the `UPDATE` itself for
+ * `EvalPlanQual` to recheck.
+ *
+ * **Does not exclude its own `worker_id`.** With one worker deployed, an abandoned row would
+ * otherwise never be reaped by the only process that will ever see it. A live supervisor's own
+ * renewals already keep its rows outside the expiry window, and a worker that reaps one of its own
+ * in-flight attempts needs no special handling: the next `renewLease` returns `lost` and the
+ * supervision loop kills the child.
+ *
+ * *Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
+ * onto one medium: a parent whose database is down stops being able to answer "should I kill this
+ * child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
+ *
+ * *Rejected: excluding our own `worker_id` from the reap* — see above.
+ *
+ * *Rejected: a `SELECT` to find expired attempts, then an `UPDATE` to end them* — see above.
+ */
+export async function reapExpiredAttempts(
+  db: DatabaseExecutor,
+  workerId: string,
+  options: ReapOptions,
+): Promise<AnalysisAttemptId[]> {
+  const leaseExpiresBefore = sql<Date>`now() - make_interval(secs => ${options.leaseExpiresAfterMs / 1000})`;
+  const claimedBefore = sql<Date>`now() - make_interval(secs => ${options.claimedCeilingMs / 1000})`;
+
+  const reaped = await db
+    .updateTable('analysisAttempt')
+    .set({
+      // A cancellation request gets the truthful verdict and no failure email; everything else is
+      // an abandoned attempt. `analysis_attempt_failure_reason_iff_failed` requires the two to move
+      // together, so both branches are one expression rather than two separately-set columns.
+      status: sql<AnalysisAttemptStatus>`(CASE WHEN cancel_requested_at IS NOT NULL THEN 'canceled' ELSE 'failed' END)::analysis_attempt_status`,
+      failureReason: sql<AnalysisFailureReason | null>`(CASE WHEN cancel_requested_at IS NOT NULL THEN NULL ELSE 'abandoned' END)::analysis_failure_reason`,
+      failureDetail: sql<string | null>`(CASE
+        WHEN cancel_requested_at IS NOT NULL THEN NULL
+        WHEN lease_renewed_at < ${leaseExpiresBefore} THEN 'lease not renewed since ' || lease_renewed_at
+        ELSE 'claimed since ' || claimed_at || ' and never finished'
+      END)`,
+      finishedAt: sql<Date>`now()`,
+      reapedByWorkerId: workerId,
+    })
+    .where('status', '=', 'processing')
+    .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
+    .where('id', 'in', expiredCandidates(db, options, leaseExpiresBefore, claimedBefore))
+    .returning('id')
+    .execute();
+
+  return reaped.map((row) => row.id);
+}
