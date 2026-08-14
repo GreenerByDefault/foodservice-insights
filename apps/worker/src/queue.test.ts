@@ -9,18 +9,9 @@
  * concurrently against one database, so a claim without it would take another file's attempts.
  */
 
-import {
-  type AnalysisAttemptId,
-  type Database,
-  type DatabaseExecutor,
-  newResultFileId,
-  type OrganizationId,
-  type ReportId,
-  type ResultFileKind,
-} from '@gbd/db';
+import type { AnalysisAttemptId, Database, OrganizationId, ReportId } from '@gbd/db';
 import { DATABASE } from '@gbd/db/env';
 import {
-  aChecksum,
   insertAnalysisAttempt,
   insertFixtureOrganization,
   insertInputFile,
@@ -30,7 +21,6 @@ import {
   withConcurrentTransactions,
   withRollback,
 } from '@gbd/db/testing';
-import { RESULT_FILE_FORMATS } from '@gbd/storage';
 import { NoResultError, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
@@ -40,13 +30,10 @@ import {
   markAttemptCanceled,
   markAttemptFailed,
   markAttemptSucceeded,
-  type ResultFileRecord,
   renewLease,
 } from './queue.ts';
-
-function aWorkerId(): string {
-  return `test-worker-${crypto.randomUUID()}`;
-}
+import { aResultFile, aWorkerId, readAttemptRow } from './testing/attempt-helpers.ts';
+import { backdateAttemptTimeline } from './testing/attempt-timeline.ts';
 
 /** A pending attempt on a report of its own, plus the narrowing every claim in this file needs. */
 async function pendingAttempt(
@@ -94,25 +81,6 @@ async function claimedAttempt(
   return attemptId;
 }
 
-/** Move an attempt's whole timeline into the past.
- *
- * `now()` is the transaction's start time, so every statement in a rolled-back test shares one
- * value and a lease renewal could never be seen to move. Backdating the columns it must overtake
- * is what gives them somewhere to move from. All three go together, because the schema requires
- * `created_at <= claimed_at <= lease_renewed_at`.
- */
-async function backdate(
-  transaction: Transaction<Database>,
-  attemptId: AnalysisAttemptId,
-): Promise<void> {
-  const fiveMinutesAgo = sql<Date>`now() - interval '5 minutes'`;
-  await transaction
-    .updateTable('analysisAttempt')
-    .set({ createdAt: fiveMinutesAgo, claimedAt: fiveMinutesAgo, leaseRenewedAt: fiveMinutesAgo })
-    .where('id', '=', attemptId)
-    .execute();
-}
-
 /** What the cross-worker reaper will do once it exists: end an attempt this worker still believes
  * it owns. The rows it leaves behind are what every "we lost the race" test starts from.
  *
@@ -123,6 +91,7 @@ async function simulateReap(
   transaction: Transaction<Database>,
   attemptId: AnalysisAttemptId,
 ): Promise<void> {
+  await backdateAttemptTimeline(transaction, attemptId);
   await transaction
     .updateTable('analysisAttempt')
     .set({
@@ -142,14 +111,6 @@ function renewedSince(attempt: { leaseRenewedAt: Date | null }): number {
   return attempt.leaseRenewedAt.getTime();
 }
 
-async function readAttempt(db: DatabaseExecutor, attemptId: AnalysisAttemptId) {
-  return await db
-    .selectFrom('analysisAttempt')
-    .selectAll()
-    .where('id', '=', attemptId)
-    .executeTakeFirstOrThrow();
-}
-
 const A_RESULT: ChildResult = {
   analysisAttemptId: crypto.randomUUID(),
   charts: ['total_spend'],
@@ -162,20 +123,6 @@ const A_RESULT: ChildResult = {
   },
   resultMetadata: { rows: 1_234 },
 };
-
-/** Stands in for what `putResultFile` returns, down to taking its extension and content type from
- * the same map the upload would. */
-function aResultFile(kind: ResultFileKind = 'pdf', chartKey = 'total_spend'): ResultFileRecord {
-  const { extension, contentType } = RESULT_FILE_FORMATS[kind];
-  const stored = {
-    id: newResultFileId(),
-    storageKey: `org/test/${crypto.randomUUID()}.${extension}`,
-    byteSize: 2_048,
-    contentType,
-    checksumSha256: aChecksum(),
-  };
-  return kind === 'chart' ? { ...stored, kind, chartKey } : { ...stored, kind };
-}
 
 describe('claiming', () => {
   test('takes the oldest pending attempt', async () => {
@@ -203,13 +150,13 @@ describe('claiming', () => {
       const { attemptId: pendingId, reportIds } = await pendingAttempt(transaction);
       // Backdate creation before claiming, so `claimedAt` and `leaseRenewedAt` land measurably
       // after `createdAt` instead of sharing the transaction's start time with it — the same
-      // trick `backdate` uses for the lease renewal tests below.
+      // trick `backdateAttemptTimeline` uses for the lease renewal tests below.
       await backdateCreation(transaction, pendingId, 5);
       const attemptId = await claimNextAttempt(transaction, workerId, {
         candidateReports: reportIds,
       });
       if (attemptId === undefined) throw new Error('the fixture attempt was not claimable');
-      return await readAttempt(transaction, attemptId);
+      return await readAttemptRow(transaction, attemptId);
     });
 
     expect(attempt).toMatchObject({ status: 'processing', workerId });
@@ -359,11 +306,11 @@ describe('renewLease', () => {
     const renewal = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
-      await backdate(transaction, attemptId);
-      const before = await readAttempt(transaction, attemptId);
+      await backdateAttemptTimeline(transaction, attemptId);
+      const before = await readAttemptRow(transaction, attemptId);
 
       const result = await renewLease(transaction, attemptId, workerId);
-      const after = await readAttempt(transaction, attemptId);
+      const after = await readAttemptRow(transaction, attemptId);
       return { result, before: renewedSince(before), after: renewedSince(after) };
     });
 
@@ -381,7 +328,7 @@ describe('renewLease', () => {
         .where('id', '=', attemptId)
         .execute();
       const result = await renewLease(transaction, attemptId, workerId);
-      const { cancelRequestedAt } = await readAttempt(transaction, attemptId);
+      const { cancelRequestedAt } = await readAttemptRow(transaction, attemptId);
       return { result, cancelRequestedAt };
     });
 
@@ -427,7 +374,7 @@ describe('finishing', () => {
 
       return {
         won,
-        attempt: await readAttempt(transaction, attemptId),
+        attempt: await readAttemptRow(transaction, attemptId),
         files: await transaction
           .selectFrom('resultFile')
           .select(['kind', 'chartKey', 'storageKey'])
@@ -463,7 +410,7 @@ describe('finishing', () => {
         reason: 'contract_violation',
         detail: 'result.json: charts.0: invalid chart key',
       });
-      return { won, row: await readAttempt(transaction, attemptId) };
+      return { won, row: await readAttemptRow(transaction, attemptId) };
     });
 
     expect(attempt.won).toBe(true);
@@ -479,7 +426,7 @@ describe('finishing', () => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       const won = await markAttemptCanceled(transaction, attemptId, workerId);
-      return { won, row: await readAttempt(transaction, attemptId) };
+      return { won, row: await readAttemptRow(transaction, attemptId) };
     });
 
     expect(attempt.won).toBe(true);
@@ -501,7 +448,7 @@ describe('finishing', () => {
         reason: 'hung',
         detail: null,
       });
-      return { won, row: await readAttempt(transaction, attemptId) };
+      return { won, row: await readAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.won).toBe(false);
@@ -527,7 +474,7 @@ describe('finishing', () => {
         await simulateReap(transaction, attemptId);
 
         const won = await finish(transaction, attemptId, workerId);
-        const row = await readAttempt(transaction, attemptId);
+        const row = await readAttemptRow(transaction, attemptId);
         const resultFiles = await transaction
           .selectFrom('resultFile')
           .selectAll()
@@ -599,7 +546,7 @@ describe('finishing', () => {
 
         const first = await markAttemptFailed(transaction, attemptId, workerId, failure);
         const second = await markAttemptFailed(transaction, attemptId, workerId, failure);
-        return { first, second, row: await readAttempt(transaction, attemptId) };
+        return { first, second, row: await readAttemptRow(transaction, attemptId) };
       });
 
       expect(outcome.first).toBe(true);
