@@ -36,10 +36,10 @@ import { afterAll, describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
 import {
   claimNextAttempt,
-  finishCanceled,
-  finishFailed,
-  finishSucceeded,
   loadAttemptInputs,
+  markAttemptCanceled,
+  markAttemptFailed,
+  markAttemptSucceeded,
   type ResultFileRecord,
   renewLease,
 } from './queue.ts';
@@ -424,7 +424,7 @@ describe('finishing', () => {
     const finished = await withRollback(DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, workerId);
 
-      const won = await finishSucceeded(transaction, attemptId, workerId, {
+      const won = await markAttemptSucceeded(transaction, attemptId, workerId, {
         result: A_RESULT,
         resultFiles,
       });
@@ -463,7 +463,7 @@ describe('finishing', () => {
     const attempt = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
-      const won = await finishFailed(transaction, attemptId, workerId, {
+      const won = await markAttemptFailed(transaction, attemptId, workerId, {
         reason: 'contract_violation',
         detail: 'result.json: charts.0: invalid chart key',
       });
@@ -482,7 +482,7 @@ describe('finishing', () => {
     const attempt = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
-      const won = await finishCanceled(transaction, attemptId, workerId);
+      const won = await markAttemptCanceled(transaction, attemptId, workerId);
       return { won, row: await readAttempt(transaction, attemptId) };
     });
 
@@ -501,7 +501,7 @@ describe('finishing', () => {
     // ends an attempt without ever claiming it and so isn't guarded by `worker_id` at all.
     const outcome = await withRollback(DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, aWorkerId());
-      const won = await finishFailed(transaction, attemptId, aWorkerId(), {
+      const won = await markAttemptFailed(transaction, attemptId, aWorkerId(), {
         reason: 'hung',
         detail: null,
       });
@@ -548,7 +548,7 @@ describe('finishing', () => {
     test('a success returns false, leaves the other verdict standing, and records no result files', async () => {
       const outcome = await afterBeingReaped(
         async (transaction, attemptId, workerId) =>
-          await finishSucceeded(transaction, attemptId, workerId, {
+          await markAttemptSucceeded(transaction, attemptId, workerId, {
             result: A_RESULT,
             resultFiles: [aResultFile()],
           }),
@@ -565,7 +565,7 @@ describe('finishing', () => {
     test('a failure returns false and leaves the other verdict standing', async () => {
       const outcome = await afterBeingReaped(
         async (transaction, attemptId, workerId) =>
-          await finishFailed(transaction, attemptId, workerId, {
+          await markAttemptFailed(transaction, attemptId, workerId, {
             reason: 'child_crashed',
             detail: null,
           }),
@@ -580,7 +580,7 @@ describe('finishing', () => {
     });
 
     test('a cancellation returns false and leaves the other verdict standing', async () => {
-      const outcome = await afterBeingReaped(finishCanceled);
+      const outcome = await afterBeingReaped(markAttemptCanceled);
 
       expect(outcome).toEqual({
         won: false,
@@ -595,14 +595,14 @@ describe('finishing', () => {
   // lost: the caller sees an error and calls the same `finish*` again, unaware the first call
   // already won.
   describe('replayed after a lost commit ack', () => {
-    test('a second finishFailed returns false and changes nothing', async () => {
+    test('a second markAttemptFailed returns false and changes nothing', async () => {
       const outcome = await withRollback(DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
         const failure = { reason: 'child_crashed' as const, detail: 'exit code 1' };
 
-        const first = await finishFailed(transaction, attemptId, workerId, failure);
-        const second = await finishFailed(transaction, attemptId, workerId, failure);
+        const first = await markAttemptFailed(transaction, attemptId, workerId, failure);
+        const second = await markAttemptFailed(transaction, attemptId, workerId, failure);
         return { first, second, row: await readAttempt(transaction, attemptId) };
       });
 
@@ -611,12 +611,12 @@ describe('finishing', () => {
       expect(outcome.row).toMatchObject({ status: 'failed', failureReason: 'child_crashed' });
     });
 
-    test('a second finishSucceeded returns false and inserts no more result files', async () => {
+    test('a second markAttemptSucceeded returns false and inserts no more result files', async () => {
       const outcome = await withRollback(DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
         const succeed = () =>
-          finishSucceeded(transaction, attemptId, workerId, {
+          markAttemptSucceeded(transaction, attemptId, workerId, {
             result: A_RESULT,
             resultFiles: [aResultFile()],
           });
