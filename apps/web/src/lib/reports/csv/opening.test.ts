@@ -18,16 +18,37 @@ describe('chooseOpening', () => {
 
     expect(chooseOpening(text)).toEqual({
       ok: false,
-      problem: { kind: 'ambiguous', delimiters: [',', '\t'] },
+      problem: {
+        kind: 'ambiguous',
+        candidates: [
+          { delimiter: ',', line: 1 },
+          { delimiter: '\t', line: 1 },
+        ],
+      },
     });
   });
 
-  test('names the row that looks like the header, when junk rows sit above it', () => {
-    const text = ['Procurement export', 'product,date,weight', 'beef,2026-01-05,1'].join('\n');
+  test('rejects a file where the same delimiter reads two rows as a header', () => {
+    const text = ['product,date,weight', 'product,date,weight', 'beef,2026-01-05,1'].join('\n');
 
     expect(chooseOpening(text)).toEqual({
       ok: false,
-      problem: { kind: 'junk_above_header', line: 2 },
+      problem: {
+        kind: 'ambiguous',
+        candidates: [
+          { delimiter: ',', line: 1 },
+          { delimiter: ',', line: 2 },
+        ],
+      },
+    });
+  });
+
+  test("skips junk rows above the header — a title, a teammate's note, blank lines", () => {
+    const text = ['Procurement export', '', 'product,date,weight', 'beef,2026-01-05,1'].join('\n');
+
+    expect(chooseOpening(text)).toMatchObject({
+      ok: true,
+      opening: { delimiter: ',', width: 3, headerLine: 3 },
     });
   });
 

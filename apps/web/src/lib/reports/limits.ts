@@ -31,5 +31,7 @@ export const MAX_FUTURE_DAYS = 30;
  */
 export const MAX_COLUMNS = 500;
 
-/** How far past line 1 we look for a header, to tell someone their file starts with junk rows. */
+/** How far past line 1 we tolerate junk — a title, a teammate's note, blank rows — before giving
+ * up on finding a header.
+ */
 export const MAX_HEADER_SEARCH_LINES = 10;
