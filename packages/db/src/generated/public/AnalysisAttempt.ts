@@ -24,6 +24,7 @@ export default interface AnalysisAttemptTable {
 
   createdAt: ColumnType<Date, Date | string | undefined, Date | string>;
 
+  /** The supervising worker's identity, unique per process — not per host. A restarted container must\n       not reuse its predecessor's id, or the ownership guard on every terminal write stops\n       distinguishing this supervisor from a dead one. */
   workerId: ColumnType<string | null, string | null, string | null>;
 
   claimedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
