@@ -12,7 +12,7 @@ declare global {
        *
        * Deliberately closed, and only for failures any caller handles the same way. This type is
        * the body of every `error()` in the app, so a code one route sets belongs in that route's
-       * own response type instead — see `RejectionResponse` in `$lib/reports/rejection.ts`.
+       * own response type instead.
        */
       code?: 'unauthenticated' | 'forbidden' | 'not_found' | 'service_unavailable';
     }
