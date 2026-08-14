@@ -26,11 +26,12 @@ export type CsvRecord = {
 /** The delimiters a file may be separated by. */
 export type CsvDelimiter = ',' | ';' | '\t' | '|';
 
-/** Both failures name the line the problem is on, not the line its record began on — where the
- * quote opened, and where the stray text follows. A record may span lines, so those differ, and
- * the offending line is the one worth pointing a reader at.
+/** The quoting failures name the line the problem is on, not the line its record began on — where
+ * the quote opened, and where the stray text follows. A record may span lines, so those differ,
+ * and the offending line is the one worth pointing a reader at. `too_many_columns` has no such
+ * distinction to make and names the line the record began on.
  */
-export type CsvParseFailure = 'unclosed_quote' | 'text_after_quote';
+export type CsvParseFailure = 'unclosed_quote' | 'text_after_quote' | 'too_many_columns';
 
 export class CsvParseError extends Error {
   override readonly name = 'CsvParseError';
@@ -44,26 +45,48 @@ export class CsvParseError extends Error {
   }
 }
 
-/** Yield each record in `text`.
+/** Yield each record in `text`, refusing one wider than `maxFields`.
  *
  * Lazily, so a caller can stop at a row cap without tokenizing the rest of the file, and so
  * probing a delimiter costs one record rather than a whole parse.
+ *
+ * `maxFields` is the caller's policy rather than a rule of the grammar, and it is a parameter
+ * because it has to be enforced *here* to be worth anything: a caller can only measure a record's
+ * width once the record exists, which for a line of a million commas is a million-element array
+ * built to prove it was never wanted.
  */
-export function* parseCsv(text: string, delimiter: CsvDelimiter): Generator<CsvRecord> {
+export function* parseCsv(
+  text: string,
+  delimiter: CsvDelimiter,
+  maxFields: number,
+): Generator<CsvRecord> {
   let cursor = { index: 0, line: 1 };
 
   while (cursor.index < text.length) {
+    // A wholly empty line is skipped, and skipped before a record is started, because a file can
+    // be millions of them and each one would otherwise allocate. A line of nothing but delimiters
+    // does not land here, and neither does a lone `""`: both are a row of blank cells, and one has
+    // to reach the caller to be rejected as one.
+    if (text[cursor.index] === '\n') {
+      let { index, line } = cursor;
+      while (text[index] === '\n') {
+        index += 1;
+        line += 1;
+      }
+      cursor = { index, line };
+      continue;
+    }
+
     const startLine = cursor.line;
     const fields: string[] = [];
-    let anyQuoted = false;
 
     for (;;) {
-      const quoted = text[cursor.index] === '"';
-      anyQuoted ||= quoted;
-      const read = quoted
-        ? readQuotedField(text, { index: cursor.index + 1, line: cursor.line }, delimiter)
-        : readBareField(text, cursor, delimiter);
+      const read =
+        text[cursor.index] === '"'
+          ? readQuotedField(text, { index: cursor.index + 1, line: cursor.line }, delimiter)
+          : readBareField(text, cursor, delimiter);
       fields.push(read.field);
+      if (fields.length > maxFields) throw new CsvParseError('too_many_columns', startLine);
       cursor = { index: read.index, line: read.line };
 
       if (text[cursor.index] === delimiter) {
@@ -76,10 +99,6 @@ export function* parseCsv(text: string, delimiter: CsvDelimiter): Generator<CsvR
       break;
     }
 
-    // A wholly empty line is skipped. A line of nothing but delimiters is not, and neither is a
-    // lone `""`: both are a row of blank cells, and one has to reach the caller to be rejected as
-    // one. Only the quoting tells those apart from a line that holds nothing at all.
-    if (!anyQuoted && fields.length === 1 && fields[0] === '') continue;
     yield { line: startLine, fields };
   }
 }
