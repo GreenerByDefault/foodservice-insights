@@ -1,13 +1,10 @@
-/** Defense 3 of [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping): the
- * reaper exists for the *row*, not the process. A parent that dies (OOM, a killed container)
- * leaves its claimed attempts stuck `processing` with nobody left to reach a verdict, so every
- * worker proactively looks for `processing` attempts whose lease has expired and ends them.
+/** The reaping defense from [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping).
  *
  * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing calls this on
  * an interval yet; `run()` is what owes it a `setInterval`-like sweep, via `sweep()`. Its only
  * caller until then is the test suite.
  *
- * **Open:** this only marks the row `failed('abandoned')`. Defense 3 also promises an email, which
+ * **Open:** this only marks the row `failed('abandoned')`. Reaping also promises an email, which
  * waits on the email provider itself being chosen — see `ARCHITECTURE.md`'s Email row.
  */
 
@@ -68,8 +65,6 @@ function expiredCandidates(
     .select('id')
     .where('status', '=', 'processing')
     .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
-    // Oldest lease first, so a sweep capped by `limit` converges the longest-abandoned attempts
-    // before anything newer.
     .orderBy('leaseRenewedAt')
     .limit(options.limit);
 
@@ -99,10 +94,6 @@ function expiredCandidates(
  * renewals already keep its rows outside the expiry window, and a worker that reaps one of its own
  * in-flight attempts needs no special handling: the next `renewLease` returns `lost` and the
  * supervision loop kills the child.
- *
- * *Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
- * onto one medium: a parent whose database is down stops being able to answer "should I kill this
- * child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
  *
  * *Rejected: excluding our own `worker_id` from the reap* — see above.
  *

@@ -214,7 +214,7 @@ notice it is itself hung:
    else to ever converge them. So, every worker proactively looks for `processing` attempts whose
    lease has expired, marks them `failed('abandoned')`, and sends an email.
 
-Defense 3 introduces a race: another parent can kill an attempt while the original parent, being
+Reaping introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
 tolerate this** — see the terminal-state and status invariants in
 [`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-status-machine).
@@ -229,17 +229,8 @@ converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/s
 onto one medium: a parent whose database is down stops being able to answer "should I kill this
 child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
 
-*Rejected: excluding our own `worker_id` from the reap.* With one worker deployed, an abandoned row
-would otherwise never be reaped by the only process that will ever see it. A live supervisor's own
-renewals already keep its rows outside the expiry window, and a worker that reaps one of its own
-in-flight attempts needs no special handling: the next lease renewal comes back `lost` and the loop
-kills the child.
-
-*Rejected: a `SELECT` to find expired attempts, then an `UPDATE` to end them.* Under READ
-COMMITTED, an `UPDATE` whose own `WHERE` blocks on a row a concurrent renewal is committing
-re-evaluates that row once the lock is released, so a renewal that lands mid-reap makes the reap a
-zero-row no-op for it. A `SELECT`-then-`UPDATE` computes its candidate list from an
-already-stale snapshot and would reap an attempt whose parent is demonstrably alive.
+*Rejected: excluding our own `worker_id` from the reap, and a `SELECT` before the reaping
+`UPDATE`.* Reasoning in [`reaper.ts`](apps/worker/src/reaper.ts).
 
 ### Canceling
 
