@@ -33,7 +33,7 @@ function anEnding(overrides: Partial<ChildEnding> = {}): ChildEnding {
 describe('classifyVerdict', () => {
   describe('fenced or lost', () => {
     for (const reason of ['fenced', 'lost'] as const) {
-      test(`${reason} is unowned and writes nothing`, () => {
+      test(`${reason} is unowned`, () => {
         const kill: Kill = { reason };
         expect(classifyVerdict(anEnding({ kill }))).toEqual({ kind: 'unowned' });
       });
@@ -90,7 +90,7 @@ describe('classifyVerdict', () => {
       });
     });
 
-    test('outranks a kill for being hung, hard-timeout, shutting-down, or a progress violation', () => {
+    test('a success outranks a kill for being hung, hard-timeout, shutting-down, or a progress violation', () => {
       const kills: Kill[] = [
         { reason: 'hung' },
         { reason: 'hard-timeout' },
@@ -105,22 +105,51 @@ describe('classifyVerdict', () => {
         });
       }
     });
+
+    test('a failure document outranks a kill for being hung, hard-timeout, shutting-down, or a progress violation', () => {
+      const kills: Kill[] = [
+        { reason: 'hung' },
+        { reason: 'hard-timeout' },
+        { reason: 'shutting-down' },
+        { reason: 'contract-violation', detail: 'progress.json was not valid JSON' },
+      ];
+      const read: DocumentRead = { kind: 'failure', failure: A_FAILURE };
+      for (const kill of kills) {
+        expect(classifyVerdict(anEnding({ kill, outcome: EXITED_1, read }))).toEqual({
+          kind: 'failed',
+          reason: A_FAILURE.reason,
+          detail: A_FAILURE.detail,
+        });
+      }
+    });
   });
 
   describe('a kill that the child did not beat to the finish', () => {
     test('hung', () => {
       const verdict = classifyVerdict(anEnding({ kill: { reason: 'hung' } }));
-      expect(verdict).toMatchObject({ kind: 'failed', reason: 'hung' });
+      expect(verdict).toEqual({
+        kind: 'failed',
+        reason: 'hung',
+        detail: 'no progress within the allotted time',
+      });
     });
 
     test('hard-timeout', () => {
       const verdict = classifyVerdict(anEnding({ kill: { reason: 'hard-timeout' } }));
-      expect(verdict).toMatchObject({ kind: 'failed', reason: 'hard_timeout' });
+      expect(verdict).toEqual({
+        kind: 'failed',
+        reason: 'hard_timeout',
+        detail: 'exceeded the hard ceiling',
+      });
     });
 
     test('shutting-down', () => {
       const verdict = classifyVerdict(anEnding({ kill: { reason: 'shutting-down' } }));
-      expect(verdict).toMatchObject({ kind: 'failed', reason: 'shut_down' });
+      expect(verdict).toEqual({
+        kind: 'failed',
+        reason: 'shut_down',
+        detail: 'killed while the worker was shutting down',
+      });
     });
 
     test('contract-violation carries the kill detail', () => {
@@ -192,6 +221,24 @@ describe('classifyVerdict', () => {
 
     test('exit 1 with no failure.json', () => {
       expect(classifyVerdict(anEnding({ outcome: EXITED_1 }))).toEqual({
+        kind: 'failed',
+        reason: 'contract_violation',
+        detail: 'exited 1 without writing failure.json',
+      });
+    });
+
+    test('exit 0 with a failure.json instead of a result.json is still a contract violation', () => {
+      const read: DocumentRead = { kind: 'failure', failure: A_FAILURE };
+      expect(classifyVerdict(anEnding({ outcome: EXITED_0, read }))).toEqual({
+        kind: 'failed',
+        reason: 'contract_violation',
+        detail: 'exited 0 without writing result.json',
+      });
+    });
+
+    test('exit 1 with a result.json instead of a failure.json is still a contract violation', () => {
+      const read: DocumentRead = { kind: 'result', result: A_RESULT, missingResultFiles: [] };
+      expect(classifyVerdict(anEnding({ outcome: EXITED_1, read }))).toEqual({
         kind: 'failed',
         reason: 'contract_violation',
         detail: 'exited 1 without writing failure.json',

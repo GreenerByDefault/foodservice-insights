@@ -66,8 +66,6 @@ async function readResultFiles(attemptId: AttemptFixture['attemptId']) {
     .execute();
 }
 
-/** The filename `fakeResultFileContents` was keyed by for a given result-file row, so a test can
- * assert the uploaded bytes are the ones the fake child wrote for that specific file. */
 function fileNameFor(row: { kind: string; chartKey: string | null }): string {
   return row.kind === 'chart'
     ? chartFileName(row.chartKey as string)
