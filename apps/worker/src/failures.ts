@@ -14,12 +14,12 @@
  *    supervise tick is logged and absorbed — the next tick is the retry. A failure while
  *    processing a *claimed* attempt becomes `failed('infrastructure')`, because a claimed
  *    attempt can never return to the queue.
- * 3. **The reaper is the backstop for a verdict we cannot record.** If even `finishFailed`
+ * 3. **The reaper is the backstop for a verdict we cannot record.** If even `markAttemptFailed`
  *    cannot be written: kill the child first, log loudly, and abandon — and abandoning stops
  *    renewing the lease, or the row would stay `processing` forever and the reaper could never
  *    converge it.
  * 4. **Bounded retry only where one transient statement would otherwise terminally fail an
- *    attempt** — loading a claimed attempt's inputs, and the `finish*` writes, which record up
+ *    attempt** — loading a claimed attempt's inputs, and the `markAttempt*` writes, which record up
  *    to ~20 minutes of child work and real AI spend. Everything else already retries: the loops
  *    by ticking, and every blob store request inside the SDK (`MAX_ATTEMPTS` in
  *    `packages/storage/src/client.ts`). *Rejected: a second retry layer on blob calls — it would

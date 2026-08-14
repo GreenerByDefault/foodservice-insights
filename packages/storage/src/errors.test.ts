@@ -6,22 +6,13 @@
  */
 
 import { afterAll, expect, test } from 'vitest';
-import { initializeBlobStore, shutdownBlobStore } from './client.ts';
+import { shutdownBlobStore } from './client.ts';
 import { BLOB_STORE, shutdown } from './env.ts';
 import { isBlobStoreError } from './errors.ts';
 import { listObjectKeys, putObject } from './objects.ts';
+import { unreachableBlobStore } from './testing/unreachable.ts';
 
-/** A store nothing answers for. Port 1 is reserved and unused, so a connection is refused
- * immediately rather than hanging until the client's connection timeout.
- */
-const UNREACHABLE_STORE = initializeBlobStore({
-  endpoint: 'http://127.0.0.1:1',
-  region: 'local',
-  accessKeyId: 'unused',
-  secretAccessKey: 'unused',
-  bucket: 'unused',
-  limits: { retryDelayBaseMs: 1 },
-});
+const UNREACHABLE_STORE = unreachableBlobStore();
 
 /** The real endpoint and credentials, aimed at a bucket that was never created. */
 const MISSING_BUCKET_STORE = { ...BLOB_STORE, bucket: 'no-such-bucket' };

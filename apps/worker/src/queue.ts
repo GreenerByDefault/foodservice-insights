@@ -193,7 +193,7 @@ export type ResultFileRecord = StoredFile & {
  * already committed"; the data is correct either way, and a `status, worker_id` read-back would
  * disambiguate the two if a consumer (the deferred email) ever needs to.
  */
-export async function finishSucceeded(
+export async function markAttemptSucceeded(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   workerId: string,
@@ -204,7 +204,7 @@ export async function finishSucceeded(
   return await withTransaction(db, async (transaction) => {
     // The guarded update goes first so that losing the race writes nothing at all: `result_file`
     // rows for an attempt whose verdict is someone else's would be results nothing points at.
-    const won = await finishIfStillOwned(transaction, attemptId, workerId, {
+    const won = await markIfStillOwned(transaction, attemptId, workerId, {
       status: 'succeeded',
       aiModel: ai.model,
       aiInputTokens: ai.inputTokens,
@@ -234,15 +234,15 @@ export async function finishSucceeded(
 }
 
 /** Returns whether we still owned the attempt. `false` under retry has the same residual
- * ambiguity as `finishSucceeded`'s: it can mean another writer's verdict stands, or that our own
+ * ambiguity as `markAttemptSucceeded`'s: it can mean another writer's verdict stands, or that our own
  * first attempt already committed. */
-export async function finishFailed(
+export async function markAttemptFailed(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   workerId: string,
   failure: { reason: AnalysisFailureReason; detail: string | null },
 ): Promise<boolean> {
-  return await finishIfStillOwned(db, attemptId, workerId, {
+  return await markIfStillOwned(db, attemptId, workerId, {
     status: 'failed',
     failureReason: failure.reason,
     failureDetail: failure.detail,
@@ -250,13 +250,13 @@ export async function finishFailed(
 }
 
 /** Returns whether we still owned the attempt. Same residual ambiguity under retry as
- * `finishSucceeded`'s. */
-export async function finishCanceled(
+ * `markAttemptSucceeded`'s. */
+export async function markAttemptCanceled(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   workerId: string,
 ): Promise<boolean> {
-  return await finishIfStillOwned(db, attemptId, workerId, { status: 'canceled' });
+  return await markIfStillOwned(db, attemptId, workerId, { status: 'canceled' });
 }
 
 type TerminalColumns = Updateable<Database['analysisAttempt']> & {
@@ -270,7 +270,7 @@ type TerminalColumns = Updateable<Database['analysisAttempt']> & {
  * The reaper ends an attempt it never claimed, so it writes a separate statement with a
  * different guard rather than calling this one.
  */
-async function finishIfStillOwned(
+async function markIfStillOwned(
   db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   workerId: string,

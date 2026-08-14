@@ -8,6 +8,7 @@ import type { AnalysisAttemptId } from '@gbd/db';
 import {
   DIRECTORIES_CREATED_BY_PARENT,
   type RunDirectoryEntry,
+  resultFilePath,
   runPath,
 } from './contract/layout.ts';
 import {
@@ -54,6 +55,23 @@ export async function readFailure(runDirectory: string): Promise<ChildFailure | 
 /** Does not mind the tree being gone already, so it is safe in the `finally` that always calls it. */
 export async function removeRunDirectory(runDirectory: string): Promise<void> {
   await rm(runDirectory, { recursive: true, force: true });
+}
+
+/** Read whichever of the named result files the child actually wrote. A file the child never
+ * produced lands in `missing` rather than failing the whole read.
+ */
+export async function readResultFiles(
+  runDirectory: string,
+  fileNames: readonly string[],
+): Promise<{ missing: string[]; contents: Map<string, Uint8Array> }> {
+  const missing: string[] = [];
+  const contents = new Map<string, Uint8Array>();
+  for (const fileName of fileNames) {
+    const bytes = await readFile(resultFilePath(runDirectory, fileName)).catch(undefinedIfMissing);
+    if (bytes === undefined) missing.push(fileName);
+    else contents.set(fileName, bytes);
+  }
+  return { missing, contents };
 }
 
 /** A document the child has not written is `undefined`; one it wrote badly is a `ContractError`.
