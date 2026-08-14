@@ -19,10 +19,10 @@ import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/lay
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
 import { classifyAttemptFailure, retryOnTransientDbError } from './failures.ts';
 import {
-  finishCanceled,
-  finishFailed,
-  finishSucceeded,
   loadAttemptInputs,
+  markAttemptCanceled,
+  markAttemptFailed,
+  markAttemptSucceeded,
   type ResultFileRecord,
 } from './queue.ts';
 import {
@@ -35,11 +35,7 @@ import {
 } from './run-directory.ts';
 import { type ChildEnding, classifyVerdict, type Kill, type Verdict } from './verdict.ts';
 
-/** The database, blob store, and child-invocation settings every function below needs. A subset
- * of `WorkerConfig` (landing with the supervision loop) plus the two live handles — kept as its
- * own type here so this file has no dependency on a config nobody constructs yet.
- */
-export type AttemptDeps = {
+export type AttemptDependencies = {
   db: DatabaseExecutor;
   store: BlobStore;
   workerId: string;
@@ -58,7 +54,7 @@ export type PreparedAttempt = {
 
 /** Thrown by `startAttempt` when the report's input object is gone from the blob store — a state
  * the queue's own invariants should prevent, but the filesystem and the database can still drift
- * apart. Deterministic, so `failClaimedAttempt` fails the attempt on it without retrying.
+ * apart.
  */
 export class MissingInputFileError extends Error {
   constructor(readonly storageKey: string) {
@@ -72,19 +68,22 @@ export class MissingInputFileError extends Error {
 
 /** Load a claimed attempt's inputs, build its run directory, and spawn its child. */
 export async function startAttempt(
-  deps: AttemptDeps,
+  dependencies: AttemptDependencies,
   attemptId: AnalysisAttemptId,
 ): Promise<PreparedAttempt> {
   let runDirectory: string | undefined;
   try {
-    const inputs = await retryOnTransientDbError(() => loadAttemptInputs(deps.db, attemptId), {
-      action: "load a claimed attempt's inputs",
-      context: { attemptId },
-    });
+    const inputs = await retryOnTransientDbError(
+      () => loadAttemptInputs(dependencies.db, attemptId),
+      {
+        action: "load a claimed attempt's inputs",
+        context: { attemptId },
+      },
+    );
 
-    runDirectory = await createRunDirectory(deps.runRoot, attemptId);
+    runDirectory = await createRunDirectory(dependencies.runRoot, attemptId);
 
-    const inputCsv = await getObject(deps.store, inputs.inputFile.storageKey);
+    const inputCsv = await getObject(dependencies.store, inputs.inputFile.storageKey);
     if (inputCsv === undefined) throw new MissingInputFileError(inputs.inputFile.storageKey);
     await writeInputCsv(runDirectory, inputCsv);
 
@@ -99,7 +98,9 @@ export async function startAttempt(
     });
     await writeManifest(runDirectory, manifest);
 
-    const child = spawnChild(deps.childCommand, runDirectory, { killGraceMs: deps.killGraceMs });
+    const child = spawnChild(dependencies.childCommand, runDirectory, {
+      killGraceMs: dependencies.killGraceMs,
+    });
 
     return {
       attemptId,
@@ -118,9 +119,6 @@ export async function startAttempt(
 // Reading how the child ended
 // -------------------------------------------------------------
 
-/** What `result.json` declares, whichever fixed name or chart key produced it — the directory is
- * never listed, so this is the only way a path is derived (`contract/layout.ts`).
- */
 type DeclaredResultFile = { fileName: string } & (
   | { kind: 'chart'; chartKey: string }
   | { kind: Exclude<ResultFileKind, 'chart'> }
@@ -211,8 +209,8 @@ function undefinedIfMissing(error: unknown): undefined {
 // Recording a verdict
 // -------------------------------------------------------------
 
-/** A verdict with everything its `finish*` write needs attached, so `recordVerdict` never has to
- * look anything up itself.
+/** A verdict with everything its `markAttempt*` write needs attached, so `recordVerdict` never
+ * has to look anything up itself.
  */
 export type RecordableVerdict = Exclude<Verdict, { kind: 'unowned' }> & {
   resultFiles?: readonly ResultFileRecord[];
@@ -220,38 +218,38 @@ export type RecordableVerdict = Exclude<Verdict, { kind: 'unowned' }> & {
 
 /** Write a verdict this worker already computed. Bounded transient retry, per principle 4 in
  * [`failures.ts`](./failures.ts): this is one of the writes a claimed attempt cannot afford to
- * lose to a blip. Returns whether we still owned the attempt, exactly like the `finish*` helpers
- * this wraps.
+ * lose to a blip. Returns whether we still owned the attempt, exactly like the `markAttempt*`
+ * helpers this wraps.
  */
 export async function recordVerdict(
-  deps: AttemptDeps,
+  dependencies: AttemptDependencies,
   attemptId: AnalysisAttemptId,
   verdict: RecordableVerdict,
 ): Promise<boolean> {
-  return await retryOnTransientDbError(() => writeVerdict(deps, attemptId, verdict), {
+  return await retryOnTransientDbError(() => writeVerdictOnce(dependencies, attemptId, verdict), {
     action: 'record an attempt verdict',
     context: { attemptId, verdict: verdict.kind },
   });
 }
 
-function writeVerdict(
-  deps: AttemptDeps,
+function writeVerdictOnce(
+  dependencies: AttemptDependencies,
   attemptId: AnalysisAttemptId,
   verdict: RecordableVerdict,
 ): Promise<boolean> {
   switch (verdict.kind) {
     case 'succeeded':
-      return finishSucceeded(deps.db, attemptId, deps.workerId, {
+      return markAttemptSucceeded(dependencies.db, attemptId, dependencies.workerId, {
         result: verdict.result,
         resultFiles: verdict.resultFiles ?? [],
       });
     case 'failed':
-      return finishFailed(deps.db, attemptId, deps.workerId, {
+      return markAttemptFailed(dependencies.db, attemptId, dependencies.workerId, {
         reason: verdict.reason,
         detail: verdict.detail,
       });
     case 'canceled':
-      return finishCanceled(deps.db, attemptId, deps.workerId);
+      return markAttemptCanceled(dependencies.db, attemptId, dependencies.workerId);
   }
 }
 
@@ -278,7 +276,7 @@ export type SettleOutcome =
  * blob store SDK already retries its own transient failures.
  */
 export async function settleAttempt(
-  deps: AttemptDeps,
+  dependencies: AttemptDependencies,
   prepared: PreparedAttempt,
   ending: ReadEnding,
 ): Promise<SettleOutcome> {
@@ -286,9 +284,9 @@ export async function settleAttempt(
     const verdict = classifyVerdict(ending);
     if (verdict.kind === 'unowned') return { kind: 'lost' };
 
-    const recordable = await toRecordable(deps, prepared, verdict, ending);
+    const recordable = await uploadResultFilesIfSucceeded(dependencies, prepared, verdict, ending);
     try {
-      const won = await recordVerdict(deps, prepared.attemptId, recordable);
+      const won = await recordVerdict(dependencies, prepared.attemptId, recordable);
       return won ? { kind: 'recorded' } : { kind: 'lost' };
     } catch (error) {
       console.error(
@@ -303,8 +301,8 @@ export async function settleAttempt(
   }
 }
 
-async function toRecordable(
-  deps: AttemptDeps,
+async function uploadResultFilesIfSucceeded(
+  dependencies: AttemptDependencies,
   prepared: PreparedAttempt,
   verdict: Exclude<Verdict, { kind: 'unowned' }>,
   ending: ReadEnding,
@@ -313,14 +311,14 @@ async function toRecordable(
 
   const resultFiles = await Promise.all(
     declaredResultFiles(verdict.result).map((file) =>
-      uploadResultFile(deps, prepared, file, ending.resultFileContents),
+      uploadResultFile(dependencies, prepared, file, ending.resultFileContents),
     ),
   );
   return { ...verdict, resultFiles };
 }
 
 async function uploadResultFile(
-  deps: AttemptDeps,
+  dependencies: AttemptDependencies,
   prepared: PreparedAttempt,
   file: DeclaredResultFile,
   contents: ReadonlyMap<string, Uint8Array>,
@@ -334,7 +332,7 @@ async function uploadResultFile(
 
   const id = newResultFileId();
   const stored = await putResultFile(
-    deps.store,
+    dependencies.store,
     {
       organizationId: prepared.organizationId,
       reportId: prepared.reportId,
@@ -359,7 +357,7 @@ async function uploadResultFile(
  * an ordinary `Error` and only be able to guess at `unknown`.
  */
 export async function failClaimedAttempt(
-  deps: AttemptDeps,
+  dependencies: AttemptDependencies,
   attemptId: AnalysisAttemptId,
   error: unknown,
 ): Promise<void> {
@@ -368,7 +366,7 @@ export async function failClaimedAttempt(
       ? { reason: 'infrastructure' as const, detail: error.message }
       : classifyAttemptFailure(error);
 
-  await recordVerdict(deps, attemptId, {
+  await recordVerdict(dependencies, attemptId, {
     kind: 'failed',
     reason: failure.reason,
     detail: failure.detail,

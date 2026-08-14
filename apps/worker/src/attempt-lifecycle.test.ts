@@ -9,7 +9,7 @@ import { deletePrefix, getObject } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
 import { afterAll, describe, expect, test } from 'vitest';
 import {
-  type AttemptDeps,
+  type AttemptDependencies,
   failClaimedAttempt,
   MissingInputFileError,
   readChildEnding,
@@ -36,11 +36,11 @@ function aWorkerId(): string {
   return `test-worker-${crypto.randomUUID()}`;
 }
 
-function deps(
+function dependencies(
   fixture: AttemptFixture,
   workerId: string,
   steps: readonly FakeChildStep[],
-): AttemptDeps {
+): AttemptDependencies {
   return {
     db: DATABASE,
     store: BLOB_STORE,
@@ -82,10 +82,13 @@ describe('a successful attempt, end to end', () => {
         { step: 'exit', code: 0 },
       ];
 
-      const prepared = await startAttempt(deps(fixture, workerId, steps), fixture.attemptId);
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
       const outcome = await prepared.child.exited;
       const ending = await readChildEnding(prepared, outcome);
-      const settled = await settleAttempt(deps(fixture, workerId, steps), prepared, ending);
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
 
       expect(settled).toEqual({ kind: 'recorded' });
       expect(existsSync(prepared.runDirectory)).toBe(false);
@@ -118,10 +121,13 @@ describe('a hung child that finished first', () => {
     await withAttemptFixture(workerId, async (fixture) => {
       const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
 
-      const prepared = await startAttempt(deps(fixture, workerId, steps), fixture.attemptId);
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
       const outcome = await prepared.child.exited;
       const ending = await readChildEnding(prepared, outcome, { reason: 'hung' });
-      const settled = await settleAttempt(deps(fixture, workerId, steps), prepared, ending);
+      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
 
       expect(settled).toEqual({ kind: 'recorded' });
       expect((await readAttempt(fixture.attemptId)).status).toBe('succeeded');
@@ -136,12 +142,12 @@ describe('failure rows', () => {
     steps: readonly FakeChildStep[],
     kill?: Kill,
   ) {
-    const prepared = await startAttempt(deps(fixture, workerId, steps), fixture.attemptId);
+    const prepared = await startAttempt(dependencies(fixture, workerId, steps), fixture.attemptId);
     const outcome = await prepared.child.exited;
     const ending = await readChildEnding(prepared, outcome, kill);
     return {
       prepared,
-      settled: await settleAttempt(deps(fixture, workerId, steps), prepared, ending),
+      settled: await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending),
     };
   }
 
@@ -249,7 +255,7 @@ describe('failure rows', () => {
   test('an unrunnable executable is a spawn failure recorded as infrastructure', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
-      const badDeps: AttemptDeps = {
+      const badDependencies: AttemptDependencies = {
         db: DATABASE,
         store: BLOB_STORE,
         workerId,
@@ -258,10 +264,10 @@ describe('failure rows', () => {
         killGraceMs: 2_000,
       };
 
-      const prepared = await startAttempt(badDeps, fixture.attemptId);
+      const prepared = await startAttempt(badDependencies, fixture.attemptId);
       const outcome = await prepared.child.exited;
       const ending = await readChildEnding(prepared, outcome);
-      const settled = await settleAttempt(badDeps, prepared, ending);
+      const settled = await settleAttempt(badDependencies, prepared, ending);
 
       expect(settled).toEqual({ kind: 'recorded' });
       expect(await readAttempt(fixture.attemptId)).toMatchObject({
@@ -275,12 +281,16 @@ describe('failure rows', () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
       await deletePrefix(BLOB_STORE, fixture.inputCsvStorageKey);
-      const attemptDeps = deps(fixture, workerId, [{ step: 'exit', code: 0 }]);
+      const attemptDependencies = dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]);
 
-      const start = startAttempt(attemptDeps, fixture.attemptId);
+      const start = startAttempt(attemptDependencies, fixture.attemptId);
       await expect(start).rejects.toThrow(MissingInputFileError);
 
-      await failClaimedAttempt(attemptDeps, fixture.attemptId, await start.catch((error) => error));
+      await failClaimedAttempt(
+        attemptDependencies,
+        fixture.attemptId,
+        await start.catch((error) => error),
+      );
 
       expect(await readAttempt(fixture.attemptId)).toMatchObject({
         status: 'failed',
@@ -296,7 +306,10 @@ describe('failure rows', () => {
       const runDirectory = `${fixture.runRoot}/${fixture.attemptId}`;
 
       await expect(
-        startAttempt(deps(fixture, workerId, [{ step: 'exit', code: 0 }]), fixture.attemptId),
+        startAttempt(
+          dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]),
+          fixture.attemptId,
+        ),
       ).rejects.toThrow(MissingInputFileError);
 
       expect(existsSync(runDirectory)).toBe(false);
@@ -334,11 +347,18 @@ describe('kills', () => {
           { step: 'exit', code: 0 },
         ];
 
-        const prepared = await startAttempt(deps(fixture, workerId, steps), fixture.attemptId);
+        const prepared = await startAttempt(
+          dependencies(fixture, workerId, steps),
+          fixture.attemptId,
+        );
         prepared.child.kill();
         const outcome = await prepared.child.exited;
         const ending = await readChildEnding(prepared, outcome, kill);
-        const settled = await settleAttempt(deps(fixture, workerId, steps), prepared, ending);
+        const settled = await settleAttempt(
+          dependencies(fixture, workerId, steps),
+          prepared,
+          ending,
+        );
 
         const expected = EXPECTED[kill.reason];
         if (expected.status === 'processing') {
@@ -358,9 +378,9 @@ describe('recordVerdict', () => {
   test('records a failure and returns whether we still owned the attempt', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
-      const attemptDeps = deps(fixture, workerId, []);
+      const attemptDependencies = dependencies(fixture, workerId, []);
 
-      const won = await recordVerdict(attemptDeps, fixture.attemptId, {
+      const won = await recordVerdict(attemptDependencies, fixture.attemptId, {
         kind: 'failed',
         reason: 'unknown',
         detail: 'something unexpected',
