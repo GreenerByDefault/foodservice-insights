@@ -1,3 +1,5 @@
+export type { Breakable } from './breakable.ts';
+export { breakableDatabase } from './breakable.ts';
 export type { BlockedStatement, ConcurrentTransaction, Trash } from './concurrency.ts';
 export {
   fixtureOrganizationName,
