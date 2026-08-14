@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { type CsvDelimiter, CsvParseError, parseCsv } from './parse.ts';
 
-const records = (text: string, delimiter: CsvDelimiter = ',') => [...parseCsv(text, delimiter)];
+const records = (
+  text: string,
+  delimiter: CsvDelimiter = ',',
+  maxFields = Number.POSITIVE_INFINITY,
+) => [...parseCsv(text, delimiter, maxFields)];
 
 describe('parseCsv', () => {
   test('splits a plain file into records and fields', () => {
@@ -87,7 +91,7 @@ describe('parseCsv', () => {
   // rather than a whole parse. Text the parser would reject is the way to observe it: reaching it
   // eagerly would throw here.
   test('tokenizes no further than the record asked for', () => {
-    const record = parseCsv('a,b\n"unclosed', ',').next();
+    const record = parseCsv('a,b\n"unclosed', ',', Number.POSITIVE_INFINITY).next();
 
     expect(record.value).toEqual({ line: 1, fields: ['a', 'b'] });
   });
@@ -123,5 +127,40 @@ describe('parseCsv', () => {
     test('with a CsvParseError, so a caller can tell it from a bug', () => {
       expect(() => records('"')).toThrowError(CsvParseError);
     });
+  });
+
+  describe('the field cap', () => {
+    test('refuses a record wider than it', () => {
+      expect(() => records('a,b,c\nd,e,f', ',', 2)).toThrowError(
+        expect.objectContaining({ failure: 'too_many_columns', line: 1 }),
+      );
+    });
+
+    test('applies to a record starting past line 1, and names where that record began', () => {
+      expect(() => records('a,b\n"two\nlines",c,d', ',', 2)).toThrowError(
+        expect.objectContaining({ failure: 'too_many_columns', line: 2 }),
+      );
+    });
+
+    test('is per record, not a running total across the file', () => {
+      expect(records('a,b\nc,d\ne,f', ',', 2)).toHaveLength(3);
+    });
+
+    // The whole point of the cap living in the parser: a caller measuring `fields.length` can only
+    // do it once the array exists, which for a degenerate line is the allocation being guarded
+    // against. Text the parser would otherwise reject is how to observe it stopping — reading the
+    // rest of this record would raise `unclosed_quote` instead.
+    test('stops one field past the cap rather than reading the rest of the record', () => {
+      expect(() => records('a,b,c,"unclosed', ',', 2)).toThrowError(
+        expect.objectContaining({ failure: 'too_many_columns' }),
+      );
+    });
+  });
+
+  test('skips a run of empty lines without allocating a record for each', () => {
+    expect(records(`a,b\n${'\n'.repeat(100_000)}c,d`)).toEqual([
+      { line: 1, fields: ['a', 'b'] },
+      { line: 100_002, fields: ['c', 'd'] },
+    ]);
   });
 });
