@@ -12,7 +12,7 @@ import {
   type ReportId,
   type ResultFileKind,
 } from '@gbd/db';
-import { type BlobStore, getObject, putResultFile } from '@gbd/storage';
+import { type BlobStore, getObject, isBlobStoreError, putResultFile } from '@gbd/storage';
 import { type ChildCommand, type ChildOutcome, type RunningChild, spawnChild } from './child.ts';
 import { chartFileName, RESULT_FILE_NAMES } from './contract/layout.ts';
 import { buildRunManifest, type ChildResult } from './contract/messages.ts';
@@ -191,12 +191,14 @@ export async function readChildEnding(
 // Recording a verdict
 // -------------------------------------------------------------
 
+type SucceededVerdict = Extract<Verdict, { kind: 'succeeded' }>;
+
 /** A verdict with everything its `markAttempt*` write needs attached, so `recordVerdict` never
  * has to look anything up itself.
  */
-export type RecordableVerdict = Exclude<Verdict, { kind: 'unowned' }> & {
-  resultFiles?: readonly ResultFileRecord[];
-};
+export type RecordableVerdict =
+  | (SucceededVerdict & { resultFiles: readonly ResultFileRecord[] })
+  | Exclude<Verdict, { kind: 'succeeded' | 'unowned' }>;
 
 /** Write a verdict this worker already computed. Bounded transient retry, per principle 4 in
  * [`failures.ts`](./failures.ts): this is one of the writes a claimed attempt cannot afford to
@@ -223,7 +225,7 @@ function writeVerdictOnce(
     case 'succeeded':
       return markAttemptSucceeded(dependencies.db, attemptId, dependencies.workerId, {
         result: verdict.result,
-        resultFiles: verdict.resultFiles ?? [],
+        resultFiles: verdict.resultFiles,
       });
     case 'failed':
       return markAttemptFailed(dependencies.db, attemptId, dependencies.workerId, {
@@ -239,23 +241,30 @@ function writeVerdictOnce(
 // Settling an attempt
 // -------------------------------------------------------------
 
+/** A verdict this worker owns and still owes the database, and how far delivering it got.
+ *
+ * Settling is two steps that can each fail independently — storing the result files, then
+ * writing the verdict — so this says which one is left. `worker.ts` holds it on the in-flight
+ * record and calls `resumeSettle` on a later tick.
+ */
+export type PendingVerdict =
+  /** The child succeeded and its result files are not stored yet. */
+  | { stage: 'upload'; verdict: SucceededVerdict; contents: ReadonlyMap<string, Uint8Array> }
+  /** Every file is stored; only the database write is left. */
+  | { stage: 'record'; verdict: RecordableVerdict };
+
 export type SettleOutcome =
   | { kind: 'recorded' }
   | { kind: 'lost' }
-  /** `recordVerdict` could not be written even after its own retries. The child is already dead
-   * and the run directory already gone, so nothing is lost by trying again — `worker.ts` keeps
-   * this verdict on the in-flight record and re-attempts the write on a later supervision tick.
+  /** A step could not be completed even after its own retries. The child is already dead and the
+   * run directory already gone, so nothing is lost by trying again.
    */
-  | { kind: 'parked'; verdict: RecordableVerdict };
+  | { kind: 'parked'; pending: PendingVerdict };
 
-/** Classify how the child ended, upload whatever a `succeeded` verdict produced, and write the
- * verdict. The run directory is removed in a `finally`, so it is gone whether the write landed,
- * lost the race, or parked.
+/** Classify how the child ended, then deliver that verdict as far as it gets.
  *
- * Uploads happen before the write, so a write that then fails to land — permanently, or parked
- * and never retried successfully — orphans the objects it already stored. Acceptable per
- * "no automated data cleanup" in REQUIREMENTS.md, and not worth a second retry layer here: the
- * blob store SDK already retries its own transient failures.
+ * The run directory is removed in a `finally`, so it is gone whether the verdict
+ * landed, lost the race, or parked.
  */
 export async function settleAttempt(
   dependencies: AttemptDependencies,
@@ -266,48 +275,85 @@ export async function settleAttempt(
     const verdict = classifyVerdict(ending);
     if (verdict.kind === 'unowned') return { kind: 'lost' };
 
-    const recordable = await uploadResultFilesIfSucceeded(
-      dependencies.store,
+    return await resumeSettle(
+      dependencies,
       prepared,
-      verdict,
-      ending,
+      verdict.kind === 'succeeded'
+        ? { stage: 'upload', verdict, contents: ending.resultFileContents }
+        : { stage: 'record', verdict },
     );
-    try {
-      const won = await recordVerdict(dependencies, prepared.attemptId, recordable);
-      return won ? { kind: 'recorded' } : { kind: 'lost' };
-    } catch (error) {
-      console.error(
-        `Could not record the verdict for attempt ${prepared.attemptId}; parking it for the ` +
-          'next supervision tick to retry',
-        { verdict: recordable.kind, error },
-      );
-      return { kind: 'parked', verdict: recordable };
-    }
   } finally {
     await removeRunDirectory(prepared.runDirectory);
   }
 }
 
-async function uploadResultFilesIfSucceeded(
+/** Carry a parked verdict the rest of the way, from whichever step it stopped at.
+ *
+ * `settleAttempt` is the first of these; every later one comes from a supervision tick. Classifying
+ * happens only in `settleAttempt`, which is what makes an `unowned` verdict unrepresentable here.
+ */
+export async function resumeSettle(
+  dependencies: AttemptDependencies,
+  prepared: PreparedAttempt,
+  pending: PendingVerdict,
+): Promise<SettleOutcome> {
+  const stored =
+    pending.stage === 'upload'
+      ? await storeResultFiles(dependencies.store, prepared, pending)
+      : pending;
+  if (stored.stage === 'upload') return { kind: 'parked', pending: stored };
+
+  try {
+    const won = await recordVerdict(dependencies, prepared.attemptId, stored.verdict);
+    return won ? { kind: 'recorded' } : { kind: 'lost' };
+  } catch (error) {
+    console.error(
+      `Could not record the verdict for attempt ${prepared.attemptId}; parking it for the ` +
+        'next supervision tick to retry',
+      { verdict: stored.verdict.kind, error },
+    );
+    return { kind: 'parked', pending: stored };
+  }
+}
+
+/** Store every file the child declared, advancing the verdict to `record`. A blob store that could
+ * not be reached hands back the same `upload` verdict for the caller to park.
+ *
+ * A resume re-uploads every file rather than tracking which ones landed. The failure that matters
+ * is an unreachable store, where none of them did; and the objects a partial success orphans are
+ * a report of a few hundred KB, well under what the bookkeeping would cost to read. Uploads also
+ * precede the write, so a verdict that never lands orphans the same way. Both are acceptable under
+ * "no automated data cleanup" in REQUIREMENTS.md.
+ */
+async function storeResultFiles(
   store: BlobStore,
   prepared: PreparedAttempt,
-  verdict: Exclude<Verdict, { kind: 'unowned' }>,
-  ending: ReadEnding,
-): Promise<RecordableVerdict> {
-  if (verdict.kind !== 'succeeded') return verdict;
-
-  const resultFiles = await Promise.all(
-    declaredResultFiles(verdict.result).map((file) => {
-      const body = ending.resultFileContents.get(file.fileName);
-      if (body === undefined) {
-        // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
-        // declared file's bytes were read alongside it.
-        throw new Error(`settleAttempt: no bytes read for declared file ${file.fileName}`);
-      }
-      return uploadResultFile(store, prepared, file, body);
-    }),
-  );
-  return { ...verdict, resultFiles };
+  pending: Extract<PendingVerdict, { stage: 'upload' }>,
+): Promise<PendingVerdict> {
+  try {
+    const resultFiles = await Promise.all(
+      declaredResultFiles(pending.verdict.result).map((file) => {
+        const body = pending.contents.get(file.fileName);
+        if (body === undefined) {
+          // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
+          // declared file's bytes were read alongside it.
+          throw new Error(`settleAttempt: no bytes read for declared file ${file.fileName}`);
+        }
+        return uploadResultFile(store, prepared, file, body);
+      }),
+    );
+    return { stage: 'record', verdict: { ...pending.verdict, resultFiles } };
+  } catch (error) {
+    // Only the store being unreachable parks. Anything else is a bug in this file — the missing
+    // bytes above — and parking it would retry a deterministic failure on every later tick.
+    if (!isBlobStoreError(error)) throw error;
+    console.error(
+      `Could not store the result files for attempt ${prepared.attemptId}; parking the verdict ` +
+        'for the next supervision tick to retry',
+      { error },
+    );
+    return pending;
+  }
 }
 
 async function uploadResultFile(

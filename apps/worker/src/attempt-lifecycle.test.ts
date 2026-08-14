@@ -1,20 +1,30 @@
-/** Nothing here is mocked — see [`testing/fake-child.ts`](./testing/fake-child.ts) for why — and
+/** A child is never mocked — see [`testing/fake-child.ts`](./testing/fake-child.ts) for why — and
  * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
- * for the decision `supervise()` will make once the loop that reads a `Clock` lands.
+ * for the decision `supervise()` will make once the loop that reads a `Clock` lands. Where a store
+ * or a database has to fail, it is a real client aimed at a port nothing listens on
+ * (`unreachableBlobStore`/`unreachableDatabase`) — a genuine failure of the same shape production
+ * would see, not a mock of one.
  */
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { shutdownDatabase } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
-import { deletePrefix, getObject } from '@gbd/storage';
+import { unreachableDatabase } from '@gbd/db/testing';
+import { type BlobStore, deletePrefix, getObject, shutdownBlobStore } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownStore } from '@gbd/storage/env';
+import { unreachableBlobStore } from '@gbd/storage/testing';
 import { afterAll, describe, expect, test } from 'vitest';
 import {
   type AttemptDependencies,
   failClaimedAttempt,
   MissingInputFileError,
+  type PendingVerdict,
+  type PreparedAttempt,
+  type ReadEnding,
   readChildEnding,
   recordVerdict,
+  resumeSettle,
   settleAttempt,
   startAttempt,
 } from './attempt-lifecycle.ts';
@@ -113,6 +123,125 @@ describe('a successful attempt, end to end', () => {
         expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
       }
       expect(resultFiles.find((row) => row.kind === 'chart')?.chartKey).toBe('total_spend');
+    });
+  });
+});
+
+/** The shape shared by every "parks instead of losing the verdict" test below, whichever
+ * dependency turned out to be unreachable: settle against `broken`, land on `stage`, retire the
+ * broken dependency, then resume against `working` and land on `recorded`.
+ */
+async function expectParkThenResume(
+  fixture: AttemptFixture,
+  working: AttemptDependencies,
+  broken: AttemptDependencies,
+  prepared: PreparedAttempt,
+  ending: ReadEnding,
+  stage: PendingVerdict['stage'],
+  cleanupBroken: () => void | Promise<void>,
+): Promise<void> {
+  const parked = await settleAttempt(broken, prepared, ending);
+  await cleanupBroken();
+
+  expect(parked).toMatchObject({ kind: 'parked', pending: { stage } });
+  expect((await readAttempt(fixture.attemptId)).status).toBe('processing');
+  expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+  // The bytes outlive the run directory, which is what makes the resume below possible.
+  expect(existsSync(prepared.runDirectory)).toBe(false);
+
+  if (parked.kind !== 'parked') throw new Error('expected a parked verdict');
+  const resumed = await resumeSettle(working, prepared, parked.pending);
+
+  expect(resumed).toEqual({ kind: 'recorded' });
+  expect((await readAttempt(fixture.attemptId)).status).toBe('succeeded');
+  const resultFiles = await readResultFiles(fixture.attemptId);
+  expect(resultFiles).toHaveLength(3);
+  for (const row of resultFiles) {
+    const body = await getObject(BLOB_STORE, row.storageKey);
+    expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileNameFor(row)));
+  }
+}
+
+describe('a blob store that cannot be reached', () => {
+  // The limits are cut to milliseconds because the production ones would spend 45 seconds per
+  // upload here.
+  function unreachableStore(): BlobStore {
+    return unreachableBlobStore({
+      bucket: BLOB_STORE.bucket,
+      limits: {
+        connectionTimeoutMs: 100,
+        attemptTimeoutMs: 200,
+        retryDelayBaseMs: 1,
+        requestDeadlineMs: 1_000,
+      },
+    });
+  }
+
+  test('parks the verdict at the upload stage, and a resume lands it once the store is back', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+      const working = dependencies(fixture, workerId, steps);
+      const broken = { ...working, store: unreachableStore() };
+
+      const prepared = await startAttempt(working, fixture.attemptId);
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+
+      await expectParkThenResume(fixture, working, broken, prepared, ending, 'upload', () =>
+        shutdownBlobStore(broken.store),
+      );
+    });
+  });
+
+  test('does not park a verdict that has nothing to upload', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'failure', reason: 'upstream_api', detail: 'the AI provider returned a 503' },
+        { step: 'exit', code: 1 },
+      ];
+      const broken = { ...dependencies(fixture, workerId, steps), store: unreachableStore() };
+
+      const prepared = await startAttempt(
+        dependencies(fixture, workerId, steps),
+        fixture.attemptId,
+      );
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+      const settled = await settleAttempt(broken, prepared, ending);
+      shutdownBlobStore(broken.store);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAttempt(fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'upstream_api',
+      });
+    });
+  });
+});
+
+describe('a database that cannot be reached', () => {
+  test('parks the verdict at the record stage, and a resume lands it once the database is back', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'result', charts: ['total_spend'] },
+        { step: 'exit', code: 0 },
+      ];
+      const working = dependencies(fixture, workerId, steps);
+      const unreachable = unreachableDatabase();
+      const broken = { ...working, db: unreachable };
+
+      const prepared = await startAttempt(working, fixture.attemptId);
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+
+      // The store is fine, so the upload stage clears; only the guarded write is left, and that's
+      // what the unreachable database parks.
+      await expectParkThenResume(fixture, working, broken, prepared, ending, 'record', () =>
+        shutdownDatabase(unreachable),
+      );
     });
   });
 });
