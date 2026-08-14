@@ -3,10 +3,7 @@
  * thing.
  *
  * `unreachableDatabase`/`unreachableBlobStore` (`@gbd/db/testing`, `@gbd/storage/testing`) cover a
- * service that never worked. This covers one that worked, broke, and came back — the shape every
- * fencing test and every parked-verdict recovery test needs, and that a swapped-in dependency
- * object can only imitate. `breakableDatabase` and `breakableBlobStore` get there by different
- * mechanisms — see each function for why.
+ * service that never worked. This covers one that worked, broke, and came back.
  */
 
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net';
@@ -120,11 +117,7 @@ export async function breakableDatabase(): Promise<Breakable<Kysely<Database>>> 
   };
 }
 
-/** Cuts the SDK's real deadlines down to the low hundreds of milliseconds. Without this, every
- * parked-upload assertion against a broken store would wait out `DEFAULT_LIMITS`' real 45-second
- * `requestDeadlineMs` (`packages/storage/src/client.ts`) before it could observe the park.
- */
-const FAST_LIMITS = {
+const FAST_STORAGE_LIMITS = {
   connectionTimeoutMs: 100,
   attemptTimeoutMs: 200,
   retryDelayBaseMs: 1,
@@ -132,24 +125,18 @@ const FAST_LIMITS = {
 };
 
 /** Port 1 is reserved and unused, so a connection to it is refused immediately rather than
- * hanging — the same trick `unreachableBlobStore` uses, just made toggleable on one long-lived
- * client instead of baked into how it's built.
- */
+ * hanging. */
 const NOTHING_LISTENS_HERE = { hostname: '127.0.0.1', port: 1 };
 
 /** A `BlobStore` whose requests can be redirected to a dead address and back, so `break()`
  * produces a genuine `BlobStoreError` and `restore()` lets the next request reach the real
  * test store (`S3_ENDPOINT`) again — the same client throughout.
  *
- * **Not a `node:net` proxy**, unlike `breakableDatabase`. The local Supabase stack's Kong
- * gateway is started with `KONG_PORT_MAPS` pinned to its published port, so it normalizes
- * every request's forwarded port back to that value before Storage verifies the request's
- * SigV4 signature — a request signed for any other port fails `SignatureDoesNotMatch`
- * regardless of where it physically lands. A proxy listening on a different port is
- * therefore a non-starter here. Redirecting the connection *after* signing, via the SDK's
- * own `middlewareStack`, never changes what the client signed for, so the mismatch never
- * arises: `initializeBlobStore` still points at the real endpoint, and only the destination
- * of an already-signed request moves.
+ * **Not a `node:net` proxy**, unlike `breakableDatabase`: Kong normalizes every request's
+ * forwarded port back to its pinned `KONG_PORT_MAPS` value before Storage verifies the
+ * SigV4 signature, so a request signed for a proxy port always fails `SignatureDoesNotMatch`.
+ * Redirecting via the SDK's own `middlewareStack` instead moves the connection *after*
+ * signing, so what the client signed for never changes.
  */
 export async function breakableBlobStore(): Promise<Breakable<BlobStore>> {
   loadLocalEnv();
@@ -160,7 +147,7 @@ export async function breakableBlobStore(): Promise<Breakable<BlobStore>> {
     accessKeyId: requireEnv('S3_ACCESS_KEY_ID'),
     secretAccessKey: requireEnv('S3_SECRET_ACCESS_KEY'),
     bucket: requireEnv('S3_BUCKET'),
-    limits: FAST_LIMITS,
+    limits: FAST_STORAGE_LIMITS,
   });
 
   let broken = false;
