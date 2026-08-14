@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { DatabaseError, Pool } from 'pg';
+import { sql } from 'kysely';
+import { DatabaseError } from 'pg';
 import { describe, expect, test } from 'vitest';
+import { shutdownDatabase } from './client.ts';
 import {
   isPermanentDatabaseError,
   isTransientDatabaseError,
@@ -15,30 +17,20 @@ import {
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from './postgres-codes.ts';
 import { aDatabaseError, anUnreachableDatabaseError } from './testing/errors.ts';
+import { unreachableDatabase } from './testing/unreachable.ts';
 
-/** Nothing legitimately listens on port 1, and binding it needs root, so connecting is a reliable
- * way to make the driver fail the way an unreachable database does.
+/** `unreachableDatabase` aims a real pool at a port nothing listens on, which is a reliable way to
+ * make the driver fail the way a genuine outage does.
  */
-const CLOSED_PORT = 1;
-
 async function failToConnect(): Promise<unknown> {
-  const pool = new Pool({
-    host: '127.0.0.1',
-    port: CLOSED_PORT,
-    database: 'nothing',
-    user: 'nobody',
-    connectionTimeoutMillis: 2_000,
-  });
-  // A pool with no error handler takes the process down with it.
-  pool.on('error', () => {});
-
+  const db = unreachableDatabase();
   try {
-    await pool.query('select 1');
-    throw new Error(`Something answered on port ${CLOSED_PORT}`);
+    await sql`select 1`.execute(db);
+    throw new Error('Something answered on the unreachable database');
   } catch (cause) {
     return cause;
   } finally {
-    await pool.end().catch(() => {});
+    await shutdownDatabase(db);
   }
 }
 

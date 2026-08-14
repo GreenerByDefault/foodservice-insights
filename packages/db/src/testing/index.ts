@@ -18,3 +18,4 @@ export {
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';
 export { withRollback } from './transactions.ts';
+export { unreachableDatabase } from './unreachable.ts';
