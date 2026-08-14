@@ -16,6 +16,10 @@
     "workDirectory": "work",
     "directoriesCreatedByParent": ["input", "output", "output/files", "work"]
   },
+  "inputCsv": {
+    "columns": ["product", "date", "weight"],
+    "dateFormat": "YYYY-MM-DD"
+  },
   "resultFiles": {
     "pdf": "report.pdf",
     "xlsx": "report.xlsx",
