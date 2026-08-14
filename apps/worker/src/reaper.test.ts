@@ -29,7 +29,7 @@ function reapOptions(overrides: Partial<ReapOptions> = {}): ReapOptions {
   return {
     leaseExpiresAfterMs: LEASE_EXPIRES_AFTER_MS,
     claimedCeilingMs: CLAIMED_CEILING_MS,
-    limit: 10,
+    maxAttemptsPerSweep: 10,
     ...overrides,
   };
 }
@@ -156,7 +156,10 @@ describe('reapExpiredAttempts', () => {
       const reaped = await reapExpiredAttempts(
         transaction,
         aWorkerId(),
-        reapOptions({ limit: 1, candidateReports: [oldest.reportId, newer.reportId] }),
+        reapOptions({
+          maxAttemptsPerSweep: 1,
+          candidateReports: [oldest.reportId, newer.reportId],
+        }),
       );
       return { reaped, oldestId: oldest.attemptId, newerId: newer.attemptId };
     });

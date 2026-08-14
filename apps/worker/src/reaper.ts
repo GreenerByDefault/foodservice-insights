@@ -19,15 +19,32 @@ import type {
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
 
 export type ReapOptions = {
-  /** A lease this old with nobody renewing it means the parent that claimed the attempt is gone —
-   * the same `k` the parent fences itself against, so one constant has two readers. */
+  /** How long the lease can go unrenewed before this reaper treats the owning parent as gone.
+   *
+   * Measured from the last renewal, not from when the attempt was first claimed — see
+   * `claimedCeilingMs` for that.
+   *
+   * This is deliberately the same value the parent itself will fence on once it can no longer
+   * renew. However, until the supervision loop lands, only the reaper uses it. */
   leaseExpiresAfterMs: number;
-  /** Catches the opposite failure: a parent that renews forever but never finishes. Depends on
-   * nothing parent-local, unlike the lease. */
+
+  /** How long an attempt can sit `processing` since it was claimed before this reaper gives up on
+   * it, independent of renewals.
+   *
+   * `leaseExpiresAfterMs` can't catch a parent that renews forever but never finishes —
+   * renewing is exactly what keeps it looking alive. This ceiling closes that gap: it fires on
+   * elapsed time alone, so a parent that never stops renewing still eventually trips this ceiling. */
   claimedCeilingMs: number;
-  /** Bounds one sweep to the oldest `limit` expired attempts, so one bad failover window
-   * converges oldest-first rather than fanning out into a mass mailing in a single pass. */
-  limit: number;
+
+  /** The most expired attempts one call to `reapExpiredAttempts` will end.
+   *
+   * Naively, a botched deploy or an outage that takes down every worker at once could leave
+   * the whole fleet's in-flight attempts stuck `processing` together. Reaping all of them in
+   * one pass would fire off a burst of failure emails the moment the fleet comes back — one per
+   * attempt, and enough of them at once risks tripping the email provider's own rate limiting or
+   * abuse detection. So, this caps how many one call can send. */
+  maxAttemptsPerSweep: number;
+
   /** Narrows the sweep to these reports.
    *
    * **Test isolation only; production passes nothing.** Same reasoning as `ClaimOptions` in
@@ -39,7 +56,9 @@ export type ReapOptions = {
 
 /** Two independent predicates, either of which condemns a `processing` attempt: a lease nobody is
  * renewing (the container died), or a claim held past the ceiling (the parent renews forever but
- * never finishes). Shared between the candidate subquery and the `UPDATE`'s own `WHERE`, so the
+ * never finishes).
+ *
+ * Shared between the candidate subquery and the `UPDATE`'s own `WHERE`, so the
  * two copies the query needs cannot drift apart — see `reapExpiredAttempts` for why both copies
  * have to exist at all.
  */
@@ -65,8 +84,10 @@ function expiredCandidates(
     .select('id')
     .where('status', '=', 'processing')
     .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
+    // Oldest-renewed first, so a sweep capped by `maxAttemptsPerSweep` converges on the
+    // longest-abandoned attempts rather than an arbitrary subset.
     .orderBy('leaseRenewedAt')
-    .limit(options.limit);
+    .limit(options.maxAttemptsPerSweep);
 
   return options.candidateReports === undefined
     ? candidates
