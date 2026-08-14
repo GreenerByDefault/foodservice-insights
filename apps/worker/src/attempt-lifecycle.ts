@@ -266,7 +266,12 @@ export async function settleAttempt(
     const verdict = classifyVerdict(ending);
     if (verdict.kind === 'unowned') return { kind: 'lost' };
 
-    const recordable = await uploadResultFilesIfSucceeded(dependencies, prepared, verdict, ending);
+    const recordable = await uploadResultFilesIfSucceeded(
+      dependencies.store,
+      prepared,
+      verdict,
+      ending,
+    );
     try {
       const won = await recordVerdict(dependencies, prepared.attemptId, recordable);
       return won ? { kind: 'recorded' } : { kind: 'lost' };
@@ -284,7 +289,7 @@ export async function settleAttempt(
 }
 
 async function uploadResultFilesIfSucceeded(
-  dependencies: AttemptDependencies,
+  store: BlobStore,
   prepared: PreparedAttempt,
   verdict: Exclude<Verdict, { kind: 'unowned' }>,
   ending: ReadEnding,
@@ -292,29 +297,28 @@ async function uploadResultFilesIfSucceeded(
   if (verdict.kind !== 'succeeded') return verdict;
 
   const resultFiles = await Promise.all(
-    declaredResultFiles(verdict.result).map((file) =>
-      uploadResultFile(dependencies, prepared, file, ending.resultFileContents),
-    ),
+    declaredResultFiles(verdict.result).map((file) => {
+      const body = ending.resultFileContents.get(file.fileName);
+      if (body === undefined) {
+        // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
+        // declared file's bytes were read alongside it.
+        throw new Error(`settleAttempt: no bytes read for declared file ${file.fileName}`);
+      }
+      return uploadResultFile(store, prepared, file, body);
+    }),
   );
   return { ...verdict, resultFiles };
 }
 
 async function uploadResultFile(
-  dependencies: AttemptDependencies,
+  store: BlobStore,
   prepared: PreparedAttempt,
   file: DeclaredResultFile,
-  contents: ReadonlyMap<string, Uint8Array>,
+  body: Uint8Array,
 ): Promise<ResultFileRecord> {
-  const body = contents.get(file.fileName);
-  if (body === undefined) {
-    // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
-    // declared file's bytes were read alongside it.
-    throw new Error(`settleAttempt: no bytes read for declared file ${file.fileName}`);
-  }
-
   const id = newResultFileId();
   const stored = await putResultFile(
-    dependencies.store,
+    store,
     {
       organizationId: prepared.organizationId,
       reportId: prepared.reportId,
@@ -333,10 +337,8 @@ async function uploadResultFile(
 // Failing a claimed attempt outright
 // -------------------------------------------------------------
 
-/** What to record when processing a claimed attempt throws before a verdict was ever classified —
- * `startAttempt` failing, most likely. A `MissingInputFileError` is deterministic, so it is
- * recorded directly rather than run through `classifyAttemptFailure`, which would otherwise see
- * an ordinary `Error` and only be able to guess at `unknown`.
+/** What to record when processing a claimed attempt throws before a verdict is ever classified —
+ * `startAttempt` failing, most likely.
  */
 export async function failClaimedAttempt(
   dependencies: AttemptDependencies,
@@ -344,6 +346,8 @@ export async function failClaimedAttempt(
   error: unknown,
 ): Promise<void> {
   const failure =
+    // Deterministic, so recorded directly instead of through `classifyAttemptFailure`, which
+    // would otherwise see only an ordinary `Error` and have to guess at `unknown`.
     error instanceof MissingInputFileError
       ? { reason: 'infrastructure' as const, detail: error.message }
       : classifyAttemptFailure(error);
