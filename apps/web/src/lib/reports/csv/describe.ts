@@ -1,5 +1,5 @@
 /** Every sentence a customer reading a CSV rejection sees. Two doors in, both taking data rather
- * than a file: `describeUnusable` for a file `validate.ts` refused before it could read rows,
+ * than a file: `describeUnreadableFile` for a file `validate.ts` refused before it could read rows,
  * `describeProblems` for the rows and columns that failed once it could.
  *
  * `grep -n "[A-Z][a-z]* .*\." csv/*.ts` should find prose only in this file — everywhere else in
@@ -25,21 +25,21 @@ import type { CsvParseError } from './parse.ts';
 import type { DateExamples, FileProblem, ProblemGroup, Problems, RowProblem } from './problems.ts';
 
 /** Every way `validate.ts` can refuse a file before a single row of it is read. */
-export type Unusable =
+export type UnreadableFile =
   | { kind: 'decode'; problem: DecodeProblem }
   | { kind: 'opening'; problem: OpeningProblem }
   | { kind: 'parse'; error: CsvParseError }
   | { kind: 'no-data-rows' }
   | { kind: 'too-many-rows' };
 
-export function describeUnusable(unusable: Unusable): RejectedUploadRecord {
-  switch (unusable.kind) {
+export function describeUnreadableFile(file: UnreadableFile): RejectedUploadRecord {
+  switch (file.kind) {
     case 'decode':
-      return decodeRejection(unusable.problem);
+      return decodeRejection(file.problem);
     case 'opening':
-      return openingRejection(unusable.problem);
+      return openingRejection(file.problem);
     case 'parse':
-      return unparseable(unusable.error);
+      return unparseable(file.error);
     case 'no-data-rows':
       return { reason: 'empty', message: 'That file has a header but no rows under it.' };
     case 'too-many-rows':
@@ -284,16 +284,16 @@ function quote(raw: string | undefined): string | undefined {
 }
 
 function describeFileProblem(problem: FileProblem): string {
-  return describeOrderProblem(problem.problem, problem.examples);
+  return describeOrderProblem(problem.issue, problem.examples);
 }
 
 function describeOrderProblem(
-  problem: 'contradictory' | 'unresolvable',
+  issue: 'contradictory' | 'unresolvable',
   examples: DateExamples,
 ): string {
   const advice = 'Re-save the date column as YYYY-MM-DD and upload again.';
 
-  if (problem === 'contradictory') {
+  if (issue === 'contradictory') {
     const dayFirst = examples.get('day-first');
     const monthFirst = examples.get('month-first');
     return `Your dates are written both ways: row ${dayFirst?.line} has ${quote(dayFirst?.raw ?? '')}, which can only be day first, and row ${monthFirst?.line} has ${quote(monthFirst?.raw ?? '')}, which can only be month first. ${advice}`;

@@ -6,16 +6,16 @@ import {
   MAX_QUOTED_CHARS,
   MAX_ROW_RANGES_REPORTED,
 } from '../limits.ts';
-import { describeProblems, describeUnusable } from './describe.ts';
+import { describeProblems, describeUnreadableFile } from './describe.ts';
 import { CsvParseError } from './parse.ts';
 import {
   type FileProblem,
-  newProblemLog,
+  newProblemTally,
   noteFile,
   noteRow,
-  type ProblemLog,
+  type ProblemTally,
   type RowProblem,
-  sealed,
+  toProblems,
 } from './problems.ts';
 
 type Finding = { line: number; problem: RowProblem };
@@ -39,20 +39,21 @@ const run = (start: number, end: number): number[] =>
 const column = (clause: string, ...raws: readonly string[]): Finding[] =>
   raws.map((raw, index) => ({ line: index + 2, problem: cell({ raw, clause }) }));
 
-function logOf(...findings: readonly Finding[][]): ProblemLog {
-  const log = newProblemLog();
-  for (const group of findings) for (const { line, problem } of group) noteRow(log, line, problem);
-  return log;
+function logOf(...findings: readonly Finding[][]): ProblemTally {
+  const tally = newProblemTally();
+  for (const group of findings)
+    for (const { line, problem } of group) noteRow(tally, line, problem);
+  return tally;
 }
 
-function fileLogOf(problem: FileProblem): ProblemLog {
-  const log = newProblemLog();
-  noteFile(log, problem);
-  return log;
+function fileLogOf(problem: FileProblem): ProblemTally {
+  const tally = newProblemTally();
+  noteFile(tally, problem);
+  return tally;
 }
 
 const rejectionOf = (...findings: readonly Finding[][]) =>
-  describeProblems(sealed(logOf(...findings)));
+  describeProblems(toProblems(logOf(...findings)));
 const problemsOf = (...findings: readonly Finding[][]) => rejectionOf(...findings).problems ?? [];
 
 /** Throws unless the findings resolve to exactly one problem line — most of the tests below are
@@ -340,7 +341,7 @@ describe('describeProblems', () => {
     test('contradictory: shows both rows and both readings', () => {
       const problem: FileProblem = {
         kind: 'date-order',
-        problem: 'contradictory',
+        issue: 'contradictory',
         examples: new Map([
           [
             'day-first',
@@ -361,7 +362,7 @@ describe('describeProblems', () => {
         ]),
       };
 
-      expect(describeProblems(sealed(fileLogOf(problem))).problems).toEqual([
+      expect(describeProblems(toProblems(fileLogOf(problem))).problems).toEqual([
         'Your dates are written both ways: row 2 has "13/04/2026", which can only be day first, ' +
           'and row 3 has "04/13/2026", which can only be month first. Re-save the date column as ' +
           'YYYY-MM-DD and upload again.',
@@ -371,7 +372,7 @@ describe('describeProblems', () => {
     test('unresolvable: names both readings for the ambiguous value', () => {
       const problem: FileProblem = {
         kind: 'date-order',
-        problem: 'unresolvable',
+        issue: 'unresolvable',
         examples: new Map([
           [
             'ambiguous',
@@ -384,7 +385,7 @@ describe('describeProblems', () => {
         ]),
       };
 
-      expect(describeProblems(sealed(fileLogOf(problem))).problems).toEqual([
+      expect(describeProblems(toProblems(fileLogOf(problem))).problems).toEqual([
         'Every date in that file could be read two ways — row 2\'s "03/04/2026" is 2026-04-03 or ' +
           '2026-03-04. Re-save the date column as YYYY-MM-DD and upload again.',
       ]);
@@ -393,7 +394,7 @@ describe('describeProblems', () => {
     test('unresolvable: falls back to "either date" when the example is not itself numeric', () => {
       const problem: FileProblem = {
         kind: 'date-order',
-        problem: 'unresolvable',
+        issue: 'unresolvable',
         examples: new Map([
           [
             'ambiguous',
@@ -402,12 +403,14 @@ describe('describeProblems', () => {
         ]),
       };
 
-      expect(describeProblems(sealed(fileLogOf(problem))).problems?.[0]).toContain('either date');
+      expect(describeProblems(toProblems(fileLogOf(problem))).problems?.[0]).toContain(
+        'either date',
+      );
     });
   });
 });
 
-describe('describeUnusable', () => {
+describe('describeUnreadableFile', () => {
   test.for([
     [
       'an xlsx signature',
@@ -562,8 +565,8 @@ describe('describeUnusable', () => {
       { kind: 'no-data-rows' },
       { reason: 'empty', message: 'That file has a header but no rows under it.' },
     ],
-  ] as const)('%s', ([, unusable, expected]) => {
+  ] as const)('%s', ([, file, expected]) => {
     // biome-ignore lint/suspicious/noExplicitAny: the table's inline literals don't infer as the discriminated union.
-    expect(describeUnusable(unusable as any)).toEqual(expected);
+    expect(describeUnreadableFile(file as any)).toEqual(expected);
   });
 });

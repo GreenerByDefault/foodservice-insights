@@ -46,7 +46,7 @@ export type DateExamples = ReadonlyMap<DateOrder | 'ambiguous', DateExample>;
 /** A problem with the file as a whole rather than any one row. */
 export type FileProblem = {
   kind: 'date-order';
-  problem: 'contradictory' | 'unresolvable';
+  issue: 'contradictory' | 'unresolvable';
   examples: DateExamples;
 };
 
@@ -64,32 +64,32 @@ type MutableGroup = {
  * few dozen values at most, each holding a handful of ranges. A rule that interpolated a value
  * into its key would make this grow with the file.
  */
-export type ProblemLog = {
+export type ProblemTally = {
   groups: Map<string, MutableGroup>;
   file: FileProblem[];
   count: number;
 };
 
-export function newProblemLog(): ProblemLog {
+export function newProblemTally(): ProblemTally {
   return { groups: new Map(), file: [], count: 0 };
 }
 
 /** Add a row to the problem it failed, which is created on the first row to reach it. */
-export function noteRow(log: ProblemLog, line: number, problem: RowProblem): void {
-  log.count += 1;
+export function noteRow(tally: ProblemTally, line: number, problem: RowProblem): void {
+  tally.count += 1;
 
   const key = groupKey(problem);
-  const existing = log.groups.get(key);
+  const existing = tally.groups.get(key);
   const group = existing ?? { problem, ranges: [], rowCount: 0, examples: [] };
-  if (!existing) log.groups.set(key, group);
+  if (!existing) tally.groups.set(key, group);
 
   extendRows(group, line);
   rememberValue(group, rawOf(problem));
 }
 
-export function noteFile(log: ProblemLog, problem: FileProblem): void {
-  log.count += 1;
-  log.file.push(problem);
+export function noteFile(tally: ProblemTally, problem: FileProblem): void {
+  tally.count += 1;
+  tally.file.push(problem);
 }
 
 /** Bounded by construction, which is what makes `groups` safe to leave uncapped: `clause` is
@@ -166,6 +166,6 @@ export type Problems = {
   readonly file: readonly FileProblem[];
 };
 
-export function sealed(log: ProblemLog): Problems {
-  return { count: log.count, groups: [...log.groups.values()], file: log.file };
+export function toProblems(tally: ProblemTally): Problems {
+  return { count: tally.count, groups: [...tally.groups.values()], file: tally.file };
 }
