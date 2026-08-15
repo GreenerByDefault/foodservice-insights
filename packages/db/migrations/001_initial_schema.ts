@@ -667,9 +667,9 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
 
   await sql`
     COMMENT ON COLUMN analysis_attempt.notification_claimed_at IS
-      'Mutual exclusion between workers sending the same notification, and — via expiry — retry
-       backoff for a send that failed. A worker claims a row before sending; leaving the claim in
-       place on failure is what makes the next sweep retry instead of losing the email.'
+      'Set by a worker before it sends the notification email, so a second worker cannot claim the
+       same row. Left in place if the send fails, so the row stays claimed until it expires — that
+       expiry is what lets a later sweep retry the send instead of the claim silently losing it.'
   `.execute(database);
 
   await sql`
