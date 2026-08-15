@@ -5,9 +5,6 @@
  *
  * Every request this package makes is wrapped so that its failures leave here under this one type,
  * which is what lets a caller tell an outage apart from a bug in its own code with an `instanceof`.
- * The alternative would be checking each transport's error shapes at every call site, and there is
- * no one shape to check: a service that replies 4xx, a socket that never opens, and an
- * `AbortSignal` firing all arrive differently, and only the transport knows all three.
  *
  * Whatever the transport raised is kept as `cause`, which is the only thing that says why.
  */

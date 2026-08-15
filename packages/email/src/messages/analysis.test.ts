@@ -1,7 +1,7 @@
 import type { AnalysisFailureReason, ResultFileId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
+import { SAMPLE_ORGANIZATION_ID, SAMPLE_REPORT_ID } from '../testing/fixtures.ts';
 import { recordingEmailer } from '../testing/recording.ts';
-import { SAMPLE_ORGANIZATION_ID, SAMPLE_REPORT_ID } from '../testing/samples.ts';
 import { renderAnalysisFailed, renderAnalysisSucceeded } from './analysis.ts';
 import { renderText } from './layout.ts';
 

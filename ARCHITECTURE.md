@@ -281,10 +281,9 @@ Refer to [`packages/storage/README.md`](packages/storage/README.md) for the priv
 
 ## Email
 
-We send email as HTTP requests using emails generated in [`packages/email`](packages/email).
-Using HTTP avoids us needing to implement SMTP or add a library. Generating emails
-programatically gives the benefits of config as code and reduces vendor lock-in. Thanks to this
-design, we can easily swap in two local mail providers to faciliate testing and local development.
+We send email as HTTP requests to a provider, using emails generated in
+[`packages/email`](packages/email) rather than a template stored with the provider. That keeps
+templates in version control and swappable across local mail catchers and providers alike.
 
 **Open:** decide which email provider, such as SendGrid.
 
