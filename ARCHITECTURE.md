@@ -31,7 +31,7 @@ keep settled decisions settled — read them before proposing a change.
 | End-to-end tests | Playwright |
 | Edge / DDoS | Cloudflare |
 | Hosting | **Open:** Railway vs Render vs DigitalOcean |
-| Email | **Open:** GBD has no existing provider; we need to propose one with reasonable cost and reliability. Connect For Animals uses SendGrid. |
+| Email | `packages/email`, over a provider's HTTP API. **Open:** GBD has no existing provider; we need to propose one with reasonable cost and reliability. Connect For Animals uses SendGrid. |
 
 ## Components
 
@@ -39,7 +39,7 @@ keep settled decisions settled — read them before proposing a change.
 | --- | --- | --- |
 | `apps/web` | TypeScript | Frontend, backend routes, upload validation, file links |
 | Worker parent | TypeScript | Queue claiming, child process lifecycle, DB and blob store writes, email |
-| `packages/*` | TypeScript | Shared database, storage, and domain code |
+| `packages/*` | TypeScript | Shared database, storage, email, and domain code |
 | `python/worker_child` | Python | One analysis run, via `gbd_foodservice_insights` |
 | `python/gbd_foodservice_insights` | Python | The AI analysis library |
 | `python/gbd_foodservice_insights_lab` | Python | Data-science experiments. Ships nothing |
@@ -278,6 +278,21 @@ back, but a migration cannot — once it has run, fix forward rather than revert
 ## Blob store
 
 Refer to [`packages/storage/README.md`](packages/storage/README.md) for the private bucket's layout and code.
+
+## Email
+
+Both the web app and the worker send email, so it lives in
+[`packages/email/README.md`](packages/email/README.md). Two consequences reach the rest of the
+system:
+
+- **A caller names the event, not the email.** Copy, layout, recipients, and the provider all change
+  without touching `apps/web` or `apps/worker`.
+- **A send that fails is the caller's to weigh.** Delivery is best effort per
+  [`REQUIREMENTS.md`](REQUIREMENTS.md#user-email), and nothing retries on a sender's behalf.
+
+Sign-in codes and email-change confirmations are Supabase Auth's, not ours. Why the transport seam
+is HTTP-shaped rather than SMTP, and what choosing a provider costs, is in
+[`provider.ts`](packages/email/src/transports/provider.ts).
 
 ## File links
 

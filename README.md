@@ -23,6 +23,7 @@ Everything above that heading is common to both.
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`apps/web/README.md`](apps/web/README.md) | The web app's design |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
+| [`packages/email/README.md`](packages/email/README.md) | The emails we send, and reading them locally |
 | [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract |
 
 ## Repo layout
@@ -32,6 +33,7 @@ apps/web/                               SvelteKit app
 apps/worker/                            Worker parent: queue, child processes, DB and blob writes
 packages/core/                          Shared TypeScript values and helpers
 packages/db/                            Kysely client, migrations, and generated types
+packages/email/                         The emails we send, and the transport under them
 packages/storage/                       Blob store client and object operations
 python/gbd_foodservice_insights/        The AI analysis library
 python/worker_child/                    One analysis run, spawned by the worker parent
