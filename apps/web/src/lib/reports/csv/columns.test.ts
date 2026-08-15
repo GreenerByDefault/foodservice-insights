@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { describeHeaderProblem, normalizeHeaderName, resolveHeader } from './columns.ts';
+import { normalizeHeaderName, resolveHeader } from './columns.ts';
 
 /** A header with `alias` standing in for whichever column it names. */
 function headerFor(alias: string, column: 'product' | 'date' | 'amount'): string[] {
@@ -75,19 +75,5 @@ describe('normalizeHeaderName', () => {
     ['product \t name', 'product name'],
   ] as const)('folds "%s" to "%s"', ([header, expected]) => {
     expect(normalizeHeaderName(header)).toBe(expected);
-  });
-});
-
-describe('describeHeaderProblem', () => {
-  test('lists the missing columns in words the form uses', () => {
-    expect(describeHeaderProblem({ kind: 'missing', columns: ['date', 'amount'] })).toBe(
-      'Your file needs a column for date ordered and amount ordered.',
-    );
-  });
-
-  test('names both candidates for an ambiguous column', () => {
-    expect(
-      describeHeaderProblem({ kind: 'ambiguous', column: 'product', headers: ['item', 'product'] }),
-    ).toContain('"item" and "product"');
   });
 });

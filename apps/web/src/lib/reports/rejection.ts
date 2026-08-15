@@ -10,6 +10,11 @@ export type RejectedUploadRecord = {
   reason: RejectedUploadReason;
   /** Safe to show the user. */
   message: string;
+  /** The things to go and fix, one line each, capped at `MAX_PROBLEMS_REPORTED`. A line covers
+   * every row that failed the same check on the same column, so one line can name many rows. Safe
+   * to show the user: every value quoted in one is truncated and escaped at construction.
+   */
+  problems?: readonly string[];
   /** For `rejected_upload.rejection_detail`. Never shown. */
   detail?: string;
 };
@@ -19,9 +24,8 @@ export type RejectedUploadRecord = {
  * A rejection is an outcome the upload form expects and renders itself, not a failure — see
  * `App.Error` in `app.d.ts` for why that means returning it as data instead of `error()`.
  */
-export type RejectedUploadResponse = {
+export type RejectedUploadResponse = Pick<RejectedUploadRecord, 'message' | 'problems'> & {
   code: RejectedUploadReason;
-  message: string;
 };
 
 /** Narrow a rejection to what the browser may see.
@@ -33,6 +37,7 @@ export type RejectedUploadResponse = {
 export function rejectionResponse({
   reason,
   message,
+  problems,
 }: RejectedUploadRecord): RejectedUploadResponse {
-  return { code: reason, message };
+  return { code: reason, message, ...(problems && { problems }) };
 }

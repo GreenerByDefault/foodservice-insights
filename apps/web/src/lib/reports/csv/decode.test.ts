@@ -64,16 +64,18 @@ describe('decodeCsv', () => {
 
   describe('rejects', () => {
     test.for([
-      ['an XLSX file, by its ZIP signature', Uint8Array.of(0x50, 0x4b, 0x03, 0x04, 0x14, 0x00)],
+      [
+        'an XLSX file, by its ZIP signature',
+        Uint8Array.of(0x50, 0x4b, 0x03, 0x04, 0x14, 0x00),
+        'xlsx',
+      ],
       [
         'a legacy XLS file, by its OLE2 signature',
         Uint8Array.of(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1),
+        'xls',
       ],
-    ] as const)('%s', ([, bytes]) => {
-      const decoded = decodeCsv(bytes);
-
-      expect(decoded).toMatchObject({ ok: false, rejection: { reason: 'unparseable' } });
-      expect(decoded.ok ? '' : decoded.rejection.message).toContain('Excel');
+    ] as const)('%s', ([, bytes, format]) => {
+      expect(decodeCsv(bytes)).toEqual({ ok: false, problem: { kind: 'signature', format } });
     });
 
     test.for([
@@ -84,35 +86,32 @@ describe('decodeCsv', () => {
       ([, endianness]) => {
         expect(decodeCsv(utf16('product,date', endianness))).toMatchObject({
           ok: false,
-          rejection: { reason: 'unparseable' },
+          problem: { kind: 'control-character' },
         });
       },
     );
 
-    test('a control character in the middle of otherwise fine text', () => {
+    test('a control character in the middle of otherwise fine text, with its offset kept', () => {
       const bytes = concat(utf8('product'), Uint8Array.of(0x01), utf8('date'));
 
-      expect(decodeCsv(bytes)).toMatchObject({ ok: false, rejection: { reason: 'unparseable' } });
+      expect(decodeCsv(bytes)).toEqual({
+        ok: false,
+        problem: { kind: 'control-character', code: 0x01, offset: 7 },
+      });
     });
 
     test('a file of nothing but whitespace', () => {
-      expect(decodeCsv(utf8(' \n\t\n '))).toMatchObject({
-        ok: false,
-        rejection: { reason: 'empty' },
-      });
+      expect(decodeCsv(utf8(' \n\t\n '))).toEqual({ ok: false, problem: { kind: 'empty' } });
     });
 
     test('a completely empty file', () => {
-      expect(decodeCsv(new Uint8Array())).toMatchObject({
-        ok: false,
-        rejection: { reason: 'empty' },
-      });
+      expect(decodeCsv(new Uint8Array())).toEqual({ ok: false, problem: { kind: 'empty' } });
     });
 
     test('a file that is only a byte order mark', () => {
-      expect(decodeCsv(Uint8Array.of(0xef, 0xbb, 0xbf))).toMatchObject({
+      expect(decodeCsv(Uint8Array.of(0xef, 0xbb, 0xbf))).toEqual({
         ok: false,
-        rejection: { reason: 'empty' },
+        problem: { kind: 'empty' },
       });
     });
   });
