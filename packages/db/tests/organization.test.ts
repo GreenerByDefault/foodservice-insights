@@ -2,7 +2,7 @@
  * invites. */
 
 import { sql } from 'kysely';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { AppUser } from '../src/generated/public/AppUser.ts';
 import type { OrganizationId } from '../src/generated/public/Organization.ts';
@@ -20,10 +20,6 @@ import {
 } from '../src/testing/concurrency.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
-
-afterAll(async () => {
-  await DATABASE.destroy();
-});
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 

@@ -1,12 +1,8 @@
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import { POSTGRES_CODE_CHECK_VIOLATION } from '../src/postgres-codes.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
-
-afterAll(async () => {
-  await DATABASE.destroy();
-});
 
 function anEvent(overrides: Record<string, unknown> = {}) {
   return {

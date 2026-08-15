@@ -2,15 +2,9 @@ import type { InputFileId, ReportId } from '@gbd/db';
 import { newInputFileId } from '@gbd/db';
 import { insertInputFile, insertReport } from '@gbd/db/testing';
 import { putInputFile } from '@gbd/storage';
-import { afterAll, describe, expect, test } from 'vitest';
-import { closeDatabase } from '$lib/server/db';
-import { closeBlobStore } from '$lib/server/storage';
+import { describe, expect, test } from 'vitest';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _downloadInputFile } from './+server.ts';
-
-afterAll(async () => {
-  await Promise.all([closeDatabase(), closeBlobStore()]);
-});
 
 const CSV = new TextEncoder().encode('product name,date ordered,amount ordered\n');
 

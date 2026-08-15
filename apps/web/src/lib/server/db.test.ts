@@ -7,12 +7,8 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { error, isHttpError } from '@sveltejs/kit';
-import { afterAll, expect, test, vi } from 'vitest';
-import { closeDatabase, database, withDbErrorHandling } from './db.ts';
-
-afterAll(async () => {
-  await closeDatabase();
-});
+import { expect, test, vi } from 'vitest';
+import { database, withDbErrorHandling } from './db.ts';
 
 test('queries the database through the app handle, rolling back after', async () => {
   const id = await withRollback(database(), async (transaction) => {

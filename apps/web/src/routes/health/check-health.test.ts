@@ -1,14 +1,10 @@
 import { divideByZero, withRollback } from '@gbd/db/testing';
 import { initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
-import { afterAll, describe, expect, test } from 'vitest';
-import { closeDatabase, database } from '$lib/server/db';
+import { describe, expect, test } from 'vitest';
+import { database } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
-import { blobStore, closeBlobStore } from '$lib/server/storage';
+import { blobStore } from '$lib/server/storage';
 import { _checkHealth } from './+server.ts';
-
-afterAll(async () => {
-  await Promise.all([closeDatabase(), closeBlobStore()]);
-});
 
 describe('_checkHealth', () => {
   test('ok when both the database and the bucket are reachable', async () => {

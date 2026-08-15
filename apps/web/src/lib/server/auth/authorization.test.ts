@@ -1,13 +1,9 @@
 import type { OrganizationId, UserId } from '@gbd/db';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { anAuthContext } from '$lib/server/tests/fixtures';
-import { closeDatabase, database } from '../db.ts';
+import { database } from '../db.ts';
 import { findOrganizationAccess, loadAuthorization } from './authorization.ts';
-
-afterAll(async () => {
-  await closeDatabase();
-});
 
 describe('loadAuthorization', () => {
   test('returns the user and the organization they administer', async () => {

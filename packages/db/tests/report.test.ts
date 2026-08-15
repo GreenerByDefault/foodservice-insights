@@ -1,7 +1,7 @@
 /** `report` and the two tables that record an upload: `input_file` for one that was accepted,
  * `rejected_upload` for one that never became a report. */
 
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import {
   POSTGRES_CODE_CHECK_VIOLATION,
@@ -15,10 +15,6 @@ import {
   insertReport,
 } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
-
-afterAll(async () => {
-  await DATABASE.destroy();
-});
 
 describe('report', () => {
   test('rejects a soft delete that predates creation', async () => {
