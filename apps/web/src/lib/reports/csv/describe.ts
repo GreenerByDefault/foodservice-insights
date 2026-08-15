@@ -1,9 +1,4 @@
-/** Every sentence a customer reading a CSV rejection sees. Two doors in, both taking data rather
- * than a file: `describeUnreadableFile` for a file `validate.ts` refused before it could read rows,
- * `describeProblems` for the rows and columns that failed once it could.
- *
- * `grep -n "[A-Z][a-z]* .*\." csv/*.ts` should find prose only in this file — everywhere else in
- * `csv/` is data and rules, never words.
+/** Every sentence a customer reading a CSV rejection sees.
  *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.

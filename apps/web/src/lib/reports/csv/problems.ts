@@ -1,12 +1,6 @@
-/** Many failing rows folded into a few groups, without ever wording any of them.
+/** Grouping for problems in failing rows.
  *
- * A customer with 4,000 rows whose amounts carry units has one thing to fix, not four thousand,
- * so `validate.ts` notes every failure here as it streams past and `describe.ts` is the only
- * thing that ever turns what accumulates into a sentence.
- *
- * The accumulator has to stay streaming rather than buffer one finding per row: `MAX_DATA_ROWS`
- * exists because a 500,000-row file cannot hold a `RowProblem[]` the length of the file, so this
- * folds rows into groups as they arrive instead.
+ * The accumulator has to stay streaming to reduce memoroy consumption.
  *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.

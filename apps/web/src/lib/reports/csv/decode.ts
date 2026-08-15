@@ -4,9 +4,6 @@
  * anything Node-only. In particular `TextDecoder`, not `Buffer`.
  */
 
-/** Why the bytes never became text. `describe.ts` is the only thing that turns this into a
- * sentence.
- */
 export type DecodeProblem =
   | { kind: 'signature'; format: 'xlsx' | 'xls' }
   | { kind: 'control-character'; code: number; offset: number }
