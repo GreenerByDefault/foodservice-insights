@@ -487,6 +487,15 @@ COMMENT ON TABLE "public"."analysis_attempt" IS 'The queue and state machine bet
 
 
 --
+-- Name: COLUMN "analysis_attempt"."worker_id"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."worker_id" IS 'The supervising worker''s identity, unique per process — not per host. A restarted container must
+       not reuse its predecessor''s id, or the ownership guard on every terminal write stops
+       distinguishing this supervisor from a dead one.';
+
+
+--
 -- Name: COLUMN "analysis_attempt"."lease_renewed_at"; Type: COMMENT; Schema: public; Owner: postgres
 --
 

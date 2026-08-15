@@ -637,6 +637,13 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it.'
   `.execute(database);
 
+  await sql`
+    COMMENT ON COLUMN "public"."analysis_attempt"."worker_id" IS
+      'The supervising worker''s identity, unique per process — not per host. A restarted container must
+       not reuse its predecessor''s id, or the ownership guard on every terminal write stops
+       distinguishing this supervisor from a dead one.';
+  `.execute(database);
+
   // At most one active attempt per report.
   //
   // It is not what serializes two concurrent retries, though it looks like it: they also both

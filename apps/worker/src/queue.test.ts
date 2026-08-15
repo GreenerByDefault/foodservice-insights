@@ -32,6 +32,7 @@ import {
   markAttemptSucceeded,
   renewLease,
 } from './queue.ts';
+import { reapExpiredAttempts } from './reaper.ts';
 import { aResultFile, aWorkerId, readAttemptRow } from './testing/attempt-helpers.ts';
 import { backdateAttemptTimeline } from './testing/attempt-timeline.ts';
 
@@ -81,28 +82,20 @@ async function claimedAttempt(
   return attemptId;
 }
 
-/** What the cross-worker reaper will do once it exists: end an attempt this worker still believes
- * it owns. The rows it leaves behind are what every "we lost the race" test starts from.
- *
- * **Open:** an imitation, so these tests are only as good as it is. Point them at the real reaper
- * when defense 3 in `ARCHITECTURE.md` § Progress, leases, and reaping lands.
- */
+/** What the cross-worker reaper does to an attempt this worker still believes it owns. The rows it
+ * leaves behind are what every "we lost the race" test starts from. */
 async function simulateReap(
   transaction: Transaction<Database>,
   attemptId: AnalysisAttemptId,
 ): Promise<void> {
   await backdateAttemptTimeline(transaction, attemptId);
-  await transaction
-    .updateTable('analysisAttempt')
-    .set({
-      status: 'failed',
-      finishedAt: sql<Date>`now()`,
-      failureReason: 'hung',
-      failureDetail: 'reaped by another worker',
-      reapedByWorkerId: 'the-reaper',
-    })
-    .where('id', '=', attemptId)
-    .execute();
+  const reaped = await reapExpiredAttempts(transaction, 'the-reaper', {
+    leaseExpiresAfterMs: 60_000,
+    claimedCeilingMs: 60_000,
+    maxAttemptsPerSweep: 1,
+    candidateReports: [(await readAttemptRow(transaction, attemptId)).reportId],
+  });
+  if (reaped.length !== 1) throw new Error('simulateReap: the fixture attempt was not reaped');
 }
 
 /** Null only on an attempt nobody has claimed, which no caller here is looking at. */
@@ -500,7 +493,7 @@ describe('finishing', () => {
       expect(outcome).toEqual({
         won: false,
         status: 'failed',
-        failureReason: 'hung',
+        failureReason: 'abandoned',
         resultFiles: [],
       });
     });
@@ -517,7 +510,7 @@ describe('finishing', () => {
       expect(outcome).toEqual({
         won: false,
         status: 'failed',
-        failureReason: 'hung',
+        failureReason: 'abandoned',
         resultFiles: [],
       });
     });
@@ -528,7 +521,7 @@ describe('finishing', () => {
       expect(outcome).toEqual({
         won: false,
         status: 'failed',
-        failureReason: 'hung',
+        failureReason: 'abandoned',
         resultFiles: [],
       });
     });
