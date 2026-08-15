@@ -105,22 +105,23 @@ function expiredCandidates(
  * the load-bearing detail of the whole file.
  *
  * `EvalPlanQual`'s recheck reruns the plan for the one row that blocked, but pins every other
- * relation the plan touches — including whatever produces the `IN`'s candidate ids, however
- * Postgres plans that — to the exact rows it joined the first time, refetched by row identity
- * rather than recomputed. So that candidate id list is fixed once, before the wait, and stays fixed
- * after: it makes no difference whether it comes from a preceding `SELECT` or the subquery below.
- * If the `UPDATE`'s own top-level `WHERE` matched only on those ids, a row that stopped being
- * expired during the wait would still match by id and get reaped. The expiry predicate has to be
- * repeated as its own top-level qual on the `UPDATE`; filtering it into the id list only is not
- * equivalent, however that list is produced.
+ * relation the plan touches to the exact rows it joined the first time, refetched by row identity
+ * rather than recomputed. That includes whatever produces the `IN`'s candidate ids, however
+ * Postgres plans that. That candidate id list, then, is fixed once, before the wait, and stays
+ * fixed after — whether it comes from a preceding `SELECT` or the subquery below makes no
+ * difference. That's why the expiry predicate has to be repeated as its own top-level qual on the
+ * `UPDATE`, and filtering it into the id list is not equivalent: if the `UPDATE`'s own top-level
+ * `WHERE` matched only on those ids, a row that stopped being expired during the wait would still
+ * match by id and get reaped, however that id list is produced.
  *
- * The subquery also repeats the predicate for an unrelated, non-correctness reason: Postgres
- * `UPDATE` has no `ORDER BY` or `LIMIT`, so a subquery is what decides which expired attempts a
- * capped sweep spends its `maxAttemptsPerSweep` on. Drop the expiry half of the predicate from the
- * subquery alone (keep `status = 'processing'`) and its `LIMIT`-sized batch can include fresh,
- * unexpired rows; the `UPDATE`'s own expiry check then discards those, so the cap is spent before a
- * genuinely expired row further down the order gets a turn. That failure is narrower than the one
- * above: the sweep returns fewer reaps than its cap allowed, never one it shouldn't have made.
+ * The subquery also repeats the predicate for an unrelated, non-correctness reason. Postgres
+ * `UPDATE` has no `ORDER BY` or `LIMIT`, so the subquery is what decides which expired attempts a
+ * capped sweep spends its `maxAttemptsPerSweep` on. If the subquery instead filtered only on
+ * `status = 'processing'`, its `LIMIT`-sized batch could include fresh, unexpired rows. The
+ * `UPDATE`'s own expiry check would then discard those, spending the cap before a genuinely
+ * expired row further down the order got a turn. That failure would be narrower than the one
+ * above — the sweep would return fewer reaps than its cap allowed, never one it shouldn't have
+ * made — but it is why the subquery repeats the predicate too.
  *
  * **Does not exclude its own `worker_id`.** A live parent kills its own children without the
  * database's help — for no progress, or for exceeding the total allowable time. This reaping
