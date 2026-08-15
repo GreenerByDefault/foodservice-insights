@@ -598,7 +598,6 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_notification_claimed_by_iff_claimed',
       sql`(notification_claimed_at IS NOT NULL) = (notification_claimed_by_worker_id IS NOT NULL)`,
     )
-    // Puts the claim-before-send protocol in the schema: sent without a claim is unrepresentable.
     .addCheckConstraint(
       'analysis_attempt_notification_sent_requires_claim',
       sql`notification_email_sent_at IS NULL OR notification_claimed_at IS NOT NULL`,
