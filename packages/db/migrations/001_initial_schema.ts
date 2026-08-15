@@ -555,11 +555,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addColumn('ai_metadata', 'jsonb')
     .addColumn('result_metadata', 'jsonb')
     .addColumn('notification_email_sent_at', 'timestamptz')
-    // Mutual exclusion and retry backoff for the notification sweep, the same trick
-    // `leaseExpiresAfterMs` plays for the processing lease: a worker claims a row before
-    // sending, and an expired claim is what makes a failed send retried rather than lost.
     .addColumn('notification_claimed_at', 'timestamptz')
-    // Debugging only, symmetric with `reaped_by_worker_id`.
     .addColumn('notification_claimed_by_worker_id', 'text')
     // So two workers cannot claim to be the same attempt.
     .addUniqueConstraint('analysis_attempt_report_id_attempt_number', [
@@ -602,8 +598,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_notification_claimed_by_iff_claimed',
       sql`(notification_claimed_at IS NOT NULL) = (notification_claimed_by_worker_id IS NOT NULL)`,
     )
-    // Puts the claim-before-send protocol in the schema: "sent without claiming" is
-    // unrepresentable.
+    // Puts the claim-before-send protocol in the schema: sent without a claim is unrepresentable.
     .addCheckConstraint(
       'analysis_attempt_notification_sent_requires_claim',
       sql`notification_email_sent_at IS NULL OR notification_claimed_at IS NOT NULL`,
@@ -668,6 +663,18 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'The supervising worker''s identity, unique per process — not per host. A restarted container must
        not reuse its predecessor''s id, or the ownership guard on every terminal write stops
        distinguishing this supervisor from a dead one.';
+  `.execute(database);
+
+  await sql`
+    COMMENT ON COLUMN analysis_attempt.notification_claimed_at IS
+      'Mutual exclusion between workers sending the same notification, and — via expiry — retry
+       backoff for a send that failed. A worker claims a row before sending; leaving the claim in
+       place on failure is what makes the next sweep retry instead of losing the email.'
+  `.execute(database);
+
+  await sql`
+    COMMENT ON COLUMN analysis_attempt.notification_claimed_by_worker_id IS
+      'Debugging only, symmetric with reaped_by_worker_id.'
   `.execute(database);
 
   // At most one active attempt per report.
