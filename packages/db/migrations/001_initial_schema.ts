@@ -603,8 +603,6 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_notification_sent_requires_claim',
       sql`notification_email_sent_at IS NULL OR notification_claimed_at IS NOT NULL`,
     )
-    // ARCHITECTURE.md § Canceling: "No email is sent" as an invariant. Covers
-    // notification_email_sent_at too, via the constraint above.
     .addCheckConstraint(
       'analysis_attempt_canceled_is_not_notified',
       sql`notification_claimed_at IS NULL OR status <> 'canceled'`,
