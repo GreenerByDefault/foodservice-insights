@@ -555,6 +555,12 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addColumn('ai_metadata', 'jsonb')
     .addColumn('result_metadata', 'jsonb')
     .addColumn('notification_email_sent_at', 'timestamptz')
+    // Mutual exclusion and retry backoff for the notification sweep, the same trick
+    // `leaseExpiresAfterMs` plays for the processing lease: a worker claims a row before
+    // sending, and an expired claim is what makes a failed send retried rather than lost.
+    .addColumn('notification_claimed_at', 'timestamptz')
+    // Debugging only, symmetric with `reaped_by_worker_id`.
+    .addColumn('notification_claimed_by_worker_id', 'text')
     // So two workers cannot claim to be the same attempt.
     .addUniqueConstraint('analysis_attempt_report_id_attempt_number', [
       'report_id',
@@ -587,6 +593,26 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addCheckConstraint(
       'analysis_attempt_notification_requires_finished',
       sql`notification_email_sent_at IS NULL OR finished_at IS NOT NULL`,
+    )
+    .addCheckConstraint(
+      'analysis_attempt_notification_claim_requires_finished',
+      sql`notification_claimed_at IS NULL OR finished_at IS NOT NULL`,
+    )
+    .addCheckConstraint(
+      'analysis_attempt_notification_claimed_by_iff_claimed',
+      sql`(notification_claimed_at IS NOT NULL) = (notification_claimed_by_worker_id IS NOT NULL)`,
+    )
+    // Puts the claim-before-send protocol in the schema: "sent without claiming" is
+    // unrepresentable.
+    .addCheckConstraint(
+      'analysis_attempt_notification_sent_requires_claim',
+      sql`notification_email_sent_at IS NULL OR notification_claimed_at IS NOT NULL`,
+    )
+    // ARCHITECTURE.md § Canceling: "No email is sent" as an invariant. Covers
+    // notification_email_sent_at too, via the constraint above.
+    .addCheckConstraint(
+      'analysis_attempt_canceled_is_not_notified',
+      sql`notification_claimed_at IS NULL OR status <> 'canceled'`,
     )
     // finished_at >= lease_renewed_at >= claimed_at >= created_at. Each is also pinned to
     // created_at directly, because the pairwise chain alone has a hole: an attempt canceled
@@ -689,6 +715,18 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
   // No (report_id, attempt_number DESC) index: the unique constraint's index already serves the
   // latest-attempt lookup by a backward scan, and covers the report_id foreign key.
 
+  // Holds exactly the notification backlog and empties as rows are stamped, so the sweep's
+  // oldest-first scan stays tiny however large the table grows. report.deleted_at and
+  // requested_by_user_id are deliberately not in the predicate — one is on another table, the
+  // other would not narrow it usefully.
+  await sql`
+    CREATE INDEX analysis_attempt_notification_pending
+      ON analysis_attempt (finished_at)
+      WHERE notification_email_sent_at IS NULL
+        AND finished_at IS NOT NULL
+        AND status <> 'canceled'
+  `.execute(database);
+
   await sql`
     CREATE FUNCTION analysis_attempt_check_new_attempt() RETURNS trigger
     LANGUAGE plpgsql AS $$
@@ -749,16 +787,20 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     CREATE FUNCTION analysis_attempt_check_terminal_is_final() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
-      -- Compared row-wise with the one mutable column masked out, rather than as a list of
+      -- Compared row-wise with the mutable columns masked out, rather than as a list of
       -- OLD.x = NEW.x tests, so that a column added later is frozen by default instead of
       -- silently becoming mutable after an attempt has finished.
-      IF to_jsonb(OLD) - 'notification_email_sent_at'
-         = to_jsonb(NEW) - 'notification_email_sent_at' THEN
+      IF to_jsonb(OLD) - ARRAY['notification_email_sent_at',
+                               'notification_claimed_at',
+                               'notification_claimed_by_worker_id']
+         = to_jsonb(NEW) - ARRAY['notification_email_sent_at',
+                                 'notification_claimed_at',
+                                 'notification_claimed_by_worker_id'] THEN
         RETURN NEW;
       END IF;
 
       RAISE EXCEPTION
-        'analysis_attempt %: % is terminal, so only notification_email_sent_at may change',
+        'analysis_attempt %: % is terminal, so only the notification columns may change',
         OLD.id, OLD.status
         USING ERRCODE = 'check_violation',
               CONSTRAINT = 'analysis_attempt_terminal_is_final',
