@@ -363,7 +363,7 @@ describe('reapExpiredAttempts', () => {
     const reaperId = aWorkerId();
     const result = await raceReapAgainstCommittedRenewal(
       { claimedAgo: CLAIMED_CEILING_MS + 120_000, renewedAgo: 0 },
-      reaperId,
+      { reaperId },
     );
 
     expect(result.reaped).toEqual([result.row.id]);
@@ -372,6 +372,21 @@ describe('reapExpiredAttempts', () => {
       failureReason: 'abandoned',
       reapedByWorkerId: reaperId,
     });
+  });
+
+  // Same race, with the reap's transaction the *older* of the two — a sweep already waiting on a
+  // row when the renewal begins. `finished_at` cannot then be a bare `now()`:
+  // `analysis_attempt_finished_at_after_lease_renewed` would reject the row, and a check violation
+  // aborts the whole statement, so one such row would take every other reap in the sweep with it.
+  test('a reap older than the renewal it overrides still ends a ceiling-expired attempt', async () => {
+    const result = await raceReapAgainstCommittedRenewal(
+      { claimedAgo: CLAIMED_CEILING_MS + 120_000, renewedAgo: 0 },
+      { reaperOpensFirst: true },
+    );
+
+    expect(result.reaped).toEqual([result.row.id]);
+    expect(result.row).toMatchObject({ status: 'failed', failureReason: 'abandoned' });
+    expect(result.row.finishedAt).toEqual(result.row.leaseRenewedAt);
   });
 
   // A verdict reached by the owning worker is committed, not merely locked, before the reap unblocks
@@ -416,6 +431,8 @@ describe('reapExpiredAttempts', () => {
   });
 });
 
+type RaceReapOptions = { reaperId?: string; reaperOpensFirst?: boolean };
+
 /** A `processing` attempt, committed, with `first` holding an uncommitted write on its row while a
  * reap blocks behind it. Commits both, then reports what the reap did and where the row landed.
  *
@@ -431,8 +448,9 @@ async function raceReapAgainstCommittedWrite(
     attemptId: AnalysisAttemptId,
     reportId: ReportId,
   ) => Promise<void>,
-  reaperId: string = aWorkerId(),
+  options: RaceReapOptions = {},
 ) {
+  const reaperId = options.reaperId ?? aWorkerId();
   return await withCommittedFixture(
     DATABASE,
     async (transaction, trash) => {
@@ -448,16 +466,19 @@ async function raceReapAgainstCommittedWrite(
     },
     async ({ attemptId, reportId }) => {
       const reaped = await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-        await firstWriter(alpha.transaction, attemptId, reportId);
+        // `alpha` opens first, so its `now()` is the earlier of the two. Which side that is decides
+        // whether the reap's own `now()` predates the write it is racing.
+        const [writer, reaper] = options.reaperOpensFirst ? [beta, alpha] : [alpha, beta];
+        await firstWriter(writer.transaction, attemptId, reportId);
 
-        // beta's reap has to block on alpha's uncommitted write, not skip past it.
-        const blockedReap = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+        // The reap has to block on the writer's uncommitted row, not skip past it.
+        const blockedReap = await sendBlockingStatement(DATABASE, reaper, writer, (transaction) =>
           reapExpiredAttempts(transaction, reaperId, reapOptions({ candidateReports: [reportId] })),
         );
 
-        await alpha.transaction.commit().execute();
+        await writer.transaction.commit().execute();
         const outcome = await blockedReap.result;
-        await beta.transaction.commit().execute();
+        await reaper.transaction.commit().execute();
         return outcome;
       });
 
@@ -467,7 +488,10 @@ async function raceReapAgainstCommittedWrite(
 }
 
 /** The common case of the above: the uncommitted write is a genuine lease renewal by the owner. */
-async function raceReapAgainstCommittedRenewal(offsets: TimelineOffsetsMs, reaperId?: string) {
+async function raceReapAgainstCommittedRenewal(
+  offsets: TimelineOffsetsMs,
+  options: RaceReapOptions = {},
+) {
   const ownerId = aWorkerId();
   return await raceReapAgainstCommittedWrite(
     offsets,
@@ -475,6 +499,6 @@ async function raceReapAgainstCommittedRenewal(offsets: TimelineOffsetsMs, reape
     async (transaction, attemptId) => {
       await renewLease(transaction, attemptId, ownerId);
     },
-    reaperId,
+    options,
   );
 }

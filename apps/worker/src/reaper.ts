@@ -151,7 +151,14 @@ export async function reapExpiredAttempts(
         WHEN lease_renewed_at < ${leaseExpiresBefore} THEN 'lease not renewed since ' || lease_renewed_at
         ELSE 'claimed since ' || claimed_at || ' and never finished'
       END)`,
-      finishedAt: sql<Date>`now()`,
+      // A reap can legitimately end a row whose `lease_renewed_at` is newer than its own `now()`.
+      // That happens when a renewal starts after this statement does and commits while it waits
+      // for that row's lock. Under the ceiling, `EvalPlanQual` above condemns the row anyway.
+      //
+      // A bare `now()` would then violate `analysis_attempt_finished_at_after_lease_renewed`. A
+      // check violation aborts the whole statement, so that one row would take the rest of the
+      // sweep down with it.
+      finishedAt: sql<Date>`greatest(now(), lease_renewed_at)`,
       reapedByWorkerId: workerId,
     })
     .where('status', '=', 'processing')
