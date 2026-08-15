@@ -235,6 +235,11 @@ TEST_DB=1 pnpm migrate
 TEST_DB=1 pnpm seed
 ```
 
+#### Read local email
+
+While developing locally, all emails get sent to a mock email provider. Read them at
+<http://localhost:55324> for the dev stack, or <http://localhost:65324> for the test stack.
+
 #### Debug the database
 
 Supabase Studio for the dev stack is at <http://localhost:55323>. For logs:

@@ -40,9 +40,12 @@ token_verifications = 1000
 [auth.email]
 max_frequency = "1s"
 
-# Catches outbound email so nothing escapes locally. Web UI on `port`.
+# Mailpit: catches outbound email so nothing escapes locally.
+#
+# There's a web UI on `port`, which also serves the REST API
+# `@gbd/email` posts to and reads back from.
 [local_smtp]
-enabled = false
+enabled = true
 port = 65324
 smtp_port = 65325
 
