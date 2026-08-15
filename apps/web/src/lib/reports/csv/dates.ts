@@ -21,14 +21,14 @@ export type DateOrder = 'day-first' | 'month-first';
 
 export type DateReading =
   /** Unambiguous, and already inside the accepted range. */
-  | { kind: 'date'; iso: string }
+  | { kind: 'date'; isoDate: string }
   /** `first/second/year`, where only the whole column can say which is the day. */
   | { kind: 'numeric'; first: number; second: number; year: number }
   | { kind: 'invalid'; problem: string };
 
 export type DateBounds = { earliest: string; latest: string };
 
-export type ResolvedDate = { ok: true; iso: string } | { ok: false; problem: string };
+export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; problem: string };
 
 // ------------------------------------------------------------------
 // Recognizing a cell
@@ -194,7 +194,7 @@ export function applyOrder(
  * describe it.
  */
 export function bothReadings(reading: Extract<DateReading, { kind: 'numeric' }>): string {
-  const describe = (resolved: ResolvedDate) => (resolved.ok ? resolved.iso : 'no real date');
+  const describe = (resolved: ResolvedDate) => (resolved.ok ? resolved.isoDate : 'no real date');
   return [
     describe(applyOrder(reading, 'day-first', ANY_DATE)),
     describe(applyOrder(reading, 'month-first', ANY_DATE)),
@@ -228,7 +228,7 @@ function named(
 function dated(year: number, month: number, day: number, bounds: DateBounds): DateReading {
   const resolved = toIso(year, month, day, bounds);
   return resolved.ok
-    ? { kind: 'date', iso: resolved.iso }
+    ? { kind: 'date', isoDate: resolved.isoDate }
     : { kind: 'invalid', problem: resolved.problem };
 }
 
@@ -251,14 +251,14 @@ function toIso(year: number, month: number, day: number, bounds: DateBounds): Re
     return { ok: false, problem: NOT_A_DATE };
   }
 
-  const iso = `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
-  if (iso < bounds.earliest) {
+  const isoDate = `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
+  if (isoDate < bounds.earliest) {
     return { ok: false, problem: `is before ${bounds.earliest}, too old to be procurement data` };
   }
-  if (iso > bounds.latest) {
+  if (isoDate > bounds.latest) {
     return { ok: false, problem: `is more than ${MAX_FUTURE_DAYS} days from now` };
   }
-  return { ok: true, iso };
+  return { ok: true, isoDate };
 }
 
 function pad(value: number): string {
