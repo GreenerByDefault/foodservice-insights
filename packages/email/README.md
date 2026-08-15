@@ -1,7 +1,11 @@
 # @gbd/email
 
-Every email the product sends. Used by the worker parent, for analysis results, and by the web app,
-for invitations and the notices to GBD.
+Every email the product sends.
+
+| Caller | Sends |
+| --- | --- |
+| Worker parent | Analysis results |
+| Web app | Invitations, notices to GBD |
 
 **Status: written ahead of its callers.** The messages and the rendering are real and tested;
 nothing calls `sendEmail` in production code yet, and there is no transport that actually delivers.
@@ -15,9 +19,8 @@ Sign-in codes and email-change confirmations are not here. Supabase Auth sends t
 
 ## Using it
 
-A caller says what happened; it never says what the email looks like, and for the GBD notices it
-does not choose the recipient either. Adding a new email means adding a member to `EmailMessage` and
-a renderer, not touching any caller.
+A caller says what happened; it never says what the email looks like. For the GBD notices, the caller
+does not choose the recipient either.
 
 ```ts
 await sendEmail(emailer, { kind: 'analysis-failed', to, organizationId, reportId, reason });
@@ -27,13 +30,12 @@ Every function takes an `Emailer` as its first parameter, so callers stay testab
 `initializeEmailer`, or take whichever your caller already has.
 
 Anything that fails throws an `EmailError`, so a caller can tell email failing apart from a bug of
-its own with `isEmailError`. Whether that should fail the work in hand is the caller's to decide:
-ARCHITECTURE.md makes delivery best effort, but a failed invitation is worth telling an admin about
-and a failed analysis notice is not worth failing an attempt over.
+its own with `isEmailError`. Whether that should fail the work in hand is the caller's to decide.
+
+To add a new kind of email, add a member to `EmailMessage` and a renderer for it.
 
 ## Testing
 
-Consumers should not send real mail to prove they asked for an email. `recordingEmailer()` from
-`@gbd/email/testing` renders for real and keeps the result, so a test asserts on `kind` and `to` and
-leaves the copy to this package. It is the only test double this package has today; a stand-in for a
-transport that genuinely fails and one that genuinely recovers arrive with the transport itself.
+Instead of sending real mail to prove a caller asked for an email, consumers should use
+`recordingEmailer()` from `@gbd/email/testing`. It renders for real and keeps the result, so a
+test asserts on `kind` and `to` and leaves the copy to this package.

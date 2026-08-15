@@ -31,7 +31,7 @@ keep settled decisions settled — read them before proposing a change.
 | End-to-end tests | Playwright |
 | Edge / DDoS | Cloudflare |
 | Hosting | **Open:** Railway vs Render vs DigitalOcean |
-| Email | `packages/email`, over a provider's HTTP API. **Open:** GBD has no existing provider; we need to propose one with reasonable cost and reliability. Connect For Animals uses SendGrid. |
+| Email | (**Open:** which provider), using HTTP and generated emails. |
 
 ## Components
 
@@ -281,18 +281,17 @@ Refer to [`packages/storage/README.md`](packages/storage/README.md) for the priv
 
 ## Email
 
-Both the web app and the worker send email, so it lives in
-[`packages/email/README.md`](packages/email/README.md). Two consequences reach the rest of the
-system:
+We send email as HTTP requests using emails generated in [`packages/email`](packages/email).
+Using HTTP avoids us needing to implement SMTP or add a library. Generating emails
+programatically gives the benefits of config as code and reduces vendor lock-in. Thanks to this
+design, we can easily swap in two local mail providers to faciliate testing and local development.
 
-- **A caller names the event, not the email.** Copy, layout, recipients, and the provider all change
-  without touching `apps/web` or `apps/worker`.
-- **A send that fails is the caller's to weigh.** Delivery is best effort per
-  [`REQUIREMENTS.md`](REQUIREMENTS.md#user-email), and nothing retries on a sender's behalf.
+**Open:** decide which email provider, such as SendGrid.
 
-Sign-in codes and email-change confirmations are Supabase Auth's, not ours. Why the transport seam
-is HTTP-shaped rather than SMTP, and what choosing a provider costs, is in
-[`provider.ts`](packages/email/src/transports/provider.ts).
+The `packages/email` code does not retry failures. Instead, callers must decide how to handle
+failure.
+
+Sign-in codes and email-change confirmations go through Supabase Auth, not us.
 
 ## File links
 
