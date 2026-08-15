@@ -34,8 +34,8 @@ describe('readDate', () => {
     ['4 sept 2025', '2025-09-04'],
     ['  4   March   2025 ', '2025-03-04'],
     ['2024-02-29', '2024-02-29'],
-  ] as const)('reads "%s" as %s', ([raw, iso]) => {
-    expect(readDate(raw, BOUNDS)).toEqual({ kind: 'date', iso });
+  ] as const)('reads "%s" as %s', ([raw, isoDate]) => {
+    expect(readDate(raw, BOUNDS)).toEqual({ kind: 'date', isoDate });
   });
 
   test.for([
@@ -44,16 +44,16 @@ describe('readDate', () => {
     ['2025-03-04T10:30:00Z', '2025-03-04'],
     ['2025-03-04T10:30:00.123Z', '2025-03-04'],
     ['2025-03-04T10:30:00+05:30', '2025-03-04'],
-  ] as const)('drops the time a database export attached to "%s"', ([raw, iso]) => {
-    expect(readDate(raw, BOUNDS)).toEqual({ kind: 'date', iso });
+  ] as const)('drops the time a database export attached to "%s"', ([raw, isoDate]) => {
+    expect(readDate(raw, BOUNDS)).toEqual({ kind: 'date', isoDate });
   });
 
   test.for([
     ['Jun 2024', '2024-06-01'],
     ['2024-06', '2024-06-01'],
     ['06/2024', '2024-06-01'],
-  ] as const)('reads the month-only "%s" as %s', ([raw, iso]) => {
-    expect(readDate(raw, BOUNDS)).toEqual({ kind: 'date', iso });
+  ] as const)('reads the month-only "%s" as %s', ([raw, isoDate]) => {
+    expect(readDate(raw, BOUNDS)).toEqual({ kind: 'date', isoDate });
   });
 
   test.for([
@@ -114,7 +114,7 @@ describe('orderProvenBy', () => {
   });
 
   test('says nothing about a date that was never ambiguous', () => {
-    expect(orderProvenBy({ kind: 'date', iso: '2025-03-04' })).toBeUndefined();
+    expect(orderProvenBy({ kind: 'date', isoDate: '2025-03-04' })).toBeUndefined();
   });
 });
 
@@ -141,7 +141,7 @@ describe('decideDateOrder', () => {
   });
 
   test('has nothing to decide when no value was ambiguous', () => {
-    expect(decideDateOrder([{ kind: 'date', iso: '2025-03-04' }])).toMatchObject({ ok: true });
+    expect(decideDateOrder([{ kind: 'date', isoDate: '2025-03-04' }])).toMatchObject({ ok: true });
   });
 });
 
@@ -149,9 +149,9 @@ describe('applyOrder', () => {
   test.for([
     ['day-first', '2025-04-03'],
     ['month-first', '2025-03-04'],
-  ] as const)('reads 03/04/2025 %s as %s', ([order, iso]) => {
+  ] as const)('reads 03/04/2025 %s as %s', ([order, isoDate]) => {
     expect(applyOrder({ kind: 'numeric', first: 3, second: 4, year: 2025 }, order, BOUNDS)).toEqual(
-      { ok: true, iso },
+      { ok: true, isoDate },
     );
   });
 

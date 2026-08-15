@@ -8,7 +8,7 @@ import { exhaustiveArray } from '@gbd/core';
 import type { CountsBasis, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
 import { optionalText, parsedJson } from '$lib/forms/validation';
-import { MAX_MONTHS, MAX_REPORT_NAME_LENGTH, MAX_SITE_NAME_LENGTH } from './limits.ts';
+import { MAX_FREE_TEXT_LENGTH, MAX_MONTHS } from './limits.ts';
 
 /** The form field names, so the form and the parser cannot drift apart. */
 export const FIELD = {
@@ -41,8 +41,8 @@ export const MonthlyCountsSchema = v.pipe(
 export type MonthlyCounts = v.InferOutput<typeof MonthlyCountsSchema>;
 
 export const ReportMetadataSchema = v.object({
-  name: optionalText(MAX_REPORT_NAME_LENGTH),
-  siteName: optionalText(MAX_SITE_NAME_LENGTH),
+  name: optionalText(MAX_FREE_TEXT_LENGTH),
+  siteName: optionalText(MAX_FREE_TEXT_LENGTH),
   countsBasis: v.picklist(COUNTS_BASES),
   unitSystem: v.picklist(UNIT_SYSTEMS),
   // One JSON field rather than a form field per month: the column is `jsonb`, and the browser
