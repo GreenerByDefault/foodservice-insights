@@ -157,6 +157,63 @@ describe('analysis_attempt column invariants', () => {
     });
   });
 
+  test('rejects a notification claim recorded against an unfinished attempt', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_notification_claim_requires_finished',
+    });
+  });
+
+  test.each([
+    {
+      description: 'a claim timestamp without a claiming worker',
+      patch: () => ({ notificationClaimedAt: new Date() }),
+    },
+    {
+      description: 'a claiming worker without a claim timestamp',
+      patch: () => ({ notificationClaimedByWorkerId: 'w1' }),
+    },
+  ])('rejects $description', async ({ patch }) => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set(patch())
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_notification_claimed_by_iff_claimed',
+    });
+  });
+
+  test('rejects stamping the notification sent without a claim', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ notificationEmailSentAt: new Date() })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_notification_sent_requires_claim',
+    });
+  });
+
   // The timestamps must satisfy finished_at >= lease_renewed_at >= claimed_at >= created_at, and
   // each is pinned to created_at directly as well. Every case below is built so that exactly one
   // of those checks is violated — otherwise the constraint that reports is whichever Postgres
@@ -409,19 +466,46 @@ describe('a terminal attempt is final', () => {
     });
   });
 
-  test('permits recording that the notification was sent', async () => {
-    const sentAt = await withRollback(DATABASE, async (transaction) => {
+  test('permits claiming, sending, and stamping the notification together', async () => {
+    // All three notification columns are in the terminal trigger's mask, so a worker can go
+    // straight from unclaimed to sent in one UPDATE.
+    const updated = await withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      const updated = await transaction
+      return await transaction
         .updateTable('analysisAttempt')
-        .set({ notificationEmailSentAt: new Date() })
+        .set({
+          notificationClaimedAt: new Date(),
+          notificationClaimedByWorkerId: 'w1',
+          notificationEmailSentAt: new Date(),
+        })
         .where('id', '=', attempt.id)
-        .returning('notificationEmailSentAt')
+        .returning([
+          'notificationClaimedAt',
+          'notificationClaimedByWorkerId',
+          'notificationEmailSentAt',
+        ])
         .executeTakeFirstOrThrow();
-      return updated.notificationEmailSentAt;
     });
 
-    expect(sentAt).toBeInstanceOf(Date);
+    expect(updated.notificationClaimedAt).toBeInstanceOf(Date);
+    expect(updated.notificationClaimedByWorkerId).toBe('w1');
+    expect(updated.notificationEmailSentAt).toBeInstanceOf(Date);
+  });
+
+  test('rejects claiming a canceled attempt', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'canceled' });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_canceled_is_not_notified',
+    });
   });
 
   test('rejects smuggling another column alongside the notification timestamp', async () => {
