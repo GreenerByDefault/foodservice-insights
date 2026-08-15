@@ -3,15 +3,11 @@
  */
 
 import { sql } from 'kysely';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import { insertOrganization, insertReport } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 import { uuidV7, uuidV7Timestamp } from '../src/uuid.ts';
-
-afterAll(async () => {
-  await DATABASE.destroy();
-});
 
 describe('conventions', () => {
   test('every table has a primary key', async () => {

@@ -1,10 +1,9 @@
 import type { UserId } from '@gbd/db';
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
-import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
-import { closeDatabase } from '$lib/server/db';
 import { anAuthContext } from '$lib/server/tests/fixtures';
 import { handle, handleError } from './hooks.server.ts';
 
@@ -18,10 +17,6 @@ const A_USER_ID = crypto.randomUUID() as UserId;
 beforeEach(() => {
   vi.mocked(identify.identifyUser).mockReset().mockResolvedValue(A_USER_ID);
   vi.mocked(authorization.loadAuthorization).mockReset().mockResolvedValue(anAuthContext());
-});
-
-afterAll(async () => {
-  await closeDatabase();
 });
 
 /** The parts of a request the hooks actually read. */

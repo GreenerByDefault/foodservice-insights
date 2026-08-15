@@ -1,17 +1,13 @@
 import { getObject, putObject } from '@gbd/storage';
 import { aBlobStoreError, withTemporaryPrefix } from '@gbd/storage/testing';
 import { isHttpError } from '@sveltejs/kit';
-import { afterAll, expect, test, vi } from 'vitest';
-import { blobStore, closeBlobStore, withBlobStoreErrorHandling } from './storage.ts';
+import { expect, test, vi } from 'vitest';
+import { blobStore, withBlobStoreErrorHandling } from './storage.ts';
 
 /** That a real failure arrives as a `BlobStoreError` is `@gbd/storage`'s own test, against its real
  * endpoint. These only need something that is one.
  */
 const blobStoreOutage = () => Promise.reject(aBlobStoreError('connection refused'));
-
-afterAll(async () => {
-  await closeBlobStore();
-});
 
 test('writes and reads through the app handle, cleaning up after', async () => {
   const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);

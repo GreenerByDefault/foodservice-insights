@@ -1,16 +1,10 @@
 import type { RejectedUploadReason, ReportId } from '@gbd/db';
 import { getObject } from '@gbd/storage';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { MAX_UPLOAD_BYTES } from '$lib/reports/limits';
 import { FIELD } from '$lib/reports/metadata';
-import { closeDatabase } from '$lib/server/db';
-import { closeBlobStore } from '$lib/server/storage';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _createReport } from './+server.ts';
-
-afterAll(async () => {
-  await Promise.all([closeDatabase(), closeBlobStore()]);
-});
 
 const A_CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
 

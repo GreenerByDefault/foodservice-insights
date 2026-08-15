@@ -67,6 +67,7 @@ export default defineConfig(({ command }) => ({
           name: 'server',
           environment: 'node',
           globalSetup: ['./src/lib/server/tests/global-setup.ts'],
+          setupFiles: ['./src/lib/server/tests/setup-file.ts'],
           include: ['src/**/*.{test,spec}.{js,ts}'],
           exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 

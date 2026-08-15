@@ -2,15 +2,9 @@ import type { ReportId, ResultFileId } from '@gbd/db';
 import { newResultFileId } from '@gbd/db';
 import { insertAnalysisAttempt, insertReport, insertResultFile } from '@gbd/db/testing';
 import { putResultFile } from '@gbd/storage';
-import { afterAll, describe, expect, test } from 'vitest';
-import { closeDatabase } from '$lib/server/db';
-import { closeBlobStore } from '$lib/server/storage';
+import { describe, expect, test } from 'vitest';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _downloadResultFile } from './+server.ts';
-
-afterAll(async () => {
-  await Promise.all([closeDatabase(), closeBlobStore()]);
-});
 
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7 fake');
 

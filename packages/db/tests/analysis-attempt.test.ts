@@ -9,7 +9,7 @@
  */
 
 import { sql } from 'kysely';
-import { afterAll, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../src/generated/public/AnalysisAttemptStatus.ts';
@@ -26,10 +26,6 @@ import {
 } from '../src/testing/concurrency.ts';
 import { aChecksum, insertAnalysisAttempt, insertReport } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
-
-afterAll(async () => {
-  await DATABASE.destroy();
-});
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 
