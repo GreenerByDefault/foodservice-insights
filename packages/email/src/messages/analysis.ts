@@ -25,8 +25,7 @@ export type AnalysisSucceeded = {
   to: string;
   organizationId: OrganizationId;
   reportId: ReportId;
-  /** `report.name` is nullable, so this is too. */
-  reportName: string | null;
+  reportName: string;
   resultFiles: readonly ResultFileLink[];
 };
 
@@ -35,7 +34,7 @@ export type AnalysisFailed = {
   to: string;
   organizationId: OrganizationId;
   reportId: ReportId;
-  reportName: string | null;
+  reportName: string;
   reason: AnalysisFailureReason;
 };
 
@@ -66,10 +65,6 @@ const DOWNLOADABLE: Record<ResultFileKind, string | null> = {
   chart: null,
 };
 
-function named(reportName: string | null, whenNamed: (name: string) => string, otherwise: string) {
-  return reportName === null ? otherwise : whenNamed(reportName);
-}
-
 export function renderAnalysisSucceeded(
   context: EmailContext,
   message: AnalysisSucceeded,
@@ -80,11 +75,7 @@ export function renderAnalysisSucceeded(
   });
 
   return {
-    heading: named(
-      message.reportName,
-      (name) => `Your report is ready: ${name}`,
-      'Your report is ready',
-    ),
+    heading: `Your report is ready: ${message.reportName}`,
     blocks: [
       { block: 'paragraph', text: 'We have finished analysing your procurement data.' },
       {
@@ -99,11 +90,7 @@ export function renderAnalysisSucceeded(
 
 export function renderAnalysisFailed(context: EmailContext, message: AnalysisFailed): Document {
   return {
-    heading: named(
-      message.reportName,
-      (name) => `We could not finish your report: ${name}`,
-      'We could not finish your report',
-    ),
+    heading: `We could not finish your report: ${message.reportName}`,
     blocks: [
       { block: 'paragraph', text: FAILURE_EXPLANATIONS[message.reason] },
       // REQUIREMENTS.md § Errors during upload and processing: a failed analysis must not read as
