@@ -1,6 +1,12 @@
 import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
-import { describeIssues, fieldsWithIssues, optionalText, parsedJson } from './validation.ts';
+import {
+  describeIssues,
+  fieldsWithIssues,
+  optionalText,
+  parsedJson,
+  requiredText,
+} from './validation.ts';
 
 function issuesOf<TSchema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>>(
   schema: TSchema,
@@ -22,6 +28,25 @@ describe('optionalText', () => {
     [null, null],
   ] as const)('%o becomes %o', ([input, expected]) => {
     expect(v.parse(schema, input)).toBe(expected);
+  });
+
+  test('rejects text over the cap', () => {
+    expect(v.safeParse(schema, 'hello!').success).toBe(false);
+  });
+});
+
+describe('requiredText', () => {
+  const schema = requiredText(5);
+
+  test.for([
+    ['  hello  ', 'hello'],
+    ['hello', 'hello'],
+  ] as const)('%o becomes %o', ([input, expected]) => {
+    expect(v.parse(schema, input)).toBe(expected);
+  });
+
+  test.for(['   ', '', null])('rejects %o as required', (input) => {
+    expect(v.safeParse(schema, input).success).toBe(false);
   });
 
   test('rejects text over the cap', () => {

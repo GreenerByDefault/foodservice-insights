@@ -88,7 +88,7 @@ export async function insertReport(
   overrides: Partial<{
     organizationId: Organization['id'];
     createdByUserId: AppUser['id'] | null;
-    name: string | null;
+    name: string;
     siteName: string | null;
     monthlyCounts: unknown;
     createdAt: Date;

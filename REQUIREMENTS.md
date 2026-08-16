@@ -19,13 +19,10 @@ A user can upload a CSV or XLSX file matching a predefined column format.
 - The website provides clear instructions for the file format.
 - Max file size: [`apps/web/src/lib/reports/upload-limit.js`](apps/web/src/lib/reports/upload-limit.js).
 - The user provides additional metadata:
-  - a map of each month to the number of diners or meals
+  - a name for the report to help users identify it
   - site name (optional)
+  - a map of each month to the number of diners or meals
   - lb vs kg
-  - a name for the report, to help users identify it
-
-**Open:** the report name may be unnecessary, or may overlap too much with site name. Drop it if
-that proves true in the UI.
 
 ### Processing
 
