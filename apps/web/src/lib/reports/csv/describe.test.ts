@@ -20,8 +20,8 @@ import {
 
 type Finding = { line: number; problem: RowProblem };
 
-const cell = (over: Partial<Extract<RowProblem, { kind: 'cell' }>> = {}): RowProblem => ({
-  kind: 'cell',
+const cell = (over: Partial<Extract<RowProblem, { kind: 'column-rule' }>> = {}): RowProblem => ({
+  kind: 'column-rule',
   column: 'amount',
   raw: '5 oz',
   clause: 'has a unit in it',

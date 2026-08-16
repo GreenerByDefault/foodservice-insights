@@ -9,8 +9,8 @@ import {
   toProblems,
 } from './problems.ts';
 
-const cell = (over: Partial<Extract<RowProblem, { kind: 'cell' }>> = {}): RowProblem => ({
-  kind: 'cell',
+const cell = (over: Partial<Extract<RowProblem, { kind: 'column-rule' }>> = {}): RowProblem => ({
+  kind: 'column-rule',
   column: 'amount',
   raw: '5 oz',
   clause: 'has a unit in it',
@@ -27,7 +27,7 @@ describe('toProblems', () => {
   test('counts every row, not every group', () => {
     const tally = noted({ line: 2, problem: cell() }, { line: 3, problem: cell() });
 
-    expect(toProblems(tally).count).toBe(2);
+    expect(toProblems(tally).failingRowCount).toBe(2);
   });
 
   test('one group per distinct problem, in the order first reached', () => {
@@ -36,14 +36,14 @@ describe('toProblems', () => {
       { line: 3, problem: cell({ column: 'product', clause: 'is empty', raw: '' }) },
     );
 
-    const columns = toProblems(tally).groups.map((group) =>
-      group.problem.kind === 'cell' ? group.problem.column : undefined,
+    const columns = toProblems(tally).rowGroups.map((group) =>
+      group.problem.kind === 'column-rule' ? group.problem.column : undefined,
     );
     expect(columns).toEqual(['amount', 'product']);
   });
 
   test('starts empty', () => {
-    expect(toProblems(newProblemTally())).toEqual({ count: 0, groups: [], file: [] });
+    expect(toProblems(newProblemTally())).toEqual({ failingRowCount: 0, rowGroups: [], file: [] });
   });
 });
 
@@ -54,7 +54,7 @@ describe('grouping', () => {
       { line: 3, problem: cell({ column: 'product', clause: 'is empty', raw: '' }) },
     );
 
-    expect(toProblems(tally).groups).toHaveLength(2);
+    expect(toProblems(tally).rowGroups).toHaveLength(2);
   });
 
   test('two widths with different actuals stay apart, since expected is constant for a file', () => {
@@ -63,7 +63,7 @@ describe('grouping', () => {
       { line: 3, problem: { kind: 'width', actual: 4, expected: 3 } },
     );
 
-    expect(toProblems(tally).groups).toHaveLength(2);
+    expect(toProblems(tally).rowGroups).toHaveLength(2);
   });
 
   test('a date read day-first stays apart from the same clause read straight', () => {
@@ -71,7 +71,10 @@ describe('grouping', () => {
     // so the discriminant has to be in the key or these two rows would merge into one group whose
     // sentence can only be right for one of them.
     const tally = noted(
-      { line: 2, problem: { kind: 'cell', column: 'date', raw: '2027-02-30', clause: NOT_A_DATE } },
+      {
+        line: 2,
+        problem: { kind: 'column-rule', column: 'date', raw: '2027-02-30', clause: NOT_A_DATE },
+      },
       {
         line: 3,
         problem: {
@@ -83,7 +86,7 @@ describe('grouping', () => {
       },
     );
 
-    expect(toProblems(tally).groups).toHaveLength(2);
+    expect(toProblems(tally).rowGroups).toHaveLength(2);
   });
 
   test('rows with different raw values still group into one', () => {
@@ -92,8 +95,51 @@ describe('grouping', () => {
       { line: 3, problem: cell({ raw: 'bar' }) },
     );
 
-    const [group] = toProblems(tally).groups;
+    const [group] = toProblems(tally).rowGroups;
     expect(group?.rowCount).toBe(2);
+  });
+
+  test('formula groups by kind alone, since its key leaves raw out', () => {
+    const tally = noted(
+      { line: 2, problem: { kind: 'formula', raw: '=SUM(A1)' } },
+      { line: 3, problem: { kind: 'formula', raw: '=A1+A2' } },
+    );
+
+    expect(toProblems(tally).rowGroups).toHaveLength(1);
+  });
+
+  test('too-long stays apart by column', () => {
+    const tally = noted(
+      { line: 2, problem: { kind: 'too-long', column: 'product' } },
+      { line: 3, problem: { kind: 'too-long', column: 'amount' } },
+    );
+
+    expect(toProblems(tally).rowGroups).toHaveLength(2);
+  });
+
+  test('resolved-date groups by readAs and clause together, apart from a different clause', () => {
+    const tally = noted(
+      {
+        line: 2,
+        problem: {
+          kind: 'resolved-date',
+          readAs: 'day-first',
+          raw: '31/02/2026',
+          clause: NOT_A_DATE,
+        },
+      },
+      {
+        line: 3,
+        problem: {
+          kind: 'resolved-date',
+          readAs: 'day-first',
+          raw: '2026-13-01',
+          clause: 'is out of range',
+        },
+      },
+    );
+
+    expect(toProblems(tally).rowGroups).toHaveLength(2);
   });
 });
 
@@ -105,13 +151,13 @@ describe('ranges', () => {
       { line: 4, problem: cell() },
     );
 
-    expect(toProblems(tally).groups[0]?.ranges).toEqual([{ start: 2, end: 4 }]);
+    expect(toProblems(tally).rowGroups[0]?.ranges).toEqual([{ start: 2, end: 4 }]);
   });
 
   test('a gap starts a new range', () => {
     const tally = noted({ line: 2, problem: cell() }, { line: 5, problem: cell() });
 
-    expect(toProblems(tally).groups[0]?.ranges).toEqual([
+    expect(toProblems(tally).rowGroups[0]?.ranges).toEqual([
       { start: 2, end: 2 },
       { start: 5, end: 5 },
     ]);
@@ -121,7 +167,7 @@ describe('ranges', () => {
     const lines = Array.from({ length: MAX_ROW_RANGES_REPORTED + 3 }, (_, index) => index * 2 + 2);
     const tally = noted(...lines.map((line) => ({ line, problem: cell() })));
 
-    const [group] = toProblems(tally).groups;
+    const [group] = toProblems(tally).rowGroups;
     expect(group?.ranges).toHaveLength(MAX_ROW_RANGES_REPORTED);
     expect(group?.rowCount).toBe(lines.length);
   });
@@ -136,7 +182,7 @@ describe('ranges', () => {
       ...consecutive.map((line) => ({ line, problem: cell() })),
     );
 
-    const [group] = toProblems(tally).groups;
+    const [group] = toProblems(tally).rowGroups;
     expect(group?.ranges).toHaveLength(MAX_ROW_RANGES_REPORTED);
     expect(group?.ranges.at(-1)?.end).toBe(consecutive.at(-1));
   });
@@ -146,14 +192,14 @@ describe('examples', () => {
   test('remembers a raw value', () => {
     const tally = noted({ line: 2, problem: cell({ raw: 'foo' }) });
 
-    expect(toProblems(tally).groups[0]?.examples).toEqual(['foo']);
+    expect(toProblems(tally).rowGroups[0]?.examples).toEqual(['foo']);
   });
 
   test('caps at MAX_EXAMPLE_VALUES', () => {
     const raws = Array.from({ length: MAX_EXAMPLE_VALUES + 3 }, (_, index) => `v${index}`);
     const tally = noted(...raws.map((raw, index) => ({ line: index + 2, problem: cell({ raw }) })));
 
-    expect(toProblems(tally).groups[0]?.examples).toHaveLength(MAX_EXAMPLE_VALUES);
+    expect(toProblems(tally).rowGroups[0]?.examples).toHaveLength(MAX_EXAMPLE_VALUES);
   });
 
   test('does not store an exact-duplicate raw value twice', () => {
@@ -162,7 +208,7 @@ describe('examples', () => {
       { line: 3, problem: cell({ raw: 'foo' }) },
     );
 
-    expect(toProblems(tally).groups[0]?.examples).toEqual(['foo']);
+    expect(toProblems(tally).rowGroups[0]?.examples).toEqual(['foo']);
   });
 
   test('keeps a blank value out of examples entirely', () => {
@@ -171,7 +217,22 @@ describe('examples', () => {
       { line: 3, problem: cell({ raw: 'foo' }) },
     );
 
-    expect(toProblems(tally).groups[0]?.examples).toEqual(['foo']);
+    expect(toProblems(tally).rowGroups[0]?.examples).toEqual(['foo']);
+  });
+
+  test('keeps an exactly empty value out of examples too', () => {
+    const tally = noted(
+      { line: 2, problem: cell({ raw: '' }) },
+      { line: 3, problem: cell({ raw: 'foo' }) },
+    );
+
+    expect(toProblems(tally).rowGroups[0]?.examples).toEqual(['foo']);
+  });
+
+  test('records an example for formula, since it carries a raw value', () => {
+    const tally = noted({ line: 2, problem: { kind: 'formula', raw: '=SUM(A1)' } });
+
+    expect(toProblems(tally).rowGroups[0]?.examples).toEqual(['=SUM(A1)']);
   });
 
   test('never remembers an example for too-long or width, since neither carries a raw value', () => {
@@ -180,7 +241,7 @@ describe('examples', () => {
       { line: 3, problem: { kind: 'width', actual: 2, expected: 3 } },
     );
 
-    for (const group of toProblems(tally).groups) expect(group.examples).toEqual([]);
+    for (const group of toProblems(tally).rowGroups) expect(group.examples).toEqual([]);
   });
 });
 
@@ -191,9 +252,19 @@ describe('noteFile', () => {
     noteFile(tally, { kind: 'date-order', issue: 'unresolvable', examples: new Map() });
 
     const problems = toProblems(tally);
-    expect(problems.count).toBe(2);
-    expect(problems.groups).toHaveLength(1);
+    expect(problems.failingRowCount).toBe(2);
+    expect(problems.rowGroups).toHaveLength(1);
     expect(problems.file).toHaveLength(1);
+  });
+
+  test('appends every file problem rather than grouping them, since file is a list not a map', () => {
+    const tally = newProblemTally();
+    noteFile(tally, { kind: 'date-order', issue: 'unresolvable', examples: new Map() });
+    noteFile(tally, { kind: 'date-order', issue: 'contradictory', examples: new Map() });
+
+    const problems = toProblems(tally);
+    expect(problems.failingRowCount).toBe(2);
+    expect(problems.file).toHaveLength(2);
   });
 });
 

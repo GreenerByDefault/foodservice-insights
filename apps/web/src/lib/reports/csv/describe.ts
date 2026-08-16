@@ -17,7 +17,13 @@ import { bothReadings, type DateOrder } from './dates.ts';
 import type { DecodeProblem } from './decode.ts';
 import type { OpeningProblem } from './opening.ts';
 import type { CsvParseError } from './parse.ts';
-import type { DateExamples, FileProblem, ProblemGroup, Problems, RowProblem } from './problems.ts';
+import type {
+  DateExamples,
+  FileProblem,
+  Problems,
+  RowProblem,
+  RowProblemGroup,
+} from './problems.ts';
 
 /** Every way `validate.ts` can refuse a file before a single row of it is read. */
 export type UnreadableFile =
@@ -43,15 +49,15 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
 }
 
 export function describeProblems(problems: Problems): RejectedUploadRecord {
-  const rowLines = problems.groups.map(renderProblem);
+  const rowLines = problems.rowGroups.map(renderProblem);
   const fileLines = problems.file.map(describeFileProblem);
   const all = [...rowLines, ...fileLines];
   const shown = all.slice(0, MAX_PROBLEMS_REPORTED);
   const hidden = all.length - shown.length;
 
   // Derived rather than tracked separately, so the reason and the rows it names cannot disagree.
-  const injection = problems.groups.some((group) => group.problem.kind === 'formula');
-  const found = `We found ${problems.count} ${plural(problems.count, 'problem')} in that file.`;
+  const injection = problems.rowGroups.some((group) => group.problem.kind === 'formula');
+  const found = `We found ${problems.failingRowCount} ${plural(problems.failingRowCount, 'problem')} in that file.`;
   const shownSuffix = hidden > 0 ? ` Showing the first ${shown.length}.` : '';
   const lead = injection
     ? 'Some product names start with a character a spreadsheet reads as the start of a formula (= + - @), which we cannot accept. '
@@ -176,7 +182,7 @@ const ROW_LABELS = { product: 'product', date: 'date', amount: 'amount' } as con
  * A problem covering a single row reads exactly as it would if it were the only thing wrong with
  * the file — the value inline, no row list, no examples — because for most files it is.
  */
-function renderProblem(group: ProblemGroup): string {
+function renderProblem(group: RowProblemGroup): string {
   const alone = group.rowCount === 1;
   const subject = subjectPhrase(group.problem, alone ? quote(group.examples[0]) : undefined);
 
@@ -197,7 +203,7 @@ function renderProblem(group: ProblemGroup): string {
  */
 function subjectPhrase(problem: RowProblem, value: string | undefined): string | undefined {
   switch (problem.kind) {
-    case 'cell':
+    case 'column-rule':
       return withValue(`the ${ROW_LABELS[problem.column]}`, value);
     case 'resolved-date':
       return `${withValue(`the ${ROW_LABELS.date}`, value)}, read ${phrase(problem.readAs)} like the rest of the column,`;
@@ -217,7 +223,7 @@ function withValue(label: string, value: string | undefined): string {
 
 function clauseOf(problem: RowProblem): string {
   switch (problem.kind) {
-    case 'cell':
+    case 'column-rule':
     case 'resolved-date':
       return problem.clause;
     // The value itself is never quoted back here — it is what is too long.
@@ -237,7 +243,7 @@ function phrase(order: DateOrder): string {
 /** `2–15, 18, 44 and 3 more (20 rows)`. The count is stated whenever the list does not name every
  * row, so a run or an elision never hides how much of the file this is.
  */
-function renderRows(group: ProblemGroup): string {
+function renderRows(group: RowProblemGroup): string {
   const named = group.ranges.reduce((total, { start, end }) => total + (end - start + 1), 0);
   const elided = group.rowCount - named;
   const runs = group.ranges.some(({ start, end }) => end - start >= 2);
