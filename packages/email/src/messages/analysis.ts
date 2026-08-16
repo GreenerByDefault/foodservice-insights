@@ -38,46 +38,33 @@ export type AnalysisFailed = {
   reason: AnalysisFailureReason;
 };
 
+const INTERRUPTED = {
+  text: 'Something on our end interrupted the analysis before it could finish.',
+  offerRetry: true,
+} as const;
+
 /** What each failure reason says to the person who uploaded the file, and whether retrying is
  * worth offering.
  *
  * A `Record` over the enum rather than a lookup with a fallback, so a reason added to the database
  * fails this file to compile instead of silently emailing someone the `unknown` copy.
- *
- * **None of these may quote `analysis_attempt.failure_detail`**, which carries the child process's
- * stderr. What the user gets is this sentence and nothing else.
  */
 export const FAILURE_EXPLANATIONS: Record<
   AnalysisFailureReason,
   { text: string; offerRetry: boolean }
 > = {
-  child_crashed: { text: 'The analysis stopped unexpectedly partway through.', offerRetry: true },
-  hung: { text: 'The analysis stopped making progress, so we ended it.', offerRetry: true },
-  hard_timeout: {
-    text: 'The analysis ran longer than we allow, so we ended it.',
-    offerRetry: true,
-  },
-  infrastructure: {
-    text: 'Something on our side went wrong before the analysis could finish.',
-    offerRetry: true,
-  },
+  child_crashed: INTERRUPTED,
+  hung: INTERRUPTED,
+  hard_timeout: { text: 'The analysis took too long, so we stopped it.', offerRetry: true },
+  infrastructure: INTERRUPTED,
   contract_violation: {
     text: 'The analysis finished in a state we could not read.',
     offerRetry: false,
   },
-  upstream_api: {
-    text: 'A service the analysis depends on was unavailable.',
-    offerRetry: true,
-  },
-  abandoned: {
-    text: 'The machine running the analysis went away before it finished.',
-    offerRetry: true,
-  },
-  unknown: { text: 'The analysis failed, and we could not determine why.', offerRetry: true },
-  shut_down: {
-    text: 'We restarted the analysis service while your report was still running.',
-    offerRetry: true,
-  },
+  upstream_api: INTERRUPTED,
+  abandoned: INTERRUPTED,
+  unknown: INTERRUPTED,
+  shut_down: INTERRUPTED,
 };
 
 /** Result files a person would want to download. Charts are in the page, not the email. */

@@ -15,8 +15,6 @@ const REPORT = {
 const REPORT_URL = `https://example.test/orgs/${SAMPLE_ORGANIZATION_ID}/reports/${SAMPLE_REPORT_ID}`;
 const CONTACT_URL = 'mailto:support@example.test';
 
-/** Every reason the database can store. A new one added to the enum without copy fails to compile
- * in `analysis.ts`; this is what proves the copy is reachable and distinct. */
 const EVERY_REASON: readonly AnalysisFailureReason[] = [
   'child_crashed',
   'hung',
@@ -106,7 +104,7 @@ describe('renderAnalysisFailed', () => {
     );
   });
 
-  test('gives each reason its own explanation, so the copy is worth having', () => {
+  test('shares one explanation across reasons the user can act on identically, but keeps hard_timeout and contract_violation distinct', () => {
     const explanations = EVERY_REASON.map(
       (reason) =>
         renderAnalysisFailed(emailer, {
@@ -116,9 +114,7 @@ describe('renderAnalysisFailed', () => {
           reason,
         }).blocks[0],
     );
-    expect(new Set(explanations.map((block) => JSON.stringify(block))).size).toBe(
-      EVERY_REASON.length,
-    );
+    expect(new Set(explanations.map((block) => JSON.stringify(block))).size).toBe(3);
   });
 
   test('offers to contact us alongside retry, not instead of it, when retry is offered', () => {
