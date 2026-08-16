@@ -2,7 +2,7 @@
 
 import { APP_NAME } from '@gbd/core';
 import type { OrganizationRole } from '@gbd/db';
-import type { Emailer } from '../client.ts';
+import type { EmailContext } from '../client.ts';
 import type { Document } from './layout.ts';
 import { signInUrl } from './links.ts';
 
@@ -26,7 +26,10 @@ const ROLE_LABELS: Record<OrganizationRole, string> = {
  */
 const EXPIRY_FORMAT = new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' });
 
-export function renderOrganizationInvite(emailer: Emailer, message: OrganizationInvite): Document {
+export function renderOrganizationInvite(
+  context: EmailContext,
+  message: OrganizationInvite,
+): Document {
   const inviter = message.invitedByName ?? 'An admin';
 
   return {
@@ -36,7 +39,7 @@ export function renderOrganizationInvite(emailer: Emailer, message: Organization
         block: 'paragraph',
         text: `${inviter} invited you to join ${message.organizationName}. Sign in with this email address to accept.`,
       },
-      { block: 'action', label: 'Accept the invitation', url: signInUrl(emailer, message.to) },
+      { block: 'action', label: 'Accept the invitation', url: signInUrl(context, message.to) },
       {
         block: 'facts',
         facts: [

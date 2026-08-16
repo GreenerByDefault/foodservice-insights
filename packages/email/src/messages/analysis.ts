@@ -11,7 +11,7 @@ import type {
   ResultFileId,
   ResultFileKind,
 } from '@gbd/db';
-import type { Emailer } from '../client.ts';
+import type { EmailContext } from '../client.ts';
 import type { Document } from './layout.ts';
 import { reportUrl, resultFileUrl } from './links.ts';
 
@@ -71,10 +71,13 @@ function named(reportName: string | null, whenNamed: (name: string) => string, o
   return reportName === null ? otherwise : whenNamed(reportName);
 }
 
-export function renderAnalysisSucceeded(emailer: Emailer, message: AnalysisSucceeded): Document {
+export function renderAnalysisSucceeded(
+  context: EmailContext,
+  message: AnalysisSucceeded,
+): Document {
   const downloads = message.resultFiles.flatMap((file) => {
     const label = DOWNLOADABLE[file.kind];
-    return label === null ? [] : [{ label, url: resultFileUrl(emailer, file.id) }];
+    return label === null ? [] : [{ label, url: resultFileUrl(context, file.id) }];
   });
 
   return {
@@ -88,14 +91,14 @@ export function renderAnalysisSucceeded(emailer: Emailer, message: AnalysisSucce
       {
         block: 'action',
         label: 'View your report',
-        url: reportUrl(emailer, message.organizationId, message.reportId),
+        url: reportUrl(context, message.organizationId, message.reportId),
       },
       ...(downloads.length > 0 ? [{ block: 'links' as const, links: downloads }] : []),
     ],
   };
 }
 
-export function renderAnalysisFailed(emailer: Emailer, message: AnalysisFailed): Document {
+export function renderAnalysisFailed(context: EmailContext, message: AnalysisFailed): Document {
   return {
     heading: named(
       message.reportName,
@@ -114,7 +117,7 @@ export function renderAnalysisFailed(emailer: Emailer, message: AnalysisFailed):
       {
         block: 'action',
         label: 'Try again',
-        url: reportUrl(emailer, message.organizationId, message.reportId),
+        url: reportUrl(context, message.organizationId, message.reportId),
       },
     ],
   };

@@ -1,4 +1,5 @@
 export {
+  type EmailContext,
   type Emailer,
   type EmailerConfig,
   type EmailMessageKind,

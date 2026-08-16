@@ -8,24 +8,24 @@
  */
 
 import type { OrganizationId, ReportId, ResultFileId } from '@gbd/db';
-import type { Emailer } from '../client.ts';
+import type { EmailContext } from '../client.ts';
 
 export function reportUrl(
-  emailer: Emailer,
+  context: EmailContext,
   organizationId: OrganizationId,
   reportId: ReportId,
 ): string {
-  return `${emailer.siteUrl}/orgs/${organizationId}/reports/${reportId}`;
+  return `${context.siteUrl}/orgs/${organizationId}/reports/${reportId}`;
 }
 
 /** The stable, unauthenticated download link — see `apps/web/src/routes/file/result/[id=uuid]/`. */
-export function resultFileUrl(emailer: Emailer, resultFileId: ResultFileId): string {
-  return `${emailer.siteUrl}/file/result/${resultFileId}`;
+export function resultFileUrl(context: EmailContext, resultFileId: ResultFileId): string {
+  return `${context.siteUrl}/file/result/${resultFileId}`;
 }
 
 /** Sign-in with the address pre-filled. Deliberately carries no token: per REQUIREMENTS.md's invite
  * flow, forwarding this link grants nobody anything, because only OTP to that address does.
  */
-export function signInUrl(emailer: Emailer, email: string): string {
-  return `${emailer.siteUrl}/sign-in?email=${encodeURIComponent(email)}`;
+export function signInUrl(context: EmailContext, email: string): string {
+  return `${context.siteUrl}/sign-in?email=${encodeURIComponent(email)}`;
 }

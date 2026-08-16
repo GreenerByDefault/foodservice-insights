@@ -4,7 +4,6 @@
  * configured. A caller that could choose the recipient could send one of these to a customer.
  */
 
-import type { Emailer } from '../client.ts';
 import type { Document } from './layout.ts';
 
 export type GbdOrganizationCreated = {
@@ -27,10 +26,7 @@ export type GbdUserDeleted = {
   userEmail: string;
 };
 
-export function renderGbdOrganizationCreated(
-  _emailer: Emailer,
-  message: GbdOrganizationCreated,
-): Document {
+export function renderGbdOrganizationCreated(message: GbdOrganizationCreated): Document {
   return {
     heading: `New organization: ${message.organizationName}`,
     blocks: [
@@ -45,10 +41,7 @@ export function renderGbdOrganizationCreated(
   };
 }
 
-export function renderGbdOrganizationDeleted(
-  _emailer: Emailer,
-  message: GbdOrganizationDeleted,
-): Document {
+export function renderGbdOrganizationDeleted(message: GbdOrganizationDeleted): Document {
   return {
     heading: `Organization deleted: ${message.organizationName}`,
     blocks: [
@@ -67,7 +60,7 @@ export function renderGbdOrganizationDeleted(
   };
 }
 
-export function renderGbdUserDeleted(_emailer: Emailer, message: GbdUserDeleted): Document {
+export function renderGbdUserDeleted(message: GbdUserDeleted): Document {
   return {
     heading: `User deleted: ${message.userEmail}`,
     blocks: [

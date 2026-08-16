@@ -3,7 +3,6 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { recordingEmailer } from '../testing/recording.ts';
 import {
   renderGbdOrganizationCreated,
   renderGbdOrganizationDeleted,
@@ -11,11 +10,9 @@ import {
 } from './gbd.ts';
 import { renderText } from './layout.ts';
 
-const emailer = recordingEmailer().service;
-
 describe('renderGbdOrganizationCreated', () => {
   test('names the organization and who created it', () => {
-    const document = renderGbdOrganizationCreated(emailer, {
+    const document = renderGbdOrganizationCreated({
       kind: 'gbd-organization-created',
       organizationName: 'Ridgeview Schools',
       actorEmail: 'dana@ridgeview.test',
@@ -28,7 +25,7 @@ describe('renderGbdOrganizationCreated', () => {
 
 describe('renderGbdOrganizationDeleted', () => {
   test('names the organization, who deleted it, and that accounts survive', () => {
-    const document = renderGbdOrganizationDeleted(emailer, {
+    const document = renderGbdOrganizationDeleted({
       kind: 'gbd-organization-deleted',
       organizationName: 'Ridgeview Schools',
       actorEmail: 'dana@ridgeview.test',
@@ -43,7 +40,7 @@ describe('renderGbdOrganizationDeleted', () => {
 
 describe('renderGbdUserDeleted', () => {
   test('names the deleted account', () => {
-    const document = renderGbdUserDeleted(emailer, {
+    const document = renderGbdUserDeleted({
       kind: 'gbd-user-deleted',
       userEmail: 'dana@ridgeview.test',
     });

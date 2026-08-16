@@ -6,7 +6,7 @@
  */
 
 import { assertNever } from '@gbd/core';
-import type { Emailer, RenderedEmail } from '../client.ts';
+import type { EmailContext, RenderedEmail } from '../client.ts';
 import type { AnalysisFailed, AnalysisSucceeded } from './analysis.ts';
 import { renderAnalysisFailed, renderAnalysisSucceeded } from './analysis.ts';
 import type { GbdOrganizationCreated, GbdOrganizationDeleted, GbdUserDeleted } from './gbd.ts';
@@ -31,7 +31,7 @@ export type EmailMessage =
 /** Who the message goes to. The GBD notices carry no `to`, so this is the only place their
  * recipient is decided.
  */
-function recipient(emailer: Emailer, message: EmailMessage): string {
+function recipient(context: EmailContext, message: EmailMessage): string {
   switch (message.kind) {
     case 'analysis-succeeded':
     case 'analysis-failed':
@@ -40,26 +40,26 @@ function recipient(emailer: Emailer, message: EmailMessage): string {
     case 'gbd-organization-created':
     case 'gbd-organization-deleted':
     case 'gbd-user-deleted':
-      return emailer.gbdAddress;
+      return context.gbdAddress;
     default:
       return assertNever(message);
   }
 }
 
-function describe(emailer: Emailer, message: EmailMessage): Document {
+function describe(context: EmailContext, message: EmailMessage): Document {
   switch (message.kind) {
     case 'analysis-succeeded':
-      return renderAnalysisSucceeded(emailer, message);
+      return renderAnalysisSucceeded(context, message);
     case 'analysis-failed':
-      return renderAnalysisFailed(emailer, message);
+      return renderAnalysisFailed(context, message);
     case 'organization-invite':
-      return renderOrganizationInvite(emailer, message);
+      return renderOrganizationInvite(context, message);
     case 'gbd-organization-created':
-      return renderGbdOrganizationCreated(emailer, message);
+      return renderGbdOrganizationCreated(message);
     case 'gbd-organization-deleted':
-      return renderGbdOrganizationDeleted(emailer, message);
+      return renderGbdOrganizationDeleted(message);
     case 'gbd-user-deleted':
-      return renderGbdUserDeleted(emailer, message);
+      return renderGbdUserDeleted(message);
     default:
       return assertNever(message);
   }
@@ -68,12 +68,12 @@ function describe(emailer: Emailer, message: EmailMessage): Document {
 /** Turn a message into the email a transport can send. Pure, so a test — or a future preview
  * route — can look at what we would send without sending it.
  */
-export function render(emailer: Emailer, message: EmailMessage): RenderedEmail {
-  const document = describe(emailer, message);
+export function render(context: EmailContext, message: EmailMessage): RenderedEmail {
+  const document = describe(context, message);
   return {
     kind: message.kind,
-    from: emailer.from,
-    to: recipient(emailer, message),
+    from: context.from,
+    to: recipient(context, message),
     // One string is both, so an email's subject can never disagree with its own heading.
     subject: document.heading,
     text: renderText(document),

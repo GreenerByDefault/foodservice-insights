@@ -45,16 +45,14 @@ export type EmailerConfig = {
   gbdAddress: string;
 };
 
-/** A transport, plus everything rendering a message needs that is not in the message.
- *
- * Every function in this package takes an `Emailer` as its first parameter so that callers are
- * testable: the app passes its long-lived emailer, and tests pass `recordingEmailer()`.
- */
-export type Emailer = {
-  readonly transport: EmailTransport;
+export type EmailContext = {
   readonly from: string;
   readonly siteUrl: string;
   readonly gbdAddress: string;
+};
+
+export type Emailer = EmailContext & {
+  readonly transport: EmailTransport;
 };
 
 /** Build an emailer. This connects to nothing; a transport only reaches the network on a `send`. */
