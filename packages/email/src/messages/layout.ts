@@ -1,32 +1,26 @@
-/** One shape for every email's copy, rendered to both a plain-text and an HTML body.
- *
- * Each message describes its copy once, as blocks, rather than writing two bodies that drift apart.
- * That is also what makes escaping an invariant instead of a habit: `renderHtml` is the only place
- * that interpolates into markup, so no renderer can forget. Report names, organization names, and
- * invited addresses all reach these blocks and all come from users.
- *
- * Styles are inline because email clients discard `<head>`. Deliberately plain — GBD comms will
- * supply real language and design later, per REQUIREMENTS.md § Design and accessibility.
- */
+/** One shape for every email's copy, rendered to both a plain-text and an HTML body. */
 
 import { APP_NAME, assertNever } from '@gbd/core';
+import type { TrustedUrl } from './links.ts';
 
 export type Block =
   | { block: 'paragraph'; text: string }
-  /** The one thing we want the reader to do. Rendered as a bare URL in the text body, because a
-   * plain-text reader cannot click a label. */
-  | { block: 'action'; label: string; url: string }
+  /** A primary call to action, styled as a button in the HTML body. Rendered as a bare URL in
+   * the text body instead, since a plain-text reader cannot click a label. */
+  | { block: 'action'; label: string; url: TrustedUrl }
   /** Secondary links, such as the individual downloads. Same text-body treatment as `action`. */
-  | { block: 'links'; links: ReadonlyArray<{ label: string; url: string }> }
+  | { block: 'links'; links: ReadonlyArray<{ label: string; url: TrustedUrl }> }
   /** Supporting detail, as label/value pairs. */
   | { block: 'facts'; facts: ReadonlyArray<readonly [string, string]> };
 
 export type Document = {
-  /** Doubles as the email's subject and its heading, so the two can never disagree. */
+  /** Rendered as the `<h1>` of the HTML body and the `<title>` of the page. */
   heading: string;
   blocks: readonly Block[];
 };
 
+/** Neutralizes the characters that let a value break out of a text node or a double- or
+ * single-quoted attribute. */
 export function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -56,13 +50,14 @@ export function renderText(document: Document): string {
   return [document.heading, ...parts, `— ${APP_NAME}`].join('\n\n');
 }
 
-const BODY_STYLE =
+// Styles are inline because email clients discard `<head>`.
+export const BODY_STYLE =
   'margin:0;padding:24px;background:#f5f5f4;' +
   "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;" +
   'font-size:16px;line-height:1.5;color:#1c1917;';
-const CARD_STYLE =
+export const CARD_STYLE =
   'max-width:560px;margin:0 auto;padding:32px;background:#ffffff;border-radius:8px;';
-const ACTION_STYLE =
+export const ACTION_STYLE =
   'display:inline-block;padding:12px 20px;background:#166534;color:#ffffff;' +
   'border-radius:6px;text-decoration:none;font-weight:600;';
 

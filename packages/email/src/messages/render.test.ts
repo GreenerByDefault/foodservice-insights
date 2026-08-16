@@ -4,9 +4,10 @@
 
 import { describe, expect, test } from 'vitest';
 import type { EmailMessageKind } from '../client.ts';
-import { allMessages, anAnalysisSucceeded } from '../testing/fixtures.ts';
+import { aGbdOrganizationCreated, allMessages, anAnalysisSucceeded } from '../testing/fixtures.ts';
 import { recordingEmailer } from '../testing/recording.ts';
 import { render } from './index.ts';
+import { reportUrl } from './links.ts';
 
 const emailer = recordingEmailer().service;
 const RECIPIENT = 'alice@example.test';
@@ -39,16 +40,21 @@ describe('render', () => {
     },
   );
 
-  test('uses one string for the subject and the heading', () => {
+  test('defaults the subject to the document heading, as a convenience — not a rule the type enforces', () => {
     const email = render(emailer, anAnalysisSucceeded({ to: RECIPIENT }));
     expect(email.html).toContain(`<title>${email.subject}</title>`);
   });
 
-  test('builds links against the emailer, not the message', () => {
-    const elsewhere = recordingEmailer({ siteUrl: 'https://staging.example.test/' }).service;
+  test('builds links from the siteUrl passed in, not a cached default', () => {
+    const otherEmailer = recordingEmailer({ siteUrl: 'https://staging.example.test' }).service;
     const succeeded = anAnalysisSucceeded({ to: RECIPIENT });
+    expect(render(otherEmailer, succeeded).text).toContain(
+      reportUrl(otherEmailer, succeeded.organizationId, succeeded.reportId),
+    );
+  });
 
-    // The trailing slash is trimmed by `initializeEmailer`, so this is one slash, not two.
-    expect(render(elsewhere, succeeded).text).toContain('https://staging.example.test/orgs/');
+  test('addresses a GBD notice using the emailer’s gbdAddress, not a cached default', () => {
+    const otherEmailer = recordingEmailer({ gbdAddress: 'ops@example.test' }).service;
+    expect(render(otherEmailer, aGbdOrganizationCreated()).to).toBe('ops@example.test');
   });
 });
