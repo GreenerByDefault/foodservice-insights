@@ -3,7 +3,7 @@
 import type { OrganizationId, ReportId, ResultFileId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { recordingEmailer } from '../testing/recording.ts';
-import { reportUrl, resultFileUrl, signInUrl } from './links.ts';
+import { reportUrl, resultFileUrl, signInUrl, supportMailtoUrl } from './links.ts';
 
 const emailer = recordingEmailer().service;
 const ORGANIZATION_ID = 'org-id' as OrganizationId;
@@ -36,5 +36,11 @@ describe('signInUrl', () => {
     expect(signInUrl(emailer, 'a+b@example.test')).toContain(
       encodeURIComponent('a+b@example.test'),
     );
+  });
+});
+
+describe('supportMailtoUrl', () => {
+  test('mailtos the configured support address', () => {
+    expect(supportMailtoUrl(emailer)).toBe('mailto:support@example.test');
   });
 });

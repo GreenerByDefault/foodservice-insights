@@ -23,6 +23,7 @@ const DEFAULTS = {
   from: 'Foodservice Insights <noreply@example.test>',
   siteUrl: 'https://example.test',
   gbdAddress: 'gbd@example.test',
+  supportAddress: 'support@example.test',
 } as const;
 
 export function recordingEmailer(

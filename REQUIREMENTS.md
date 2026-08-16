@@ -44,7 +44,7 @@ Three distinct failures can reach the user, and each calls for a different answe
 - **The analysis failed:** the user can retry without re-uploading the file or re-entering
   metadata.
   - The server allows only one retry at a time per report.
-  - The error message makes clear this was not a problem with their file.
+  - The error message makes clear this was not a problem with their file, mentions contacting GBD, and offers retrying when relevant.
 
 ### Persistence
 
@@ -82,7 +82,8 @@ rendered charts and potentially some metadata.
 The user receives an email when the analysis completes.
 
 - Success includes links to download the result files, and potentially metadata.
-- Failure explains the failure and links to the web app to retry.
+- Failure explains the failure and offers to retry, to contact GBD, or both — see § Errors
+  during upload and processing.
 - Email typically sends within 30 seconds, but is best effort. Delivery is not guaranteed.
 
 ### Multiple reports

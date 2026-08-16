@@ -23,9 +23,11 @@ export function resultFileUrl(context: EmailContext, resultFileId: ResultFileId)
   return `${context.siteUrl}/file/result/${resultFileId}`;
 }
 
-/** Sign-in with the address pre-filled. Deliberately carries no token: per REQUIREMENTS.md's invite
- * flow, forwarding this link grants nobody anything, because only OTP to that address does.
- */
+/** Sign-in with the address pre-filled. */
 export function signInUrl(context: EmailContext, email: string): string {
   return `${context.siteUrl}/sign-in?email=${encodeURIComponent(email)}`;
+}
+
+export function supportMailtoUrl(context: EmailContext): string {
+  return `mailto:${context.supportAddress}`;
 }

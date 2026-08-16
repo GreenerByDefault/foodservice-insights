@@ -6,6 +6,7 @@ const CONFIG = {
   from: 'Foodservice Insights <noreply@example.test>',
   siteUrl: 'https://example.test',
   gbdAddress: 'gbd@example.test',
+  supportAddress: 'support@example.test',
 };
 
 describe('initializeEmailer', () => {

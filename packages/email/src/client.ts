@@ -35,12 +35,15 @@ export type EmailerConfig = {
   siteUrl: string;
   /** Where the GBD notices go. */
   gbdAddress: string;
+  /** Where a user is told to write for help. */
+  supportAddress: string;
 };
 
 export type EmailContext = {
   readonly from: string;
   readonly siteUrl: string;
   readonly gbdAddress: string;
+  readonly supportAddress: string;
 };
 
 export type Emailer = EmailContext & {
@@ -55,5 +58,6 @@ export function initializeEmailer(config: EmailerConfig): Emailer {
     // Trimmed here rather than at every call site, so `${siteUrl}${path}` is always right.
     siteUrl: config.siteUrl.replace(/\/+$/, ''),
     gbdAddress: config.gbdAddress,
+    supportAddress: config.supportAddress,
   };
 }

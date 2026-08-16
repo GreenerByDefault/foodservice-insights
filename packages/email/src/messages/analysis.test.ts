@@ -13,6 +13,7 @@ const REPORT = {
 } as const;
 
 const REPORT_URL = `https://example.test/orgs/${SAMPLE_ORGANIZATION_ID}/reports/${SAMPLE_REPORT_ID}`;
+const CONTACT_URL = 'mailto:support@example.test';
 
 /** Every reason the database can store. A new one added to the enum without copy fails to compile
  * in `analysis.ts`; this is what proves the copy is reachable and distinct. */
@@ -89,17 +90,20 @@ describe('renderAnalysisFailed', () => {
       reportName: 'Q1 procurement',
       reason,
     });
+    const { text, offerRetry } = FAILURE_EXPLANATIONS[reason];
 
-    expect(document.blocks).toEqual([
-      { block: 'paragraph', text: FAILURE_EXPLANATIONS[reason] },
-      // REQUIREMENTS.md § Errors during upload and processing: retrying is the whole point of the
-      // email, so the reader must never come away thinking their file was at fault.
-      {
-        block: 'paragraph',
-        text: 'This was not a problem with your file. You can run it again without uploading it a second time.',
-      },
-      { block: 'action', label: 'Try again', url: REPORT_URL },
-    ]);
+    // REQUIREMENTS.md § Errors during upload and processing: retrying is the whole point of the
+    // email, so the reader must never come away thinking their file was at fault.
+    expect(document.blocks[0]).toEqual({ block: 'paragraph', text });
+    expect(document.blocks[1]).toEqual({
+      block: 'paragraph',
+      text: expect.stringContaining('This was not a problem with your file.'),
+    });
+    expect(document.blocks[2]).toEqual(
+      offerRetry
+        ? { block: 'action', label: 'Try again', url: REPORT_URL }
+        : { block: 'action', label: 'Contact us', url: CONTACT_URL },
+    );
   });
 
   test('gives each reason its own explanation, so the copy is worth having', () => {
@@ -114,6 +118,36 @@ describe('renderAnalysisFailed', () => {
     );
     expect(new Set(explanations.map((block) => JSON.stringify(block))).size).toBe(
       EVERY_REASON.length,
+    );
+  });
+
+  test('offers to contact us alongside retry, not instead of it, when retry is offered', () => {
+    const document = renderAnalysisFailed(emailer, {
+      kind: 'analysis-failed',
+      ...REPORT,
+      reportName: 'Q1 procurement',
+      reason: 'upstream_api',
+    });
+
+    expect(document.blocks).toContainEqual({
+      block: 'links',
+      links: [{ label: 'Contact us', url: CONTACT_URL }],
+    });
+  });
+
+  test('skips the retry action for a contract_violation, since retrying reruns the same broken output', () => {
+    const document = renderAnalysisFailed(emailer, {
+      kind: 'analysis-failed',
+      ...REPORT,
+      reportName: 'Q1 procurement',
+      reason: 'contract_violation',
+    });
+
+    expect(document.blocks).not.toContainEqual(
+      expect.objectContaining({ block: 'action', label: 'Try again' }),
+    );
+    expect(document.blocks).toEqual(
+      expect.arrayContaining([{ block: 'action', label: 'Contact us', url: CONTACT_URL }]),
     );
   });
 });
