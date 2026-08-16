@@ -71,6 +71,6 @@ export function render(context: EmailContext, message: EmailMessage): RenderedEm
   };
 }
 
-export type { AnalysisFailed, AnalysisSucceeded, ResultFileLink } from './analysis.ts';
+export type { AnalysisFailed, AnalysisSucceeded } from './analysis.ts';
 export type { GbdOrganizationCreated, GbdOrganizationDeleted, GbdUserDeleted } from './gbd.ts';
 export type { OrganizationInvite } from './invite.ts';

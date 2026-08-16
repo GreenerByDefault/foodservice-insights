@@ -12,7 +12,6 @@ export const SAMPLE_ORGANIZATION_ID = '0199c4d1-0000-7000-8000-000000000001' as 
 export const SAMPLE_REPORT_ID = '0199c4d1-0000-7000-8000-000000000002' as ReportId;
 const SAMPLE_PDF_ID = '0199c4d1-0000-7000-8000-000000000003' as ResultFileId;
 const SAMPLE_XLSX_ID = '0199c4d1-0000-7000-8000-000000000004' as ResultFileId;
-const SAMPLE_CHART_ID = '0199c4d1-0000-7000-8000-000000000005' as ResultFileId;
 
 export function anAnalysisSucceeded(overrides: Partial<AnalysisSucceeded> = {}): AnalysisSucceeded {
   return {
@@ -21,11 +20,8 @@ export function anAnalysisSucceeded(overrides: Partial<AnalysisSucceeded> = {}):
     organizationId: SAMPLE_ORGANIZATION_ID,
     reportId: SAMPLE_REPORT_ID,
     reportName: 'Q1 procurement',
-    resultFiles: [
-      { id: SAMPLE_PDF_ID, kind: 'pdf' },
-      { id: SAMPLE_XLSX_ID, kind: 'xlsx' },
-      { id: SAMPLE_CHART_ID, kind: 'chart' },
-    ],
+    pdfFileId: SAMPLE_PDF_ID,
+    xlsxFileId: SAMPLE_XLSX_ID,
     ...overrides,
   };
 }

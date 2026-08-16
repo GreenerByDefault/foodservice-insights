@@ -28,16 +28,13 @@ const EVERY_REASON: readonly AnalysisFailureReason[] = [
 ];
 
 describe('renderAnalysisSucceeded', () => {
-  test('links the report page and each downloadable file, but not the charts', () => {
+  test('links the report page, the PDF, and the Excel sheet', () => {
     const document = renderAnalysisSucceeded(emailer, {
       kind: 'analysis-succeeded',
       ...REPORT,
       reportName: 'Q1 procurement',
-      resultFiles: [
-        { id: 'pdf-id' as ResultFileId, kind: 'pdf' },
-        { id: 'xlsx-id' as ResultFileId, kind: 'xlsx' },
-        { id: 'chart-id' as ResultFileId, kind: 'chart' },
-      ],
+      pdfFileId: 'pdf-id' as ResultFileId,
+      xlsxFileId: 'xlsx-id' as ResultFileId,
     });
 
     expect(document.heading).toBe('Your report is ready: Q1 procurement');
@@ -51,21 +48,6 @@ describe('renderAnalysisSucceeded', () => {
           { label: 'Download the Excel sheet', url: 'https://example.test/file/result/xlsx-id' },
         ],
       },
-    ]);
-  });
-
-  test('drops the links block entirely when there is nothing downloadable', () => {
-    const document = renderAnalysisSucceeded(emailer, {
-      kind: 'analysis-succeeded',
-      ...REPORT,
-      reportName: 'Q1 procurement',
-      resultFiles: [],
-    });
-
-    expect(document.heading).toBe('Your report is ready: Q1 procurement');
-    expect(document.blocks).toEqual([
-      { block: 'paragraph', text: 'We have finished analysing your procurement data.' },
-      { block: 'action', label: 'View your report', url: REPORT_URL },
     ]);
   });
 });
@@ -90,8 +72,6 @@ describe('renderAnalysisFailed', () => {
     });
     const { text, offerRetry } = FAILURE_EXPLANATIONS[reason];
 
-    // REQUIREMENTS.md § Errors during upload and processing: retrying is the whole point of the
-    // email, so the reader must never come away thinking their file was at fault.
     expect(document.blocks[0]).toEqual({ block: 'paragraph', text });
     expect(document.blocks[1]).toEqual({
       block: 'paragraph',

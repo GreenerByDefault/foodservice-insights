@@ -16,7 +16,6 @@ export {
   type GbdOrganizationDeleted,
   type GbdUserDeleted,
   type OrganizationInvite,
-  type ResultFileLink,
   render,
 } from './messages/index.ts';
 export { sendEmail } from './send.ts';

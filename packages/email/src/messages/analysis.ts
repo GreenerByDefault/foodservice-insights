@@ -3,22 +3,10 @@
  * There is deliberately no message for a canceled attempt.
  */
 
-import type {
-  AnalysisFailureReason,
-  OrganizationId,
-  ReportId,
-  ResultFileId,
-  ResultFileKind,
-} from '@gbd/db';
+import type { AnalysisFailureReason, OrganizationId, ReportId, ResultFileId } from '@gbd/db';
 import type { EmailContext } from '../client.ts';
 import type { Document } from './layout.ts';
 import { reportUrl, resultFileUrl, supportMailtoUrl } from './links.ts';
-
-/** A stored result file, as much of one as a link needs. */
-export type ResultFileLink = {
-  id: ResultFileId;
-  kind: ResultFileKind;
-};
 
 export type AnalysisSucceeded = {
   kind: 'analysis-succeeded';
@@ -26,7 +14,8 @@ export type AnalysisSucceeded = {
   organizationId: OrganizationId;
   reportId: ReportId;
   reportName: string;
-  resultFiles: readonly ResultFileLink[];
+  pdfFileId: ResultFileId;
+  xlsxFileId: ResultFileId;
 };
 
 export type AnalysisFailed = {
@@ -67,22 +56,10 @@ export const FAILURE_EXPLANATIONS: Record<
   shut_down: INTERRUPTED,
 };
 
-/** Result files a person would want to download. Charts are in the page, not the email. */
-const DOWNLOADABLE: Record<ResultFileKind, string | null> = {
-  pdf: 'Download the PDF',
-  xlsx: 'Download the Excel sheet',
-  chart: null,
-};
-
 export function renderAnalysisSucceeded(
   context: EmailContext,
   message: AnalysisSucceeded,
 ): Document {
-  const downloads = message.resultFiles.flatMap((file) => {
-    const label = DOWNLOADABLE[file.kind];
-    return label === null ? [] : [{ label, url: resultFileUrl(context, file.id) }];
-  });
-
   return {
     heading: `Your report is ready: ${message.reportName}`,
     blocks: [
@@ -92,7 +69,13 @@ export function renderAnalysisSucceeded(
         label: 'View your report',
         url: reportUrl(context, message.organizationId, message.reportId),
       },
-      ...(downloads.length > 0 ? [{ block: 'links' as const, links: downloads }] : []),
+      {
+        block: 'links',
+        links: [
+          { label: 'Download the PDF', url: resultFileUrl(context, message.pdfFileId) },
+          { label: 'Download the Excel sheet', url: resultFileUrl(context, message.xlsxFileId) },
+        ],
+      },
     ],
   };
 }
