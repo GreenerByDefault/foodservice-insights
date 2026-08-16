@@ -228,16 +228,20 @@ CREATE OR REPLACE FUNCTION "public"."analysis_attempt_check_terminal_is_final"()
     LANGUAGE "plpgsql"
     AS $$
     BEGIN
-      -- Compared row-wise with the one mutable column masked out, rather than as a list of
+      -- Compared row-wise with the mutable columns masked out, rather than as a list of
       -- OLD.x = NEW.x tests, so that a column added later is frozen by default instead of
       -- silently becoming mutable after an attempt has finished.
-      IF to_jsonb(OLD) - 'notification_email_sent_at'
-         = to_jsonb(NEW) - 'notification_email_sent_at' THEN
+      IF to_jsonb(OLD) - ARRAY['notification_email_sent_at',
+                               'notification_claimed_at',
+                               'notification_claimed_by_worker_id']
+         = to_jsonb(NEW) - ARRAY['notification_email_sent_at',
+                                 'notification_claimed_at',
+                                 'notification_claimed_by_worker_id'] THEN
         RETURN NEW;
       END IF;
 
       RAISE EXCEPTION
-        'analysis_attempt %: % is terminal, so only notification_email_sent_at may change',
+        'analysis_attempt %: % is terminal, so only the notification columns may change',
         OLD.id, OLD.status
         USING ERRCODE = 'check_violation',
               CONSTRAINT = 'analysis_attempt_terminal_is_final',
@@ -459,11 +463,14 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "ai_metadata" "jsonb",
     "result_metadata" "jsonb",
     "notification_email_sent_at" timestamp with time zone,
+    "notification_claimed_at" timestamp with time zone,
+    "notification_claimed_by_worker_id" "text",
     CONSTRAINT "analysis_attempt_ai_cost_usd_non_negative" CHECK (("ai_cost_usd" >= (0)::numeric)),
     CONSTRAINT "analysis_attempt_ai_input_tokens_non_negative" CHECK (("ai_input_tokens" >= 0)),
     CONSTRAINT "analysis_attempt_ai_output_tokens_non_negative" CHECK (("ai_output_tokens" >= 0)),
     CONSTRAINT "analysis_attempt_attempt_number_range" CHECK ((("attempt_number" >= 1) AND ("attempt_number" <= 5))),
     CONSTRAINT "analysis_attempt_cancel_requested_at_after_created_at" CHECK ((("cancel_requested_at" IS NULL) OR ("cancel_requested_at" >= "created_at"))),
+    CONSTRAINT "analysis_attempt_canceled_is_not_notified" CHECK ((("notification_claimed_at" IS NULL) OR ("status" <> 'canceled'::"public"."analysis_attempt_status"))),
     CONSTRAINT "analysis_attempt_claimed_at_after_created_at" CHECK ((("claimed_at" IS NULL) OR ("claimed_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_failure_reason_iff_failed" CHECK ((("status" = 'failed'::"public"."analysis_attempt_status") = ("failure_reason" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_finished_at_after_created_at" CHECK ((("finished_at" IS NULL) OR ("finished_at" >= "created_at"))),
@@ -471,7 +478,10 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     CONSTRAINT "analysis_attempt_finished_at_iff_terminal" CHECK ((("status" = ANY (ARRAY['succeeded'::"public"."analysis_attempt_status", 'failed'::"public"."analysis_attempt_status", 'canceled'::"public"."analysis_attempt_status"])) = ("finished_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_lease_renewed_after_claimed_at" CHECK ((("lease_renewed_at" IS NULL) OR ("claimed_at" IS NULL) OR ("lease_renewed_at" >= "claimed_at"))),
     CONSTRAINT "analysis_attempt_lease_renewed_after_created_at" CHECK ((("lease_renewed_at" IS NULL) OR ("lease_renewed_at" >= "created_at"))),
+    CONSTRAINT "analysis_attempt_notification_claim_requires_finished" CHECK ((("notification_claimed_at" IS NULL) OR ("finished_at" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_notification_claimed_by_iff_claimed" CHECK ((("notification_claimed_at" IS NOT NULL) = ("notification_claimed_by_worker_id" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_notification_requires_finished" CHECK ((("notification_email_sent_at" IS NULL) OR ("finished_at" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_notification_sent_requires_claim" CHECK ((("notification_email_sent_at" IS NULL) OR ("notification_claimed_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_pending_is_unclaimed" CHECK ((("status" <> 'pending'::"public"."analysis_attempt_status") OR (("worker_id" IS NULL) AND ("claimed_at" IS NULL) AND ("lease_renewed_at" IS NULL)))),
     CONSTRAINT "analysis_attempt_processing_is_claimed" CHECK ((("status" <> 'processing'::"public"."analysis_attempt_status") OR (("worker_id" IS NOT NULL) AND ("claimed_at" IS NOT NULL) AND ("lease_renewed_at" IS NOT NULL) AND ("finished_at" IS NULL))))
 );
@@ -500,6 +510,22 @@ COMMENT ON COLUMN "public"."analysis_attempt"."worker_id" IS 'The supervising wo
 --
 
 COMMENT ON COLUMN "public"."analysis_attempt"."lease_renewed_at" IS 'When a worker last confirmed it was still supervising this attempt and would still reach a verdict for it.';
+
+
+--
+-- Name: COLUMN "analysis_attempt"."notification_claimed_at"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."notification_claimed_at" IS 'Set by a worker before it sends the notification email, so a second worker cannot claim the
+       same row. Left in place if the send fails, so the row stays claimed until it expires — that
+       expiry is what lets a later sweep retry the send instead of the claim silently losing it.';
+
+
+--
+-- Name: COLUMN "analysis_attempt"."notification_claimed_by_worker_id"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."notification_claimed_by_worker_id" IS 'Debugging only, symmetric with reaped_by_worker_id.';
 
 
 --
@@ -879,6 +905,13 @@ ALTER TABLE ONLY "public"."result_file"
 
 ALTER TABLE ONLY "public"."result_file"
     ADD CONSTRAINT "result_file_storage_key_key" UNIQUE ("storage_key");
+
+
+--
+-- Name: analysis_attempt_notification_pending; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "analysis_attempt_notification_pending" ON "public"."analysis_attempt" USING "btree" ("finished_at") WHERE (("notification_email_sent_at" IS NULL) AND ("finished_at" IS NOT NULL) AND ("status" <> 'canceled'::"public"."analysis_attempt_status"));
 
 
 --
