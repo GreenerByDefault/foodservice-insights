@@ -4,7 +4,6 @@ import {
   renderGbdOrganizationDeleted,
   renderGbdUserDeleted,
 } from './gbd.ts';
-import { renderText } from './layout.ts';
 
 describe('renderGbdOrganizationCreated', () => {
   test('names the organization and who created it', () => {
@@ -15,7 +14,15 @@ describe('renderGbdOrganizationCreated', () => {
     });
 
     expect(document.heading).toBe('New organization: Ridgeview Schools');
-    expect(renderText(document)).toContain('dana@ridgeview.test');
+    expect(document.blocks).toEqual([
+      {
+        block: 'facts',
+        facts: [
+          ['Organization', 'Ridgeview Schools'],
+          ['Created by', 'dana@ridgeview.test'],
+        ],
+      },
+    ]);
   });
 });
 
@@ -28,9 +35,19 @@ describe('renderGbdOrganizationDeleted', () => {
     });
 
     expect(document.heading).toBe('Organization deleted: Ridgeview Schools');
-    const text = renderText(document);
-    expect(text).toContain('dana@ridgeview.test');
-    expect(text).toContain('No user accounts were');
+    expect(document.blocks).toEqual([
+      {
+        block: 'paragraph',
+        text: 'Its reports and input files were deleted with it. No user accounts were.',
+      },
+      {
+        block: 'facts',
+        facts: [
+          ['Organization', 'Ridgeview Schools'],
+          ['Deleted by', 'dana@ridgeview.test'],
+        ],
+      },
+    ]);
   });
 });
 
@@ -42,5 +59,12 @@ describe('renderGbdUserDeleted', () => {
     });
 
     expect(document.heading).toBe('User deleted: dana@ridgeview.test');
+    expect(document.blocks).toEqual([
+      {
+        block: 'paragraph',
+        text: 'Their reports remain with their organizations, showing a deleted user as the submitter.',
+      },
+      { block: 'facts', facts: [['Account', 'dana@ridgeview.test']] },
+    ]);
   });
 });

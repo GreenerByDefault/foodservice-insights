@@ -1,7 +1,6 @@
 /** The two emails the worker sends when an analysis attempt becomes terminal.
  *
- * There is deliberately no message for a canceled attempt: ARCHITECTURE.md § Canceling says no
- * email is sent, and leaving it out of the union is what stops one being sent by accident.
+ * There is deliberately no message for a canceled attempt.
  */
 
 import type {
@@ -48,7 +47,7 @@ export type AnalysisFailed = {
  * **None of these may quote `analysis_attempt.failure_detail`**, which carries the child process's
  * stderr. What the user gets is this sentence and nothing else.
  */
-const FAILURE_EXPLANATIONS: Record<AnalysisFailureReason, string> = {
+export const FAILURE_EXPLANATIONS: Record<AnalysisFailureReason, string> = {
   child_crashed: 'The analysis stopped unexpectedly partway through.',
   hung: 'The analysis stopped making progress, so we ended it.',
   hard_timeout: 'The analysis ran longer than we allow, so we ended it.',

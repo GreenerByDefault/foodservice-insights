@@ -1,4 +1,4 @@
-/** The email an admin's invitation sends, per REQUIREMENTS.md § Invite flow. */
+/** The email an admin's invitation sends. */
 
 import { APP_NAME } from '@gbd/core';
 import type { OrganizationRole } from '@gbd/db';

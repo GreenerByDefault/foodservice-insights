@@ -2,8 +2,7 @@ import type { AnalysisFailureReason, ResultFileId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { SAMPLE_ORGANIZATION_ID, SAMPLE_REPORT_ID } from '../testing/fixtures.ts';
 import { recordingEmailer } from '../testing/recording.ts';
-import { renderAnalysisFailed, renderAnalysisSucceeded } from './analysis.ts';
-import { renderText } from './layout.ts';
+import { FAILURE_EXPLANATIONS, renderAnalysisFailed, renderAnalysisSucceeded } from './analysis.ts';
 
 const emailer = recordingEmailer().service;
 
@@ -42,26 +41,55 @@ describe('renderAnalysisSucceeded', () => {
       ],
     });
 
-    const text = renderText(document);
     expect(document.heading).toBe('Your report is ready: Q1 procurement');
-    expect(text).toContain(REPORT_URL);
-    expect(text).toContain('https://example.test/file/result/pdf-id');
-    expect(text).toContain('https://example.test/file/result/xlsx-id');
-    expect(text).not.toContain('chart-id');
+    expect(document.blocks).toEqual([
+      { block: 'paragraph', text: 'We have finished analysing your procurement data.' },
+      { block: 'action', label: 'View your report', url: REPORT_URL },
+      {
+        block: 'links',
+        links: [
+          { label: 'Download the PDF', url: 'https://example.test/file/result/pdf-id' },
+          { label: 'Download the Excel sheet', url: 'https://example.test/file/result/xlsx-id' },
+        ],
+      },
+    ]);
   });
 
-  test('still reads as a sentence when the report was never named', () => {
+  test('drops the links block entirely when there is nothing downloadable', () => {
     const document = renderAnalysisSucceeded(emailer, {
       kind: 'analysis-succeeded',
       ...REPORT,
       reportName: null,
       resultFiles: [],
     });
+
     expect(document.heading).toBe('Your report is ready');
+    expect(document.blocks).toEqual([
+      { block: 'paragraph', text: 'We have finished analysing your procurement data.' },
+      { block: 'action', label: 'View your report', url: REPORT_URL },
+    ]);
   });
 });
 
 describe('renderAnalysisFailed', () => {
+  test('names the report in the heading, or leaves it out gracefully', () => {
+    const named = renderAnalysisFailed(emailer, {
+      kind: 'analysis-failed',
+      ...REPORT,
+      reportName: 'Q1 procurement',
+      reason: 'upstream_api',
+    });
+    expect(named.heading).toBe('We could not finish your report: Q1 procurement');
+
+    const unnamed = renderAnalysisFailed(emailer, {
+      kind: 'analysis-failed',
+      ...REPORT,
+      reportName: null,
+      reason: 'upstream_api',
+    });
+    expect(unnamed.heading).toBe('We could not finish your report');
+  });
+
   test.each(EVERY_REASON)('explains %s without blaming the file', (reason) => {
     const document = renderAnalysisFailed(emailer, {
       kind: 'analysis-failed',
@@ -70,10 +98,16 @@ describe('renderAnalysisFailed', () => {
       reason,
     });
 
-    const text = renderText(document);
-    expect(text).toContain('This was not a problem with your file.');
-    // Retrying is the whole point of the email, per REQUIREMENTS.md.
-    expect(text).toContain(REPORT_URL);
+    expect(document.blocks).toEqual([
+      { block: 'paragraph', text: FAILURE_EXPLANATIONS[reason] },
+      // REQUIREMENTS.md § Errors during upload and processing: retrying is the whole point of the
+      // email, so the reader must never come away thinking their file was at fault.
+      {
+        block: 'paragraph',
+        text: 'This was not a problem with your file. You can run it again without uploading it a second time.',
+      },
+      { block: 'action', label: 'Try again', url: REPORT_URL },
+    ]);
   });
 
   test('gives each reason its own explanation, so the copy is worth having', () => {

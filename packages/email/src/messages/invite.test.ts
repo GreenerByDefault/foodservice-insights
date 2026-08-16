@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { recordingEmailer } from '../testing/recording.ts';
 import { renderOrganizationInvite } from './invite.ts';
-import { renderText } from './layout.ts';
 
 const emailer = recordingEmailer().service;
 
@@ -17,9 +16,29 @@ describe('renderOrganizationInvite', () => {
     });
 
     expect(document.heading).toBe('Join Ridgeview Schools on Foodservice Insights');
-    const text = renderText(document);
-    expect(text).toContain('Dana Cook invited you');
-    expect(text).toContain('https://example.test/sign-in?email=alice%40example.test');
+    expect(document.blocks).toEqual([
+      {
+        block: 'paragraph',
+        text: 'Dana Cook invited you to join Ridgeview Schools. Sign in with this email address to accept.',
+      },
+      {
+        block: 'action',
+        label: 'Accept the invitation',
+        url: 'https://example.test/sign-in?email=alice%40example.test',
+      },
+      {
+        block: 'facts',
+        facts: [
+          ['Organization', 'Ridgeview Schools'],
+          ['Role', 'Admin'],
+          ['Expires', 'September 1, 2026'],
+        ],
+      },
+      {
+        block: 'paragraph',
+        text: 'Only someone signed in as this email address can accept, so forwarding this message does not pass the invitation on.',
+      },
+    ]);
   });
 
   test('falls back to "An admin" when the inviter has no display name', () => {
@@ -32,6 +51,17 @@ describe('renderOrganizationInvite', () => {
       expiresAt: new Date('2026-09-01T12:00:00Z'),
     });
 
-    expect(renderText(document)).toContain('An admin invited you');
+    expect(document.blocks[0]).toEqual({
+      block: 'paragraph',
+      text: 'An admin invited you to join Ridgeview Schools. Sign in with this email address to accept.',
+    });
+    expect(document.blocks[2]).toEqual({
+      block: 'facts',
+      facts: [
+        ['Organization', 'Ridgeview Schools'],
+        ['Role', 'Member'],
+        ['Expires', 'September 1, 2026'],
+      ],
+    });
   });
 });
