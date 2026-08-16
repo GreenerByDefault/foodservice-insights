@@ -48,12 +48,6 @@ export function renderOrganizationInvite(
           ['Expires', EXPIRY_FORMAT.format(message.expiresAt)],
         ],
       },
-      // The link carries no token by design, so it is worth telling the reader that forwarding it
-      // achieves nothing — otherwise the natural assumption is the opposite.
-      {
-        block: 'paragraph',
-        text: 'Only someone signed in as this email address can accept, so forwarding this message does not pass the invitation on.',
-      },
     ],
   };
 }

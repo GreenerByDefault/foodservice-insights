@@ -34,10 +34,6 @@ describe('renderOrganizationInvite', () => {
           ['Expires', 'September 1, 2026'],
         ],
       },
-      {
-        block: 'paragraph',
-        text: 'Only someone signed in as this email address can accept, so forwarding this message does not pass the invitation on.',
-      },
     ]);
   });
 
