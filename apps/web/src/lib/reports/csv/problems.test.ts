@@ -76,6 +76,18 @@ describe('grouping', () => {
     ]);
   });
 
+  test('two widths with the same actual group together', () => {
+    const first: RowProblem = { kind: 'width', actual: 2, expected: 3 };
+    const tally = noted(
+      { line: 2, problem: first },
+      { line: 3, problem: { kind: 'width', actual: 2, expected: 3 } },
+    );
+
+    expect(toProblems(tally).rowGroups).toEqual([
+      { problem: first, ranges: [{ start: 2, end: 3 }], rowCount: 2, examples: [] },
+    ]);
+  });
+
   test('a date read day-first stays apart from the same clause read straight', () => {
     // Both `readDate` and `applyOrder` bottom out in the same "not a real calendar date" clause,
     // so the discriminant has to be in the key or these two rows would merge into one group whose
@@ -137,6 +149,18 @@ describe('grouping', () => {
     ]);
   });
 
+  test('too-long groups by column together, despite falling on different lines', () => {
+    const first: RowProblem = { kind: 'too-long', column: 'product' };
+    const tally = noted(
+      { line: 2, problem: first },
+      { line: 3, problem: { kind: 'too-long', column: 'product' } },
+    );
+
+    expect(toProblems(tally).rowGroups).toEqual([
+      { problem: first, ranges: [{ start: 2, end: 3 }], rowCount: 2, examples: [] },
+    ]);
+  });
+
   test('resolved-date groups by readAs and clause together, apart from a different clause', () => {
     const notADate: RowProblem = {
       kind: 'resolved-date',
@@ -155,6 +179,28 @@ describe('grouping', () => {
     expect(toProblems(tally).rowGroups).toEqual([
       singleRowGroup(notADate, 2, ['31/02/2026']),
       singleRowGroup(outOfRange, 3, ['2026-13-01']),
+    ]);
+  });
+
+  test('resolved-date groups matching readAs and clause together, despite different raw', () => {
+    const first: RowProblem = {
+      kind: 'resolved-date',
+      readAs: 'day-first',
+      raw: '31/02/2026',
+      clause: NOT_A_DATE,
+    };
+    const tally = noted(
+      { line: 2, problem: first },
+      { line: 3, problem: { ...first, raw: '2026-13-40' } },
+    );
+
+    expect(toProblems(tally).rowGroups).toEqual([
+      {
+        problem: first,
+        ranges: [{ start: 2, end: 3 }],
+        rowCount: 2,
+        examples: ['31/02/2026', '2026-13-40'],
+      },
     ]);
   });
 });
