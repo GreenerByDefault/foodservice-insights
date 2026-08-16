@@ -10,29 +10,26 @@ export type RejectedUploadRecord = {
   reason: RejectedUploadReason;
   /** Safe to show the user. */
   message: string;
-  /** For `rejected_upload.rejection_detail`. Never shown. */
+  /** The things to go and fix. Safe to show the user. */
+  problems?: readonly string[];
+  /** For `rejected_upload.rejection_detail`. Not shown to the user. */
   detail?: string;
 };
 
 /** The half of a `RejectedUploadRecord` that crosses the wire.
  *
- * A rejection is an outcome the upload form expects and renders itself, not a failure — see
- * `App.Error` in `app.d.ts` for why that means returning it as data instead of `error()`.
+ * A rejection is an outcome the upload form expects and renders itself,
+ * rather than a failure thrown with `error()`.
  */
-export type RejectedUploadResponse = {
+export type RejectedUploadResponse = Pick<RejectedUploadRecord, 'message' | 'problems'> & {
   code: RejectedUploadReason;
-  message: string;
 };
 
-/** Narrow a rejection to what the browser may see.
- *
- * The projection is the point: it makes "`detail` never leaves the server" something the types
- * enforce, so a field added to `RejectedUploadRecord` later is withheld by default rather than by
- * whoever next edits the route.
- */
+/** Narrow a rejection to what the browser may see. */
 export function rejectionResponse({
   reason,
   message,
+  problems,
 }: RejectedUploadRecord): RejectedUploadResponse {
-  return { code: reason, message };
+  return { code: reason, message, ...(problems && { problems }) };
 }

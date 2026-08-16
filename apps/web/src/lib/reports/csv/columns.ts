@@ -82,21 +82,3 @@ function columnFor(normalized: string): RequiredColumn | undefined {
     (ALIASES[column] as readonly string[]).includes(normalized),
   );
 }
-
-export function describeHeaderProblem(problem: HeaderProblem): string {
-  if (problem.kind === 'missing') {
-    return `Your file needs a column for ${listOf(problem.columns.map(columnLabel))}.`;
-  }
-  return `Two columns could be the ${columnLabel(problem.column)}: ${listOf(
-    problem.headers.map((header) => `"${header}"`),
-  )}. Remove or rename one.`;
-}
-
-function columnLabel(column: RequiredColumn): string {
-  return { product: 'product name', date: 'date ordered', amount: 'amount ordered' }[column];
-}
-
-function listOf(items: readonly string[]): string {
-  if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
-}

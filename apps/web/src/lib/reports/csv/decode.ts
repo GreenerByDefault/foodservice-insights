@@ -4,9 +4,12 @@
  * anything Node-only. In particular `TextDecoder`, not `Buffer`.
  */
 
-import type { RejectedUploadRecord } from '../rejection.ts';
+export type DecodeProblem =
+  | { kind: 'signature'; format: 'xlsx' | 'xls' }
+  | { kind: 'control-character'; code: number; offset: number }
+  | { kind: 'empty' };
 
-export type Decoded = { ok: true; text: string } | { ok: false; rejection: RejectedUploadRecord };
+export type Decoded = { ok: true; text: string } | { ok: false; problem: DecodeProblem };
 
 /** Files that people mistake for a CSV, recognised so we can say which one it is.
  *
@@ -19,18 +22,13 @@ export type Decoded = { ok: true; text: string } | { ok: false; rejection: Rejec
  * The filename and the browser-supplied content type are never consulted.
  */
 const SIGNATURES = [
-  { bytes: [0x50, 0x4b], name: 'an Excel (.xlsx) file' },
-  { bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], name: 'an old Excel (.xls) file' },
+  { bytes: [0x50, 0x4b], format: 'xlsx' },
+  { bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], format: 'xls' },
 ] as const;
 
 export function decodeCsv(bytes: Uint8Array): Decoded {
   const signature = SIGNATURES.find((candidate) => startsWith(bytes, candidate.bytes));
-  if (signature) {
-    return unparseable(
-      `That looks like ${signature.name}, not a CSV. Save it as CSV and upload it again.`,
-      `signature matched ${signature.name}`,
-    );
-  }
+  if (signature) return { ok: false, problem: { kind: 'signature', format: signature.format } };
 
   const text = normalizeLineEndings(decodeText(bytes));
 
@@ -40,15 +38,17 @@ export function decodeCsv(bytes: Uint8Array): Decoded {
   // rather than the raw bytes is what keeps real UTF-16 from tripping over its own encoding.
   const controlAt = findControlCharacter(text);
   if (controlAt !== undefined) {
-    return unparseable(
-      'That file does not look like text. Save it as CSV (comma separated values) and upload it again.',
-      `control character 0x${text.charCodeAt(controlAt).toString(16)} at offset ${controlAt}`,
-    );
+    return {
+      ok: false,
+      problem: {
+        kind: 'control-character',
+        code: text.charCodeAt(controlAt),
+        offset: controlAt,
+      },
+    };
   }
 
-  if (text.trim() === '') {
-    return { ok: false, rejection: { reason: 'empty', message: 'That file has no rows in it.' } };
-  }
+  if (text.trim() === '') return { ok: false, problem: { kind: 'empty' } };
 
   return { ok: true, text };
 }
@@ -90,8 +90,4 @@ function findControlCharacter(text: string): number | undefined {
 
 function startsWith(bytes: Uint8Array, prefix: readonly number[]): boolean {
   return prefix.every((byte, index) => bytes[index] === byte);
-}
-
-function unparseable(message: string, detail: string): Decoded {
-  return { ok: false, rejection: { reason: 'unparseable', message, detail } };
 }
