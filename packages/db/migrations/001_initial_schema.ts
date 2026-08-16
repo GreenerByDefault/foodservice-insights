@@ -381,7 +381,7 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
     .addColumn('created_by_user_id', 'uuid', (column) =>
       column.references('app_user.id').onDelete('set null'),
     )
-    .addColumn('name', 'text')
+    .addColumn('name', 'text', (column) => column.notNull())
     .addColumn('site_name', 'text')
     .addColumn('counts_basis', sql`counts_basis`, (column) => column.notNull())
     .addColumn('monthly_counts', 'jsonb', (column) => column.notNull())

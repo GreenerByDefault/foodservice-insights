@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_MONTHS, MAX_UPLOAD_BYTES } from './limits.ts';
+import { MAX_UPLOAD_BYTES } from './limits.ts';
 import { FIELD } from './metadata.ts';
 import { type RawSubmission, readSubmission, validateSubmission } from './submission.ts';
 
@@ -49,26 +49,6 @@ describe('validateSubmission', () => {
     });
   });
 
-  describe('optional text fields', () => {
-    test.for(['name', 'siteName'] as const)('trims %s', async (field) => {
-      const outcome = await validateSubmission(aSubmission({ [field]: '  Q1 procurement  ' }));
-
-      expect(outcome).toMatchObject({ ok: true, metadata: { [field]: 'Q1 procurement' } });
-    });
-
-    test.for(['name', 'siteName'] as const)('stores a blank %s as null', async (field) => {
-      const outcome = await validateSubmission(aSubmission({ [field]: '   ' }));
-
-      expect(outcome).toMatchObject({ ok: true, metadata: { [field]: null } });
-    });
-  });
-
-  test('treats a missing optional field as null rather than an error', async () => {
-    const outcome = await validateSubmission(aSubmission({ name: null, siteName: null }));
-
-    expect(outcome).toMatchObject({ ok: true, metadata: { name: null, siteName: null } });
-  });
-
   test('truncates an absurd filename rather than rejecting it', async () => {
     const outcome = await validateSubmission(
       aSubmission({ file: new File([CSV], `${'x'.repeat(500)}.csv`, { type: 'text/csv' }) }),
@@ -82,65 +62,9 @@ describe('validateSubmission', () => {
       // A file rejection has no metadata field to name, so `field` is null for those rows.
       ['no file at all', { file: null }, 'other', null],
       ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty', null],
-      ['a missing counts basis', { countsBasis: null }, 'invalid_metadata', 'countsBasis'],
-      [
-        'a counts basis outside the enum',
-        { countsBasis: 'guesses' },
-        'invalid_metadata',
-        'countsBasis',
-      ],
-      ['a unit system outside the enum', { unitSystem: 'stone' }, 'invalid_metadata', 'unitSystem'],
-      [
-        'monthly counts that are not JSON',
-        { monthlyCounts: '{oops' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      ['missing monthly counts', { monthlyCounts: null }, 'invalid_metadata', 'monthlyCounts'],
-      [
-        'monthly counts that are empty',
-        { monthlyCounts: '{}' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      [
-        'monthly counts that are an array',
-        { monthlyCounts: '[1, 2]' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      [
-        'a month key that is not YYYY-MM',
-        { monthlyCounts: '{"Jan 2026": 1}' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      [
-        'a month outside 01-12',
-        { monthlyCounts: '{"2026-13": 1}' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      [
-        'a negative count',
-        { monthlyCounts: '{"2026-01": -1}' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      [
-        'a fractional count',
-        { monthlyCounts: '{"2026-01": 1.5}' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      [
-        'a count that is a string',
-        { monthlyCounts: '{"2026-01": "120"}' },
-        'invalid_metadata',
-        'monthlyCounts',
-      ],
-      ['an over-long report name', { name: 'x'.repeat(1000) }, 'invalid_metadata', 'name'],
-      ['an over-long site name', { siteName: 'x'.repeat(1000) }, 'invalid_metadata', 'siteName'],
+      // Content rules for each metadata field belong to `ReportMetadataSchema`, covered by
+      // metadata.test.ts. This one case just proves a metadata rejection is wired through.
+      ['a missing report name', { name: null }, 'invalid_metadata', 'name'],
     ] as const)('%s', async ([, overrides, reason, field]) => {
       const outcome = await validateSubmission(aSubmission(overrides));
 
@@ -149,27 +73,6 @@ describe('validateSubmission', () => {
         rejection: {
           reason,
           ...(field ? { message: `Check these fields: ${field}.` } : {}),
-        },
-      });
-    });
-
-    test('monthly counts with more months than MAX_MONTHS allows', async () => {
-      const counts = Object.fromEntries(
-        Array.from({ length: MAX_MONTHS + 1 }, (_, index) => [
-          `${2000 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`,
-          1,
-        ]),
-      );
-
-      const outcome = await validateSubmission(
-        aSubmission({ monthlyCounts: JSON.stringify(counts) }),
-      );
-
-      expect(outcome).toMatchObject({
-        ok: false,
-        rejection: {
-          reason: 'invalid_metadata',
-          message: 'Check these fields: monthlyCounts.',
         },
       });
     });

@@ -734,7 +734,7 @@ CREATE TABLE IF NOT EXISTS "public"."report" (
     "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
     "organization_id" "uuid" NOT NULL,
     "created_by_user_id" "uuid",
-    "name" "text",
+    "name" "text" NOT NULL,
     "site_name" "text",
     "counts_basis" "public"."counts_basis" NOT NULL,
     "monthly_counts" "jsonb" NOT NULL,

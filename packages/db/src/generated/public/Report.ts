@@ -15,7 +15,7 @@ export default interface ReportTable {
 
   createdByUserId: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 
-  name: ColumnType<string | null, string | null, string | null>;
+  name: ColumnType<string, string, string>;
 
   siteName: ColumnType<string | null, string | null, string | null>;
 

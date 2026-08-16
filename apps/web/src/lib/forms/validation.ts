@@ -16,6 +16,16 @@ export function optionalText(maxLength: number) {
   );
 }
 
+/** A text field the user must fill in. Trims whitespace, then rejects empty. */
+export function requiredText(maxLength: number) {
+  return v.pipe(
+    v.nullable(v.string()),
+    v.transform((value) => value?.trim() ?? ''),
+    v.nonEmpty('is required'),
+    v.maxLength(maxLength),
+  );
+}
+
 /** `JSON.parse` a field, to pipe into the schema that judges what it holds.
  *
  * Both a missing field and unparseable text become issues rather than a throw, so the form still
