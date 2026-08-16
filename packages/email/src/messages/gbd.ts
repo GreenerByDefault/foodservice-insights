@@ -1,7 +1,7 @@
-/** The three notices to GBD, per REQUIREMENTS.md § GBD email notifications.
+/** The three notices to Greener By Default.
  *
  * None carries a `to`: they all go to `emailer.gbdAddress`, which is the one place that address is
- * configured. A caller that could choose the recipient could send one of these to a customer.
+ * configured.
  */
 
 import type { Document } from './layout.ts';

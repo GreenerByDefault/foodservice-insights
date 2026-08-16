@@ -1,7 +1,3 @@
-/** The three GBD notices ignore `to` and go to `emailer.gbdAddress` — see `messages/index.ts`'s
- * `recipient`. That routing is asserted there; this file is only each notice's own copy.
- */
-
 import { describe, expect, test } from 'vitest';
 import {
   renderGbdOrganizationCreated,

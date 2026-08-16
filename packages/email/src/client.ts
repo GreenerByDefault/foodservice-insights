@@ -1,8 +1,5 @@
 /** The emailer handle, and the transport seam under it. */
 
-/** Lives here rather than beside the message payloads because it is part of what a transport sees.
- * A message whose `kind` is missing from this union fails to compile in `render`.
- */
 export type EmailMessageKind =
   | 'analysis-succeeded'
   | 'analysis-failed'
@@ -13,9 +10,7 @@ export type EmailMessageKind =
 
 /** One email, fully rendered and ready to hand to a transport. */
 export type RenderedEmail = {
-  /** Survives rendering because it is the only field a transport or a log line can group by: a
-   * provider's tags and message streams want it, and so does a test asserting *which* email was
-   * sent without matching on copy that is going to be rewritten. */
+  /** This allows us to report which email kind was used. */
   readonly kind: EmailMessageKind;
   readonly from: string;
   readonly to: string;
@@ -26,9 +21,6 @@ export type RenderedEmail = {
   readonly html: string;
 };
 
-/** Where email actually goes — the one seam between this package and the sending service. Why it
- * is shaped like this, and what choosing a provider costs, is in `transports/provider.ts`.
- */
 export type EmailTransport = {
   /** For log lines, and for the error a stub transport raises when asked to send. */
   readonly name: string;
@@ -41,7 +33,7 @@ export type EmailerConfig = {
   from: string;
   /** The origin every link in an email is built against. A trailing slash is trimmed. */
   siteUrl: string;
-  /** Where the GBD notices go — see REQUIREMENTS.md § GBD email notifications. */
+  /** Where the GBD notices go. */
   gbdAddress: string;
 };
 

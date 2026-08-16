@@ -19,9 +19,8 @@ export function isEmailError(error: unknown): error is EmailError {
 
 /** Await one request to the email service, relabelling whatever it fails with.
  *
- * Wrap the request and nothing else. What this turns into an `EmailError` is a request failing, so
- * anything else inside the callback — rendering the message, shaping the body — would be reported
- * as an outage when it is a bug.
+ * Wraps the request and nothing else. Everything in the `send` closure gets reported as an EmailError,
+ * so callers should avoid putting unrelated fallible code inside, like rendering the message.
  */
 export async function emailRequest<T>(operation: string, send: () => Promise<T>): Promise<T> {
   try {

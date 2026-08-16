@@ -1,9 +1,4 @@
-/** Every email we send, and the one function that turns one into bytes.
- *
- * A caller says what happened; it never says what the email looks like or who receives it beyond
- * the address the event is about. That is what lets the copy, the layout, and the provider all
- * change without touching `apps/web` or `apps/worker`.
- */
+/** Every email we send, and the one function that turns one into bytes. */
 
 import { assertNever } from '@gbd/core';
 import type { EmailContext, RenderedEmail } from '../client.ts';
@@ -28,9 +23,6 @@ export type EmailMessage =
   | GbdOrganizationDeleted
   | GbdUserDeleted;
 
-/** Who the message goes to. The GBD notices carry no `to`, so this is the only place their
- * recipient is decided.
- */
 function recipient(context: EmailContext, message: EmailMessage): string {
   switch (message.kind) {
     case 'analysis-succeeded':
@@ -46,7 +38,7 @@ function recipient(context: EmailContext, message: EmailMessage): string {
   }
 }
 
-function describe(context: EmailContext, message: EmailMessage): Document {
+function renderDocument(context: EmailContext, message: EmailMessage): Document {
   switch (message.kind) {
     case 'analysis-succeeded':
       return renderAnalysisSucceeded(context, message);
@@ -65,16 +57,14 @@ function describe(context: EmailContext, message: EmailMessage): Document {
   }
 }
 
-/** Turn a message into the email a transport can send. Pure, so a test — or a future preview
- * route — can look at what we would send without sending it.
- */
+/** Turn a message into the email a transport can send. */
 export function render(context: EmailContext, message: EmailMessage): RenderedEmail {
-  const document = describe(context, message);
+  const document = renderDocument(context, message);
   return {
     kind: message.kind,
     from: context.from,
     to: recipient(context, message),
-    // One string is both, so an email's subject can never disagree with its own heading.
+    // For now, we reuse the heading as the subject. We can adjust that if we ever need to.
     subject: document.heading,
     text: renderText(document),
     html: renderHtml(document),
