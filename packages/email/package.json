@@ -12,7 +12,8 @@
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
-    "test": "pnpm run test:unit"
+    "test": "pnpm run test:unit",
+    "preview": "node scripts/preview.ts"
   },
   "dependencies": {
     "@gbd/core": "workspace:*",

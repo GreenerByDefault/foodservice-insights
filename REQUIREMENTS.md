@@ -82,8 +82,7 @@ rendered charts and potentially some metadata.
 The user receives an email when the analysis completes.
 
 - Success includes links to download the result files, and potentially metadata.
-- Failure explains the failure and offers to retry, to contact GBD, or both — see § Errors
-  during upload and processing.
+- Failure follows the same rules as § Errors during upload and processing.
 - Email typically sends within 30 seconds, but is best effort. Delivery is not guaranteed.
 
 ### Multiple reports

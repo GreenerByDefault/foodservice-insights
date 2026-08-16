@@ -39,3 +39,8 @@ To add a new kind of email, add a member to `EmailMessage` and a renderer for it
 Instead of sending real mail to prove a caller asked for an email, consumers should use
 `recordingEmailer()` from `@gbd/email/testing`. It renders for real and keeps the result, so a
 test asserts on `kind` and `to` and leaves the copy to this package.
+
+## Previewing
+
+`pnpm --filter @gbd/email preview` renders one of every message to `.preview/` (gitignored),
+HTML and text side by side — open `.preview/index.html` in a browser.
