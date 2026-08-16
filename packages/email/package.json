@@ -1,0 +1,27 @@
+{
+  "name": "@gbd/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./testing": "./dist/testing/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "check": "tsc --noEmit",
+    "test:unit": "TEST_DB=1 vitest run",
+    "test": "pnpm run test:unit",
+    "preview": "node scripts/preview.ts"
+  },
+  "dependencies": {
+    "@gbd/core": "workspace:*",
+    "@gbd/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

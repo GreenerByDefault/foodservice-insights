@@ -31,7 +31,7 @@ keep settled decisions settled — read them before proposing a change.
 | End-to-end tests | Playwright |
 | Edge / DDoS | Cloudflare |
 | Hosting | **Open:** Railway vs Render vs DigitalOcean |
-| Email | **Open:** GBD has no existing provider; we need to propose one with reasonable cost and reliability. Connect For Animals uses SendGrid. |
+| Email | (**Open:** which provider), using HTTP and generated emails. |
 
 ## Components
 
@@ -39,7 +39,7 @@ keep settled decisions settled — read them before proposing a change.
 | --- | --- | --- |
 | `apps/web` | TypeScript | Frontend, backend routes, upload validation, file links |
 | Worker parent | TypeScript | Queue claiming, child process lifecycle, DB and blob store writes, email |
-| `packages/*` | TypeScript | Shared database, storage, and domain code |
+| `packages/*` | TypeScript | Shared database, storage, email, and domain code |
 | `python/worker_child` | Python | One analysis run, via `gbd_foodservice_insights` |
 | `python/gbd_foodservice_insights` | Python | The AI analysis library |
 | `python/gbd_foodservice_insights_lab` | Python | Data-science experiments. Ships nothing |
@@ -278,6 +278,19 @@ back, but a migration cannot — once it has run, fix forward rather than revert
 ## Blob store
 
 Refer to [`packages/storage/README.md`](packages/storage/README.md) for the private bucket's layout and code.
+
+## Email
+
+We send email as HTTP requests to a provider, using emails generated in
+[`packages/email`](packages/email) rather than a template stored with the provider. That keeps
+templates in version control and swappable across local mail catchers and providers alike.
+
+**Open:** decide which email provider, such as SendGrid.
+
+The `packages/email` code does not retry failures. Instead, callers must decide how to handle
+failure.
+
+Sign-in codes and email-change confirmations go through Supabase Auth, not us.
 
 ## File links
 

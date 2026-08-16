@@ -8,6 +8,7 @@ build/
 dist/
 .output/
 .turbo/
+/packages/email/.preview/
 
 # OS
 .DS_Store
