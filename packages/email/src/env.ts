@@ -10,15 +10,17 @@
 import { APP_NAME } from '@gbd/core';
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
 import { type Emailer, initializeEmailer } from './client.ts';
-import { resolveTransport } from './transports/index.ts';
+import { parseTransportSettings, resolveTransport } from './transports/index.ts';
 
 loadLocalEnv();
 
 export const EMAILER: Emailer = initializeEmailer({
-  transport: resolveTransport({
-    name: requireEnv('EMAIL_TRANSPORT'),
-    endpoint: process.env.EMAIL_ENDPOINT,
-  }),
+  transport: resolveTransport(
+    parseTransportSettings({
+      name: requireEnv('EMAIL_TRANSPORT'),
+      endpoint: process.env.EMAIL_ENDPOINT,
+    }),
+  ),
   from: { address: requireEnv('EMAIL_FROM_ADDRESS'), name: APP_NAME },
   siteUrl: requireEnv('SITE_URL'),
   gbdAddress: requireEnv('EMAIL_GBD_ADDRESS'),

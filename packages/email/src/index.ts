@@ -20,6 +20,8 @@ export {
 } from './messages/index.ts';
 export { sendEmail } from './send.ts';
 export {
+  parseTransportSettings,
+  type RawTransportSettings,
   resolveTransport,
   type TransportName,
   type TransportSettings,
