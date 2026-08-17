@@ -1,9 +1,15 @@
 export type { Breakable } from './breakable.ts';
 export { breakableDatabase } from './breakable.ts';
-export type { BlockedStatement, ConcurrentTransaction, Trash } from './concurrency.ts';
+export type {
+  BlockedStatement,
+  ConcurrentTransaction,
+  RaceAgainstCommittedWriteOptions,
+  Trash,
+} from './concurrency.ts';
 export {
   fixtureOrganizationName,
   insertFixtureOrganization,
+  raceAgainstCommittedWrite,
   sendBlockingStatement,
   withCommittedFixture,
   withConcurrentTransactions,
@@ -17,6 +23,7 @@ export {
   insertOrganization,
   insertReport,
   insertResultFile,
+  readAnalysisAttemptRow,
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';
 export { withRollback } from './transactions.ts';

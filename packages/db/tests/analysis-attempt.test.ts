@@ -162,7 +162,12 @@ describe('analysis_attempt column invariants', () => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
       await transaction
         .updateTable('analysisAttempt')
-        .set({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' })
+        // notificationAttempts too, so this doesn't trip _notification_attempts_iff_claimed instead.
+        .set({
+          notificationClaimedAt: new Date(),
+          notificationClaimedByWorkerId: 'w1',
+          notificationAttempts: 1,
+        })
         .where('id', '=', attempt.id)
         .execute();
     });
@@ -176,7 +181,8 @@ describe('analysis_attempt column invariants', () => {
   test.each([
     {
       description: 'a claim timestamp without a claiming worker',
-      patch: () => ({ notificationClaimedAt: new Date() }),
+      // notificationAttempts too, so this doesn't trip _notification_attempts_iff_claimed instead.
+      patch: () => ({ notificationClaimedAt: new Date(), notificationAttempts: 1 }),
     },
     {
       description: 'a claiming worker without a claim timestamp',
@@ -211,6 +217,47 @@ describe('analysis_attempt column invariants', () => {
     await expect(update).rejects.toMatchObject({
       code: POSTGRES_CODE_CHECK_VIOLATION,
       constraint: 'analysis_attempt_notification_sent_requires_claim',
+    });
+  });
+
+  test('rejects a negative notification attempt count', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ notificationAttempts: -1 })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_notification_attempts_non_negative',
+    });
+  });
+
+  test.each([
+    {
+      description: 'a positive attempt count without a claim',
+      patch: () => ({ notificationAttempts: 1 }),
+    },
+    {
+      description: 'a claim without incrementing the attempt count',
+      patch: () => ({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' }),
+    },
+  ])('rejects $description', async ({ patch }) => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set(patch())
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_notification_attempts_iff_claimed',
     });
   });
 
@@ -467,7 +514,7 @@ describe('a terminal attempt is final', () => {
   });
 
   test('permits claiming, sending, and stamping the notification together', async () => {
-    // All three notification columns are in the terminal trigger's mask, so a worker can go
+    // All four notification columns are in the terminal trigger's mask, so a worker can go
     // straight from unclaimed to sent in one UPDATE.
     const updated = await withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
@@ -476,12 +523,14 @@ describe('a terminal attempt is final', () => {
         .set({
           notificationClaimedAt: new Date(),
           notificationClaimedByWorkerId: 'w1',
+          notificationAttempts: 1,
           notificationEmailSentAt: new Date(),
         })
         .where('id', '=', attempt.id)
         .returning([
           'notificationClaimedAt',
           'notificationClaimedByWorkerId',
+          'notificationAttempts',
           'notificationEmailSentAt',
         ])
         .executeTakeFirstOrThrow();
@@ -489,6 +538,7 @@ describe('a terminal attempt is final', () => {
 
     expect(updated.notificationClaimedAt).toBeInstanceOf(Date);
     expect(updated.notificationClaimedByWorkerId).toBe('w1');
+    expect(updated.notificationAttempts).toBe(1);
     expect(updated.notificationEmailSentAt).toBeInstanceOf(Date);
   });
 
@@ -516,6 +566,33 @@ describe('a terminal attempt is final', () => {
       await transaction
         .updateTable('analysisAttempt')
         .set({ notificationEmailSentAt: new Date(), failureDetail: 'rewritten after the fact' })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_terminal_is_final',
+    });
+  });
+
+  test('rejects smuggling another column alongside the notification attempt count', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
+      // The claim itself is permitted on its own; the second UPDATE is what smuggles.
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({
+          notificationClaimedAt: new Date(),
+          notificationClaimedByWorkerId: 'w1',
+          notificationAttempts: 1,
+        })
+        .where('id', '=', attempt.id)
+        .execute();
+
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ notificationAttempts: 2, failureDetail: 'rewritten after the fact' })
         .where('id', '=', attempt.id)
         .execute();
     });

@@ -298,6 +298,50 @@ export async function withCommittedFixture<F, T>(
   }
 }
 
+export type RaceAgainstCommittedWriteOptions = {
+  /** Which side opens its transaction first — decides whether the blocked statement's own `now()`
+   * predates the write it is racing. Defaults to the writer opening first, the common case. */
+  blockedOpensFirst?: boolean;
+};
+
+/** Races `blockedStatement` against `firstWriter`'s commit: `blockedStatement` starts while
+ * `firstWriter`'s write is still uncommitted, blocks on it, and only proceeds once that write
+ * commits. Use this to test that a statement waits for a concurrent write instead of skipping
+ * past it — row-level locking, `SELECT ... FOR UPDATE`, anything where "sees the committed
+ * row" is the behavior under test.
+ */
+export async function raceAgainstCommittedWrite<F, T, R>(
+  database: Kysely<Database>,
+  setup: (transaction: Transaction<Database>, trash: Trash) => Promise<F>,
+  firstWriter: (transaction: ControlledTransaction<Database>, fixture: F) => Promise<void>,
+  blockedStatement: (transaction: ControlledTransaction<Database>, fixture: F) => Promise<T>,
+  readBack: (database: Kysely<Database>, fixture: F) => Promise<R>,
+  options: RaceAgainstCommittedWriteOptions = {},
+): Promise<{ result: T; row: R }> {
+  return await withCommittedFixture(database, setup, async (fixture) => {
+    const result = await withConcurrentTransactions(database, async (alpha, beta) => {
+      // `alpha` opens first, so its `now()` is the earlier of the two.
+      const [writer, blocked] = options.blockedOpensFirst ? [beta, alpha] : [alpha, beta];
+      await firstWriter(writer.transaction, fixture);
+
+      // The blocked statement has to block on the writer's uncommitted row, not skip past it.
+      const blockedCall = await sendBlockingStatement(database, blocked, writer, (transaction) =>
+        blockedStatement(transaction, fixture),
+      );
+
+      await writer.transaction.commit().execute();
+      const outcome = await blockedCall.result;
+      // Committing here is what makes `readBack`'s result mean anything: a rolled-back
+      // statement leaves the row untouched whatever its `WHERE` matched, so a test that only
+      // inspects the row afterwards would pass against a statement with no predicate at all.
+      await blocked.transaction.commit().execute();
+      return outcome;
+    });
+
+    return { result, row: await readBack(database, fixture) };
+  });
+}
+
 /** A name the sweep below will recognise. Use it for any organization a test commits itself. */
 export function fixtureOrganizationName(): string {
   return `${FIXTURE_NAME_PREFIX}${crypto.randomUUID()}`;

@@ -233,10 +233,12 @@ CREATE OR REPLACE FUNCTION "public"."analysis_attempt_check_terminal_is_final"()
       -- silently becoming mutable after an attempt has finished.
       IF to_jsonb(OLD) - ARRAY['notification_email_sent_at',
                                'notification_claimed_at',
-                               'notification_claimed_by_worker_id']
+                               'notification_claimed_by_worker_id',
+                               'notification_attempts']
          = to_jsonb(NEW) - ARRAY['notification_email_sent_at',
                                  'notification_claimed_at',
-                                 'notification_claimed_by_worker_id'] THEN
+                                 'notification_claimed_by_worker_id',
+                                 'notification_attempts'] THEN
         RETURN NEW;
       END IF;
 
@@ -465,6 +467,7 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "notification_email_sent_at" timestamp with time zone,
     "notification_claimed_at" timestamp with time zone,
     "notification_claimed_by_worker_id" "text",
+    "notification_attempts" integer DEFAULT 0 NOT NULL,
     CONSTRAINT "analysis_attempt_ai_cost_usd_non_negative" CHECK (("ai_cost_usd" >= (0)::numeric)),
     CONSTRAINT "analysis_attempt_ai_input_tokens_non_negative" CHECK (("ai_input_tokens" >= 0)),
     CONSTRAINT "analysis_attempt_ai_output_tokens_non_negative" CHECK (("ai_output_tokens" >= 0)),
@@ -478,6 +481,8 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     CONSTRAINT "analysis_attempt_finished_at_iff_terminal" CHECK ((("status" = ANY (ARRAY['succeeded'::"public"."analysis_attempt_status", 'failed'::"public"."analysis_attempt_status", 'canceled'::"public"."analysis_attempt_status"])) = ("finished_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_lease_renewed_after_claimed_at" CHECK ((("lease_renewed_at" IS NULL) OR ("claimed_at" IS NULL) OR ("lease_renewed_at" >= "claimed_at"))),
     CONSTRAINT "analysis_attempt_lease_renewed_after_created_at" CHECK ((("lease_renewed_at" IS NULL) OR ("lease_renewed_at" >= "created_at"))),
+    CONSTRAINT "analysis_attempt_notification_attempts_iff_claimed" CHECK ((("notification_attempts" > 0) = ("notification_claimed_at" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_notification_attempts_non_negative" CHECK (("notification_attempts" >= 0)),
     CONSTRAINT "analysis_attempt_notification_claim_requires_finished" CHECK ((("notification_claimed_at" IS NULL) OR ("finished_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_notification_claimed_by_iff_claimed" CHECK ((("notification_claimed_at" IS NOT NULL) = ("notification_claimed_by_worker_id" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_notification_requires_finished" CHECK ((("notification_email_sent_at" IS NULL) OR ("finished_at" IS NOT NULL))),
@@ -526,6 +531,16 @@ COMMENT ON COLUMN "public"."analysis_attempt"."notification_claimed_at" IS 'Set 
 --
 
 COMMENT ON COLUMN "public"."analysis_attempt"."notification_claimed_by_worker_id" IS 'Debugging only, symmetric with reaped_by_worker_id.';
+
+
+--
+-- Name: COLUMN "analysis_attempt"."notification_attempts"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."notification_attempts" IS 'Incremented by the claim, before the send is attempted. Bounds retries: once it reaches the
+       configured maximum the row stops being claimed, however stale its claim, so a permanently
+       undeliverable address costs a fixed number of provider requests rather than an unbounded
+       retry loop.';
 
 
 --
@@ -911,7 +926,7 @@ ALTER TABLE ONLY "public"."result_file"
 -- Name: analysis_attempt_notification_pending; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX "analysis_attempt_notification_pending" ON "public"."analysis_attempt" USING "btree" ("finished_at") WHERE (("notification_email_sent_at" IS NULL) AND ("finished_at" IS NOT NULL) AND ("status" <> 'canceled'::"public"."analysis_attempt_status"));
+CREATE INDEX "analysis_attempt_notification_pending" ON "public"."analysis_attempt" USING "btree" ("finished_at") WHERE (("notification_email_sent_at" IS NULL) AND ("finished_at" IS NOT NULL) AND ("status" <> 'canceled'::"public"."analysis_attempt_status") AND ("notification_attempts" < 5));
 
 
 --

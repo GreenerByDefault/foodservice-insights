@@ -8,7 +8,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { DATABASE } from '@gbd/db/env';
-import { type Breakable, breakableDatabase } from '@gbd/db/testing';
+import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
 import { deletePrefix, getObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
@@ -30,7 +30,7 @@ import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/lay
 import { markAttemptFailed } from './queue.ts';
 import type { AttemptFixture } from './testing/attempt-fixture.ts';
 import { withAttemptFixture } from './testing/attempt-fixture.ts';
-import { aWorkerId, readAttemptRow } from './testing/attempt-helpers.ts';
+import { aWorkerId } from './testing/attempt-helpers.ts';
 import {
   type FakeChildStep,
   fakeChildCommand,
@@ -88,7 +88,7 @@ describe('a successful attempt, end to end', () => {
       expect(settled).toEqual({ kind: 'recorded' });
       expect(existsSync(prepared.runDirectory)).toBe(false);
 
-      const attempt = await readAttemptRow(DATABASE, fixture.attemptId);
+      const attempt = await readAnalysisAttemptRow(DATABASE, fixture.attemptId);
       expect(attempt).toMatchObject({
         status: 'succeeded',
         aiModel: 'fake-model',
@@ -129,7 +129,7 @@ async function expectParkThenResume(
   const parked = await settleAttempt(dependencies, prepared, ending);
 
   expect(parked).toMatchObject({ kind: 'parked', pending: { stage } });
-  expect((await readAttemptRow(DATABASE, fixture.attemptId)).status).toBe('processing');
+  expect((await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).status).toBe('processing');
   expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
   // The bytes outlive the run directory, which is what makes the resume below possible.
   expect(existsSync(prepared.runDirectory)).toBe(false);
@@ -139,7 +139,7 @@ async function expectParkThenResume(
   const resumed = await resumeSettle(dependencies, prepared, parked.pending);
 
   expect(resumed).toEqual({ kind: 'recorded' });
-  expect((await readAttemptRow(DATABASE, fixture.attemptId)).status).toBe('succeeded');
+  expect((await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).status).toBe('succeeded');
   const resultFiles = await readResultFiles(fixture.attemptId);
   expect(resultFiles).toHaveLength(3);
   for (const row of resultFiles) {
@@ -196,7 +196,7 @@ describe('a blob store that cannot be reached', () => {
         const settled = await settleAttempt(withBreakableStore, prepared, ending);
 
         expect(settled).toEqual({ kind: 'recorded' });
-        expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+        expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
           status: 'failed',
           failureReason: 'upstream_api',
         });
@@ -248,7 +248,7 @@ describe('a hung child that finished first', () => {
       const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect((await readAttemptRow(DATABASE, fixture.attemptId)).status).toBe('succeeded');
+      expect((await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).status).toBe('succeeded');
     });
   });
 });
@@ -281,7 +281,7 @@ describe('failure rows', () => {
 
       expect(settled).toEqual({ kind: 'recorded' });
       expect(existsSync(prepared.runDirectory)).toBe(false);
-      const attempt = await readAttemptRow(DATABASE, fixture.attemptId);
+      const attempt = await readAnalysisAttemptRow(DATABASE, fixture.attemptId);
       expect(attempt).toMatchObject({ status: 'failed', failureReason: 'contract_violation' });
       expect(attempt.failureDetail).toContain('chart-total_spend.png');
       expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
@@ -296,7 +296,7 @@ describe('failure rows', () => {
       const { settled } = await runAndSettle(fixture, workerId, steps);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'contract_violation',
       });
@@ -314,7 +314,7 @@ describe('failure rows', () => {
       const { settled } = await runAndSettle(fixture, workerId, steps);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'contract_violation',
       });
@@ -332,7 +332,7 @@ describe('failure rows', () => {
       const { settled } = await runAndSettle(fixture, workerId, steps);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'upstream_api',
         failureDetail: 'the AI provider returned a 503',
@@ -348,7 +348,7 @@ describe('failure rows', () => {
       const { settled } = await runAndSettle(fixture, workerId, steps);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'contract_violation',
       });
@@ -363,7 +363,7 @@ describe('failure rows', () => {
       const { settled } = await runAndSettle(fixture, workerId, steps);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'child_crashed',
       });
@@ -393,7 +393,7 @@ describe('failure rows', () => {
       const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'infrastructure',
       });
@@ -418,7 +418,7 @@ describe('failure rows', () => {
       const settled = await settleAttempt(badDependencies, prepared, ending);
 
       expect(settled).toEqual({ kind: 'recorded' });
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'infrastructure',
       });
@@ -440,7 +440,7 @@ describe('failure rows', () => {
         await start.catch((error) => error),
       );
 
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'infrastructure',
       });
@@ -515,7 +515,7 @@ describe('kills', () => {
         } else {
           expect(settled).toEqual({ kind: 'recorded' });
         }
-        expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject(expected);
+        expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject(expected);
         expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
       });
     });
@@ -553,7 +553,7 @@ describe('losing the race to record a verdict', () => {
       expect(existsSync(prepared.runDirectory)).toBe(false);
       // The reaper's write stands: settleAttempt did not overwrite it with the `succeeded` verdict
       // it computed.
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'hard_timeout',
       });
@@ -577,7 +577,7 @@ describe('recordVerdict', () => {
       });
 
       expect(won).toBe(true);
-      expect(await readAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
         status: 'failed',
         failureReason: 'unknown',
         failureDetail: 'something unexpected',

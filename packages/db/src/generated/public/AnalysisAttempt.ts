@@ -65,6 +65,9 @@ export default interface AnalysisAttemptTable {
 
   /** Debugging only, symmetric with reaped_by_worker_id. */
   notificationClaimedByWorkerId: ColumnType<string | null, string | null, string | null>;
+
+  /** Incremented by the claim, before the send is attempted. Bounds retries: once it reaches the\n       configured maximum the row stops being claimed, however stale its claim, so a permanently\n       undeliverable address costs a fixed number of provider requests rather than an unbounded\n       retry loop. */
+  notificationAttempts: ColumnType<number, number | undefined, number>;
 }
 
 export type AnalysisAttempt = Selectable<AnalysisAttemptTable>;
