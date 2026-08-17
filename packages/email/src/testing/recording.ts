@@ -20,7 +20,7 @@ export type RecordingEmailer = {
 
 // This uses addresses under `.test`, which is reserved by RFC 2606 and so can never be a real recipient.
 export const TEST_EMAILER_CONFIG = {
-  from: 'Foodservice Insights <noreply@example.test>',
+  from: { address: 'noreply@example.test', name: 'Foodservice Insights' },
   siteUrl: 'https://example.test',
   gbdAddress: 'gbd@example.test',
   supportAddress: 'support@example.test',

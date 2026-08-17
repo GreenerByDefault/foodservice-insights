@@ -6,13 +6,11 @@
 
 import type { EmailTransport, RenderedEmail } from '../client.ts';
 import { emailRequest } from '../errors.ts';
-import { parseAddress } from './address.ts';
 
 export type MailpitConfig = {
   /** Mailpit's HTTP origin — `local_smtp.port`, not `smtp_port`. */
   endpoint: string;
-  /** How long one send may take. There are no retries: a caller that wants one wants a policy,
-   * and only the caller knows whether this email is worth waiting for. */
+  /** How long one send may take. There are no retries. */
   timeoutMs?: number;
 };
 
@@ -26,12 +24,11 @@ export function mailpitTransport(config: MailpitConfig): EmailTransport {
     name: 'mailpit',
     async send(email: RenderedEmail): Promise<void> {
       await emailRequest(`mailpit send to ${email.to}`, async () => {
-        const from = parseAddress(email.from);
         const response = await fetch(`${origin}/api/v1/send`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            From: { Email: from.address, Name: from.name },
+            From: { Email: email.from.address, Name: email.from.name },
             To: [{ Email: email.to }],
             Subject: email.subject,
             Text: email.text,

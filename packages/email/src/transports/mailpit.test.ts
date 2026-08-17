@@ -21,7 +21,7 @@ import { mailpitTransport } from './mailpit.ts';
 
 loadLocalEnv();
 
-const FROM = 'Foodservice Insights <noreply@example.test>';
+const FROM = { address: 'noreply@example.test', name: 'Foodservice Insights' };
 
 function emailerForTests(overrides: { gbdAddress?: string } = {}) {
   return initializeEmailer({
@@ -65,6 +65,16 @@ describe('mailpitTransport', () => {
     expect(delivered.map((email) => email.subject)).toHaveLength(messages.length);
   });
 
+  test('fails with an EmailError when Mailpit rejects the request', async () => {
+    const emailer = emailerForTests();
+
+    const thrown = await sendEmail(emailer, anAnalysisSucceeded({ to: 'not-an-email' })).catch(
+      (error: unknown) => error,
+    );
+
+    expect(isEmailError(thrown)).toBe(true);
+  });
+
   test('fails with an EmailError when Mailpit goes away, and recovers when it comes back', async () => {
     const to = aTestEmailAddress();
     const breakable = breakableEmailer();
@@ -81,5 +91,16 @@ describe('mailpitTransport', () => {
     } finally {
       await breakable.close();
     }
+  });
+
+  test('waitForEmails throws when too few arrive before the timeout', async () => {
+    const to = aTestEmailAddress();
+    const emailer = emailerForTests();
+
+    await sendEmail(emailer, anAnalysisSucceeded({ to }));
+
+    await expect(waitForEmails(to, 2, { timeoutMs: 200, pollIntervalMs: 20 })).rejects.toThrow(
+      'Only 1 of 2 emails arrived',
+    );
   });
 });

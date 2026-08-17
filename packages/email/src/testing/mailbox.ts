@@ -6,6 +6,8 @@
  * per test and read only what was sent to it.
  *
  * `clearMailbox` therefore belongs to `pnpm truncate` alone, which runs between suites.
+ *
+ * See `../transports/mailpit.test.ts` for test coverage.
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
@@ -31,7 +33,7 @@ function endpoint(): string {
   return requireEnv('EMAIL_ENDPOINT').replace(/\/+$/, '');
 }
 
-async function mailpit(path: string, init?: RequestInit): Promise<Response> {
+async function callMailpit(path: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(`${endpoint()}${path}`, init);
   if (!response.ok) {
     throw new Error(`Mailpit answered ${response.status} for ${path}: ${await response.text()}`);
@@ -52,14 +54,14 @@ type MessageDetail = {
 /** Every message sent to one address, newest first. */
 export async function readMailbox(address: string): Promise<MailboxMessage[]> {
   const search = new URLSearchParams({ query: `to:${address}` });
-  const found = (await (await mailpit(`/api/v1/search?${search}`)).json()) as SearchResult;
+  const found = (await (await callMailpit(`/api/v1/search?${search}`)).json()) as SearchResult;
 
   // The search result carries only a snippet, so each body is a second request. Fine at the one or
   // two messages a test sends to its own address.
   return await Promise.all(
     found.messages.map(async (summary) => {
       const detail = (await (
-        await mailpit(`/api/v1/message/${summary.ID}`)
+        await callMailpit(`/api/v1/message/${summary.ID}`)
       ).json()) as MessageDetail;
       return {
         id: detail.ID,
@@ -82,8 +84,7 @@ export type WaitOptions = {
  *
  * Mailpit answers a send before it has finished storing the message, so reading straight after
  * sending sees too few often enough to matter. Waiting on a *count* rather than on presence is
- * what makes that safe: a test that sent six and asserts on the first message it can see would
- * pass whether five arrived or six.
+ * what makes that safe.
  */
 export async function waitForEmails(
   address: string,
@@ -118,5 +119,5 @@ export async function waitForEmail(
 
 /** Delete every message. Only for `pnpm truncate` — see this file's header. */
 export async function clearMailbox(): Promise<void> {
-  await mailpit('/api/v1/messages', { method: 'DELETE' });
+  await callMailpit('/api/v1/messages', { method: 'DELETE' });
 }

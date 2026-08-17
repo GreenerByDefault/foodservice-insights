@@ -1,14 +1,4 @@
-/** The reaping defense from [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping).
- *
- * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing calls this on
- * an interval yet; `run()` is what owes it a `setInterval`-like sweep, via `sweep()`. Its only
- * caller until then is the test suite.
- *
- * **Open:** this only marks the row `failed('abandoned')`. Reaping also promises an email; the
- * transport itself is no longer what blocks that — `@gbd/email` can deliver today via
- * `EMAIL_TRANSPORT=mailpit`. What's still open is *who* calls `sendEmail` and *when*: this
- * function, its future caller, or the supervision loop that owns `run()`.
- */
+/** The reaping defense from [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping). */
 
 import type {
   AnalysisAttemptId,

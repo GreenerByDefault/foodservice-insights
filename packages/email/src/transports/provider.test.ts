@@ -7,7 +7,7 @@ describe('providerTransport', () => {
     const thrown = await providerTransport()
       .send({
         kind: 'gbd-user-deleted',
-        from: 'Foodservice Insights <noreply@example.test>',
+        from: { address: 'noreply@example.test', name: 'Foodservice Insights' },
         to: 'gbd@example.test',
         subject: 'User deleted',
         text: 'text',
