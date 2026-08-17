@@ -16,9 +16,9 @@
  * anything Node-only.
  */
 
-import { MAX_AMOUNT_DIGITS } from '../limits.ts';
+import { MAX_AMOUNT_DIGITS } from '../../limits.ts';
 
-export type AmountReading = { ok: true; value: number } | { ok: false; problem: string };
+export type AmountRead = { ok: true; value: number } | { ok: false; fault: string };
 
 /** A whole number, or one with a decimal point, optionally grouped in thousands. */
 const PLAIN_NUMBER = /^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
@@ -35,51 +35,51 @@ const HAS_DIGIT = /\d/;
 const UNIT_ADVICE =
   'the lb or kg choice on the form sets the unit for the whole file, so this column should hold plain numbers with no unit';
 
-export function readAmount(raw: string): AmountReading {
+export function readAmount(raw: string): AmountRead {
   const trimmed = raw.trim();
-  if (trimmed === '') return { ok: false, problem: 'is empty' };
+  if (trimmed === '') return { ok: false, fault: 'is empty' };
 
   if (IN_BRACKETS.test(trimmed)) {
     return {
       ok: false,
-      problem:
+      fault:
         'is a negative number written in parentheses, an accounting notation for a credit or return; delete that row rather than just removing the parentheses',
     };
   }
   if (trimmed.startsWith('-')) {
     return {
       ok: false,
-      problem:
+      fault:
         'is negative, which usually means a credit or return; delete that row rather than just dropping the minus sign',
     };
   }
   if (CURRENCY.test(trimmed)) {
-    return { ok: false, problem: 'is money, not a weight; check you mapped the right column' };
+    return { ok: false, fault: 'is money, not a weight; check you mapped the right column' };
   }
   if (SCIENTIFIC.test(trimmed)) {
     return {
       ok: false,
-      problem: 'is in scientific notation, so the exact figure is already lost; widen the column',
+      fault: 'is in scientific notation, so the exact figure is already lost; widen the column',
     };
   }
   if (HAS_LETTER.test(trimmed)) {
     return HAS_DIGIT.test(trimmed)
-      ? { ok: false, problem: `has a unit in it — ${UNIT_ADVICE}` }
-      : { ok: false, problem: 'is not a number' };
+      ? { ok: false, fault: `has a unit in it — ${UNIT_ADVICE}` }
+      : { ok: false, fault: 'is not a number' };
   }
 
   if (!PLAIN_NUMBER.test(trimmed)) {
     return trimmed.includes(',')
       ? {
           ok: false,
-          problem: 'has a comma we cannot read; use a full stop for the decimal point',
+          fault: 'has a comma we cannot read; use a full stop for the decimal point',
         }
-      : { ok: false, problem: 'is not a plain number, such as 12 or 1234.50' };
+      : { ok: false, fault: 'is not a plain number, such as 12 or 1234.50' };
   }
 
   const digits = trimmed.replace(/[,.]/g, '');
   if (digits.length > MAX_AMOUNT_DIGITS) {
-    return { ok: false, problem: 'has more digits than any real weight' };
+    return { ok: false, fault: 'has more digits than any real weight' };
   }
 
   // `Number`, never `parseFloat`, which stops at the first character it dislikes and returns

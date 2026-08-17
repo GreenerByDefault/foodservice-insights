@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_FUTURE_DAYS } from '../limits.ts';
+import { MAX_FUTURE_DAYS } from '../../limits.ts';
 import {
   applyOrder,
   bothReadings,
@@ -92,11 +92,11 @@ describe('readDate', () => {
       ['13/13/2025', 'not a real calendar date'],
       ['1999-12-31', 'is before 2000-01-01'],
       ['2027-01-01', `more than ${MAX_FUTURE_DAYS} days from now`],
-    ] as const)('"%s", saying it %s', ([raw, problem]) => {
+    ] as const)('"%s", saying it %s', ([raw, fault]) => {
       const reading = readDate(raw, BOUNDS);
 
       expect(reading).toMatchObject({ kind: 'invalid' });
-      expect(reading.kind === 'invalid' ? reading.problem : '').toContain(problem);
+      expect(reading.kind === 'invalid' ? reading.fault : '').toContain(fault);
     });
   });
 });
@@ -129,14 +129,14 @@ describe('decideDateOrder', () => {
   test('refuses a column that proves both, rather than letting one typo flip every row', () => {
     expect(decideDateOrder([numeric(13, 4, 2025), numeric(4, 13, 2025)])).toEqual({
       ok: false,
-      problem: 'contradictory',
+      fault: 'contradictory',
     });
   });
 
   test('refuses a column where every value reads both ways', () => {
     expect(decideDateOrder([numeric(3, 4, 2025), numeric(1, 2, 2025)])).toEqual({
       ok: false,
-      problem: 'unresolvable',
+      fault: 'unresolvable',
     });
   });
 
@@ -158,7 +158,7 @@ describe('applyOrder', () => {
   test('checks the calendar, which Date.UTC would otherwise roll past', () => {
     expect(
       applyOrder({ kind: 'numeric', first: 31, second: 2, year: 2025 }, 'day-first', BOUNDS),
-    ).toEqual({ ok: false, problem: 'is not a real calendar date' });
+    ).toEqual({ ok: false, fault: 'is not a real calendar date' });
   });
 
   test('applies the accepted range', () => {
