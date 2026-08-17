@@ -1,19 +1,31 @@
 # CSV validation
 
 `validate.ts` turns uploaded bytes into the CSV the analysis reads, or the reason we will not
-accept them. The other files here each enforce one piece of that:
+accept them. The folder is three layers, one word each for what they hand upward:
+
+| Word | Means | Lives in |
+| --- | --- | --- |
+| **Fault** | What is wrong with one thing — a byte stream, a header, a cell | `read/`, `rules/` |
+| **Finding** | A fault, plus the rows it was found on | `findings.ts` |
+| **Problem** | What the customer reads about a finding | `describe.ts` |
+
+A value has a *fault*; we record a *finding*; we show a *problem*. "Problem" is reserved for the
+customer-facing type.
 
 | File | Enforces |
 | --- | --- |
-| `decode.ts` | Encoding |
-| `parse.ts` | Delimiter grammar |
-| `columns.ts` | Header matching |
-| `opening.ts` | Which delimiter and header the file resolves to |
-| `dates.ts` | Date cells |
-| `amounts.ts` | Amount cells |
-| `products.ts` | Product cells, including the formula-injection check |
-| `problems.ts` | Folding many failing rows into a few groups, without wording any of them |
+| `read/decode.ts` | Encoding |
+| `read/parse.ts` | Delimiter grammar |
+| `read/columns.ts` | Header matching |
+| `read/layout.ts` | Which delimiter and header the file resolves to |
+| `rules/dates.ts` | Date cells |
+| `rules/amounts.ts` | Amount cells |
+| `rules/products.ts` | Product cells, including the formula-injection check |
+| `findings.ts` | Folding many failing rows into a few groups, without wording any of them |
 | `describe.ts` | Every sentence a customer reading a rejection sees |
+
+`validate.ts`, `findings.ts` and `describe.ts` stay at the top of `csv/` because they *are* the
+pipeline; `read/` and `rules/` hold the leaf modules underneath it.
 
 **Be more tolerant than the analysis, but never guess.** We accept things the analysis doesn't —
 extra delimiters, extra encodings, the customer's other nineteen columns — and normalize them away

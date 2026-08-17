@@ -23,19 +23,17 @@ const ALIASES = {
 
 export type ColumnIndexes = Record<RequiredColumn, number>;
 
-export type HeaderProblem =
+export type HeaderFault =
   | { kind: 'missing'; columns: readonly RequiredColumn[] }
   | { kind: 'ambiguous'; column: RequiredColumn; headers: readonly string[] };
 
-export type HeaderResolution =
-  | { ok: true; columns: ColumnIndexes }
-  | { ok: false; problem: HeaderProblem };
+export type ColumnsRead = { ok: true; columns: ColumnIndexes } | { ok: false; fault: HeaderFault };
 
 /** Which column is which, given a header record.
  *
  * Columns we do not need are ignored rather than rejected.
  */
-export function resolveHeader(fields: readonly string[]): HeaderResolution {
+export function resolveHeader(fields: readonly string[]): ColumnsRead {
   const matches = new Map<RequiredColumn, { index: number; header: string }[]>(
     REQUIRED_COLUMNS.map((column) => [column, []]),
   );
@@ -46,13 +44,13 @@ export function resolveHeader(fields: readonly string[]): HeaderResolution {
   });
 
   const missing = REQUIRED_COLUMNS.filter((column) => matches.get(column)?.length === 0);
-  if (missing.length > 0) return { ok: false, problem: { kind: 'missing', columns: missing } };
+  if (missing.length > 0) return { ok: false, fault: { kind: 'missing', columns: missing } };
 
   const ambiguous = REQUIRED_COLUMNS.find((column) => (matches.get(column)?.length ?? 0) > 1);
   if (ambiguous) {
     return {
       ok: false,
-      problem: {
+      fault: {
         kind: 'ambiguous',
         column: ambiguous,
         headers: (matches.get(ambiguous) ?? []).map(({ header }) => header),

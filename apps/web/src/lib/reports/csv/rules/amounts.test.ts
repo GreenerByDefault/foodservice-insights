@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_AMOUNT_DIGITS } from '../limits.ts';
+import { MAX_AMOUNT_DIGITS } from '../../limits.ts';
 import { readAmount } from './amounts.ts';
 
 describe('readAmount', () => {
@@ -53,10 +53,10 @@ describe('readAmount', () => {
       ['１２３', 'is not a plain number'],
       ['', 'is empty'],
       ['   ', 'is empty'],
-    ] as const)('"%s", saying it %s', ([raw, problem]) => {
+    ] as const)('"%s", saying it %s', ([raw, fault]) => {
       const reading = readAmount(raw);
       expect(reading).toMatchObject({ ok: false });
-      expect(reading.ok ? '' : reading.problem).toContain(problem);
+      expect(reading.ok ? '' : reading.fault).toContain(fault);
     });
 
     test.for([MAX_AMOUNT_DIGITS + 1, 400])(
@@ -64,7 +64,7 @@ describe('readAmount', () => {
       (length) => {
         expect(readAmount('1'.repeat(length))).toEqual({
           ok: false,
-          problem: 'has more digits than any real weight',
+          fault: 'has more digits than any real weight',
         });
       },
     );

@@ -4,18 +4,18 @@
  * anything Node-only.
  */
 
-import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../limits.ts';
-import { type ColumnIndexes, type HeaderProblem, resolveHeader } from './columns.ts';
+import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../../limits.ts';
+import { type ColumnIndexes, type HeaderFault, resolveHeader } from './columns.ts';
 import { type CsvDelimiter, CsvParseError, type CsvRecord, parseCsv } from './parse.ts';
 
 /** Tried in this fixed order, and picked by which one resolves a header we recognize — never by
  * counting characters. A comma-packed product column can outvote a file's real semicolon
  * delimiter.
  */
-const DELIMITERS: readonly CsvDelimiter[] = [',', ';', '\t'];
+const DELIMITERS: readonly CsvDelimiter[] = [',', ';', '\t', '|'];
 
 /** The delimiter and the column positions, once we know how to read the file. */
-export type Opening = {
+export type Layout = {
   delimiter: CsvDelimiter;
   columns: ColumnIndexes;
   width: number;
@@ -29,30 +29,28 @@ export type Opening = {
 export type HeaderCandidate = { delimiter: CsvDelimiter; line: number };
 
 /** Why no delimiter produced a usable header, or why more than one row did. */
-export type OpeningProblem =
-  | { kind: 'parse_error'; error: CsvParseError }
+export type LayoutFault =
+  | { kind: 'parse-error'; error: CsvParseError }
   | { kind: 'ambiguous'; candidates: readonly HeaderCandidate[] }
   | { kind: 'empty' }
-  | { kind: 'bad_header'; fields: readonly string[]; problem?: HeaderProblem };
+  | { kind: 'bad-header'; fields: readonly string[]; fault?: HeaderFault };
 
-export type OpeningDecision =
-  | { ok: true; opening: Opening }
-  | { ok: false; problem: OpeningProblem };
+export type LayoutDecision = { ok: true; layout: Layout } | { ok: false; fault: LayoutFault };
 
-export function chooseOpening(text: string): OpeningDecision {
+export function readLayout(text: string): LayoutDecision {
   const probes = DELIMITERS.map((delimiter) => probe(text, delimiter));
 
   // Ahead of the header, and on *any* delimiter rather than the one that resolves, because a file
   // one delimiter reads as thousands of columns wide is not a file we want to go on reading.
-  const tooWide = probes.find(({ error }) => error?.failure === 'too_many_columns');
-  if (tooWide?.error) return { ok: false, problem: { kind: 'parse_error', error: tooWide.error } };
+  const tooWide = probes.find(({ error }) => error?.failure === 'too-many-columns');
+  if (tooWide?.error) return { ok: false, fault: { kind: 'parse-error', error: tooWide.error } };
 
   const candidates = probes.flatMap(headerCandidates);
   const [candidate, ...rest] = candidates;
   if (candidate && rest.length === 0) {
     return {
       ok: true,
-      opening: {
+      layout: {
         delimiter: candidate.delimiter,
         columns: candidate.columns,
         width: candidate.record.fields.length,
@@ -63,14 +61,14 @@ export function chooseOpening(text: string): OpeningDecision {
   if (candidate) {
     return {
       ok: false,
-      problem: {
+      fault: {
         kind: 'ambiguous',
         candidates: candidates.map(({ delimiter, record }) => ({ delimiter, line: record.line })),
       },
     };
   }
 
-  return { ok: false, problem: noHeaderProblem(probes) };
+  return { ok: false, fault: noHeaderFault(probes) };
 }
 
 /** What one delimiter makes of the top of the file. */
@@ -101,19 +99,19 @@ function headerCandidates(probe: Probe): Candidate[] {
   });
 }
 
-function noHeaderProblem(probes: readonly Probe[]): OpeningProblem {
+function noHeaderFault(probes: readonly Probe[]): LayoutFault {
   // Fall back to describing the comma reading, since that is the format we ask for.
   const [comma] = probes;
-  if (comma?.error) return { kind: 'parse_error', error: comma.error };
+  if (comma?.error) return { kind: 'parse-error', error: comma.error };
 
   const [first] = comma?.records ?? [];
   if (!first) return { kind: 'empty' };
 
   const resolution = resolveHeader(first.fields);
   return {
-    kind: 'bad_header',
+    kind: 'bad-header',
     fields: first.fields,
-    problem: resolution.ok ? undefined : resolution.problem,
+    fault: resolution.ok ? undefined : resolution.fault,
   };
 }
 

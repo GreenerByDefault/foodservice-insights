@@ -1,22 +1,22 @@
-/** Grouping for problems in failing rows.
+/** Grouping many failing rows into a few findings.
  *
- * The accumulator has to stay streaming to reduce memoroy consumption.
+ * The accumulator has to stay streaming to reduce memory consumption.
  *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.
  */
 
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
-import type { RequiredColumn } from './columns.ts';
-import type { DateOrder, DateReading } from './dates.ts';
+import type { RequiredColumn } from './read/columns.ts';
+import type { DateOrder, DateOrderFault, DateReading } from './rules/dates.ts';
 
-/** One row's problem.
+/** One row's fault.
  *
  * Every kind but `width` is a cell that failed its rule; `width` is the row
  * itself having the wrong number of columns.
  */
-export type RowProblem =
-  | { kind: 'column-rule'; column: RequiredColumn; raw: string; clause: string }
+export type RowFinding =
+  | { kind: 'cell'; column: RequiredColumn; raw: string; clause: string }
   /** A date that only failed once the column-wide order was applied, so the message has to name
    * the reading we took. */
   | { kind: 'resolved-date'; readAs: DateOrder; raw: string; clause: string }
@@ -31,15 +31,15 @@ export type RowProblem =
 export type DateExample = { line: number; raw: string; reading: DateReading };
 export type DateExamples = ReadonlyMap<DateOrder | 'ambiguous', DateExample>;
 
-/** A problem with the file as a whole rather than any one row. */
-export type FileProblem = {
+/** A finding about the file as a whole rather than any one row. */
+export type FileFinding = {
   kind: 'date-order';
-  issue: 'contradictory' | 'unresolvable';
+  issue: DateOrderFault;
   examples: DateExamples;
 };
 
-type MutableRowGroup = {
-  problem: RowProblem;
+export type MutableRowGroup = {
+  finding: RowFinding;
   ranges: { start: number; end: number }[];
   rowCount: number;
   /** Capped at `MAX_EXAMPLE_VALUES`. */
@@ -51,55 +51,55 @@ type MutableRowGroup = {
  * The key space of `rowGroups` is limited to a fixed, small set of templates.
  * That keeps memory usage acceptable no matter how many rows fail.
  */
-export type ProblemTally = {
+export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
-  file: FileProblem[];
+  file: FileFinding[];
   failingRowCount: number;
 };
 
-export function newProblemTally(): ProblemTally {
+export function newFindingLog(): FindingLog {
   return { rowGroups: new Map(), file: [], failingRowCount: 0 };
 }
 
-/** Add a row to the problem it failed, which is created on the first row to reach it. */
-export function noteRow(tally: ProblemTally, line: number, problem: RowProblem): void {
-  tally.failingRowCount += 1;
+/** Add a row to the finding it failed, which is created on the first row to reach it. */
+export function noteRow(log: FindingLog, line: number, finding: RowFinding): void {
+  log.failingRowCount += 1;
 
-  const key = groupKey(problem);
-  const existing = tally.rowGroups.get(key);
-  const group = existing ?? { problem, ranges: [], rowCount: 0, examples: new Set<string>() };
-  if (!existing) tally.rowGroups.set(key, group);
+  const key = groupKey(finding);
+  const existing = log.rowGroups.get(key);
+  const group = existing ?? { finding, ranges: [], rowCount: 0, examples: new Set<string>() };
+  if (!existing) log.rowGroups.set(key, group);
 
   extendOrStartRange(group, line);
-  addExampleValue(group, rawValueOf(problem));
+  addExampleValue(group, rawValueOf(finding));
 }
 
-export function noteFile(tally: ProblemTally, problem: FileProblem): void {
-  tally.failingRowCount += 1;
-  tally.file.push(problem);
+export function noteFile(log: FindingLog, finding: FileFinding): void {
+  log.failingRowCount += 1;
+  log.file.push(finding);
 }
 
-function groupKey(problem: RowProblem): string {
+function groupKey(finding: RowFinding): string {
   // `raw` never appears in the key, so the key stays a fixed, small set of templates.
-  switch (problem.kind) {
-    case 'column-rule':
-      return `column-rule|${problem.column}|${problem.clause}`;
+  switch (finding.kind) {
+    case 'cell':
+      return `cell|${finding.column}|${finding.clause}`;
     case 'resolved-date':
       // `readAs` has to stay in the key: `readDate` and `applyOrder` both bottom out in `toIso`,
       // so the same clause can come from a raw ISO date or from a day-first read of a different one.
-      return `resolved-date|${problem.readAs}|${problem.clause}`;
+      return `resolved-date|${finding.readAs}|${finding.clause}`;
     case 'too-long':
-      return `too-long|${problem.column}`;
+      return `too-long|${finding.column}`;
     case 'formula':
       return 'formula';
     case 'width':
       // `expected` stays out of the key: it is constant for a file.
-      return `width|${problem.actual}`;
+      return `width|${finding.actual}`;
   }
 }
 
-function rawValueOf(problem: RowProblem): string | undefined {
-  return problem.kind === 'too-long' || problem.kind === 'width' ? undefined : problem.raw;
+function rawValueOf(finding: RowFinding): string | undefined {
+  return finding.kind === 'too-long' || finding.kind === 'width' ? undefined : finding.raw;
 }
 
 function extendOrStartRange(group: MutableRowGroup, line: number): void {
@@ -121,10 +121,10 @@ function addExampleValue(group: MutableRowGroup, raw: string | undefined): void 
   if (group.examples.size < MAX_EXAMPLE_VALUES) group.examples.add(raw);
 }
 
-/** One group's representative problem, the rows it covers, and the raw values worth quoting
+/** One group's representative finding, the rows it covers, and the raw values worth quoting
  * back. */
-export type RowProblemGroup = {
-  readonly problem: RowProblem;
+export type FindingGroup = {
+  readonly finding: RowFinding;
   readonly ranges: readonly { start: number; end: number }[];
   /** Every row, including the ones past `MAX_ROW_RANGES_REPORTED` that no range holds. */
   readonly rowCount: number;
@@ -133,16 +133,17 @@ export type RowProblemGroup = {
 };
 
 /** The accumulator's result. */
-export type Problems = {
+export type Findings = {
   readonly failingRowCount: number;
-  readonly rowGroups: readonly RowProblemGroup[];
-  readonly file: readonly FileProblem[];
+  readonly rowGroups: readonly FindingGroup[];
+  readonly file: readonly FileFinding[];
 };
 
-export function toProblems(tally: ProblemTally): Problems {
-  const rowGroups = [...tally.rowGroups.values()].map((group) => ({
+/** Closes the log to further writes — the contract `seal` names. */
+export function seal(log: FindingLog): Findings {
+  const rowGroups = [...log.rowGroups.values()].map((group) => ({
     ...group,
     examples: [...group.examples],
   }));
-  return { failingRowCount: tally.failingRowCount, rowGroups, file: tally.file };
+  return { failingRowCount: log.failingRowCount, rowGroups, file: log.file };
 }

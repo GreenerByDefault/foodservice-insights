@@ -75,7 +75,7 @@ describe('decodeCsv', () => {
         'xls',
       ],
     ] as const)('%s', ([, bytes, format]) => {
-      expect(decodeCsv(bytes)).toEqual({ ok: false, problem: { kind: 'signature', format } });
+      expect(decodeCsv(bytes)).toEqual({ ok: false, fault: { kind: 'signature', format } });
     });
 
     test.for([
@@ -86,7 +86,7 @@ describe('decodeCsv', () => {
       ([, endianness]) => {
         expect(decodeCsv(utf16('product,date', endianness))).toMatchObject({
           ok: false,
-          problem: { kind: 'control-character' },
+          fault: { kind: 'control-character' },
         });
       },
     );
@@ -96,22 +96,22 @@ describe('decodeCsv', () => {
 
       expect(decodeCsv(bytes)).toEqual({
         ok: false,
-        problem: { kind: 'control-character', code: 0x01, offset: 7 },
+        fault: { kind: 'control-character', code: 0x01, offset: 7 },
       });
     });
 
     test('a file of nothing but whitespace', () => {
-      expect(decodeCsv(utf8(' \n\t\n '))).toEqual({ ok: false, problem: { kind: 'empty' } });
+      expect(decodeCsv(utf8(' \n\t\n '))).toEqual({ ok: false, fault: { kind: 'empty' } });
     });
 
     test('a completely empty file', () => {
-      expect(decodeCsv(new Uint8Array())).toEqual({ ok: false, problem: { kind: 'empty' } });
+      expect(decodeCsv(new Uint8Array())).toEqual({ ok: false, fault: { kind: 'empty' } });
     });
 
     test('a file that is only a byte order mark', () => {
       expect(decodeCsv(Uint8Array.of(0xef, 0xbb, 0xbf))).toEqual({
         ok: false,
-        problem: { kind: 'empty' },
+        fault: { kind: 'empty' },
       });
     });
   });

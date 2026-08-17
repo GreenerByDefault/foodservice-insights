@@ -1,12 +1,19 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../limits.ts';
-import { chooseOpening } from './opening.ts';
+import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../../limits.ts';
+import { readLayout } from './layout.ts';
 
-describe('chooseOpening', () => {
+describe('readLayout', () => {
   test('resolves the one delimiter that reads a header', () => {
-    expect(chooseOpening('product;date;weight\nbeef,2026-01-05,12\n')).toMatchObject({
+    expect(readLayout('product;date;weight\nbeef,2026-01-05,12\n')).toMatchObject({
       ok: true,
-      opening: { delimiter: ';', width: 3 },
+      layout: { delimiter: ';', width: 3 },
+    });
+  });
+
+  test('resolves a pipe-delimited header, the fourth and last delimiter tried', () => {
+    expect(readLayout('product|date|weight\nbeef,2026-01-05,12\n')).toMatchObject({
+      ok: true,
+      layout: { delimiter: '|', width: 3 },
     });
   });
 
@@ -16,9 +23,9 @@ describe('chooseOpening', () => {
     // tabs ignored as extra columns.
     const text = ',\tproduct\t,\tdate\t,\tweight\t,\n';
 
-    expect(chooseOpening(text)).toEqual({
+    expect(readLayout(text)).toEqual({
       ok: false,
-      problem: {
+      fault: {
         kind: 'ambiguous',
         candidates: [
           { delimiter: ',', line: 1 },
@@ -31,9 +38,9 @@ describe('chooseOpening', () => {
   test('rejects a file where the same delimiter reads two rows as a header', () => {
     const text = ['product,date,weight', 'product,date,weight', 'beef,2026-01-05,1'].join('\n');
 
-    expect(chooseOpening(text)).toEqual({
+    expect(readLayout(text)).toEqual({
       ok: false,
-      problem: {
+      fault: {
         kind: 'ambiguous',
         candidates: [
           { delimiter: ',', line: 1 },
@@ -46,23 +53,23 @@ describe('chooseOpening', () => {
   test("skips junk rows above the header — a title, a teammate's note, blank lines", () => {
     const text = ['Procurement export', '', 'product,date,weight', 'beef,2026-01-05,1'].join('\n');
 
-    expect(chooseOpening(text)).toMatchObject({
+    expect(readLayout(text)).toMatchObject({
       ok: true,
-      opening: { delimiter: ',', width: 3, headerLine: 3 },
+      layout: { delimiter: ',', width: 3, headerLine: 3 },
     });
   });
 
   test('reports empty for a file with no rows at all', () => {
-    expect(chooseOpening('')).toEqual({ ok: false, problem: { kind: 'empty' } });
+    expect(readLayout('')).toEqual({ ok: false, fault: { kind: 'empty' } });
   });
 
   test('reports a bad header with the fields it saw, for a header missing a required column', () => {
-    expect(chooseOpening('vendor,cost\nSysco,12\n')).toEqual({
+    expect(readLayout('vendor,cost\nSysco,12\n')).toEqual({
       ok: false,
-      problem: {
-        kind: 'bad_header',
+      fault: {
+        kind: 'bad-header',
         fields: ['vendor', 'cost'],
-        problem: { kind: 'missing', columns: ['product', 'date', 'amount'] },
+        fault: { kind: 'missing', columns: ['product', 'date', 'amount'] },
       },
     });
   });
@@ -70,9 +77,9 @@ describe('chooseOpening', () => {
   test('surfaces the parser error when even the comma reading is too wide to tokenize', () => {
     const text = `${'a,'.repeat(MAX_COLUMNS)}b\n`;
 
-    expect(chooseOpening(text)).toMatchObject({
+    expect(readLayout(text)).toMatchObject({
       ok: false,
-      problem: { kind: 'parse_error', error: { failure: 'too_many_columns' } },
+      fault: { kind: 'parse-error', error: { failure: 'too-many-columns' } },
     });
   });
 
@@ -80,7 +87,7 @@ describe('chooseOpening', () => {
     const junkRows = Array.from({ length: MAX_HEADER_SEARCH_LINES }, (_, i) => `junk ${i}`);
     const text = [...junkRows, 'product,date,weight', 'beef,2026-01-05,1'].join('\n');
 
-    expect(chooseOpening(text)).toMatchObject({ ok: false, problem: { kind: 'bad_header' } });
+    expect(readLayout(text)).toMatchObject({ ok: false, fault: { kind: 'bad-header' } });
   });
 
   test('reports a bad header with an ambiguous column, not just a missing one', () => {
@@ -88,12 +95,12 @@ describe('chooseOpening', () => {
     // in the text, so this is the only reading on offer.
     const text = 'product,item,date,amount\nbeef,foo,2026-01-01,1\n';
 
-    expect(chooseOpening(text)).toEqual({
+    expect(readLayout(text)).toEqual({
       ok: false,
-      problem: {
-        kind: 'bad_header',
+      fault: {
+        kind: 'bad-header',
         fields: ['product', 'item', 'date', 'amount'],
-        problem: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
+        fault: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
       },
     });
   });
@@ -104,18 +111,18 @@ describe('chooseOpening', () => {
     // the whole file out before any header search happens.
     const text = [`${'a,'.repeat(MAX_COLUMNS)}b`, 'product;date;weight'].join('\n');
 
-    expect(chooseOpening(text)).toMatchObject({
+    expect(readLayout(text)).toMatchObject({
       ok: false,
-      problem: { kind: 'parse_error', error: { failure: 'too_many_columns' } },
+      fault: { kind: 'parse-error', error: { failure: 'too-many-columns' } },
     });
   });
 
   test('surfaces a quoting error when no delimiter can even read a row, not just a header problem', () => {
     const text = '"unterminated\n';
 
-    expect(chooseOpening(text)).toMatchObject({
+    expect(readLayout(text)).toMatchObject({
       ok: false,
-      problem: { kind: 'parse_error', error: { failure: 'unclosed_quote' } },
+      fault: { kind: 'parse-error', error: { failure: 'unclosed-quote' } },
     });
   });
 });

@@ -4,12 +4,12 @@
  * anything Node-only. In particular `TextDecoder`, not `Buffer`.
  */
 
-export type DecodeProblem =
+export type DecodeFault =
   | { kind: 'signature'; format: 'xlsx' | 'xls' }
   | { kind: 'control-character'; code: number; offset: number }
   | { kind: 'empty' };
 
-export type Decoded = { ok: true; text: string } | { ok: false; problem: DecodeProblem };
+export type Decoded = { ok: true; text: string } | { ok: false; fault: DecodeFault };
 
 /** Files that people mistake for a CSV, recognised so we can say which one it is.
  *
@@ -28,7 +28,7 @@ const SIGNATURES = [
 
 export function decodeCsv(bytes: Uint8Array): Decoded {
   const signature = SIGNATURES.find((candidate) => startsWith(bytes, candidate.bytes));
-  if (signature) return { ok: false, problem: { kind: 'signature', format: signature.format } };
+  if (signature) return { ok: false, fault: { kind: 'signature', format: signature.format } };
 
   const text = normalizeLineEndings(decodeText(bytes));
 
@@ -40,7 +40,7 @@ export function decodeCsv(bytes: Uint8Array): Decoded {
   if (controlAt !== undefined) {
     return {
       ok: false,
-      problem: {
+      fault: {
         kind: 'control-character',
         code: text.charCodeAt(controlAt),
         offset: controlAt,
@@ -48,7 +48,7 @@ export function decodeCsv(bytes: Uint8Array): Decoded {
     };
   }
 
-  if (text.trim() === '') return { ok: false, problem: { kind: 'empty' } };
+  if (text.trim() === '') return { ok: false, fault: { kind: 'empty' } };
 
   return { ok: true, text };
 }

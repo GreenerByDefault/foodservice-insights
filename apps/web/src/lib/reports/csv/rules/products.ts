@@ -12,7 +12,7 @@
  * anything Node-only.
  */
 
-export type ProductReading = { ok: true; value: string } | { ok: false; problem: string };
+export type ProductRead = { ok: true; value: string } | { ok: false; fault: string };
 
 /** What a spreadsheet leaves behind where a product should be. */
 const PLACEHOLDERS = new Set([
@@ -57,14 +57,14 @@ const INVISIBLE = /\p{Cc}|\p{Cf}|\p{Co}|\p{Cs}/u;
  */
 const FORMULA_TRIGGERS = new Set(['=', '+', '-', '@']);
 
-export function readProduct(raw: string): ProductReading {
+export function readProduct(raw: string): ProductRead {
   const trimmed = raw.trim();
-  if (trimmed === '') return { ok: false, problem: 'is empty' };
+  if (trimmed === '') return { ok: false, fault: 'is empty' };
   if (PLACEHOLDERS.has(trimmed.toLowerCase())) {
-    return { ok: false, problem: 'is a placeholder rather than a product' };
+    return { ok: false, fault: 'is a placeholder rather than a product' };
   }
   if (INVISIBLE.test(trimmed)) {
-    return { ok: false, problem: 'contains a line break, a tab or an invisible character' };
+    return { ok: false, fault: 'contains a line break, a tab or an invisible character' };
   }
   return { ok: true, value: trimmed };
 }

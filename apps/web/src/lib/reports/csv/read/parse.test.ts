@@ -99,27 +99,27 @@ describe('parseCsv', () => {
   describe('refuses to guess', () => {
     test('a quote that is never closed', () => {
       expect(() => records('a,b\nc,"unclosed\nd,e')).toThrowError(
-        expect.objectContaining({ failure: 'unclosed_quote', line: 2 }),
+        expect.objectContaining({ failure: 'unclosed-quote', line: 2 }),
       );
     });
 
     test('a doubled quote that runs into the end of the file', () => {
       expect(() => records('"a""')).toThrowError(
-        expect.objectContaining({ failure: 'unclosed_quote', line: 1 }),
+        expect.objectContaining({ failure: 'unclosed-quote', line: 1 }),
       );
     });
 
     test('text after a closing quote', () => {
       expect(() => records('a,"quoted"junk,c')).toThrowError(
-        expect.objectContaining({ failure: 'text_after_quote', line: 1 }),
+        expect.objectContaining({ failure: 'text-after-quote', line: 1 }),
       );
     });
 
     // A record can span lines, so the line the problem is on and the line the record began on are
     // two different numbers. Both failures report the former.
     test.for([
-      ['an unclosed quote, where it opened', '"a\nb","unclosed', 'unclosed_quote'],
-      ['text after a quote, where the text is', '"a\nb","c"junk', 'text_after_quote'],
+      ['an unclosed quote, where it opened', '"a\nb","unclosed', 'unclosed-quote'],
+      ['text after a quote, where the text is', '"a\nb","c"junk', 'text-after-quote'],
     ] as const)('names %s, not where the record started', ([, text, failure]) => {
       expect(() => records(text)).toThrowError(expect.objectContaining({ failure, line: 2 }));
     });
@@ -132,13 +132,13 @@ describe('parseCsv', () => {
   describe('the field cap', () => {
     test('refuses a record wider than it', () => {
       expect(() => records('a,b,c\nd,e,f', ',', 2)).toThrowError(
-        expect.objectContaining({ failure: 'too_many_columns', line: 1 }),
+        expect.objectContaining({ failure: 'too-many-columns', line: 1 }),
       );
     });
 
     test('applies to a record starting past line 1, and names where that record began', () => {
       expect(() => records('a,b\n"two\nlines",c,d', ',', 2)).toThrowError(
-        expect.objectContaining({ failure: 'too_many_columns', line: 2 }),
+        expect.objectContaining({ failure: 'too-many-columns', line: 2 }),
       );
     });
 
@@ -149,10 +149,10 @@ describe('parseCsv', () => {
     // The whole point of the cap living in the parser: a caller measuring `fields.length` can only
     // do it once the array exists, which for a degenerate line is the allocation being guarded
     // against. Text the parser would otherwise reject is how to observe it stopping — reading the
-    // rest of this record would raise `unclosed_quote` instead.
+    // rest of this record would raise `unclosed-quote` instead.
     test('stops one field past the cap rather than reading the rest of the record', () => {
       expect(() => records('a,b,c,"unclosed', ',', 2)).toThrowError(
-        expect.objectContaining({ failure: 'too_many_columns' }),
+        expect.objectContaining({ failure: 'too-many-columns' }),
       );
     });
   });

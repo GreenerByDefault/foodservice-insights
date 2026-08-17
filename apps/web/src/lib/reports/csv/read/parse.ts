@@ -28,10 +28,10 @@ export type CsvDelimiter = ',' | ';' | '\t' | '|';
 
 /** The quoting failures name the line the problem is on, not the line its record began on — where
  * the quote opened, and where the stray text follows. A record may span lines, so those differ,
- * and the offending line is the one worth pointing a reader at. `too_many_columns` has no such
+ * and the offending line is the one worth pointing a reader at. `too-many-columns` has no such
  * distinction to make and names the line the record began on.
  */
-export type CsvParseFailure = 'unclosed_quote' | 'text_after_quote' | 'too_many_columns';
+export type CsvParseFailure = 'unclosed-quote' | 'text-after-quote' | 'too-many-columns';
 
 export class CsvParseError extends Error {
   override readonly name = 'CsvParseError';
@@ -86,7 +86,7 @@ export function* parseCsv(
           ? readQuotedField(text, { index: cursor.index + 1, line: cursor.line }, delimiter)
           : readBareField(text, cursor, delimiter);
       fields.push(read.field);
-      if (fields.length > maxFields) throw new CsvParseError('too_many_columns', startLine);
+      if (fields.length > maxFields) throw new CsvParseError('too-many-columns', startLine);
       cursor = { index: read.index, line: read.line };
 
       if (text[cursor.index] === delimiter) {
@@ -117,7 +117,7 @@ function readQuotedField(text: string, start: Cursor, delimiter: CsvDelimiter): 
 
   for (;;) {
     const closing = text.indexOf('"', index);
-    if (closing === -1) throw new CsvParseError('unclosed_quote', start.line);
+    if (closing === -1) throw new CsvParseError('unclosed-quote', start.line);
 
     field += text.slice(index, closing);
     line += countNewlines(text, index, closing);
@@ -132,7 +132,7 @@ function readQuotedField(text: string, start: Cursor, delimiter: CsvDelimiter): 
 
     const next = text[index];
     if (next !== undefined && next !== delimiter && next !== '\n') {
-      throw new CsvParseError('text_after_quote', line);
+      throw new CsvParseError('text-after-quote', line);
     }
     return { field, index, line };
   }

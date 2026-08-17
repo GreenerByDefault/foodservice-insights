@@ -40,7 +40,7 @@ describe('resolveHeader', () => {
     (header) => {
       expect(resolveHeader(['product', 'date', header])).toMatchObject({
         ok: false,
-        problem: { kind: 'missing', columns: ['amount'] },
+        fault: { kind: 'missing', columns: ['amount'] },
       });
     },
   );
@@ -48,21 +48,21 @@ describe('resolveHeader', () => {
   test('names every column it could not find', () => {
     expect(resolveHeader(['product', 'vendor'])).toEqual({
       ok: false,
-      problem: { kind: 'missing', columns: ['date', 'amount'] },
+      fault: { kind: 'missing', columns: ['date', 'amount'] },
     });
   });
 
   test('refuses to choose when two columns could be the same one', () => {
     expect(resolveHeader(['item', 'Product Name', 'date', 'weight'])).toEqual({
       ok: false,
-      problem: { kind: 'ambiguous', column: 'product', headers: ['item', 'Product Name'] },
+      fault: { kind: 'ambiguous', column: 'product', headers: ['item', 'Product Name'] },
     });
   });
 
   test('treats an identical header twice as the same ambiguity', () => {
     expect(resolveHeader(['product', 'product', 'date', 'weight'])).toMatchObject({
       ok: false,
-      problem: { kind: 'ambiguous', column: 'product' },
+      fault: { kind: 'ambiguous', column: 'product' },
     });
   });
 });

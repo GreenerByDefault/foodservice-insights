@@ -14,7 +14,7 @@
  * anything Node-only.
  */
 
-import { MAX_FUTURE_DAYS } from '../limits.ts';
+import { MAX_FUTURE_DAYS } from '../../limits.ts';
 
 /** Which of the first two numbers in `03/04/2025` is the day. */
 export type DateOrder = 'day-first' | 'month-first';
@@ -24,11 +24,11 @@ export type DateReading =
   | { kind: 'date'; isoDate: string }
   /** `first/second/year`, where only the whole column can say which is the day. */
   | { kind: 'numeric'; first: number; second: number; year: number }
-  | { kind: 'invalid'; problem: string };
+  | { kind: 'invalid'; fault: string };
 
 export type DateBounds = { earliest: string; latest: string };
 
-export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; problem: string };
+export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; fault: string };
 
 // ------------------------------------------------------------------
 // Recognizing a cell
@@ -76,7 +76,7 @@ const NOT_A_DATE = 'is not a real calendar date';
 
 export function readDate(raw: string, bounds: DateBounds): DateReading {
   const cleaned = raw.trim().replace(/,/g, '').replace(/\s+/g, ' ').toLowerCase();
-  if (cleaned === '') return { kind: 'invalid', problem: 'is empty' };
+  if (cleaned === '') return { kind: 'invalid', fault: 'is empty' };
 
   const yearFirst =
     YEAR_FIRST.exec(cleaned) ?? YEAR_FIRST_WITH_TIME.exec(cleaned) ?? COMPACT.exec(cleaned);
@@ -124,12 +124,12 @@ export function readDate(raw: string, bounds: DateBounds): DateReading {
   if (DIGITS_ONLY.test(cleaned) || DECIMAL_SERIAL.test(cleaned)) {
     return {
       kind: 'invalid',
-      problem:
+      fault:
         'looks like an unconverted date serial; format the column as a date in your spreadsheet and save it again',
     };
   }
 
-  return { kind: 'invalid', problem: 'is not a date we recognise; use YYYY-MM-DD' };
+  return { kind: 'invalid', fault: 'is not a date we recognise; use YYYY-MM-DD' };
 }
 
 /** A month with no day is the whole month, and the report is keyed by month, so the day we put in
@@ -149,12 +149,14 @@ export function orderProvenBy(reading: DateReading): DateOrder | undefined {
   return undefined;
 }
 
-export type OrderDecision =
-  | { ok: true; order: DateOrder }
-  /** One column holds values proving both readings — a typo, or two exports concatenated. */
-  | { ok: false; problem: 'contradictory' }
-  /** Every value works either way, so there is nothing to infer from. */
-  | { ok: false; problem: 'unresolvable' };
+/** Why a column's date order couldn't be decided.
+ *
+ * `contradictory`: one column holds values proving both readings — a typo, or two exports
+ * concatenated. `unresolvable`: every value works either way, so there is nothing to infer from.
+ */
+export type DateOrderFault = 'contradictory' | 'unresolvable';
+
+export type OrderDecision = { ok: true; order: DateOrder } | { ok: false; fault: DateOrderFault };
 
 /** Decide day-first or month-first for the whole column, never per value.
  *
@@ -173,11 +175,11 @@ export function decideDateOrder(readings: Iterable<DateReading>): OrderDecision 
     if (order) proven.add(order);
   }
 
-  if (proven.size === 2) return { ok: false, problem: 'contradictory' };
+  if (proven.size === 2) return { ok: false, fault: 'contradictory' };
   const [order] = proven;
   if (order) return { ok: true, order };
   // With nothing numeric in the column the order is never consulted; either answer will do.
-  return sawNumeric ? { ok: false, problem: 'unresolvable' } : { ok: true, order: 'month-first' };
+  return sawNumeric ? { ok: false, fault: 'unresolvable' } : { ok: true, order: 'month-first' };
 }
 
 export function applyOrder(
@@ -208,7 +210,7 @@ const ANY_DATE: DateBounds = { earliest: '0000-01-01', latest: '9999-12-31' };
 // ------------------------------------------------------------------
 
 function numeric(first: number, second: number, year: number): DateReading {
-  if (first > 12 && second > 12) return { kind: 'invalid', problem: NOT_A_DATE };
+  if (first > 12 && second > 12) return { kind: 'invalid', fault: NOT_A_DATE };
   return { kind: 'numeric', first, second, year };
 }
 
@@ -220,7 +222,7 @@ function named(
 ): DateReading {
   const month = MONTH_NUMBERS.get(name ?? '');
   if (month === undefined) {
-    return { kind: 'invalid', problem: 'has a month name we do not recognise' };
+    return { kind: 'invalid', fault: 'has a month name we do not recognise' };
   }
   return dated(year, month, day, bounds);
 }
@@ -229,7 +231,7 @@ function dated(year: number, month: number, day: number, bounds: DateBounds): Da
   const resolved = toIso(year, month, day, bounds);
   return resolved.ok
     ? { kind: 'date', isoDate: resolved.isoDate }
-    : { kind: 'invalid', problem: resolved.problem };
+    : { kind: 'invalid', fault: resolved.fault };
 }
 
 /** A two-digit year is always a 21st-century one; nothing this tool ingests predates 2000. */
@@ -241,22 +243,22 @@ function expandYear(token: string | undefined): number {
 
 function toIso(year: number, month: number, day: number, bounds: DateBounds): ResolvedDate {
   if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return { ok: false, problem: NOT_A_DATE };
+    return { ok: false, fault: NOT_A_DATE };
   }
 
   // `Date.UTC` rolls February 30 forward into March rather than complaining, so the only way to
   // know the date exists is to read the fields back out.
   const at = new Date(Date.UTC(year, month - 1, day));
   if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) {
-    return { ok: false, problem: NOT_A_DATE };
+    return { ok: false, fault: NOT_A_DATE };
   }
 
   const isoDate = `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
   if (isoDate < bounds.earliest) {
-    return { ok: false, problem: `is before ${bounds.earliest}, too old to be procurement data` };
+    return { ok: false, fault: `is before ${bounds.earliest}, too old to be procurement data` };
   }
   if (isoDate > bounds.latest) {
-    return { ok: false, problem: `is more than ${MAX_FUTURE_DAYS} days from now` };
+    return { ok: false, fault: `is more than ${MAX_FUTURE_DAYS} days from now` };
   }
   return { ok: true, isoDate };
 }
