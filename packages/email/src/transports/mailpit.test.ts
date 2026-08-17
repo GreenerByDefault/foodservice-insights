@@ -1,13 +1,4 @@
-/** Proves the transport end-to-end, against the real Mailpit the test stack runs.
- *
- * Deliberately unmocked, for the reason `@gbd/storage`'s object tests are: a fake HTTP server could
- * only confirm we call `fetch` the way we call it, whereas what this layer actually gets wrong is
- * the body shape Mailpit accepts, an address it parses differently than we do, and a body that does
- * not survive the round trip.
- *
- * Every test sends to its own `aTestEmailAddress()`. Nothing here may empty the mailbox — see
- * `testing/mailbox.ts`.
- */
+/** Proves the transport end-to-end, against the real Mailpit the test stack runs. */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
 import { describe, expect, test } from 'vitest';
