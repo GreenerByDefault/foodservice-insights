@@ -32,11 +32,9 @@ Instead of sending real mail to prove a caller asked for an email, consumers sho
 `recordingEmailer()` from `@gbd/email/testing`. It renders for real and keeps the result, so a
 test asserts on `kind` and `to` and leaves the copy to this package.
 
-This package's own tests prove the Mailpit transport for real. Every test addresses its mail to
-`aTestEmailAddress()`, a random recipient nothing else in the suite will use, and reads the mailbox
-back with `waitForEmail`/`waitForEmails` rather than truncating — Turbo runs every package's
-`test:unit` concurrently against the one mailbox, so a test that emptied it would delete another
-package's mail mid-run.
+This package's own tests, along with all e2e tests, prove the Mailpit transport for real instead of faking
+it. Every test addresses its mail to `aTestEmailAddress()`, a random recipient nothing else in the
+suite will use, and reads the mailbox back with `waitForEmail`/`waitForEmails`.
 
 ## Previewing
 

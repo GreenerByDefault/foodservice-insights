@@ -283,9 +283,13 @@ Refer to [`packages/storage/README.md`](packages/storage/README.md) for the priv
 
 We send email as HTTP requests to a provider, using emails generated in
 [`packages/email`](packages/email) rather than a template stored with the provider. That keeps
-templates in version control and swappable across local mail catchers and providers alike.
-Locally, `EMAIL_TRANSPORT=mailpit` posts to Mailpit's `POST /api/v1/send`, the Supabase CLI's local
-mail catcher.
+templates in version control and swappable across local mail catchers and providers alike. 
+
+Locally, mail goes to [Mailpit](https://mailpit.axllent.org), a fake SMTP server with a web
+inbox, so nothing leaves the machine. `packages/email`'s own tests and e2e tests read that inbox
+for real.
+Every other test fakes the transport with an in-memory `recordingEmailer()`, asserting only that
+the right email was asked for.
 
 **Open:** decide which email provider, such as SendGrid.
 
