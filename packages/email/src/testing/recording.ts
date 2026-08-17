@@ -10,6 +10,7 @@
 
 import type { Emailer, EmailerConfig, EmailTransport, RenderedEmail } from '../client.ts';
 import { initializeEmailer } from '../client.ts';
+import { RESERVED_TEST_DOMAIN } from './mailbox.ts';
 
 export type RecordingEmailer = {
   readonly service: Emailer;
@@ -18,12 +19,11 @@ export type RecordingEmailer = {
   clear(): void;
 };
 
-// This uses addresses under `.test`, which is reserved by RFC 2606 and so can never be a real recipient.
 export const TEST_EMAILER_CONFIG = {
-  from: { address: 'noreply@example.test', name: 'Foodservice Insights' },
-  siteUrl: 'https://example.test',
-  gbdAddress: 'gbd@example.test',
-  supportAddress: 'support@example.test',
+  from: { address: `noreply@${RESERVED_TEST_DOMAIN}`, name: 'Foodservice Insights' },
+  siteUrl: `https://${RESERVED_TEST_DOMAIN}`,
+  gbdAddress: `gbd@${RESERVED_TEST_DOMAIN}`,
+  supportAddress: `support@${RESERVED_TEST_DOMAIN}`,
 } as const;
 
 export function recordingEmailer(

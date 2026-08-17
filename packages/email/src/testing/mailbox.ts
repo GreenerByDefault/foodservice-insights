@@ -21,11 +21,12 @@ export type MailboxMessage = {
   html: string;
 };
 
-/** A recipient nothing else in the suite will use. `.test` is reserved by RFC 2606, so a message
- * that escaped to a real network could not be delivered.
- */
+/** `.test` is reserved by RFC 2606, so a message addressed here can never reach a real inbox. */
+export const RESERVED_TEST_DOMAIN = 'example.test';
+
+/** A recipient nothing else in the suite will use. */
 export function aTestEmailAddress(label = 'test'): string {
-  return `${label}-${crypto.randomUUID()}@example.test`;
+  return `${label}-${crypto.randomUUID()}@${RESERVED_TEST_DOMAIN}`;
 }
 
 function endpoint(): string {
@@ -117,7 +118,7 @@ export async function waitForEmail(
   return first;
 }
 
-/** Delete every message. Only for `pnpm truncate` — see this file's header. */
+/** Delete every message. Only for `pnpm truncate` to avoid breaking test concurrency. */
 export async function clearMailbox(): Promise<void> {
   await callMailpit('/api/v1/messages', { method: 'DELETE' });
 }
