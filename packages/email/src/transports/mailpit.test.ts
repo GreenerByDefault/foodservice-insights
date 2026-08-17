@@ -34,6 +34,12 @@ function emailerForTests(overrides: { gbdAddress?: string } = {}) {
   });
 }
 
+/** An emailer whose GBD notices are also addressed to `mailbox`, so a test sending every
+ * message kind can poll one mailbox instead of tracking each kind's real recipient. */
+function emailerWithSharedMailbox(mailbox: string) {
+  return emailerForTests({ gbdAddress: mailbox });
+}
+
 describe('mailpitTransport', () => {
   test('delivers both bodies, the subject, and the parsed sender', async () => {
     const to = aTestEmailAddress();
@@ -43,7 +49,6 @@ describe('mailpitTransport', () => {
 
     const delivered = await waitForEmail(to);
     expect(delivered).toMatchObject({
-      // The display name is stripped off into its own field, so what lands here is the address.
       from: 'noreply@example.test',
       to: [to],
       subject: 'Your report is ready: Q1 procurement',
@@ -54,9 +59,7 @@ describe('mailpitTransport', () => {
 
   test('delivers every message we can send', async () => {
     const to = aTestEmailAddress();
-    // The GBD notices ignore `to`, so this emailer points them at the same address to keep the
-    // whole set readable from one mailbox.
-    const emailer = emailerForTests({ gbdAddress: to });
+    const emailer = emailerWithSharedMailbox(to);
 
     const messages = allMessages(to);
     for (const message of messages) await sendEmail(emailer, message);

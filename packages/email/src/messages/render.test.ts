@@ -3,7 +3,6 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import type { EmailMessageKind } from '../client.ts';
 import { aGbdOrganizationCreated, allMessages, anAnalysisSucceeded } from '../testing/fixtures.ts';
 import { recordingEmailer } from '../testing/recording.ts';
 import { render } from './index.ts';
@@ -11,12 +10,6 @@ import { reportUrl } from './links.ts';
 
 const emailer = recordingEmailer().service;
 const RECIPIENT = 'alice@example.test';
-
-const GBD_KINDS: ReadonlySet<EmailMessageKind> = new Set([
-  'gbd-organization-created',
-  'gbd-organization-deleted',
-  'gbd-user-deleted',
-]);
 
 describe('render', () => {
   test.each(allMessages(RECIPIENT).map((message) => [message.kind, message] as const))(
@@ -31,14 +24,12 @@ describe('render', () => {
     },
   );
 
-  test.each(allMessages(RECIPIENT).map((message) => [message.kind, message] as const))(
-    '%s goes to the address its event is about',
-    (kind, message) => {
-      expect(render(emailer, message).to).toBe(
-        GBD_KINDS.has(kind) ? emailer.gbdAddress : RECIPIENT,
-      );
-    },
-  );
+  test.each(allMessages(RECIPIENT))('$kind goes to the address its event is about', (message) => {
+    // GBD notices carry no `to` at all (see messages/gbd.ts) — that absence, not a
+    // hand-copied list of kinds, is what tells us where each one should land.
+    const expected = 'to' in message ? message.to : emailer.gbdAddress;
+    expect(render(emailer, message).to).toBe(expected);
+  });
 
   test('defaults the subject to the document heading, as a convenience — not a rule the type enforces', () => {
     const email = render(emailer, anAnalysisSucceeded({ to: RECIPIENT }));
