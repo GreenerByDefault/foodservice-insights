@@ -1,5 +1,10 @@
 /** The emailer handle, and the transport seam under it. */
 
+export type Address = {
+  readonly address: string;
+  readonly name: string;
+};
+
 export type EmailMessageKind =
   | 'analysis-succeeded'
   | 'analysis-failed'
@@ -12,7 +17,7 @@ export type EmailMessageKind =
 export type RenderedEmail = {
   /** This allows us to report which email kind was used. */
   readonly kind: EmailMessageKind;
-  readonly from: string;
+  readonly from: Address;
   readonly to: string;
   readonly subject: string;
   /** The canonical copy. A transport that can only carry one body should send this one. */
@@ -29,8 +34,7 @@ export type EmailTransport = {
 
 export type EmailerConfig = {
   transport: EmailTransport;
-  /** The sender, as a full address: `Foodservice Insights <noreply@example.org>`. */
-  from: string;
+  from: Address;
   /** The origin every link in an email is built against. A trailing slash is trimmed. */
   siteUrl: string;
   /** Where the GBD notices go. */
@@ -40,7 +44,7 @@ export type EmailerConfig = {
 };
 
 export type EmailContext = {
-  readonly from: string;
+  readonly from: Address;
   readonly siteUrl: string;
   readonly gbdAddress: string;
   readonly supportAddress: string;

@@ -178,9 +178,14 @@ after itself.
 necessary for isolation. Use its sibling `withTemporaryOrganization` instead when the code under
 test builds real keys, which start at an organization rather than at a prefix of your choosing.
 
-Meanwhile, E2E tests commit transactions to the database and leave objects in the blob store. So, Playwright truncates both before runs. Tests should generate random IDs with `crypto.randomUUID()` to avoid clashes between tests.
+**A test that needs to prove an email was sent should use `recordingEmailer()`**, from
+`@gbd/email/testing`, not real mail. The exceptions are `@gbd/email`'s own tests along with e2e tests, which
+send through Mailpit for real.
 
-If the test database gets into a strange state, [reset it](#reset-a-database).
+**E2E tests commit transactions and leave objects in the blob store, unlike the rest of the
+suite** — Playwright truncates both before a run. Generate IDs with `crypto.randomUUID()` to
+avoid clashes between tests. If the test database gets into a strange state,
+[reset it](#reset-a-database).
 
 ### Occasional tasks
 
@@ -190,11 +195,11 @@ If the test database gets into a strange state, [reset it](#reset-a-database).
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
 | `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands. Required. |
-| `pnpm truncate` | Delete every row and every object, keeping the schema and the bucket |
+| `pnpm truncate` | Delete every row, object, and local email, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) and [`packages/db/schema.sql`](packages/db/schema.sql) from the live database |
 
-`migrate` and `truncate` act on both stores. Use a pnpm filter to reach just one:
-`pnpm --filter @gbd/storage run migrate`.
+`migrate` acts on the database and blob store; `truncate` acts on those plus the local mailbox.
+Use a pnpm filter to reach just one: `pnpm --filter @gbd/storage run migrate`.
 
 Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
@@ -241,6 +246,9 @@ TEST_DB=1 pnpm seed
 
 While developing locally, all emails get sent to a mock email provider. Read them at
 <http://localhost:55324> for the dev stack, or <http://localhost:65324> for the test stack.
+
+`pnpm --filter @gbd/email preview` renders one of every message to disk, for reviewing
+copy changes without sending anything.
 
 #### Debug the database
 

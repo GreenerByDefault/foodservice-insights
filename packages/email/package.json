@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./env": "./dist/env.js",
     "./testing": "./dist/testing/index.js"
   },
   "scripts": {
@@ -13,6 +14,7 @@
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
     "test": "pnpm run test:unit",
+    "truncate": "node scripts/truncate.ts",
     "preview": "node scripts/preview.ts"
   },
   "dependencies": {

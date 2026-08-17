@@ -19,4 +19,12 @@ export {
   render,
 } from './messages/index.ts';
 export { sendEmail } from './send.ts';
+export {
+  parseTransportSettings,
+  type RawTransportSettings,
+  resolveTransport,
+  type TransportName,
+  type TransportSettings,
+} from './transports/index.ts';
+export { mailpitTransport } from './transports/mailpit.ts';
 export { providerTransport } from './transports/provider.ts';
