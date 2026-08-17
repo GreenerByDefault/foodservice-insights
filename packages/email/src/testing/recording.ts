@@ -18,8 +18,8 @@ export type RecordingEmailer = {
   clear(): void;
 };
 
-/** Addresses under `.test`, which is reserved by RFC 2606 and so can never be a real recipient. */
-const DEFAULTS = {
+// This uses addresses under `.test`, which is reserved by RFC 2606 and so can never be a real recipient.
+export const TEST_EMAILER_CONFIG = {
   from: 'Foodservice Insights <noreply@example.test>',
   siteUrl: 'https://example.test',
   gbdAddress: 'gbd@example.test',
@@ -40,7 +40,7 @@ export function recordingEmailer(
   };
 
   return {
-    service: initializeEmailer({ ...DEFAULTS, ...overrides, transport }),
+    service: initializeEmailer({ ...TEST_EMAILER_CONFIG, ...overrides, transport }),
     sent: () => sent,
     clear: () => {
       sent.length = 0;

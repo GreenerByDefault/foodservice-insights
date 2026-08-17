@@ -1,10 +1,9 @@
 /** Reading mail back out of Mailpit.
  *
- * **Isolation is the recipient address, not a truncate.** Turbo runs every package's `test:unit`
- * concurrently against the one test stack, so emptying the mailbox would delete another package's
- * mail mid-run — the same reason `@gbd/storage`'s global setup creates its bucket but never empties
- * it. Mailpit has no transactions to roll back, so a unique recipient per test is the analogue of
- * `withTemporaryPrefix`: use `aTestEmailAddress()` and read only what was sent to it.
+ * **Isolation is the recipient address, not a truncate.** Tests run concurrently against
+ * the one Mailpit instance, which has no transactions to roll back, so emptying the mailbox
+ * would delete another test's mail mid-run. Use `aTestEmailAddress()` for a unique recipient
+ * per test and read only what was sent to it.
  *
  * `clearMailbox` therefore belongs to `pnpm truncate` alone, which runs between suites.
  */

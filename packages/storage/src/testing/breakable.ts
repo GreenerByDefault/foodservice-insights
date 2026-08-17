@@ -6,6 +6,7 @@
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
+import { LOCALHOST, UNREACHABLE_PORT } from '@gbd/core/testing';
 import type { Breakable } from '@gbd/db/testing';
 import type { HttpRequest } from '@smithy/types';
 import type { BlobStore } from '../client.ts';
@@ -20,9 +21,7 @@ const FAST_STORAGE_LIMITS = {
   requestDeadlineMs: 1_000,
 };
 
-/** Port 1 is reserved and unused, so a connection to it is refused immediately rather than
- * hanging. */
-const NOTHING_LISTENS_HERE = { hostname: '127.0.0.1', port: 1 };
+const NOTHING_LISTENS_HERE = { hostname: LOCALHOST, port: UNREACHABLE_PORT };
 
 /** A `BlobStore` whose requests can be redirected to a dead address and back, so `break()`
  * produces a genuine `BlobStoreError` and `restore()` lets the next request reach the real

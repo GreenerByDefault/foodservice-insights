@@ -5,19 +5,17 @@
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
+import { UNREACHABLE_LOCALHOST_URL } from '@gbd/core/testing';
 import type { Breakable } from '@gbd/db/testing';
 import type { Emailer, EmailTransport, RenderedEmail } from '../client.ts';
 import { initializeEmailer } from '../client.ts';
 import { mailpitTransport } from '../transports/mailpit.ts';
+import { TEST_EMAILER_CONFIG } from './recording.ts';
 
 export type { Breakable } from '@gbd/db/testing';
 
 /** Short, because a test that breaks email is waiting on this timeout to prove the failure. */
 const FAST_TIMEOUT_MS = 1_000;
-
-/** Port 1 is reserved and unused, so a connection to it is refused immediately rather than
- * hanging. */
-const NOTHING_LISTENS_HERE = 'http://127.0.0.1:1';
 
 export function breakableEmailer(): Breakable<Emailer> {
   loadLocalEnv();
@@ -27,7 +25,7 @@ export function breakableEmailer(): Breakable<Emailer> {
     timeoutMs: FAST_TIMEOUT_MS,
   });
   const unreachable = mailpitTransport({
-    endpoint: NOTHING_LISTENS_HERE,
+    endpoint: UNREACHABLE_LOCALHOST_URL,
     timeoutMs: FAST_TIMEOUT_MS,
   });
 
@@ -38,13 +36,7 @@ export function breakableEmailer(): Breakable<Emailer> {
   };
 
   return {
-    service: initializeEmailer({
-      transport,
-      from: 'Foodservice Insights <noreply@example.test>',
-      siteUrl: 'https://example.test',
-      gbdAddress: 'gbd@example.test',
-      supportAddress: 'support@example.test',
-    }),
+    service: initializeEmailer({ transport, ...TEST_EMAILER_CONFIG }),
     break() {
       broken = true;
     },
