@@ -39,8 +39,8 @@ catalog:
   tailwind-variants: ^3.3.1
 
   # --- Database ---------------------------------------------------------------
-  kysely: ^0.29.4
-  pg: ^8.22.0
+  kysely: ^0.29.5
+  pg: ^8.23.0
   '@types/pg': ^8.20.4
   kanel: ^4.0.3
   kanel-kysely: ^4.0.0
