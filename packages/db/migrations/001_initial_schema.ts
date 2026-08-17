@@ -557,6 +557,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addColumn('notification_email_sent_at', 'timestamptz')
     .addColumn('notification_claimed_at', 'timestamptz')
     .addColumn('notification_claimed_by_worker_id', 'text')
+    .addColumn('notification_attempts', 'integer', (column) => column.notNull().defaultTo(0))
     // So two workers cannot claim to be the same attempt.
     .addUniqueConstraint('analysis_attempt_report_id_attempt_number', [
       'report_id',
@@ -605,6 +606,14 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addCheckConstraint(
       'analysis_attempt_canceled_is_not_notified',
       sql`notification_claimed_at IS NULL OR status <> 'canceled'`,
+    )
+    .addCheckConstraint(
+      'analysis_attempt_notification_attempts_non_negative',
+      sql`notification_attempts >= 0`,
+    )
+    .addCheckConstraint(
+      'analysis_attempt_notification_attempts_iff_claimed',
+      sql`(notification_attempts > 0) = (notification_claimed_at IS NOT NULL)`,
     )
     // finished_at >= lease_renewed_at >= claimed_at >= created_at. Each is also pinned to
     // created_at directly, because the pairwise chain alone has a hole: an attempt canceled
@@ -674,6 +683,14 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'Debugging only, symmetric with reaped_by_worker_id.'
   `.execute(database);
 
+  await sql`
+    COMMENT ON COLUMN analysis_attempt.notification_attempts IS
+      'Incremented by the claim, before the send is attempted. Bounds retries: once it reaches the
+       configured maximum the row stops being claimed, however stale its claim, so a permanently
+       undeliverable address costs a fixed number of provider requests rather than an unbounded
+       retry loop.'
+  `.execute(database);
+
   // At most one active attempt per report.
   //
   // It is not what serializes two concurrent retries, though it looks like it: they also both
@@ -719,16 +736,24 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
   // No (report_id, attempt_number DESC) index: the unique constraint's index already serves the
   // latest-attempt lookup by a backward scan, and covers the report_id foreign key.
 
-  // Holds exactly the notification backlog and empties as rows are stamped, so the sweep's
-  // oldest-first scan stays tiny however large the table grows. report.deleted_at and
-  // requested_by_user_id are deliberately not in the predicate — one is on another table, the
-  // other would not narrow it usefully.
+  // Holds exactly the notification backlog, so the sweep's oldest-first scan stays tiny
+  // regardless of table size. report.deleted_at and requested_by_user_id are deliberately not in
+  // the predicate — one lives on another table, the other wouldn't narrow the scan usefully.
+  //
+  // `notification_attempts < 5` duplicates the worker's retry cap, but without it a row we've
+  // given up on stays here forever (notification_email_sent_at never gets set) — an unbounded
+  // backlog. Changing the cap means migrating this index to match.
+  //
+  // The cap must stay a literal: `notification_attempts < $1` would stop Postgres from proving
+  // the WHERE clause implies this predicate once it's on a generic plan, silently falling back
+  // to a full scan instead of using the index.
   await sql`
     CREATE INDEX analysis_attempt_notification_pending
       ON analysis_attempt (finished_at)
       WHERE notification_email_sent_at IS NULL
         AND finished_at IS NOT NULL
         AND status <> 'canceled'
+        AND notification_attempts < 5
   `.execute(database);
 
   await sql`
@@ -796,10 +821,12 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       -- silently becoming mutable after an attempt has finished.
       IF to_jsonb(OLD) - ARRAY['notification_email_sent_at',
                                'notification_claimed_at',
-                               'notification_claimed_by_worker_id']
+                               'notification_claimed_by_worker_id',
+                               'notification_attempts']
          = to_jsonb(NEW) - ARRAY['notification_email_sent_at',
                                  'notification_claimed_at',
-                                 'notification_claimed_by_worker_id'] THEN
+                                 'notification_claimed_by_worker_id',
+                                 'notification_attempts'] THEN
         RETURN NEW;
       END IF;
 

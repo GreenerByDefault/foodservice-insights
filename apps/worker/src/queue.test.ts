@@ -17,6 +17,7 @@ import {
   insertInputFile,
   insertOrganization,
   insertReport,
+  readAnalysisAttemptRow,
   withCommittedFixture,
   withConcurrentTransactions,
   withRollback,
@@ -33,7 +34,7 @@ import {
   renewLease,
 } from './queue.ts';
 import { reapExpiredAttempts } from './reaper.ts';
-import { aResultFile, aWorkerId, readAttemptRow } from './testing/attempt-helpers.ts';
+import { aResultFile, aWorkerId } from './testing/attempt-helpers.ts';
 import { backdateAttemptTimeline } from './testing/attempt-timeline.ts';
 
 /** A pending attempt on a report of its own, plus the narrowing every claim in this file needs. */
@@ -93,7 +94,7 @@ async function simulateReap(
     leaseExpiresAfterMs: 60_000,
     claimedCeilingMs: 60_000,
     maxAttemptsPerSweep: 1,
-    candidateReports: [(await readAttemptRow(transaction, attemptId)).reportId],
+    candidateReports: [(await readAnalysisAttemptRow(transaction, attemptId)).reportId],
   });
   if (reaped.length !== 1) throw new Error('simulateReap: the fixture attempt was not reaped');
 }
@@ -149,7 +150,7 @@ describe('claiming', () => {
         candidateReports: reportIds,
       });
       if (attemptId === undefined) throw new Error('the fixture attempt was not claimable');
-      return await readAttemptRow(transaction, attemptId);
+      return await readAnalysisAttemptRow(transaction, attemptId);
     });
 
     expect(attempt).toMatchObject({ status: 'processing', workerId });
@@ -300,10 +301,10 @@ describe('renewLease', () => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       await backdateAttemptTimeline(transaction, attemptId);
-      const before = await readAttemptRow(transaction, attemptId);
+      const before = await readAnalysisAttemptRow(transaction, attemptId);
 
       const result = await renewLease(transaction, attemptId, workerId);
-      const after = await readAttemptRow(transaction, attemptId);
+      const after = await readAnalysisAttemptRow(transaction, attemptId);
       return { result, before: renewedSince(before), after: renewedSince(after) };
     });
 
@@ -321,7 +322,7 @@ describe('renewLease', () => {
         .where('id', '=', attemptId)
         .execute();
       const result = await renewLease(transaction, attemptId, workerId);
-      const { cancelRequestedAt } = await readAttemptRow(transaction, attemptId);
+      const { cancelRequestedAt } = await readAnalysisAttemptRow(transaction, attemptId);
       return { result, cancelRequestedAt };
     });
 
@@ -367,7 +368,7 @@ describe('finishing', () => {
 
       return {
         won,
-        attempt: await readAttemptRow(transaction, attemptId),
+        attempt: await readAnalysisAttemptRow(transaction, attemptId),
         files: await transaction
           .selectFrom('resultFile')
           .select(['kind', 'chartKey', 'storageKey'])
@@ -403,7 +404,7 @@ describe('finishing', () => {
         reason: 'contract_violation',
         detail: 'result.json: charts.0: invalid chart key',
       });
-      return { won, row: await readAttemptRow(transaction, attemptId) };
+      return { won, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(attempt.won).toBe(true);
@@ -419,7 +420,7 @@ describe('finishing', () => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       const won = await markAttemptCanceled(transaction, attemptId, workerId);
-      return { won, row: await readAttemptRow(transaction, attemptId) };
+      return { won, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(attempt.won).toBe(true);
@@ -441,7 +442,7 @@ describe('finishing', () => {
         reason: 'hung',
         detail: null,
       });
-      return { won, row: await readAttemptRow(transaction, attemptId) };
+      return { won, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.won).toBe(false);
@@ -467,7 +468,7 @@ describe('finishing', () => {
         await simulateReap(transaction, attemptId);
 
         const won = await finish(transaction, attemptId, workerId);
-        const row = await readAttemptRow(transaction, attemptId);
+        const row = await readAnalysisAttemptRow(transaction, attemptId);
         const resultFiles = await transaction
           .selectFrom('resultFile')
           .selectAll()
@@ -539,7 +540,7 @@ describe('finishing', () => {
 
         const first = await markAttemptFailed(transaction, attemptId, workerId, failure);
         const second = await markAttemptFailed(transaction, attemptId, workerId, failure);
-        return { first, second, row: await readAttemptRow(transaction, attemptId) };
+        return { first, second, row: await readAnalysisAttemptRow(transaction, attemptId) };
       });
 
       expect(outcome.first).toBe(true);

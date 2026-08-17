@@ -174,6 +174,17 @@ export async function insertAnalysisAttempt(
     .executeTakeFirstOrThrow();
 }
 
+export async function readAnalysisAttemptRow(
+  database: DatabaseExecutor,
+  attemptId: AnalysisAttempt['id'],
+): Promise<AnalysisAttempt> {
+  return await database
+    .selectFrom('analysisAttempt')
+    .selectAll()
+    .where('id', '=', attemptId)
+    .executeTakeFirstOrThrow();
+}
+
 const RESULT_FILE_TEST_CONTENT_TYPE: Record<ResultFileKind, string> = {
   pdf: 'application/pdf',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

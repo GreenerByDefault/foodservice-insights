@@ -10,16 +10,15 @@ import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
   insertReport,
-  sendBlockingStatement,
-  withCommittedFixture,
-  withConcurrentTransactions,
+  raceAgainstCommittedWrite,
+  readAnalysisAttemptRow,
   withRollback,
 } from '@gbd/db/testing';
 import type { ControlledTransaction, Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { markAttemptSucceeded, renewLease } from './queue.ts';
 import { type ReapOptions, reapExpiredAttempts } from './reaper.ts';
-import { aResultFile, aWorkerId, readAttemptRow } from './testing/attempt-helpers.ts';
+import { aResultFile, aWorkerId } from './testing/attempt-helpers.ts';
 import { backdateAttemptTimeline, type TimelineOffsetsMs } from './testing/attempt-timeline.ts';
 
 const LEASE_EXPIRES_AFTER_MS = 5 * 60_000;
@@ -71,7 +70,7 @@ describe('reapExpiredAttempts', () => {
         reaperId,
         reapOptions({ candidateReports: [reportId] }),
       );
-      return { reaped, row: await readAttemptRow(transaction, attemptId) };
+      return { reaped, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.reaped).toEqual([outcome.row.id]);
@@ -92,7 +91,7 @@ describe('reapExpiredAttempts', () => {
         aWorkerId(),
         reapOptions({ candidateReports: [reportId] }),
       );
-      return { reaped, row: await readAttemptRow(transaction, attemptId) };
+      return { reaped, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.reaped).toEqual([]);
@@ -115,7 +114,7 @@ describe('reapExpiredAttempts', () => {
         aWorkerId(),
         reapOptions({ candidateReports: [reportId] }),
       );
-      return { reaped, row: await readAttemptRow(transaction, attemptId) };
+      return { reaped, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.reaped).toEqual([outcome.row.id]);
@@ -137,7 +136,7 @@ describe('reapExpiredAttempts', () => {
         aWorkerId(),
         reapOptions({ candidateReports: [reportId] }),
       );
-      return { reaped, row: await readAttemptRow(transaction, attemptId) };
+      return { reaped, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.reaped).toEqual([outcome.row.id]);
@@ -205,7 +204,7 @@ describe('reapExpiredAttempts', () => {
       return {
         reaped,
         inScopeId: inScope.attemptId,
-        outOfScopeRow: await readAttemptRow(transaction, outOfScope.attemptId),
+        outOfScopeRow: await readAnalysisAttemptRow(transaction, outOfScope.attemptId),
       };
     });
 
@@ -224,7 +223,7 @@ describe('reapExpiredAttempts', () => {
         workerId,
         reapOptions({ candidateReports: [reportId] }),
       );
-      return { reaped, row: await readAttemptRow(transaction, attemptId) };
+      return { reaped, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
 
     expect(outcome.reaped).toEqual([outcome.row.id]);
@@ -308,8 +307,8 @@ describe('reapExpiredAttempts', () => {
       });
       return {
         reaped,
-        pending: await readAttemptRow(transaction, pending.id),
-        succeeded: await readAttemptRow(transaction, succeededId),
+        pending: await readAnalysisAttemptRow(transaction, pending.id),
+        succeeded: await readAnalysisAttemptRow(transaction, succeededId),
       };
     });
 
@@ -433,13 +432,8 @@ describe('reapExpiredAttempts', () => {
 
 type RaceReapOptions = { reaperId?: string; reaperOpensFirst?: boolean };
 
-/** A `processing` attempt, committed, with `first` holding an uncommitted write on its row while a
- * reap blocks behind it. Commits both, then reports what the reap did and where the row landed.
- *
- * Committing the reap is what makes the row assertion mean anything: a rolled-back reap leaves the
- * row untouched whatever its `WHERE` matched, so a test that only inspects the row afterwards passes
- * against a reaper with no predicate at all.
- */
+/** A `processing` attempt, committed, with `firstWriter` holding an uncommitted write on its row
+ * while a reap blocks behind it. */
 async function raceReapAgainstCommittedWrite(
   offsets: TimelineOffsetsMs,
   ownerId: string,
@@ -451,7 +445,7 @@ async function raceReapAgainstCommittedWrite(
   options: RaceReapOptions = {},
 ) {
   const reaperId = options.reaperId ?? aWorkerId();
-  return await withCommittedFixture(
+  const { result: reaped, row } = await raceAgainstCommittedWrite(
     DATABASE,
     async (transaction, trash) => {
       const { organization } = await insertFixtureOrganization(transaction, trash);
@@ -464,27 +458,17 @@ async function raceReapAgainstCommittedWrite(
       await backdateAttemptTimeline(transaction, attempt.id, offsets);
       return { attemptId: attempt.id, reportId: report.id };
     },
-    async ({ attemptId, reportId }) => {
-      const reaped = await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-        // `alpha` opens first, so its `now()` is the earlier of the two. Which side that is decides
-        // whether the reap's own `now()` predates the write it is racing.
-        const [writer, reaper] = options.reaperOpensFirst ? [beta, alpha] : [alpha, beta];
-        await firstWriter(writer.transaction, attemptId, reportId);
-
-        // The reap has to block on the writer's uncommitted row, not skip past it.
-        const blockedReap = await sendBlockingStatement(DATABASE, reaper, writer, (transaction) =>
-          reapExpiredAttempts(transaction, reaperId, reapOptions({ candidateReports: [reportId] })),
-        );
-
-        await writer.transaction.commit().execute();
-        const outcome = await blockedReap.result;
-        await reaper.transaction.commit().execute();
-        return outcome;
-      });
-
-      return { reaped, row: await readAttemptRow(DATABASE, attemptId) };
-    },
+    (transaction, fixture) => firstWriter(transaction, fixture.attemptId, fixture.reportId),
+    (transaction, fixture) =>
+      reapExpiredAttempts(
+        transaction,
+        reaperId,
+        reapOptions({ candidateReports: [fixture.reportId] }),
+      ),
+    (database, fixture) => readAnalysisAttemptRow(database, fixture.attemptId),
+    { blockedOpensFirst: options.reaperOpensFirst },
   );
+  return { reaped, row };
 }
 
 /** The common case of the above: the uncommitted write is a genuine lease renewal by the owner. */

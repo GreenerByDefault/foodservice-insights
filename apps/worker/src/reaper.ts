@@ -9,6 +9,7 @@ import type {
   ReportId,
 } from '@gbd/db';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
+import { msAgo } from './sql.ts';
 
 export type ReapOptions = {
   /** How long the lease can go unrenewed before this reaper treats the owning parent as gone.
@@ -127,8 +128,8 @@ export async function reapExpiredAttempts(
   workerId: string,
   options: ReapOptions,
 ): Promise<AnalysisAttemptId[]> {
-  const leaseExpiresBefore = sql<Date>`now() - make_interval(secs => ${options.leaseExpiresAfterMs / 1000})`;
-  const claimedBefore = sql<Date>`now() - make_interval(secs => ${options.claimedCeilingMs / 1000})`;
+  const leaseExpiresBefore = msAgo(options.leaseExpiresAfterMs);
+  const claimedBefore = msAgo(options.claimedCeilingMs);
 
   const reaped = await db
     .updateTable('analysisAttempt')
