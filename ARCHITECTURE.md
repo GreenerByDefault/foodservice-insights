@@ -284,6 +284,8 @@ Refer to [`packages/storage/README.md`](packages/storage/README.md) for the priv
 We send email as HTTP requests to a provider, using emails generated in
 [`packages/email`](packages/email) rather than a template stored with the provider. That keeps
 templates in version control and swappable across local mail catchers and providers alike.
+Locally, `EMAIL_TRANSPORT=mailpit` posts to Mailpit's `POST /api/v1/send`, the Supabase CLI's local
+mail catcher.
 
 **Open:** decide which email provider, such as SendGrid.
 

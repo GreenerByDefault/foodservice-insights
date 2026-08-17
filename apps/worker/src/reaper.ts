@@ -4,8 +4,10 @@
  * an interval yet; `run()` is what owes it a `setInterval`-like sweep, via `sweep()`. Its only
  * caller until then is the test suite.
  *
- * **Open:** this only marks the row `failed('abandoned')`. Reaping also promises an email, which
- * waits on the email provider itself being chosen — see `ARCHITECTURE.md`'s Email row.
+ * **Open:** this only marks the row `failed('abandoned')`. Reaping also promises an email; the
+ * transport itself is no longer what blocks that — `@gbd/email` can deliver today via
+ * `EMAIL_TRANSPORT=mailpit`. What's still open is *who* calls `sendEmail` and *when*: this
+ * function, its future caller, or the supervision loop that owns `run()`.
  */
 
 import type {

@@ -7,14 +7,6 @@ Every email the product sends.
 | Worker parent | Analysis results |
 | Web app | Invitations, notices to GBD |
 
-**Status: written ahead of its callers.** The messages and the rendering are real and tested;
-nothing calls `sendEmail` in production code yet, and there is no transport that actually delivers.
-What replaces this paragraph is `apps/worker`'s supervision loop and `apps/web`'s auth routes,
-plus the Mailpit transport that lands in a follow-up. The provider is still **Open** in
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md) — see
-[`src/transports/provider.ts`](src/transports/provider.ts) for what choosing one costs, and why the
-seam is shaped the way it is.
-
 Sign-in codes and email-change confirmations are not here. Supabase Auth sends those.
 
 ## Using it
@@ -39,6 +31,12 @@ To add a new kind of email, add a member to `EmailMessage` and a renderer for it
 Instead of sending real mail to prove a caller asked for an email, consumers should use
 `recordingEmailer()` from `@gbd/email/testing`. It renders for real and keeps the result, so a
 test asserts on `kind` and `to` and leaves the copy to this package.
+
+This package's own tests prove the Mailpit transport for real. Every test addresses its mail to
+`aTestEmailAddress()`, a random recipient nothing else in the suite will use, and reads the mailbox
+back with `waitForEmail`/`waitForEmails` rather than truncating — Turbo runs every package's
+`test:unit` concurrently against the one mailbox, so a test that emptied it would delete another
+package's mail mid-run.
 
 ## Previewing
 

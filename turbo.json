@@ -21,6 +21,7 @@
     "EMAIL_ENDPOINT",
     "EMAIL_FROM",
     "EMAIL_GBD_ADDRESS",
+    "EMAIL_SUPPORT_ADDRESS",
     "SITE_URL"
   ],
   "tasks": {
