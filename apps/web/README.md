@@ -19,6 +19,12 @@ already is, so there is no `?next=` to carry anywhere.
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
+## Frontend
+
+**`src/lib/components/ui/` is purely vendored shadcn** — nothing hand-written goes there. A
+route-local component is promoted to `src/lib/components/<feature>/` only once a second route
+needs it.
+
 ## Forms
 
 **A form's own schema lives with its feature**. What is not specific to one form lives in `src/lib/forms/`.

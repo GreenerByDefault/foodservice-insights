@@ -18,6 +18,9 @@ catalogs:
     '@fontsource-variable/inter':
       specifier: ^5.3.0
       version: 5.3.0
+    '@internationalized/date':
+      specifier: ^3.12.3
+      version: 3.12.3
     '@lucide/svelte':
       specifier: ^1.31.0
       version: 1.31.0
@@ -75,6 +78,9 @@ catalogs:
     prettier:
       specifier: ^3.6.2
       version: 3.9.6
+    runed:
+      specifier: ^0.35.1
+      version: 0.35.1
     shadcn-svelte:
       specifier: ^1.5.0
       version: 1.5.0
@@ -84,6 +90,9 @@ catalogs:
     svelte-check:
       specifier: ^4.7.6
       version: 4.7.6
+    svelte-toolbelt:
+      specifier: ^0.10.6
+      version: 0.10.6
     tailwind-merge:
       specifier: ^3.6.0
       version: 3.6.0
@@ -147,6 +156,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: 'catalog:'
         version: 5.3.0
+      '@internationalized/date':
+        specifier: 'catalog:'
+        version: 3.12.3
       '@lucide/svelte':
         specifier: 'catalog:'
         version: 1.31.0(svelte@5.56.9)
@@ -180,6 +192,9 @@ importers:
       playwright:
         specifier: 'catalog:'
         version: 1.62.1
+      runed:
+        specifier: 'catalog:'
+        version: 0.35.1(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.56.9)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)(typescript@6.0.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)
       shadcn-svelte:
         specifier: 'catalog:'
         version: 1.5.0(svelte@5.56.9)
@@ -189,6 +204,9 @@ importers:
       svelte-check:
         specifier: 'catalog:'
         version: 4.7.6(picomatch@4.0.5)(svelte@5.56.9)(typescript@6.0.3)
+      svelte-toolbelt:
+        specifier: 'catalog:'
+        version: 0.10.6(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.56.9)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)(typescript@6.0.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.6.0
