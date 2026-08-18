@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
 import {
-  type FileFinding,
+  type DateOrderFinding,
   type FindingLog,
   newFindingLog,
-  noteFile,
+  noteDateOrder,
   noteRow,
   type RowFinding,
   seal,
@@ -49,7 +49,11 @@ describe('seal', () => {
   });
 
   test('starts empty', () => {
-    expect(seal(newFindingLog())).toEqual({ failingRowCount: 0, rowGroups: [], file: [] });
+    expect(seal(newFindingLog())).toEqual({
+      failingRowCount: 0,
+      rowGroups: [],
+      dateOrder: undefined,
+    });
   });
 });
 
@@ -309,42 +313,36 @@ describe('examples', () => {
   });
 });
 
-describe('noteFile', () => {
-  test('adds to count and is kept apart from row groups', () => {
+describe('noteDateOrder', () => {
+  test('does not add to failingRowCount, and is kept apart from row groups', () => {
+    // It names one or two rows only as evidence, so counting it would read as an off-by-one
+    // against the rows-affected denominator a rejection headline reports.
     const log = newFindingLog();
     const rowFinding = cell();
-    const fileFinding: FileFinding = {
-      kind: 'date-order',
+    const dateOrder: DateOrderFinding = {
       issue: 'unresolvable',
       examples: new Map(),
     };
     noteRow(log, 2, rowFinding);
-    noteFile(log, fileFinding);
+    noteDateOrder(log, dateOrder);
 
     const findings = seal(log);
-    expect(findings.failingRowCount).toBe(2);
+    expect(findings.failingRowCount).toBe(1);
     expect(findings.rowGroups).toEqual([singleRowGroup(rowFinding, 2, ['5 oz'])]);
-    expect(findings.file).toEqual([fileFinding]);
+    expect(findings.dateOrder).toEqual(dateOrder);
   });
 
-  test('appends every file finding rather than grouping them, since file is a list not a map', () => {
-    const log = newFindingLog();
-    const unresolvable: FileFinding = {
-      kind: 'date-order',
-      issue: 'unresolvable',
-      examples: new Map(),
-    };
-    const contradictory: FileFinding = {
-      kind: 'date-order',
-      issue: 'contradictory',
-      examples: new Map(),
-    };
-    noteFile(log, unresolvable);
-    noteFile(log, contradictory);
+  test('is absent on a log nothing was noted to', () => {
+    expect(seal(newFindingLog()).dateOrder).toBeUndefined();
+  });
 
-    const findings = seal(log);
-    expect(findings.failingRowCount).toBe(2);
-    expect(findings.file).toEqual([unresolvable, contradictory]);
+  test('keeps the last verdict, since a column is decided once', () => {
+    const log = newFindingLog();
+    const contradictory: DateOrderFinding = { issue: 'contradictory', examples: new Map() };
+    noteDateOrder(log, { issue: 'unresolvable', examples: new Map() });
+    noteDateOrder(log, contradictory);
+
+    expect(seal(log).dateOrder).toEqual(contradictory);
   });
 });
 
