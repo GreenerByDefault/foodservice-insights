@@ -93,10 +93,12 @@ describe('grouping', () => {
     ]);
   });
 
-  test('a date read day-first stays apart from the same clause read straight', () => {
-    // Both `readDate` and `applyDateOrder` bottom out in the same "not a real calendar date" clause,
-    // so the discriminant has to be in the key or these two rows would merge into one group whose
-    // sentence can only be right for one of them.
+  test('a resolved date stays apart from a plain cell finding with the same clause', () => {
+    // `readDate` (an out-of-range ISO date) and `applyDateOrder` (a numeric date invalid once the
+    // column order resolves it) can independently land on the identical "not a real calendar
+    // date" clause. `kind` is always part of the key, so they still land in separate groups —
+    // not because merging would render a wrong sentence (`ruleOf` renders both the same way), but
+    // because nothing about grouping is meant to know the two paths ever agree.
     const plainCell: RowFinding = {
       kind: 'cell',
       column: 'date',
@@ -105,7 +107,6 @@ describe('grouping', () => {
     };
     const resolved: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '31/02/2026',
       clause: NOT_A_DATE,
     };
@@ -166,16 +167,14 @@ describe('grouping', () => {
     ]);
   });
 
-  test('resolved-date groups by readAs and clause together, apart from a different clause', () => {
+  test('resolved-date groups by clause, apart from a different clause', () => {
     const notADate: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '31/02/2026',
       clause: NOT_A_DATE,
     };
     const outOfRange: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '2026-13-01',
       clause: 'is out of range',
     };
@@ -187,10 +186,9 @@ describe('grouping', () => {
     ]);
   });
 
-  test('resolved-date groups matching readAs and clause together, despite different raw', () => {
+  test('resolved-date groups by matching clause together, despite different raw', () => {
     const first: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '31/02/2026',
       clause: NOT_A_DATE,
     };
