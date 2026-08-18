@@ -10,7 +10,7 @@ import {
   type RowFinding,
   seal,
 } from './findings.ts';
-import { cellFinding } from './testing/fixtures.ts';
+import { cellFinding } from './testing/index.ts';
 
 /** The expected shape of a group that a single row reached, covering exactly `line`. */
 function singleRowGroup(finding: RowFinding, line: number, examples: string[] = []) {

@@ -18,7 +18,9 @@ customer-facing type.
 | `read/parse.ts` | Delimiter grammar |
 | `read/columns.ts` | Header matching |
 | `read/layout.ts` | Which delimiter and header the file resolves to |
+| `rules/calendar.ts` | Calendar fields into an ISO date inside the accepted range |
 | `rules/dates.ts` | Date cells |
+| `rules/date-order.ts` | Deciding a column's day-first/month-first order |
 | `rules/amounts.ts` | Amount cells |
 | `rules/products.ts` | Product cells, including the formula-injection check |
 | `findings.ts` | Folding many failing rows into a few groups, without wording any of them |

@@ -13,11 +13,15 @@ import {
 } from '../limits.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
 import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
-import type { HeaderFault, RequiredColumn } from './read/columns.ts';
-import type { DecodeFault } from './read/decode.ts';
-import type { HeaderCandidate, LayoutFault } from './read/layout.ts';
-import type { CsvParseError } from './read/parse.ts';
-import { bothReadings } from './rules/dates.ts';
+import type {
+  CsvParseError,
+  DecodeFault,
+  HeaderCandidate,
+  HeaderFault,
+  LayoutFault,
+  RequiredColumn,
+} from './read/index.ts';
+import { bothReadings } from './rules/index.ts';
 
 // ---------------------------------------------------------------------------
 // The structured payload

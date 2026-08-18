@@ -22,8 +22,8 @@ import {
   renderProblemsAsDetail,
 } from './describe.ts';
 import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
-import { CsvParseError } from './read/parse.ts';
-import { cellFinding, findingGroup, sealedFindings } from './testing/fixtures.ts';
+import { CsvParseError } from './read/index.ts';
+import { cellFinding, findingGroup, sealedFindings } from './testing/index.ts';
 
 function rejectionFor(overrides: Partial<Findings> = {}) {
   return describeFindings(sealedFindings(overrides));

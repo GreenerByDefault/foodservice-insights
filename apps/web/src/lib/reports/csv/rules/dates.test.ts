@@ -1,13 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_FUTURE_DAYS } from '../../limits.ts';
-import {
-  applyOrder,
-  bothReadings,
-  type DateReading,
-  decideDateOrder,
-  orderProvenBy,
-  readDate,
-} from './dates.ts';
+import { type DateReading, readDate } from './dates.ts';
 
 const BOUNDS = { earliest: '2000-01-01', latest: '2026-12-31' };
 /** For the cases that are about a year rather than about the accepted range. */
@@ -90,88 +82,11 @@ describe('readDate', () => {
       ['2025-13-01', 'not a real calendar date'],
       ['Mar 32 2025', 'not a real calendar date'],
       ['13/13/2025', 'not a real calendar date'],
-      ['1999-12-31', 'is before 2000-01-01'],
-      ['2027-01-01', `more than ${MAX_FUTURE_DAYS} days from now`],
     ] as const)('"%s", saying it %s', ([raw, fault]) => {
       const reading = readDate(raw, BOUNDS);
 
       expect(reading).toMatchObject({ kind: 'invalid' });
       expect(reading.kind === 'invalid' ? reading.fault : '').toContain(fault);
     });
-  });
-});
-
-describe('orderProvenBy', () => {
-  test.for([
-    [numeric(13, 4, 2025), 'day-first'],
-    [numeric(4, 13, 2025), 'month-first'],
-  ] as const)('%o can only be %s', ([reading, order]) => {
-    expect(orderProvenBy(reading)).toBe(order);
-  });
-
-  test('says nothing about a value that reads either way', () => {
-    expect(orderProvenBy(numeric(3, 4, 2025))).toBeUndefined();
-  });
-
-  test('says nothing about a date that was never ambiguous', () => {
-    expect(orderProvenBy({ kind: 'date', isoDate: '2025-03-04' })).toBeUndefined();
-  });
-});
-
-describe('decideDateOrder', () => {
-  test('takes the one reading the column proves', () => {
-    expect(decideDateOrder([numeric(3, 4, 2025), numeric(13, 4, 2025)])).toEqual({
-      ok: true,
-      order: 'day-first',
-    });
-  });
-
-  test('refuses a column that proves both, rather than letting one typo flip every row', () => {
-    expect(decideDateOrder([numeric(13, 4, 2025), numeric(4, 13, 2025)])).toEqual({
-      ok: false,
-      fault: 'contradictory',
-    });
-  });
-
-  test('refuses a column where every value reads both ways', () => {
-    expect(decideDateOrder([numeric(3, 4, 2025), numeric(1, 2, 2025)])).toEqual({
-      ok: false,
-      fault: 'unresolvable',
-    });
-  });
-
-  test('has nothing to decide when no value was ambiguous', () => {
-    expect(decideDateOrder([{ kind: 'date', isoDate: '2025-03-04' }])).toMatchObject({ ok: true });
-  });
-});
-
-describe('applyOrder', () => {
-  test.for([
-    ['day-first', '2025-04-03'],
-    ['month-first', '2025-03-04'],
-  ] as const)('reads 03/04/2025 %s as %s', ([order, isoDate]) => {
-    expect(applyOrder({ kind: 'numeric', first: 3, second: 4, year: 2025 }, order, BOUNDS)).toEqual(
-      { ok: true, isoDate },
-    );
-  });
-
-  test('checks the calendar, which Date.UTC would otherwise roll past', () => {
-    expect(
-      applyOrder({ kind: 'numeric', first: 31, second: 2, year: 2025 }, 'day-first', BOUNDS),
-    ).toEqual({ ok: false, fault: 'is not a real calendar date' });
-  });
-
-  test('applies the accepted range', () => {
-    expect(
-      applyOrder({ kind: 'numeric', first: 1, second: 2, year: 1969 }, 'day-first', BOUNDS),
-    ).toMatchObject({ ok: false });
-  });
-});
-
-describe('bothReadings', () => {
-  test('shows the user the two dates rather than describing the problem', () => {
-    expect(bothReadings({ kind: 'numeric', first: 3, second: 4, year: 2025 })).toBe(
-      '2025-04-03 or 2025-03-04',
-    );
   });
 });
