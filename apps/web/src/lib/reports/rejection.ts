@@ -5,7 +5,7 @@
  */
 
 import type { RejectedUploadReason } from '@gbd/db';
-import type { Problem } from './csv/describe.ts';
+import type { Problem } from './csv/describe/index.ts';
 
 export type RejectedUploadRecord = {
   reason: RejectedUploadReason;
