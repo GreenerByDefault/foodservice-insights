@@ -353,6 +353,15 @@ describe('noteDateOrder', () => {
   test('is absent on a log nothing was noted to', () => {
     expect(seal(newFindingLog()).dateOrder).toBeUndefined();
   });
+
+  test('keeps the last verdict, since a column is decided once', () => {
+    const log = newFindingLog();
+    const contradictory: DateOrderFinding = { issue: 'contradictory', examples: new Map() };
+    noteDateOrder(log, { issue: 'unresolvable', examples: new Map() });
+    noteDateOrder(log, contradictory);
+
+    expect(seal(log).dateOrder).toEqual(contradictory);
+  });
 });
 
 const NOT_A_DATE = 'is not a real calendar date';
