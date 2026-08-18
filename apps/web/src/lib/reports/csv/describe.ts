@@ -57,11 +57,11 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
     case 'parse':
       return csvParseErrorRejection(file.error);
     case 'no-data-rows':
-      return { reason: 'empty', message: 'That file has a header but no rows under it.' };
+      return { reason: 'empty', summary: 'That file has a header but no rows under it.' };
     case 'too-many-rows':
       return {
         reason: 'too_large',
-        message: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
+        summary: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
       };
   }
 }
@@ -94,7 +94,7 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
 
   return {
     reason,
-    message: `${scale}${truncationNote}`,
+    summary: `${scale}${truncationNote}`,
     ...(shownRowProblems.length > 0 && { rowProblems: shownRowProblems }),
     ...(shownDateOrderProblem && { dateOrderProblem: shownDateOrderProblem }),
     rejectionDetail: detailParts.join('; '),
@@ -158,19 +158,19 @@ function decodeRejection(fault: DecodeFault): RejectedUploadRecord {
       const name = fault.format === 'xlsx' ? 'an Excel (.xlsx) file' : 'an old Excel (.xls) file';
       return {
         reason: 'unparseable',
-        message: `That looks like ${name}, not a CSV. Save it as CSV and upload it again.`,
-        rejectionDetail: `signature matched ${name}`,
+        summary: `That looks like ${name}, not a CSV. Save it as CSV and upload it again.`,
+        rejectionDetail: `signature matched ${fault.format}`,
       };
     }
     case 'control-character':
       return {
         reason: 'unparseable',
-        message:
+        summary:
           'That file does not look like text. Save it as CSV (comma separated values) and upload it again.',
         rejectionDetail: `control character 0x${fault.code.toString(16)} at offset ${fault.offset}`,
       };
     case 'empty':
-      return { reason: 'empty', message: 'That file has no rows in it.' };
+      return { reason: 'empty', summary: 'That file has no rows in it.' };
   }
 }
 
@@ -181,16 +181,16 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
     case 'ambiguous':
       return {
         reason: 'bad_columns',
-        message:
+        summary:
           "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
         rejectionDetail: describeAmbiguousDelimiters(fault.candidates),
       };
     case 'empty':
-      return { reason: 'empty', message: 'That file has no rows in it.' };
+      return { reason: 'empty', summary: 'That file has no rows in it.' };
     case 'bad-header':
       return {
         reason: 'bad_columns',
-        message: fault.fault ? describeHeaderFault(fault.fault) : 'We could not read that file.',
+        summary: fault.fault ? describeHeaderFault(fault.fault) : 'We could not read that file.',
         rejectionDetail: `header: ${fault.fields.slice(0, 20).join(' | ')}`,
       };
   }
@@ -225,13 +225,13 @@ function csvParseErrorRejection(error: CsvParseError): RejectedUploadRecord {
     case 'unclosed-quote':
       return {
         reason: 'unparseable',
-        message: `The quotes starting on line ${error.line} are never closed, so we cannot tell where that row ends.`,
+        summary: `The quotes starting on line ${error.line} are never closed, so we cannot tell where that row ends.`,
         rejectionDetail,
       };
     case 'text-after-quote':
       return {
         reason: 'unparseable',
-        message: `Line ${error.line} has text after a closing quote. A quoted value has to fill the whole cell.`,
+        summary: `Line ${error.line} has text after a closing quote. A quoted value has to fill the whole cell.`,
         rejectionDetail,
       };
     // "More than", because the parser stopped at the cap: the real width was never measured, and
@@ -239,7 +239,7 @@ function csvParseErrorRejection(error: CsvParseError): RejectedUploadRecord {
     case 'too-many-columns':
       return {
         reason: 'too_large',
-        message: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
+        summary: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
         rejectionDetail,
       };
   }

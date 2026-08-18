@@ -9,8 +9,8 @@ import type { Problem } from './csv/describe.ts';
 
 export type RejectedUploadRecord = {
   reason: RejectedUploadReason;
-  /** Safe to show the user. */
-  message: string;
+  /** The one-line explanation shown above any structured detail. Safe to show the user. */
+  summary: string;
   /** The rows to go and fix, structured so a component can render a list or a grid. */
   rowProblems?: readonly Problem[];
   /** Prose carrying the fix for a date order problem. */
@@ -26,7 +26,7 @@ export type RejectedUploadRecord = {
  */
 export type RejectedUploadResponse = Pick<
   RejectedUploadRecord,
-  'message' | 'rowProblems' | 'dateOrderProblem'
+  'summary' | 'rowProblems' | 'dateOrderProblem'
 > & {
   code: RejectedUploadReason;
 };
@@ -34,13 +34,13 @@ export type RejectedUploadResponse = Pick<
 /** Narrow a rejection to what the browser may see. */
 export function rejectionResponse({
   reason,
-  message,
+  summary,
   rowProblems,
   dateOrderProblem,
 }: RejectedUploadRecord): RejectedUploadResponse {
   return {
     code: reason,
-    message,
+    summary,
     ...(rowProblems && { rowProblems }),
     ...(dateOrderProblem && { dateOrderProblem }),
   };

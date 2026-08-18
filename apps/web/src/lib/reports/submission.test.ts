@@ -72,7 +72,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason,
-          ...(field ? { message: `Check these fields: ${field}.` } : {}),
+          ...(field ? { summary: `Check these fields: ${field}.` } : {}),
         },
       });
     });
@@ -95,7 +95,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason: 'invalid_metadata',
-          message: 'Check these fields: countsBasis, unitSystem.',
+          summary: 'Check these fields: countsBasis, unitSystem.',
         },
       });
     });

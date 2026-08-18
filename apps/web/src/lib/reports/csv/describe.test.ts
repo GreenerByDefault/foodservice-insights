@@ -174,19 +174,19 @@ describe('the rows a problem covers', () => {
   });
 });
 
-describe('the message', () => {
+describe('the summary', () => {
   test('counts failing rows, not kinds of problem', () => {
-    expect(rejectionFor({ rowGroups: distinctKindGroups(3) }).message).toBe(
+    expect(rejectionFor({ rowGroups: distinctKindGroups(3) }).summary).toBe(
       'We found problems in 3 of your 3 rows.',
     );
   });
 
   test('the denominator drops to singular for one', () => {
-    expect(rejectionFor().message).toBe('We found problems in 1 of your 1 row.');
+    expect(rejectionFor().summary).toBe('We found problems in 1 of your 1 row.');
   });
 
   test('states the denominator, with thousands grouped', () => {
-    expect(rejectionFor({ failingRowCount: 4102, rowsRead: 4500 }).message).toBe(
+    expect(rejectionFor({ failingRowCount: 4102, rowsRead: 4500 }).summary).toBe(
       'We found problems in 4,102 of your 4,500 rows.',
     );
   });
@@ -194,14 +194,14 @@ describe('the message', () => {
   test('says how many kinds are shown when more than MAX_PROBLEMS_REPORTED', () => {
     const kinds = MAX_PROBLEMS_REPORTED + 2;
 
-    expect(rejectionFor({ rowGroups: distinctKindGroups(kinds) }).message).toBe(
+    expect(rejectionFor({ rowGroups: distinctKindGroups(kinds) }).summary).toBe(
       `We found problems in ${kinds} of your ${kinds} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${kinds} things to fix.`,
     );
   });
 
   test('silent about showing when everything fits', () => {
     expect(
-      rejectionFor({ rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED) }).message,
+      rejectionFor({ rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED) }).summary,
     ).not.toContain('Showing');
   });
 });
@@ -273,7 +273,7 @@ describe('a date order problem, which is prose rather than a row problem', () =>
   });
 
   test('names no failing rows of its own', () => {
-    expect(rejectionFor({ rowGroups: [], dateOrder: noExamples }).message).toBe(
+    expect(rejectionFor({ rowGroups: [], dateOrder: noExamples }).summary).toBe(
       'We found problems in 0 of your 0 rows.',
     );
   });
@@ -359,7 +359,7 @@ describe('a date order problem, which is prose rather than a row problem', () =>
       dateOrder: noExamples,
     });
 
-    expect(rejection.message).toBe(
+    expect(rejection.summary).toBe(
       `We found problems in ${MAX_PROBLEMS_REPORTED} of your ${MAX_PROBLEMS_REPORTED} rows. ` +
         `Showing ${MAX_PROBLEMS_REPORTED} of ${MAX_PROBLEMS_REPORTED + 1} things to fix.`,
     );
@@ -371,7 +371,7 @@ describe('the whole record', () => {
   test('bad_rows', () => {
     expect(rejectionFor({ rowsRead: 900 })).toEqual({
       reason: 'bad_rows',
-      message: 'We found problems in 1 of your 900 rows.',
+      summary: 'We found problems in 1 of your 900 rows.',
       rowProblems: [
         {
           rule: 'The amount has a unit in it',
@@ -390,7 +390,7 @@ describe('the whole record', () => {
 
     expect(rejectionFor({ rowGroups, rowsRead: 2 })).toEqual({
       reason: 'csv_injection',
-      message: 'We found problems in 2 of your 2 rows.',
+      summary: 'We found problems in 2 of your 2 rows.',
       rowProblems: [
         {
           rule: 'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
@@ -498,9 +498,9 @@ describe('describeUnreadableFile', () => {
       { kind: 'decode', fault: { kind: 'signature', format: 'xlsx' } },
       {
         reason: 'unparseable',
-        message:
+        summary:
           'That looks like an Excel (.xlsx) file, not a CSV. Save it as CSV and upload it again.',
-        rejectionDetail: 'signature matched an Excel (.xlsx) file',
+        rejectionDetail: 'signature matched xlsx',
       },
     ],
     [
@@ -508,9 +508,9 @@ describe('describeUnreadableFile', () => {
       { kind: 'decode', fault: { kind: 'signature', format: 'xls' } },
       {
         reason: 'unparseable',
-        message:
+        summary:
           'That looks like an old Excel (.xls) file, not a CSV. Save it as CSV and upload it again.',
-        rejectionDetail: 'signature matched an old Excel (.xls) file',
+        rejectionDetail: 'signature matched xls',
       },
     ],
     [
@@ -518,7 +518,7 @@ describe('describeUnreadableFile', () => {
       { kind: 'decode', fault: { kind: 'control-character', code: 0x01, offset: 7 } },
       {
         reason: 'unparseable',
-        message:
+        summary:
           'That file does not look like text. Save it as CSV (comma separated values) and upload it again.',
         rejectionDetail: 'control character 0x1 at offset 7',
       },
@@ -526,7 +526,7 @@ describe('describeUnreadableFile', () => {
     [
       'an empty decode',
       { kind: 'decode', fault: { kind: 'empty' } },
-      { reason: 'empty', message: 'That file has no rows in it.' },
+      { reason: 'empty', summary: 'That file has no rows in it.' },
     ],
     [
       'a missing column',
@@ -540,7 +540,7 @@ describe('describeUnreadableFile', () => {
       },
       {
         reason: 'bad_columns',
-        message: 'Your file needs a column for product name, date ordered and amount ordered.',
+        summary: 'Your file needs a column for product name, date ordered and amount ordered.',
         rejectionDetail: 'header: vendor | cost',
       },
     ],
@@ -556,7 +556,7 @@ describe('describeUnreadableFile', () => {
       },
       {
         reason: 'bad_columns',
-        message:
+        summary:
           'Two columns could be the product name: "product" and "item". Remove or rename one.',
         rejectionDetail: 'header: product | item | date | amount',
       },
@@ -566,7 +566,7 @@ describe('describeUnreadableFile', () => {
       { kind: 'layout', fault: { kind: 'bad-header', fields: ['product', 'date', 'amount'] } },
       {
         reason: 'bad_columns',
-        message: 'We could not read that file.',
+        summary: 'We could not read that file.',
         rejectionDetail: 'header: product | date | amount',
       },
     ],
@@ -584,7 +584,7 @@ describe('describeUnreadableFile', () => {
       },
       {
         reason: 'bad_columns',
-        message:
+        summary:
           "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
         rejectionDetail: '"," at line 1 and "\\t" at line 1',
       },
@@ -592,7 +592,7 @@ describe('describeUnreadableFile', () => {
     [
       'an empty layout',
       { kind: 'layout', fault: { kind: 'empty' } },
-      { reason: 'empty', message: 'That file has no rows in it.' },
+      { reason: 'empty', summary: 'That file has no rows in it.' },
     ],
     [
       'a layout parse error',
@@ -602,7 +602,7 @@ describe('describeUnreadableFile', () => {
       },
       {
         reason: 'unparseable',
-        message:
+        summary:
           'The quotes starting on line 1 are never closed, so we cannot tell where that row ends.',
         rejectionDetail: 'unclosed-quote at line 1',
       },
@@ -612,7 +612,7 @@ describe('describeUnreadableFile', () => {
       { kind: 'parse', error: new CsvParseError('unclosed-quote', 4) },
       {
         reason: 'unparseable',
-        message:
+        summary:
           'The quotes starting on line 4 are never closed, so we cannot tell where that row ends.',
         rejectionDetail: 'unclosed-quote at line 4',
       },
@@ -622,7 +622,7 @@ describe('describeUnreadableFile', () => {
       { kind: 'parse', error: new CsvParseError('text-after-quote', 2) },
       {
         reason: 'unparseable',
-        message:
+        summary:
           'Line 2 has text after a closing quote. A quoted value has to fill the whole cell.',
         rejectionDetail: 'text-after-quote at line 2',
       },
@@ -632,7 +632,7 @@ describe('describeUnreadableFile', () => {
       { kind: 'parse', error: new CsvParseError('too-many-columns', 1) },
       {
         reason: 'too_large',
-        message: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
+        summary: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
         rejectionDetail: 'too-many-columns at line 1',
       },
     ],
@@ -641,13 +641,13 @@ describe('describeUnreadableFile', () => {
       { kind: 'too-many-rows' },
       {
         reason: 'too_large',
-        message: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
+        summary: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
       },
     ],
     [
       'a header with no rows under it',
       { kind: 'no-data-rows' },
-      { reason: 'empty', message: 'That file has a header but no rows under it.' },
+      { reason: 'empty', summary: 'That file has a header but no rows under it.' },
     ],
   ] as const)('%s', ([, file, expected]) => {
     // biome-ignore lint/suspicious/noExplicitAny: the table's inline literals don't infer as the discriminated union.
