@@ -93,30 +93,6 @@ describe('grouping', () => {
     ]);
   });
 
-  test('a date read day-first stays apart from the same clause read straight', () => {
-    // Both `readDate` and `applyDateOrder` bottom out in the same "not a real calendar date" clause,
-    // so the discriminant has to be in the key or these two rows would merge into one group whose
-    // sentence can only be right for one of them.
-    const plainCell: RowFinding = {
-      kind: 'cell',
-      column: 'date',
-      raw: '2027-02-30',
-      clause: NOT_A_DATE,
-    };
-    const resolved: RowFinding = {
-      kind: 'resolved-date',
-      readAs: 'day-first',
-      raw: '31/02/2026',
-      clause: NOT_A_DATE,
-    };
-    const log = noted({ line: 2, finding: plainCell }, { line: 3, finding: resolved });
-
-    expect(seal(log).rowGroups).toEqual([
-      singleRowGroup(plainCell, 2, ['2027-02-30']),
-      singleRowGroup(resolved, 3, ['31/02/2026']),
-    ]);
-  });
-
   test('rows with different raw values still group into one', () => {
     const first = cellFinding({ raw: 'foo' });
     const log = noted(
@@ -166,16 +142,14 @@ describe('grouping', () => {
     ]);
   });
 
-  test('resolved-date groups by readAs and clause together, apart from a different clause', () => {
+  test('resolved-date groups by clause, apart from a different clause', () => {
     const notADate: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '31/02/2026',
       clause: NOT_A_DATE,
     };
     const outOfRange: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '2026-13-01',
       clause: 'is out of range',
     };
@@ -187,10 +161,9 @@ describe('grouping', () => {
     ]);
   });
 
-  test('resolved-date groups matching readAs and clause together, despite different raw', () => {
+  test('resolved-date groups by matching clause together, despite different raw', () => {
     const first: RowFinding = {
       kind: 'resolved-date',
-      readAs: 'day-first',
       raw: '31/02/2026',
       clause: NOT_A_DATE,
     };

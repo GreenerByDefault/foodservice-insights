@@ -86,7 +86,6 @@ describe('the rule a finding becomes', () => {
       'a date resolved against the column-wide order',
       {
         kind: 'resolved-date',
-        readAs: 'day-first',
         raw: '01/12/2026',
         clause: 'is more than 30 days from now',
       },

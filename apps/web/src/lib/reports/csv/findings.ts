@@ -17,10 +17,8 @@ import type { DateOrder, DateOrderFault, DateReading } from './rules/index.ts';
  */
 export type RowFinding =
   | { kind: 'cell'; column: RequiredColumn; raw: string; clause: string }
-  /** A date that only failed once the column-wide order was applied. `readAs` isn't shown to the
-   * user; it stays on the finding only so groupKey can tell apart two rows whose `clause` matches
-   * by coincidence despite being read with opposite orders — see the comment there. */
-  | { kind: 'resolved-date'; readAs: DateOrder; raw: string; clause: string }
+  /** A date that only failed once the column-wide order was applied. */
+  | { kind: 'resolved-date'; raw: string; clause: string }
   // We leave off the `raw` value.
   | { kind: 'too-long'; column: RequiredColumn }
   | { kind: 'formula'; raw: string }
@@ -91,10 +89,7 @@ function groupKey(finding: RowFinding): string {
     case 'cell':
       return `cell|${finding.column}|${finding.clause}`;
     case 'resolved-date':
-      // `readAs` has to stay in the key: `readDate` and `applyDateOrder` both bottom out in
-      // `toIsoDate`, so the same clause can come from a raw ISO date or from a day-first read of
-      // a different one.
-      return `resolved-date|${finding.readAs}|${finding.clause}`;
+      return `resolved-date|${finding.clause}`;
     case 'too-long':
       return `too-long|${finding.column}`;
     case 'formula':
