@@ -7,27 +7,46 @@ accept them. The folder is three layers, one word each for what they hand upward
 | --- | --- | --- |
 | **Fault** | What is wrong with one thing — a byte stream, a header, a cell | `read/`, `rules/` |
 | **Finding** | A fault, plus the rows it was found on | `findings.ts` |
-| **Problem** | What the customer reads about a finding | `describe.ts` |
+| **Problem** | What the customer reads about a finding | `describe/` |
 
-A value has a *fault*; we record a *finding*; we show a *problem*. "Problem" is reserved for the
-customer-facing type.
+A value has a *fault*; we record a *finding*; we show a *problem*. **Every sentence about the
+user's file lives in `describe/`** — `read/` and `rules/` never word one themselves.
+
+`validate.ts` and `findings.ts` stay at the top of `csv/` because they *are* the pipeline;
+`read/`, `rules/`, and `describe/` hold the leaf modules underneath it. `findings.ts` folds many
+failing rows into a few groups.
+
+### `read/` — bytes into a table
 
 | File | Enforces |
 | --- | --- |
-| `read/decode.ts` | Encoding |
-| `read/parse.ts` | Delimiter grammar |
-| `read/columns.ts` | Header matching |
-| `read/layout.ts` | Which delimiter and header the file resolves to |
-| `rules/calendar.ts` | Calendar fields into an ISO date inside the accepted range |
-| `rules/dates.ts` | Date cells |
-| `rules/date-order.ts` | Deciding a column's day-first/month-first order |
-| `rules/amounts.ts` | Amount cells |
-| `rules/products.ts` | Product cells, including the formula-injection check |
-| `findings.ts` | Folding many failing rows into a few groups, without wording any of them |
-| `describe.ts` | Every sentence a customer reading a rejection sees |
+| `decode.ts` | Encoding |
+| `parse.ts` | Delimiter grammar |
+| `columns.ts` | Header matching |
+| `layout.ts` | Which delimiter and header the file resolves to |
 
-`validate.ts`, `findings.ts` and `describe.ts` stay at the top of `csv/` because they *are* the
-pipeline; `read/` and `rules/` hold the leaf modules underneath it.
+### `rules/` — one value into ok, or its fault
+
+| File | Enforces |
+| --- | --- |
+| `calendar.ts` | Calendar fields into an ISO date inside the accepted range |
+| `dates.ts` | Date cells |
+| `date-order.ts` | Deciding a column's day-first/month-first order |
+| `amounts.ts` | Amount cells |
+| `products.ts` | Product cells, including the formula-injection check |
+
+### `describe/` — every sentence a customer reading a rejection sees
+
+One module per thing being described, mirroring what produces it:
+
+| File | Describes |
+| --- | --- |
+| `file.ts` | A file refused before a row was read — the decode / layout / header / parse-error rejections |
+| `rows.ts` | One row problem: the rule, the rows it covers, the quoted examples |
+| `date-order.ts` | A column-wide date-order failure, which is prose rather than a row problem |
+| `findings.ts` | The assembly: budgeting row problems against the date-order problem into a summary, reason, and detail |
+| `problems.ts` | The `Problem` payload, and rendering it back to `rejectionDetail` text |
+| `text.ts` | Shared prose helpers: quoting, joining, pluralizing, formatting numbers |
 
 **Be more tolerant than the analysis, but never guess.** We accept things the analysis doesn't —
 extra delimiters, extra encodings, the customer's other nineteen columns — and normalize them away
