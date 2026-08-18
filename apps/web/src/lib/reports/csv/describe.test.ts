@@ -97,7 +97,7 @@ describe('the rule a finding becomes', () => {
   });
 });
 
-describe('the values it quotes back', () => {
+describe('the examples a problem quotes', () => {
   test('quoted, in the order the group reached them', () => {
     expect(soleRowProblemFor(cellFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
       '"foo"',
@@ -244,7 +244,7 @@ describe('the rejectionDetail we keep but never show', () => {
   });
 });
 
-describe('a date column that could not be resolved', () => {
+describe('a date order problem, which is prose rather than a row problem', () => {
   const noExamples: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
 
   test('is prose of its own, never a row problem, since it is not rows to go and fix', () => {
@@ -334,6 +334,19 @@ describe('a date column that could not be resolved', () => {
     expect(rejection.dateOrderProblem).toBeDefined();
     expect(rejection.rowProblems).toHaveLength(MAX_PROBLEMS_REPORTED - 1);
   });
+
+  test('the slot it takes still counts toward the "Showing" note and the detail', () => {
+    const rejection = rejectionFor({
+      rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED),
+      dateOrder: noExamples,
+    });
+
+    expect(rejection.message).toBe(
+      `We found problems in ${MAX_PROBLEMS_REPORTED} of your ${MAX_PROBLEMS_REPORTED} rows. ` +
+        `Showing ${MAX_PROBLEMS_REPORTED} of ${MAX_PROBLEMS_REPORTED + 1} things to fix.`,
+    );
+    expect(rejection.rejectionDetail).toMatch(/; and 1 more$/);
+  });
 });
 
 describe('the whole record', () => {
@@ -371,6 +384,19 @@ describe('the whole record', () => {
         'all 2 rows: The product starts with =, +, -, or @, which spreadsheets treat as the start of a ' +
         'formula. For example "=cmd".',
     });
+  });
+});
+
+describe('groupDigits', () => {
+  test.for([
+    ['no separator for zero', 0, '0'],
+    ['no separator just under 1,000', 999, '999'],
+    ['a separator right at 1,000', 1000, '1,000'],
+    ['one separator', 4102, '4,102'],
+    ['two separators', 1234567, '1,234,567'],
+    ['MAX_DATA_ROWS, the limit the "too many rows" message quotes', MAX_DATA_ROWS, '500,000'],
+  ] as const)('%s', ([, value, expected]) => {
+    expect(groupDigits(value)).toBe(expected);
   });
 });
 
