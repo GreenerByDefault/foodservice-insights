@@ -84,9 +84,9 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   const shownKinds = shownRowProblems.length + (shownDateOrderProblem ? 1 : 0);
   const hidden = totalKinds - shownKinds;
 
-  // Derived rather than tracked separately, so the reason and the rows it names cannot disagree.
   const injection = findings.rowGroups.some((group) => group.finding.kind === 'formula');
-  const lead = injection ? `${FORMULA_LEAD} ` : '';
+  const reason = injection ? 'csv_injection' : 'bad_rows';
+
   const scale = headline(findings.failingRowCount, findings.rowsRead);
   const truncationNote = hidden > 0 ? ` Showing ${shownKinds} of ${totalKinds} things to fix.` : '';
 
@@ -97,16 +97,13 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   ];
 
   return {
-    reason: injection ? 'csv_injection' : 'bad_rows',
-    message: `${lead}${scale}${truncationNote}`,
+    reason,
+    message: `${scale}${truncationNote}`,
     ...(shownRowProblems.length > 0 && { rowProblems: shownRowProblems }),
     ...(shownDateOrderProblem && { dateOrderProblem: shownDateOrderProblem }),
     rejectionDetail: detailParts.join('; '),
   };
 }
-
-const FORMULA_LEAD =
-  'Some product names start with a character a spreadsheet reads as the start of a formula (= + - @), which we cannot accept.';
 
 function headline(failingRowCount: number, rowsRead: number): string {
   const found = groupDigits(failingRowCount);

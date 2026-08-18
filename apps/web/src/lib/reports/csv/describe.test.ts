@@ -213,15 +213,6 @@ describe('the message', () => {
       rejectionFor({ rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED) }).message,
     ).not.toContain('Showing');
   });
-
-  test('the formula sentence leads it', () => {
-    const rowGroups = [findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
-
-    expect(rejectionFor({ rowGroups }).message).toBe(
-      'Some product names start with a character a spreadsheet reads as the start of a formula ' +
-        '(= + - @), which we cannot accept. We found problems in 1 of your 1 row.',
-    );
-  });
 });
 
 describe('the reason', () => {
@@ -377,9 +368,7 @@ describe('the whole record', () => {
 
     expect(rejectionFor({ rowGroups, rowsRead: 2 })).toEqual({
       reason: 'csv_injection',
-      message:
-        'Some product names start with a character a spreadsheet reads as the start of a formula ' +
-        '(= + - @), which we cannot accept. We found problems in 2 of your 2 rows.',
+      message: 'We found problems in 2 of your 2 rows.',
       rowProblems: [
         {
           rule: 'The product starts with a character a spreadsheet reads as the start of a formula',
