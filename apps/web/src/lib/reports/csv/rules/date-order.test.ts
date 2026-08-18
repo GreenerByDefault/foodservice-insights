@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { applyOrder, bothReadings, decideDateOrder, orderProvenBy } from './date-order.ts';
+import {
+  applyDateOrder,
+  bothDateOrderReadings,
+  dateOrderProvenBy,
+  decideDateOrder,
+} from './date-order.ts';
 import type { DateReading } from './dates.ts';
 
 const BOUNDS = { earliest: '2000-01-01', latest: '2026-12-31' };
@@ -11,20 +16,20 @@ const numeric = (first: number, second: number, year: number): DateReading => ({
   year,
 });
 
-describe('orderProvenBy', () => {
+describe('dateOrderProvenBy', () => {
   test.for([
     [numeric(13, 4, 2025), 'day-first'],
     [numeric(4, 13, 2025), 'month-first'],
   ] as const)('%o can only be %s', ([reading, order]) => {
-    expect(orderProvenBy(reading)).toBe(order);
+    expect(dateOrderProvenBy(reading)).toBe(order);
   });
 
   test('says nothing about a value that reads either way', () => {
-    expect(orderProvenBy(numeric(3, 4, 2025))).toBeUndefined();
+    expect(dateOrderProvenBy(numeric(3, 4, 2025))).toBeUndefined();
   });
 
   test('says nothing about a date that was never ambiguous', () => {
-    expect(orderProvenBy({ kind: 'date', isoDate: '2025-03-04' })).toBeUndefined();
+    expect(dateOrderProvenBy({ kind: 'date', isoDate: '2025-03-04' })).toBeUndefined();
   });
 });
 
@@ -55,32 +60,32 @@ describe('decideDateOrder', () => {
   });
 });
 
-describe('applyOrder', () => {
+describe('applyDateOrder', () => {
   test.for([
     ['day-first', '2025-04-03'],
     ['month-first', '2025-03-04'],
   ] as const)('reads 03/04/2025 %s as %s', ([order, isoDate]) => {
-    expect(applyOrder({ kind: 'numeric', first: 3, second: 4, year: 2025 }, order, BOUNDS)).toEqual(
-      { ok: true, isoDate },
-    );
+    expect(
+      applyDateOrder({ kind: 'numeric', first: 3, second: 4, year: 2025 }, order, BOUNDS),
+    ).toEqual({ ok: true, isoDate });
   });
 
   test('checks the calendar, which Date.UTC would otherwise roll past', () => {
     expect(
-      applyOrder({ kind: 'numeric', first: 31, second: 2, year: 2025 }, 'day-first', BOUNDS),
+      applyDateOrder({ kind: 'numeric', first: 31, second: 2, year: 2025 }, 'day-first', BOUNDS),
     ).toEqual({ ok: false, fault: 'is not a real calendar date' });
   });
 
   test('applies the accepted range', () => {
     expect(
-      applyOrder({ kind: 'numeric', first: 1, second: 2, year: 1969 }, 'day-first', BOUNDS),
+      applyDateOrder({ kind: 'numeric', first: 1, second: 2, year: 1969 }, 'day-first', BOUNDS),
     ).toMatchObject({ ok: false });
   });
 });
 
-describe('bothReadings', () => {
+describe('bothDateOrderReadings', () => {
   test('shows the user the two dates rather than describing the problem', () => {
-    expect(bothReadings({ kind: 'numeric', first: 3, second: 4, year: 2025 })).toBe(
+    expect(bothDateOrderReadings({ kind: 'numeric', first: 3, second: 4, year: 2025 })).toBe(
       '2025-04-03 or 2025-03-04',
     );
   });

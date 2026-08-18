@@ -91,8 +91,9 @@ function groupKey(finding: RowFinding): string {
     case 'cell':
       return `cell|${finding.column}|${finding.clause}`;
     case 'resolved-date':
-      // `readAs` has to stay in the key: `readDate` and `applyOrder` both bottom out in `toIsoDate`,
-      // so the same clause can come from a raw ISO date or from a day-first read of a different one.
+      // `readAs` has to stay in the key: `readDate` and `applyDateOrder` both bottom out in
+      // `toIsoDate`, so the same clause can come from a raw ISO date or from a day-first read of
+      // a different one.
       return `resolved-date|${finding.readAs}|${finding.clause}`;
     case 'too-long':
       return `too-long|${finding.column}`;

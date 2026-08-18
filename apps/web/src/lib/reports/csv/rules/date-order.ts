@@ -16,7 +16,7 @@ import type { DateReading } from './dates.ts';
 export type DateOrder = 'day-first' | 'month-first';
 
 /** Which reading a value rules out, if any. `13/04/2025` can only be day-first. */
-export function orderProvenBy(reading: DateReading): DateOrder | undefined {
+export function dateOrderProvenBy(reading: DateReading): DateOrder | undefined {
   if (reading.kind !== 'numeric') return undefined;
   if (reading.first > 12) return 'day-first';
   if (reading.second > 12) return 'month-first';
@@ -30,16 +30,18 @@ export function orderProvenBy(reading: DateReading): DateOrder | undefined {
  */
 export type DateOrderFault = 'contradictory' | 'unresolvable';
 
-export type OrderDecision = { ok: true; order: DateOrder } | { ok: false; fault: DateOrderFault };
+export type DateOrderDecision =
+  | { ok: true; order: DateOrder }
+  | { ok: false; fault: DateOrderFault };
 
-export function decideDateOrder(readings: Iterable<DateReading>): OrderDecision {
+export function decideDateOrder(readings: Iterable<DateReading>): DateOrderDecision {
   const proven = new Set<DateOrder>();
   let sawNumeric = false;
 
   for (const reading of readings) {
     if (reading.kind !== 'numeric') continue;
     sawNumeric = true;
-    const order = orderProvenBy(reading);
+    const order = dateOrderProvenBy(reading);
     if (order) proven.add(order);
   }
 
@@ -50,7 +52,7 @@ export function decideDateOrder(readings: Iterable<DateReading>): OrderDecision 
   return sawNumeric ? { ok: false, fault: 'unresolvable' } : { ok: true, order: 'month-first' };
 }
 
-export function applyOrder(
+export function applyDateOrder(
   reading: Extract<DateReading, { kind: 'numeric' }>,
   order: DateOrder,
   bounds: DateBounds,
@@ -63,11 +65,11 @@ export function applyOrder(
 /** Both ways a value could be read, so a message can show the user the problem rather than
  * describe it.
  */
-export function bothReadings(reading: Extract<DateReading, { kind: 'numeric' }>): string {
+export function bothDateOrderReadings(reading: Extract<DateReading, { kind: 'numeric' }>): string {
   const describe = (resolved: ResolvedDate) => (resolved.ok ? resolved.isoDate : 'no real date');
   return [
-    describe(applyOrder(reading, 'day-first', ANY_DATE)),
-    describe(applyOrder(reading, 'month-first', ANY_DATE)),
+    describe(applyDateOrder(reading, 'day-first', ANY_DATE)),
+    describe(applyDateOrder(reading, 'month-first', ANY_DATE)),
   ].join(' or ');
 }
 

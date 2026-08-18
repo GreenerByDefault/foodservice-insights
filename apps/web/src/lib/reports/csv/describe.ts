@@ -21,7 +21,7 @@ import type {
   LayoutFault,
   RequiredColumn,
 } from './read/index.ts';
-import { bothReadings } from './rules/index.ts';
+import { bothDateOrderReadings } from './rules/index.ts';
 
 // ---------------------------------------------------------------------------
 // The structured payload
@@ -315,7 +315,9 @@ function describeDateOrderFinding(finding: DateOrderFinding): string {
   // readings of the same value.
   const ambiguous = examples.get('ambiguous');
   const readings =
-    ambiguous?.reading.kind === 'numeric' ? bothReadings(ambiguous.reading) : 'either date';
+    ambiguous?.reading.kind === 'numeric'
+      ? bothDateOrderReadings(ambiguous.reading)
+      : 'either date';
   return `Every date in that file could be read two ways — row ${ambiguous?.line}'s ${quote(ambiguous?.raw ?? '')} is ${readings}. ${advice}`;
 }
 

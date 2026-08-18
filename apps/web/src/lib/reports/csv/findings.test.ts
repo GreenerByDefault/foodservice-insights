@@ -94,7 +94,7 @@ describe('grouping', () => {
   });
 
   test('a date read day-first stays apart from the same clause read straight', () => {
-    // Both `readDate` and `applyOrder` bottom out in the same "not a real calendar date" clause,
+    // Both `readDate` and `applyDateOrder` bottom out in the same "not a real calendar date" clause,
     // so the discriminant has to be in the key or these two rows would merge into one group whose
     // sentence can only be right for one of them.
     const plainCell: RowFinding = {
