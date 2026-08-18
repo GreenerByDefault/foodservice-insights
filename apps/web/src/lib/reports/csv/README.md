@@ -9,16 +9,14 @@ accept them. The folder is three layers, one word each for what they hand upward
 | **Finding** | A fault, plus the rows it was found on | `findings.ts` |
 | **Problem** | What the customer reads about a finding | `describe/` |
 
-A value has a *fault*; we record a *finding*; we show a *problem*. **Every sentence about the
-user's file lives in `describe/`** — `read/` and `rules/` never word one themselves, they return a
-fault code. The accepted exception is a field label in the future Svelte component (`Rows`, `For
-example`), which is UI chrome rather than a sentence about the file.
+A value has a *fault*; we record a *finding*; we show a *problem*. Every sentence about the
+user's file lives in `describe/`. `read/` and `rules/` return fault codes.
 
 `validate.ts` and `findings.ts` stay at the top of `csv/` because they *are* the pipeline;
 `read/`, `rules/`, and `describe/` hold the leaf modules underneath it. `findings.ts` folds many
 failing rows into a few groups.
 
-### `read/` — bytes into a table, returning a fault code, never a sentence
+### `read/` — bytes into a table, or a fault code
 
 | File | Enforces |
 | --- | --- |
@@ -27,7 +25,7 @@ failing rows into a few groups.
 | `columns.ts` | Header matching |
 | `layout.ts` | Which delimiter and header the file resolves to |
 
-### `rules/` — one value into ok, or its fault code, never a sentence
+### `rules/` — one value into ok, or its fault code
 
 | File | Enforces |
 | --- | --- |
