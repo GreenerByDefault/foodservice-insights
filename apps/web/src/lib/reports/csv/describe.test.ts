@@ -1,3 +1,10 @@
+/** Tests for how we describe failures.
+ *
+ * `Findings` is built as a literal here rather than folded through `noteRow`/`seal`: which rows
+ * group together and how their ranges accumulate is `findings.test.ts`'s subject, and what one
+ * sealed group reads as is this file's.
+ */
+
 import { describe, expect, test } from 'vitest';
 import {
   MAX_COLUMNS,
@@ -10,18 +17,14 @@ import {
   describeUnreadableFile,
   formatRows,
   type Problem,
-  renderProblemsText,
+  renderProblemsAsDetail,
 } from './describe.ts';
 import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
 import { CsvParseError } from './read/parse.ts';
-import { cell, findings, group } from './testing/fixtures.ts';
-
-// `Findings` is built as a literal here rather than folded through `noteRow`/`seal`: which rows
-// group together and how their ranges accumulate is `findings.test.ts`'s subject, and what one
-// sealed group reads as is this file's.
+import { cellFinding, findingGroup, sealedFindings } from './testing/fixtures.ts';
 
 function rejectionOf(over: Partial<Findings> = {}) {
-  return describeFindings(findings(over));
+  return describeFindings(sealedFindings(over));
 }
 
 function problemsOf(over: Partial<Findings> = {}): readonly Problem[] {
@@ -30,7 +33,7 @@ function problemsOf(over: Partial<Findings> = {}): readonly Problem[] {
 
 /** The problem one group becomes. */
 function problemFor(finding: RowFinding, over: Partial<FindingGroup> = {}): Problem {
-  const [problem] = problemsOf({ rowGroups: [group({ finding, ...over })] });
+  const [problem] = problemsOf({ rowGroups: [findingGroup({ finding, ...over })] });
   if (!problem) throw new Error('describeFindings dropped the only group');
   return problem;
 }
@@ -38,7 +41,7 @@ function problemFor(finding: RowFinding, over: Partial<FindingGroup> = {}): Prob
 /** Distinct groups, one row each — for the cases that care only about how many kinds there are. */
 function distinctGroups(count: number): FindingGroup[] {
   return Array.from({ length: count }, (_, index) =>
-    group({
+    findingGroup({
       finding: { kind: 'width', actual: index + 4, expected: 3 },
       ranges: [{ start: index + 2, end: index + 2 }],
     }),
@@ -49,12 +52,12 @@ describe('the rule a finding becomes', () => {
   test.for([
     [
       'a bad cell, naming the column the value sits in',
-      cell({ raw: '5 oz', clause: 'has a unit in it' }),
+      cellFinding({ raw: '5 oz', clause: 'has a unit in it' }),
       'The amount has a unit in it',
     ],
     [
       'another column, same clause',
-      cell({ column: 'product', raw: 'x', clause: 'is empty' }),
+      cellFinding({ column: 'product', raw: 'x', clause: 'is empty' }),
       'The product is empty',
     ],
     [
@@ -98,14 +101,14 @@ describe('the rule a finding becomes', () => {
     });
 
     test('nothing else carries a note', () => {
-      expect(problemFor(cell()).note).toBeUndefined();
+      expect(problemFor(cellFinding()).note).toBeUndefined();
     });
   });
 });
 
 describe('the values it quotes back', () => {
   test('quoted, in the order the group reached them', () => {
-    expect(problemFor(cell(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
+    expect(problemFor(cellFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
       '"foo"',
       '"bar"',
       '"baz"',
@@ -115,19 +118,21 @@ describe('the values it quotes back', () => {
   test('shortened at MAX_QUOTED_CHARS', () => {
     const long = '9'.repeat(MAX_QUOTED_CHARS + 20);
 
-    expect(problemFor(cell(), { examples: [long] }).examples).toEqual([
+    expect(problemFor(cellFinding(), { examples: [long] }).examples).toEqual([
       `"${'9'.repeat(MAX_QUOTED_CHARS)}…"`,
     ]);
   });
 
   test('tabs and newlines flattened, since they would break the layout they sit in', () => {
-    expect(problemFor(cell(), { examples: ['beef\tmince\n5'] }).examples).toEqual([
+    expect(problemFor(cellFinding(), { examples: ['beef\tmince\n5'] }).examples).toEqual([
       '"beef mince 5"',
     ]);
   });
 
   test('values that differ only in whitespace collapse to one quote', () => {
-    expect(problemFor(cell(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual(['"5 oz"']);
+    expect(problemFor(cellFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
+      '"5 oz"',
+    ]);
   });
 
   test('a finding with no value of its own quotes nothing', () => {
@@ -137,7 +142,7 @@ describe('the values it quotes back', () => {
 
 describe('the rows a problem covers', () => {
   test('the ranges pass through, and the total counts the rows no range names', () => {
-    const rows = problemFor(cell(), {
+    const rows = problemFor(cellFinding(), {
       ranges: [
         { start: 2, end: 4 },
         { start: 8, end: 8 },
@@ -155,21 +160,22 @@ describe('the rows a problem covers', () => {
     });
   });
 
-  test('everyRow once the group covers every row read', () => {
-    const rowGroups = [group({ ranges: [{ start: 2, end: 4 }] })];
+  test('everyRow is true only when rowsRead matches the rows the group covers', () => {
+    const group = findingGroup({ ranges: [{ start: 2, end: 4 }] });
+    const rowGroups = [group];
 
-    expect(problemsOf({ rowGroups, rowsRead: 3 })[0]?.rows.everyRow).toBe(true);
-    expect(problemsOf({ rowGroups, rowsRead: 10 })[0]?.rows.everyRow).toBe(false);
+    expect(problemsOf({ rowGroups, rowsRead: group.rowCount })[0]?.rows.everyRow).toBe(true);
+    expect(problemsOf({ rowGroups, rowsRead: group.rowCount + 1 })[0]?.rows.everyRow).toBe(false);
   });
 
   test('everyRow stays false while rowsRead is unknown, however many rows the group holds', () => {
     // `rowsRead` is 0 until `validate.ts` counts rows, and "every row of a file whose length we
     // do not know" is not a claim we can make.
-    expect(problemFor(cell(), { ranges: [{ start: 2, end: 4 }] }).rows.everyRow).toBe(false);
+    expect(problemFor(cellFinding(), { ranges: [{ start: 2, end: 4 }] }).rows.everyRow).toBe(false);
   });
 
   test('one row and many rows produce the same problem but for the rows it names', () => {
-    const finding = cell();
+    const finding = cellFinding();
     const { rows: _one, ...single } = problemFor(finding, { ranges: [{ start: 2, end: 2 }] });
     const { rows: _many, ...many } = problemFor(finding, { ranges: [{ start: 2, end: 9 }] });
 
@@ -209,7 +215,7 @@ describe('the message', () => {
   });
 
   test('the formula sentence leads it', () => {
-    const rowGroups = [group({ finding: { kind: 'formula', raw: '=cmd' } })];
+    const rowGroups = [findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
 
     expect(rejectionOf({ rowGroups }).message).toBe(
       'Some product names start with a character a spreadsheet reads as the start of a formula ' +
@@ -224,25 +230,25 @@ describe('the reason', () => {
   });
 
   test('a formula anywhere in the file outranks it', () => {
-    const rowGroups = [group(), group({ finding: { kind: 'formula', raw: '=cmd' } })];
+    const rowGroups = [findingGroup(), findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
 
     expect(rejectionOf({ rowGroups }).reason).toBe('csv_injection');
   });
 });
 
-describe('the detail we keep but never show', () => {
+describe('the rejectionDetail we keep but never show', () => {
   test('one line per problem, joined with a semicolon', () => {
-    const detail = rejectionOf({
+    const rejectionDetail = rejectionOf({
       rowGroups: [
-        group({ finding: cell({ column: 'amount', raw: '', clause: 'is empty' }) }),
-        group({
-          finding: cell({ column: 'product', raw: 'x', clause: 'is empty' }),
+        findingGroup({ finding: cellFinding({ column: 'amount', raw: '', clause: 'is empty' }) }),
+        findingGroup({
+          finding: cellFinding({ column: 'product', raw: 'x', clause: 'is empty' }),
           ranges: [{ start: 3, end: 3 }],
         }),
       ],
-    }).detail;
+    }).rejectionDetail;
 
-    expect(detail).toBe(
+    expect(rejectionDetail).toBe(
       'row 2: The amount is empty.; row 3: The product is empty. For example "x".',
     );
   });
@@ -250,7 +256,7 @@ describe('the detail we keep but never show', () => {
   test('names how many kinds are missing from it', () => {
     const kinds = MAX_PROBLEMS_REPORTED + 3;
 
-    expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).detail).toContain(
+    expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).rejectionDetail).toContain(
       `and ${kinds - MAX_PROBLEMS_REPORTED} more`,
     );
   });
@@ -350,13 +356,13 @@ describe('the whole record', () => {
           examples: ['"5 oz"'],
         },
       ],
-      detail: 'row 2: The amount has a unit in it. For example "5 oz".',
+      rejectionDetail: 'row 2: The amount has a unit in it. For example "5 oz".',
     });
   });
 
   test('csv_injection', () => {
     const rowGroups = [
-      group({ finding: { kind: 'formula', raw: '=cmd' }, ranges: [{ start: 2, end: 3 }] }),
+      findingGroup({ finding: { kind: 'formula', raw: '=cmd' }, ranges: [{ start: 2, end: 3 }] }),
     ];
 
     expect(rejectionOf({ rowGroups, rowsRead: 2 })).toEqual({
@@ -371,7 +377,7 @@ describe('the whole record', () => {
           examples: ['"=cmd"'],
         },
       ],
-      detail:
+      rejectionDetail:
         'all 2 rows: The product starts with a character a spreadsheet reads as the start of a ' +
         'formula. For example "=cmd".',
     });
@@ -418,12 +424,12 @@ describe('formatRows', () => {
   });
 });
 
-describe('renderProblemsText', () => {
+describe('renderProblemsAsDetail', () => {
   const oneRow = { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false };
 
   test('the rows, the rule, then the examples', () => {
     expect(
-      renderProblemsText([
+      renderProblemsAsDetail([
         { rule: 'The amount has a unit in it', rows: oneRow, examples: ['"5 oz"', '"3 kg"'] },
       ]),
     ).toBe('row 2: The amount has a unit in it. For example "5 oz" and "3 kg".');
@@ -431,7 +437,7 @@ describe('renderProblemsText', () => {
 
   test('a note sits between the rule and its full stop', () => {
     expect(
-      renderProblemsText([
+      renderProblemsAsDetail([
         {
           rule: 'The date is more than 30 days from now',
           rows: oneRow,
@@ -447,7 +453,7 @@ describe('renderProblemsText', () => {
 
   test('no examples, no sentence about them', () => {
     expect(
-      renderProblemsText([
+      renderProblemsAsDetail([
         { rule: 'Has 2 columns where the header has 3', rows: oneRow, examples: [] },
       ]),
     ).toBe('row 2: Has 2 columns where the header has 3.');
@@ -455,7 +461,7 @@ describe('renderProblemsText', () => {
 
   test('problems joined with a semicolon', () => {
     expect(
-      renderProblemsText([
+      renderProblemsAsDetail([
         { rule: 'The amount is empty', rows: oneRow, examples: [] },
         { rule: 'The product is empty', rows: oneRow, examples: [] },
       ]),
@@ -463,7 +469,7 @@ describe('renderProblemsText', () => {
   });
 
   test('nothing to render', () => {
-    expect(renderProblemsText([])).toBe('');
+    expect(renderProblemsAsDetail([])).toBe('');
   });
 });
 
@@ -476,7 +482,7 @@ describe('describeUnreadableFile', () => {
         reason: 'unparseable',
         message:
           'That looks like an Excel (.xlsx) file, not a CSV. Save it as CSV and upload it again.',
-        detail: 'signature matched an Excel (.xlsx) file',
+        rejectionDetail: 'signature matched an Excel (.xlsx) file',
       },
     ],
     [
@@ -486,7 +492,7 @@ describe('describeUnreadableFile', () => {
         reason: 'unparseable',
         message:
           'That looks like an old Excel (.xls) file, not a CSV. Save it as CSV and upload it again.',
-        detail: 'signature matched an old Excel (.xls) file',
+        rejectionDetail: 'signature matched an old Excel (.xls) file',
       },
     ],
     [
@@ -496,7 +502,7 @@ describe('describeUnreadableFile', () => {
         reason: 'unparseable',
         message:
           'That file does not look like text. Save it as CSV (comma separated values) and upload it again.',
-        detail: 'control character 0x1 at offset 7',
+        rejectionDetail: 'control character 0x1 at offset 7',
       },
     ],
     [
@@ -517,7 +523,7 @@ describe('describeUnreadableFile', () => {
       {
         reason: 'bad_columns',
         message: 'Your file needs a column for product name, date ordered and amount ordered.',
-        detail: 'header: vendor | cost',
+        rejectionDetail: 'header: vendor | cost',
       },
     ],
     [
@@ -534,7 +540,7 @@ describe('describeUnreadableFile', () => {
         reason: 'bad_columns',
         message:
           'Two columns could be the product name: "product" and "item". Remove or rename one.',
-        detail: 'header: product | item | date | amount',
+        rejectionDetail: 'header: product | item | date | amount',
       },
     ],
     [
@@ -543,7 +549,7 @@ describe('describeUnreadableFile', () => {
       {
         reason: 'bad_columns',
         message: 'We could not read that file.',
-        detail: 'header: product | date | amount',
+        rejectionDetail: 'header: product | date | amount',
       },
     ],
     [
@@ -562,7 +568,7 @@ describe('describeUnreadableFile', () => {
         reason: 'bad_columns',
         message:
           'That file reads as a valid table more than one way, so we cannot tell how it is split into columns. Save it as a comma-separated CSV.',
-        detail: '"," at line 1 and "\\t" at line 1',
+        rejectionDetail: '"," at line 1 and "\\t" at line 1',
       },
     ],
     [
@@ -580,7 +586,7 @@ describe('describeUnreadableFile', () => {
         reason: 'unparseable',
         message:
           'The quotes starting on line 1 are never closed, so we cannot tell where that row ends.',
-        detail: 'unclosed-quote at line 1',
+        rejectionDetail: 'unclosed-quote at line 1',
       },
     ],
     [
@@ -590,7 +596,7 @@ describe('describeUnreadableFile', () => {
         reason: 'unparseable',
         message:
           'The quotes starting on line 4 are never closed, so we cannot tell where that row ends.',
-        detail: 'unclosed-quote at line 4',
+        rejectionDetail: 'unclosed-quote at line 4',
       },
     ],
     [
@@ -600,7 +606,7 @@ describe('describeUnreadableFile', () => {
         reason: 'unparseable',
         message:
           'Line 2 has text after a closing quote. A quoted value has to fill the whole cell.',
-        detail: 'text-after-quote at line 2',
+        rejectionDetail: 'text-after-quote at line 2',
       },
     ],
     [
@@ -609,7 +615,7 @@ describe('describeUnreadableFile', () => {
       {
         reason: 'too_large',
         message: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
-        detail: 'too-many-columns at line 1',
+        rejectionDetail: 'too-many-columns at line 1',
       },
     ],
     [

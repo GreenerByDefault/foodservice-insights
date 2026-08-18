@@ -66,7 +66,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       rejection: {
         reason: 'other',
         message: 'Choose a CSV file to upload.',
-        detail: 'the request carried no file',
+        rejectionDetail: 'the request carried no file',
       },
     };
   }
@@ -86,7 +86,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       rejection: {
         reason: 'too_large',
         message: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
-        detail: `${fileDescription.byteSize} bytes`,
+        rejectionDetail: `${fileDescription.byteSize} bytes`,
       },
     };
   }
@@ -117,7 +117,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       rejection: {
         reason: 'invalid_metadata',
         message: `Check these fields: ${fieldsWithIssues(parsed.issues).join(', ')}.`,
-        detail: describeIssues(parsed.issues),
+        rejectionDetail: describeIssues(parsed.issues),
       },
     };
   }

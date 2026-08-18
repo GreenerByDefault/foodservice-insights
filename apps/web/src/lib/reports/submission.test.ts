@@ -82,7 +82,7 @@ describe('validateSubmission', () => {
 
       expect(outcome).toMatchObject({
         ok: false,
-        rejection: { reason: 'too_large', detail: `${MAX_UPLOAD_BYTES + 1} bytes` },
+        rejection: { reason: 'too_large', rejectionDetail: `${MAX_UPLOAD_BYTES + 1} bytes` },
       });
     });
 

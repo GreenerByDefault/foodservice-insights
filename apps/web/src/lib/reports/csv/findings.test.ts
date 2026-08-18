@@ -10,7 +10,7 @@ import {
   type RowFinding,
   seal,
 } from './findings.ts';
-import { cell } from './testing/fixtures.ts';
+import { cellFinding } from './testing/fixtures.ts';
 
 /** The expected shape of a group that a single row reached, covering exactly `line`. */
 function singleRowGroup(finding: RowFinding, line: number, examples: string[] = []) {
@@ -25,15 +25,15 @@ function noted(...lines: { line: number; finding: RowFinding }[]): FindingLog {
 
 describe('seal', () => {
   test('counts every row, not every group', () => {
-    const log = noted({ line: 2, finding: cell() }, { line: 3, finding: cell() });
+    const log = noted({ line: 2, finding: cellFinding() }, { line: 3, finding: cellFinding() });
 
     expect(seal(log).failingRowCount).toBe(2);
   });
 
   test('one group per distinct finding, in the order first reached', () => {
     const log = noted(
-      { line: 2, finding: cell({ column: 'amount' }) },
-      { line: 3, finding: cell({ column: 'product', clause: 'is empty', raw: '' }) },
+      { line: 2, finding: cellFinding({ column: 'amount' }) },
+      { line: 3, finding: cellFinding({ column: 'product', clause: 'is empty', raw: '' }) },
     );
 
     const columns = seal(log).rowGroups.map((group) =>
@@ -58,7 +58,7 @@ describe('rowsRead', () => {
     noteRowRead(log);
     noteRowRead(log);
     noteRowRead(log);
-    noteRow(log, 3, cell());
+    noteRow(log, 3, cellFinding());
 
     expect(seal(log).rowsRead).toBe(3);
   });
@@ -70,8 +70,8 @@ describe('rowsRead', () => {
 
 describe('grouping', () => {
   test('the same clause on two columns stays two groups', () => {
-    const amount = cell({ column: 'amount', clause: 'is empty', raw: '' });
-    const product = cell({ column: 'product', clause: 'is empty', raw: '' });
+    const amount = cellFinding({ column: 'amount', clause: 'is empty', raw: '' });
+    const product = cellFinding({ column: 'product', clause: 'is empty', raw: '' });
     const log = noted({ line: 2, finding: amount }, { line: 3, finding: product });
 
     expect(seal(log).rowGroups).toEqual([singleRowGroup(amount, 2), singleRowGroup(product, 3)]);
@@ -101,7 +101,7 @@ describe('grouping', () => {
     // Both `readDate` and `applyOrder` bottom out in the same "not a real calendar date" clause,
     // so the discriminant has to be in the key or these two rows would merge into one group whose
     // sentence can only be right for one of them.
-    const cellFinding: RowFinding = {
+    const plainCell: RowFinding = {
       kind: 'cell',
       column: 'date',
       raw: '2027-02-30',
@@ -113,17 +113,20 @@ describe('grouping', () => {
       raw: '31/02/2026',
       clause: NOT_A_DATE,
     };
-    const log = noted({ line: 2, finding: cellFinding }, { line: 3, finding: resolved });
+    const log = noted({ line: 2, finding: plainCell }, { line: 3, finding: resolved });
 
     expect(seal(log).rowGroups).toEqual([
-      singleRowGroup(cellFinding, 2, ['2027-02-30']),
+      singleRowGroup(plainCell, 2, ['2027-02-30']),
       singleRowGroup(resolved, 3, ['31/02/2026']),
     ]);
   });
 
   test('rows with different raw values still group into one', () => {
-    const first = cell({ raw: 'foo' });
-    const log = noted({ line: 2, finding: first }, { line: 3, finding: cell({ raw: 'bar' }) });
+    const first = cellFinding({ raw: 'foo' });
+    const log = noted(
+      { line: 2, finding: first },
+      { line: 3, finding: cellFinding({ raw: 'bar' }) },
+    );
 
     expect(seal(log).rowGroups).toEqual([
       { finding: first, ranges: [{ start: 2, end: 3 }], rowCount: 2, examples: ['foo', 'bar'] },
@@ -214,16 +217,16 @@ describe('grouping', () => {
 describe('ranges', () => {
   test('a run of consecutive lines extends the last range rather than starting a new one', () => {
     const log = noted(
-      { line: 2, finding: cell() },
-      { line: 3, finding: cell() },
-      { line: 4, finding: cell() },
+      { line: 2, finding: cellFinding() },
+      { line: 3, finding: cellFinding() },
+      { line: 4, finding: cellFinding() },
     );
 
     expect(seal(log).rowGroups[0]?.ranges).toEqual([{ start: 2, end: 4 }]);
   });
 
   test('a gap starts a new range', () => {
-    const log = noted({ line: 2, finding: cell() }, { line: 5, finding: cell() });
+    const log = noted({ line: 2, finding: cellFinding() }, { line: 5, finding: cellFinding() });
 
     expect(seal(log).rowGroups[0]?.ranges).toEqual([
       { start: 2, end: 2 },
@@ -233,7 +236,7 @@ describe('ranges', () => {
 
   test('stops adding new ranges past MAX_ROW_RANGES_REPORTED, but rowCount keeps counting', () => {
     const lines = Array.from({ length: MAX_ROW_RANGES_REPORTED + 3 }, (_, index) => index * 2 + 2);
-    const log = noted(...lines.map((line) => ({ line, finding: cell() })));
+    const log = noted(...lines.map((line) => ({ line, finding: cellFinding() })));
 
     const [group] = seal(log).rowGroups;
     // Every line here is non-consecutive with the last (they're spaced by 2), so each of the
@@ -251,8 +254,8 @@ describe('ranges', () => {
     // ...then a run consecutive with the last one, extending it past the cap on range *count*.
     const consecutive = Array.from({ length: 5 }, (_, index) => (lines.at(-1) ?? 0) + index + 1);
     const log = noted(
-      ...lines.map((line) => ({ line, finding: cell() })),
-      ...consecutive.map((line) => ({ line, finding: cell() })),
+      ...lines.map((line) => ({ line, finding: cellFinding() })),
+      ...consecutive.map((line) => ({ line, finding: cellFinding() })),
     );
 
     const [group] = seal(log).rowGroups;
@@ -266,22 +269,24 @@ describe('ranges', () => {
 
 describe('examples', () => {
   test('remembers a raw value', () => {
-    const log = noted({ line: 2, finding: cell({ raw: 'foo' }) });
+    const log = noted({ line: 2, finding: cellFinding({ raw: 'foo' }) });
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
   });
 
   test('caps at MAX_EXAMPLE_VALUES, keeping the first ones reached', () => {
     const raws = Array.from({ length: MAX_EXAMPLE_VALUES + 3 }, (_, index) => `v${index}`);
-    const log = noted(...raws.map((raw, index) => ({ line: index + 2, finding: cell({ raw }) })));
+    const log = noted(
+      ...raws.map((raw, index) => ({ line: index + 2, finding: cellFinding({ raw }) })),
+    );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(raws.slice(0, MAX_EXAMPLE_VALUES));
   });
 
   test('does not store an exact-duplicate raw value twice', () => {
     const log = noted(
-      { line: 2, finding: cell({ raw: 'foo' }) },
-      { line: 3, finding: cell({ raw: 'foo' }) },
+      { line: 2, finding: cellFinding({ raw: 'foo' }) },
+      { line: 3, finding: cellFinding({ raw: 'foo' }) },
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
@@ -289,8 +294,8 @@ describe('examples', () => {
 
   test('keeps a blank value out of examples entirely', () => {
     const log = noted(
-      { line: 2, finding: cell({ raw: '  ' }) },
-      { line: 3, finding: cell({ raw: 'foo' }) },
+      { line: 2, finding: cellFinding({ raw: '  ' }) },
+      { line: 3, finding: cellFinding({ raw: 'foo' }) },
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
@@ -298,8 +303,8 @@ describe('examples', () => {
 
   test('keeps an exactly empty value out of examples too', () => {
     const log = noted(
-      { line: 2, finding: cell({ raw: '' }) },
-      { line: 3, finding: cell({ raw: 'foo' }) },
+      { line: 2, finding: cellFinding({ raw: '' }) },
+      { line: 3, finding: cellFinding({ raw: 'foo' }) },
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
@@ -329,7 +334,7 @@ describe('noteDateOrder', () => {
     // A date-order finding names one or two rows only as evidence, so it is not a failing row —
     // counting it would read as an off-by-one against the headline's rows-affected denominator.
     const log = newFindingLog();
-    const rowFinding = cell();
+    const rowFinding = cellFinding();
     const dateOrder: DateOrderFinding = {
       issue: 'unresolvable',
       examples: new Map(),

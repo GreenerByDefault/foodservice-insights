@@ -2,7 +2,7 @@ import type { FindingGroup, Findings, RowFinding } from '../findings.ts';
 
 /** A `'cell'` finding with representative defaults, for tests that don't care which column or
  * clause failed. */
-export function cell(over: Partial<Extract<RowFinding, { kind: 'cell' }>> = {}): RowFinding {
+export function cellFinding(over: Partial<Extract<RowFinding, { kind: 'cell' }>> = {}): RowFinding {
   return {
     kind: 'cell',
     column: 'amount',
@@ -12,26 +12,21 @@ export function cell(over: Partial<Extract<RowFinding, { kind: 'cell' }>> = {}):
   };
 }
 
-/** One sealed group, as `findings.ts` would have folded it.
- *
- * `rowCount` and `examples` default to what the accumulator would have derived, so a literal
- * cannot accidentally describe a state `seal` could never produce. Override `rowCount` to build
- * the one state that is genuinely inconsistent with `ranges`: rows elided past
- * `MAX_ROW_RANGES_REPORTED`.
- */
-export function group(over: Partial<FindingGroup> = {}): FindingGroup {
-  const finding = over.finding ?? cell();
+/** One group, as `findings.ts` would have folded it. */
+export function findingGroup(over: Partial<FindingGroup> = {}): FindingGroup {
+  const finding = over.finding ?? cellFinding();
   const ranges = over.ranges ?? [{ start: 2, end: 2 }];
   return {
     finding,
     ranges,
-    rowCount: over.rowCount ?? countRows(ranges),
-    examples: over.examples ?? rawValuesOf(finding),
+    rowCount: over.rowCount ?? rowsCoveredBy(ranges),
+    examples: over.examples ?? exampleValuesOf(finding),
   };
 }
 
-export function findings(over: Partial<Findings> = {}): Findings {
-  const rowGroups = over.rowGroups ?? [group()];
+/** What `seal` would have returned, for a test that starts downstream of the accumulator. */
+export function sealedFindings(over: Partial<Findings> = {}): Findings {
+  const rowGroups = over.rowGroups ?? [findingGroup()];
   return {
     rowGroups,
     failingRowCount:
@@ -41,11 +36,13 @@ export function findings(over: Partial<Findings> = {}): Findings {
   };
 }
 
-function countRows(ranges: readonly { start: number; end: number }[]): number {
+function rowsCoveredBy(ranges: readonly { start: number; end: number }[]): number {
   return ranges.reduce((total, { start, end }) => total + (end - start + 1), 0);
 }
 
-function rawValuesOf(finding: RowFinding): string[] {
+/** The values `addExampleValue` would have kept: the finding's own, unless it has none to give
+ * or it is blank. */
+function exampleValuesOf(finding: RowFinding): string[] {
   if (finding.kind === 'too-long' || finding.kind === 'width') return [];
   return finding.raw.trim() === '' ? [] : [finding.raw];
 }

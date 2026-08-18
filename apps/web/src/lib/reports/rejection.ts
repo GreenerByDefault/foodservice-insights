@@ -15,8 +15,8 @@ export type RejectedUploadRecord = {
   rowProblems?: readonly Problem[];
   /** Prose carrying the fix for a date order problem. */
   dateOrderProblem?: string;
-  /** For `rejected_upload.rejection_detail`. Not shown to the user. */
-  detail?: string;
+  /** For the database's `rejected_upload.rejection_detail`. Not shown to the user. */
+  rejectionDetail?: string;
 };
 
 /** The half of a `RejectedUploadRecord` that crosses the wire.

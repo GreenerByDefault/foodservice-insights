@@ -90,7 +90,7 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   const truncationNote = hidden > 0 ? ` Showing ${shownKinds} of ${totalKinds} things to fix.` : '';
 
   const detailParts = [
-    ...(shownRowProblems.length > 0 ? [renderProblemsText(shownRowProblems)] : []),
+    ...(shownRowProblems.length > 0 ? [renderProblemsAsDetail(shownRowProblems)] : []),
     ...(shownDateOrderProblem ? [shownDateOrderProblem] : []),
     ...(hidden > 0 ? [`and ${hidden} more`] : []),
   ];
@@ -100,7 +100,7 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
     message: `${lead}${scale}${truncationNote}`,
     ...(shownRowProblems.length > 0 && { rowProblems: shownRowProblems }),
     ...(shownDateOrderProblem && { dateOrderProblem: shownDateOrderProblem }),
-    detail: detailParts.join('; '),
+    rejectionDetail: detailParts.join('; '),
   };
 }
 
@@ -116,32 +116,36 @@ function headline(failingRowCount: number, rowsRead: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering a Problem to plain text, for `detail`
+// The problems as `rejectionDetail` text
 // ---------------------------------------------------------------------------
 
-export function renderProblemsText(problems: readonly Problem[]): string {
-  return problems.map(renderProblemLine).join('; ');
+export function renderProblemsAsDetail(problems: readonly Problem[]): string {
+  return problems.map(renderProblemAsDetailLine).join('; ');
 }
 
-function renderProblemLine(problem: Problem): string {
+function renderProblemAsDetailLine(problem: Problem): string {
   const note = problem.note ? `, ${problem.note}` : '';
   const examples = problem.examples.length > 0 ? ` For example ${listOf(problem.examples)}.` : '';
   return `${formatRows(problem.rows)}: ${problem.rule}${note}.${examples}`;
 }
 
+// ---------------------------------------------------------------------------
+// The rows a problem covers, worded once for every reader of them
+// ---------------------------------------------------------------------------
+
 /** `row 15`, `5 rows: 2–4, 8, 11`, or `all 4,500 rows` — the one shared format for a row span,
- * used by the browser, by `renderProblemsText`, and by `detail` alike.
+ * used by the browser rendering a `Problem` and by `rejectionDetail` alike.
  */
 export function formatRows(span: RowSpan): string {
   if (span.everyRow) return `all ${groupDigits(span.total)} rows`;
   if (span.total === 1) return `row ${span.ranges[0]?.start ?? ''}`;
-  return `${groupDigits(span.total)} rows: ${renderRanges(span)}`;
+  return `${groupDigits(span.total)} rows: ${formatRanges(span)}`;
 }
 
 /** `2–4, 8, 11 and 3 more`. A run of two is written out (`2, 3`) rather than ranged, since that
  * costs no more than `2–3` and asks less of the reader.
  */
-function renderRanges(span: RowSpan): string {
+function formatRanges(span: RowSpan): string {
   const named = span.ranges.reduce((total, { start, end }) => total + (end - start + 1), 0);
   const elided = span.total - named;
 
@@ -166,7 +170,7 @@ function decodeRejection(fault: DecodeFault): RejectedUploadRecord {
       return {
         reason: 'unparseable',
         message: `That looks like ${name}, not a CSV. Save it as CSV and upload it again.`,
-        detail: `signature matched ${name}`,
+        rejectionDetail: `signature matched ${name}`,
       };
     }
     case 'control-character':
@@ -174,7 +178,7 @@ function decodeRejection(fault: DecodeFault): RejectedUploadRecord {
         reason: 'unparseable',
         message:
           'That file does not look like text. Save it as CSV (comma separated values) and upload it again.',
-        detail: `control character 0x${fault.code.toString(16)} at offset ${fault.offset}`,
+        rejectionDetail: `control character 0x${fault.code.toString(16)} at offset ${fault.offset}`,
       };
     case 'empty':
       return { reason: 'empty', message: 'That file has no rows in it.' };
@@ -190,7 +194,7 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
         reason: 'bad_columns',
         message:
           'That file reads as a valid table more than one way, so we cannot tell how it is split into columns. Save it as a comma-separated CSV.',
-        detail: describeCandidates(fault.candidates),
+        rejectionDetail: describeCandidates(fault.candidates),
       };
     case 'empty':
       return { reason: 'empty', message: 'That file has no rows in it.' };
@@ -198,7 +202,7 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
       return {
         reason: 'bad_columns',
         message: fault.fault ? describeHeaderFault(fault.fault) : 'We could not read that file.',
-        detail: `header: ${fault.fields.slice(0, 20).join(' | ')}`,
+        rejectionDetail: `header: ${fault.fields.slice(0, 20).join(' | ')}`,
       };
   }
 }
@@ -227,19 +231,19 @@ function headerLabel(column: RequiredColumn): string {
 }
 
 function unparseable(error: CsvParseError): RejectedUploadRecord {
-  const detail = `${error.failure} at line ${error.line}`;
+  const rejectionDetail = `${error.failure} at line ${error.line}`;
   switch (error.failure) {
     case 'unclosed-quote':
       return {
         reason: 'unparseable',
         message: `The quotes starting on line ${error.line} are never closed, so we cannot tell where that row ends.`,
-        detail,
+        rejectionDetail,
       };
     case 'text-after-quote':
       return {
         reason: 'unparseable',
         message: `Line ${error.line} has text after a closing quote. A quoted value has to fill the whole cell.`,
-        detail,
+        rejectionDetail,
       };
     // "More than", because the parser stopped at the cap: the real width was never measured, and
     // measuring it is the cost this whole path exists to avoid.
@@ -247,7 +251,7 @@ function unparseable(error: CsvParseError): RejectedUploadRecord {
       return {
         reason: 'too_large',
         message: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
-        detail,
+        rejectionDetail,
       };
   }
 }
