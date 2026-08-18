@@ -1,475 +1,379 @@
 import { describe, expect, test } from 'vitest';
 import {
   MAX_COLUMNS,
-  MAX_EXAMPLE_VALUES,
   MAX_FREE_TEXT_LENGTH,
   MAX_PROBLEMS_REPORTED,
   MAX_QUOTED_CHARS,
-  MAX_ROW_RANGES_REPORTED,
 } from '../limits.ts';
 import {
   describeFindings,
   describeUnreadableFile,
   formatRows,
   type Problem,
-  type RowSpan,
   renderProblemsText,
 } from './describe.ts';
-import {
-  type DateOrderFinding,
-  type Findings,
-  newFindingLog,
-  noteDateOrder,
-  noteRow,
-  noteRowRead,
-  type RowFinding,
-  seal,
-} from './findings.ts';
+import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
 import { CsvParseError } from './read/parse.ts';
-import { cell } from './testing/fixtures.ts';
+import { cell, findings, group } from './testing/fixtures.ts';
 
-type Line = { line: number; finding: RowFinding };
+// `Findings` is built as a literal here rather than folded through `noteRow`/`seal`: which rows
+// group together and how their ranges accumulate is `findings.test.ts`'s subject, and what one
+// sealed group reads as is this file's.
 
-/** The same finding on each of `lines`, in the increasing order `validate.ts` finds them in. */
-function sameFindingOnLines(lines: readonly number[], finding: RowFinding): Line[] {
-  return lines.map((line) => ({ line, finding }));
+function rejectionOf(over: Partial<Findings> = {}) {
+  return describeFindings(findings(over));
 }
 
-function consecutiveLines(start: number, end: number): number[] {
-  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+function problemsOf(over: Partial<Findings> = {}): readonly Problem[] {
+  return rejectionOf(over).rowProblems ?? [];
 }
 
-/** One cell finding per raw value, on consecutive rows: a column failing the same way. */
-function cellFindingsForColumn(clause: string, ...raws: readonly string[]): Line[] {
-  return raws.map((raw, index) => ({ line: index + 2, finding: cell({ raw, clause }) }));
+/** The problem one group becomes. */
+function problemFor(finding: RowFinding, over: Partial<FindingGroup> = {}): Problem {
+  const [problem] = problemsOf({ rowGroups: [group({ finding, ...over })] });
+  if (!problem) throw new Error('describeFindings dropped the only group');
+  return problem;
 }
 
-function findingsOf(...lines: readonly Line[][]): Findings {
-  const log = newFindingLog();
-  for (const group of lines) for (const { line, finding } of group) noteRow(log, line, finding);
-  return seal(log);
+/** Distinct groups, one row each — for the cases that care only about how many kinds there are. */
+function distinctGroups(count: number): FindingGroup[] {
+  return Array.from({ length: count }, (_, index) =>
+    group({
+      finding: { kind: 'width', actual: index + 4, expected: 3 },
+      ranges: [{ start: index + 2, end: index + 2 }],
+    }),
+  );
 }
 
-function dateOrderFindingsOf(finding: DateOrderFinding): Findings {
-  const log = newFindingLog();
-  noteDateOrder(log, finding);
-  return seal(log);
-}
+describe('the rule a finding becomes', () => {
+  test.for([
+    [
+      'a bad cell, naming the column the value sits in',
+      cell({ raw: '5 oz', clause: 'has a unit in it' }),
+      'The amount has a unit in it',
+    ],
+    [
+      'another column, same clause',
+      cell({ column: 'product', raw: 'x', clause: 'is empty' }),
+      'The product is empty',
+    ],
+    [
+      'an over-long cell, which names the limit rather than the value',
+      { kind: 'too-long', column: 'product' },
+      `The product is over ${MAX_FREE_TEXT_LENGTH} characters long`,
+    ],
+    [
+      'a formula trigger',
+      { kind: 'formula', raw: '=cmd' },
+      'The product starts with a character a spreadsheet reads as the start of a formula',
+    ],
+    [
+      'a width mismatch, which is the row itself failing rather than a column',
+      { kind: 'width', actual: 2, expected: 3 },
+      'Has 2 columns where the header has 3',
+    ],
+    [
+      'a one-column row, not pluralized',
+      { kind: 'width', actual: 1, expected: 3 },
+      'Has 1 column where the header has 3',
+    ],
+  ] as const)('%s', ([, finding, rule]) => {
+    expect(problemFor(finding).rule).toBe(rule);
+  });
 
-function rejectionOf(...lines: readonly Line[][]) {
-  return describeFindings(findingsOf(...lines));
-}
-
-function rowProblemsOf(...lines: readonly Line[][]) {
-  return rejectionOf(...lines).rowProblems ?? [];
-}
-
-/** Throws unless the findings resolve to exactly one row problem — most of the tests below are
- * about one row, and a change that silently produces two is a regression worth failing loudly on.
- */
-function oneProblem(...lines: readonly Line[][]): Problem {
-  const problems = rowProblemsOf(...lines);
-  if (problems.length !== 1) {
-    throw new Error(`expected exactly one problem, got ${problems.length}`);
-  }
-  const [only] = problems;
-  if (!only) throw new Error('unreachable');
-  return only;
-}
-
-function singleRow(line: number): RowSpan {
-  return { ranges: [{ start: line, end: line }], total: 1, everyRow: false };
-}
-
-describe('describeFindings', () => {
-  describe('one row, where the whole rejection is that row', () => {
+  describe('a date resolved against the column-wide order', () => {
     test.for([
-      [
-        'a bad cell',
-        sameFindingOnLines([2], cell({ raw: '5 oz', clause: 'has a unit in it' })),
-        { rule: 'The amount has a unit in it', examples: ['"5 oz"'] },
+      ['day-first', 'read day first like the rest of the column'],
+      ['month-first', 'read month first like the rest of the column'],
+    ] as const)('%s carries the reading it was given as a note', ([readAs, note]) => {
+      const problem = problemFor({
+        kind: 'resolved-date',
+        readAs,
+        raw: '01/12/2026',
+        clause: 'is more than 30 days from now',
+      });
+
+      expect(problem.rule).toBe('The date is more than 30 days from now');
+      expect(problem.note).toBe(note);
+    });
+
+    test('nothing else carries a note', () => {
+      expect(problemFor(cell()).note).toBeUndefined();
+    });
+  });
+});
+
+describe('the values it quotes back', () => {
+  test('quoted, in the order the group reached them', () => {
+    expect(problemFor(cell(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
+      '"foo"',
+      '"bar"',
+      '"baz"',
+    ]);
+  });
+
+  test('shortened at MAX_QUOTED_CHARS', () => {
+    const long = '9'.repeat(MAX_QUOTED_CHARS + 20);
+
+    expect(problemFor(cell(), { examples: [long] }).examples).toEqual([
+      `"${'9'.repeat(MAX_QUOTED_CHARS)}…"`,
+    ]);
+  });
+
+  test('tabs and newlines flattened, since they would break the layout they sit in', () => {
+    expect(problemFor(cell(), { examples: ['beef\tmince\n5'] }).examples).toEqual([
+      '"beef mince 5"',
+    ]);
+  });
+
+  test('values that differ only in whitespace collapse to one quote', () => {
+    expect(problemFor(cell(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual(['"5 oz"']);
+  });
+
+  test('a finding with no value of its own quotes nothing', () => {
+    expect(problemFor({ kind: 'too-long', column: 'product' }).examples).toEqual([]);
+  });
+});
+
+describe('the rows a problem covers', () => {
+  test('the ranges pass through, and the total counts the rows no range names', () => {
+    const rows = problemFor(cell(), {
+      ranges: [
+        { start: 2, end: 4 },
+        { start: 8, end: 8 },
       ],
-      [
-        'a blank cell, with nothing to quote',
-        sameFindingOnLines([2], cell({ raw: '', clause: 'is empty' })),
-        { rule: 'The amount is empty', examples: [] },
+      rowCount: 7,
+    }).rows;
+
+    expect(rows).toEqual({
+      ranges: [
+        { start: 2, end: 4 },
+        { start: 8, end: 8 },
       ],
-      [
-        'a date resolved day-first',
-        sameFindingOnLines([2], {
-          kind: 'resolved-date',
-          readAs: 'day-first',
-          raw: '01/12/2026',
-          clause: 'is more than 30 days from now',
+      total: 7,
+      everyRow: false,
+    });
+  });
+
+  test('everyRow once the group covers every row read', () => {
+    const rowGroups = [group({ ranges: [{ start: 2, end: 4 }] })];
+
+    expect(problemsOf({ rowGroups, rowsRead: 3 })[0]?.rows.everyRow).toBe(true);
+    expect(problemsOf({ rowGroups, rowsRead: 10 })[0]?.rows.everyRow).toBe(false);
+  });
+
+  test('everyRow stays false while rowsRead is unknown, however many rows the group holds', () => {
+    // `rowsRead` is 0 until `validate.ts` counts rows, and "every row of a file whose length we
+    // do not know" is not a claim we can make.
+    expect(problemFor(cell(), { ranges: [{ start: 2, end: 4 }] }).rows.everyRow).toBe(false);
+  });
+
+  test('one row and many rows produce the same problem but for the rows it names', () => {
+    const finding = cell();
+    const { rows: _one, ...single } = problemFor(finding, { ranges: [{ start: 2, end: 2 }] });
+    const { rows: _many, ...many } = problemFor(finding, { ranges: [{ start: 2, end: 9 }] });
+
+    expect(single).toEqual(many);
+  });
+});
+
+describe('the message', () => {
+  test('counts failing rows, not kinds of problem', () => {
+    expect(rejectionOf({ rowGroups: distinctGroups(3) }).message).toBe(
+      'We found problems in 3 rows.',
+    );
+  });
+
+  test('singular for one', () => {
+    expect(rejectionOf().message).toBe('We found problems in 1 row.');
+  });
+
+  test('states the denominator once rowsRead is known, with thousands grouped', () => {
+    expect(rejectionOf({ failingRowCount: 4102, rowsRead: 4500 }).message).toBe(
+      'We found problems in 4,102 of your 4,500 rows.',
+    );
+  });
+
+  test('says how many kinds are shown when more than MAX_PROBLEMS_REPORTED', () => {
+    const kinds = MAX_PROBLEMS_REPORTED + 2;
+
+    expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).message).toBe(
+      `We found problems in ${kinds} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${kinds} things to fix.`,
+    );
+  });
+
+  test('silent about showing when everything fits', () => {
+    expect(rejectionOf({ rowGroups: distinctGroups(MAX_PROBLEMS_REPORTED) }).message).not.toContain(
+      'Showing',
+    );
+  });
+
+  test('the formula sentence leads it', () => {
+    const rowGroups = [group({ finding: { kind: 'formula', raw: '=cmd' } })];
+
+    expect(rejectionOf({ rowGroups }).message).toBe(
+      'Some product names start with a character a spreadsheet reads as the start of a formula ' +
+        '(= + - @), which we cannot accept. We found problems in 1 row.',
+    );
+  });
+});
+
+describe('the reason', () => {
+  test('an ordinary rejection is bad_rows', () => {
+    expect(rejectionOf().reason).toBe('bad_rows');
+  });
+
+  test('a formula anywhere in the file outranks it', () => {
+    const rowGroups = [group(), group({ finding: { kind: 'formula', raw: '=cmd' } })];
+
+    expect(rejectionOf({ rowGroups }).reason).toBe('csv_injection');
+  });
+});
+
+describe('the detail we keep but never show', () => {
+  test('one line per problem, joined with a semicolon', () => {
+    const detail = rejectionOf({
+      rowGroups: [
+        group({ finding: cell({ column: 'amount', raw: '', clause: 'is empty' }) }),
+        group({
+          finding: cell({ column: 'product', raw: 'x', clause: 'is empty' }),
+          ranges: [{ start: 3, end: 3 }],
         }),
+      ],
+    }).detail;
+
+    expect(detail).toBe(
+      'row 2: The amount is empty.; row 3: The product is empty. For example "x".',
+    );
+  });
+
+  test('names how many kinds are missing from it', () => {
+    const kinds = MAX_PROBLEMS_REPORTED + 3;
+
+    expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).detail).toContain(
+      `and ${kinds - MAX_PROBLEMS_REPORTED} more`,
+    );
+  });
+});
+
+describe('a date column that could not be resolved', () => {
+  const noExamples: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+
+  test('is prose of its own, never a row problem, since it is not rows to go and fix', () => {
+    const rejection = rejectionOf({ rowGroups: [], dateOrder: noExamples });
+
+    expect(rejection.rowProblems).toBeUndefined();
+    expect(rejection.dateOrderProblem).toBeDefined();
+  });
+
+  test('names no failing rows of its own', () => {
+    expect(rejectionOf({ rowGroups: [], dateOrder: noExamples }).message).toBe(
+      'We found problems in 0 rows.',
+    );
+  });
+
+  test('contradictory: names both rows and the reading each one forces', () => {
+    const dateOrder: DateOrderFinding = {
+      issue: 'contradictory',
+      examples: new Map([
+        [
+          'day-first',
+          {
+            line: 2,
+            raw: '13/04/2026',
+            reading: { kind: 'numeric', first: 13, second: 4, year: 2026 },
+          },
+        ],
+        [
+          'month-first',
+          {
+            line: 3,
+            raw: '04/13/2026',
+            reading: { kind: 'numeric', first: 4, second: 13, year: 2026 },
+          },
+        ],
+      ]),
+    };
+
+    expect(rejectionOf({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
+      'Your dates are written both ways: row 2 has "13/04/2026", which can only be day first, ' +
+        'and row 3 has "04/13/2026", which can only be month first. Re-save the date column as ' +
+        'YYYY-MM-DD and upload again.',
+    );
+  });
+
+  test('unresolvable: names both readings of the one ambiguous value', () => {
+    const dateOrder: DateOrderFinding = {
+      issue: 'unresolvable',
+      examples: new Map([
+        [
+          'ambiguous',
+          {
+            line: 2,
+            raw: '03/04/2026',
+            reading: { kind: 'numeric', first: 3, second: 4, year: 2026 },
+          },
+        ],
+      ]),
+    };
+
+    expect(rejectionOf({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
+      'Every date in that file could be read two ways — row 2\'s "03/04/2026" is 2026-04-03 or ' +
+        '2026-03-04. Re-save the date column as YYYY-MM-DD and upload again.',
+    );
+  });
+
+  test('unresolvable: falls back to "either date" when the example is not itself numeric', () => {
+    const dateOrder: DateOrderFinding = {
+      issue: 'unresolvable',
+      examples: new Map([
+        [
+          'ambiguous',
+          { line: 2, raw: 'jan 2026', reading: { kind: 'date', isoDate: '2026-01-01' } },
+        ],
+      ]),
+    };
+
+    expect(rejectionOf({ rowGroups: [], dateOrder }).dateOrderProblem).toContain('either date');
+  });
+});
+
+describe('the whole record', () => {
+  test('bad_rows', () => {
+    expect(rejectionOf({ rowsRead: 900 })).toEqual({
+      reason: 'bad_rows',
+      message: 'We found problems in 1 of your 900 rows.',
+      rowProblems: [
         {
-          rule: 'The date is more than 30 days from now',
-          note: 'read day first like the rest of the column',
-          examples: ['"01/12/2026"'],
+          rule: 'The amount has a unit in it',
+          rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
+          examples: ['"5 oz"'],
         },
       ],
-      [
-        'a date resolved month-first',
-        sameFindingOnLines([2], {
-          kind: 'resolved-date',
-          readAs: 'month-first',
-          raw: '12/01/2026',
-          clause: 'is not a real calendar date',
-        }),
-        {
-          rule: 'The date is not a real calendar date',
-          note: 'read month first like the rest of the column',
-          examples: ['"12/01/2026"'],
-        },
-      ],
-      [
-        'an over-long cell, which never quotes the value',
-        sameFindingOnLines([2], { kind: 'too-long', column: 'product' }),
-        { rule: `The product is over ${MAX_FREE_TEXT_LENGTH} characters long`, examples: [] },
-      ],
-      [
-        'a formula trigger',
-        sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' }),
+      detail: 'row 2: The amount has a unit in it. For example "5 oz".',
+    });
+  });
+
+  test('csv_injection', () => {
+    const rowGroups = [
+      group({ finding: { kind: 'formula', raw: '=cmd' }, ranges: [{ start: 2, end: 3 }] }),
+    ];
+
+    expect(rejectionOf({ rowGroups, rowsRead: 2 })).toEqual({
+      reason: 'csv_injection',
+      message:
+        'Some product names start with a character a spreadsheet reads as the start of a formula ' +
+        '(= + - @), which we cannot accept. We found problems in 2 of your 2 rows.',
+      rowProblems: [
         {
           rule: 'The product starts with a character a spreadsheet reads as the start of a formula',
+          rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: true },
           examples: ['"=cmd"'],
         },
       ],
-      [
-        'a width mismatch',
-        sameFindingOnLines([2], { kind: 'width', actual: 2, expected: 3 }),
-        { rule: 'Has 2 columns where the header has 3', examples: [] },
-      ],
-      [
-        'a one-column row, not pluralized',
-        sameFindingOnLines([2], { kind: 'width', actual: 1, expected: 3 }),
-        { rule: 'Has 1 column where the header has 3', examples: [] },
-      ],
-    ] as const)('%s', ([, lines, expected]) => {
-      expect(oneProblem(lines)).toEqual({ rows: singleRow(2), ...expected });
-    });
-
-    test('the whole record, not just the problem', () => {
-      expect(
-        rejectionOf(sameFindingOnLines([2], cell({ raw: '5 oz', clause: 'has a unit in it' }))),
-      ).toEqual({
-        reason: 'bad_rows',
-        message: 'We found problems in 1 row.',
-        rowProblems: [
-          { rule: 'The amount has a unit in it', rows: singleRow(2), examples: ['"5 oz"'] },
-        ],
-        detail: 'row 2: The amount has a unit in it. For example "5 oz".',
-      });
-    });
-  });
-
-  describe('several rows: only `rows` and `examples` differ from the single-row case', () => {
-    test('a run of two', () => {
-      expect(oneProblem(sameFindingOnLines([2, 3], cell()))).toEqual({
-        rule: 'The amount has a unit in it',
-        rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false },
-        examples: ['"5 oz"'],
-      });
-    });
-
-    test('a run of three', () => {
-      expect(oneProblem(sameFindingOnLines(consecutiveLines(2, 4), cell())).rows).toEqual({
-        ranges: [{ start: 2, end: 4 }],
-        total: 3,
-        everyRow: false,
-      });
-    });
-
-    test('every run is listed up to the cap', () => {
-      expect(
-        oneProblem(
-          sameFindingOnLines(consecutiveLines(2, 4), cell()),
-          sameFindingOnLines([8, 11], cell()),
-        ).rows,
-      ).toEqual({
-        ranges: [
-          { start: 2, end: 4 },
-          { start: 8, end: 8 },
-          { start: 11, end: 11 },
-        ],
-        total: 5,
-        everyRow: false,
-      });
-    });
-
-    test('elides the runs past MAX_ROW_RANGES_REPORTED, still stating the total', () => {
-      const runs = MAX_ROW_RANGES_REPORTED + 2;
-      const lines = Array.from({ length: runs }, (_, index) => 2 + index * 2);
-
-      const { rows } = oneProblem(sameFindingOnLines(lines, cell()));
-      expect(rows.ranges).toHaveLength(MAX_ROW_RANGES_REPORTED);
-      expect(rows.total).toBe(runs);
-    });
-
-    test('everyRow is true only when the group covers every row read', () => {
-      const log = newFindingLog();
-      noteRowRead(log);
-      noteRowRead(log);
-      noteRow(log, 2, cell());
-      noteRow(log, 3, cell());
-
-      const [problem] = describeFindings(seal(log)).rowProblems ?? [];
-      expect(problem?.rows.everyRow).toBe(true);
-    });
-
-    test('everyRow stays false when rowsRead is unknown, even if every noted row matches', () => {
-      // rowsRead defaults to 0 (unknown) here, since noteRowRead was never called.
-      expect(oneProblem(sameFindingOnLines([2, 3], cell())).rows.everyRow).toBe(false);
-    });
-  });
-
-  describe('the values it quotes back', () => {
-    test('distinct values only', () => {
-      expect(
-        oneProblem(cellFindingsForColumn('is not a date we recognise', 'foo', 'bar', 'baz'))
-          .examples,
-      ).toEqual(['"foo"', '"bar"', '"baz"']);
-    });
-
-    test('capped at MAX_EXAMPLE_VALUES', () => {
-      const raws = Array.from({ length: MAX_EXAMPLE_VALUES + 5 }, (_, index) => `v${index}`);
-      expect(
-        oneProblem(cellFindingsForColumn('is not a date we recognise', ...raws)).examples,
-      ).toHaveLength(MAX_EXAMPLE_VALUES);
-    });
-
-    test('shortened at MAX_QUOTED_CHARS', () => {
-      const long = '9'.repeat(MAX_QUOTED_CHARS + 20);
-      expect(
-        oneProblem(sameFindingOnLines([2], cell({ raw: long, clause: 'is not a number' })))
-          .examples,
-      ).toEqual([`"${'9'.repeat(MAX_QUOTED_CHARS)}…"`]);
-    });
-
-    test('tabs and newlines flattened', () => {
-      expect(
-        oneProblem(
-          sameFindingOnLines([2], cell({ raw: 'beef\tmince\n5', clause: 'is not a number' })),
-        ).examples,
-      ).toEqual(['"beef mince 5"']);
-    });
-
-    test('blank values kept out of the quoted examples entirely', () => {
-      expect(oneProblem(cellFindingsForColumn('is empty', '', '   ')).examples).toEqual([]);
-    });
-  });
-
-  describe('telling two problems apart', () => {
-    test('the same clause on two columns stays two problems', () => {
-      const problems = rowProblemsOf(
-        sameFindingOnLines([2], cell({ column: 'amount', raw: '', clause: 'is empty' })),
-        sameFindingOnLines([3], cell({ column: 'product', raw: '', clause: 'is empty' })),
-      );
-
-      expect(problems.map((problem) => problem.rule)).toEqual([
-        'The amount is empty',
-        'The product is empty',
-      ]);
-    });
-
-    test('a date read day-first stays apart from the same clause read straight', () => {
-      const problems = rowProblemsOf(
-        sameFindingOnLines(
-          [2],
-          cell({ column: 'date', raw: '2027-02-30', clause: 'is not a real calendar date' }),
-        ),
-        sameFindingOnLines([3], {
-          kind: 'resolved-date',
-          readAs: 'day-first',
-          raw: '31/02/2026',
-          clause: 'is not a real calendar date',
-        }),
-      );
-
-      expect(problems).toHaveLength(2);
-    });
-
-    test('rows with different values group into one', () => {
-      expect(rowProblemsOf(cellFindingsForColumn('is not a number', 'oops', 'nope'))).toHaveLength(
-        1,
-      );
-    });
-  });
-
-  describe('the summary line', () => {
-    test('counts rows, not problems', () => {
-      expect(rejectionOf(sameFindingOnLines(consecutiveLines(2, 4), cell())).message).toBe(
-        'We found problems in 3 rows.',
-      );
-    });
-
-    test('singular for one', () => {
-      expect(rejectionOf(sameFindingOnLines([2], cell())).message).toBe(
-        'We found problems in 1 row.',
-      );
-    });
-
-    test('states the denominator once rowsRead is known', () => {
-      const log = newFindingLog();
-      for (let i = 0; i < 500; i += 1) noteRowRead(log);
-      noteRow(log, 2, cell());
-
-      expect(describeFindings(seal(log)).message).toBe('We found problems in 1 of your 500 rows.');
-    });
-
-    test('says how many kinds are shown when more than MAX_PROBLEMS_REPORTED', () => {
-      const widths = Array.from({ length: MAX_PROBLEMS_REPORTED + 2 }, (_, index) => index + 4);
-      const lines = widths.map((actual, index) =>
-        sameFindingOnLines([2 + index], { kind: 'width', actual, expected: 3 }),
-      );
-
-      expect(rejectionOf(...lines).message).toBe(
-        `We found problems in ${widths.length} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${widths.length} things to fix.`,
-      );
-    });
-
-    test('silent about showing when everything fits', () => {
-      expect(rejectionOf(sameFindingOnLines([2], cell())).message).not.toContain('Showing');
-    });
-
-    test('the formula sentence leads the message', () => {
-      expect(rejectionOf(sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' })).message).toBe(
-        'Some product names start with a character a spreadsheet reads as the start of a formula ' +
-          '(= + - @), which we cannot accept. We found problems in 1 row.',
-      );
-    });
-
-    test('csv_injection is derived from a formula problem being present', () => {
-      expect(rejectionOf(sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' })).reason).toBe(
-        'csv_injection',
-      );
-      expect(rejectionOf(sameFindingOnLines([2], cell())).reason).toBe('bad_rows');
-    });
-
-    test('a formula outranks an ordinary problem in the same file', () => {
-      const reason = rejectionOf(
-        sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' }),
-        sameFindingOnLines([3], cell({ raw: '', clause: 'is empty' })),
-      ).reason;
-
-      expect(reason).toBe('csv_injection');
-    });
-  });
-
-  describe('the detail we keep but never show', () => {
-    test('joins multiple problems with a semicolon', () => {
-      const detail = rejectionOf(
-        sameFindingOnLines([2], cell({ column: 'amount', raw: '', clause: 'is empty' })),
-        sameFindingOnLines([3], cell({ column: 'product', raw: '', clause: 'is empty' })),
-      ).detail;
-
-      expect(detail).toBe('row 2: The amount is empty.; row 3: The product is empty.');
-    });
-
-    test('names how many more beyond what is shown', () => {
-      const widths = Array.from({ length: MAX_PROBLEMS_REPORTED + 3 }, (_, index) => index + 4);
-      const lines = widths.map((actual, index) =>
-        sameFindingOnLines([2 + index], { kind: 'width', actual, expected: 3 }),
-      );
-
-      expect(rejectionOf(...lines).detail).toContain(
-        `and ${widths.length - MAX_PROBLEMS_REPORTED} more`,
-      );
-    });
-
-    test('matches renderProblemsText when there is only one problem', () => {
-      const rejection = rejectionOf(sameFindingOnLines([2], cell({ raw: '', clause: 'is empty' })));
-      expect(rejection.detail).toBe(renderProblemsText(rejection.rowProblems ?? []));
-    });
-  });
-
-  describe('a date column that could not be resolved', () => {
-    test('is a dateOrderProblem, never mixed into rowProblems', () => {
-      const finding: DateOrderFinding = {
-        issue: 'unresolvable',
-        examples: new Map(),
-      };
-      const rejection = describeFindings(dateOrderFindingsOf(finding));
-
-      expect(rejection.rowProblems).toBeUndefined();
-      expect(rejection.dateOrderProblem).toBeDefined();
-    });
-
-    test('does not count toward failingRowCount', () => {
-      const finding: DateOrderFinding = {
-        issue: 'unresolvable',
-        examples: new Map(),
-      };
-      expect(describeFindings(dateOrderFindingsOf(finding)).message).toBe(
-        'We found problems in 0 rows.',
-      );
-    });
-
-    test('contradictory: names both rows and both readings', () => {
-      const finding: DateOrderFinding = {
-        issue: 'contradictory',
-        examples: new Map([
-          [
-            'day-first',
-            {
-              line: 2,
-              raw: '13/04/2026',
-              reading: { kind: 'numeric', first: 13, second: 4, year: 2026 },
-            },
-          ],
-          [
-            'month-first',
-            {
-              line: 3,
-              raw: '04/13/2026',
-              reading: { kind: 'numeric', first: 4, second: 13, year: 2026 },
-            },
-          ],
-        ]),
-      };
-
-      expect(describeFindings(dateOrderFindingsOf(finding)).dateOrderProblem).toBe(
-        'Your dates are written both ways: row 2 has "13/04/2026", which can only be day first, ' +
-          'and row 3 has "04/13/2026", which can only be month first. Re-save the date column as ' +
-          'YYYY-MM-DD and upload again.',
-      );
-    });
-
-    test('unresolvable: names both readings for the ambiguous value', () => {
-      const finding: DateOrderFinding = {
-        issue: 'unresolvable',
-        examples: new Map([
-          [
-            'ambiguous',
-            {
-              line: 2,
-              raw: '03/04/2026',
-              reading: { kind: 'numeric', first: 3, second: 4, year: 2026 },
-            },
-          ],
-        ]),
-      };
-
-      expect(describeFindings(dateOrderFindingsOf(finding)).dateOrderProblem).toBe(
-        'Every date in that file could be read two ways — row 2\'s "03/04/2026" is 2026-04-03 or ' +
-          '2026-03-04. Re-save the date column as YYYY-MM-DD and upload again.',
-      );
-    });
-
-    test('unresolvable: falls back to "either date" when the example is not itself numeric', () => {
-      const finding: DateOrderFinding = {
-        issue: 'unresolvable',
-        examples: new Map([
-          [
-            'ambiguous',
-            { line: 2, raw: 'jan 2026', reading: { kind: 'date', isoDate: '2026-01-01' } },
-          ],
-        ]),
-      };
-
-      expect(describeFindings(dateOrderFindingsOf(finding)).dateOrderProblem).toContain(
-        'either date',
-      );
+      detail:
+        'all 2 rows: The product starts with a character a spreadsheet reads as the start of a ' +
+        'formula. For example "=cmd".',
     });
   });
 });
@@ -501,7 +405,7 @@ describe('formatRows', () => {
     );
   });
 
-  test('elided rows past the range cap are named as a count', () => {
+  test('rows past the range cap are named as a count', () => {
     expect(formatRows({ ranges: [{ start: 2, end: 2 }], total: 4, everyRow: false })).toBe(
       '4 rows: 2 and 3 more',
     );
@@ -511,6 +415,55 @@ describe('formatRows', () => {
     expect(formatRows({ ranges: [{ start: 1, end: 4500 }], total: 4500, everyRow: true })).toBe(
       'all 4,500 rows',
     );
+  });
+});
+
+describe('renderProblemsText', () => {
+  const oneRow = { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false };
+
+  test('the rows, the rule, then the examples', () => {
+    expect(
+      renderProblemsText([
+        { rule: 'The amount has a unit in it', rows: oneRow, examples: ['"5 oz"', '"3 kg"'] },
+      ]),
+    ).toBe('row 2: The amount has a unit in it. For example "5 oz" and "3 kg".');
+  });
+
+  test('a note sits between the rule and its full stop', () => {
+    expect(
+      renderProblemsText([
+        {
+          rule: 'The date is more than 30 days from now',
+          rows: oneRow,
+          examples: ['"01/12/2026"'],
+          note: 'read day first like the rest of the column',
+        },
+      ]),
+    ).toBe(
+      'row 2: The date is more than 30 days from now, read day first like the rest of the ' +
+        'column. For example "01/12/2026".',
+    );
+  });
+
+  test('no examples, no sentence about them', () => {
+    expect(
+      renderProblemsText([
+        { rule: 'Has 2 columns where the header has 3', rows: oneRow, examples: [] },
+      ]),
+    ).toBe('row 2: Has 2 columns where the header has 3.');
+  });
+
+  test('problems joined with a semicolon', () => {
+    expect(
+      renderProblemsText([
+        { rule: 'The amount is empty', rows: oneRow, examples: [] },
+        { rule: 'The product is empty', rows: oneRow, examples: [] },
+      ]),
+    ).toBe('row 2: The amount is empty.; row 2: The product is empty.');
+  });
+
+  test('nothing to render', () => {
+    expect(renderProblemsText([])).toBe('');
   });
 });
 
