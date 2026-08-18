@@ -16,6 +16,7 @@ import {
 import { DATABASE } from '@gbd/db/env';
 import {
   insertAnalysisAttempt,
+  insertAppUserWithEmail,
   insertFixtureOrganization,
   insertReport,
   insertResultFile,
@@ -39,7 +40,7 @@ import {
   sendPendingNotifications,
 } from './notifications.ts';
 import { msAgo } from './sql.ts';
-import { aWorkerId, insertRequester } from './testing/attempt-helpers.ts';
+import { aWorkerId } from './testing/attempt-helpers.ts';
 
 const RETRY_BASE_MS = 5 * 60_000;
 const MAX_ATTEMPTS = 5;
@@ -67,7 +68,9 @@ async function insertNotifiableAttempt(
 ): Promise<{ attemptId: AnalysisAttemptId; reportId: ReportId; email: string | undefined }> {
   const report = await insertReport(transaction);
   const requester =
-    overrides.requestedByUserId === undefined ? await insertRequester(transaction) : undefined;
+    overrides.requestedByUserId === undefined
+      ? await insertAppUserWithEmail(transaction)
+      : undefined;
   const finishedAt =
     overrides.finishedAgo === undefined ? undefined : new Date(Date.now() - overrides.finishedAgo);
 
@@ -159,7 +162,7 @@ describe('sendPendingNotifications', () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
     const outcome = await withRollback(DATABASE, async (transaction) => {
-      const requester = await insertRequester(transaction);
+      const requester = await insertAppUserWithEmail(transaction);
 
       const canceledReport = await insertReport(transaction);
       await insertAnalysisAttempt(transaction, {
@@ -436,7 +439,7 @@ describe('sendPendingNotifications', () => {
     const emailer = recordingEmailer();
     const outcome = await withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction);
-      const requester = await insertRequester(transaction);
+      const requester = await insertAppUserWithEmail(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'succeeded',
@@ -473,7 +476,7 @@ describe('sendPendingNotifications', () => {
       async (transaction, trash) => {
         const { organization } = await insertFixtureOrganization(transaction, trash);
         const report = await insertReport(transaction, { organizationId: organization.id });
-        const requester = await insertRequester(transaction);
+        const requester = await insertAppUserWithEmail(transaction);
         trash.user(requester.id);
         const attempt = await insertAnalysisAttempt(transaction, {
           reportId: report.id,

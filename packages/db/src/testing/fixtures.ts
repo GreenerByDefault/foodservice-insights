@@ -60,6 +60,20 @@ export async function insertAppUser(
     .executeTakeFirstOrThrow();
 }
 
+/** `email` lives on `auth.users`, not the `app_user` row `insertAppUser` returns, so this reads
+ * it back separately. */
+export async function insertAppUserWithEmail(
+  database: DatabaseExecutor,
+): Promise<{ id: AppUser['id']; email: string }> {
+  const user = await insertAppUser(database);
+  const { email } = await database
+    .selectFrom('auth.users')
+    .select('email')
+    .where('id', '=', user.id)
+    .executeTakeFirstOrThrow();
+  return { id: user.id, email: email as string };
+}
+
 /** An organization and the admin it must have. Anything else would fail its deferred trigger. */
 export async function insertOrganization(
   database: DatabaseExecutor,
