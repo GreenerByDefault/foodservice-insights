@@ -31,9 +31,6 @@ export type RowFinding =
 export type DateExample = { line: number; raw: string; reading: DateReading };
 export type DateExamples = ReadonlyMap<DateOrder | 'ambiguous', DateExample>;
 
-/** A column-wide date-order failure — the one finding today that is about the file as a whole
- * rather than any one row.
- */
 export type DateOrderFinding = {
   issue: DateOrderFault;
   examples: DateExamples;
@@ -54,7 +51,6 @@ export type MutableRowGroup = {
  */
 export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
-  /** At most one: `decideDateOrder` reaches a single verdict for the whole column. */
   dateOrder?: DateOrderFinding;
   failingRowCount: number;
 };
@@ -76,9 +72,6 @@ export function noteRow(log: FindingLog, line: number, finding: RowFinding): voi
   addExampleValue(group, rawValueOf(finding));
 }
 
-/** Not a failing row — it names one or two rows only as evidence — so it does not add to
- * `failingRowCount`.
- */
 export function noteDateOrder(log: FindingLog, finding: DateOrderFinding): void {
   log.dateOrder = finding;
 }
