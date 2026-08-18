@@ -59,7 +59,7 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
     case 'layout':
       return layoutRejection(file.fault);
     case 'parse':
-      return unparseable(file.error);
+      return csvParseErrorRejection(file.error);
     case 'no-data-rows':
       return { reason: 'empty', message: 'That file has a header but no rows under it.' };
     case 'too-many-rows':
@@ -109,10 +109,7 @@ const FORMULA_LEAD =
 
 function headline(failingRowCount: number, rowsRead: number): string {
   const found = groupDigits(failingRowCount);
-  // Degrades to the bare count when `rowsRead` is unknown — validate.ts is still a stub, so this
-  // keeps describe.ts testable ahead of it being wired up.
-  if (rowsRead === 0) return `We found problems in ${found} ${plural(failingRowCount, 'row')}.`;
-  return `We found problems in ${found} of your ${groupDigits(rowsRead)} rows.`;
+  return `We found problems in ${found} of your ${groupDigits(rowsRead)} ${plural(rowsRead, 'row')}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,13 +185,13 @@ function decodeRejection(fault: DecodeFault): RejectedUploadRecord {
 function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
   switch (fault.kind) {
     case 'parse-error':
-      return unparseable(fault.error);
+      return csvParseErrorRejection(fault.error);
     case 'ambiguous':
       return {
         reason: 'bad_columns',
         message:
           'That file reads as a valid table more than one way, so we cannot tell how it is split into columns. Save it as a comma-separated CSV.',
-        rejectionDetail: describeCandidates(fault.candidates),
+        rejectionDetail: describeAmbiguousDelimiters(fault.candidates),
       };
     case 'empty':
       return { reason: 'empty', message: 'That file has no rows in it.' };
@@ -207,7 +204,7 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
   }
 }
 
-function describeCandidates(candidates: readonly HeaderCandidate[]): string {
+function describeAmbiguousDelimiters(candidates: readonly HeaderCandidate[]): string {
   return candidates
     .map(({ delimiter, line }) => `${JSON.stringify(delimiter)} at line ${line}`)
     .join(' and ');
@@ -230,7 +227,7 @@ function headerLabel(column: RequiredColumn): string {
   return { product: 'product name', date: 'date ordered', amount: 'amount ordered' }[column];
 }
 
-function unparseable(error: CsvParseError): RejectedUploadRecord {
+function csvParseErrorRejection(error: CsvParseError): RejectedUploadRecord {
   const rejectionDetail = `${error.failure} at line ${error.line}`;
   switch (error.failure) {
     case 'unclosed-quote':
@@ -276,7 +273,7 @@ function toRowSpan(group: FindingGroup, rowsRead: number): RowSpan {
   return {
     ranges: group.ranges,
     total: group.rowCount,
-    everyRow: rowsRead > 0 && group.rowCount === rowsRead,
+    everyRow: group.rowCount === rowsRead,
   };
 }
 
@@ -310,26 +307,16 @@ function ruleOf(finding: RowFinding): string {
  */
 function noteOf(finding: RowFinding): string | undefined {
   return finding.kind === 'resolved-date'
-    ? `read ${phrase(finding.readAs)} like the rest of the column`
+    ? `read ${dateOrderPhrase(finding.readAs)} like the rest of the column`
     : undefined;
 }
 
-function phrase(order: DateOrder): string {
+function dateOrderPhrase(order: DateOrder): string {
   return order === 'day-first' ? 'day first' : 'month first';
 }
 
 function quotedExamples(raws: readonly string[]): readonly string[] {
   return [...new Set(raws.map(quote))];
-}
-
-/** A value quoted for the user is shortened and stripped of whitespace that would otherwise break
- * layout. Anything worse than a tab was refused while decoding.
- */
-function quote(raw: string): string {
-  const flattened = raw.replace(/[\t\n\r]+/g, ' ').trim();
-  const shortened =
-    flattened.length > MAX_QUOTED_CHARS ? `${flattened.slice(0, MAX_QUOTED_CHARS)}…` : flattened;
-  return `"${shortened}"`;
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +357,16 @@ function plural(count: number, noun: string): string {
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+/** A value quoted for the user is shortened and stripped of whitespace that would otherwise break
+ * layout. Anything worse than a tab was refused while decoding.
+ */
+function quote(raw: string): string {
+  const flattened = raw.replace(/[\t\n\r]+/g, ' ').trim();
+  const shortened =
+    flattened.length > MAX_QUOTED_CHARS ? `${flattened.slice(0, MAX_QUOTED_CHARS)}…` : flattened;
+  return `"${shortened}"`;
 }
 
 /** A small thousands separator, since `Intl` and `toLocaleString` are banned here per the README.md. */

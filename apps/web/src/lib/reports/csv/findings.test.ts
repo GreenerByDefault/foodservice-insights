@@ -62,10 +62,6 @@ describe('rowsRead', () => {
 
     expect(seal(log).rowsRead).toBe(3);
   });
-
-  test('stays 0 when never called, so a caller can tell "unknown" from "counted"', () => {
-    expect(seal(newFindingLog()).rowsRead).toBe(0);
-  });
 });
 
 describe('grouping', () => {

@@ -25,14 +25,17 @@ export function findingGroup(over: Partial<FindingGroup> = {}): FindingGroup {
 }
 
 /** What `seal` would have returned, for a test that starts downstream of the accumulator. */
-export function sealedFindings(over: Partial<Findings> = {}): Findings {
-  const rowGroups = over.rowGroups ?? [findingGroup()];
+export function sealedFindings(overrides: Partial<Findings> = {}): Findings {
+  const rowGroups = overrides.rowGroups ?? [findingGroup()];
+  const failingRowCount =
+    overrides.failingRowCount ?? rowGroups.reduce((total, { rowCount }) => total + rowCount, 0);
   return {
     rowGroups,
-    failingRowCount:
-      over.failingRowCount ?? rowGroups.reduce((total, { rowCount }) => total + rowCount, 0),
-    rowsRead: over.rowsRead ?? 0,
-    ...(over.dateOrder && { dateOrder: over.dateOrder }),
+    failingRowCount,
+    // A test that doesn't pass `rowsRead` isn't modeling passing rows, so the file it's
+    // describing has no passing rows to count: `rowsRead` defaults to `failingRowCount`.
+    rowsRead: overrides.rowsRead ?? failingRowCount,
+    ...(overrides.dateOrder && { dateOrder: overrides.dateOrder }),
   };
 }
 

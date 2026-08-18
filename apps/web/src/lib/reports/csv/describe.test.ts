@@ -142,15 +142,17 @@ describe('the values it quotes back', () => {
 
 describe('the rows a problem covers', () => {
   test('the ranges pass through, and the total counts the rows no range names', () => {
-    const rows = problemFor(cellFinding(), {
+    const group = findingGroup({
       ranges: [
         { start: 2, end: 4 },
         { start: 8, end: 8 },
       ],
       rowCount: 7,
-    }).rows;
+    });
 
-    expect(rows).toEqual({
+    const [problem] = problemsOf({ rowGroups: [group], rowsRead: 100 });
+
+    expect(problem?.rows).toEqual({
       ranges: [
         { start: 2, end: 4 },
         { start: 8, end: 8 },
@@ -168,12 +170,6 @@ describe('the rows a problem covers', () => {
     expect(problemsOf({ rowGroups, rowsRead: group.rowCount + 1 })[0]?.rows.everyRow).toBe(false);
   });
 
-  test('everyRow stays false while rowsRead is unknown, however many rows the group holds', () => {
-    // `rowsRead` is 0 until `validate.ts` counts rows, and "every row of a file whose length we
-    // do not know" is not a claim we can make.
-    expect(problemFor(cellFinding(), { ranges: [{ start: 2, end: 4 }] }).rows.everyRow).toBe(false);
-  });
-
   test('one row and many rows produce the same problem but for the rows it names', () => {
     const finding = cellFinding();
     const { rows: _one, ...single } = problemFor(finding, { ranges: [{ start: 2, end: 2 }] });
@@ -186,15 +182,15 @@ describe('the rows a problem covers', () => {
 describe('the message', () => {
   test('counts failing rows, not kinds of problem', () => {
     expect(rejectionOf({ rowGroups: distinctGroups(3) }).message).toBe(
-      'We found problems in 3 rows.',
+      'We found problems in 3 of your 3 rows.',
     );
   });
 
-  test('singular for one', () => {
-    expect(rejectionOf().message).toBe('We found problems in 1 row.');
+  test('the denominator drops to singular for one', () => {
+    expect(rejectionOf().message).toBe('We found problems in 1 of your 1 row.');
   });
 
-  test('states the denominator once rowsRead is known, with thousands grouped', () => {
+  test('states the denominator, with thousands grouped', () => {
     expect(rejectionOf({ failingRowCount: 4102, rowsRead: 4500 }).message).toBe(
       'We found problems in 4,102 of your 4,500 rows.',
     );
@@ -204,7 +200,7 @@ describe('the message', () => {
     const kinds = MAX_PROBLEMS_REPORTED + 2;
 
     expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).message).toBe(
-      `We found problems in ${kinds} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${kinds} things to fix.`,
+      `We found problems in ${kinds} of your ${kinds} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${kinds} things to fix.`,
     );
   });
 
@@ -219,7 +215,7 @@ describe('the message', () => {
 
     expect(rejectionOf({ rowGroups }).message).toBe(
       'Some product names start with a character a spreadsheet reads as the start of a formula ' +
-        '(= + - @), which we cannot accept. We found problems in 1 row.',
+        '(= + - @), which we cannot accept. We found problems in 1 of your 1 row.',
     );
   });
 });
@@ -274,7 +270,7 @@ describe('a date column that could not be resolved', () => {
 
   test('names no failing rows of its own', () => {
     expect(rejectionOf({ rowGroups: [], dateOrder: noExamples }).message).toBe(
-      'We found problems in 0 rows.',
+      'We found problems in 0 of your 0 rows.',
     );
   });
 

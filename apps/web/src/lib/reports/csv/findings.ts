@@ -54,7 +54,7 @@ export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
   dateOrder?: DateOrderFinding;
   failingRowCount: number;
-  /** Every data row seen, passing or failing. Zero means unknown. */
+  /** Every data row seen, passing or failing. */
   rowsRead: number;
 };
 
