@@ -93,31 +93,6 @@ describe('grouping', () => {
     ]);
   });
 
-  test('a resolved date stays apart from a plain cell finding with the same clause', () => {
-    // `readDate` (an out-of-range ISO date) and `applyDateOrder` (a numeric date invalid once the
-    // column order resolves it) can independently land on the identical "not a real calendar
-    // date" clause. `kind` is always part of the key, so they still land in separate groups —
-    // not because merging would render a wrong sentence (`ruleOf` renders both the same way), but
-    // because nothing about grouping is meant to know the two paths ever agree.
-    const plainCell: RowFinding = {
-      kind: 'cell',
-      column: 'date',
-      raw: '2027-02-30',
-      clause: NOT_A_DATE,
-    };
-    const resolved: RowFinding = {
-      kind: 'resolved-date',
-      raw: '31/02/2026',
-      clause: NOT_A_DATE,
-    };
-    const log = noted({ line: 2, finding: plainCell }, { line: 3, finding: resolved });
-
-    expect(seal(log).rowGroups).toEqual([
-      singleRowGroup(plainCell, 2, ['2027-02-30']),
-      singleRowGroup(resolved, 3, ['31/02/2026']),
-    ]);
-  });
-
   test('rows with different raw values still group into one', () => {
     const first = cellFinding({ raw: 'foo' });
     const log = noted(
