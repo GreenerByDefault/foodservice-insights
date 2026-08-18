@@ -31,9 +31,10 @@ export type RowFinding =
 export type DateExample = { line: number; raw: string; reading: DateReading };
 export type DateExamples = ReadonlyMap<DateOrder | 'ambiguous', DateExample>;
 
-/** A finding about the file as a whole rather than any one row. */
-export type FileFinding = {
-  kind: 'date-order';
+/** A column-wide date-order failure — the one finding today that is about the file as a whole
+ * rather than any one row.
+ */
+export type DateOrderFinding = {
   issue: DateOrderFault;
   examples: DateExamples;
 };
@@ -53,12 +54,13 @@ export type MutableRowGroup = {
  */
 export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
-  file: FileFinding[];
+  /** At most one: `decideDateOrder` reaches a single verdict for the whole column. */
+  dateOrder?: DateOrderFinding;
   failingRowCount: number;
 };
 
 export function newFindingLog(): FindingLog {
-  return { rowGroups: new Map(), file: [], failingRowCount: 0 };
+  return { rowGroups: new Map(), failingRowCount: 0 };
 }
 
 /** Add a row to the finding it failed, which is created on the first row to reach it. */
@@ -74,9 +76,11 @@ export function noteRow(log: FindingLog, line: number, finding: RowFinding): voi
   addExampleValue(group, rawValueOf(finding));
 }
 
-export function noteFile(log: FindingLog, finding: FileFinding): void {
-  log.failingRowCount += 1;
-  log.file.push(finding);
+/** Not a failing row — it names one or two rows only as evidence — so it does not add to
+ * `failingRowCount`.
+ */
+export function noteDateOrder(log: FindingLog, finding: DateOrderFinding): void {
+  log.dateOrder = finding;
 }
 
 function groupKey(finding: RowFinding): string {
@@ -136,7 +140,7 @@ export type FindingGroup = {
 export type Findings = {
   readonly failingRowCount: number;
   readonly rowGroups: readonly FindingGroup[];
-  readonly file: readonly FileFinding[];
+  readonly dateOrder?: DateOrderFinding;
 };
 
 /** Closes the log to further writes — the contract `seal` names. */
@@ -145,5 +149,5 @@ export function seal(log: FindingLog): Findings {
     ...group,
     examples: [...group.examples],
   }));
-  return { failingRowCount: log.failingRowCount, rowGroups, file: log.file };
+  return { failingRowCount: log.failingRowCount, rowGroups, dateOrder: log.dateOrder };
 }
