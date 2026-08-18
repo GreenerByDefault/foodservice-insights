@@ -36,6 +36,29 @@ The CLI rewrites `apps/web/package.json` with literal dependency versions. Move 
 into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) and restore
 `"catalog:"` in the package, so every package stays on one version. Then run `pnpm install`.
 
+## Frontend
+
+**No component calls `fetch` directly.** `src/lib/api/client.ts` — `apiCall`, `ApiError`,
+`ApiUnreachableError` — is the one place that happens, so a component only ever decides what to
+show for a known status versus an unreachable server.
+
+**No form library.** Native constraint validation plus `reportValidity()` on submit, consistent
+with `ARCHITECTURE.md` rejecting form actions.
+
+**Each form declares its own outcome union** rather than sharing one across forms — the outcomes
+differ per form, and the shared part is already the error classification in `client.ts`.
+
+**A field name is always read from a `FIELD` map**, never written as a literal in markup, so the
+form and its parser cannot drift apart. `src/lib/reports/metadata.ts` is the one for reports.
+
+**One panel renders both client- and server-side rejections.** `RejectedUploadRecord` and
+`RejectedUploadResponse` (`src/lib/reports/rejection.ts`) already share the `{ message, problems }`
+shape a form needs, so a form's rejection panel takes that shape regardless of which side produced
+it.
+
+**Errors are shown inline, next to the cause, never as a toast.** No toast dependency exists in
+this app; don't add one for a single form.
+
 ## Forms
 
 **A form's own schema lives with its feature**. What is not specific to one form lives in `src/lib/forms/`.
