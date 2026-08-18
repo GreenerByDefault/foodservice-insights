@@ -55,10 +55,12 @@ export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
   file: FileFinding[];
   failingRowCount: number;
+  /** Every data row seen, passing or failing. Zero means unknown. */
+  rowsRead: number;
 };
 
 export function newFindingLog(): FindingLog {
-  return { rowGroups: new Map(), file: [], failingRowCount: 0 };
+  return { rowGroups: new Map(), file: [], failingRowCount: 0, rowsRead: 0 };
 }
 
 /** Add a row to the finding it failed, which is created on the first row to reach it. */
@@ -74,8 +76,15 @@ export function noteRow(log: FindingLog, line: number, finding: RowFinding): voi
   addExampleValue(group, rawValueOf(finding));
 }
 
+/** Call once per data row read, whether or not it failed, so `rowsRead` is a true denominator. */
+export function noteRowRead(log: FindingLog): void {
+  log.rowsRead += 1;
+}
+
+/** A whole-file finding is not a failing row — it names one or two rows only as evidence — so it
+ * does not add to `failingRowCount`.
+ */
 export function noteFile(log: FindingLog, finding: FileFinding): void {
-  log.failingRowCount += 1;
   log.file.push(finding);
 }
 
@@ -137,6 +146,7 @@ export type Findings = {
   readonly failingRowCount: number;
   readonly rowGroups: readonly FindingGroup[];
   readonly file: readonly FileFinding[];
+  readonly rowsRead: number;
 };
 
 /** Closes the log to further writes — the contract `seal` names. */
@@ -145,5 +155,10 @@ export function seal(log: FindingLog): Findings {
     ...group,
     examples: [...group.examples],
   }));
-  return { failingRowCount: log.failingRowCount, rowGroups, file: log.file };
+  return {
+    failingRowCount: log.failingRowCount,
+    rowGroups,
+    file: log.file,
+    rowsRead: log.rowsRead,
+  };
 }

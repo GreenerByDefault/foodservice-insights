@@ -6,6 +6,7 @@ import {
   newFindingLog,
   noteFile,
   noteRow,
+  noteRowRead,
   type RowFinding,
   seal,
 } from './findings.ts';
@@ -49,7 +50,28 @@ describe('seal', () => {
   });
 
   test('starts empty', () => {
-    expect(seal(newFindingLog())).toEqual({ failingRowCount: 0, rowGroups: [], file: [] });
+    expect(seal(newFindingLog())).toEqual({
+      failingRowCount: 0,
+      rowGroups: [],
+      file: [],
+      rowsRead: 0,
+    });
+  });
+});
+
+describe('rowsRead', () => {
+  test('counts every row noted, regardless of pass or fail', () => {
+    const log = newFindingLog();
+    noteRowRead(log);
+    noteRowRead(log);
+    noteRowRead(log);
+    noteRow(log, 3, cell());
+
+    expect(seal(log).rowsRead).toBe(3);
+  });
+
+  test('stays 0 when never called, so a caller can tell "unknown" from "counted"', () => {
+    expect(seal(newFindingLog()).rowsRead).toBe(0);
   });
 });
 
@@ -310,7 +332,9 @@ describe('examples', () => {
 });
 
 describe('noteFile', () => {
-  test('adds to count and is kept apart from row groups', () => {
+  test('does not add to failingRowCount, and is kept apart from row groups', () => {
+    // A whole-file finding names one or two rows only as evidence, so it is not a failing row —
+    // counting it would read as an off-by-one against the headline's rows-affected denominator.
     const log = newFindingLog();
     const rowFinding = cell();
     const fileFinding: FileFinding = {
@@ -322,7 +346,7 @@ describe('noteFile', () => {
     noteFile(log, fileFinding);
 
     const findings = seal(log);
-    expect(findings.failingRowCount).toBe(2);
+    expect(findings.failingRowCount).toBe(1);
     expect(findings.rowGroups).toEqual([singleRowGroup(rowFinding, 2, ['5 oz'])]);
     expect(findings.file).toEqual([fileFinding]);
   });
@@ -343,7 +367,7 @@ describe('noteFile', () => {
     noteFile(log, contradictory);
 
     const findings = seal(log);
-    expect(findings.failingRowCount).toBe(2);
+    expect(findings.failingRowCount).toBe(0);
     expect(findings.file).toEqual([unresolvable, contradictory]);
   });
 });

@@ -66,10 +66,8 @@ export const MAX_PROBLEMS_REPORTED = 20;
  */
 export const MAX_ROW_RANGES_REPORTED = 5;
 
-/** How many different values one problem quotes back as examples. Enough to see that the rows
- * differ, few enough to keep the line readable.
- */
-export const MAX_EXAMPLE_VALUES = 2;
+/** How many different values one problem quotes back as examples. */
+export const MAX_EXAMPLE_VALUES = 3;
 
 /** How much of a cell a problem message may quote back before it is elided. Long enough to
  * recognise the row by, short enough not to wrap the line it sits on.
