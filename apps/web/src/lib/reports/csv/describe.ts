@@ -128,30 +128,29 @@ function renderProblemAsDetailLine(problem: Problem): string {
 // The rows a problem covers, worded once for every reader of them
 // ---------------------------------------------------------------------------
 
-/** `row 15`, `5 rows: 2–4, 8, 11`, or `all 4,500 rows` — the one shared format for a row span,
- * used by the browser rendering a `Problem` and by `rejectionDetail` alike.
- */
+/** Formats a `RowSpan` as the text a reader sees: `row 15`, `5 rows: 2–4, 8, 11`, or
+ * `all 4,500 rows`. */
 export function formatRows(span: RowSpan): string {
   if (span.everyRow) return `all ${groupDigits(span.total)} rows`;
   if (span.total === 1) return `row ${span.ranges[0]?.start ?? ''}`;
-  return `${groupDigits(span.total)} rows: ${formatRanges(span)}`;
+  return `${groupDigits(span.total)} rows: ${formatRowRanges(span)}`;
 }
 
-/** `2–4, 8, 11 and 3 more`. A run of two is written out (`2, 3`) rather than ranged, since that
- * costs no more than `2–3` and asks less of the reader.
+/** Formats a span's named ranges as `2–4, 8, 11 and 3 more`. A run of two rows is written out
+ * (`2, 3`) rather than ranged, since that costs no more than `2–3` and asks less of the reader.
  */
-function formatRanges(span: RowSpan): string {
-  const named = span.ranges.reduce((total, { start, end }) => total + (end - start + 1), 0);
-  const elided = span.total - named;
+function formatRowRanges(span: RowSpan): string {
+  const namedRowCount = span.ranges.reduce((sum, { start, end }) => sum + (end - start + 1), 0);
+  const elidedRowCount = span.total - namedRowCount;
 
-  const list = span.ranges
+  const rangeText = span.ranges
     .map(({ start, end }) => {
       if (end - start >= 2) return `${start}–${end}`;
       return end === start ? `${start}` : `${start}, ${end}`;
     })
     .join(', ');
-  const more = elided > 0 ? ` and ${elided} more` : '';
-  return `${list}${more}`;
+  const elidedSuffix = elidedRowCount > 0 ? ` and ${elidedRowCount} more` : '';
+  return `${rangeText}${elidedSuffix}`;
 }
 
 // ---------------------------------------------------------------------------
