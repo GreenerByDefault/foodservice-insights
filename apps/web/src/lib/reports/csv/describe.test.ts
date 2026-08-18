@@ -16,10 +16,10 @@ import {
   renderProblemsText,
 } from './describe.ts';
 import {
-  type FileFinding,
+  type DateOrderFinding,
   type Findings,
   newFindingLog,
-  noteFile,
+  noteDateOrder,
   noteRow,
   noteRowRead,
   type RowFinding,
@@ -54,9 +54,9 @@ function findingsOf(...lines: readonly Line[][]): Findings {
   return seal(log);
 }
 
-function fileFindingsOf(finding: FileFinding): Findings {
+function dateOrderFindingsOf(finding: DateOrderFinding): Findings {
   const log = newFindingLog();
-  noteFile(log, finding);
+  noteDateOrder(log, finding);
   return seal(log);
 }
 
@@ -363,32 +363,29 @@ describe('describeFindings', () => {
   });
 
   describe('a date column that could not be resolved', () => {
-    test('is a fileProblem, never mixed into rowProblems', () => {
-      const finding: FileFinding = {
-        kind: 'date-order',
+    test('is a dateOrderProblem, never mixed into rowProblems', () => {
+      const finding: DateOrderFinding = {
         issue: 'unresolvable',
         examples: new Map(),
       };
-      const rejection = describeFindings(fileFindingsOf(finding));
+      const rejection = describeFindings(dateOrderFindingsOf(finding));
 
       expect(rejection.rowProblems).toBeUndefined();
-      expect(rejection.fileProblems).toHaveLength(1);
+      expect(rejection.dateOrderProblem).toBeDefined();
     });
 
     test('does not count toward failingRowCount', () => {
-      const finding: FileFinding = {
-        kind: 'date-order',
+      const finding: DateOrderFinding = {
         issue: 'unresolvable',
         examples: new Map(),
       };
-      expect(describeFindings(fileFindingsOf(finding)).message).toBe(
+      expect(describeFindings(dateOrderFindingsOf(finding)).message).toBe(
         'We found problems in 0 rows.',
       );
     });
 
     test('contradictory: names both rows and both readings', () => {
-      const finding: FileFinding = {
-        kind: 'date-order',
+      const finding: DateOrderFinding = {
         issue: 'contradictory',
         examples: new Map([
           [
@@ -410,16 +407,15 @@ describe('describeFindings', () => {
         ]),
       };
 
-      expect(describeFindings(fileFindingsOf(finding)).fileProblems).toEqual([
+      expect(describeFindings(dateOrderFindingsOf(finding)).dateOrderProblem).toBe(
         'Your dates are written both ways: row 2 has "13/04/2026", which can only be day first, ' +
           'and row 3 has "04/13/2026", which can only be month first. Re-save the date column as ' +
           'YYYY-MM-DD and upload again.',
-      ]);
+      );
     });
 
     test('unresolvable: names both readings for the ambiguous value', () => {
-      const finding: FileFinding = {
-        kind: 'date-order',
+      const finding: DateOrderFinding = {
         issue: 'unresolvable',
         examples: new Map([
           [
@@ -433,15 +429,14 @@ describe('describeFindings', () => {
         ]),
       };
 
-      expect(describeFindings(fileFindingsOf(finding)).fileProblems).toEqual([
+      expect(describeFindings(dateOrderFindingsOf(finding)).dateOrderProblem).toBe(
         'Every date in that file could be read two ways — row 2\'s "03/04/2026" is 2026-04-03 or ' +
           '2026-03-04. Re-save the date column as YYYY-MM-DD and upload again.',
-      ]);
+      );
     });
 
     test('unresolvable: falls back to "either date" when the example is not itself numeric', () => {
-      const finding: FileFinding = {
-        kind: 'date-order',
+      const finding: DateOrderFinding = {
         issue: 'unresolvable',
         examples: new Map([
           [
@@ -451,7 +446,9 @@ describe('describeFindings', () => {
         ]),
       };
 
-      expect(describeFindings(fileFindingsOf(finding)).fileProblems?.[0]).toContain('either date');
+      expect(describeFindings(dateOrderFindingsOf(finding)).dateOrderProblem).toContain(
+        'either date',
+      );
     });
   });
 });

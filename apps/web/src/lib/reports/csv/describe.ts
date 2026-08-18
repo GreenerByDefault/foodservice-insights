@@ -1,8 +1,5 @@
 /** Every sentence a customer reading a CSV rejection sees.
  *
- * `Intl` and `toLocale*` are banned in this folder (see `README.md`), so `groupDigits` below is a
- * small hand-rolled thousands separator rather than a call to either.
- *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.
  */
@@ -15,12 +12,12 @@ import {
   MAX_QUOTED_CHARS,
 } from '../limits.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
-import type { DateExamples, FileFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
+import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
 import type { HeaderFault, RequiredColumn } from './read/columns.ts';
 import type { DecodeFault } from './read/decode.ts';
 import type { HeaderCandidate, LayoutFault } from './read/layout.ts';
 import type { CsvParseError } from './read/parse.ts';
-import { bothReadings, type DateOrder, type DateOrderFault } from './rules/dates.ts';
+import { bothReadings, type DateOrder } from './rules/dates.ts';
 
 // ---------------------------------------------------------------------------
 // The structured payload
@@ -75,15 +72,15 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
 
 export function describeFindings(findings: Findings): RejectedUploadRecord {
   const rowProblems = findings.rowGroups.map((group) => toProblem(group, findings.rowsRead));
-  const fileProblems = findings.file.map(describeFileFinding);
+  const dateOrderProblem = findings.dateOrder && describeDateOrderFinding(findings.dateOrder);
 
-  const totalKinds = rowProblems.length + fileProblems.length;
   const shownRowProblems = rowProblems.slice(0, MAX_PROBLEMS_REPORTED);
-  const shownFileProblems = fileProblems.slice(
-    0,
-    Math.max(0, MAX_PROBLEMS_REPORTED - shownRowProblems.length),
-  );
-  const shownKinds = shownRowProblems.length + shownFileProblems.length;
+  // The date-order problem takes a slot only if the row problems left one.
+  const shownDateOrderProblem =
+    shownRowProblems.length < MAX_PROBLEMS_REPORTED ? dateOrderProblem : undefined;
+
+  const totalKinds = rowProblems.length + (dateOrderProblem ? 1 : 0);
+  const shownKinds = shownRowProblems.length + (shownDateOrderProblem ? 1 : 0);
   const hidden = totalKinds - shownKinds;
 
   // Derived rather than tracked separately, so the reason and the rows it names cannot disagree.
@@ -94,7 +91,7 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
 
   const detailParts = [
     ...(shownRowProblems.length > 0 ? [renderProblemsText(shownRowProblems)] : []),
-    ...shownFileProblems,
+    ...(shownDateOrderProblem ? [shownDateOrderProblem] : []),
     ...(hidden > 0 ? [`and ${hidden} more`] : []),
   ];
 
@@ -102,7 +99,7 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
     reason: injection ? 'csv_injection' : 'bad_rows',
     message: `${lead}${scale}${truncationNote}`,
     ...(shownRowProblems.length > 0 && { rowProblems: shownRowProblems }),
-    ...(shownFileProblems.length > 0 && { fileProblems: shownFileProblems }),
+    ...(shownDateOrderProblem && { dateOrderProblem: shownDateOrderProblem }),
     detail: detailParts.join('; '),
   };
 }
@@ -332,26 +329,22 @@ function quote(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// File problems
+// Date order problems
 // ---------------------------------------------------------------------------
 
-function describeFileFinding(finding: FileFinding): string {
-  return describeOrderFault(finding.issue, finding.examples);
-}
-
-/** `contradictory`: the column holds values proving both readings, so both are shown as evidence.
- * `unresolvable`: every value works either way, so the one ambiguous example shows both readings
- * of the same value.
- */
-function describeOrderFault(fault: DateOrderFault, examples: DateExamples): string {
+function describeDateOrderFinding(finding: DateOrderFinding): string {
+  const { issue: fault, examples } = finding;
   const advice = 'Re-save the date column as YYYY-MM-DD and upload again.';
 
   if (fault === 'contradictory') {
+    // The column holds values proving both readings, so both are shown as evidence.
     const dayFirst = examples.get('day-first');
     const monthFirst = examples.get('month-first');
     return `Your dates are written both ways: row ${dayFirst?.line} has ${quote(dayFirst?.raw ?? '')}, which can only be day first, and row ${monthFirst?.line} has ${quote(monthFirst?.raw ?? '')}, which can only be month first. ${advice}`;
   }
 
+  // `unresolvable`: every value works either way, so the one ambiguous example shows both
+  // readings of the same value.
   const ambiguous = examples.get('ambiguous');
   const readings =
     ambiguous?.reading.kind === 'numeric' ? bothReadings(ambiguous.reading) : 'either date';
@@ -375,9 +368,7 @@ function capitalize(text: string): string {
   return text.length === 0 ? text : `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 }
 
-/** A small thousands separator, since `Intl` and `toLocaleString` are banned here — see
- * `README.md`.
- */
+/** A small thousands separator, since `Intl` and `toLocaleString` are banned here per the README.md. */
 export function groupDigits(value: number): string {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }

@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
 import {
-  type FileFinding,
+  type DateOrderFinding,
   type FindingLog,
   newFindingLog,
-  noteFile,
+  noteDateOrder,
   noteRow,
   noteRowRead,
   type RowFinding,
@@ -53,7 +53,7 @@ describe('seal', () => {
     expect(seal(newFindingLog())).toEqual({
       failingRowCount: 0,
       rowGroups: [],
-      file: [],
+      dateOrder: undefined,
       rowsRead: 0,
     });
   });
@@ -331,44 +331,27 @@ describe('examples', () => {
   });
 });
 
-describe('noteFile', () => {
+describe('noteDateOrder', () => {
   test('does not add to failingRowCount, and is kept apart from row groups', () => {
-    // A whole-file finding names one or two rows only as evidence, so it is not a failing row —
+    // A date-order finding names one or two rows only as evidence, so it is not a failing row —
     // counting it would read as an off-by-one against the headline's rows-affected denominator.
     const log = newFindingLog();
     const rowFinding = cell();
-    const fileFinding: FileFinding = {
-      kind: 'date-order',
+    const dateOrder: DateOrderFinding = {
       issue: 'unresolvable',
       examples: new Map(),
     };
     noteRow(log, 2, rowFinding);
-    noteFile(log, fileFinding);
+    noteDateOrder(log, dateOrder);
 
     const findings = seal(log);
     expect(findings.failingRowCount).toBe(1);
     expect(findings.rowGroups).toEqual([singleRowGroup(rowFinding, 2, ['5 oz'])]);
-    expect(findings.file).toEqual([fileFinding]);
+    expect(findings.dateOrder).toEqual(dateOrder);
   });
 
-  test('appends every file finding rather than grouping them, since file is a list not a map', () => {
-    const log = newFindingLog();
-    const unresolvable: FileFinding = {
-      kind: 'date-order',
-      issue: 'unresolvable',
-      examples: new Map(),
-    };
-    const contradictory: FileFinding = {
-      kind: 'date-order',
-      issue: 'contradictory',
-      examples: new Map(),
-    };
-    noteFile(log, unresolvable);
-    noteFile(log, contradictory);
-
-    const findings = seal(log);
-    expect(findings.failingRowCount).toBe(0);
-    expect(findings.file).toEqual([unresolvable, contradictory]);
+  test('is absent on a log nothing was noted to', () => {
+    expect(seal(newFindingLog()).dateOrder).toBeUndefined();
   });
 });
 

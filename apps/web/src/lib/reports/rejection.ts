@@ -13,8 +13,8 @@ export type RejectedUploadRecord = {
   message: string;
   /** The rows to go and fix, structured so a component can render a list or a grid. */
   rowProblems?: readonly Problem[];
-  /** Whole-file prose, each entry carrying its own remedy. */
-  fileProblems?: readonly string[];
+  /** Prose carrying the fix for a date order problem. */
+  dateOrderProblem?: string;
   /** For `rejected_upload.rejection_detail`. Not shown to the user. */
   detail?: string;
 };
@@ -26,7 +26,7 @@ export type RejectedUploadRecord = {
  */
 export type RejectedUploadResponse = Pick<
   RejectedUploadRecord,
-  'message' | 'rowProblems' | 'fileProblems'
+  'message' | 'rowProblems' | 'dateOrderProblem'
 > & {
   code: RejectedUploadReason;
 };
@@ -36,12 +36,12 @@ export function rejectionResponse({
   reason,
   message,
   rowProblems,
-  fileProblems,
+  dateOrderProblem,
 }: RejectedUploadRecord): RejectedUploadResponse {
   return {
     code: reason,
     message,
     ...(rowProblems && { rowProblems }),
-    ...(fileProblems && { fileProblems }),
+    ...(dateOrderProblem && { dateOrderProblem }),
   };
 }
