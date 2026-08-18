@@ -211,9 +211,9 @@ function describeHeaderFault(fault: HeaderFault): string {
   )}. Remove or rename one.`;
 }
 
-/** Deliberately a different label set from `ROW_LABELS` below: a header sentence says "amount
- * ordered" — naming the column as the alias table spells it — while a row sentence says "the
- * amount" — naming the value inside it.
+/** Deliberately a different label set from the row-problem wording below: a header sentence says
+ * "amount ordered" — naming the column as the alias table spells it — while a row sentence says
+ * "the amount" — naming the value inside it.
  */
 function headerLabel(column: RequiredColumn): string {
   return { product: 'product name', date: 'date ordered', amount: 'amount ordered' }[column];
@@ -249,8 +249,6 @@ function csvParseErrorRejection(error: CsvParseError): RejectedUploadRecord {
 // Row problems
 // ---------------------------------------------------------------------------
 
-const ROW_LABELS = { product: 'product', date: 'date', amount: 'amount' } as const;
-
 function toProblem(group: FindingGroup, rowsRead: number): Problem {
   return {
     rule: ruleOf(group.finding),
@@ -273,17 +271,15 @@ function toRowSpan(group: FindingGroup, rowsRead: number): RowSpan {
 function ruleOf(finding: RowFinding): string {
   switch (finding.kind) {
     case 'cell':
-      return capitalize(`the ${ROW_LABELS[finding.column]} ${finding.clause}`);
+      return capitalize(`the ${finding.column} ${finding.clause}`);
     case 'resolved-date':
-      return capitalize(`the ${ROW_LABELS.date} ${finding.clause}`);
+      return capitalize(`the date ${finding.clause}`);
     // The value itself is never quoted back here — it is what is too long.
     case 'too-long':
-      return capitalize(
-        `the ${ROW_LABELS[finding.column]} is over ${MAX_FREE_TEXT_LENGTH} characters long`,
-      );
+      return capitalize(`the ${finding.column} is over ${MAX_FREE_TEXT_LENGTH} characters long`);
     case 'formula':
       return capitalize(
-        `the ${ROW_LABELS.product} starts with =, +, -, or @, which spreadsheets treat as the start of a formula`,
+        'the product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
       );
     case 'width':
       return capitalize(
