@@ -14,7 +14,6 @@
 
 import type {
   AnalysisAttemptId,
-  AnalysisAttemptStatus,
   AnalysisFailureReason,
   Database,
   DatabaseExecutor,
@@ -29,13 +28,11 @@ import { retryOnTransientDbError } from './failures.ts';
 
 export type NotifyOptions = {
   /** The first retry's delay. Each further attempt doubles it, so a row's claim also holds
-   *  longer each time — mutual exclusion and backoff from one constant, the same trick
-   *  `leaseExpiresAfterMs` plays in `ReapOptions`. */
+   *  longer each time. */
   retryBaseMs: number;
   /** How many times we will ever try to send one attempt's email. */
   maxAttempts: number;
-  /** The most attempts one sweep will claim and send — the same rate-limiting reasoning as
-   *  `ReapOptions.maxAttemptsPerSweep`. */
+  /** The most attempts one sweep will claim and send. */
   maxNotificationsPerSweep: number;
   /** Narrows the sweep to these reports.
    *
@@ -56,21 +53,27 @@ type NotifiableRow = ExpressionBuilder<
   'analysisAttempt' | 'report' | 'appUser' | 'auth.users'
 >;
 
-export type NotifiableAttempt = {
+type NotifiableAttemptCommon = {
   id: AnalysisAttemptId;
   reportId: ReportId;
   organizationId: OrganizationId;
   reportName: string;
-  /** The candidate predicate excludes `pending`, `processing`, and `canceled`, so only these two
-   * terminal statuses ever reach here. */
-  status: Extract<AnalysisAttemptStatus, 'succeeded' | 'failed'>;
-  failureReason: AnalysisFailureReason | null;
-  /** How many sends this row has now had, counting this one — for the log line on a failed send. */
+  /** How many sends this row has now had, counting this one. */
   notificationAttempts: number;
   to: string;
-  pdfFileId: ResultFileId | null;
-  xlsxFileId: ResultFileId | null;
 };
+
+export type NotifiableAttempt = NotifiableAttemptCommon &
+  (
+    | { status: 'failed'; failureReason: AnalysisFailureReason }
+    | {
+        status: 'succeeded';
+        /** Null here means `AnalysisSucceeded`'s write is missing a file — a bug in our own
+         * writes, not a legal state `notificationFor` treats as final; see its doc comment. */
+        pdfFileId: ResultFileId | null;
+        xlsxFileId: ResultFileId | null;
+      }
+  );
 
 /** Send the email every attempt this sweep claims is owed. Returns the ids of the attempts whose
  * email the provider accepted.
@@ -222,21 +225,36 @@ async function loadNotifiableAttempts(
     .where('analysisAttempt.id', 'in', ids)
     .execute();
 
-  return rows.map((row) => ({
-    id: row.id,
-    reportId: row.reportId,
-    organizationId: row.organizationId,
-    reportName: row.reportName,
-    // Guaranteed by `isOwedEmail`: only a `succeeded` or `failed` row is ever claimed.
-    status: row.status as Extract<AnalysisAttemptStatus, 'succeeded' | 'failed'>,
-    failureReason: row.failureReason,
-    notificationAttempts: row.notificationAttempts,
-    // Every requester in this app signs in by email; `auth.users.email` is only nullable in the
-    // generated type because Supabase also permits phone-only accounts.
-    to: row.to as string,
-    pdfFileId: row.pdfFileId,
-    xlsxFileId: row.xlsxFileId,
-  }));
+  return rows.map((row) => {
+    const common = {
+      id: row.id,
+      reportId: row.reportId,
+      organizationId: row.organizationId,
+      reportName: row.reportName,
+      notificationAttempts: row.notificationAttempts,
+      // Every requester in this app signs in by email; `auth.users.email` is only nullable in
+      // the generated type because Supabase also permits phone-only accounts.
+      to: row.to as string,
+    };
+
+    if (row.status === 'failed') {
+      return {
+        ...common,
+        status: 'failed' as const,
+        // Guaranteed by `analysis_attempt_failure_reason_iff_failed`.
+        failureReason: row.failureReason as AnalysisFailureReason,
+      };
+    }
+
+    // Guaranteed by `isOwedEmail`: only a `succeeded` or `failed` row is ever claimed, so
+    // anything that isn't `failed` here is `succeeded`.
+    return {
+      ...common,
+      status: 'succeeded' as const,
+      pdfFileId: row.pdfFileId,
+      xlsxFileId: row.xlsxFileId,
+    };
+  });
 }
 
 function resultFileId(eb: NotifiableRow, kind: ResultFileKind) {
@@ -328,8 +346,7 @@ export function notificationFor(attempt: NotifiableAttempt): EmailMessage | unde
       organizationId: attempt.organizationId,
       reportId: attempt.reportId,
       reportName: attempt.reportName,
-      // `analysis_attempt_failure_reason_iff_failed` guarantees this is set whenever status is.
-      reason: attempt.failureReason as AnalysisFailureReason,
+      reason: attempt.failureReason,
     };
   }
 

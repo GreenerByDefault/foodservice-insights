@@ -513,14 +513,15 @@ describe('sendPendingNotifications', () => {
 });
 
 describe('notificationFor', () => {
-  function aNotifiableAttempt(overrides: Partial<NotifiableAttempt> = {}): NotifiableAttempt {
+  function aSucceededAttempt(
+    overrides: Partial<Extract<NotifiableAttempt, { status: 'succeeded' }>> = {},
+  ): Extract<NotifiableAttempt, { status: 'succeeded' }> {
     return {
       id: crypto.randomUUID() as AnalysisAttemptId,
       reportId: SAMPLE_REPORT_ID,
       organizationId: SAMPLE_ORGANIZATION_ID,
       reportName: 'Q1 procurement',
       status: 'succeeded',
-      failureReason: null,
       notificationAttempts: 1,
       to: 'alice@example.test',
       pdfFileId: newResultFileId(),
@@ -529,8 +530,23 @@ describe('notificationFor', () => {
     };
   }
 
+  function aFailedAttempt(
+    reason: AnalysisFailureReason,
+  ): Extract<NotifiableAttempt, { status: 'failed' }> {
+    return {
+      id: crypto.randomUUID() as AnalysisAttemptId,
+      reportId: SAMPLE_REPORT_ID,
+      organizationId: SAMPLE_ORGANIZATION_ID,
+      reportName: 'Q1 procurement',
+      status: 'failed',
+      notificationAttempts: 1,
+      to: 'alice@example.test',
+      failureReason: reason,
+    };
+  }
+
   test('a succeeded attempt with both result files sends analysis-succeeded', () => {
-    const attempt = aNotifiableAttempt();
+    const attempt = aSucceededAttempt();
     expect(notificationFor(attempt)).toMatchObject({
       kind: 'analysis-succeeded',
       to: attempt.to,
@@ -553,15 +569,17 @@ describe('notificationFor', () => {
     'unknown',
     'shut_down',
   ])('a failed attempt with reason %s sends analysis-failed', (reason) => {
-    const attempt = aNotifiableAttempt({ status: 'failed', failureReason: reason });
-    expect(notificationFor(attempt)).toMatchObject({ kind: 'analysis-failed', reason });
+    expect(notificationFor(aFailedAttempt(reason))).toMatchObject({
+      kind: 'analysis-failed',
+      reason,
+    });
   });
 
   test('a succeeded attempt missing the pdf returns undefined', () => {
-    expect(notificationFor(aNotifiableAttempt({ pdfFileId: null }))).toBeUndefined();
+    expect(notificationFor(aSucceededAttempt({ pdfFileId: null }))).toBeUndefined();
   });
 
   test('a succeeded attempt missing the xlsx returns undefined', () => {
-    expect(notificationFor(aNotifiableAttempt({ xlsxFileId: null }))).toBeUndefined();
+    expect(notificationFor(aSucceededAttempt({ xlsxFileId: null }))).toBeUndefined();
   });
 });
