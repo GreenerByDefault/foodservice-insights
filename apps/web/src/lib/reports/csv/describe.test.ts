@@ -80,29 +80,18 @@ describe('the rule a finding becomes', () => {
       { kind: 'width', actual: 1, expected: 3 },
       'Has 1 column where the header has 3',
     ],
-  ] as const)('%s', ([, finding, rule]) => {
-    expect(soleRowProblemFor(finding).rule).toBe(rule);
-  });
-
-  describe('a date resolved against the column-wide order', () => {
-    test.for([
-      ['day-first', 'read day first like the rest of the column'],
-      ['month-first', 'read month first like the rest of the column'],
-    ] as const)('%s carries the reading it was given as a note', ([readAs, note]) => {
-      const problem = soleRowProblemFor({
+    [
+      'a date resolved against the column-wide order',
+      {
         kind: 'resolved-date',
-        readAs,
+        readAs: 'day-first',
         raw: '01/12/2026',
         clause: 'is more than 30 days from now',
-      });
-
-      expect(problem.rule).toBe('The date is more than 30 days from now');
-      expect(problem.note).toBe(note);
-    });
-
-    test('nothing else carries a note', () => {
-      expect(soleRowProblemFor(cellFinding()).note).toBeUndefined();
-    });
+      },
+      'The date is more than 30 days from now',
+    ],
+  ] as const)('%s', ([, finding, rule]) => {
+    expect(soleRowProblemFor(finding).rule).toBe(rule);
   });
 });
 
@@ -432,22 +421,6 @@ describe('renderProblemsAsDetail', () => {
         { rule: 'The amount has a unit in it', rows: oneRow, examples: ['"5 oz"', '"3 kg"'] },
       ]),
     ).toBe('row 2: The amount has a unit in it. For example "5 oz" and "3 kg".');
-  });
-
-  test('a note sits between the rule and its full stop', () => {
-    expect(
-      renderProblemsAsDetail([
-        {
-          rule: 'The date is more than 30 days from now',
-          rows: oneRow,
-          examples: ['"01/12/2026"'],
-          note: 'read day first like the rest of the column',
-        },
-      ]),
-    ).toBe(
-      'row 2: The date is more than 30 days from now, read day first like the rest of the ' +
-        'column. For example "01/12/2026".',
-    );
   });
 
   test('no examples, no sentence about them', () => {

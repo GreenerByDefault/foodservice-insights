@@ -17,7 +17,7 @@ import type { HeaderFault, RequiredColumn } from './read/columns.ts';
 import type { DecodeFault } from './read/decode.ts';
 import type { HeaderCandidate, LayoutFault } from './read/layout.ts';
 import type { CsvParseError } from './read/parse.ts';
-import { bothReadings, type DateOrder } from './rules/dates.ts';
+import { bothReadings } from './rules/dates.ts';
 
 // ---------------------------------------------------------------------------
 // The structured payload
@@ -38,10 +38,6 @@ export type Problem = {
   readonly rows: RowSpan;
   /** Already quoted and truncated — safe to interpolate as text, never as `{@html}`. */
   readonly examples: readonly string[];
-  /** A qualifier that only makes sense next to a value, e.g. "read day first like the rest of
-   * the column".
-   */
-  readonly note?: string;
 };
 
 /** Every way `validate.ts` can refuse a file before a single row of it is read. */
@@ -119,9 +115,8 @@ export function renderProblemsAsDetail(problems: readonly Problem[]): string {
 }
 
 function renderProblemAsDetailLine(problem: Problem): string {
-  const note = problem.note ? `, ${problem.note}` : '';
   const examples = problem.examples.length > 0 ? ` For example ${listOf(problem.examples)}.` : '';
-  return `${formatRows(problem.rows)}: ${problem.rule}${note}.${examples}`;
+  return `${formatRows(problem.rows)}: ${problem.rule}.${examples}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +252,10 @@ function csvParseErrorRejection(error: CsvParseError): RejectedUploadRecord {
 const ROW_LABELS = { product: 'product', date: 'date', amount: 'amount' } as const;
 
 function toProblem(group: FindingGroup, rowsRead: number): Problem {
-  const note = noteOf(group.finding);
   return {
     rule: ruleOf(group.finding),
     rows: toRowSpan(group, rowsRead),
     examples: quotedExamples(group.examples),
-    ...(note !== undefined && { note }),
   };
 }
 
@@ -297,19 +290,6 @@ function ruleOf(finding: RowFinding): string {
         `has ${finding.actual} ${plural(finding.actual, 'column')} where the header has ${finding.expected}`,
       );
   }
-}
-
-/** Only a resolved date carries a note: which reading the column-wide order gave it, since that
- * is what makes the clause after it meaningful (`is more than 30 days from now` — from what?).
- */
-function noteOf(finding: RowFinding): string | undefined {
-  return finding.kind === 'resolved-date'
-    ? `read ${dateOrderPhrase(finding.readAs)} like the rest of the column`
-    : undefined;
-}
-
-function dateOrderPhrase(order: DateOrder): string {
-  return order === 'day-first' ? 'day first' : 'month first';
 }
 
 function quotedExamples(raws: readonly string[]): readonly string[] {

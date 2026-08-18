@@ -17,8 +17,9 @@ import type { DateOrder, DateOrderFault, DateReading } from './rules/dates.ts';
  */
 export type RowFinding =
   | { kind: 'cell'; column: RequiredColumn; raw: string; clause: string }
-  /** A date that only failed once the column-wide order was applied, so the message has to name
-   * the reading we took. */
+  /** A date that only failed once the column-wide order was applied. `readAs` isn't shown to the
+   * user; it stays on the finding only so groupKey can tell apart two rows whose `clause` matches
+   * by coincidence despite being read with opposite orders — see the comment there. */
   | { kind: 'resolved-date'; readAs: DateOrder; raw: string; clause: string }
   // We leave off the `raw` value.
   | { kind: 'too-long'; column: RequiredColumn }
