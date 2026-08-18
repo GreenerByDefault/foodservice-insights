@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'vitest';
 import { MAX_PROBLEMS_REPORTED } from '../../limits.ts';
 import type { DateOrderFinding, FindingGroup, Findings } from '../findings.ts';
-import { cellFinding, findingGroup, sealedFindings } from '../testing/index.ts';
+import { findingGroup, sealedFindings } from '../testing/index.ts';
 import { describeFindings } from './findings.ts';
 
 function rejectionFor(overrides: Partial<Findings> = {}) {
@@ -74,9 +74,9 @@ describe('the rejectionDetail we keep but never show', () => {
   test('one line per problem, joined with a semicolon', () => {
     const rejectionDetail = rejectionFor({
       rowGroups: [
-        findingGroup({ finding: cellFinding({ column: 'amount', raw: '', clause: 'is empty' }) }),
+        findingGroup({ finding: { kind: 'amount', fault: 'empty', raw: '' } }),
         findingGroup({
-          finding: cellFinding({ column: 'product', raw: 'x', clause: 'is empty' }),
+          finding: { kind: 'product', fault: 'empty', raw: 'x' },
           ranges: [{ start: 3, end: 3 }],
         }),
       ],
@@ -96,7 +96,7 @@ describe('the rejectionDetail we keep but never show', () => {
   });
 
   test('a date order problem alone is the prose itself, with nothing to join it to', () => {
-    const dateOrder: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+    const dateOrder: DateOrderFinding = { fault: 'unresolvable', examples: new Map() };
 
     const rejection = rejectionFor({ rowGroups: [], dateOrder });
 
@@ -104,7 +104,7 @@ describe('the rejectionDetail we keep but never show', () => {
   });
 
   test('a date order problem alongside row problems: its prose first, then the row problems', () => {
-    const dateOrder: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+    const dateOrder: DateOrderFinding = { fault: 'unresolvable', examples: new Map() };
 
     const rejection = rejectionFor({ rowGroups: [findingGroup()], dateOrder });
 
@@ -115,7 +115,7 @@ describe('the rejectionDetail we keep but never show', () => {
 });
 
 describe('a date order finding, budgeted alongside row problems', () => {
-  const noExamples: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+  const noExamples: DateOrderFinding = { fault: 'unresolvable', examples: new Map() };
 
   test('is prose of its own, never a row problem, since it is not rows to go and fix', () => {
     const rejection = rejectionFor({ rowGroups: [], dateOrder: noExamples });
@@ -162,10 +162,14 @@ describe('the whole record', () => {
       rowProblems: [
         {
           rule: 'The amount has a unit in it',
+          advice:
+            'The lb or kg choice on the form sets the unit for the whole file, so this column ' +
+            'should hold plain numbers with no unit.',
           rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
           examples: ['"5 oz"'],
         },
       ],
+      // `rejectionDetail` omits `advice`, since it's a diagnostic column we read, not the customer.
       rejectionDetail: 'row 2: The amount has a unit in it. For example "5 oz".',
     });
   });

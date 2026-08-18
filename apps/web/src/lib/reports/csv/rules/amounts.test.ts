@@ -23,40 +23,38 @@ describe('readAmount', () => {
 
   describe('rejects', () => {
     test.for([
-      ['5 oz', 'has a unit in it'],
-      ['4/5 LBS', 'has a unit in it'],
-      ['12 kg', 'has a unit in it'],
-      ['inf', 'is not a number'],
-      ['$12', 'is money, not a weight'],
-      ['12 €', 'is money, not a weight'],
-      ['₹12', 'is money, not a weight'],
-      ['₩12', 'is money, not a weight'],
-      ['₽12', 'is money, not a weight'],
-      ['₺12', 'is money, not a weight'],
-      ['₫12', 'is money, not a weight'],
-      ['12¢', 'is money, not a weight'],
-      ['1e3', 'scientific notation'],
-      ['1.5E+10', 'scientific notation'],
-      ['(50)', 'negative number written in parentheses'],
-      ['-5', 'is negative'],
-      ['1.234,56', 'has a comma we cannot read'],
-      ['1,5', 'has a comma we cannot read'],
-      ['1,23,456', 'has a comma we cannot read'],
-      ['1 234', 'is not a plain number'],
-      ['+3.2', 'is not a plain number'],
-      ['.5', 'is not a plain number'],
-      ['5.', 'is not a plain number'],
-      ['50%', 'is not a plain number'],
-      ['NaN', 'is not a number'],
-      ['Infinity', 'is not a number'],
-      ['-Infinity', 'is negative'],
-      ['１２３', 'is not a plain number'],
-      ['', 'is empty'],
-      ['   ', 'is empty'],
-    ] as const)('"%s", saying it %s', ([raw, fault]) => {
-      const reading = readAmount(raw);
-      expect(reading).toMatchObject({ ok: false });
-      expect(reading.ok ? '' : reading.fault).toContain(fault);
+      ['5 oz', 'has-a-unit'],
+      ['4/5 LBS', 'has-a-unit'],
+      ['12 kg', 'has-a-unit'],
+      ['inf', 'not-a-number'],
+      ['$12', 'money'],
+      ['12 €', 'money'],
+      ['₹12', 'money'],
+      ['₩12', 'money'],
+      ['₽12', 'money'],
+      ['₺12', 'money'],
+      ['₫12', 'money'],
+      ['12¢', 'money'],
+      ['1e3', 'scientific'],
+      ['1.5E+10', 'scientific'],
+      ['(50)', 'parenthesized-negative'],
+      ['-5', 'negative'],
+      ['1.234,56', 'comma-decimal'],
+      ['1,5', 'comma-decimal'],
+      ['1,23,456', 'comma-decimal'],
+      ['1 234', 'not-plain'],
+      ['+3.2', 'not-plain'],
+      ['.5', 'not-plain'],
+      ['5.', 'not-plain'],
+      ['50%', 'not-plain'],
+      ['NaN', 'not-a-number'],
+      ['Infinity', 'not-a-number'],
+      ['-Infinity', 'negative'],
+      ['１２３', 'not-plain'],
+      ['', 'empty'],
+      ['   ', 'empty'],
+    ] as const)('"%s" is %s', ([raw, fault]) => {
+      expect(readAmount(raw)).toEqual({ ok: false, fault });
     });
 
     test.for([MAX_AMOUNT_DIGITS + 1, 400])(
@@ -64,7 +62,7 @@ describe('readAmount', () => {
       (length) => {
         expect(readAmount('1'.repeat(length))).toEqual({
           ok: false,
-          fault: 'has more digits than any real weight',
+          fault: 'too-many-digits',
         });
       },
     );

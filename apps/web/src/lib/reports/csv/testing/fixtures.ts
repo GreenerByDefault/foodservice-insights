@@ -1,20 +1,21 @@
 import type { FindingGroup, Findings, RowFinding } from '../findings.ts';
 
-/** A `'cell'` finding with representative defaults, for tests that don't care which column or
- * clause failed. */
-export function cellFinding(over: Partial<Extract<RowFinding, { kind: 'cell' }>> = {}): RowFinding {
+/** An `'amount'` finding with representative defaults, for tests that don't care which fault
+ * failed. */
+export function amountFinding(
+  over: Partial<Extract<RowFinding, { kind: 'amount' }>> = {},
+): RowFinding {
   return {
-    kind: 'cell',
-    column: 'amount',
+    kind: 'amount',
+    fault: 'has-a-unit',
     raw: '5 oz',
-    clause: 'has a unit in it',
     ...over,
   };
 }
 
 /** One group, as `findings.ts` would have folded it. */
 export function findingGroup(over: Partial<FindingGroup> = {}): FindingGroup {
-  const finding = over.finding ?? cellFinding();
+  const finding = over.finding ?? amountFinding();
   const ranges = over.ranges ?? [{ start: 2, end: 2 }];
   return {
     finding,
@@ -46,6 +47,6 @@ function rowsCoveredBy(ranges: readonly { start: number; end: number }[]): numbe
 /** The values `addExampleValue` would have kept: the finding's own, unless it has none to give
  * or it is blank. */
 function exampleValuesOf(finding: RowFinding): string[] {
-  if (finding.kind === 'too-long' || finding.kind === 'width') return [];
+  if (!('raw' in finding)) return [];
   return finding.raw.trim() === '' ? [] : [finding.raw];
 }

@@ -20,7 +20,7 @@ describe('readProduct', () => {
 
   describe('rejects', () => {
     test.for(['', '   '])('a blank product (%j)', (raw) => {
-      expect(readProduct(raw)).toEqual({ ok: false, fault: 'is empty' });
+      expect(readProduct(raw)).toEqual({ ok: false, fault: 'empty' });
     });
 
     test.for([
@@ -41,10 +41,7 @@ describe('readProduct', () => {
     ])(
       'the placeholder "%s", which the analysis would otherwise categorize as a product',
       (raw) => {
-        expect(readProduct(raw)).toEqual({
-          ok: false,
-          fault: 'is a placeholder rather than a product',
-        });
+        expect(readProduct(raw)).toEqual({ ok: false, fault: 'placeholder' });
       },
     );
 
@@ -55,10 +52,7 @@ describe('readProduct', () => {
       ['a tab', 'beef\tmince'],
       ['a line break', 'beef\nmince'],
     ] as const)('%s, which nothing on screen would explain', ([, raw]) => {
-      expect(readProduct(raw)).toEqual({
-        ok: false,
-        fault: 'contains a line break, a tab or an invisible character',
-      });
+      expect(readProduct(raw)).toEqual({ ok: false, fault: 'invisible-character' });
     });
   });
 });

@@ -5,11 +5,12 @@
  * anything Node-only.
  */
 
+import type { RowRange } from '../findings.ts';
 import { groupDigits, listOf } from './text.ts';
 
 /** Which rows a problem covers. */
 export type RowSpan = {
-  readonly ranges: readonly { start: number; end: number }[];
+  readonly ranges: readonly RowRange[];
   /** Every affected row, including ones past the range cap that no range names. */
   readonly total: number;
   /** True when `total` is every row the file had. */
@@ -19,6 +20,8 @@ export type RowSpan = {
 export type Problem = {
   /** A full clause, e.g. "The amount has a unit in it". */
   readonly rule: string;
+  /** How to fix it, as its own sentence, for a renderer to style as secondary text. */
+  readonly advice?: string;
   readonly rows: RowSpan;
   /** Already quoted and truncated — safe to interpolate as text, never as `{@html}`. */
   readonly examples: readonly string[];

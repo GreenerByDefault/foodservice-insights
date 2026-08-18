@@ -4,9 +4,9 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { MAX_FREE_TEXT_LENGTH } from '../../limits.ts';
+import { EARLIEST_DATE, MAX_FREE_TEXT_LENGTH, MAX_FUTURE_DAYS } from '../../limits.ts';
 import type { FindingGroup } from '../findings.ts';
-import { cellFinding, findingGroup } from '../testing/index.ts';
+import { amountFinding, findingGroup } from '../testing/index.ts';
 import type { Problem } from './problems.ts';
 import { toProblem, toRowSpan } from './rows.ts';
 
@@ -20,17 +20,57 @@ function problemFor(
 }
 
 describe('the rule a finding becomes', () => {
+  describe('every product fault, to its sentence', () => {
+    test.for([
+      ['empty', 'The product is empty'],
+      ['placeholder', 'The product is a placeholder rather than a product'],
+      ['invisible-character', 'The product contains a line break, a tab or an invisible character'],
+    ] as const)('%s', ([fault, rule]) => {
+      expect(problemFor({ kind: 'product', fault, raw: 'x' }).rule).toBe(rule);
+    });
+  });
+
+  describe('every date fault, to its sentence', () => {
+    test.for([
+      ['empty', 'The date is empty'],
+      ['unknown-month-name', 'The date has a month name we do not recognise'],
+      ['date-serial', 'The date looks like an unconverted date serial'],
+      ['unrecognized', 'The date is not a date we recognise'],
+      ['not-a-real-date', 'The date is not a real calendar date'],
+      ['too-old', `The date is before ${EARLIEST_DATE}, too old to be procurement data`],
+      ['too-far-ahead', `The date is more than ${MAX_FUTURE_DAYS} days from now`],
+    ] as const)('%s', ([fault, rule]) => {
+      expect(problemFor({ kind: 'date', fault, raw: 'x' }).rule).toBe(rule);
+    });
+  });
+
+  test('a resolved date reads the same table, and never names which order the column was read in', () => {
+    expect(problemFor({ kind: 'resolved-date', fault: 'not-a-real-date', raw: 'x' }).rule).toBe(
+      'The date is not a real calendar date',
+    );
+  });
+
+  describe('every amount fault, to its sentence', () => {
+    test.for([
+      ['empty', 'The amount is empty'],
+      [
+        'parenthesized-negative',
+        'The amount is a negative number written in parentheses, an accounting notation for a credit or return',
+      ],
+      ['negative', 'The amount is negative, which usually means a credit or return'],
+      ['money', 'The amount is money, not a weight'],
+      ['scientific', 'The amount is in scientific notation, so the exact figure is already lost'],
+      ['has-a-unit', 'The amount has a unit in it'],
+      ['not-a-number', 'The amount is not a number'],
+      ['comma-decimal', 'The amount has a comma we cannot read'],
+      ['not-plain', 'The amount is not a plain number, such as 12 or 1234.50'],
+      ['too-many-digits', 'The amount has more digits than any real weight'],
+    ] as const)('%s', ([fault, rule]) => {
+      expect(problemFor({ kind: 'amount', fault, raw: 'x' }).rule).toBe(rule);
+    });
+  });
+
   test.for([
-    [
-      'a bad cell, naming the column the value sits in',
-      cellFinding({ raw: '5 oz', clause: 'has a unit in it' }),
-      'The amount has a unit in it',
-    ],
-    [
-      'another column, same clause',
-      cellFinding({ column: 'product', raw: 'x', clause: 'is empty' }),
-      'The product is empty',
-    ],
     [
       'an over-long cell, which names the limit rather than the value',
       { kind: 'too-long', column: 'product' },
@@ -51,23 +91,42 @@ describe('the rule a finding becomes', () => {
       { kind: 'width', actual: 1, expected: 3 },
       'Has 1 column where the header has 3',
     ],
-    [
-      'a date resolved against the column-wide order',
-      {
-        kind: 'resolved-date',
-        raw: '01/12/2026',
-        clause: 'is more than 30 days from now',
-      },
-      'The date is more than 30 days from now',
-    ],
   ] as const)('%s', ([, finding, rule]) => {
     expect(problemFor(finding).rule).toBe(rule);
   });
 });
 
+describe('the advice a finding carries', () => {
+  test.for([
+    ['parenthesized-negative', 'Delete that row rather than just removing the parentheses.'],
+    ['negative', 'Delete that row rather than just dropping the minus sign.'],
+    ['money', 'Check you mapped the right column.'],
+    ['scientific', 'Widen the column.'],
+    [
+      'has-a-unit',
+      'The lb or kg choice on the form sets the unit for the whole file, so this column ' +
+        'should hold plain numbers with no unit.',
+    ],
+    ['comma-decimal', 'Use a full stop for the decimal point.'],
+  ] as const)('amount fault %s carries advice as a sentence of its own', ([fault, advice]) => {
+    expect(problemFor({ kind: 'amount', fault, raw: 'x' }).advice).toBe(advice);
+  });
+
+  test.for([
+    ['date-serial', 'Format the column as a date in your spreadsheet and save it again.'],
+    ['unrecognized', 'Use YYYY-MM-DD.'],
+  ] as const)('date fault %s carries advice as a sentence of its own', ([fault, advice]) => {
+    expect(problemFor({ kind: 'date', fault, raw: 'x' }).advice).toBe(advice);
+  });
+
+  test('a fault with no remedy to add carries no advice', () => {
+    expect(problemFor({ kind: 'amount', fault: 'not-a-number', raw: 'x' }).advice).toBeUndefined();
+  });
+});
+
 describe('the examples a problem quotes', () => {
   test('quoted, in the order the group reached them', () => {
-    expect(problemFor(cellFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
+    expect(problemFor(amountFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
       '"foo"',
       '"bar"',
       '"baz"',
@@ -75,7 +134,7 @@ describe('the examples a problem quotes', () => {
   });
 
   test('values that differ only in whitespace collapse to one quote', () => {
-    expect(problemFor(cellFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
+    expect(problemFor(amountFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
       '"5 oz"',
     ]);
   });
@@ -113,7 +172,7 @@ describe('the rows a problem covers', () => {
   });
 
   test('one row and many rows produce the same problem but for the rows it names', () => {
-    const finding = cellFinding();
+    const finding = amountFinding();
     const { rows: _one, ...single } = problemFor(finding, { ranges: [{ start: 2, end: 2 }] });
     const { rows: _many, ...many } = problemFor(finding, { ranges: [{ start: 2, end: 9 }] });
 

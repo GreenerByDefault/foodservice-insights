@@ -69,24 +69,21 @@ describe('readDate', () => {
 
   describe('rejects', () => {
     test.for([
-      ['', 'is empty'],
-      ['45000', 'unconverted date serial'],
-      ['1735689600', 'unconverted date serial'],
-      ['45292.542', 'unconverted date serial'],
-      ['01/02', 'not a date we recognise'],
-      ['next tuesday', 'not a date we recognise'],
-      ['4th March 2025', 'not a date we recognise'],
-      ['Foo 2025', 'month name we do not recognise'],
-      ['2025-02-30', 'not a real calendar date'],
-      ['2025-02-29', 'not a real calendar date'],
-      ['2025-13-01', 'not a real calendar date'],
-      ['Mar 32 2025', 'not a real calendar date'],
-      ['13/13/2025', 'not a real calendar date'],
-    ] as const)('"%s", saying it %s', ([raw, fault]) => {
-      const reading = readDate(raw, BOUNDS);
-
-      expect(reading).toMatchObject({ kind: 'invalid' });
-      expect(reading.kind === 'invalid' ? reading.fault : '').toContain(fault);
+      ['', 'empty'],
+      ['45000', 'date-serial'],
+      ['1735689600', 'date-serial'],
+      ['45292.542', 'date-serial'],
+      ['01/02', 'unrecognized'],
+      ['next tuesday', 'unrecognized'],
+      ['4th March 2025', 'unrecognized'],
+      ['Foo 2025', 'unknown-month-name'],
+      ['2025-02-30', 'not-a-real-date'],
+      ['2025-02-29', 'not-a-real-date'],
+      ['2025-13-01', 'not-a-real-date'],
+      ['Mar 32 2025', 'not-a-real-date'],
+      ['13/13/2025', 'not-a-real-date'],
+    ] as const)('"%s" is %s', ([raw, fault]) => {
+      expect(readDate(raw, BOUNDS)).toEqual({ kind: 'invalid', fault });
     });
   });
 });
