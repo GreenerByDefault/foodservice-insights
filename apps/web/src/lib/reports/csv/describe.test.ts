@@ -1,0 +1,656 @@
+/** Tests for how we describe failures.
+ *
+ * `Findings` is built as a literal here rather than folded through `noteRow`/`seal`: which rows
+ * group together and how their ranges accumulate is `findings.test.ts`'s subject, and what one
+ * sealed group reads as is this file's.
+ */
+
+import { describe, expect, test } from 'vitest';
+import {
+  MAX_COLUMNS,
+  MAX_DATA_ROWS,
+  MAX_FREE_TEXT_LENGTH,
+  MAX_PROBLEMS_REPORTED,
+  MAX_QUOTED_CHARS,
+} from '../limits.ts';
+import {
+  describeFindings,
+  describeUnreadableFile,
+  formatRows,
+  groupDigits,
+  type Problem,
+  renderProblemsAsDetail,
+} from './describe.ts';
+import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
+import { CsvParseError } from './read/parse.ts';
+import { cellFinding, findingGroup, sealedFindings } from './testing/fixtures.ts';
+
+function rejectionFor(overrides: Partial<Findings> = {}) {
+  return describeFindings(sealedFindings(overrides));
+}
+
+function rowProblemsFor(overrides: Partial<Findings> = {}): readonly Problem[] {
+  return rejectionFor(overrides).rowProblems ?? [];
+}
+
+/** The problem one group becomes. */
+function soleRowProblemFor(finding: RowFinding, overrides: Partial<FindingGroup> = {}): Problem {
+  const [problem] = rowProblemsFor({ rowGroups: [findingGroup({ finding, ...overrides })] });
+  if (!problem) throw new Error('describeFindings dropped the only group');
+  return problem;
+}
+
+/** Distinct groups, one row each — for the cases that care only about how many kinds there are. */
+function distinctKindGroups(count: number): FindingGroup[] {
+  return Array.from({ length: count }, (_, index) =>
+    findingGroup({
+      finding: { kind: 'width', actual: index + 4, expected: 3 },
+      ranges: [{ start: index + 2, end: index + 2 }],
+    }),
+  );
+}
+
+describe('the rule a finding becomes', () => {
+  test.for([
+    [
+      'a bad cell, naming the column the value sits in',
+      cellFinding({ raw: '5 oz', clause: 'has a unit in it' }),
+      'The amount has a unit in it',
+    ],
+    [
+      'another column, same clause',
+      cellFinding({ column: 'product', raw: 'x', clause: 'is empty' }),
+      'The product is empty',
+    ],
+    [
+      'an over-long cell, which names the limit rather than the value',
+      { kind: 'too-long', column: 'product' },
+      `The product is over ${MAX_FREE_TEXT_LENGTH} characters long`,
+    ],
+    [
+      'a formula trigger',
+      { kind: 'formula', raw: '=cmd' },
+      'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
+    ],
+    [
+      'a width mismatch, which is the row itself failing rather than a column',
+      { kind: 'width', actual: 2, expected: 3 },
+      'Has 2 columns where the header has 3',
+    ],
+    [
+      'a one-column row, not pluralized',
+      { kind: 'width', actual: 1, expected: 3 },
+      'Has 1 column where the header has 3',
+    ],
+    [
+      'a date resolved against the column-wide order',
+      {
+        kind: 'resolved-date',
+        readAs: 'day-first',
+        raw: '01/12/2026',
+        clause: 'is more than 30 days from now',
+      },
+      'The date is more than 30 days from now',
+    ],
+  ] as const)('%s', ([, finding, rule]) => {
+    expect(soleRowProblemFor(finding).rule).toBe(rule);
+  });
+});
+
+describe('the examples a problem quotes', () => {
+  test('quoted, in the order the group reached them', () => {
+    expect(soleRowProblemFor(cellFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
+      '"foo"',
+      '"bar"',
+      '"baz"',
+    ]);
+  });
+
+  test('shortened at MAX_QUOTED_CHARS', () => {
+    const long = '9'.repeat(MAX_QUOTED_CHARS + 20);
+
+    expect(soleRowProblemFor(cellFinding(), { examples: [long] }).examples).toEqual([
+      `"${'9'.repeat(MAX_QUOTED_CHARS)}…"`,
+    ]);
+  });
+
+  test('tabs and newlines flattened, since they would break the layout they sit in', () => {
+    expect(soleRowProblemFor(cellFinding(), { examples: ['beef\tmince\n5'] }).examples).toEqual([
+      '"beef mince 5"',
+    ]);
+  });
+
+  test('values that differ only in whitespace collapse to one quote', () => {
+    expect(soleRowProblemFor(cellFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
+      '"5 oz"',
+    ]);
+  });
+
+  test('a finding with no value of its own quotes nothing', () => {
+    expect(soleRowProblemFor({ kind: 'too-long', column: 'product' }).examples).toEqual([]);
+  });
+});
+
+describe('the rows a problem covers', () => {
+  test('the ranges pass through, and the total counts the rows no range names', () => {
+    const group = findingGroup({
+      ranges: [
+        { start: 2, end: 4 },
+        { start: 8, end: 8 },
+      ],
+      rowCount: 7,
+    });
+
+    const [problem] = rowProblemsFor({ rowGroups: [group], rowsRead: 100 });
+
+    expect(problem?.rows).toEqual({
+      ranges: [
+        { start: 2, end: 4 },
+        { start: 8, end: 8 },
+      ],
+      total: 7,
+      everyRow: false,
+    });
+  });
+
+  test('everyRow is true only when rowsRead matches the rows the group covers', () => {
+    const group = findingGroup({ ranges: [{ start: 2, end: 4 }] });
+    const rowGroups = [group];
+
+    expect(rowProblemsFor({ rowGroups, rowsRead: group.rowCount })[0]?.rows.everyRow).toBe(true);
+    expect(rowProblemsFor({ rowGroups, rowsRead: group.rowCount + 1 })[0]?.rows.everyRow).toBe(
+      false,
+    );
+  });
+
+  test('one row and many rows produce the same problem but for the rows it names', () => {
+    const finding = cellFinding();
+    const { rows: _one, ...single } = soleRowProblemFor(finding, {
+      ranges: [{ start: 2, end: 2 }],
+    });
+    const { rows: _many, ...many } = soleRowProblemFor(finding, { ranges: [{ start: 2, end: 9 }] });
+
+    expect(single).toEqual(many);
+  });
+});
+
+describe('the summary', () => {
+  test('counts failing rows, not kinds of problem', () => {
+    expect(rejectionFor({ rowGroups: distinctKindGroups(3) }).summary).toBe(
+      'We found problems in 3 of your 3 rows.',
+    );
+  });
+
+  test('the denominator drops to singular for one', () => {
+    expect(rejectionFor().summary).toBe('We found problems in 1 of your 1 row.');
+  });
+
+  test('states the denominator, with thousands grouped', () => {
+    expect(rejectionFor({ failingRowCount: 4102, rowsRead: 4500 }).summary).toBe(
+      'We found problems in 4,102 of your 4,500 rows.',
+    );
+  });
+
+  test('says how many kinds are shown when more than MAX_PROBLEMS_REPORTED', () => {
+    const kinds = MAX_PROBLEMS_REPORTED + 2;
+
+    expect(rejectionFor({ rowGroups: distinctKindGroups(kinds) }).summary).toBe(
+      `We found problems in ${kinds} of your ${kinds} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${kinds} things to fix.`,
+    );
+  });
+
+  test('silent about showing when everything fits', () => {
+    expect(
+      rejectionFor({ rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED) }).summary,
+    ).not.toContain('Showing');
+  });
+});
+
+describe('the reason', () => {
+  test('an ordinary rejection is bad_rows', () => {
+    expect(rejectionFor().reason).toBe('bad_rows');
+  });
+
+  test('a formula anywhere in the file outranks it', () => {
+    const rowGroups = [findingGroup(), findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
+
+    expect(rejectionFor({ rowGroups }).reason).toBe('csv_injection');
+  });
+});
+
+describe('the rejectionDetail we keep but never show', () => {
+  test('one line per problem, joined with a semicolon', () => {
+    const rejectionDetail = rejectionFor({
+      rowGroups: [
+        findingGroup({ finding: cellFinding({ column: 'amount', raw: '', clause: 'is empty' }) }),
+        findingGroup({
+          finding: cellFinding({ column: 'product', raw: 'x', clause: 'is empty' }),
+          ranges: [{ start: 3, end: 3 }],
+        }),
+      ],
+    }).rejectionDetail;
+
+    expect(rejectionDetail).toBe(
+      'row 2: The amount is empty.; row 3: The product is empty. For example "x".',
+    );
+  });
+
+  test('names how many kinds are missing from it', () => {
+    const kinds = MAX_PROBLEMS_REPORTED + 3;
+
+    expect(rejectionFor({ rowGroups: distinctKindGroups(kinds) }).rejectionDetail).toContain(
+      `and ${kinds - MAX_PROBLEMS_REPORTED} more`,
+    );
+  });
+
+  test('a date order problem alone is the prose itself, with nothing to join it to', () => {
+    const dateOrder: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+
+    const rejection = rejectionFor({ rowGroups: [], dateOrder });
+
+    expect(rejection.rejectionDetail).toBe(rejection.dateOrderProblem);
+  });
+
+  test('a date order problem alongside row problems: its prose first, then the row problems', () => {
+    const dateOrder: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+
+    const rejection = rejectionFor({ rowGroups: [findingGroup()], dateOrder });
+
+    expect(rejection.rejectionDetail).toBe(
+      `${rejection.dateOrderProblem}; all 1 rows: The amount has a unit in it. For example "5 oz".`,
+    );
+  });
+});
+
+describe('a date order problem, which is prose rather than a row problem', () => {
+  const noExamples: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+
+  test('is prose of its own, never a row problem, since it is not rows to go and fix', () => {
+    const rejection = rejectionFor({ rowGroups: [], dateOrder: noExamples });
+
+    expect(rejection.rowProblems).toBeUndefined();
+    expect(rejection.dateOrderProblem).toBeDefined();
+  });
+
+  test('names no failing rows of its own', () => {
+    expect(rejectionFor({ rowGroups: [], dateOrder: noExamples }).summary).toBe(
+      'We found problems in 0 of your 0 rows.',
+    );
+  });
+
+  test('contradictory: names both rows and the reading each one forces', () => {
+    const dateOrder: DateOrderFinding = {
+      issue: 'contradictory',
+      examples: new Map([
+        [
+          'day-first',
+          {
+            line: 2,
+            raw: '13/04/2026',
+            reading: { kind: 'numeric', first: 13, second: 4, year: 2026 },
+          },
+        ],
+        [
+          'month-first',
+          {
+            line: 3,
+            raw: '04/13/2026',
+            reading: { kind: 'numeric', first: 4, second: 13, year: 2026 },
+          },
+        ],
+      ]),
+    };
+
+    expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
+      'Your dates are written both ways: row 2 has "13/04/2026", which can only be day first, ' +
+        'and row 3 has "04/13/2026", which can only be month first. Re-save the date column as ' +
+        'YYYY-MM-DD and upload again.',
+    );
+  });
+
+  test('unresolvable: names both readings of the one ambiguous value', () => {
+    const dateOrder: DateOrderFinding = {
+      issue: 'unresolvable',
+      examples: new Map([
+        [
+          'ambiguous',
+          {
+            line: 2,
+            raw: '03/04/2026',
+            reading: { kind: 'numeric', first: 3, second: 4, year: 2026 },
+          },
+        ],
+      ]),
+    };
+
+    expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
+      'Every date in that file could be read two ways — row 2\'s "03/04/2026" is 2026-04-03 or ' +
+        '2026-03-04. Re-save the date column as YYYY-MM-DD and upload again.',
+    );
+  });
+
+  test('unresolvable: falls back to "either date" when the example is not itself numeric', () => {
+    const dateOrder: DateOrderFinding = {
+      issue: 'unresolvable',
+      examples: new Map([
+        [
+          'ambiguous',
+          { line: 2, raw: 'jan 2026', reading: { kind: 'date', isoDate: '2026-01-01' } },
+        ],
+      ]),
+    };
+
+    expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toContain('either date');
+  });
+
+  test('is never crowded out by row problems filling every slot', () => {
+    const rejection = rejectionFor({
+      rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED),
+      dateOrder: noExamples,
+    });
+
+    expect(rejection.dateOrderProblem).toBeDefined();
+    expect(rejection.rowProblems).toHaveLength(MAX_PROBLEMS_REPORTED - 1);
+  });
+
+  test('the slot it takes still counts toward the "Showing" note and the detail', () => {
+    const rejection = rejectionFor({
+      rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED),
+      dateOrder: noExamples,
+    });
+
+    expect(rejection.summary).toBe(
+      `We found problems in ${MAX_PROBLEMS_REPORTED} of your ${MAX_PROBLEMS_REPORTED} rows. ` +
+        `Showing ${MAX_PROBLEMS_REPORTED} of ${MAX_PROBLEMS_REPORTED + 1} things to fix.`,
+    );
+    expect(rejection.rejectionDetail).toMatch(/; and 1 more$/);
+  });
+});
+
+describe('the whole record', () => {
+  test('bad_rows', () => {
+    expect(rejectionFor({ rowsRead: 900 })).toEqual({
+      reason: 'bad_rows',
+      summary: 'We found problems in 1 of your 900 rows.',
+      rowProblems: [
+        {
+          rule: 'The amount has a unit in it',
+          rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
+          examples: ['"5 oz"'],
+        },
+      ],
+      rejectionDetail: 'row 2: The amount has a unit in it. For example "5 oz".',
+    });
+  });
+
+  test('csv_injection', () => {
+    const rowGroups = [
+      findingGroup({ finding: { kind: 'formula', raw: '=cmd' }, ranges: [{ start: 2, end: 3 }] }),
+    ];
+
+    expect(rejectionFor({ rowGroups, rowsRead: 2 })).toEqual({
+      reason: 'csv_injection',
+      summary: 'We found problems in 2 of your 2 rows.',
+      rowProblems: [
+        {
+          rule: 'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
+          rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: true },
+          examples: ['"=cmd"'],
+        },
+      ],
+      rejectionDetail:
+        'all 2 rows: The product starts with =, +, -, or @, which spreadsheets treat as the start of a ' +
+        'formula. For example "=cmd".',
+    });
+  });
+});
+
+describe('groupDigits', () => {
+  test.for([
+    ['no separator for zero', 0, '0'],
+    ['no separator just under 1,000', 999, '999'],
+    ['a separator right at 1,000', 1000, '1,000'],
+    ['one separator', 4102, '4,102'],
+    ['two separators', 1234567, '1,234,567'],
+    ['MAX_DATA_ROWS, the limit the "too many rows" message quotes', MAX_DATA_ROWS, '500,000'],
+  ] as const)('%s', ([, value, expected]) => {
+    expect(groupDigits(value)).toBe(expected);
+  });
+});
+
+describe('formatRows', () => {
+  test('a single row', () => {
+    expect(formatRows({ ranges: [{ start: 15, end: 15 }], total: 1, everyRow: false })).toBe(
+      'row 15',
+    );
+  });
+
+  test('several rows, with the total and every range', () => {
+    expect(
+      formatRows({
+        ranges: [
+          { start: 2, end: 4 },
+          { start: 8, end: 8 },
+          { start: 11, end: 11 },
+        ],
+        total: 5,
+        everyRow: false,
+      }),
+    ).toBe('5 rows: 2–4, 8, 11');
+  });
+
+  test('a run of two is written out rather than ranged', () => {
+    expect(formatRows({ ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false })).toBe(
+      '2 rows: 2, 3',
+    );
+  });
+
+  test('rows past the range cap are named as a count', () => {
+    expect(formatRows({ ranges: [{ start: 2, end: 2 }], total: 4, everyRow: false })).toBe(
+      '4 rows: 2 and 3 more',
+    );
+  });
+
+  test('every row, with thousands grouped', () => {
+    expect(formatRows({ ranges: [{ start: 1, end: 4500 }], total: 4500, everyRow: true })).toBe(
+      'all 4,500 rows',
+    );
+  });
+});
+
+describe('renderProblemsAsDetail', () => {
+  const oneRow = { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false };
+
+  test('the rows, the rule, then the examples', () => {
+    expect(
+      renderProblemsAsDetail([
+        { rule: 'The amount has a unit in it', rows: oneRow, examples: ['"5 oz"', '"3 kg"'] },
+      ]),
+    ).toBe('row 2: The amount has a unit in it. For example "5 oz" and "3 kg".');
+  });
+
+  test('no examples, no sentence about them', () => {
+    expect(
+      renderProblemsAsDetail([
+        { rule: 'Has 2 columns where the header has 3', rows: oneRow, examples: [] },
+      ]),
+    ).toBe('row 2: Has 2 columns where the header has 3.');
+  });
+
+  test('problems joined with a semicolon', () => {
+    expect(
+      renderProblemsAsDetail([
+        { rule: 'The amount is empty', rows: oneRow, examples: [] },
+        { rule: 'The product is empty', rows: oneRow, examples: [] },
+      ]),
+    ).toBe('row 2: The amount is empty.; row 2: The product is empty.');
+  });
+
+  test('nothing to render', () => {
+    expect(renderProblemsAsDetail([])).toBe('');
+  });
+});
+
+describe('describeUnreadableFile', () => {
+  test.for([
+    [
+      'an xlsx signature',
+      { kind: 'decode', fault: { kind: 'signature', format: 'xlsx' } },
+      {
+        reason: 'unparseable',
+        summary:
+          'That looks like an Excel (.xlsx) file, not a CSV. Save it as CSV and upload it again.',
+        rejectionDetail: 'signature matched xlsx',
+      },
+    ],
+    [
+      'an xls signature',
+      { kind: 'decode', fault: { kind: 'signature', format: 'xls' } },
+      {
+        reason: 'unparseable',
+        summary:
+          'That looks like an old Excel (.xls) file, not a CSV. Save it as CSV and upload it again.',
+        rejectionDetail: 'signature matched xls',
+      },
+    ],
+    [
+      'a control character, offset kept but not shown',
+      { kind: 'decode', fault: { kind: 'control-character', code: 0x01, offset: 7 } },
+      {
+        reason: 'unparseable',
+        summary:
+          'That file does not look like text. Save it as CSV (comma separated values) and upload it again.',
+        rejectionDetail: 'control character 0x1 at offset 7',
+      },
+    ],
+    [
+      'an empty decode',
+      { kind: 'decode', fault: { kind: 'empty' } },
+      { reason: 'empty', summary: 'That file has no rows in it.' },
+    ],
+    [
+      'a missing column',
+      {
+        kind: 'layout',
+        fault: {
+          kind: 'bad-header',
+          fields: ['vendor', 'cost'],
+          fault: { kind: 'missing', columns: ['product', 'date', 'amount'] },
+        },
+      },
+      {
+        reason: 'bad_columns',
+        summary: 'Your file needs a column for product name, date ordered and amount ordered.',
+        rejectionDetail: 'header: vendor | cost',
+      },
+    ],
+    [
+      'an ambiguous column',
+      {
+        kind: 'layout',
+        fault: {
+          kind: 'bad-header',
+          fields: ['product', 'item', 'date', 'amount'],
+          fault: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
+        },
+      },
+      {
+        reason: 'bad_columns',
+        summary:
+          'Two columns could be the product name: "product" and "item". Remove or rename one.',
+        rejectionDetail: 'header: product | item | date | amount',
+      },
+    ],
+    [
+      'a header resolved fine but the layout still failed to open',
+      { kind: 'layout', fault: { kind: 'bad-header', fields: ['product', 'date', 'amount'] } },
+      {
+        reason: 'bad_columns',
+        summary: 'We could not read that file.',
+        rejectionDetail: 'header: product | date | amount',
+      },
+    ],
+    [
+      'ambiguous delimiters',
+      {
+        kind: 'layout',
+        fault: {
+          kind: 'ambiguous',
+          candidates: [
+            { delimiter: ',', line: 1 },
+            { delimiter: '\t', line: 1 },
+          ],
+        },
+      },
+      {
+        reason: 'bad_columns',
+        summary:
+          "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
+        rejectionDetail: '"," at line 1 and "\\t" at line 1',
+      },
+    ],
+    [
+      'an empty layout',
+      { kind: 'layout', fault: { kind: 'empty' } },
+      { reason: 'empty', summary: 'That file has no rows in it.' },
+    ],
+    [
+      'a layout parse error',
+      {
+        kind: 'layout',
+        fault: { kind: 'parse-error', error: new CsvParseError('unclosed-quote', 1) },
+      },
+      {
+        reason: 'unparseable',
+        summary:
+          'The quotes starting on line 1 are never closed, so we cannot tell where that row ends.',
+        rejectionDetail: 'unclosed-quote at line 1',
+      },
+    ],
+    [
+      'an unclosed quote found while reading data',
+      { kind: 'parse', error: new CsvParseError('unclosed-quote', 4) },
+      {
+        reason: 'unparseable',
+        summary:
+          'The quotes starting on line 4 are never closed, so we cannot tell where that row ends.',
+        rejectionDetail: 'unclosed-quote at line 4',
+      },
+    ],
+    [
+      'text after a closing quote',
+      { kind: 'parse', error: new CsvParseError('text-after-quote', 2) },
+      {
+        reason: 'unparseable',
+        summary:
+          'Line 2 has text after a closing quote. A quoted value has to fill the whole cell.',
+        rejectionDetail: 'text-after-quote at line 2',
+      },
+    ],
+    [
+      'too many columns',
+      { kind: 'parse', error: new CsvParseError('too-many-columns', 1) },
+      {
+        reason: 'too_large',
+        summary: `That file has more than ${MAX_COLUMNS} columns, far past what we can read.`,
+        rejectionDetail: 'too-many-columns at line 1',
+      },
+    ],
+    [
+      'too many rows, with thousands grouped',
+      { kind: 'too-many-rows' },
+      {
+        reason: 'too_large',
+        summary: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
+      },
+    ],
+    [
+      'a header with no rows under it',
+      { kind: 'no-data-rows' },
+      { reason: 'empty', summary: 'That file has a header but no rows under it.' },
+    ],
+  ] as const)('%s', ([, file, expected]) => {
+    // biome-ignore lint/suspicious/noExplicitAny: the table's inline literals don't infer as the discriminated union.
+    expect(describeUnreadableFile(file as any)).toEqual(expected);
+  });
+});

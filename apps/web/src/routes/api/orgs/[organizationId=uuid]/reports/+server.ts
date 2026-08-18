@@ -176,7 +176,7 @@ async function recordRejection(
         inputFileByteSize: upload.fileDescription?.byteSize ?? null,
         inputFileOriginalFilename: upload.fileDescription?.originalFilename ?? null,
         rejectionReason: rejection.reason,
-        rejectionDetail: rejection.detail ?? null,
+        rejectionDetail: rejection.rejectionDetail ?? null,
       })
       .execute();
   } catch (cause) {

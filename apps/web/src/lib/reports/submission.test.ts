@@ -72,7 +72,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason,
-          ...(field ? { message: `Check these fields: ${field}.` } : {}),
+          ...(field ? { summary: `Check these fields: ${field}.` } : {}),
         },
       });
     });
@@ -82,7 +82,7 @@ describe('validateSubmission', () => {
 
       expect(outcome).toMatchObject({
         ok: false,
-        rejection: { reason: 'too_large', detail: `${MAX_UPLOAD_BYTES + 1} bytes` },
+        rejection: { reason: 'too_large', rejectionDetail: `${MAX_UPLOAD_BYTES + 1} bytes` },
       });
     });
 
@@ -95,7 +95,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason: 'invalid_metadata',
-          message: 'Check these fields: countsBasis, unitSystem.',
+          summary: 'Check these fields: countsBasis, unitSystem.',
         },
       });
     });

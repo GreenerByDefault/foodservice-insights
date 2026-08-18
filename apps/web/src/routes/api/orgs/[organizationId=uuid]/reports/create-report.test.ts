@@ -183,10 +183,10 @@ describe('a rejected upload', () => {
   });
 
   // `toEqual`, not `toMatchObject`: the point here is the keys that are absent.
-  test('answers with the reason and the message, and nothing else', async () => {
+  test('answers with the reason and the summary, and nothing else', async () => {
     const { refusal } = await reject({ monthlyCounts: '{oops' });
 
-    expect(refusal.body).toEqual({ code: 'invalid_metadata', message: expect.any(String) });
+    expect(refusal.body).toEqual({ code: 'invalid_metadata', summary: expect.any(String) });
   });
 
   test('keeps the file that was refused', async () => {

@@ -61,7 +61,7 @@ test('rejects a file over the product limit as our own 400, not the transport 41
   expect(response.status()).toBe(400);
   expect(await response.json()).toMatchObject({
     code: 'too_large',
-    message: 'That file is larger than 10MB.',
+    summary: 'That file is larger than 10MB.',
   });
 });
 

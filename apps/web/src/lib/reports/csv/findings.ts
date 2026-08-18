@@ -17,8 +17,9 @@ import type { DateOrder, DateOrderFault, DateReading } from './rules/dates.ts';
  */
 export type RowFinding =
   | { kind: 'cell'; column: RequiredColumn; raw: string; clause: string }
-  /** A date that only failed once the column-wide order was applied, so the message has to name
-   * the reading we took. */
+  /** A date that only failed once the column-wide order was applied. `readAs` isn't shown to the
+   * user; it stays on the finding only so groupKey can tell apart two rows whose `clause` matches
+   * by coincidence despite being read with opposite orders — see the comment there. */
   | { kind: 'resolved-date'; readAs: DateOrder; raw: string; clause: string }
   // We leave off the `raw` value.
   | { kind: 'too-long'; column: RequiredColumn }
@@ -31,6 +32,7 @@ export type RowFinding =
 export type DateExample = { line: number; raw: string; reading: DateReading };
 export type DateExamples = ReadonlyMap<DateOrder | 'ambiguous', DateExample>;
 
+/** A column-wide date-order failure. */
 export type DateOrderFinding = {
   issue: DateOrderFault;
   examples: DateExamples;
@@ -53,10 +55,12 @@ export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
   dateOrder?: DateOrderFinding;
   failingRowCount: number;
+  /** Every data row seen, passing or failing. */
+  rowsRead: number;
 };
 
 export function newFindingLog(): FindingLog {
-  return { rowGroups: new Map(), failingRowCount: 0 };
+  return { rowGroups: new Map(), failingRowCount: 0, rowsRead: 0 };
 }
 
 /** Add a row to the finding it failed, which is created on the first row to reach it. */
@@ -70,6 +74,11 @@ export function noteRow(log: FindingLog, line: number, finding: RowFinding): voi
 
   extendOrStartRange(group, line);
   addExampleValue(group, rawValueOf(finding));
+}
+
+/** Call once per data row read, whether or not it failed, so `rowsRead` is a true denominator. */
+export function noteRowRead(log: FindingLog): void {
+  log.rowsRead += 1;
 }
 
 export function noteDateOrder(log: FindingLog, finding: DateOrderFinding): void {
@@ -134,6 +143,7 @@ export type Findings = {
   readonly failingRowCount: number;
   readonly rowGroups: readonly FindingGroup[];
   readonly dateOrder?: DateOrderFinding;
+  readonly rowsRead: number;
 };
 
 /** Closes the log to further writes — the contract `seal` names. */
@@ -142,5 +152,10 @@ export function seal(log: FindingLog): Findings {
     ...group,
     examples: [...group.examples],
   }));
-  return { failingRowCount: log.failingRowCount, rowGroups, dateOrder: log.dateOrder };
+  return {
+    failingRowCount: log.failingRowCount,
+    rowGroups,
+    dateOrder: log.dateOrder,
+    rowsRead: log.rowsRead,
+  };
 }
