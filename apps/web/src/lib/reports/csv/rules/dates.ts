@@ -3,21 +3,11 @@
  * Every pattern here is anchored with bounded quantifiers, and callers length-check a cell before
  * handing it over.
  *
- * Two constructors are banned here, and only `Date.UTC` is left:
- *
- * - **`Date.parse` and `new Date(string)`** guess at ambiguous input without saying so.
- *   `Date.parse('03/04/2025')` returns March 4 with no hint that April 3 was as good a reading.
- * - **`new Date(y, m, d)`** is timezone-dependent, so the browser and the server would disagree
- *   about the same file.
- *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.
  */
 
-import { MAX_FUTURE_DAYS } from '../../limits.ts';
-
-/** Which of the first two numbers in `03/04/2025` is the day. */
-export type DateOrder = 'day-first' | 'month-first';
+import { type DateBounds, toIsoDate } from './calendar.ts';
 
 export type DateReading =
   /** Unambiguous, and already inside the accepted range. */
@@ -25,10 +15,6 @@ export type DateReading =
   /** `first/second/year`, where only the whole column can say which is the day. */
   | { kind: 'numeric'; first: number; second: number; year: number }
   | { kind: 'invalid'; fault: string };
-
-export type DateBounds = { earliest: string; latest: string };
-
-export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; fault: string };
 
 // ------------------------------------------------------------------
 // Recognizing a cell
@@ -138,74 +124,6 @@ export function readDate(raw: string, bounds: DateBounds): DateReading {
 const FIRST_OF_THE_MONTH = 1;
 
 // ------------------------------------------------------------------
-// Resolving column-wide order
-// ------------------------------------------------------------------
-
-/** Which reading a value rules out, if any. `13/04/2025` can only be day-first. */
-export function orderProvenBy(reading: DateReading): DateOrder | undefined {
-  if (reading.kind !== 'numeric') return undefined;
-  if (reading.first > 12) return 'day-first';
-  if (reading.second > 12) return 'month-first';
-  return undefined;
-}
-
-/** Why a column's date order couldn't be decided.
- *
- * `contradictory`: one column holds values proving both readings — a typo, or two exports
- * concatenated. `unresolvable`: every value works either way, so there is nothing to infer from.
- */
-export type DateOrderFault = 'contradictory' | 'unresolvable';
-
-export type OrderDecision = { ok: true; order: DateOrder } | { ok: false; fault: DateOrderFault };
-
-/** Decide day-first or month-first for the whole column, never per value.
- *
- * Deciding per value is what lets `01/13/2025` and `13/01/2025` in one column silently become the
- * same date. Deciding for the column also means a single typo cannot quietly flip the reading of
- * every other row: it makes both readings provable, and that is a rejection.
- */
-export function decideDateOrder(readings: Iterable<DateReading>): OrderDecision {
-  const proven = new Set<DateOrder>();
-  let sawNumeric = false;
-
-  for (const reading of readings) {
-    if (reading.kind !== 'numeric') continue;
-    sawNumeric = true;
-    const order = orderProvenBy(reading);
-    if (order) proven.add(order);
-  }
-
-  if (proven.size === 2) return { ok: false, fault: 'contradictory' };
-  const [order] = proven;
-  if (order) return { ok: true, order };
-  // With nothing numeric in the column the order is never consulted; either answer will do.
-  return sawNumeric ? { ok: false, fault: 'unresolvable' } : { ok: true, order: 'month-first' };
-}
-
-export function applyOrder(
-  reading: Extract<DateReading, { kind: 'numeric' }>,
-  order: DateOrder,
-  bounds: DateBounds,
-): ResolvedDate {
-  const [day, month] =
-    order === 'day-first' ? [reading.first, reading.second] : [reading.second, reading.first];
-  return toIso(reading.year, month, day, bounds);
-}
-
-/** Both ways a value could be read, so a message can show the user the problem rather than
- * describe it.
- */
-export function bothReadings(reading: Extract<DateReading, { kind: 'numeric' }>): string {
-  const describe = (resolved: ResolvedDate) => (resolved.ok ? resolved.isoDate : 'no real date');
-  return [
-    describe(applyOrder(reading, 'day-first', ANY_DATE)),
-    describe(applyOrder(reading, 'month-first', ANY_DATE)),
-  ].join(' or ');
-}
-
-const ANY_DATE: DateBounds = { earliest: '0000-01-01', latest: '9999-12-31' };
-
-// ------------------------------------------------------------------
 // Internal helpers
 // ------------------------------------------------------------------
 
@@ -228,7 +146,7 @@ function named(
 }
 
 function dated(year: number, month: number, day: number, bounds: DateBounds): DateReading {
-  const resolved = toIso(year, month, day, bounds);
+  const resolved = toIsoDate(year, month, day, bounds);
   return resolved.ok
     ? { kind: 'date', isoDate: resolved.isoDate }
     : { kind: 'invalid', fault: resolved.fault };
@@ -239,30 +157,4 @@ function expandYear(token: string | undefined): number {
   const year = Number(token);
   if (token?.length !== 2) return year;
   return 2000 + year;
-}
-
-function toIso(year: number, month: number, day: number, bounds: DateBounds): ResolvedDate {
-  if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return { ok: false, fault: NOT_A_DATE };
-  }
-
-  // `Date.UTC` rolls February 30 forward into March rather than complaining, so the only way to
-  // know the date exists is to read the fields back out.
-  const at = new Date(Date.UTC(year, month - 1, day));
-  if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) {
-    return { ok: false, fault: NOT_A_DATE };
-  }
-
-  const isoDate = `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
-  if (isoDate < bounds.earliest) {
-    return { ok: false, fault: `is before ${bounds.earliest}, too old to be procurement data` };
-  }
-  if (isoDate > bounds.latest) {
-    return { ok: false, fault: `is more than ${MAX_FUTURE_DAYS} days from now` };
-  }
-  return { ok: true, isoDate };
-}
-
-function pad(value: number): string {
-  return String(value).padStart(2, '0');
 }

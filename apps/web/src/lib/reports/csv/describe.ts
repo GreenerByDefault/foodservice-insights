@@ -13,11 +13,15 @@ import {
 } from '../limits.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
 import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './findings.ts';
-import type { HeaderFault, RequiredColumn } from './read/columns.ts';
-import type { DecodeFault } from './read/decode.ts';
-import type { HeaderCandidate, LayoutFault } from './read/layout.ts';
-import type { CsvParseError } from './read/parse.ts';
-import { bothReadings } from './rules/dates.ts';
+import type {
+  CsvParseError,
+  DecodeFault,
+  HeaderCandidate,
+  HeaderFault,
+  LayoutFault,
+  RequiredColumn,
+} from './read/index.ts';
+import { bothDateOrderReadings } from './rules/index.ts';
 
 // ---------------------------------------------------------------------------
 // The structured payload
@@ -311,7 +315,9 @@ function describeDateOrderFinding(finding: DateOrderFinding): string {
   // readings of the same value.
   const ambiguous = examples.get('ambiguous');
   const readings =
-    ambiguous?.reading.kind === 'numeric' ? bothReadings(ambiguous.reading) : 'either date';
+    ambiguous?.reading.kind === 'numeric'
+      ? bothDateOrderReadings(ambiguous.reading)
+      : 'either date';
   return `Every date in that file could be read two ways — row ${ambiguous?.line}'s ${quote(ambiguous?.raw ?? '')} is ${readings}. ${advice}`;
 }
 

@@ -18,7 +18,9 @@ customer-facing type.
 | `read/parse.ts` | Delimiter grammar |
 | `read/columns.ts` | Header matching |
 | `read/layout.ts` | Which delimiter and header the file resolves to |
+| `rules/calendar.ts` | Calendar fields into an ISO date inside the accepted range |
 | `rules/dates.ts` | Date cells |
+| `rules/date-order.ts` | Deciding a column's day-first/month-first order |
 | `rules/amounts.ts` | Amount cells |
 | `rules/products.ts` | Product cells, including the formula-injection check |
 | `findings.ts` | Folding many failing rows into a few groups, without wording any of them |
@@ -36,15 +38,6 @@ them instead of guessed at.
 What comes out is `product,date,weight`: comma-delimited, UTF-8, dates `YYYY-MM-DD`, amounts plain
 numbers, and nothing else. Ambiguous dates, unit words, semicolon delimiters, Windows-1252 are rejected. Weights stay in the unit the form declared, which
 the run manifest carries; converting them is the analysis's job.
-
-**Banned APIs**, because each one would let the browser and the server disagree on a file the
-other accepted — a disagreement the user cannot act on. Use `Date.UTC` only.
-
-| API | Why not |
-| --- | --- |
-| `Intl`, `toLocale*` | Varies by runtime and by the user's machine |
-| `Date.parse`, `new Date(string)` | Guesses at ambiguous input without saying so |
-| `new Date(y, m, d)` | Depends on the local timezone |
 
 Every file in this folder is imported by the browser as well as the server: keep them free of
 `$env`, `$lib/server`, and anything Node-only.
