@@ -11,6 +11,7 @@
  * Values that must be unique are randomised, because tests run concurrently against one database.
  */
 
+import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../generated/public/AnalysisAttemptStatus.ts';
 import type { AppUser } from '../generated/public/AppUser.ts';
@@ -145,6 +146,11 @@ export async function insertAnalysisAttempt(
     attemptNumber?: number;
     status?: AnalysisAttemptStatus;
     workerId?: string;
+    requestedByUserId?: UsersId | null;
+    createdAt?: Date;
+    /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
+     * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
+    finishedAt?: Date;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -159,6 +165,8 @@ export async function insertAnalysisAttempt(
       reportId,
       attemptNumber: overrides.attemptNumber ?? 1,
       status,
+      requestedByUserId: overrides.requestedByUserId ?? null,
+      ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
       ...(isProcessing
         ? {
             workerId: overrides.workerId ?? 'test-worker',
@@ -167,7 +175,10 @@ export async function insertAnalysisAttempt(
           }
         : {}),
       ...(isTerminal
-        ? { finishedAt: new Date(), failureReason: status === 'failed' ? 'child_crashed' : null }
+        ? {
+            finishedAt: overrides.finishedAt ?? new Date(),
+            failureReason: status === 'failed' ? 'child_crashed' : null,
+          }
         : {}),
     })
     .returningAll()
