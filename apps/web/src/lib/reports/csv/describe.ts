@@ -74,10 +74,11 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   const rowProblems = findings.rowGroups.map((group) => toProblem(group, findings.rowsRead));
   const dateOrderProblem = findings.dateOrder && describeDateOrderFinding(findings.dateOrder);
 
-  const shownRowProblems = rowProblems.slice(0, MAX_PROBLEMS_REPORTED);
-  // The date-order problem takes a slot only if the row problems left one.
-  const shownDateOrderProblem =
-    shownRowProblems.length < MAX_PROBLEMS_REPORTED ? dateOrderProblem : undefined;
+  // The date-order problem always gets a slot: it's a fatal, file-wide failure, so row problems
+  // must not crowd it out.
+  const shownDateOrderProblem = dateOrderProblem;
+  const rowProblemSlots = MAX_PROBLEMS_REPORTED - (shownDateOrderProblem ? 1 : 0);
+  const shownRowProblems = rowProblems.slice(0, rowProblemSlots);
 
   const totalKinds = rowProblems.length + (dateOrderProblem ? 1 : 0);
   const shownKinds = shownRowProblems.length + (shownDateOrderProblem ? 1 : 0);

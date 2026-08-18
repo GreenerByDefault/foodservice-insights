@@ -342,6 +342,16 @@ describe('a date column that could not be resolved', () => {
 
     expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toContain('either date');
   });
+
+  test('is never crowded out by row problems filling every slot', () => {
+    const rejection = rejectionFor({
+      rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED),
+      dateOrder: noExamples,
+    });
+
+    expect(rejection.dateOrderProblem).toBeDefined();
+    expect(rejection.rowProblems).toHaveLength(MAX_PROBLEMS_REPORTED - 1);
+  });
 });
 
 describe('the whole record', () => {
