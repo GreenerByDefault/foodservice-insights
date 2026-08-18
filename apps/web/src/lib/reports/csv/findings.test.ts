@@ -10,14 +10,7 @@ import {
   type RowFinding,
   seal,
 } from './findings.ts';
-
-const cell = (over: Partial<Extract<RowFinding, { kind: 'cell' }>> = {}): RowFinding => ({
-  kind: 'cell',
-  column: 'amount',
-  raw: '5 oz',
-  clause: 'has a unit in it',
-  ...over,
-});
+import { cell } from './testing/fixtures.ts';
 
 /** The expected shape of a group that a single row reached, covering exactly `line`. */
 function singleRowGroup(finding: RowFinding, line: number, examples: string[] = []) {

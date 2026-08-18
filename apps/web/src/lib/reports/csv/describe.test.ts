@@ -26,27 +26,23 @@ import {
   seal,
 } from './findings.ts';
 import { CsvParseError } from './read/parse.ts';
+import { cell } from './testing/fixtures.ts';
 
 type Line = { line: number; finding: RowFinding };
 
-const cell = (over: Partial<Extract<RowFinding, { kind: 'cell' }>> = {}): RowFinding => ({
-  kind: 'cell',
-  column: 'amount',
-  raw: '5 oz',
-  clause: 'has a unit in it',
-  ...over,
-});
-
 /** The same finding on each of `lines`, in the increasing order `validate.ts` finds them in. */
-const on = (lines: readonly number[], finding: RowFinding): Line[] =>
-  lines.map((line) => ({ line, finding }));
+function sameFindingOnLines(lines: readonly number[], finding: RowFinding): Line[] {
+  return lines.map((line) => ({ line, finding }));
+}
 
-const run = (start: number, end: number): number[] =>
-  Array.from({ length: end - start + 1 }, (_, index) => start + index);
+function consecutiveLines(start: number, end: number): number[] {
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
 
 /** One cell finding per raw value, on consecutive rows: a column failing the same way. */
-const column = (clause: string, ...raws: readonly string[]): Line[] =>
-  raws.map((raw, index) => ({ line: index + 2, finding: cell({ raw, clause }) }));
+function cellFindingsForColumn(clause: string, ...raws: readonly string[]): Line[] {
+  return raws.map((raw, index) => ({ line: index + 2, finding: cell({ raw, clause }) }));
+}
 
 function findingsOf(...lines: readonly Line[][]): Findings {
   const log = newFindingLog();
@@ -60,8 +56,13 @@ function dateOrderFindingsOf(finding: DateOrderFinding): Findings {
   return seal(log);
 }
 
-const rejectionOf = (...lines: readonly Line[][]) => describeFindings(findingsOf(...lines));
-const rowProblemsOf = (...lines: readonly Line[][]) => rejectionOf(...lines).rowProblems ?? [];
+function rejectionOf(...lines: readonly Line[][]) {
+  return describeFindings(findingsOf(...lines));
+}
+
+function rowProblemsOf(...lines: readonly Line[][]) {
+  return rejectionOf(...lines).rowProblems ?? [];
+}
 
 /** Throws unless the findings resolve to exactly one row problem — most of the tests below are
  * about one row, and a change that silently produces two is a regression worth failing loudly on.
@@ -76,28 +77,26 @@ function oneProblem(...lines: readonly Line[][]): Problem {
   return only;
 }
 
-const singleRow = (line: number): RowSpan => ({
-  ranges: [{ start: line, end: line }],
-  total: 1,
-  everyRow: false,
-});
+function singleRow(line: number): RowSpan {
+  return { ranges: [{ start: line, end: line }], total: 1, everyRow: false };
+}
 
 describe('describeFindings', () => {
   describe('one row, where the whole rejection is that row', () => {
     test.for([
       [
         'a bad cell',
-        on([2], cell({ raw: '5 oz', clause: 'has a unit in it' })),
+        sameFindingOnLines([2], cell({ raw: '5 oz', clause: 'has a unit in it' })),
         { rule: 'The amount has a unit in it', examples: ['"5 oz"'] },
       ],
       [
         'a blank cell, with nothing to quote',
-        on([2], cell({ raw: '', clause: 'is empty' })),
+        sameFindingOnLines([2], cell({ raw: '', clause: 'is empty' })),
         { rule: 'The amount is empty', examples: [] },
       ],
       [
         'a date resolved day-first',
-        on([2], {
+        sameFindingOnLines([2], {
           kind: 'resolved-date',
           readAs: 'day-first',
           raw: '01/12/2026',
@@ -111,7 +110,7 @@ describe('describeFindings', () => {
       ],
       [
         'a date resolved month-first',
-        on([2], {
+        sameFindingOnLines([2], {
           kind: 'resolved-date',
           readAs: 'month-first',
           raw: '12/01/2026',
@@ -125,12 +124,12 @@ describe('describeFindings', () => {
       ],
       [
         'an over-long cell, which never quotes the value',
-        on([2], { kind: 'too-long', column: 'product' }),
+        sameFindingOnLines([2], { kind: 'too-long', column: 'product' }),
         { rule: `The product is over ${MAX_FREE_TEXT_LENGTH} characters long`, examples: [] },
       ],
       [
         'a formula trigger',
-        on([2], { kind: 'formula', raw: '=cmd' }),
+        sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' }),
         {
           rule: 'The product starts with a character a spreadsheet reads as the start of a formula',
           examples: ['"=cmd"'],
@@ -138,12 +137,12 @@ describe('describeFindings', () => {
       ],
       [
         'a width mismatch',
-        on([2], { kind: 'width', actual: 2, expected: 3 }),
+        sameFindingOnLines([2], { kind: 'width', actual: 2, expected: 3 }),
         { rule: 'Has 2 columns where the header has 3', examples: [] },
       ],
       [
         'a one-column row, not pluralized',
-        on([2], { kind: 'width', actual: 1, expected: 3 }),
+        sameFindingOnLines([2], { kind: 'width', actual: 1, expected: 3 }),
         { rule: 'Has 1 column where the header has 3', examples: [] },
       ],
     ] as const)('%s', ([, lines, expected]) => {
@@ -151,7 +150,9 @@ describe('describeFindings', () => {
     });
 
     test('the whole record, not just the problem', () => {
-      expect(rejectionOf(on([2], cell({ raw: '5 oz', clause: 'has a unit in it' })))).toEqual({
+      expect(
+        rejectionOf(sameFindingOnLines([2], cell({ raw: '5 oz', clause: 'has a unit in it' }))),
+      ).toEqual({
         reason: 'bad_rows',
         message: 'We found problems in 1 row.',
         rowProblems: [
@@ -164,7 +165,7 @@ describe('describeFindings', () => {
 
   describe('several rows: only `rows` and `examples` differ from the single-row case', () => {
     test('a run of two', () => {
-      expect(oneProblem(on([2, 3], cell()))).toEqual({
+      expect(oneProblem(sameFindingOnLines([2, 3], cell()))).toEqual({
         rule: 'The amount has a unit in it',
         rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false },
         examples: ['"5 oz"'],
@@ -172,7 +173,7 @@ describe('describeFindings', () => {
     });
 
     test('a run of three', () => {
-      expect(oneProblem(on(run(2, 4), cell())).rows).toEqual({
+      expect(oneProblem(sameFindingOnLines(consecutiveLines(2, 4), cell())).rows).toEqual({
         ranges: [{ start: 2, end: 4 }],
         total: 3,
         everyRow: false,
@@ -180,7 +181,12 @@ describe('describeFindings', () => {
     });
 
     test('every run is listed up to the cap', () => {
-      expect(oneProblem(on(run(2, 4), cell()), on([8, 11], cell())).rows).toEqual({
+      expect(
+        oneProblem(
+          sameFindingOnLines(consecutiveLines(2, 4), cell()),
+          sameFindingOnLines([8, 11], cell()),
+        ).rows,
+      ).toEqual({
         ranges: [
           { start: 2, end: 4 },
           { start: 8, end: 8 },
@@ -195,7 +201,7 @@ describe('describeFindings', () => {
       const runs = MAX_ROW_RANGES_REPORTED + 2;
       const lines = Array.from({ length: runs }, (_, index) => 2 + index * 2);
 
-      const { rows } = oneProblem(on(lines, cell()));
+      const { rows } = oneProblem(sameFindingOnLines(lines, cell()));
       expect(rows.ranges).toHaveLength(MAX_ROW_RANGES_REPORTED);
       expect(rows.total).toBe(runs);
     });
@@ -213,47 +219,51 @@ describe('describeFindings', () => {
 
     test('everyRow stays false when rowsRead is unknown, even if every noted row matches', () => {
       // rowsRead defaults to 0 (unknown) here, since noteRowRead was never called.
-      expect(oneProblem(on([2, 3], cell())).rows.everyRow).toBe(false);
+      expect(oneProblem(sameFindingOnLines([2, 3], cell())).rows.everyRow).toBe(false);
     });
   });
 
   describe('the values it quotes back', () => {
     test('distinct values only', () => {
       expect(
-        oneProblem(column('is not a date we recognise', 'foo', 'bar', 'baz')).examples,
+        oneProblem(cellFindingsForColumn('is not a date we recognise', 'foo', 'bar', 'baz'))
+          .examples,
       ).toEqual(['"foo"', '"bar"', '"baz"']);
     });
 
     test('capped at MAX_EXAMPLE_VALUES', () => {
       const raws = Array.from({ length: MAX_EXAMPLE_VALUES + 5 }, (_, index) => `v${index}`);
-      expect(oneProblem(column('is not a date we recognise', ...raws)).examples).toHaveLength(
-        MAX_EXAMPLE_VALUES,
-      );
+      expect(
+        oneProblem(cellFindingsForColumn('is not a date we recognise', ...raws)).examples,
+      ).toHaveLength(MAX_EXAMPLE_VALUES);
     });
 
     test('shortened at MAX_QUOTED_CHARS', () => {
       const long = '9'.repeat(MAX_QUOTED_CHARS + 20);
-      expect(oneProblem(on([2], cell({ raw: long, clause: 'is not a number' }))).examples).toEqual([
-        `"${'9'.repeat(MAX_QUOTED_CHARS)}…"`,
-      ]);
+      expect(
+        oneProblem(sameFindingOnLines([2], cell({ raw: long, clause: 'is not a number' })))
+          .examples,
+      ).toEqual([`"${'9'.repeat(MAX_QUOTED_CHARS)}…"`]);
     });
 
     test('tabs and newlines flattened', () => {
       expect(
-        oneProblem(on([2], cell({ raw: 'beef\tmince\n5', clause: 'is not a number' }))).examples,
+        oneProblem(
+          sameFindingOnLines([2], cell({ raw: 'beef\tmince\n5', clause: 'is not a number' })),
+        ).examples,
       ).toEqual(['"beef mince 5"']);
     });
 
     test('blank values kept out of the quoted examples entirely', () => {
-      expect(oneProblem(column('is empty', '', '   ')).examples).toEqual([]);
+      expect(oneProblem(cellFindingsForColumn('is empty', '', '   ')).examples).toEqual([]);
     });
   });
 
   describe('telling two problems apart', () => {
     test('the same clause on two columns stays two problems', () => {
       const problems = rowProblemsOf(
-        on([2], cell({ column: 'amount', raw: '', clause: 'is empty' })),
-        on([3], cell({ column: 'product', raw: '', clause: 'is empty' })),
+        sameFindingOnLines([2], cell({ column: 'amount', raw: '', clause: 'is empty' })),
+        sameFindingOnLines([3], cell({ column: 'product', raw: '', clause: 'is empty' })),
       );
 
       expect(problems.map((problem) => problem.rule)).toEqual([
@@ -264,8 +274,11 @@ describe('describeFindings', () => {
 
     test('a date read day-first stays apart from the same clause read straight', () => {
       const problems = rowProblemsOf(
-        on([2], cell({ column: 'date', raw: '2027-02-30', clause: 'is not a real calendar date' })),
-        on([3], {
+        sameFindingOnLines(
+          [2],
+          cell({ column: 'date', raw: '2027-02-30', clause: 'is not a real calendar date' }),
+        ),
+        sameFindingOnLines([3], {
           kind: 'resolved-date',
           readAs: 'day-first',
           raw: '31/02/2026',
@@ -277,17 +290,23 @@ describe('describeFindings', () => {
     });
 
     test('rows with different values group into one', () => {
-      expect(rowProblemsOf(column('is not a number', 'oops', 'nope'))).toHaveLength(1);
+      expect(rowProblemsOf(cellFindingsForColumn('is not a number', 'oops', 'nope'))).toHaveLength(
+        1,
+      );
     });
   });
 
   describe('the summary line', () => {
     test('counts rows, not problems', () => {
-      expect(rejectionOf(on(run(2, 4), cell())).message).toBe('We found problems in 3 rows.');
+      expect(rejectionOf(sameFindingOnLines(consecutiveLines(2, 4), cell())).message).toBe(
+        'We found problems in 3 rows.',
+      );
     });
 
     test('singular for one', () => {
-      expect(rejectionOf(on([2], cell())).message).toBe('We found problems in 1 row.');
+      expect(rejectionOf(sameFindingOnLines([2], cell())).message).toBe(
+        'We found problems in 1 row.',
+      );
     });
 
     test('states the denominator once rowsRead is known', () => {
@@ -301,7 +320,7 @@ describe('describeFindings', () => {
     test('says how many kinds are shown when more than MAX_PROBLEMS_REPORTED', () => {
       const widths = Array.from({ length: MAX_PROBLEMS_REPORTED + 2 }, (_, index) => index + 4);
       const lines = widths.map((actual, index) =>
-        on([2 + index], { kind: 'width', actual, expected: 3 }),
+        sameFindingOnLines([2 + index], { kind: 'width', actual, expected: 3 }),
       );
 
       expect(rejectionOf(...lines).message).toBe(
@@ -310,25 +329,27 @@ describe('describeFindings', () => {
     });
 
     test('silent about showing when everything fits', () => {
-      expect(rejectionOf(on([2], cell())).message).not.toContain('Showing');
+      expect(rejectionOf(sameFindingOnLines([2], cell())).message).not.toContain('Showing');
     });
 
     test('the formula sentence leads the message', () => {
-      expect(rejectionOf(on([2], { kind: 'formula', raw: '=cmd' })).message).toBe(
+      expect(rejectionOf(sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' })).message).toBe(
         'Some product names start with a character a spreadsheet reads as the start of a formula ' +
           '(= + - @), which we cannot accept. We found problems in 1 row.',
       );
     });
 
     test('csv_injection is derived from a formula problem being present', () => {
-      expect(rejectionOf(on([2], { kind: 'formula', raw: '=cmd' })).reason).toBe('csv_injection');
-      expect(rejectionOf(on([2], cell())).reason).toBe('bad_rows');
+      expect(rejectionOf(sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' })).reason).toBe(
+        'csv_injection',
+      );
+      expect(rejectionOf(sameFindingOnLines([2], cell())).reason).toBe('bad_rows');
     });
 
     test('a formula outranks an ordinary problem in the same file', () => {
       const reason = rejectionOf(
-        on([2], { kind: 'formula', raw: '=cmd' }),
-        on([3], cell({ raw: '', clause: 'is empty' })),
+        sameFindingOnLines([2], { kind: 'formula', raw: '=cmd' }),
+        sameFindingOnLines([3], cell({ raw: '', clause: 'is empty' })),
       ).reason;
 
       expect(reason).toBe('csv_injection');
@@ -338,8 +359,8 @@ describe('describeFindings', () => {
   describe('the detail we keep but never show', () => {
     test('joins multiple problems with a semicolon', () => {
       const detail = rejectionOf(
-        on([2], cell({ column: 'amount', raw: '', clause: 'is empty' })),
-        on([3], cell({ column: 'product', raw: '', clause: 'is empty' })),
+        sameFindingOnLines([2], cell({ column: 'amount', raw: '', clause: 'is empty' })),
+        sameFindingOnLines([3], cell({ column: 'product', raw: '', clause: 'is empty' })),
       ).detail;
 
       expect(detail).toBe('row 2: The amount is empty.; row 3: The product is empty.');
@@ -348,7 +369,7 @@ describe('describeFindings', () => {
     test('names how many more beyond what is shown', () => {
       const widths = Array.from({ length: MAX_PROBLEMS_REPORTED + 3 }, (_, index) => index + 4);
       const lines = widths.map((actual, index) =>
-        on([2 + index], { kind: 'width', actual, expected: 3 }),
+        sameFindingOnLines([2 + index], { kind: 'width', actual, expected: 3 }),
       );
 
       expect(rejectionOf(...lines).detail).toContain(
@@ -357,7 +378,7 @@ describe('describeFindings', () => {
     });
 
     test('matches renderProblemsText when there is only one problem', () => {
-      const rejection = rejectionOf(on([2], cell({ raw: '', clause: 'is empty' })));
+      const rejection = rejectionOf(sameFindingOnLines([2], cell({ raw: '', clause: 'is empty' })));
       expect(rejection.detail).toBe(renderProblemsText(rejection.rowProblems ?? []));
     });
   });
