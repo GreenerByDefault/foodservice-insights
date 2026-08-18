@@ -242,6 +242,24 @@ describe('the rejectionDetail we keep but never show', () => {
       `and ${kinds - MAX_PROBLEMS_REPORTED} more`,
     );
   });
+
+  test('a date order problem alone is the prose itself, with nothing to join it to', () => {
+    const dateOrder: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+
+    const rejection = rejectionFor({ rowGroups: [], dateOrder });
+
+    expect(rejection.rejectionDetail).toBe(rejection.dateOrderProblem);
+  });
+
+  test('a date order problem alongside row problems: its prose first, then the row problems', () => {
+    const dateOrder: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
+
+    const rejection = rejectionFor({ rowGroups: [findingGroup()], dateOrder });
+
+    expect(rejection.rejectionDetail).toBe(
+      `${rejection.dateOrderProblem}; all 1 rows: The amount has a unit in it. For example "5 oz".`,
+    );
+  });
 });
 
 describe('a date order problem, which is prose rather than a row problem', () => {

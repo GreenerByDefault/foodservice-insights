@@ -87,8 +87,8 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   const truncationNote = hidden > 0 ? ` Showing ${shownKinds} of ${totalKinds} things to fix.` : '';
 
   const detailParts = [
-    ...(shownRowProblems.length > 0 ? [renderProblemsAsDetail(shownRowProblems)] : []),
     ...(shownDateOrderProblem ? [shownDateOrderProblem] : []),
+    ...(shownRowProblems.length > 0 ? [renderProblemsAsDetail(shownRowProblems)] : []),
     ...(hidden > 0 ? [`and ${hidden} more`] : []),
   ];
 
