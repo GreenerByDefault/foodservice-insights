@@ -182,7 +182,7 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
       return {
         reason: 'bad_columns',
         message:
-          'That file reads as a valid table more than one way, so we cannot tell how it is split into columns. Save it as a comma-separated CSV.',
+          "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
         rejectionDetail: describeAmbiguousDelimiters(fault.candidates),
       };
     case 'empty':
@@ -283,7 +283,7 @@ function ruleOf(finding: RowFinding): string {
       );
     case 'formula':
       return capitalize(
-        `the ${ROW_LABELS.product} starts with a character a spreadsheet reads as the start of a formula`,
+        `the ${ROW_LABELS.product} starts with =, +, -, or @, which spreadsheets treat as the start of a formula`,
       );
     case 'width':
       return capitalize(

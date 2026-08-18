@@ -8,6 +8,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   MAX_COLUMNS,
+  MAX_DATA_ROWS,
   MAX_FREE_TEXT_LENGTH,
   MAX_PROBLEMS_REPORTED,
   MAX_QUOTED_CHARS,
@@ -16,6 +17,7 @@ import {
   describeFindings,
   describeUnreadableFile,
   formatRows,
+  groupDigits,
   type Problem,
   renderProblemsAsDetail,
 } from './describe.ts';
@@ -68,7 +70,7 @@ describe('the rule a finding becomes', () => {
     [
       'a formula trigger',
       { kind: 'formula', raw: '=cmd' },
-      'The product starts with a character a spreadsheet reads as the start of a formula',
+      'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
     ],
     [
       'a width mismatch, which is the row itself failing rather than a column',
@@ -360,13 +362,13 @@ describe('the whole record', () => {
       message: 'We found problems in 2 of your 2 rows.',
       rowProblems: [
         {
-          rule: 'The product starts with a character a spreadsheet reads as the start of a formula',
+          rule: 'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
           rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: true },
           examples: ['"=cmd"'],
         },
       ],
       rejectionDetail:
-        'all 2 rows: The product starts with a character a spreadsheet reads as the start of a ' +
+        'all 2 rows: The product starts with =, +, -, or @, which spreadsheets treat as the start of a ' +
         'formula. For example "=cmd".',
     });
   });
@@ -539,7 +541,7 @@ describe('describeUnreadableFile', () => {
       {
         reason: 'bad_columns',
         message:
-          'That file reads as a valid table more than one way, so we cannot tell how it is split into columns. Save it as a comma-separated CSV.',
+          "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
         rejectionDetail: '"," at line 1 and "\\t" at line 1',
       },
     ],
@@ -593,9 +595,10 @@ describe('describeUnreadableFile', () => {
     [
       'too many rows, with thousands grouped',
       { kind: 'too-many-rows' },
-      // `Intl` and `toLocale*` are banned in this folder, so this is spelled out rather than
-      // derived from `MAX_DATA_ROWS` with one.
-      { reason: 'too_large', message: 'That file has more than 500,000 rows.' },
+      {
+        reason: 'too_large',
+        message: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
+      },
     ],
     [
       'a header with no rows under it',
