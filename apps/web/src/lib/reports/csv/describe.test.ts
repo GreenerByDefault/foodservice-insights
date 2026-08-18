@@ -23,23 +23,23 @@ import type { DateOrderFinding, FindingGroup, Findings, RowFinding } from './fin
 import { CsvParseError } from './read/parse.ts';
 import { cellFinding, findingGroup, sealedFindings } from './testing/fixtures.ts';
 
-function rejectionOf(over: Partial<Findings> = {}) {
-  return describeFindings(sealedFindings(over));
+function rejectionFor(overrides: Partial<Findings> = {}) {
+  return describeFindings(sealedFindings(overrides));
 }
 
-function problemsOf(over: Partial<Findings> = {}): readonly Problem[] {
-  return rejectionOf(over).rowProblems ?? [];
+function rowProblemsFor(overrides: Partial<Findings> = {}): readonly Problem[] {
+  return rejectionFor(overrides).rowProblems ?? [];
 }
 
 /** The problem one group becomes. */
-function problemFor(finding: RowFinding, over: Partial<FindingGroup> = {}): Problem {
-  const [problem] = problemsOf({ rowGroups: [findingGroup({ finding, ...over })] });
+function soleRowProblemFor(finding: RowFinding, overrides: Partial<FindingGroup> = {}): Problem {
+  const [problem] = rowProblemsFor({ rowGroups: [findingGroup({ finding, ...overrides })] });
   if (!problem) throw new Error('describeFindings dropped the only group');
   return problem;
 }
 
 /** Distinct groups, one row each — for the cases that care only about how many kinds there are. */
-function distinctGroups(count: number): FindingGroup[] {
+function distinctKindGroups(count: number): FindingGroup[] {
   return Array.from({ length: count }, (_, index) =>
     findingGroup({
       finding: { kind: 'width', actual: index + 4, expected: 3 },
@@ -81,7 +81,7 @@ describe('the rule a finding becomes', () => {
       'Has 1 column where the header has 3',
     ],
   ] as const)('%s', ([, finding, rule]) => {
-    expect(problemFor(finding).rule).toBe(rule);
+    expect(soleRowProblemFor(finding).rule).toBe(rule);
   });
 
   describe('a date resolved against the column-wide order', () => {
@@ -89,7 +89,7 @@ describe('the rule a finding becomes', () => {
       ['day-first', 'read day first like the rest of the column'],
       ['month-first', 'read month first like the rest of the column'],
     ] as const)('%s carries the reading it was given as a note', ([readAs, note]) => {
-      const problem = problemFor({
+      const problem = soleRowProblemFor({
         kind: 'resolved-date',
         readAs,
         raw: '01/12/2026',
@@ -101,14 +101,14 @@ describe('the rule a finding becomes', () => {
     });
 
     test('nothing else carries a note', () => {
-      expect(problemFor(cellFinding()).note).toBeUndefined();
+      expect(soleRowProblemFor(cellFinding()).note).toBeUndefined();
     });
   });
 });
 
 describe('the values it quotes back', () => {
   test('quoted, in the order the group reached them', () => {
-    expect(problemFor(cellFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
+    expect(soleRowProblemFor(cellFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
       '"foo"',
       '"bar"',
       '"baz"',
@@ -118,25 +118,25 @@ describe('the values it quotes back', () => {
   test('shortened at MAX_QUOTED_CHARS', () => {
     const long = '9'.repeat(MAX_QUOTED_CHARS + 20);
 
-    expect(problemFor(cellFinding(), { examples: [long] }).examples).toEqual([
+    expect(soleRowProblemFor(cellFinding(), { examples: [long] }).examples).toEqual([
       `"${'9'.repeat(MAX_QUOTED_CHARS)}…"`,
     ]);
   });
 
   test('tabs and newlines flattened, since they would break the layout they sit in', () => {
-    expect(problemFor(cellFinding(), { examples: ['beef\tmince\n5'] }).examples).toEqual([
+    expect(soleRowProblemFor(cellFinding(), { examples: ['beef\tmince\n5'] }).examples).toEqual([
       '"beef mince 5"',
     ]);
   });
 
   test('values that differ only in whitespace collapse to one quote', () => {
-    expect(problemFor(cellFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
+    expect(soleRowProblemFor(cellFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
       '"5 oz"',
     ]);
   });
 
   test('a finding with no value of its own quotes nothing', () => {
-    expect(problemFor({ kind: 'too-long', column: 'product' }).examples).toEqual([]);
+    expect(soleRowProblemFor({ kind: 'too-long', column: 'product' }).examples).toEqual([]);
   });
 });
 
@@ -150,7 +150,7 @@ describe('the rows a problem covers', () => {
       rowCount: 7,
     });
 
-    const [problem] = problemsOf({ rowGroups: [group], rowsRead: 100 });
+    const [problem] = rowProblemsFor({ rowGroups: [group], rowsRead: 100 });
 
     expect(problem?.rows).toEqual({
       ranges: [
@@ -166,14 +166,18 @@ describe('the rows a problem covers', () => {
     const group = findingGroup({ ranges: [{ start: 2, end: 4 }] });
     const rowGroups = [group];
 
-    expect(problemsOf({ rowGroups, rowsRead: group.rowCount })[0]?.rows.everyRow).toBe(true);
-    expect(problemsOf({ rowGroups, rowsRead: group.rowCount + 1 })[0]?.rows.everyRow).toBe(false);
+    expect(rowProblemsFor({ rowGroups, rowsRead: group.rowCount })[0]?.rows.everyRow).toBe(true);
+    expect(rowProblemsFor({ rowGroups, rowsRead: group.rowCount + 1 })[0]?.rows.everyRow).toBe(
+      false,
+    );
   });
 
   test('one row and many rows produce the same problem but for the rows it names', () => {
     const finding = cellFinding();
-    const { rows: _one, ...single } = problemFor(finding, { ranges: [{ start: 2, end: 2 }] });
-    const { rows: _many, ...many } = problemFor(finding, { ranges: [{ start: 2, end: 9 }] });
+    const { rows: _one, ...single } = soleRowProblemFor(finding, {
+      ranges: [{ start: 2, end: 2 }],
+    });
+    const { rows: _many, ...many } = soleRowProblemFor(finding, { ranges: [{ start: 2, end: 9 }] });
 
     expect(single).toEqual(many);
   });
@@ -181,17 +185,17 @@ describe('the rows a problem covers', () => {
 
 describe('the message', () => {
   test('counts failing rows, not kinds of problem', () => {
-    expect(rejectionOf({ rowGroups: distinctGroups(3) }).message).toBe(
+    expect(rejectionFor({ rowGroups: distinctKindGroups(3) }).message).toBe(
       'We found problems in 3 of your 3 rows.',
     );
   });
 
   test('the denominator drops to singular for one', () => {
-    expect(rejectionOf().message).toBe('We found problems in 1 of your 1 row.');
+    expect(rejectionFor().message).toBe('We found problems in 1 of your 1 row.');
   });
 
   test('states the denominator, with thousands grouped', () => {
-    expect(rejectionOf({ failingRowCount: 4102, rowsRead: 4500 }).message).toBe(
+    expect(rejectionFor({ failingRowCount: 4102, rowsRead: 4500 }).message).toBe(
       'We found problems in 4,102 of your 4,500 rows.',
     );
   });
@@ -199,21 +203,21 @@ describe('the message', () => {
   test('says how many kinds are shown when more than MAX_PROBLEMS_REPORTED', () => {
     const kinds = MAX_PROBLEMS_REPORTED + 2;
 
-    expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).message).toBe(
+    expect(rejectionFor({ rowGroups: distinctKindGroups(kinds) }).message).toBe(
       `We found problems in ${kinds} of your ${kinds} rows. Showing ${MAX_PROBLEMS_REPORTED} of ${kinds} things to fix.`,
     );
   });
 
   test('silent about showing when everything fits', () => {
-    expect(rejectionOf({ rowGroups: distinctGroups(MAX_PROBLEMS_REPORTED) }).message).not.toContain(
-      'Showing',
-    );
+    expect(
+      rejectionFor({ rowGroups: distinctKindGroups(MAX_PROBLEMS_REPORTED) }).message,
+    ).not.toContain('Showing');
   });
 
   test('the formula sentence leads it', () => {
     const rowGroups = [findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
 
-    expect(rejectionOf({ rowGroups }).message).toBe(
+    expect(rejectionFor({ rowGroups }).message).toBe(
       'Some product names start with a character a spreadsheet reads as the start of a formula ' +
         '(= + - @), which we cannot accept. We found problems in 1 of your 1 row.',
     );
@@ -222,19 +226,19 @@ describe('the message', () => {
 
 describe('the reason', () => {
   test('an ordinary rejection is bad_rows', () => {
-    expect(rejectionOf().reason).toBe('bad_rows');
+    expect(rejectionFor().reason).toBe('bad_rows');
   });
 
   test('a formula anywhere in the file outranks it', () => {
     const rowGroups = [findingGroup(), findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
 
-    expect(rejectionOf({ rowGroups }).reason).toBe('csv_injection');
+    expect(rejectionFor({ rowGroups }).reason).toBe('csv_injection');
   });
 });
 
 describe('the rejectionDetail we keep but never show', () => {
   test('one line per problem, joined with a semicolon', () => {
-    const rejectionDetail = rejectionOf({
+    const rejectionDetail = rejectionFor({
       rowGroups: [
         findingGroup({ finding: cellFinding({ column: 'amount', raw: '', clause: 'is empty' }) }),
         findingGroup({
@@ -252,7 +256,7 @@ describe('the rejectionDetail we keep but never show', () => {
   test('names how many kinds are missing from it', () => {
     const kinds = MAX_PROBLEMS_REPORTED + 3;
 
-    expect(rejectionOf({ rowGroups: distinctGroups(kinds) }).rejectionDetail).toContain(
+    expect(rejectionFor({ rowGroups: distinctKindGroups(kinds) }).rejectionDetail).toContain(
       `and ${kinds - MAX_PROBLEMS_REPORTED} more`,
     );
   });
@@ -262,14 +266,14 @@ describe('a date column that could not be resolved', () => {
   const noExamples: DateOrderFinding = { issue: 'unresolvable', examples: new Map() };
 
   test('is prose of its own, never a row problem, since it is not rows to go and fix', () => {
-    const rejection = rejectionOf({ rowGroups: [], dateOrder: noExamples });
+    const rejection = rejectionFor({ rowGroups: [], dateOrder: noExamples });
 
     expect(rejection.rowProblems).toBeUndefined();
     expect(rejection.dateOrderProblem).toBeDefined();
   });
 
   test('names no failing rows of its own', () => {
-    expect(rejectionOf({ rowGroups: [], dateOrder: noExamples }).message).toBe(
+    expect(rejectionFor({ rowGroups: [], dateOrder: noExamples }).message).toBe(
       'We found problems in 0 of your 0 rows.',
     );
   });
@@ -297,7 +301,7 @@ describe('a date column that could not be resolved', () => {
       ]),
     };
 
-    expect(rejectionOf({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
+    expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
       'Your dates are written both ways: row 2 has "13/04/2026", which can only be day first, ' +
         'and row 3 has "04/13/2026", which can only be month first. Re-save the date column as ' +
         'YYYY-MM-DD and upload again.',
@@ -319,7 +323,7 @@ describe('a date column that could not be resolved', () => {
       ]),
     };
 
-    expect(rejectionOf({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
+    expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toBe(
       'Every date in that file could be read two ways — row 2\'s "03/04/2026" is 2026-04-03 or ' +
         '2026-03-04. Re-save the date column as YYYY-MM-DD and upload again.',
     );
@@ -336,13 +340,13 @@ describe('a date column that could not be resolved', () => {
       ]),
     };
 
-    expect(rejectionOf({ rowGroups: [], dateOrder }).dateOrderProblem).toContain('either date');
+    expect(rejectionFor({ rowGroups: [], dateOrder }).dateOrderProblem).toContain('either date');
   });
 });
 
 describe('the whole record', () => {
   test('bad_rows', () => {
-    expect(rejectionOf({ rowsRead: 900 })).toEqual({
+    expect(rejectionFor({ rowsRead: 900 })).toEqual({
       reason: 'bad_rows',
       message: 'We found problems in 1 of your 900 rows.',
       rowProblems: [
@@ -361,7 +365,7 @@ describe('the whole record', () => {
       findingGroup({ finding: { kind: 'formula', raw: '=cmd' }, ranges: [{ start: 2, end: 3 }] }),
     ];
 
-    expect(rejectionOf({ rowGroups, rowsRead: 2 })).toEqual({
+    expect(rejectionFor({ rowGroups, rowsRead: 2 })).toEqual({
       reason: 'csv_injection',
       message:
         'Some product names start with a character a spreadsheet reads as the start of a formula ' +
