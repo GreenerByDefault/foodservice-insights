@@ -97,8 +97,17 @@ If not, write it. If so, the comment is a second copy of something that will dri
 
 - We deeply value tests to make it easier for us to maintain and extend the app. Whenever
   adding new functionality, you should generally add tests.
-- We care about our tests being fast, concurrent, and maintainable. Do not exhaustively
-  test things already handled by the standard library and third-party dependencies.
+- We care about our tests being fast, concurrent, and maintainable.
+- Don't re-test something that already carries its own guarantee — the standard library, a
+  third-party dependency, or a first-party leaf module with its own exhaustive tests. Trust that contract and put the test at the integration point instead:
+  does *this* code call it correctly, handle the edges it exposes, and compose it with the rest
+  of the pipeline — not every case the leaf already covers.
+- Prefer `toEqual` over `toMatchObject` (or an equivalent partial-match assertion): a full
+  equality check catches an unexpected field a partial match would silently let through. Fall
+  back to a partial match when the full value is noisy or irrelevant to what the test is
+  checking — e.g. a timestamp or generated id — not as a default.
+- Cover the edge cases the source code actually branches on — empty/null/boundary inputs, error
+  paths — not just the happy path.
 
 ## PRs and sizing changes
 
