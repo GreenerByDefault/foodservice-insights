@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiError, ApiUnreachableError, apiCall } from './client.ts';
+import { ApiError, ApiUnreachableError, apiCall } from './fetch.ts';
 
 function stubFetch(response: Response) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
