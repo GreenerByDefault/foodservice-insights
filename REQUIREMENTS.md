@@ -15,7 +15,7 @@ A user can upload a CSV or XLSX file matching a predefined column format.
 - Single sheet with these columns:
   - product name: text
   - date ordered: date
-  - amount ordered: number
+  - weight: number
 - The website provides clear instructions for the file format.
 - Max file size: [`apps/web/src/lib/reports/upload-limit.js`](apps/web/src/lib/reports/upload-limit.js).
 - The user provides additional metadata:

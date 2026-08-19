@@ -32,7 +32,7 @@ export type AttemptFixture = {
   runRoot: string;
 };
 
-const AN_INPUT_CSV = Buffer.from('month,category,amount\n2026-01,produce,1200\n');
+const AN_INPUT_CSV = Buffer.from('filler bytes');
 
 /** Commit an organization with one report, one input file, and one pending attempt already
  * claimed by `workerId`; write the input file's bytes to the real object its storage key names;
