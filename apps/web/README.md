@@ -16,24 +16,21 @@ layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 
-**A write is a `+server.ts` handler, called with plain `fetch()`.** *Rejected: SvelteKit form
-actions and remote functions.* Both add a layer of indirection over a `fetch()` call to a
-`+server.ts` handler, which makes the code harder for newcomers to follow without a strong enough
-payoff.
+**A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions and remote functions.*
+Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler, which makes the
+code harder for newcomers to follow without a strong enough payoff. See
+[Calling the API from the browser](#calling-the-api-from-the-browser) for how the client calls it.
 
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
 ## Calling the API from the browser
 
-**No component calls `fetch`.** `src/lib/api/client.ts` is the one place, and it knows only HTTP:
-`ApiError` carries a status, a message for a log, and the body as `unknown`; `ApiUnreachableError`
-means no answer arrived and the request's fate is unknown.
+**A component calls `src/lib/api/fetch.ts`, never `fetch` itself.** Its helper
+`apiCall` throws `ApiError` on a non-2xx response — a status, a message for a log, and `jsonBody`
+parsed if the body was JSON. If no response every arrived, it throws `ApiUnreachableError`.
 
-**A feature owns a client that knows its own endpoint's statuses and bodies**, and returns an
-outcome union with no HTTP in it.
-
-**Expected outcomes are returned, not thrown** — the browser-side half of the rule in `## Errors`.
+**A feature owns a parser that knows its own endpoint's statuses and bodies.** Many only need `ApiError.status` — a 400 means one thing, a 409 another. One that returns a structured body, like `parseUploadRejection` in `src/lib/reports/rejection.ts`, narrows `ApiError.jsonBody` into a typed outcome.
 
 ## UI components
 
@@ -56,30 +53,7 @@ into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 
 
 ## Forms
 
-**No form library.** Native constraint validation, consistent with `## Routes` above rejecting
-form actions. A real `<form>` with `onsubmit` and a `<button type="submit">` mean the browser
-blocks an invalid submit and focuses the first bad field; `reportValidity()` is only for a
-programmatic submit. Async failures and hand-written checks render in a `<Field.Error>`.
-
-**Trap: a hidden or `type="hidden"` control is skipped by constraint validation.** `required` on a
-hidden file input blocks submission with no visible message; on a `RadioGroup`'s hidden input it
-does nothing at all. Those get a check in the handler and an inline message.
-
-**The submit button stays enabled for an invalid form**, and is disabled only while a request is
-in flight or a navigation is pending, with the reason in its label. A disabled button cannot say
-which field it is waiting on; the browser's own refusal can.
-
-**A field name is always read from a `FIELD` map**, never written as a literal in markup, so the
-form and its parser cannot drift apart. `src/lib/reports/metadata.ts` is the one for reports.
-
-**Each form declares its own outcome union** rather than sharing one across forms — the outcomes
-differ per form, and the shared part is already the error classification in `client.ts`.
-
-**A form's values live in the component's own state, not only in the DOM**, so a form that swaps
-its own markup for another view does not lose typed work.
-
-**A form's schema lives with its feature**. What is not specific to one form lives in
-`src/lib/forms/`.
+**A form's own schema lives with its feature**. What is not specific to one form lives in `src/lib/forms/`.
 
 ## Errors
 
@@ -93,17 +67,6 @@ in `hooks.server.ts` logs it and hands the client a generic message.
 trade for a payload one route sets and one client reads. A route that fails in a way its own UI
 renders answers `json(body, { status })` with a type it owns. `error()` is left to the failures every caller handles
 the same way, like 404s.
-
-**Three failure surfaces, never merged.** A field problem is shown at the field; a submission a
-feature refuses outright gets its own view; an unknown outcome is shown at the action that caused
-it, with no retry implied.
-
-**A short message gets `role="alert"`. A long one does not** — announcing a whole document on
-render is hostile. Move focus to its heading instead and let the user read at their own pace.
-
-**A failure inside a form is shown inline and stays until it is fixed.** A toast is for a
-transient confirmation of an action on a page that stays put; no page needs one yet, and that is a
-fine reason to add the dependency when one does.
 
 ## Auth
 
