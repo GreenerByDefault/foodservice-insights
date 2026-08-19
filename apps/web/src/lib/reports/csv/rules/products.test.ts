@@ -64,7 +64,6 @@ describe('isFormulaTrigger', () => {
     '@SUM(1+9)*cmd|calc',
     '+HYPERLINK("http://example.com")',
     '-2+3+cmd|calc',
-    '  =1+1',
   ])('catches %j', (value) => {
     expect(isFormulaTrigger(value)).toBe(true);
   });

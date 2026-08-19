@@ -27,6 +27,7 @@ import {
   type Layout,
   parseCsv,
   REQUIRED_COLUMNS,
+  type RequiredColumn,
   readLayout,
 } from './read/index.ts';
 import {
@@ -144,8 +145,14 @@ function readRow(
   // what guarantees none of them ever sees a long input in the first place. Only these three
   // columns are read out of the record at all, so a column the file carries but the analysis
   // never reads is bounded only by `MAX_UPLOAD_BYTES`.
-  const overLong = REQUIRED_COLUMNS.filter((column) => raw[column].length > MAX_FREE_TEXT_LENGTH);
-  if (overLong.length > 0) {
+  let overLong: RequiredColumn[] | undefined;
+  for (const column of REQUIRED_COLUMNS) {
+    if (raw[column].length > MAX_FREE_TEXT_LENGTH) {
+      overLong ??= [];
+      overLong.push(column);
+    }
+  }
+  if (overLong) {
     for (const column of overLong) noteRow(log, record.line, { kind: 'too-long', column });
     return undefined;
   }

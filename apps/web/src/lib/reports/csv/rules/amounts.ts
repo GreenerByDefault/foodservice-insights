@@ -72,12 +72,13 @@ export function readAmount(raw: string): AmountRead {
       : { ok: false, fault: 'not-plain' };
   }
 
-  const digits = trimmed.replace(/[,.]/g, '');
+  const withoutCommas = trimmed.replace(/,/g, '');
+  const digits = withoutCommas.replace('.', '');
   if (digits.length > MAX_AMOUNT_DIGITS) {
     return { ok: false, fault: 'too-many-digits' };
   }
 
   // `Number`, never `parseFloat`, which stops at the first character it dislikes and returns
   // whatever it read up to there.
-  return { ok: true, value: Number(trimmed.replace(/,/g, '')) };
+  return { ok: true, value: Number(withoutCommas) };
 }

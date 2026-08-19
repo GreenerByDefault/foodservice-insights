@@ -21,6 +21,13 @@ function rejected(text: string, now?: Date): RejectedUploadRecord {
   return outcome.rejection;
 }
 
+function withoutRejectionDetail(
+  rejection: RejectedUploadRecord,
+): Omit<RejectedUploadRecord, 'rejectionDetail'> {
+  const { rejectionDetail: _rejectionDetail, ...rest } = rejection;
+  return rest;
+}
+
 function ruleNames(rejection: RejectedUploadRecord): readonly string[] {
   return (rejection.rowProblems ?? []).map(({ rule }) => rule);
 }
@@ -77,13 +84,26 @@ describe('normalizeCsv', () => {
       ['quotes that never close', `${HEADER}\n"beef,2026-01-05,1`, 'unparseable'],
       ['a header with nothing under it', HEADER, 'empty'],
     ] as const)('%s', ([, text, reason]) => {
-      expect(rejected(text)).toMatchObject({ reason });
+      expect(rejected(text).reason).toBe(reason);
     });
 
-    test('more rows than we will read', () => {
+    test('refuses more rows than we will read', () => {
       const rows = new Array(MAX_DATA_ROWS + 1).fill('beef,2026-01-05,1');
 
-      expect(rejected([HEADER, ...rows].join('\n'))).toMatchObject({ reason: 'too_large' });
+      expect(withoutRejectionDetail(rejected([HEADER, ...rows].join('\n')))).toEqual({
+        reason: 'too_large',
+        summary: 'That file has more than 500,000 rows.',
+      });
+    });
+
+    test('refuses on the row count alone, discarding row problems found before the cap', () => {
+      const rows = new Array(MAX_DATA_ROWS + 1).fill('beef,2026-01-05,1');
+      rows[0] = ',2026-01-05,1'; // an empty product, well within the cap
+
+      expect(withoutRejectionDetail(rejected([HEADER, ...rows].join('\n')))).toEqual({
+        reason: 'too_large',
+        summary: 'That file has more than 500,000 rows.',
+      });
     });
   });
 
@@ -97,16 +117,22 @@ describe('normalizeCsv', () => {
         ',2026-01-08,1',
       ].join('\n');
 
-      expect(rejected(text)).toMatchObject({
+      expect(withoutRejectionDetail(rejected(text))).toEqual({
         reason: 'bad_rows',
         summary: 'We found problems in 3 of your 4 rows.',
         rowProblems: [
           {
             rule: 'The amount has a unit in it',
+            advice:
+              'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
             rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false },
             examples: ['"5 oz"', '"3 kg"'],
           },
-          { rule: 'The product is empty', rows: { ranges: [{ start: 5, end: 5 }], total: 1 } },
+          {
+            rule: 'The product is empty',
+            rows: { ranges: [{ start: 5, end: 5 }], total: 1, everyRow: false },
+            examples: [],
+          },
         ],
       });
     });
@@ -142,10 +168,29 @@ describe('normalizeCsv', () => {
     test('a product a spreadsheet would run as a formula, as its own reason', () => {
       const text = [HEADER, 'beef,2026-01-05,1', '=1+1,2026-01-06,1'].join('\n');
 
-      expect(rejected(text)).toMatchObject({
+      expect(withoutRejectionDetail(rejected(text))).toEqual({
         reason: 'csv_injection',
-        rowProblems: [{ examples: ['"=1+1"'] }],
+        summary: 'We found problems in 1 of your 2 rows.',
+        rowProblems: [
+          {
+            rule: 'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
+            rows: { ranges: [{ start: 3, end: 3 }], total: 1, everyRow: false },
+            examples: ['"=1+1"'],
+          },
+        ],
       });
+    });
+
+    test('a formula alongside an unrelated row fault still reports as csv_injection', () => {
+      const text = [HEADER, 'beef,2026-01-05,5 oz', '=1+1,2026-01-06,1'].join('\n');
+      const rejection = rejected(text);
+
+      // Both faults are reported, but the file-wide reason is driven by the formula alone.
+      expect(rejection.reason).toBe('csv_injection');
+      expect(ruleNames(rejection)).toEqual([
+        'The amount has a unit in it',
+        'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
+      ]);
     });
   });
 
@@ -154,6 +199,9 @@ describe('normalizeCsv', () => {
       const text = [HEADER, 'beef,13/03/2026,1', 'beef,03/13/2026,1'].join('\n');
       const rejection = rejected(text);
 
+      // Neither row fails on its own, so nothing is counted toward `failingRowCount`.
+      expect(rejection.reason).toBe('bad_rows');
+      expect(rejection.summary).toBe('We found problems in 0 of your 2 rows.');
       expect(rejection.dateOrderProblem).toContain('row 2 has "13/03/2026"');
       expect(rejection.dateOrderProblem).toContain('row 3 has "03/13/2026"');
       expect(rejection.rowProblems).toBeUndefined();
@@ -164,6 +212,32 @@ describe('normalizeCsv', () => {
 
       expect(rejection.dateOrderProblem).toContain('2026-04-01');
       expect(rejection.dateOrderProblem).toContain('2026-01-04');
+      expect(rejection.rowProblems).toBeUndefined();
+    });
+
+    test('a row dropped for an unrelated fault cannot supply the disambiguating example', () => {
+      // Row 2 would prove day-first, but its amount fails first, so `resolveDates` never sees it —
+      // only row 3's date, which no reading disambiguates, is left as evidence.
+      const text = [HEADER, 'beef,13/03/2026,5 oz', 'beef,01/04/2026,1'].join('\n');
+      const rejection = rejected(text);
+
+      expect(ruleNames(rejection)).toEqual(['The amount has a unit in it']);
+      expect(rejection.dateOrderProblem).toContain('2026-04-01');
+      expect(rejection.dateOrderProblem).toContain('2026-01-04');
+    });
+
+    test('a date-order problem reports alongside an unrelated row fault, rather than crowding it out', () => {
+      const text = [
+        HEADER,
+        'beef,01/04/2026,1',
+        'pork,02/05/2026,1',
+        'carrots,2026-01-01', // missing the weight column entirely
+      ].join('\n');
+      const rejection = rejected(text);
+
+      expect(rejection.dateOrderProblem).toContain('2026-04-01');
+      expect(rejection.dateOrderProblem).toContain('2026-01-04');
+      expect(ruleNames(rejection)).toEqual(['Has 2 columns where the header has 3']);
     });
   });
 });

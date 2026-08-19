@@ -16,7 +16,8 @@ export function encodeNormalizedCsv(rows: readonly NormalizedRow[]): Uint8Array 
     // Only the product needs escaping.
     lines.push(`${escapeField(product)},${isoDate},${weight}`);
   }
-  return new TextEncoder().encode(`${lines.join('\n')}\n`);
+  lines.push('');
+  return new TextEncoder().encode(lines.join('\n'));
 }
 
 function escapeField(value: string): string {

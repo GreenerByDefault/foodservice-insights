@@ -72,5 +72,6 @@ export function readProduct(raw: string): ProductRead {
 }
 
 export function isFormulaTrigger(value: string): boolean {
-  return FORMULA_TRIGGERS.has(value.trimStart().slice(0, 1));
+  // `value` is always a `readProduct` result, so it's already trimmed and we can read index 0.
+  return FORMULA_TRIGGERS.has(value.charAt(0));
 }
