@@ -39,4 +39,5 @@ __pycache__/
 *.egg-info/
 
 # Local agent state
-.claude/settings.local.json
+/.claude/settings.local.json
+/.playwright-mcp/
