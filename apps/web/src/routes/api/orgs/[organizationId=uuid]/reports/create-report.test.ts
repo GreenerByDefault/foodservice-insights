@@ -81,6 +81,7 @@ describe('a valid upload', () => {
         unitSystem: 'lb',
         monthlyCounts: { '2026-01': 120, '2026-02': 135 },
         deletedAt: null,
+        deletedByUserId: null,
       });
 
       const inputFile = await transaction
@@ -179,17 +180,16 @@ describe('a rejected upload', () => {
   ] as const)('answers 400 and records %s', async ([, overrides, reason]) => {
     const { refusal, recorded, reports } = await reject(overrides);
 
-    // The code the client branches on is the same word the database recorded.
-    expect(refusal).toMatchObject({ status: 400, body: { code: reason } });
+    expect(refusal).toMatchObject({ status: 400 });
     expect(recorded).toMatchObject({ rejectionReason: reason satisfies RejectedUploadReason });
     expect(reports).toEqual([]);
   });
 
-  // `toEqual`, not `toMatchObject`: the point here is the keys that are absent.
-  test('answers with the reason and the summary, and nothing else', async () => {
+  test('answers with the summary, and nothing else', async () => {
     const { refusal } = await reject({ monthlyCounts: '{oops' });
 
-    expect(refusal.body).toEqual({ code: 'invalid_metadata', summary: expect.any(String) });
+    // `toEqual`, not `toMatchObject`: the point here is the keys that are absent.
+    expect(refusal.body).toEqual({ summary: expect.any(String) });
   });
 
   test('keeps the file that was refused', async () => {
@@ -238,7 +238,7 @@ describe('a rejected upload', () => {
 
     const { refusal, recorded } = await reject({ file: oversized });
 
-    expect(refusal).toMatchObject({ status: 400, body: { code: 'too_large' } });
+    expect(refusal).toMatchObject({ status: 400 });
     expect(recorded).toMatchObject({
       rejectionReason: 'too_large',
       inputFileOriginalFilename: 'big.csv',

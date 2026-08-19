@@ -16,12 +16,27 @@ layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 
+**A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions and remote functions.*
+Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler, which makes the
+code harder for newcomers to follow without a strong enough payoff. See
+[Calling the API from the browser](#calling-the-api-from-the-browser) for how the client calls it.
+
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
+## Calling the API from the browser
+
+**A component calls `src/lib/api/fetch.ts`, never `fetch` itself.** Its helper
+`apiCall` throws `ApiError` on a non-2xx response — a status, a message for a log, and `jsonBody`
+parsed if the body was JSON. If no response every arrived, it throws `ApiUnreachableError`.
+
+**A feature owns a parser that knows its own endpoint's statuses and bodies.** Many only need `ApiError.status` — a 400 means one thing, a 409 another. One that returns a structured body, like `parseUploadRejection` in `src/lib/reports/rejection.ts`, narrows `ApiError.jsonBody` into a typed outcome.
+
 ## UI components
 
-**`src/lib/components/ui/` is purely vendored shadcn** — nothing hand-written goes there.
+Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
+is purely vendored shadcn** — nothing hand-written goes there — so we own the components outright
+rather than depending on a component library.
 
 **A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
 route needs it.

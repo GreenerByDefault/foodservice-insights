@@ -5,6 +5,7 @@
  */
 
 import type { RejectedUploadReason } from '@gbd/db';
+import type { ApiError } from '$lib/api/fetch';
 import type { Problem } from './csv/describe/index.ts';
 
 export type RejectedUploadRecord = {
@@ -19,27 +20,42 @@ export type RejectedUploadRecord = {
   rejectionDetail?: string;
 };
 
-/** The half of a `RejectedUploadRecord` that crosses the wire.
- *
- * A rejection is an outcome the upload form expects and renders itself,
- * rather than a failure thrown with `error()`.
- */
-export type RejectedUploadResponse = Pick<
+/** What we tell the user about a refused upload. */
+export type UploadRejection = Pick<
   RejectedUploadRecord,
   'summary' | 'rowProblems' | 'dateOrderProblem'
-> & {
-  code: RejectedUploadReason;
-};
+>;
 
-/** Narrow a rejection to what the browser may see. */
-export function rejectionResponse({
-  reason,
+export function userFacingRejection({
   summary,
   rowProblems,
   dateOrderProblem,
-}: RejectedUploadRecord): RejectedUploadResponse {
+}: RejectedUploadRecord): UploadRejection {
   return {
-    code: reason,
+    summary,
+    ...(rowProblems && { rowProblems }),
+    ...(dateOrderProblem && { dateOrderProblem }),
+  };
+}
+
+export function parseUploadRejection(error: ApiError): UploadRejection | undefined {
+  if (error.status !== 400) return undefined;
+
+  const { jsonBody } = error;
+  if (
+    !jsonBody ||
+    typeof jsonBody !== 'object' ||
+    Array.isArray(jsonBody) ||
+    typeof jsonBody.summary !== 'string'
+  )
+    return undefined;
+
+  const { summary, rowProblems, dateOrderProblem } = jsonBody as unknown as {
+    summary: string;
+    rowProblems?: readonly Problem[];
+    dateOrderProblem?: string;
+  };
+  return {
     summary,
     ...(rowProblems && { rowProblems }),
     ...(dateOrderProblem && { dateOrderProblem }),
