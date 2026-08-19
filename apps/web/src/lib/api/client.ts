@@ -2,17 +2,27 @@
  * classified.
  *
  * This layer knows only HTTP. A feature's own client is what knows which statuses its endpoint
- * means and what its bodies are — see `$lib/reports/upload.ts`.
+ * means and what its bodies are.
  */
 
-/** The server answered, but not with a 2xx. `message` is for a log or a last-resort string;
- * `body` is the parsed payload, for the feature client that knows its shape.
- */
+/** Any value `JSON.parse` can produce. */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+/** The server answered, but not with a 2xx. */
 export class ApiError extends Error {
   constructor(
     public status: number,
+    /** A log or last-resort string, like the HTTP code description. */
     message: string,
-    public body: unknown,
+    /** The parsed body, for the feature client that knows its shape. `undefined` if the body
+     * wasn't valid JSON. */
+    public jsonBody: JsonValue | undefined,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -52,14 +62,19 @@ export async function apiCall(url: string, options?: RequestInit): Promise<Respo
   if (response.ok) return response;
 
   let message = response.statusText;
-  let body: unknown;
+  let jsonBody: JsonValue | undefined;
   try {
-    body = await response.json();
-    if (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string') {
-      message = body.message;
+    jsonBody = await response.json();
+    if (
+      jsonBody &&
+      typeof jsonBody === 'object' &&
+      !Array.isArray(jsonBody) &&
+      typeof jsonBody.message === 'string'
+    ) {
+      message = jsonBody.message;
     }
   } catch {
-    // Not a JSON body — fall back to statusText already set above.
+    jsonBody = undefined;
   }
-  throw new ApiError(response.status, message, body);
+  throw new ApiError(response.status, message, jsonBody);
 }
