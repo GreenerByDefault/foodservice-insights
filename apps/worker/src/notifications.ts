@@ -66,13 +66,7 @@ type NotifiableAttemptCommon = {
 export type NotifiableAttempt = NotifiableAttemptCommon &
   (
     | { status: 'failed'; failureReason: AnalysisFailureReason }
-    | {
-        status: 'succeeded';
-        /** Null here means `AnalysisSucceeded`'s write is missing a file — a bug in our own
-         * writes, not a legal state `notificationFor` treats as final; see its doc comment. */
-        pdfFileId: ResultFileId | null;
-        xlsxFileId: ResultFileId | null;
-      }
+    | { status: 'succeeded'; pdfFileId: ResultFileId; xlsxFileId: ResultFileId }
   );
 
 /** Send the email every attempt this sweep claims is owed. Returns the ids of the attempts whose
@@ -225,7 +219,8 @@ async function loadNotifiableAttempts(
     .where('analysisAttempt.id', 'in', ids)
     .execute();
 
-  return rows.map((row) => {
+  // A `flatMap` rather than `map`, so a row this app itself wrote incorrectly is dropped.
+  return rows.flatMap((row): NotifiableAttempt[] => {
     const common = {
       id: row.id,
       reportId: row.reportId,
@@ -238,22 +233,31 @@ async function loadNotifiableAttempts(
     };
 
     if (row.status === 'failed') {
-      return {
-        ...common,
-        status: 'failed' as const,
-        // Guaranteed by `analysis_attempt_failure_reason_iff_failed`.
-        failureReason: row.failureReason as AnalysisFailureReason,
-      };
+      return [
+        {
+          ...common,
+          status: 'failed' as const,
+          // Guaranteed by `analysis_attempt_failure_reason_iff_failed`.
+          failureReason: row.failureReason as AnalysisFailureReason,
+        },
+      ];
     }
 
     // Guaranteed by `isOwedEmail`: only a `succeeded` or `failed` row is ever claimed, so
     // anything that isn't `failed` here is `succeeded`.
-    return {
-      ...common,
-      status: 'succeeded' as const,
-      pdfFileId: row.pdfFileId,
-      xlsxFileId: row.xlsxFileId,
-    };
+    if (row.pdfFileId === null || row.xlsxFileId === null) {
+      console.error(`analysis attempt ${row.id}: succeeded but missing a result file`);
+      return [];
+    }
+
+    return [
+      {
+        ...common,
+        status: 'succeeded' as const,
+        pdfFileId: row.pdfFileId,
+        xlsxFileId: row.xlsxFileId,
+      },
+    ];
   });
 }
 
@@ -266,24 +270,17 @@ function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileK
     .limit(1);
 }
 
-/** Send one attempt's email. Never throws: a failed send, or a message `notificationFor` refused
- * to build, is logged and the attempt's claim is left in place — see `sendPendingNotifications`. */
+/** Send one attempt's email. Never throws: a failed send is logged and the attempt's claim is
+ * left in place — see `sendPendingNotifications`. */
 async function sendOne(
   emailer: Emailer,
   attempt: NotifiableAttempt,
   options: Pick<NotifyOptions, 'maxAttempts'>,
 ): Promise<AnalysisAttemptId | undefined> {
-  const message = notificationFor(attempt);
-  if (message === undefined) {
-    console.error(
-      `analysis attempt ${attempt.id}: ${attempt.status} but missing a result file — the claim ` +
-        'stays in place so this retries on the usual backoff and then surfaces in the alert.',
-    );
-    return undefined;
-  }
+  const email = emailForNotifiableAttempt(attempt);
 
   try {
-    await sendEmail(emailer, message);
+    await sendEmail(emailer, email);
   } catch (error) {
     if (!isEmailError(error)) throw error;
     console.error(
@@ -326,19 +323,7 @@ async function stampSent(
   );
 }
 
-/** What email, if any, a claimed attempt owes. Side-effect free, like `verdict.ts`, so it is
- * testable with no database and no transport.
- *
- * A `succeeded` attempt whose `pdf` or `xlsx` result file is missing returns `undefined`.
- * `AnalysisSucceeded` requires both ids, and a succeeded attempt without them is a bug in our own
- * writes, not a user-facing state — the caller logs it and leaves the claim in place, so the row
- * retries on the backoff cadence and then gives up like any other undeliverable row, visible in
- * the alert rather than stamped and buried.
- *
- * Maps no failure reasons itself: `FAILURE_EXPLANATIONS` in `@gbd/email`'s `messages/analysis.ts`
- * already does that, exhaustively over the enum.
- */
-export function notificationFor(attempt: NotifiableAttempt): EmailMessage | undefined {
+export function emailForNotifiableAttempt(attempt: NotifiableAttempt): EmailMessage {
   if (attempt.status === 'failed') {
     return {
       kind: 'analysis-failed',
@@ -349,8 +334,6 @@ export function notificationFor(attempt: NotifiableAttempt): EmailMessage | unde
       reason: attempt.failureReason,
     };
   }
-
-  if (attempt.pdfFileId === null || attempt.xlsxFileId === null) return undefined;
 
   return {
     kind: 'analysis-succeeded',

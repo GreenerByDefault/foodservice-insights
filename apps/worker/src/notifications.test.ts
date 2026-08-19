@@ -1,5 +1,5 @@
-/** `sendPendingNotifications` against the real database, plus `notificationFor` with no database
- * at all.
+/** `sendPendingNotifications` against the real database, plus `emailForNotifiableAttempt` with no
+ * database at all.
  *
  * Every sweep narrows itself with `candidateReports`. Turbo runs each package's tests concurrently
  * against one database, so a sweep without it would email about another test file's attempts.
@@ -34,9 +34,9 @@ import {
 import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import {
+  emailForNotifiableAttempt,
   type NotifiableAttempt,
   type NotifyOptions,
-  notificationFor,
   sendPendingNotifications,
 } from './notifications.ts';
 import { msAgo } from './sql.ts';
@@ -333,6 +333,31 @@ describe('sendPendingNotifications', () => {
     expect(outcome.row.notificationAttempts).toBe(1);
   });
 
+  // `sendOne` only swallows `EmailError`; anything else is a bug, not a delivery failure, and
+  // must not be mistaken for one by being caught and silently retried.
+  test('a non-EmailError from the transport propagates instead of being swallowed', async () => {
+    const workerId = aWorkerId();
+    const emailer: Emailer = {
+      ...recordingEmailer().service,
+      transport: {
+        name: 'broken',
+        send() {
+          throw new Error('not an EmailError');
+        },
+      },
+    };
+
+    const outcome = withRollback(DATABASE, async (transaction) => {
+      const { reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
+      return sendPendingNotifications(
+        { db: transaction, emailer, workerId },
+        notifyOptions({ candidateReports: [reportId] }),
+      );
+    });
+
+    await expect(outcome).rejects.toThrow('not an EmailError');
+  });
+
   // `recordingEmailer`/`unreachableEmailer` are all-or-nothing, so a genuinely mixed sweep needs an
   // emailer that fails for one recipient and not the other — a real transport, hand-written like
   // `recordingEmailer`'s own, rather than a mock: it still throws the real `EmailError` a broken
@@ -512,7 +537,7 @@ describe('sendPendingNotifications', () => {
   });
 });
 
-describe('notificationFor', () => {
+describe('emailForNotifiableAttempt', () => {
   function aSucceededAttempt(
     overrides: Partial<Extract<NotifiableAttempt, { status: 'succeeded' }>> = {},
   ): Extract<NotifiableAttempt, { status: 'succeeded' }> {
@@ -545,9 +570,9 @@ describe('notificationFor', () => {
     };
   }
 
-  test('a succeeded attempt with both result files sends analysis-succeeded', () => {
+  test('a succeeded attempt sends analysis-succeeded', () => {
     const attempt = aSucceededAttempt();
-    expect(notificationFor(attempt)).toMatchObject({
+    expect(emailForNotifiableAttempt(attempt)).toEqual({
       kind: 'analysis-succeeded',
       to: attempt.to,
       organizationId: attempt.organizationId,
@@ -569,17 +594,14 @@ describe('notificationFor', () => {
     'unknown',
     'shut_down',
   ])('a failed attempt with reason %s sends analysis-failed', (reason) => {
-    expect(notificationFor(aFailedAttempt(reason))).toMatchObject({
+    const attempt = aFailedAttempt(reason);
+    expect(emailForNotifiableAttempt(attempt)).toEqual({
       kind: 'analysis-failed',
+      to: attempt.to,
+      organizationId: attempt.organizationId,
+      reportId: attempt.reportId,
+      reportName: attempt.reportName,
       reason,
     });
-  });
-
-  test('a succeeded attempt missing the pdf returns undefined', () => {
-    expect(notificationFor(aSucceededAttempt({ pdfFileId: null }))).toBeUndefined();
-  });
-
-  test('a succeeded attempt missing the xlsx returns undefined', () => {
-    expect(notificationFor(aSucceededAttempt({ xlsxFileId: null }))).toBeUndefined();
   });
 });
