@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
+import { ApiError, type JsonValue } from '$lib/api/fetch';
 import type { Problem } from './csv/describe/index.ts';
-import { asUploadRejection, type RejectedUploadRecord, userFacingRejection } from './rejection.ts';
+import {
+  parseUploadRejection,
+  type RejectedUploadRecord,
+  userFacingRejection,
+} from './rejection.ts';
 
 const PROBLEM: Problem = {
   rule: 'The weight has a unit in it',
@@ -44,24 +49,34 @@ describe('userFacingRejection', () => {
   });
 });
 
-describe('asUploadRejection', () => {
-  test('accepts a body whose summary is a string', () => {
+describe('parseUploadRejection', () => {
+  test('accepts a 400 whose body has a string summary', () => {
     const body = { summary: 'We found problems.', rowProblems: [PROBLEM] };
 
-    expect(asUploadRejection(body)).toEqual(body);
+    expect(
+      parseUploadRejection(new ApiError(400, 'Bad Request', body as unknown as JsonValue)),
+    ).toEqual(body);
   });
 
-  test('rejects a body with no summary', () => {
-    expect(asUploadRejection({ message: 'Not found' })).toBeUndefined();
+  test('rejects a non-400 status, even with a rejection-shaped body', () => {
+    const body = { summary: 'We found problems.' };
+
+    expect(parseUploadRejection(new ApiError(500, 'Internal Server Error', body))).toBeUndefined();
+  });
+
+  test('rejects a 400 body with no summary', () => {
+    expect(
+      parseUploadRejection(new ApiError(400, 'Not found', { message: 'Not found' })),
+    ).toBeUndefined();
   });
 
   test('rejects a non-object body', () => {
-    expect(asUploadRejection('oops')).toBeUndefined();
-    expect(asUploadRejection(null)).toBeUndefined();
-    expect(asUploadRejection(undefined)).toBeUndefined();
+    expect(parseUploadRejection(new ApiError(400, 'oops', 'oops'))).toBeUndefined();
+    expect(parseUploadRejection(new ApiError(400, 'oops', null))).toBeUndefined();
+    expect(parseUploadRejection(new ApiError(400, 'oops', undefined))).toBeUndefined();
   });
 
   test('rejects a summary that is not a string', () => {
-    expect(asUploadRejection({ summary: 404 })).toBeUndefined();
+    expect(parseUploadRejection(new ApiError(400, 'oops', { summary: 404 }))).toBeUndefined();
   });
 });

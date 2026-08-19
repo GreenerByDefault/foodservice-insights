@@ -5,6 +5,7 @@
  */
 
 import type { RejectedUploadReason } from '@gbd/db';
+import type { ApiError } from '$lib/api/fetch';
 import type { Problem } from './csv/describe/index.ts';
 
 export type RejectedUploadRecord = {
@@ -37,13 +38,19 @@ export function userFacingRejection({
   };
 }
 
-export function asUploadRejection(body: unknown): UploadRejection | undefined {
-  // Every other error response is shaped `{ message, code? }`, never `summary`, so a string
-  // `summary` is enough to identify this body as a rejection.
-  if (!body || typeof body !== 'object' || !('summary' in body) || typeof body.summary !== 'string')
+export function parseUploadRejection(error: ApiError): UploadRejection | undefined {
+  if (error.status !== 400) return undefined;
+
+  const { jsonBody } = error;
+  if (
+    !jsonBody ||
+    typeof jsonBody !== 'object' ||
+    Array.isArray(jsonBody) ||
+    typeof jsonBody.summary !== 'string'
+  )
     return undefined;
 
-  const { summary, rowProblems, dateOrderProblem } = body as {
+  const { summary, rowProblems, dateOrderProblem } = jsonBody as unknown as {
     summary: string;
     rowProblems?: readonly Problem[];
     dateOrderProblem?: string;
