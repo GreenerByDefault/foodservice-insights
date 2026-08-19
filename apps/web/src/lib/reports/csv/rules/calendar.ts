@@ -11,7 +11,22 @@
  * anything Node-only.
  */
 
+import { EARLIEST_DATE, MAX_FUTURE_DAYS } from '../../limits.ts';
+
 export type DateBounds = { earliest: string; latest: string };
+
+/** The range every cell in a customer's file is read against.
+ *
+ * `now` is a parameter rather than read here so that a test can fix it, and so that one upload
+ * reads every one of its rows against the same instant.
+ */
+export function dateBoundsAt(now: Date): DateBounds {
+  const dayInMs = 24 * 60 * 60 * 1000;
+  return {
+    earliest: EARLIEST_DATE,
+    latest: new Date(now.getTime() + MAX_FUTURE_DAYS * dayInMs).toISOString().slice(0, 10),
+  };
+}
 
 export type CalendarFault = 'not-a-real-date' | 'too-old' | 'too-far-ahead';
 

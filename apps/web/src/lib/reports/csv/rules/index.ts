@@ -1,7 +1,7 @@
 export type { AmountFault, AmountRead } from './amounts.ts';
 export { readAmount } from './amounts.ts';
 export type { CalendarFault, DateBounds, ResolvedDate } from './calendar.ts';
-export { toIsoDate } from './calendar.ts';
+export { dateBoundsAt, toIsoDate } from './calendar.ts';
 export type { DateOrder, DateOrderDecision, DateOrderFault } from './date-order.ts';
 export {
   applyDateOrder,

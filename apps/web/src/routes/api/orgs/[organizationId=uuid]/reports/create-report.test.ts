@@ -6,7 +6,8 @@ import { FIELD } from '$lib/reports/metadata';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _createReport } from './+server.ts';
 
-const A_CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
+const RAW_CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
+const NORMALIZED_CSV = 'product,date,weight\nbeef mince,2026-01-05,12\n';
 
 type SubmissionOverrides = {
   name?: string | null;
@@ -25,7 +26,7 @@ function createUploadRequest(overrides: SubmissionOverrides = {}): Request {
     countsBasis: 'people',
     unitSystem: 'lb',
     monthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
-    file: new File([A_CSV], 'procurement.csv', { type: 'text/csv' }),
+    file: new File([RAW_CSV], 'procurement.csv', { type: 'text/csv' }),
     ...overrides,
   };
 
@@ -90,7 +91,8 @@ describe('a valid upload', () => {
       expect(inputFile).toMatchObject({
         originalFilename: 'procurement.csv',
         contentType: 'text/csv',
-        byteSize: A_CSV.length,
+        byteSize: NORMALIZED_CSV.length,
+        isModified: true,
       });
 
       const attempt = await transaction
@@ -127,7 +129,8 @@ describe('a valid upload', () => {
         .executeTakeFirstOrThrow();
 
       const bytes = await getObject(store, inputFile.storageKey);
-      expect(new TextDecoder().decode(bytes)).toBe(A_CSV);
+      // The row points at the normalized variant; the file as uploaded is kept beside it.
+      expect(new TextDecoder().decode(bytes)).toBe(NORMALIZED_CSV);
       // The column is CHECKed at 32 bytes, so a wrong-shaped digest would never have inserted.
       expect(Buffer.from(inputFile.checksumSha256 as Uint8Array)).toHaveLength(32);
 
@@ -194,9 +197,9 @@ describe('a rejected upload', () => {
 
     expect(recorded).toMatchObject({
       inputFileOriginalFilename: 'procurement.csv',
-      inputFileByteSize: A_CSV.length,
+      inputFileByteSize: RAW_CSV.length,
     });
-    expect(new TextDecoder().decode(bytes)).toBe(A_CSV);
+    expect(new TextDecoder().decode(bytes)).toBe(RAW_CSV);
   });
 
   test('records the metadata exactly as it was submitted', async () => {

@@ -1,0 +1,23 @@
+/** The months a file has orders in, against the counts the form gave for them.
+ *
+ * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
+ * anything Node-only.
+ */
+
+import type { MonthlyCounts } from './metadata.ts';
+import type { RejectedUploadRecord } from './rejection.ts';
+
+export function monthsWithoutCounts(
+  months: readonly string[],
+  monthlyCounts: MonthlyCounts,
+): RejectedUploadRecord | undefined {
+  const uncounted = months.filter((month) => !(month in monthlyCounts));
+  if (uncounted.length === 0) return undefined;
+
+  const those = uncounted.length === 1 ? 'that month' : 'those months';
+  return {
+    reason: 'invalid_metadata',
+    summary: `Your file has orders in ${uncounted.join(', ')}, but you did not give a count for ${those}.`,
+    rejectionDetail: `months in the file with no count: ${uncounted.join(', ')}`,
+  };
+}

@@ -67,7 +67,10 @@ const MONTH_NUMBERS = new Map<string, number>(
 );
 
 export function readDate(raw: string, bounds: DateBounds): DateReading {
-  const cleaned = raw.trim().replace(/,/g, '').replace(/\s+/g, ' ').toLowerCase();
+  const cleaned = raw
+    .trim()
+    .replace(/,|\s+/g, (match) => (match === ',' ? '' : ' '))
+    .toLowerCase();
   if (cleaned === '') return { kind: 'invalid', fault: 'empty' };
 
   const yearFirst =
