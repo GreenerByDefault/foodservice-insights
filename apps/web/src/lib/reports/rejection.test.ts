@@ -39,7 +39,8 @@ describe('userFacingRejection', () => {
       summary: 'Your file has no rows in it.',
     });
 
-    expect(rejection).toEqual({ summary: 'Your file has no rows in it.' });
+    expect(rejection).not.toHaveProperty('rowProblems');
+    expect(rejection).not.toHaveProperty('dateOrderProblem');
   });
 });
 

@@ -67,20 +67,14 @@ server-side rendering (SSR) for the first request, then client-side navigation (
 hydration. Server-only code (`hooks.server.ts`, `+layout.server.ts`, `+page.server.ts`) runs on
 every navigation regardless of whether the client re-renders the page.
 
-**Backend routes are called with `fetch()`.**
+**Database access, in both the web app and the worker, uses [Kysely](https://kysely.dev)**, a
+type-safe SQL builder: we write SQL directly in TypeScript. This gives predictable query
+performance, unlike an ORM, while keeping the ergonomics an ORM provides through TypeScript
+integration. [Kanel](https://kristiandupont.github.io/kanel/) generates the types from the live
+database. Kysely also handles migrations.
 
-- *Rejected: SvelteKit form actions and remote functions.* Both add a layer of indirection over
-  plain `fetch()` calls to `+server.ts` handlers, which makes the code harder for newcomers to
-  follow without strong enough of a payoff.
-
-**Database access uses [Kysely](https://kysely.dev)**, a type-safe SQL builder: we write SQL
-directly in TypeScript. This gives predictable query performance, unlike an ORM, while keeping
-the ergonomics an ORM provides through TypeScript integration.
-[Kanel](https://kristiandupont.github.io/kanel/) generates the types from the live database.
-Kysely also handles migrations.
-
-**Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com)**, whose components we
-vendor in full, so we own them outright.
+How routes are structured within `apps/web` — including why they call `+server.ts` handlers with
+plain `fetch()` rather than form actions — is in [`apps/web/README.md`](apps/web/README.md#routes).
 
 ## Auth
 

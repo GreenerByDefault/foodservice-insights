@@ -16,6 +16,11 @@ layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 
+**A write is a `+server.ts` handler, called with plain `fetch()`.** *Rejected: SvelteKit form
+actions and remote functions.* Both add a layer of indirection over a `fetch()` call to a
+`+server.ts` handler, which makes the code harder for newcomers to follow without a strong enough
+payoff.
+
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
@@ -26,13 +31,15 @@ what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what 
 means no answer arrived and the request's fate is unknown.
 
 **A feature owns a client that knows its own endpoint's statuses and bodies**, and returns an
-outcome union with no HTTP in it. `src/lib/reports/upload.ts` is the example.
+outcome union with no HTTP in it.
 
 **Expected outcomes are returned, not thrown** — the browser-side half of the rule in `## Errors`.
 
 ## UI components
 
-**`src/lib/components/ui/` is purely vendored shadcn** — nothing hand-written goes there.
+Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
+is purely vendored shadcn** — nothing hand-written goes there — so we own the components outright
+rather than depending on a component library.
 
 **A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
 route needs it.
@@ -49,7 +56,7 @@ into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 
 
 ## Forms
 
-**No form library.** Native constraint validation, consistent with `ARCHITECTURE.md` rejecting
+**No form library.** Native constraint validation, consistent with `## Routes` above rejecting
 form actions. A real `<form>` with `onsubmit` and a `<button type="submit">` mean the browser
 blocks an invalid submit and focuses the first bad field; `reportValidity()` is only for a
 programmatic submit. Async failures and hand-written checks render in a `<Field.Error>`.
@@ -69,7 +76,7 @@ form and its parser cannot drift apart. `src/lib/reports/metadata.ts` is the one
 differ per form, and the shared part is already the error classification in `client.ts`.
 
 **A form's values live in the component's own state, not only in the DOM**, so a form that swaps
-its own view for another — a rejection view in place of the form, say — does not lose typed work.
+its own markup for another view does not lose typed work.
 
 **A form's schema lives with its feature**. What is not specific to one form lives in
 `src/lib/forms/`.
@@ -87,8 +94,9 @@ trade for a payload one route sets and one client reads. A route that fails in a
 renders answers `json(body, { status })` with a type it owns. `error()` is left to the failures every caller handles
 the same way, like 404s.
 
-**Three failure surfaces, never merged.** A field problem is shown at the field; a rejected file
-gets its own view; an unknown outcome is shown at the action that caused it, with no retry implied.
+**Three failure surfaces, never merged.** A field problem is shown at the field; a submission a
+feature refuses outright gets its own view; an unknown outcome is shown at the action that caused
+it, with no retry implied.
 
 **A short message gets `role="alert"`. A long one does not** — announcing a whole document on
 render is hostile. Move focus to its heading instead and let the user read at their own pace.
@@ -96,14 +104,6 @@ render is hostile. Move focus to its heading instead and let the user read at th
 **A failure inside a form is shown inline and stays until it is fixed.** A toast is for a
 transient confirmation of an action on a page that stays put; no page needs one yet, and that is a
 fine reason to add the dependency when one does.
-
-**One component renders both a client-side and a server-side rejection.** Both narrow to
-`UploadRejection` (`summary`, `rowProblems?`, `dateOrderProblem?`) in
-`src/lib/reports/rejection.ts`, so a rejection view takes that shape regardless of which side
-produced it.
-
-**Every sentence about a user's file comes from `src/lib/reports/csv/describe/`.** A view lays out
-what the payload holds; copy the screen is missing gets added there, not written in markup.
 
 ## Auth
 

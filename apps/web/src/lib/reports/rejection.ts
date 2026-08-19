@@ -27,8 +27,8 @@ export type UploadRejection = Pick<
   'summary' | 'rowProblems' | 'dateOrderProblem'
 >;
 
-/** Narrow a rejection to what the user may see. Both the browser and the server call this — the
- * server before it answers with `json()`, the browser as soon as it rejects a file itself. */
+/** Both the browser and the server call this — the server before it answers with `json()`, the
+ * browser as soon as it rejects a file itself. */
 export function userFacingRejection({
   summary,
   rowProblems,
@@ -41,8 +41,8 @@ export function userFacingRejection({
   };
 }
 
-/** Whether a 400 body is a rejection rather than some other failure. `summary` being a string is
- * what tells the two apart, now that no `code` crosses the wire. */
+/** `summary` being a string is what tells a rejection body apart from any other 400, now that no
+ * `code` crosses the wire. */
 export function asUploadRejection(body: unknown): UploadRejection | undefined {
   if (!body || typeof body !== 'object' || !('summary' in body) || typeof body.summary !== 'string')
     return undefined;
