@@ -81,7 +81,9 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
       return {
         reason: 'bad_columns',
         summary: fault.fault ? describeHeaderFault(fault.fault) : 'We could not read that file.',
-        rejectionDetail: `header: ${fault.fields.slice(0, 20).join(' | ')}`,
+        rejectionDetail: fault.fault
+          ? describeHeaderFaultDetail(fault.fault)
+          : `header: ${fault.fields.slice(0, 20).join(' | ')}`,
       };
   }
 }
@@ -99,6 +101,13 @@ function describeHeaderFault(fault: HeaderFault): string {
   return `Two columns could be the ${headerLabel(fault.column)}: ${listOf(
     fault.headers.map((header) => `"${header}"`),
   )}. Remove or rename one.`;
+}
+
+function describeHeaderFaultDetail(fault: HeaderFault): string {
+  if (fault.kind === 'missing') {
+    return `missing column(s): ${fault.columns.join(', ')}`;
+  }
+  return `ambiguous column: ${fault.column} (${fault.headers.join(' | ')})`;
 }
 
 /** Deliberately a different label set from the row-problem wording in `rows.ts`: a header

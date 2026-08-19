@@ -54,7 +54,7 @@ const LAYOUT_CASES: [string, LayoutFault, RejectedUploadRecord][] = [
     {
       reason: 'bad_columns',
       summary: 'Your file needs a column for product name, date ordered and weight.',
-      rejectionDetail: 'header: vendor | cost',
+      rejectionDetail: 'missing column(s): product, date, weight',
     },
   ],
   [
@@ -67,7 +67,7 @@ const LAYOUT_CASES: [string, LayoutFault, RejectedUploadRecord][] = [
     {
       reason: 'bad_columns',
       summary: 'Two columns could be the product name: "product" and "item". Remove or rename one.',
-      rejectionDetail: 'header: product | item | date | weight',
+      rejectionDetail: 'ambiguous column: product (product | item)',
     },
   ],
   [
