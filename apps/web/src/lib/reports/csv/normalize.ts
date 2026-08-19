@@ -226,16 +226,19 @@ function resolveDates(
   const resolved: NormalizedRow[] = [];
   const months = new Set<string>();
   for (const row of rows) {
-    const date =
-      row.reading.kind === 'date'
-        ? ({ ok: true, isoDate: row.reading.isoDate } as const)
-        : applyDateOrder(row.reading, decision.order, bounds);
-    if (!date.ok) {
-      noteRow(log, row.line, { kind: 'resolved-date', fault: date.fault, raw: row.rawDate });
-      continue;
+    let isoDate: string;
+    if (row.reading.kind === 'date') {
+      isoDate = row.reading.isoDate;
+    } else {
+      const date = applyDateOrder(row.reading, decision.order, bounds);
+      if (!date.ok) {
+        noteRow(log, row.line, { kind: 'resolved-date', fault: date.fault, raw: row.rawDate });
+        continue;
+      }
+      isoDate = date.isoDate;
     }
-    resolved.push({ product: row.product, isoDate: date.isoDate, weight: row.weight });
-    months.add(date.isoDate.slice(0, 7));
+    resolved.push({ product: row.product, isoDate, weight: row.weight });
+    months.add(isoDate.slice(0, 7));
   }
   return { rows: resolved, months: [...months].sort() };
 }
