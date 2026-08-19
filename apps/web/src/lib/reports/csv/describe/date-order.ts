@@ -28,8 +28,14 @@ export function describeDateOrderFinding(finding: DateOrderFinding): string {
   return `Every date in that file could be read two ways — row ${ambiguous?.line}'s ${quote(ambiguous?.raw ?? '')} is ${readings}. ${advice}`;
 }
 
-function describeBothReadings(reading: Extract<DateReading, { kind: 'numeric' }>): string {
-  const { dayFirst, monthFirst } = bothDateOrderReadings(reading);
-  const describe = (resolved: ResolvedDate) => (resolved.ok ? resolved.isoDate : 'no real date');
-  return `${describe(dayFirst)} or ${describe(monthFirst)}`;
+function describeBothReadings(ambiguousReading: Extract<DateReading, { kind: 'numeric' }>): string {
+  const { dayFirst, monthFirst } = bothDateOrderReadings(ambiguousReading);
+  return `${isoDateOfAmbiguousReading(dayFirst)} or ${isoDateOfAmbiguousReading(monthFirst)}`;
+}
+
+function isoDateOfAmbiguousReading(resolved: ResolvedDate): string {
+  if (!resolved.ok) {
+    throw new Error(`unreachable: ambiguous date resolved to ${resolved.fault}`);
+  }
+  return resolved.isoDate;
 }
