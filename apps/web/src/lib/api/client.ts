@@ -1,11 +1,6 @@
 /** The one place components call `fetch`, so no component has to decide how a failure is
  * classified.
  *
- * `ApiError` and `ApiUnreachableError` are deliberately separate: the server answering with a
- * bad status is a known outcome a form can render, while `fetch` itself rejecting means the
- * request's fate is unknown — REQUIREMENTS.md § Errors requires the UI to say that rather than
- * imply a retry is safe.
- *
  * This layer knows only HTTP. A feature's own client is what knows which statuses its endpoint
  * means and what its bodies are — see `$lib/reports/upload.ts`.
  */
