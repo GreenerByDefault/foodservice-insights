@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { inspectFile } from './inspect-file.ts';
-import { MAX_UPLOAD_BYTES } from './limits.ts';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
 import { validateSubmission } from './submission.ts';
 
 const HEADER = 'product,date,weight';
@@ -32,7 +32,7 @@ describe('inspectFile', () => {
       ok: false,
       rejection: {
         reason: 'too_large',
-        summary: expect.stringContaining('larger than'),
+        summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
         rejectionDetail: `${text.length} bytes`,
       },
     });
