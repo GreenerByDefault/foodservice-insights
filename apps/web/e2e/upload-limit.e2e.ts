@@ -48,7 +48,7 @@ test('accepts a file far past the Svelte default but inside the product limit', 
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(201);
-  expect(await response.json()).toMatchObject({ reportId: expect.any(String) });
+  expect(await response.json()).toEqual({ reportId: expect.any(String) });
 });
 
 test('rejects a file over the product limit as our own 400, not the transport 413', async ({
@@ -59,7 +59,7 @@ test('rejects a file over the product limit as our own 400, not the transport 41
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(400);
-  expect(await response.json()).toMatchObject({
+  expect(await response.json()).toEqual({
     summary: 'That file is larger than 10MB.',
   });
 });
@@ -72,5 +72,5 @@ test('rejects a file over the transport limit as adapter-node, not our own valid
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(413);
-  expect(await response.json()).toMatchObject({ message: UNEXPECTED_ERROR_MESSAGE });
+  expect(await response.json()).toEqual({ message: UNEXPECTED_ERROR_MESSAGE });
 });
