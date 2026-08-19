@@ -19,6 +19,17 @@ already is, so there is no `?next=` to carry anywhere.
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
+## Calling the API from the browser
+
+**No component calls `fetch`.** `src/lib/api/client.ts` is the one place, and it knows only HTTP:
+`ApiError` carries a status, a message for a log, and the body as `unknown`; `ApiUnreachableError`
+means no answer arrived and the request's fate is unknown.
+
+**A feature owns a client that knows its own endpoint's statuses and bodies**, and returns an
+outcome union with no HTTP in it. `src/lib/reports/upload.ts` is the example.
+
+**Expected outcomes are returned, not thrown** — the browser-side half of the rule in `## Errors`.
+
 ## UI components
 
 **`src/lib/components/ui/` is purely vendored shadcn** — nothing hand-written goes there.
@@ -36,32 +47,32 @@ The CLI rewrites `apps/web/package.json` with literal dependency versions. Move 
 into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) and restore
 `"catalog:"` in the package, so every package stays on one version. Then run `pnpm install`.
 
-## Frontend
+## Forms
 
-**No component calls `fetch` directly.** `src/lib/api/client.ts` — `apiCall`, `ApiError`,
-`ApiUnreachableError` — is the one place that happens, so a component only ever decides what to
-show for a known status versus an unreachable server.
+**No form library.** Native constraint validation, consistent with `ARCHITECTURE.md` rejecting
+form actions. A real `<form>` with `onsubmit` and a `<button type="submit">` mean the browser
+blocks an invalid submit and focuses the first bad field; `reportValidity()` is only for a
+programmatic submit. Async failures and hand-written checks render in a `<Field.Error>`.
 
-**No form library.** Native constraint validation plus `reportValidity()` on submit, consistent
-with `ARCHITECTURE.md` rejecting form actions.
+**Trap: a hidden or `type="hidden"` control is skipped by constraint validation.** `required` on a
+hidden file input blocks submission with no visible message; on a `RadioGroup`'s hidden input it
+does nothing at all. Those get a check in the handler and an inline message.
 
-**Each form declares its own outcome union** rather than sharing one across forms — the outcomes
-differ per form, and the shared part is already the error classification in `client.ts`.
+**The submit button stays enabled for an invalid form**, and is disabled only while a request is
+in flight or a navigation is pending, with the reason in its label. A disabled button cannot say
+which field it is waiting on; the browser's own refusal can.
 
 **A field name is always read from a `FIELD` map**, never written as a literal in markup, so the
 form and its parser cannot drift apart. `src/lib/reports/metadata.ts` is the one for reports.
 
-**One panel renders both client- and server-side rejections.** `RejectedUploadRecord` and
-`RejectedUploadResponse` (`src/lib/reports/rejection.ts`) already share the `{ message, problems }`
-shape a form needs, so a form's rejection panel takes that shape regardless of which side produced
-it.
+**Each form declares its own outcome union** rather than sharing one across forms — the outcomes
+differ per form, and the shared part is already the error classification in `client.ts`.
 
-**Errors are shown inline, next to the cause, never as a toast.** No toast dependency exists in
-this app; don't add one for a single form.
+**A form's values live in the component's own state, not only in the DOM**, so a form that swaps
+its own view for another — a rejection view in place of the form, say — does not lose typed work.
 
-## Forms
-
-**A form's own schema lives with its feature**. What is not specific to one form lives in `src/lib/forms/`.
+**A form's schema lives with its feature**. What is not specific to one form lives in
+`src/lib/forms/`.
 
 ## Errors
 
@@ -75,6 +86,24 @@ in `hooks.server.ts` logs it and hands the client a generic message.
 trade for a payload one route sets and one client reads. A route that fails in a way its own UI
 renders answers `json(body, { status })` with a type it owns. `error()` is left to the failures every caller handles
 the same way, like 404s.
+
+**Three failure surfaces, never merged.** A field problem is shown at the field; a rejected file
+gets its own view; an unknown outcome is shown at the action that caused it, with no retry implied.
+
+**A short message gets `role="alert"`. A long one does not** — announcing a whole document on
+render is hostile. Move focus to its heading instead and let the user read at their own pace.
+
+**A failure inside a form is shown inline and stays until it is fixed.** A toast is for a
+transient confirmation of an action on a page that stays put; no page needs one yet, and that is a
+fine reason to add the dependency when one does.
+
+**One component renders both a client-side and a server-side rejection.** Both narrow to
+`UploadRejection` (`summary`, `rowProblems?`, `dateOrderProblem?`) in
+`src/lib/reports/rejection.ts`, so a rejection view takes that shape regardless of which side
+produced it.
+
+**Every sentence about a user's file comes from `src/lib/reports/csv/describe/`.** A view lays out
+what the payload holds; copy the screen is missing gets added there, not written in markup.
 
 ## Auth
 

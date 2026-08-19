@@ -16,7 +16,7 @@ import {
 import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
 import type { ReportMetadata } from '$lib/reports/metadata';
-import { type RejectedUploadRecord, rejectionResponse } from '$lib/reports/rejection';
+import { type RejectedUploadRecord, userFacingRejection } from '$lib/reports/rejection';
 import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
@@ -51,7 +51,7 @@ export async function _createReport(
 
   if (!outcome.ok) {
     await recordRejection(db, store, uploader, raw, outcome, outcome.rejection);
-    return json(rejectionResponse(outcome.rejection), { status: 400 });
+    return json(userFacingRejection(outcome.rejection), { status: 400 });
   }
 
   const { organizationId, userId } = uploader;

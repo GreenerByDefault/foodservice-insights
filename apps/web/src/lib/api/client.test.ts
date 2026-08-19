@@ -18,20 +18,15 @@ describe('apiCall', () => {
     expect(response.status).toBe(204);
   });
 
-  test('a non-2xx JSON body becomes an ApiError carrying status, code, and problems', async () => {
-    const body = JSON.stringify({
-      message: 'The file could not be read',
-      code: 'invalid_csv',
-      problems: ['Row 3: amount is not a number'],
-    });
-    stubFetch(new Response(body, { status: 400 }));
+  test('a non-2xx JSON body becomes an ApiError carrying status, message, and the body', async () => {
+    const body = { message: 'The file could not be read', summary: 'The file could not be read' };
+    stubFetch(new Response(JSON.stringify(body), { status: 400 }));
 
     await expect(apiCall('/api/orgs/org-1/reports')).rejects.toMatchObject({
       constructor: ApiError,
       status: 400,
       message: 'The file could not be read',
-      code: 'invalid_csv',
-      problems: ['Row 3: amount is not a number'],
+      body,
     });
   });
 
@@ -44,7 +39,6 @@ describe('apiCall', () => {
       constructor: ApiError,
       status: 504,
       message: 'Gateway Timeout',
-      code: undefined,
     });
   });
 

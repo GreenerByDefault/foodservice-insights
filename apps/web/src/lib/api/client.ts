@@ -5,17 +5,19 @@
  * bad status is a known outcome a form can render, while `fetch` itself rejecting means the
  * request's fate is unknown — REQUIREMENTS.md § Errors requires the UI to say that rather than
  * imply a retry is safe.
+ *
+ * This layer knows only HTTP. A feature's own client is what knows which statuses its endpoint
+ * means and what its bodies are — see `$lib/reports/upload.ts`.
  */
 
-/** The server answered, but not with a 2xx. Carries whatever the body offered, which covers both
- * `App.Error` (`message`, `code`) and `RejectedUploadResponse` (`message`, `code`, `problems`).
+/** The server answered, but not with a 2xx. `message` is for a log or a last-resort string;
+ * `body` is the parsed payload, for the feature client that knows its shape.
  */
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public code?: string,
-    public problems?: readonly string[],
+    public body: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -35,8 +37,6 @@ export class ApiUnreachableError extends Error {
 /** Makes an API request and throws on a non-2xx or unreachable response.
  *
  * Skips `Content-Type` for a `FormData` body so the browser can set its own multipart boundary.
- * Callers uploading a file should pass their own `signal` rather than rely on a default timeout,
- * since an upload can legitimately take longer than a small request.
  */
 export async function apiCall(url: string, options?: RequestInit): Promise<Response> {
   const isFormData = options?.body instanceof FormData;
@@ -57,15 +57,14 @@ export async function apiCall(url: string, options?: RequestInit): Promise<Respo
   if (response.ok) return response;
 
   let message = response.statusText;
-  let code: string | undefined;
-  let problems: readonly string[] | undefined;
+  let body: unknown;
   try {
-    const body = await response.json();
-    message = body.message ?? message;
-    code = body.code;
-    problems = body.problems;
+    body = await response.json();
+    if (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string') {
+      message = body.message;
+    }
   } catch {
     // Not a JSON body — fall back to statusText already set above.
   }
-  throw new ApiError(response.status, message, code, problems);
+  throw new ApiError(response.status, message, body);
 }
