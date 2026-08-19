@@ -5,23 +5,23 @@ import { type CsvNormalization, normalizeCsv } from './normalize.ts';
 
 const HEADER = 'product,date,weight';
 
-function normalize(text: string, now?: Date): CsvNormalization {
+function normalizeText(text: string, now?: Date): CsvNormalization {
   return normalizeCsv(new TextEncoder().encode(text), now ? { now } : {});
 }
 
 function accepted(text: string, now?: Date): { text: string; months: readonly string[] } {
-  const outcome = normalize(text, now);
+  const outcome = normalizeText(text, now);
   if (!outcome.ok) throw new Error(`expected acceptance, got: ${outcome.rejection.summary}`);
   return { text: new TextDecoder().decode(outcome.normalized), months: outcome.months };
 }
 
 function rejected(text: string, now?: Date): RejectedUploadRecord {
-  const outcome = normalize(text, now);
+  const outcome = normalizeText(text, now);
   if (outcome.ok) throw new Error('expected a rejection');
   return outcome.rejection;
 }
 
-function rules(rejection: RejectedUploadRecord): readonly string[] {
+function ruleNames(rejection: RejectedUploadRecord): readonly string[] {
   return (rejection.rowProblems ?? []).map(({ rule }) => rule);
 }
 
@@ -67,12 +67,12 @@ describe('normalizeCsv', () => {
     const farOff = `${HEADER}\nbeef,2026-06-01,1`;
 
     expect(accepted(soon, now).months).toEqual(['2026-02']);
-    expect(rules(rejected(farOff, now))).toEqual(['The date is more than 30 days from now']);
+    expect(ruleNames(rejected(farOff, now))).toEqual(['The date is more than 30 days from now']);
   });
 
   describe('refuses a file before reading a row', () => {
     test.for([
-      ['an Excel file renamed to .csv', 'PKrest of the zip', 'unparseable'],
+      ['an Excel file renamed to .csv', 'PK\x03\x04rest of the zip', 'unparseable'],
       ['a header with no amount column', 'product,date\nbeef,2026-01-05', 'bad_columns'],
       ['quotes that never close', `${HEADER}\n"beef,2026-01-05,1`, 'unparseable'],
       ['a header with nothing under it', HEADER, 'empty'],
@@ -112,14 +112,14 @@ describe('normalizeCsv', () => {
     });
 
     test('every fault in a row, rather than the first', () => {
-      expect(rules(rejected(`${HEADER}\nbeef,never,5 oz`))).toEqual([
+      expect(ruleNames(rejected(`${HEADER}\nbeef,never,5 oz`))).toEqual([
         'The amount has a unit in it',
         'The date is not a date we recognise',
       ]);
     });
 
     test('a row that does not have the header’s columns, without reading its cells', () => {
-      expect(rules(rejected(`${HEADER}\nbeef,2026-01-05`))).toEqual([
+      expect(ruleNames(rejected(`${HEADER}\nbeef,2026-01-05`))).toEqual([
         'Has 2 columns where the header has 3',
       ]);
     });
@@ -127,7 +127,7 @@ describe('normalizeCsv', () => {
     test('a cell too long to hand to a rule', () => {
       const product = 'x'.repeat(MAX_FREE_TEXT_LENGTH + 1);
 
-      expect(rules(rejected(`${HEADER}\n${product},2026-01-05,1`))).toEqual([
+      expect(ruleNames(rejected(`${HEADER}\n${product},2026-01-05,1`))).toEqual([
         `The product is over ${MAX_FREE_TEXT_LENGTH} characters long`,
       ]);
     });
@@ -136,7 +136,7 @@ describe('normalizeCsv', () => {
       // `13/03` proves the column is day-first, and read that way `31/06` is a June the 31st.
       const text = [HEADER, 'beef,13/03/2026,1', 'beef,31/06/2026,1'].join('\n');
 
-      expect(rules(rejected(text))).toEqual(['The date is not a real calendar date']);
+      expect(ruleNames(rejected(text))).toEqual(['The date is not a real calendar date']);
     });
 
     test('a product a spreadsheet would run as a formula, as its own reason', () => {
