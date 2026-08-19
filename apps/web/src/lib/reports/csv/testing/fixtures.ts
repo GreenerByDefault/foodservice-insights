@@ -3,25 +3,25 @@ import type { FindingGroup, Findings, RowFinding } from '../findings.ts';
 /** A `'weight'` finding with representative defaults, for tests that don't care which fault
  * failed. */
 export function weightFinding(
-  over: Partial<Extract<RowFinding, { kind: 'weight' }>> = {},
+  overrides: Partial<Extract<RowFinding, { kind: 'weight' }>> = {},
 ): RowFinding {
   return {
     kind: 'weight',
     fault: 'has-a-unit',
     raw: '5 oz',
-    ...over,
+    ...overrides,
   };
 }
 
 /** One group, as `findings.ts` would have folded it. */
-export function findingGroup(over: Partial<FindingGroup> = {}): FindingGroup {
-  const finding = over.finding ?? weightFinding();
-  const ranges = over.ranges ?? [{ start: 2, end: 2 }];
+export function findingGroup(overrides: Partial<FindingGroup> = {}): FindingGroup {
+  const finding = overrides.finding ?? weightFinding();
+  const ranges = overrides.ranges ?? [{ start: 2, end: 2 }];
   return {
     finding,
     ranges,
-    rowCount: over.rowCount ?? rowsCoveredBy(ranges),
-    examples: over.examples ?? exampleValuesOf(finding),
+    rowCount: overrides.rowCount ?? rowsCoveredBy(ranges),
+    examples: overrides.examples ?? exampleValuesOf(finding),
   };
 }
 
