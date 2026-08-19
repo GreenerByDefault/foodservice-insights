@@ -4,16 +4,16 @@
  * anything Node-only.
  */
 
-import type { MonthlyCounts } from './metadata.ts';
+import type { MonthlyCounts, MonthsFromFile } from './metadata.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
 const monthListFormat = new Intl.ListFormat('en', { type: 'conjunction' });
 
 export function monthsWithoutCounts(
-  months: readonly string[],
+  monthsFromFile: MonthsFromFile,
   monthlyCounts: MonthlyCounts,
 ): RejectedUploadRecord | undefined {
-  const uncounted = months.filter((month) => !(month in monthlyCounts));
+  const uncounted = monthsFromFile.filter((month) => !(month in monthlyCounts));
   if (uncounted.length === 0) return undefined;
 
   const those = uncounted.length === 1 ? 'that month' : 'those months';

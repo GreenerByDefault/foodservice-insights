@@ -8,6 +8,7 @@
  */
 
 import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_FREE_TEXT_LENGTH } from '../limits.ts';
+import type { MonthsFromFile } from '../metadata.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
 import { describeFindings, describeUnreadableFile, type UnreadableFile } from './describe/index.ts';
 import {
@@ -45,13 +46,7 @@ import {
 import { encodeNormalizedCsv, type NormalizedRow } from './write.ts';
 
 export type CsvNormalization =
-  | {
-      ok: true;
-      normalized: Uint8Array;
-      /** Sorted unique `YYYY-MM`, so the caller can check the form gave a count for every month
-       * the file has orders in. */
-      months: readonly string[];
-    }
+  | { ok: true; normalized: Uint8Array; months: MonthsFromFile }
   | { ok: false; rejection: RejectedUploadRecord };
 
 export function normalizeCsv(bytes: Uint8Array, options: { now?: Date } = {}): CsvNormalization {
@@ -215,7 +210,7 @@ function resolveDates(
   examples: MutableDateExamples,
   bounds: DateBounds,
   log: FindingLog,
-): { rows: NormalizedRow[]; months: readonly string[] } {
+): { rows: NormalizedRow[]; months: MonthsFromFile } {
   const decision = decideDateOrder(readingsOf(rows));
   if (!decision.ok) {
     noteDateOrder(log, { fault: decision.fault, examples });

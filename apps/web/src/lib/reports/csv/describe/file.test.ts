@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_COLUMNS, MAX_DATA_ROWS } from '../../limits.ts';
+import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';
 import type { RejectedUploadRecord } from '../../rejection.ts';
 import { CsvParseError, type DecodeFault, type LayoutFault } from '../read/index.ts';
 import { describeUnreadableFile } from './file.ts';
@@ -167,6 +167,21 @@ describe('describeUnreadableFile', () => {
     expect(describeUnreadableFile({ kind: 'no-data-rows' })).toEqual({
       reason: 'empty',
       summary: 'That file has a header but no rows under it.',
+    });
+  });
+
+  test('a file over the size cap', () => {
+    expect(describeUnreadableFile({ kind: 'too-large', byteSize: 12_345 })).toEqual({
+      reason: 'too_large',
+      summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
+      rejectionDetail: '12345 bytes',
+    });
+  });
+
+  test('a zero-byte file', () => {
+    expect(describeUnreadableFile({ kind: 'empty' })).toEqual({
+      reason: 'empty',
+      summary: 'That file has no rows in it.',
     });
   });
 });
