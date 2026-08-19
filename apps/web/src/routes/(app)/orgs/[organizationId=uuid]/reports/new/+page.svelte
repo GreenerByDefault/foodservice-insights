@@ -1,7 +1,14 @@
 <script lang="ts">
+import type { CountDraft } from '$lib/reports/monthly-counts';
+import MonthlyCounts from './monthly-counts.svelte';
 import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
+
+// **Temporary, dev-only preview of PR 1's `monthly-counts.svelte`** — there is nowhere else to
+// see it rendered until PR 2 wires up the real upload form. Delete this block (down to
+// `<!-- /preview -->`) when that lands; it is not meant to survive review.
+let previewCounts: CountDraft = $state({});
 </script>
 
 <!-- **Stub:** names the organization for real; the upload form itself is not built yet.
@@ -18,3 +25,16 @@ let { data }: PageProps = $props();
 <p>Uploading to <strong>{data.organization.name}</strong>.</p>
 
 <p class="text-muted-foreground">Boilerplate only. Real features arrive in later phases.</p>
+
+<!-- preview -->
+<div class="mt-8 max-w-2xl rounded-md border border-dashed p-4">
+  <p class="mb-4 text-sm text-muted-foreground">
+    Dev preview of <code>monthly-counts.svelte</code>, spanning two years. Removed in PR 2.
+  </p>
+  <MonthlyCounts
+    months={['2025-11', '2025-12', '2026-01', '2026-02']}
+    basis="people"
+    bind:counts={previewCounts}
+  />
+</div>
+<!-- /preview -->
