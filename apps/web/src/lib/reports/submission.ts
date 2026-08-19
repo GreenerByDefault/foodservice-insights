@@ -13,8 +13,10 @@ import type { InputFileVariants } from '@gbd/storage';
 import * as v from 'valibot';
 import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
+import { normalizeCsv } from './csv/normalize.ts';
 import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
 import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
+import { monthsWithoutCounts } from './monthly-coverage.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
 /** Exactly what arrived, before anything has judged it. Recorded verbatim on a rejection. */
@@ -122,9 +124,15 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     };
   }
 
+  const csv = normalizeCsv(bytes);
+  if (!csv.ok) return { ok: false, fileDescription, bytes, rejection: csv.rejection };
+
+  const uncounted = monthsWithoutCounts(csv.months, parsed.output.monthlyCounts);
+  if (uncounted) return { ok: false, fileDescription, bytes, rejection: uncounted };
+
   return {
     ok: true,
-    file: { ...fileDescription, variants: { original: bytes, normalized: bytes } },
+    file: { ...fileDescription, variants: { original: bytes, normalized: csv.normalized } },
     metadata: parsed.output,
   };
 }

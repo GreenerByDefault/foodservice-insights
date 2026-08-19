@@ -16,7 +16,7 @@ import type {
 } from '../read/index.ts';
 import { groupDigits, listOf } from './text.ts';
 
-/** Every way `validate.ts` can refuse a file before a single row of it is read. */
+/** Every way `normalize.ts` can refuse a file before a single row of it is read. */
 export type UnreadableFile =
   | { kind: 'decode'; fault: DecodeFault }
   | { kind: 'layout'; fault: LayoutFault }

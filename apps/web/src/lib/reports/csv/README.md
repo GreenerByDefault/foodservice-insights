@@ -1,6 +1,6 @@
 # CSV validation
 
-`validate.ts` turns uploaded bytes into the CSV the analysis reads, or the reason we will not
+`normalize.ts` turns uploaded bytes into the CSV the analysis reads, or the reason we will not
 accept them. The folder is three layers, one word each for what they hand upward:
 
 | Word | Means | Lives in |
@@ -12,9 +12,10 @@ accept them. The folder is three layers, one word each for what they hand upward
 A value has a *fault*; we record a *finding*; we show a *problem*. Every sentence about the
 user's file lives in `describe/`. `read/` and `rules/` return fault codes.
 
-`validate.ts` and `findings.ts` stay at the top of `csv/` because they *are* the pipeline;
+`normalize.ts` and `findings.ts` stay at the top of `csv/` because they *are* the pipeline;
 `read/`, `rules/`, and `describe/` hold the leaf modules underneath it. `findings.ts` folds many
-failing rows into a few groups.
+failing rows into a few groups. `write.ts` is the counterpart to `read/`: the accepted rows back
+into bytes, and the only file that knows the header the analysis reads.
 
 ### `read/` — bytes into a table, or a fault code
 

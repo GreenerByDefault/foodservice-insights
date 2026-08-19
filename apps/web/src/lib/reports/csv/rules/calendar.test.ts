@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { toIsoDate } from './calendar.ts';
+import { EARLIEST_DATE } from '../../limits.ts';
+import { dateBoundsAt, toIsoDate } from './calendar.ts';
 
 const BOUNDS = { earliest: '2000-01-01', latest: '2026-12-31' };
 
@@ -26,5 +27,14 @@ describe('toIsoDate', () => {
 
   test('rejects a date after the accepted range', () => {
     expect(toIsoDate(2027, 1, 1, BOUNDS)).toEqual({ ok: false, fault: 'too-far-ahead' });
+  });
+});
+
+describe('dateBoundsAt', () => {
+  test('accepts back to EARLIEST_DATE and MAX_FUTURE_DAYS ahead of now', () => {
+    expect(dateBoundsAt(new Date('2026-01-15T12:00:00Z'))).toEqual({
+      earliest: EARLIEST_DATE,
+      latest: '2026-02-14',
+    });
   });
 });

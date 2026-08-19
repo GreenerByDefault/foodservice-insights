@@ -34,8 +34,7 @@ describe('validateSubmission', () => {
     });
   });
 
-  // TODO: change this test when the normalize changes the file.
-  test('reports the normalized bytes as the same bytes it received, until a normalizer exists', async () => {
+  test('keeps the file it received alongside the CSV the analysis reads', async () => {
     const outcome = await validateSubmission(aSubmission());
 
     expect(outcome).toMatchObject({
@@ -43,7 +42,7 @@ describe('validateSubmission', () => {
       file: {
         variants: {
           original: new TextEncoder().encode(CSV),
-          normalized: new TextEncoder().encode(CSV),
+          normalized: new TextEncoder().encode('product,date,weight\nbeef mince,2026-01-05,12\n'),
         },
       },
     });
@@ -99,6 +98,30 @@ describe('validateSubmission', () => {
         },
       });
     });
+
+    // Which CSVs are refused, and the words they are refused in, belong to normalize.test.ts.
+    // This is only that the pipeline is wired in.
+    test('a file the CSV pipeline refuses', async () => {
+      const outcome = await validateSubmission(
+        aSubmission({ file: new File(['product,date\nbeef,2026-01-05\n'], 'no-amount.csv') }),
+      );
+
+      expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'bad_columns' } });
+    });
+
+    test('a file with orders in a month the form gave no count for', async () => {
+      const outcome = await validateSubmission(
+        aSubmission({ monthlyCounts: JSON.stringify({ '2026-02': 135 }) }),
+      );
+
+      expect(outcome).toMatchObject({
+        ok: false,
+        rejection: {
+          reason: 'invalid_metadata',
+          summary: 'Your file has orders in 2026-01, but you did not give a count for that month.',
+        },
+      });
+    });
   });
 
   test('keeps the bytes of a rejected file, so the caller can store it', async () => {
@@ -133,6 +156,17 @@ describe('validateSubmission', () => {
     );
 
     expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'empty' } });
+  });
+
+  test('reports a metadata problem before reading the file, which costs far more', async () => {
+    const outcome = await validateSubmission(
+      aSubmission({
+        countsBasis: 'guesses',
+        file: new File(['product,date\nbeef,2026-01-05\n'], 'no-amount.csv'),
+      }),
+    );
+
+    expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'invalid_metadata' } });
   });
 });
 
