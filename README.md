@@ -23,6 +23,7 @@ Everything above that heading is common to both.
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`apps/web/README.md`](apps/web/README.md) | The web app's design |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
+| [`packages/storage/README.md`](packages/storage/README.md) | The blob store, and its key layout |
 | [`packages/email/README.md`](packages/email/README.md) | The emails we send, and reading them locally |
 | [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract |
 
@@ -167,20 +168,16 @@ A fair number of tests query Postgres or the blob store. The test scripts apply 
 the bucket created before tests run.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
-`@gbd/db/testing`, which rolls the transaction back however the test ends. It's necessary for
-isolation. The one exception is a test *about* concurrency, which needs two transactions at once
-and so has to commit; those use the harness in
-[`packages/db/src/testing/concurrency.ts`](packages/db/src/testing/concurrency.ts), which cleans up
-after itself.
+`@gbd/db/testing` — see [`packages/db/README.md`](packages/db/README.md#using-it) for the one
+exception.
 
 **Every test that touches the blob store must wrap its keys in `withTemporaryPrefix`**, from
-`@gbd/storage/testing`, which deletes everything under its prefix however the test ends. It's
-necessary for isolation. Use its sibling `withTemporaryOrganization` instead when the code under
-test builds real keys, which start at an organization rather than at a prefix of your choosing.
+`@gbd/storage/testing` — see [`packages/storage/README.md`](packages/storage/README.md) for when
+to use its sibling `withTemporaryOrganization` instead.
 
 **A test that needs to prove an email was sent should use `recordingEmailer()`**, from
-`@gbd/email/testing`, not real mail. The exceptions are `@gbd/email`'s own tests along with e2e tests, which
-send through Mailpit for real.
+`@gbd/email/testing` — see [`packages/email/README.md`](packages/email/README.md#testing) for the
+exceptions that send through Mailpit for real.
 
 **E2E tests commit transactions and leave objects in the blob store, unlike the rest of the
 suite** — Playwright truncates both before a run. Generate IDs with `crypto.randomUUID()` to
@@ -205,11 +202,10 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
 #### Add a database migration
 
-1. Add a file to `packages/db/migrations/`, numbered in sequence. Name every constraint, index,
-   and trigger you add.
+1. Add a file to `packages/db/migrations/`, numbered in sequence, following the naming and
+   testing conventions in [`packages/db/README.md`](packages/db/README.md#conventions).
 2. `pnpm migrate`
 3. `pnpm db:gen-types`, and commit the regenerated files alongside the migration.
-4. Add a test to `packages/db/tests/` for each new constraint or trigger, asserting its name.
 
 Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
 Keep them backwards-compatible with the running app, since migrations run *before* the new
@@ -267,13 +263,4 @@ console.error(JSON.stringify(await query.explain('json', sql`analyze`), null, 2)
 
 #### Add a shadcn-svelte component
 
-UI components are vendored from [shadcn-svelte](https://www.shadcn-svelte.com) into `apps/web/src/lib/components/ui/`, so we own them outright.
-
-```sh
-pnpm dlx shadcn-svelte@latest add --cwd apps/web <component>
-```
-
-The CLI rewrites `apps/web/package.json` with literal dependency versions. Move any new
-version into the `catalog:` block in [`pnpm-workspace.yaml`](pnpm-workspace.yaml) and
-restore `"catalog:"` in the package, so every package stays on one version. Then run
-`pnpm install`.
+See [`apps/web/README.md`](apps/web/README.md#ui-components).
