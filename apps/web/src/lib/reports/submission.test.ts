@@ -3,7 +3,7 @@ import { MAX_UPLOAD_BYTES } from './limits.ts';
 import { FIELD } from './metadata.ts';
 import { type RawSubmission, readSubmission, validateSubmission } from './submission.ts';
 
-const CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
+const CSV = 'product,date ordered,weight\nbeef mince,2026-01-05,12\n';
 
 function aSubmission(overrides: Partial<RawSubmission> = {}): RawSubmission {
   return {
@@ -103,7 +103,7 @@ describe('validateSubmission', () => {
     // This is only that the pipeline is wired in.
     test('a file the CSV pipeline refuses', async () => {
       const outcome = await validateSubmission(
-        aSubmission({ file: new File(['product,date\nbeef,2026-01-05\n'], 'no-amount.csv') }),
+        aSubmission({ file: new File(['product,date\nbeef,2026-01-05\n'], 'no-weight.csv') }),
       );
 
       expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'bad_columns' } });
@@ -162,7 +162,7 @@ describe('validateSubmission', () => {
     const outcome = await validateSubmission(
       aSubmission({
         countsBasis: 'guesses',
-        file: new File(['product,date\nbeef,2026-01-05\n'], 'no-amount.csv'),
+        file: new File(['product,date\nbeef,2026-01-05\n'], 'no-weight.csv'),
       }),
     );
 

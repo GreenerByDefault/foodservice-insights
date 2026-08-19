@@ -20,11 +20,21 @@ describe('monthsWithoutCounts', () => {
     });
   });
 
-  test('rejects several uncounted months', () => {
+  test('rejects two uncounted months', () => {
     expect(monthsWithoutCounts(['2026-01', '2026-02'], { '2026-03': 120 })).toMatchObject({
       summary:
-        'Your file has orders in 2026-01, 2026-02, but you did not give a count for those months.',
+        'Your file has orders in 2026-01 and 2026-02, but you did not give a count for those months.',
       rejectionDetail: 'months in the file with no count: 2026-01, 2026-02',
+    });
+  });
+
+  test('rejects three or more uncounted months with an Oxford comma', () => {
+    expect(
+      monthsWithoutCounts(['2026-01', '2026-02', '2026-03'], { '2026-04': 120 }),
+    ).toMatchObject({
+      summary:
+        'Your file has orders in 2026-01, 2026-02, and 2026-03, but you did not give a count for those months.',
+      rejectionDetail: 'months in the file with no count: 2026-01, 2026-02, 2026-03',
     });
   });
 });

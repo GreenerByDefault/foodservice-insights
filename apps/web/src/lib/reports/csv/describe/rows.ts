@@ -6,7 +6,7 @@
 
 import { EARLIEST_DATE, MAX_FREE_TEXT_LENGTH, MAX_FUTURE_DAYS } from '../../limits.ts';
 import type { FindingGroup, RowFinding } from '../findings.ts';
-import type { AmountFault, DateFault, ProductFault } from '../rules/index.ts';
+import type { DateFault, ProductFault, WeightFault } from '../rules/index.ts';
 import type { Problem, RowSpan } from './problems.ts';
 import { capitalize, plural, quote } from './text.ts';
 
@@ -21,7 +21,7 @@ const PRODUCT_CLAUSES: Record<ProductFault, Clause> = {
   'invisible-character': { clause: 'contains a line break, a tab or an invisible character' },
 };
 
-const AMOUNT_CLAUSES: Record<AmountFault, Clause> = {
+const WEIGHT_CLAUSES: Record<WeightFault, Clause> = {
   empty: { clause: 'is empty' },
   'parenthesized-negative': {
     clause:
@@ -33,7 +33,7 @@ const AMOUNT_CLAUSES: Record<AmountFault, Clause> = {
     advice: 'Delete that row rather than just dropping the minus sign.',
   },
   money: {
-    clause: 'is money, not a weight',
+    clause: 'is money',
     advice: 'Check you mapped the right column.',
   },
   scientific: {
@@ -52,7 +52,7 @@ const AMOUNT_CLAUSES: Record<AmountFault, Clause> = {
   },
   // An example, not a remedy, so it stays in the clause.
   'not-plain': { clause: 'is not a plain number, such as 12 or 1234.50' },
-  'too-many-digits': { clause: 'has more digits than any real weight' },
+  'too-many-digits': { clause: 'has too many digits to be real' },
 };
 
 /** Covers `CalendarFault` as well as `DateFault`'s own codes, since `resolved-date` findings read
@@ -106,8 +106,8 @@ export function ruleOf(finding: RowFinding): string {
     case 'date':
     case 'resolved-date':
       return sentence('date', DATE_CLAUSES[finding.fault].clause);
-    case 'amount':
-      return sentence('amount', AMOUNT_CLAUSES[finding.fault].clause);
+    case 'weight':
+      return sentence('weight', WEIGHT_CLAUSES[finding.fault].clause);
     // The value itself is never quoted back here — it is what is too long.
     case 'too-long':
       return capitalize(`the ${finding.column} is over ${MAX_FREE_TEXT_LENGTH} characters long`);
@@ -131,8 +131,8 @@ function adviceOf(finding: RowFinding): string | undefined {
     case 'date':
     case 'resolved-date':
       return DATE_CLAUSES[finding.fault].advice;
-    case 'amount':
-      return AMOUNT_CLAUSES[finding.fault].advice;
+    case 'weight':
+      return WEIGHT_CLAUSES[finding.fault].advice;
     case 'too-long':
     case 'formula':
     case 'width':

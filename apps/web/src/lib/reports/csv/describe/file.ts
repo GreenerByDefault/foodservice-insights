@@ -81,7 +81,9 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
       return {
         reason: 'bad_columns',
         summary: fault.fault ? describeHeaderFault(fault.fault) : 'We could not read that file.',
-        rejectionDetail: `header: ${fault.fields.slice(0, 20).join(' | ')}`,
+        rejectionDetail: fault.fault
+          ? describeHeaderFaultDetail(fault.fault)
+          : `header: ${fault.fields.slice(0, 20).join(' | ')}`,
       };
   }
 }
@@ -101,12 +103,19 @@ function describeHeaderFault(fault: HeaderFault): string {
   )}. Remove or rename one.`;
 }
 
+function describeHeaderFaultDetail(fault: HeaderFault): string {
+  if (fault.kind === 'missing') {
+    return `missing column(s): ${fault.columns.join(', ')}`;
+  }
+  return `ambiguous column: ${fault.column} (${fault.headers.join(' | ')})`;
+}
+
 /** Deliberately a different label set from the row-problem wording in `rows.ts`: a header
- * sentence says "amount ordered" — naming the column as the alias table spells it — while a row
- * sentence says "the amount" — naming the value inside it.
+ * sentence says "date ordered" — naming the column as the alias table spells it — while a row
+ * sentence says "the date" — naming the value inside it.
  */
 function headerLabel(column: RequiredColumn): string {
-  return { product: 'product name', date: 'date ordered', amount: 'amount ordered' }[column];
+  return { product: 'product name', date: 'date ordered', weight: 'weight' }[column];
 }
 
 function csvParseErrorRejection(error: CsvParseError): RejectedUploadRecord {

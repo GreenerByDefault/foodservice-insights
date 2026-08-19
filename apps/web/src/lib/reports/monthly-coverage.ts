@@ -7,6 +7,8 @@
 import type { MonthlyCounts } from './metadata.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
+const monthListFormat = new Intl.ListFormat('en', { type: 'conjunction' });
+
 export function monthsWithoutCounts(
   months: readonly string[],
   monthlyCounts: MonthlyCounts,
@@ -17,7 +19,7 @@ export function monthsWithoutCounts(
   const those = uncounted.length === 1 ? 'that month' : 'those months';
   return {
     reason: 'invalid_metadata',
-    summary: `Your file has orders in ${uncounted.join(', ')}, but you did not give a count for ${those}.`,
+    summary: `Your file has orders in ${monthListFormat.format(uncounted)}, but you did not give a count for ${those}.`,
     rejectionDetail: `months in the file with no count: ${uncounted.join(', ')}`,
   };
 }

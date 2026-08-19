@@ -33,7 +33,7 @@ into bytes, and the only file that knows the header the analysis reads.
 | `calendar.ts` | Calendar fields into an ISO date inside the accepted range |
 | `dates.ts` | Date cells |
 | `date-order.ts` | Deciding a column's day-first/month-first order |
-| `amounts.ts` | Amount cells |
+| `weights.ts` | Weight cells |
 | `products.ts` | Product cells, including the formula-injection check |
 
 ### `describe/` — every sentence a customer reading a rejection sees
@@ -55,7 +55,7 @@ wherever that's safe, like dropping a column the analysis never reads. What we w
 an ambiguity on the user's behalf: an ambiguous date or an unrecognized header gets rejected back to
 them instead of guessed at.
 
-What comes out is `product,date,weight`: comma-delimited, UTF-8, dates `YYYY-MM-DD`, amounts plain
+What comes out is `product,date,weight`: comma-delimited, UTF-8, dates `YYYY-MM-DD`, weights plain
 numbers, and nothing else. Ambiguous dates, unit words, semicolon delimiters, Windows-1252 are rejected. Weights stay in the unit the form declared, which
 the run manifest carries; converting them is the analysis's job.
 

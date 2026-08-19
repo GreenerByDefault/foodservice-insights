@@ -48,9 +48,9 @@ const INVISIBLE = /\p{Cc}|\p{Cf}|\p{Co}|\p{Cs}/u;
 
 /** What a spreadsheet reads as the start of a formula.
  *
- * Only the product column is checked, and that is what makes the rule usable: the date and amount
- * grammars already reject anything that is not a plain date or a plain number, so `=1+1` in an
- * amount is a bad amount and `-5` is a negative — neither needs to be an injection. Checked over
+ * Only the product column is checked, and that is what makes the rule usable: the date and weight
+ * grammars already reject anything that is not a plain date or a plain number, so `=1+1` in a
+ * weight is a bad weight and `-5` is a negative — neither needs to be an injection. Checked over
  * the whole free-text column, `-5` in a product name is vanishingly rare, so the false positives
  * this rule is famous for never arise.
  *

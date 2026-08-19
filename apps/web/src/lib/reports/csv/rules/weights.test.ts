@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_AMOUNT_DIGITS } from '../../limits.ts';
-import { readAmount } from './amounts.ts';
+import { MAX_WEIGHT_DIGITS } from '../../limits.ts';
+import { readWeight } from './weights.ts';
 
-describe('readAmount', () => {
+describe('readWeight', () => {
   test.for([
     ['123', 123],
     ['123.45', 123.45],
@@ -13,12 +13,12 @@ describe('readAmount', () => {
     // The analysis permits zero, so accepting it keeps what we take a subset of what it takes.
     ['0', 0],
   ] as const)('reads "%s" as %f', ([raw, value]) => {
-    expect(readAmount(raw)).toEqual({ ok: true, value });
+    expect(readWeight(raw)).toEqual({ ok: true, value });
   });
 
   test('accepts a number right at the digit cap', () => {
-    const digits = '1'.repeat(MAX_AMOUNT_DIGITS);
-    expect(readAmount(digits)).toEqual({ ok: true, value: Number(digits) });
+    const digits = '1'.repeat(MAX_WEIGHT_DIGITS);
+    expect(readWeight(digits)).toEqual({ ok: true, value: Number(digits) });
   });
 
   describe('rejects', () => {
@@ -54,13 +54,13 @@ describe('readAmount', () => {
       ['', 'empty'],
       ['   ', 'empty'],
     ] as const)('"%s" is %s', ([raw, fault]) => {
-      expect(readAmount(raw)).toEqual({ ok: false, fault });
+      expect(readWeight(raw)).toEqual({ ok: false, fault });
     });
 
-    test.for([MAX_AMOUNT_DIGITS + 1, 400])(
+    test.for([MAX_WEIGHT_DIGITS + 1, 400])(
       'a number with %i digits, one more than the cap allows',
       (length) => {
-        expect(readAmount('1'.repeat(length))).toEqual({
+        expect(readWeight('1'.repeat(length))).toEqual({
           ok: false,
           fault: 'too-many-digits',
         });

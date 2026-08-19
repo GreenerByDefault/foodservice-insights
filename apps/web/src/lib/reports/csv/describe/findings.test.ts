@@ -74,7 +74,7 @@ describe('the rejectionDetail we keep but never show', () => {
   test('one line per problem, joined with a semicolon', () => {
     const rejectionDetail = rejectionFor({
       rowGroups: [
-        findingGroup({ finding: { kind: 'amount', fault: 'empty', raw: '' } }),
+        findingGroup({ finding: { kind: 'weight', fault: 'empty', raw: '' } }),
         findingGroup({
           finding: { kind: 'product', fault: 'empty', raw: 'x' },
           ranges: [{ start: 3, end: 3 }],
@@ -83,7 +83,7 @@ describe('the rejectionDetail we keep but never show', () => {
     }).rejectionDetail;
 
     expect(rejectionDetail).toBe(
-      'row 2: The amount is empty.; row 3: The product is empty. For example "x".',
+      'row 2: The weight is empty.; row 3: The product is empty. For example "x".',
     );
   });
 
@@ -109,7 +109,7 @@ describe('the rejectionDetail we keep but never show', () => {
     const rejection = rejectionFor({ rowGroups: [findingGroup()], dateOrder });
 
     expect(rejection.rejectionDetail).toBe(
-      `${rejection.dateOrderProblem}; all 1 rows: The amount has a unit in it. For example "5 oz".`,
+      `${rejection.dateOrderProblem}; all 1 rows: The weight has a unit in it. For example "5 oz".`,
     );
   });
 });
@@ -161,7 +161,7 @@ describe('the whole record', () => {
       summary: 'We found problems in 1 of your 900 rows.',
       rowProblems: [
         {
-          rule: 'The amount has a unit in it',
+          rule: 'The weight has a unit in it',
           advice:
             'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
           rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
@@ -169,7 +169,7 @@ describe('the whole record', () => {
         },
       ],
       // `rejectionDetail` omits `advice`, since it's a diagnostic column we read, not the customer.
-      rejectionDetail: 'row 2: The amount has a unit in it. For example "5 oz".',
+      rejectionDetail: 'row 2: The weight has a unit in it. For example "5 oz".',
     });
   });
 

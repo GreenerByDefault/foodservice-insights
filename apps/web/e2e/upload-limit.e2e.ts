@@ -13,7 +13,7 @@ import { MAX_UPLOAD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upl
 
 const ENDPOINT = `/api/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports`;
 
-const HEADER = 'product name,date ordered,amount ordered\n';
+const HEADER = 'product name,date ordered,weight\n';
 const ROW = 'beef mince,2026-01-05,12\n';
 
 function csvOfAtLeast(bytes: number): string {

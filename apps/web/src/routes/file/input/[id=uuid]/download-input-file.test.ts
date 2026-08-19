@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _downloadInputFile } from './+server.ts';
 
-const CSV = new TextEncoder().encode('product name,date ordered,amount ordered\n');
+const CSV = new TextEncoder().encode('product name,date ordered,weight\n');
 
 describe('_downloadInputFile', () => {
   test('redirects to a URL that actually serves the bytes', async () => {

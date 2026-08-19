@@ -12,11 +12,11 @@ import { withTemporaryOrganization } from './testing/organizations.ts';
 
 // Has a non-ASCII name, so that a byte count taken from a string's length rather than its
 // encoding would come out short.
-const ORIGINAL_CSV = new TextEncoder().encode('product,date,amount\ncafé au lait,2026-01-05,12\n');
+const ORIGINAL_CSV = new TextEncoder().encode('product,date,weight\ncafé au lait,2026-01-05,12\n');
 
 // Differs from `ORIGINAL_CSV`, so a test can tell the normalized bytes from the original.
 const NORMALIZED_CSV = new TextEncoder().encode(
-  'product,date,amount\ncafe au lait,2026-01-05,12\n',
+  'product,date,weight\ncafe au lait,2026-01-05,12\n',
 );
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);

@@ -47,9 +47,9 @@ describe('renderProblemsAsDetail', () => {
   test('the rows, the rule, then the examples', () => {
     expect(
       renderProblemsAsDetail([
-        { rule: 'The amount has a unit in it', rows: oneRow, examples: ['"5 oz"', '"3 kg"'] },
+        { rule: 'The weight has a unit in it', rows: oneRow, examples: ['"5 oz"', '"3 kg"'] },
       ]),
-    ).toBe('row 2: The amount has a unit in it. For example "5 oz" and "3 kg".');
+    ).toBe('row 2: The weight has a unit in it. For example "5 oz" and "3 kg".');
   });
 
   test('no examples, no sentence about them', () => {
@@ -63,10 +63,10 @@ describe('renderProblemsAsDetail', () => {
   test('problems joined with a semicolon', () => {
     expect(
       renderProblemsAsDetail([
-        { rule: 'The amount is empty', rows: oneRow, examples: [] },
+        { rule: 'The weight is empty', rows: oneRow, examples: [] },
         { rule: 'The product is empty', rows: oneRow, examples: [] },
       ]),
-    ).toBe('row 2: The amount is empty.; row 2: The product is empty.');
+    ).toBe('row 2: The weight is empty.; row 2: The product is empty.');
   });
 
   test('nothing to render', () => {

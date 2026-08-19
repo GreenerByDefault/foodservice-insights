@@ -4,21 +4,22 @@
  * anything Node-only.
  */
 
-export type RequiredColumn = 'product' | 'date' | 'amount';
+export type RequiredColumn = 'product' | 'date' | 'weight';
 
-export const REQUIRED_COLUMNS: readonly RequiredColumn[] = ['product', 'date', 'amount'];
+export const REQUIRED_COLUMNS: readonly RequiredColumn[] = ['product', 'date', 'weight'];
 
 /** What each required column may be called, written in normalized form.
  *
- * Deliberately tiny. `quantity` and `qty` are excluded because they count cases, not weight, and
- * `total`, `cost` and `sales` because they are spend — mapping either onto weight produces a
- * confident wrong report, and nothing downstream can tell. A header we do not recognise is a
- * visible rejection the user can fix; a header we recognise wrongly is not.
+ * Deliberately tiny. `quantity` and `qty` are excluded because they count cases, not weight;
+ * `total`, `cost` and `sales` because they are spend; and `amount` because it is generic enough to
+ * mean either — mapping any of them onto weight produces a confident wrong report, and nothing
+ * downstream can tell. A header we do not recognise is a visible rejection the user can fix; a
+ * header we recognise wrongly is not.
  */
 const ALIASES = {
   product: ['product', 'product name', 'item', 'item name', 'description'],
   date: ['date', 'date ordered', 'order date'],
-  amount: ['amount', 'amount ordered', 'weight'],
+  weight: ['weight'],
 } as const satisfies Record<RequiredColumn, readonly string[]>;
 
 export type ColumnIndexes = Record<RequiredColumn, number>;
