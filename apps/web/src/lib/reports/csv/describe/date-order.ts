@@ -5,11 +5,12 @@
  */
 
 import type { DateOrderFinding } from '../findings.ts';
+import type { DateReading, ResolvedDate } from '../rules/index.ts';
 import { bothDateOrderReadings } from '../rules/index.ts';
 import { quote } from './text.ts';
 
 export function describeDateOrderFinding(finding: DateOrderFinding): string {
-  const { issue: fault, examples } = finding;
+  const { fault, examples } = finding;
   const advice = 'Re-save the date column as YYYY-MM-DD and upload again.';
 
   if (fault === 'contradictory') {
@@ -23,8 +24,18 @@ export function describeDateOrderFinding(finding: DateOrderFinding): string {
   // readings of the same value.
   const ambiguous = examples.get('ambiguous');
   const readings =
-    ambiguous?.reading.kind === 'numeric'
-      ? bothDateOrderReadings(ambiguous.reading)
-      : 'either date';
+    ambiguous?.reading.kind === 'numeric' ? describeBothReadings(ambiguous.reading) : 'either date';
   return `Every date in that file could be read two ways — row ${ambiguous?.line}'s ${quote(ambiguous?.raw ?? '')} is ${readings}. ${advice}`;
+}
+
+function describeBothReadings(ambiguousReading: Extract<DateReading, { kind: 'numeric' }>): string {
+  const { dayFirst, monthFirst } = bothDateOrderReadings(ambiguousReading);
+  return `${isoDateOfAmbiguousReading(dayFirst)} or ${isoDateOfAmbiguousReading(monthFirst)}`;
+}
+
+function isoDateOfAmbiguousReading(resolved: ResolvedDate): string {
+  if (!resolved.ok) {
+    throw new Error(`unreachable: ambiguous date resolved to ${resolved.fault}`);
+  }
+  return resolved.isoDate;
 }

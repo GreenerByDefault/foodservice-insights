@@ -7,14 +7,22 @@
  * anything Node-only.
  */
 
-import { type DateBounds, toIsoDate } from './calendar.ts';
+import { type CalendarFault, type DateBounds, toIsoDate } from './calendar.ts';
+
+// Everything readDate can produce, which includes the calendar's.
+export type DateFault =
+  | CalendarFault
+  | 'empty'
+  | 'unknown-month-name'
+  | 'date-serial'
+  | 'unrecognized';
 
 export type DateReading =
   /** Unambiguous, and already inside the accepted range. */
   | { kind: 'date'; isoDate: string }
   /** `first/second/year`, where only the whole column can say which is the day. */
   | { kind: 'numeric'; first: number; second: number; year: number }
-  | { kind: 'invalid'; fault: string };
+  | { kind: 'invalid'; fault: DateFault };
 
 // ------------------------------------------------------------------
 // Recognizing a cell
@@ -58,11 +66,9 @@ const MONTH_NUMBERS = new Map<string, number>(
   ].flatMap((names, index) => names.map((name): [string, number] => [name, index + 1])),
 );
 
-const NOT_A_DATE = 'is not a real calendar date';
-
 export function readDate(raw: string, bounds: DateBounds): DateReading {
   const cleaned = raw.trim().replace(/,/g, '').replace(/\s+/g, ' ').toLowerCase();
-  if (cleaned === '') return { kind: 'invalid', fault: 'is empty' };
+  if (cleaned === '') return { kind: 'invalid', fault: 'empty' };
 
   const yearFirst =
     YEAR_FIRST.exec(cleaned) ?? YEAR_FIRST_WITH_TIME.exec(cleaned) ?? COMPACT.exec(cleaned);
@@ -108,14 +114,10 @@ export function readDate(raw: string, bounds: DateBounds): DateReading {
   }
 
   if (DIGITS_ONLY.test(cleaned) || DECIMAL_SERIAL.test(cleaned)) {
-    return {
-      kind: 'invalid',
-      fault:
-        'looks like an unconverted date serial; format the column as a date in your spreadsheet and save it again',
-    };
+    return { kind: 'invalid', fault: 'date-serial' };
   }
 
-  return { kind: 'invalid', fault: 'is not a date we recognise; use YYYY-MM-DD' };
+  return { kind: 'invalid', fault: 'unrecognized' };
 }
 
 /** A month with no day is the whole month, and the report is keyed by month, so the day we put in
@@ -128,7 +130,7 @@ const FIRST_OF_THE_MONTH = 1;
 // ------------------------------------------------------------------
 
 function numeric(first: number, second: number, year: number): DateReading {
-  if (first > 12 && second > 12) return { kind: 'invalid', fault: NOT_A_DATE };
+  if (first > 12 && second > 12) return { kind: 'invalid', fault: 'not-a-real-date' };
   return { kind: 'numeric', first, second, year };
 }
 
@@ -140,7 +142,7 @@ function named(
 ): DateReading {
   const month = MONTH_NUMBERS.get(name ?? '');
   if (month === undefined) {
-    return { kind: 'invalid', fault: 'has a month name we do not recognise' };
+    return { kind: 'invalid', fault: 'unknown-month-name' };
   }
   return dated(year, month, day, bounds);
 }

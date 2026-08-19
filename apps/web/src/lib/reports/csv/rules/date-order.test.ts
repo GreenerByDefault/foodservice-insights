@@ -73,7 +73,7 @@ describe('applyDateOrder', () => {
   test('checks the calendar, which Date.UTC would otherwise roll past', () => {
     expect(
       applyDateOrder({ kind: 'numeric', first: 31, second: 2, year: 2025 }, 'day-first', BOUNDS),
-    ).toEqual({ ok: false, fault: 'is not a real calendar date' });
+    ).toEqual({ ok: false, fault: 'not-a-real-date' });
   });
 
   test('applies the accepted range', () => {
@@ -84,9 +84,10 @@ describe('applyDateOrder', () => {
 });
 
 describe('bothDateOrderReadings', () => {
-  test('shows the user the two dates rather than describing the problem', () => {
-    expect(bothDateOrderReadings({ kind: 'numeric', first: 3, second: 4, year: 2025 })).toBe(
-      '2025-04-03 or 2025-03-04',
-    );
+  test('reads both orders, so a message can show the user the problem rather than describe it', () => {
+    expect(bothDateOrderReadings({ kind: 'numeric', first: 3, second: 4, year: 2025 })).toEqual({
+      dayFirst: { ok: true, isoDate: '2025-04-03' },
+      monthFirst: { ok: true, isoDate: '2025-03-04' },
+    });
   });
 });

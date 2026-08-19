@@ -11,13 +11,11 @@
  * anything Node-only.
  */
 
-import { MAX_FUTURE_DAYS } from '../../limits.ts';
-
 export type DateBounds = { earliest: string; latest: string };
 
-export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; fault: string };
+export type CalendarFault = 'not-a-real-date' | 'too-old' | 'too-far-ahead';
 
-const NOT_A_DATE = 'is not a real calendar date';
+export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; fault: CalendarFault };
 
 export function toIsoDate(
   year: number,
@@ -26,22 +24,22 @@ export function toIsoDate(
   bounds: DateBounds,
 ): ResolvedDate {
   if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return { ok: false, fault: NOT_A_DATE };
+    return { ok: false, fault: 'not-a-real-date' };
   }
 
   // `Date.UTC` rolls February 30 forward into March rather than complaining, so the only way to
   // know the date exists is to read the fields back out.
   const at = new Date(Date.UTC(year, month - 1, day));
   if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) {
-    return { ok: false, fault: NOT_A_DATE };
+    return { ok: false, fault: 'not-a-real-date' };
   }
 
   const isoDate = `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
   if (isoDate < bounds.earliest) {
-    return { ok: false, fault: `is before ${bounds.earliest}, too old to be procurement data` };
+    return { ok: false, fault: 'too-old' };
   }
   if (isoDate > bounds.latest) {
-    return { ok: false, fault: `is more than ${MAX_FUTURE_DAYS} days from now` };
+    return { ok: false, fault: 'too-far-ahead' };
   }
   return { ok: true, isoDate };
 }

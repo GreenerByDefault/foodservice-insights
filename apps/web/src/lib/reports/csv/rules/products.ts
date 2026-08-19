@@ -12,7 +12,9 @@
  * anything Node-only.
  */
 
-export type ProductRead = { ok: true; value: string } | { ok: false; fault: string };
+export type ProductFault = 'empty' | 'placeholder' | 'invisible-character';
+
+export type ProductRead = { ok: true; value: string } | { ok: false; fault: ProductFault };
 
 /** What a spreadsheet leaves behind where a product should be. */
 const PLACEHOLDERS = new Set([
@@ -59,12 +61,12 @@ const FORMULA_TRIGGERS = new Set(['=', '+', '-', '@']);
 
 export function readProduct(raw: string): ProductRead {
   const trimmed = raw.trim();
-  if (trimmed === '') return { ok: false, fault: 'is empty' };
+  if (trimmed === '') return { ok: false, fault: 'empty' };
   if (PLACEHOLDERS.has(trimmed.toLowerCase())) {
-    return { ok: false, fault: 'is a placeholder rather than a product' };
+    return { ok: false, fault: 'placeholder' };
   }
   if (INVISIBLE.test(trimmed)) {
-    return { ok: false, fault: 'contains a line break, a tab or an invisible character' };
+    return { ok: false, fault: 'invisible-character' };
   }
   return { ok: true, value: trimmed };
 }

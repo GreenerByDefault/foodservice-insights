@@ -5,7 +5,7 @@ import { describeDateOrderFinding } from './date-order.ts';
 describe('a date order problem', () => {
   test('contradictory: names both rows and the reading each one forces', () => {
     const dateOrder: DateOrderFinding = {
-      issue: 'contradictory',
+      fault: 'contradictory',
       examples: new Map([
         [
           'day-first',
@@ -35,7 +35,7 @@ describe('a date order problem', () => {
 
   test('unresolvable: names both readings of the one ambiguous value', () => {
     const dateOrder: DateOrderFinding = {
-      issue: 'unresolvable',
+      fault: 'unresolvable',
       examples: new Map([
         [
           'ambiguous',
@@ -56,7 +56,7 @@ describe('a date order problem', () => {
 
   test('unresolvable: falls back to "either date" when the example is not itself numeric', () => {
     const dateOrder: DateOrderFinding = {
-      issue: 'unresolvable',
+      fault: 'unresolvable',
       examples: new Map([
         [
           'ambiguous',

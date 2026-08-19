@@ -63,14 +63,17 @@ export function applyDateOrder(
 }
 
 /** Both ways a value could be read, so a message can show the user the problem rather than
- * describe it.
+ * describe it. Read against the widest possible range: showing the reading is the point, even
+ * when one of the two would itself be rejected as too old or too far ahead.
  */
-export function bothDateOrderReadings(reading: Extract<DateReading, { kind: 'numeric' }>): string {
-  const describe = (resolved: ResolvedDate) => (resolved.ok ? resolved.isoDate : 'no real date');
-  return [
-    describe(applyDateOrder(reading, 'day-first', ANY_DATE)),
-    describe(applyDateOrder(reading, 'month-first', ANY_DATE)),
-  ].join(' or ');
+export function bothDateOrderReadings(reading: Extract<DateReading, { kind: 'numeric' }>): {
+  dayFirst: ResolvedDate;
+  monthFirst: ResolvedDate;
+} {
+  return {
+    dayFirst: applyDateOrder(reading, 'day-first', ANY_DATE),
+    monthFirst: applyDateOrder(reading, 'month-first', ANY_DATE),
+  };
 }
 
 const ANY_DATE: DateBounds = { earliest: '0000-01-01', latest: '9999-12-31' };

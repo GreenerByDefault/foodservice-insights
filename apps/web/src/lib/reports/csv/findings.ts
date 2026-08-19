@@ -8,18 +8,26 @@
 
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
 import type { RequiredColumn } from './read/index.ts';
-import type { DateOrder, DateOrderFault, DateReading } from './rules/index.ts';
+import type {
+  AmountFault,
+  CalendarFault,
+  DateFault,
+  DateOrder,
+  DateOrderFault,
+  DateReading,
+  ProductFault,
+} from './rules/index.ts';
 
-/** One row's fault.
- *
- * Every kind but `width` is a cell that failed its rule; `width` is the row
- * itself having the wrong number of columns.
- */
+export type RowRange = { start: number; end: number };
+
+/** One row's fault. */
 export type RowFinding =
-  | { kind: 'cell'; column: RequiredColumn; raw: string; clause: string }
+  | { kind: 'product'; fault: ProductFault; raw: string }
+  | { kind: 'date'; fault: DateFault; raw: string }
   /** A date that only failed once the column-wide order was applied. */
-  | { kind: 'resolved-date'; raw: string; clause: string }
-  // We leave off the `raw` value.
+  | { kind: 'resolved-date'; fault: CalendarFault; raw: string }
+  | { kind: 'amount'; fault: AmountFault; raw: string }
+  // We leave off the `raw` value: it is what is too long.
   | { kind: 'too-long'; column: RequiredColumn }
   | { kind: 'formula'; raw: string }
   | { kind: 'width'; actual: number; expected: number };
@@ -32,13 +40,13 @@ export type DateExamples = ReadonlyMap<DateOrder | 'ambiguous', DateExample>;
 
 /** A column-wide date-order failure. */
 export type DateOrderFinding = {
-  issue: DateOrderFault;
+  fault: DateOrderFault;
   examples: DateExamples;
 };
 
-export type MutableRowGroup = {
+type MutableRowGroup = {
   finding: RowFinding;
-  ranges: { start: number; end: number }[];
+  ranges: RowRange[];
   rowCount: number;
   /** Capped at `MAX_EXAMPLE_VALUES`. */
   examples: Set<string>;
@@ -53,6 +61,8 @@ export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
   dateOrder?: DateOrderFinding;
   failingRowCount: number;
+  /** The last line `noteRow` counted toward `failingRowCount`. */
+  lastFailingLine?: number;
   /** Every data row seen, passing or failing. */
   rowsRead: number;
 };
@@ -63,7 +73,10 @@ export function newFindingLog(): FindingLog {
 
 /** Add a row to the finding it failed, which is created on the first row to reach it. */
 export function noteRow(log: FindingLog, line: number, finding: RowFinding): void {
-  log.failingRowCount += 1;
+  if (log.lastFailingLine !== line) {
+    log.failingRowCount += 1;
+    log.lastFailingLine = line;
+  }
 
   const key = groupKey(finding);
   const existing = log.rowGroups.get(key);
@@ -86,10 +99,11 @@ export function noteDateOrder(log: FindingLog, finding: DateOrderFinding): void 
 function groupKey(finding: RowFinding): string {
   // `raw` never appears in the key, so the key stays a fixed, small set of templates.
   switch (finding.kind) {
-    case 'cell':
-      return `cell|${finding.column}|${finding.clause}`;
+    case 'product':
+    case 'date':
     case 'resolved-date':
-      return `resolved-date|${finding.clause}`;
+    case 'amount':
+      return `${finding.kind}|${finding.fault}`;
     case 'too-long':
       return `too-long|${finding.column}`;
     case 'formula':
@@ -101,7 +115,7 @@ function groupKey(finding: RowFinding): string {
 }
 
 function rawValueOf(finding: RowFinding): string | undefined {
-  return finding.kind === 'too-long' || finding.kind === 'width' ? undefined : finding.raw;
+  return 'raw' in finding ? finding.raw : undefined;
 }
 
 function extendOrStartRange(group: MutableRowGroup, line: number): void {
@@ -127,7 +141,7 @@ function addExampleValue(group: MutableRowGroup, raw: string | undefined): void 
  * back. */
 export type FindingGroup = {
   readonly finding: RowFinding;
-  readonly ranges: readonly { start: number; end: number }[];
+  readonly ranges: readonly RowRange[];
   /** Every row, including the ones past `MAX_ROW_RANGES_REPORTED` that no range holds. */
   readonly rowCount: number;
   /** This holds at most `MAX_EXAMPLE_VALUES` deduplicated raw values. */

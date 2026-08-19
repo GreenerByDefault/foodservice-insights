@@ -9,14 +9,14 @@ accept them. The folder is three layers, one word each for what they hand upward
 | **Finding** | A fault, plus the rows it was found on | `findings.ts` |
 | **Problem** | What the customer reads about a finding | `describe/` |
 
-A value has a *fault*; we record a *finding*; we show a *problem*. **Every sentence about the
-user's file lives in `describe/`** — `read/` and `rules/` never word one themselves.
+A value has a *fault*; we record a *finding*; we show a *problem*. Every sentence about the
+user's file lives in `describe/`. `read/` and `rules/` return fault codes.
 
 `validate.ts` and `findings.ts` stay at the top of `csv/` because they *are* the pipeline;
 `read/`, `rules/`, and `describe/` hold the leaf modules underneath it. `findings.ts` folds many
 failing rows into a few groups.
 
-### `read/` — bytes into a table
+### `read/` — bytes into a table, or a fault code
 
 | File | Enforces |
 | --- | --- |
@@ -25,7 +25,7 @@ failing rows into a few groups.
 | `columns.ts` | Header matching |
 | `layout.ts` | Which delimiter and header the file resolves to |
 
-### `rules/` — one value into ok, or its fault
+### `rules/` — one value into ok, or its fault code
 
 | File | Enforces |
 | --- | --- |
@@ -42,7 +42,7 @@ One module per thing being described, mirroring what produces it:
 | File | Describes |
 | --- | --- |
 | `file.ts` | A file refused before a row was read — the decode / layout / header / parse-error rejections |
-| `rows.ts` | One row problem: the rule, the rows it covers, the quoted examples |
+| `rows.ts` | One row problem: the fault code's clause and advice, the rows it covers, the quoted examples |
 | `date-order.ts` | A column-wide date-order failure, which is prose rather than a row problem |
 | `findings.ts` | The assembly: budgeting row problems against the date-order problem into a summary, reason, and detail |
 | `problems.ts` | The `Problem` payload, and rendering it back to `rejectionDetail` text |
