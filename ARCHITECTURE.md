@@ -217,7 +217,7 @@ notice it is itself hung:
 Reaping introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
 tolerate this** — see the terminal-state and status invariants in
-[`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-status-machine).
+[`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-state-machine).
 
 When the parent's own database calls fail, **an error is not a verdict**: a zero-row guarded
 update is the only "we lost the attempt". A *thrown* lease-renewal error skips that write but

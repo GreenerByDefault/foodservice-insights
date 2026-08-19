@@ -4,7 +4,8 @@ What the product must do. For *how* it is built and why, see
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 This file is the source of truth for product rules, including the numeric limits. When
-implementing, each value should live in exactly one place in code and be referenced from there, then replace these docs with a link to them. See [`AGENTS.md`](AGENTS.md#documentation).
+implementing, each value should live in exactly one place in code and be referenced from there,
+then replace these docs with a link to them. See the `writing-docs` skill.
 
 ## Product capabilities
 

@@ -19,11 +19,22 @@ already is, so there is no `?next=` to carry anywhere.
 Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
 what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
-## Frontend
+## UI components
 
-**`src/lib/components/ui/` is purely vendored shadcn** — nothing hand-written goes there. A
-route-local component is promoted to `src/lib/components/<feature>/` only once a second route
-needs it.
+**`src/lib/components/ui/` is purely vendored shadcn** — nothing hand-written goes there.
+
+**A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
+route needs it.
+
+**Add a component with the shadcn-svelte CLI**, run from the repo root:
+
+```sh
+pnpm dlx shadcn-svelte@latest add --cwd apps/web <component>
+```
+
+The CLI rewrites `apps/web/package.json` with literal dependency versions. Move any new version
+into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) and restore
+`"catalog:"` in the package, so every package stays on one version. Then run `pnpm install`.
 
 ## Forms
 
