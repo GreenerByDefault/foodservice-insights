@@ -1,10 +1,11 @@
-/** A file refused before a row was read: the decode / layout / header / parse-error rejections.
+/** A file refused before a report was ever written: too large or empty before any parsing, or
+ * unreadable by the decode / layout / header / parse-error rejections once parsing starts.
  *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.
  */
 
-import { MAX_COLUMNS, MAX_DATA_ROWS } from '../../limits.ts';
+import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';
 import type { RejectedUploadRecord } from '../../rejection.ts';
 import type {
   CsvParseError,
@@ -16,8 +17,9 @@ import type {
 } from '../read/index.ts';
 import { groupDigits, listOf } from './text.ts';
 
-/** Every way `normalize.ts` can refuse a file before a single row of it is read. */
 export type UnreadableFile =
+  | { kind: 'too-large'; byteSize: number }
+  | { kind: 'empty' }
   | { kind: 'decode'; fault: DecodeFault }
   | { kind: 'layout'; fault: LayoutFault }
   | { kind: 'parse'; error: CsvParseError }
@@ -26,6 +28,14 @@ export type UnreadableFile =
 
 export function describeUnreadableFile(file: UnreadableFile): RejectedUploadRecord {
   switch (file.kind) {
+    case 'too-large':
+      return {
+        reason: 'too_large',
+        summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
+        rejectionDetail: `${file.byteSize} bytes`,
+      };
+    case 'empty':
+      return { reason: 'empty', summary: 'That file has no rows in it.' };
     case 'decode':
       return decodeRejection(file.fault);
     case 'layout':

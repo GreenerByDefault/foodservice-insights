@@ -40,6 +40,9 @@ export const MonthlyCountsSchema = v.pipe(
 
 export type MonthlyCounts = v.InferOutput<typeof MonthlyCountsSchema>;
 
+/** The months a CSV's rows cover: `YYYY-MM`, sorted ascending, deduplicated, and never empty. */
+export type MonthsFromFile = readonly string[];
+
 export const ReportMetadataSchema = v.object({
   name: requiredText(MAX_FREE_TEXT_LENGTH),
   siteName: optionalText(MAX_FREE_TEXT_LENGTH),

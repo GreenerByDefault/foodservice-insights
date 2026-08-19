@@ -13,8 +13,9 @@ import type { InputFileVariants } from '@gbd/storage';
 import * as v from 'valibot';
 import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
+import { describeUnreadableFile } from './csv/describe/index.ts';
 import { normalizeCsv } from './csv/normalize.ts';
-import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
+import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_BYTES } from './limits.ts';
 import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
 import { monthsWithoutCounts } from './monthly-coverage.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
@@ -85,11 +86,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       fileDescription,
       // We don't upload large files to the blob store.
       bytes: null,
-      rejection: {
-        reason: 'too_large',
-        summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
-        rejectionDetail: `${fileDescription.byteSize} bytes`,
-      },
+      rejection: describeUnreadableFile({ kind: 'too-large', byteSize: fileDescription.byteSize }),
     };
   }
 
@@ -100,7 +97,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       ok: false,
       fileDescription,
       bytes,
-      rejection: { reason: 'empty', summary: 'That file has no rows in it.' },
+      rejection: describeUnreadableFile({ kind: 'empty' }),
     };
   }
 
