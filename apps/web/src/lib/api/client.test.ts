@@ -116,4 +116,43 @@ describe('apiCall', () => {
     const options = fetchMock.mock.calls[0]?.[1];
     expect(options.headers['Content-Type']).toBe('application/merge-patch+json');
   });
+
+  test('passes an abort signal to fetch so a hung request is eventually aborted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await apiCall('/api/orgs/org-1/reports');
+
+    const options = fetchMock.mock.calls[0]?.[1];
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test('a timeout aborts the request, which fetch reports as a rejection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, options: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+        });
+      }),
+    );
+
+    await expect(apiCall('/api/orgs/org-1/reports', { timeoutMs: 5 })).rejects.toMatchObject({
+      constructor: ApiUnreachableError,
+    });
+  });
+
+  test('a caller-supplied signal is combined with the timeout, not replaced by it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+
+    await apiCall('/api/orgs/org-1/reports', { signal: controller.signal });
+
+    const options = fetchMock.mock.calls[0]?.[1];
+    expect(options.signal).not.toBe(controller.signal);
+    expect(options.signal.aborted).toBe(false);
+    controller.abort(new Error('caller cancelled'));
+    expect(options.signal.aborted).toBe(true);
+  });
 });

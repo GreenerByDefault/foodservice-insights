@@ -39,21 +39,33 @@ export class ApiUnreachableError extends Error {
   }
 }
 
-/** Makes an API request and throws on a non-2xx or unreachable response.
+/** This timeout covers most of our routes: small Postgres reads/writes with room for a cold
+ * connection or a slow query. */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+/** Makes an API request and throws on a non-2xx, unreachable, or timed-out response.
  *
  * Skips `Content-Type` for a `FormData` body so the browser can set its own multipart boundary.
+ * Aborts after `timeoutMs` (default `DEFAULT_TIMEOUT_MS`), combined with any caller-supplied
+ * `signal`.
  */
-export async function apiCall(url: string, options?: RequestInit): Promise<Response> {
-  const isFormData = options?.body instanceof FormData;
+export async function apiCall(
+  url: string,
+  options?: RequestInit & { timeoutMs?: number },
+): Promise<Response> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = options ?? {};
+  const isFormData = rest.body instanceof FormData;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
 
   let response: Response;
   try {
     response = await fetch(url, {
-      ...options,
+      ...rest,
       headers: {
         ...(!isFormData && { 'Content-Type': 'application/json' }),
-        ...options?.headers,
+        ...rest.headers,
       },
+      signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
     });
   } catch (cause) {
     throw new ApiUnreachableError(cause);
