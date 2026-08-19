@@ -37,7 +37,7 @@ describe('normalizeCsv', () => {
     const text = [
       'Procurement export — Q1',
       '',
-      'product name;date ordered;amount ordered;supplier',
+      'product name;date ordered;weight;supplier',
       '"beef, minced";2026-01-05;12.5;Acme',
       'Carrots;13/03/2026;3;Acme',
       'Onions;01/04/2026;0;Acme',
@@ -80,7 +80,7 @@ describe('normalizeCsv', () => {
   describe('refuses a file before reading a row', () => {
     test.for([
       ['an Excel file renamed to .csv', 'PK\x03\x04rest of the zip', 'unparseable'],
-      ['a header with no amount column', 'product,date\nbeef,2026-01-05', 'bad_columns'],
+      ['a header with no weight column', 'product,date\nbeef,2026-01-05', 'bad_columns'],
       ['quotes that never close', `${HEADER}\n"beef,2026-01-05,1`, 'unparseable'],
       ['a header with nothing under it', HEADER, 'empty'],
     ] as const)('%s', ([, text, reason]) => {
@@ -122,7 +122,7 @@ describe('normalizeCsv', () => {
         summary: 'We found problems in 3 of your 4 rows.',
         rowProblems: [
           {
-            rule: 'The amount has a unit in it',
+            rule: 'The weight has a unit in it',
             advice:
               'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
             rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false },
@@ -139,7 +139,7 @@ describe('normalizeCsv', () => {
 
     test('every fault in a row, rather than the first', () => {
       expect(ruleNames(rejected(`${HEADER}\nbeef,never,5 oz`))).toEqual([
-        'The amount has a unit in it',
+        'The weight has a unit in it',
         'The date is not a date we recognise',
       ]);
     });
@@ -188,7 +188,7 @@ describe('normalizeCsv', () => {
       // Both faults are reported, but the file-wide reason is driven by the formula alone.
       expect(rejection.reason).toBe('csv_injection');
       expect(ruleNames(rejection)).toEqual([
-        'The amount has a unit in it',
+        'The weight has a unit in it',
         'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
       ]);
     });
@@ -216,12 +216,12 @@ describe('normalizeCsv', () => {
     });
 
     test('a row dropped for an unrelated fault cannot supply the disambiguating example', () => {
-      // Row 2 would prove day-first, but its amount fails first, so `resolveDates` never sees it —
+      // Row 2 would prove day-first, but its weight fails first, so `resolveDates` never sees it —
       // only row 3's date, which no reading disambiguates, is left as evidence.
       const text = [HEADER, 'beef,13/03/2026,5 oz', 'beef,01/04/2026,1'].join('\n');
       const rejection = rejected(text);
 
-      expect(ruleNames(rejection)).toEqual(['The amount has a unit in it']);
+      expect(ruleNames(rejection)).toEqual(['The weight has a unit in it']);
       expect(rejection.dateOrderProblem).toContain('2026-04-01');
       expect(rejection.dateOrderProblem).toContain('2026-01-04');
     });

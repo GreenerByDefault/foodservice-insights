@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'vitest';
 import { EARLIEST_DATE, MAX_FREE_TEXT_LENGTH, MAX_FUTURE_DAYS } from '../../limits.ts';
 import type { FindingGroup } from '../findings.ts';
-import { amountFinding, findingGroup } from '../testing/index.ts';
+import { findingGroup, weightFinding } from '../testing/index.ts';
 import type { Problem } from './problems.ts';
 import { toProblem, toRowSpan } from './rows.ts';
 
@@ -50,23 +50,23 @@ describe('the rule a finding becomes', () => {
     );
   });
 
-  describe('every amount fault, to its sentence', () => {
+  describe('every weight fault, to its sentence', () => {
     test.for([
-      ['empty', 'The amount is empty'],
+      ['empty', 'The weight is empty'],
       [
         'parenthesized-negative',
-        'The amount is a negative number written in parentheses, an accounting notation for a credit or return',
+        'The weight is a negative number written in parentheses, an accounting notation for a credit or return',
       ],
-      ['negative', 'The amount is negative, which usually means a credit or return'],
-      ['money', 'The amount is money, not a weight'],
-      ['scientific', 'The amount is in scientific notation, so the exact figure is already lost'],
-      ['has-a-unit', 'The amount has a unit in it'],
-      ['not-a-number', 'The amount is not a number'],
-      ['comma-decimal', 'The amount has a comma we cannot read'],
-      ['not-plain', 'The amount is not a plain number, such as 12 or 1234.50'],
-      ['too-many-digits', 'The amount has more digits than any real weight'],
+      ['negative', 'The weight is negative, which usually means a credit or return'],
+      ['money', 'The weight is money'],
+      ['scientific', 'The weight is in scientific notation, so the exact figure is already lost'],
+      ['has-a-unit', 'The weight has a unit in it'],
+      ['not-a-number', 'The weight is not a number'],
+      ['comma-decimal', 'The weight has a comma we cannot read'],
+      ['not-plain', 'The weight is not a plain number, such as 12 or 1234.50'],
+      ['too-many-digits', 'The weight has too many digits to be real'],
     ] as const)('%s', ([fault, rule]) => {
-      expect(problemFor({ kind: 'amount', fault, raw: 'x' }).rule).toBe(rule);
+      expect(problemFor({ kind: 'weight', fault, raw: 'x' }).rule).toBe(rule);
     });
   });
 
@@ -107,8 +107,8 @@ describe('the advice a finding carries', () => {
       'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
     ],
     ['comma-decimal', 'Use a period for the decimal point.'],
-  ] as const)('amount fault %s carries advice as a sentence of its own', ([fault, advice]) => {
-    expect(problemFor({ kind: 'amount', fault, raw: 'x' }).advice).toBe(advice);
+  ] as const)('weight fault %s carries advice as a sentence of its own', ([fault, advice]) => {
+    expect(problemFor({ kind: 'weight', fault, raw: 'x' }).advice).toBe(advice);
   });
 
   test.for([
@@ -119,13 +119,13 @@ describe('the advice a finding carries', () => {
   });
 
   test('a fault with no remedy to add carries no advice', () => {
-    expect(problemFor({ kind: 'amount', fault: 'not-a-number', raw: 'x' }).advice).toBeUndefined();
+    expect(problemFor({ kind: 'weight', fault: 'not-a-number', raw: 'x' }).advice).toBeUndefined();
   });
 });
 
 describe('the examples a problem quotes', () => {
   test('quoted, in the order the group reached them', () => {
-    expect(problemFor(amountFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
+    expect(problemFor(weightFinding(), { examples: ['foo', 'bar', 'baz'] }).examples).toEqual([
       '"foo"',
       '"bar"',
       '"baz"',
@@ -133,7 +133,7 @@ describe('the examples a problem quotes', () => {
   });
 
   test('values that differ only in whitespace collapse to one quote', () => {
-    expect(problemFor(amountFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
+    expect(problemFor(weightFinding(), { examples: ['5 oz', '5 oz\n'] }).examples).toEqual([
       '"5 oz"',
     ]);
   });
@@ -171,7 +171,7 @@ describe('the rows a problem covers', () => {
   });
 
   test('one row and many rows produce the same problem but for the rows it names', () => {
-    const finding = amountFinding();
+    const finding = weightFinding();
     const { rows: _one, ...single } = problemFor(finding, { ranges: [{ start: 2, end: 2 }] });
     const { rows: _many, ...many } = problemFor(finding, { ranges: [{ start: 2, end: 9 }] });
 

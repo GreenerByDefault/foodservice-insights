@@ -49,11 +49,11 @@ const LAYOUT_CASES: [string, LayoutFault, RejectedUploadRecord][] = [
     {
       kind: 'bad-header',
       fields: ['vendor', 'cost'],
-      fault: { kind: 'missing', columns: ['product', 'date', 'amount'] },
+      fault: { kind: 'missing', columns: ['product', 'date', 'weight'] },
     },
     {
       reason: 'bad_columns',
-      summary: 'Your file needs a column for product name, date ordered and amount ordered.',
+      summary: 'Your file needs a column for product name, date ordered and weight.',
       rejectionDetail: 'header: vendor | cost',
     },
   ],
@@ -61,22 +61,22 @@ const LAYOUT_CASES: [string, LayoutFault, RejectedUploadRecord][] = [
     'an ambiguous column',
     {
       kind: 'bad-header',
-      fields: ['product', 'item', 'date', 'amount'],
+      fields: ['product', 'item', 'date', 'weight'],
       fault: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
     },
     {
       reason: 'bad_columns',
       summary: 'Two columns could be the product name: "product" and "item". Remove or rename one.',
-      rejectionDetail: 'header: product | item | date | amount',
+      rejectionDetail: 'header: product | item | date | weight',
     },
   ],
   [
     'a header resolved fine but the layout still failed to open',
-    { kind: 'bad-header', fields: ['product', 'date', 'amount'] },
+    { kind: 'bad-header', fields: ['product', 'date', 'weight'] },
     {
       reason: 'bad_columns',
       summary: 'We could not read that file.',
-      rejectionDetail: 'header: product | date | amount',
+      rejectionDetail: 'header: product | date | weight',
     },
   ],
   [

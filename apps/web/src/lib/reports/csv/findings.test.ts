@@ -10,7 +10,7 @@ import {
   type RowFinding,
   seal,
 } from './findings.ts';
-import { amountFinding } from './testing/index.ts';
+import { weightFinding } from './testing/index.ts';
 
 /** The expected shape of a group that a single row reached, covering exactly `line`. */
 function singleRowGroup(finding: RowFinding, line: number, examples: string[] = []) {
@@ -25,14 +25,14 @@ function noted(...lines: { line: number; finding: RowFinding }[]): FindingLog {
 
 describe('seal', () => {
   test('counts every row, not every group', () => {
-    const log = noted({ line: 2, finding: amountFinding() }, { line: 3, finding: amountFinding() });
+    const log = noted({ line: 2, finding: weightFinding() }, { line: 3, finding: weightFinding() });
 
     expect(seal(log).failingRowCount).toBe(2);
   });
 
   test('one row with two bad cells counts once, not twice', () => {
     const log = noted(
-      { line: 2, finding: amountFinding() },
+      { line: 2, finding: weightFinding() },
       { line: 2, finding: { kind: 'product', fault: 'empty', raw: '' } },
     );
 
@@ -41,12 +41,12 @@ describe('seal', () => {
 
   test('one group per distinct finding, in the order first reached', () => {
     const log = noted(
-      { line: 2, finding: amountFinding() },
+      { line: 2, finding: weightFinding() },
       { line: 3, finding: { kind: 'product', fault: 'empty', raw: '' } },
     );
 
     const kinds = seal(log).rowGroups.map((group) => group.finding.kind);
-    expect(kinds).toEqual(['amount', 'product']);
+    expect(kinds).toEqual(['weight', 'product']);
   });
 
   test('starts empty', () => {
@@ -65,7 +65,7 @@ describe('rowsRead', () => {
     noteRowRead(log);
     noteRowRead(log);
     noteRowRead(log);
-    noteRow(log, 3, amountFinding());
+    noteRow(log, 3, weightFinding());
 
     expect(seal(log).rowsRead).toBe(3);
   });
@@ -73,11 +73,11 @@ describe('rowsRead', () => {
 
 describe('grouping', () => {
   test('the same fault on two different kinds stays two groups', () => {
-    const amount: RowFinding = { kind: 'amount', fault: 'empty', raw: '' };
+    const weight: RowFinding = { kind: 'weight', fault: 'empty', raw: '' };
     const product: RowFinding = { kind: 'product', fault: 'empty', raw: '' };
-    const log = noted({ line: 2, finding: amount }, { line: 3, finding: product });
+    const log = noted({ line: 2, finding: weight }, { line: 3, finding: product });
 
-    expect(seal(log).rowGroups).toEqual([singleRowGroup(amount, 2), singleRowGroup(product, 3)]);
+    expect(seal(log).rowGroups).toEqual([singleRowGroup(weight, 2), singleRowGroup(product, 3)]);
   });
 
   test('two widths with different actuals stay apart, since expected is constant for a file', () => {
@@ -101,10 +101,10 @@ describe('grouping', () => {
   });
 
   test('rows with different raw values still group into one', () => {
-    const first = amountFinding({ raw: 'foo' });
+    const first = weightFinding({ raw: 'foo' });
     const log = noted(
       { line: 2, finding: first },
-      { line: 3, finding: amountFinding({ raw: 'bar' }) },
+      { line: 3, finding: weightFinding({ raw: 'bar' }) },
     );
 
     expect(seal(log).rowGroups).toEqual([
@@ -131,10 +131,10 @@ describe('grouping', () => {
 
   test('too-long stays apart by column', () => {
     const product: RowFinding = { kind: 'too-long', column: 'product' };
-    const amount: RowFinding = { kind: 'too-long', column: 'amount' };
-    const log = noted({ line: 2, finding: product }, { line: 3, finding: amount });
+    const weight: RowFinding = { kind: 'too-long', column: 'weight' };
+    const log = noted({ line: 2, finding: product }, { line: 3, finding: weight });
 
-    expect(seal(log).rowGroups).toEqual([singleRowGroup(product, 2), singleRowGroup(amount, 3)]);
+    expect(seal(log).rowGroups).toEqual([singleRowGroup(product, 2), singleRowGroup(weight, 3)]);
   });
 
   test('too-long groups by column together, despite falling on different lines', () => {
@@ -189,16 +189,16 @@ describe('grouping', () => {
 describe('ranges', () => {
   test('a run of consecutive lines extends the last range rather than starting a new one', () => {
     const log = noted(
-      { line: 2, finding: amountFinding() },
-      { line: 3, finding: amountFinding() },
-      { line: 4, finding: amountFinding() },
+      { line: 2, finding: weightFinding() },
+      { line: 3, finding: weightFinding() },
+      { line: 4, finding: weightFinding() },
     );
 
     expect(seal(log).rowGroups[0]?.ranges).toEqual([{ start: 2, end: 4 }]);
   });
 
   test('a gap starts a new range', () => {
-    const log = noted({ line: 2, finding: amountFinding() }, { line: 5, finding: amountFinding() });
+    const log = noted({ line: 2, finding: weightFinding() }, { line: 5, finding: weightFinding() });
 
     expect(seal(log).rowGroups[0]?.ranges).toEqual([
       { start: 2, end: 2 },
@@ -208,7 +208,7 @@ describe('ranges', () => {
 
   test('stops adding new ranges past MAX_ROW_RANGES_REPORTED, but rowCount keeps counting', () => {
     const lines = Array.from({ length: MAX_ROW_RANGES_REPORTED + 3 }, (_, index) => index * 2 + 2);
-    const log = noted(...lines.map((line) => ({ line, finding: amountFinding() })));
+    const log = noted(...lines.map((line) => ({ line, finding: weightFinding() })));
 
     const [group] = seal(log).rowGroups;
     // Every line here is non-consecutive with the last (they're spaced by 2), so each of the
@@ -226,8 +226,8 @@ describe('ranges', () => {
     // ...then a run consecutive with the last one, extending it past the cap on range *count*.
     const consecutive = Array.from({ length: 5 }, (_, index) => (lines.at(-1) ?? 0) + index + 1);
     const log = noted(
-      ...lines.map((line) => ({ line, finding: amountFinding() })),
-      ...consecutive.map((line) => ({ line, finding: amountFinding() })),
+      ...lines.map((line) => ({ line, finding: weightFinding() })),
+      ...consecutive.map((line) => ({ line, finding: weightFinding() })),
     );
 
     const [group] = seal(log).rowGroups;
@@ -241,7 +241,7 @@ describe('ranges', () => {
 
 describe('examples', () => {
   test('remembers a raw value', () => {
-    const log = noted({ line: 2, finding: amountFinding({ raw: 'foo' }) });
+    const log = noted({ line: 2, finding: weightFinding({ raw: 'foo' }) });
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
   });
@@ -249,7 +249,7 @@ describe('examples', () => {
   test('caps at MAX_EXAMPLE_VALUES, keeping the first ones reached', () => {
     const raws = Array.from({ length: MAX_EXAMPLE_VALUES + 3 }, (_, index) => `v${index}`);
     const log = noted(
-      ...raws.map((raw, index) => ({ line: index + 2, finding: amountFinding({ raw }) })),
+      ...raws.map((raw, index) => ({ line: index + 2, finding: weightFinding({ raw }) })),
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(raws.slice(0, MAX_EXAMPLE_VALUES));
@@ -257,8 +257,8 @@ describe('examples', () => {
 
   test('does not store an exact-duplicate raw value twice', () => {
     const log = noted(
-      { line: 2, finding: amountFinding({ raw: 'foo' }) },
-      { line: 3, finding: amountFinding({ raw: 'foo' }) },
+      { line: 2, finding: weightFinding({ raw: 'foo' }) },
+      { line: 3, finding: weightFinding({ raw: 'foo' }) },
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
@@ -266,8 +266,8 @@ describe('examples', () => {
 
   test('keeps a blank value out of examples entirely', () => {
     const log = noted(
-      { line: 2, finding: amountFinding({ raw: '  ' }) },
-      { line: 3, finding: amountFinding({ raw: 'foo' }) },
+      { line: 2, finding: weightFinding({ raw: '  ' }) },
+      { line: 3, finding: weightFinding({ raw: 'foo' }) },
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
@@ -275,8 +275,8 @@ describe('examples', () => {
 
   test('keeps an exactly empty value out of examples too', () => {
     const log = noted(
-      { line: 2, finding: amountFinding({ raw: '' }) },
-      { line: 3, finding: amountFinding({ raw: 'foo' }) },
+      { line: 2, finding: weightFinding({ raw: '' }) },
+      { line: 3, finding: weightFinding({ raw: 'foo' }) },
     );
 
     expect(seal(log).rowGroups[0]?.examples).toEqual(['foo']);
@@ -306,7 +306,7 @@ describe('noteDateOrder', () => {
     // A date-order finding names one or two rows only as evidence, so it is not a failing row —
     // counting it would read as an off-by-one against the headline's rows-affected denominator.
     const log = newFindingLog();
-    const rowFinding = amountFinding();
+    const rowFinding = weightFinding();
     const dateOrder: DateOrderFinding = {
       fault: 'unresolvable',
       examples: new Map(),

@@ -38,9 +38,9 @@ import {
   dateOrderProvenBy,
   decideDateOrder,
   isFormulaTrigger,
-  readAmount,
   readDate,
   readProduct,
+  readWeight,
 } from './rules/index.ts';
 import { encodeNormalizedCsv, type NormalizedRow } from './write.ts';
 
@@ -137,7 +137,7 @@ function readRow(
   const raw = {
     product: record.fields[layout.columns.product] ?? '',
     date: record.fields[layout.columns.date] ?? '',
-    amount: record.fields[layout.columns.amount] ?? '',
+    weight: record.fields[layout.columns.weight] ?? '',
   };
 
   // Length before any rule runs. Every pattern in `rules/` is anchored and bounded, but this is
@@ -159,7 +159,7 @@ function readRow(
   // Each cell is read even when an earlier one already failed, so one pass tells the user
   // everything wrong with the row rather than one thing at a time.
   const product = readProductCell(raw.product, record.line, log);
-  const weight = readAmountCell(raw.amount, record.line, log);
+  const weight = readWeightCell(raw.weight, record.line, log);
   const reading = readDateCell(raw.date, bounds, record.line, log);
 
   if (product === undefined || weight === undefined || reading === undefined) return undefined;
@@ -179,13 +179,13 @@ function readProductCell(raw: string, line: number, log: FindingLog): string | u
   return product.value;
 }
 
-function readAmountCell(raw: string, line: number, log: FindingLog): number | undefined {
-  const amount = readAmount(raw);
-  if (!amount.ok) {
-    noteRow(log, line, { kind: 'amount', fault: amount.fault, raw });
+function readWeightCell(raw: string, line: number, log: FindingLog): number | undefined {
+  const weight = readWeight(raw);
+  if (!weight.ok) {
+    noteRow(log, line, { kind: 'weight', fault: weight.fault, raw });
     return undefined;
   }
-  return amount.value;
+  return weight.value;
 }
 
 function readDateCell(

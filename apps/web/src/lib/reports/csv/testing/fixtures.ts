@@ -1,12 +1,12 @@
 import type { FindingGroup, Findings, RowFinding } from '../findings.ts';
 
-/** An `'amount'` finding with representative defaults, for tests that don't care which fault
+/** A `'weight'` finding with representative defaults, for tests that don't care which fault
  * failed. */
-export function amountFinding(
-  over: Partial<Extract<RowFinding, { kind: 'amount' }>> = {},
+export function weightFinding(
+  over: Partial<Extract<RowFinding, { kind: 'weight' }>> = {},
 ): RowFinding {
   return {
-    kind: 'amount',
+    kind: 'weight',
     fault: 'has-a-unit',
     raw: '5 oz',
     ...over,
@@ -15,7 +15,7 @@ export function amountFinding(
 
 /** One group, as `findings.ts` would have folded it. */
 export function findingGroup(over: Partial<FindingGroup> = {}): FindingGroup {
-  const finding = over.finding ?? amountFinding();
+  const finding = over.finding ?? weightFinding();
   const ranges = over.ranges ?? [{ start: 2, end: 2 }];
   return {
     finding,

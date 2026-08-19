@@ -18,7 +18,7 @@ export type RowSpan = {
 };
 
 export type Problem = {
-  /** A full clause, e.g. "The amount has a unit in it". */
+  /** A full clause, e.g. "The weight has a unit in it". */
   readonly rule: string;
   /** How to fix it, as its own sentence, for a renderer to style as secondary text. */
   readonly advice?: string;

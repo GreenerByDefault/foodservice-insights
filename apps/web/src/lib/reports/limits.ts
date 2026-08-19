@@ -17,7 +17,7 @@ export const MAX_ORIGINAL_FILENAME_LENGTH = 255;
 export const MAX_MONTHS = 120;
 
 /** More digits than a double can hold exactly, and far more than any real weight. */
-export const MAX_AMOUNT_DIGITS = 15;
+export const MAX_WEIGHT_DIGITS = 15;
 
 /** Orders this far ahead are a typo or a misread year, not a delivery schedule. */
 export const MAX_FUTURE_DAYS = 30;

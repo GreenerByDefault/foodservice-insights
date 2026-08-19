@@ -1,1 +1,1 @@
-export { amountFinding, findingGroup, sealedFindings } from './fixtures.ts';
+export { findingGroup, sealedFindings, weightFinding } from './fixtures.ts';

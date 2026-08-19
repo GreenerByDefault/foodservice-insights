@@ -16,9 +16,9 @@
  * anything Node-only.
  */
 
-import { MAX_AMOUNT_DIGITS } from '../../limits.ts';
+import { MAX_WEIGHT_DIGITS } from '../../limits.ts';
 
-export type AmountFault =
+export type WeightFault =
   | 'empty'
   | 'parenthesized-negative'
   | 'negative'
@@ -30,7 +30,7 @@ export type AmountFault =
   | 'not-plain'
   | 'too-many-digits';
 
-export type AmountRead = { ok: true; value: number } | { ok: false; fault: AmountFault };
+export type WeightRead = { ok: true; value: number } | { ok: false; fault: WeightFault };
 
 /** A whole number, or one with a decimal point, optionally grouped in thousands. */
 const PLAIN_NUMBER = /^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
@@ -44,7 +44,7 @@ const SCIENTIFIC = /^\d+(\.\d+)?e[+-]?\d+$/i;
 const HAS_LETTER = /[a-z]/i;
 const HAS_DIGIT = /\d/;
 
-export function readAmount(raw: string): AmountRead {
+export function readWeight(raw: string): WeightRead {
   const trimmed = raw.trim();
   if (trimmed === '') return { ok: false, fault: 'empty' };
 
@@ -74,7 +74,7 @@ export function readAmount(raw: string): AmountRead {
 
   const withoutCommas = trimmed.replace(/,/g, '');
   const digits = withoutCommas.replace('.', '');
-  if (digits.length > MAX_AMOUNT_DIGITS) {
+  if (digits.length > MAX_WEIGHT_DIGITS) {
     return { ok: false, fault: 'too-many-digits' };
   }
 

@@ -9,13 +9,13 @@
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
 import type { RequiredColumn } from './read/index.ts';
 import type {
-  AmountFault,
   CalendarFault,
   DateFault,
   DateOrder,
   DateOrderFault,
   DateReading,
   ProductFault,
+  WeightFault,
 } from './rules/index.ts';
 
 export type RowRange = { start: number; end: number };
@@ -26,7 +26,7 @@ export type RowFinding =
   | { kind: 'date'; fault: DateFault; raw: string }
   /** A date that only failed once the column-wide order was applied. */
   | { kind: 'resolved-date'; fault: CalendarFault; raw: string }
-  | { kind: 'amount'; fault: AmountFault; raw: string }
+  | { kind: 'weight'; fault: WeightFault; raw: string }
   // We leave off the `raw` value: it is what is too long.
   | { kind: 'too-long'; column: RequiredColumn }
   | { kind: 'formula'; raw: string }
@@ -102,7 +102,7 @@ function groupKey(finding: RowFinding): string {
     case 'product':
     case 'date':
     case 'resolved-date':
-    case 'amount':
+    case 'weight':
       return `${finding.kind}|${finding.fault}`;
     case 'too-long':
       return `too-long|${finding.column}`;

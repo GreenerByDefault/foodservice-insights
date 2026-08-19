@@ -69,7 +69,7 @@ describe('readLayout', () => {
       fault: {
         kind: 'bad-header',
         fields: ['vendor', 'cost'],
-        fault: { kind: 'missing', columns: ['product', 'date', 'amount'] },
+        fault: { kind: 'missing', columns: ['product', 'date', 'weight'] },
       },
     });
   });
@@ -93,13 +93,13 @@ describe('readLayout', () => {
   test('reports a bad header with an ambiguous column, not just a missing one', () => {
     // "item" and "product" both alias the product column, and neither other delimiter is present
     // in the text, so this is the only reading on offer.
-    const text = 'product,item,date,amount\nbeef,foo,2026-01-01,1\n';
+    const text = 'product,item,date,weight\nbeef,foo,2026-01-01,1\n';
 
     expect(readLayout(text)).toEqual({
       ok: false,
       fault: {
         kind: 'bad-header',
-        fields: ['product', 'item', 'date', 'amount'],
+        fields: ['product', 'item', 'date', 'weight'],
         fault: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
       },
     });

@@ -6,7 +6,7 @@ import { FIELD } from '$lib/reports/metadata';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _createReport } from './+server.ts';
 
-const RAW_CSV = 'product,date ordered,amount ordered\nbeef mince,2026-01-05,12\n';
+const RAW_CSV = 'product,date ordered,weight\nbeef mince,2026-01-05,12\n';
 const NORMALIZED_CSV = 'product,date,weight\nbeef mince,2026-01-05,12\n';
 
 type SubmissionOverrides = {
