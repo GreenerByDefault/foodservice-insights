@@ -59,8 +59,7 @@ const WEIGHT_CLAUSES: Record<WeightFault, Clause> = {
  * this table too.
  *
  * `too-old` is worded from `EARLIEST_DATE`, which is the only `earliest` a customer's file is
- * ever read with — `rules/date-order.ts`'s `ANY_DATE` bounds exist solely to widen
- * `bothDateOrderReadings`'s display and never reach here.
+ * ever read with.
  */
 const DATE_CLAUSES: Record<DateFault, Clause> = {
   empty: { clause: 'is empty' },
