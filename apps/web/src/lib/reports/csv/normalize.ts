@@ -1,8 +1,7 @@
-/** Uploaded bytes into the CSV the analysis reads, or the reason we will not accept them. What we
- * accept and what we reject is in `README.md`.
+/** Turns uploaded bytes into the CSV the analysis reads, or into the reason we rejected them.
  *
- * The order of the steps below is also their precedence: a file failing two of them is rejected
- * for the first.
+ * The order of the steps below is also their precedence: a file that fails two of them is
+ * rejected for the first one it fails.
  *
  * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
  * anything Node-only.
