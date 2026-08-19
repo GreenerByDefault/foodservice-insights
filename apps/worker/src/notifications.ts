@@ -48,7 +48,7 @@ export type NotifyDependencies = {
 };
 
 /** The tables `loadNotifiableAttempts` joins, so its scalar subqueries share one builder type. */
-type NotifiableRow = ExpressionBuilder<
+type NotifiableAttemptsExpressionBuilder = ExpressionBuilder<
   Database,
   'analysisAttempt' | 'report' | 'appUser' | 'auth.users'
 >;
@@ -257,7 +257,7 @@ async function loadNotifiableAttempts(
   });
 }
 
-function resultFileId(eb: NotifiableRow, kind: ResultFileKind) {
+function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileKind) {
   return eb
     .selectFrom('resultFile')
     .select('resultFile.id')
