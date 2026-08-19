@@ -9,7 +9,7 @@
  */
 
 import type { DateBounds, ResolvedDate } from './calendar.ts';
-import { toIsoDate } from './calendar.ts';
+import { ANY_DATE, toIsoDate } from './calendar.ts';
 import type { DateReading } from './dates.ts';
 
 /** Which of the first two numbers in `03/04/2025` is the day. */
@@ -57,23 +57,28 @@ export function applyDateOrder(
   order: DateOrder,
   bounds: DateBounds,
 ): ResolvedDate {
-  const [day, month] =
-    order === 'day-first' ? [reading.first, reading.second] : [reading.second, reading.first];
+  let day: number;
+  let month: number;
+  if (order === 'day-first') {
+    day = reading.first;
+    month = reading.second;
+  } else {
+    day = reading.second;
+    month = reading.first;
+  }
   return toIsoDate(reading.year, month, day, bounds);
 }
 
 /** Both ways a value could be read, so a message can show the user the problem rather than
- * describe it. Read against the widest possible range: showing the reading is the point, even
- * when one of the two would itself be rejected as too old or too far ahead.
- */
+ * describe it. */
 export function bothDateOrderReadings(reading: Extract<DateReading, { kind: 'numeric' }>): {
   dayFirst: ResolvedDate;
   monthFirst: ResolvedDate;
 } {
+  // Read against `ANY_DATE`: showing the reading is the point, even when one of the
+  // two would itself be rejected as too old or too far ahead.
   return {
     dayFirst: applyDateOrder(reading, 'day-first', ANY_DATE),
     monthFirst: applyDateOrder(reading, 'month-first', ANY_DATE),
   };
 }
-
-const ANY_DATE: DateBounds = { earliest: '0000-01-01', latest: '9999-12-31' };

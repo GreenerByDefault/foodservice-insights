@@ -28,6 +28,9 @@ export function dateBoundsAt(now: Date): DateBounds {
   };
 }
 
+/** The widest possible range, unbounded by `EARLIEST_DATE` or `MAX_FUTURE_DAYS`. */
+export const ANY_DATE: DateBounds = { earliest: '0000-01-01', latest: '9999-12-31' };
+
 export type CalendarFault = 'not-a-real-date' | 'too-old' | 'too-far-ahead';
 
 export type ResolvedDate = { ok: true; isoDate: string } | { ok: false; fault: CalendarFault };
