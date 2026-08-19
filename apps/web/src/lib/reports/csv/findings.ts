@@ -20,13 +20,7 @@ import type {
 
 export type RowRange = { start: number; end: number };
 
-/** One row's fault.
- *
- * The `kind` of a cell finding *is* the column: a product fault can no longer be pinned to the
- * amount column. `width` is the row itself having the wrong number of columns, and `too-long`
- * keeps `column` because the length check runs before any rule and so has no column-specific
- * code space of its own.
- */
+/** One row's fault. */
 export type RowFinding =
   | { kind: 'product'; fault: ProductFault; raw: string }
   | { kind: 'date'; fault: DateFault; raw: string }
@@ -67,8 +61,7 @@ export type FindingLog = {
   rowGroups: Map<string, MutableRowGroup>;
   dateOrder?: DateOrderFinding;
   failingRowCount: number;
-  /** The last line `noteRow` counted toward `failingRowCount`, so a row with two bad cells is
-   * counted once. See `noteRow`. */
+  /** The last line `noteRow` counted toward `failingRowCount`. */
   lastFailingLine?: number;
   /** Every data row seen, passing or failing. */
   rowsRead: number;
@@ -80,11 +73,6 @@ export function newFindingLog(): FindingLog {
 
 /** Add a row to the finding it failed, which is created on the first row to reach it. */
 export function noteRow(log: FindingLog, line: number, finding: RowFinding): void {
-  // A row's faults are all noted one after another before the next row's, so a repeat of `line`
-  // is always the very next call — but the date-resolution pass restarts from the top of the
-  // file, so `line` is not monotonic across passes and `>` would miss that restart. A `Set` of
-  // failing lines would also be correct, but it's the unbounded allocation `MAX_DATA_ROWS` exists
-  // to forbid.
   if (log.lastFailingLine !== line) {
     log.failingRowCount += 1;
     log.lastFailingLine = line;

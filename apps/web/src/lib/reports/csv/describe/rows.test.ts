@@ -37,7 +37,7 @@ describe('the rule a finding becomes', () => {
       ['date-serial', 'The date looks like an unconverted date serial'],
       ['unrecognized', 'The date is not a date we recognise'],
       ['not-a-real-date', 'The date is not a real calendar date'],
-      ['too-old', `The date is before ${EARLIEST_DATE}, too old to be procurement data`],
+      ['too-old', `The date is before ${EARLIEST_DATE}`],
       ['too-far-ahead', `The date is more than ${MAX_FUTURE_DAYS} days from now`],
     ] as const)('%s', ([fault, rule]) => {
       expect(problemFor({ kind: 'date', fault, raw: 'x' }).rule).toBe(rule);
@@ -101,13 +101,12 @@ describe('the advice a finding carries', () => {
     ['parenthesized-negative', 'Delete that row rather than just removing the parentheses.'],
     ['negative', 'Delete that row rather than just dropping the minus sign.'],
     ['money', 'Check you mapped the right column.'],
-    ['scientific', 'Widen the column.'],
+    ['scientific', 'Format the column as a number.'],
     [
       'has-a-unit',
-      'The lb or kg choice on the form sets the unit for the whole file, so this column ' +
-        'should hold plain numbers with no unit.',
+      'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
     ],
-    ['comma-decimal', 'Use a full stop for the decimal point.'],
+    ['comma-decimal', 'Use a period for the decimal point.'],
   ] as const)('amount fault %s carries advice as a sentence of its own', ([fault, advice]) => {
     expect(problemFor({ kind: 'amount', fault, raw: 'x' }).advice).toBe(advice);
   });

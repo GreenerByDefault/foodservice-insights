@@ -163,8 +163,7 @@ describe('the whole record', () => {
         {
           rule: 'The amount has a unit in it',
           advice:
-            'The lb or kg choice on the form sets the unit for the whole file, so this column ' +
-            'should hold plain numbers with no unit.',
+            'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
           rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
           examples: ['"5 oz"'],
         },

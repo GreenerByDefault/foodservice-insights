@@ -38,18 +38,17 @@ const AMOUNT_CLAUSES: Record<AmountFault, Clause> = {
   },
   scientific: {
     clause: 'is in scientific notation, so the exact figure is already lost',
-    advice: 'Widen the column.',
+    advice: 'Format the column as a number.',
   },
   'has-a-unit': {
     clause: 'has a unit in it',
     advice:
-      'The lb or kg choice on the form sets the unit for the whole file, so this column should ' +
-      'hold plain numbers with no unit.',
+      'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
   },
   'not-a-number': { clause: 'is not a number' },
   'comma-decimal': {
     clause: 'has a comma we cannot read',
-    advice: 'Use a full stop for the decimal point.',
+    advice: 'Use a period for the decimal point.',
   },
   // An example, not a remedy, so it stays in the clause.
   'not-plain': { clause: 'is not a plain number, such as 12 or 1234.50' },
@@ -75,8 +74,7 @@ const DATE_CLAUSES: Record<DateFault, Clause> = {
     advice: 'Use YYYY-MM-DD.',
   },
   'not-a-real-date': { clause: 'is not a real calendar date' },
-  // A rationale, not a remedy, so it stays in the clause.
-  'too-old': { clause: `is before ${EARLIEST_DATE}, too old to be procurement data` },
+  'too-old': { clause: `is before ${EARLIEST_DATE}` },
   'too-far-ahead': { clause: `is more than ${MAX_FUTURE_DAYS} days from now` },
 };
 
