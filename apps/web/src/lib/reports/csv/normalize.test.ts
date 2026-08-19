@@ -165,11 +165,11 @@ describe('normalizeCsv', () => {
       expect(ruleNames(rejected(text))).toEqual(['The date is not a real calendar date']);
     });
 
-    test('a product a spreadsheet would run as a formula, as its own reason', () => {
+    test('a product a spreadsheet would run as a formula', () => {
       const text = [HEADER, 'beef,2026-01-05,1', '=1+1,2026-01-06,1'].join('\n');
 
       expect(withoutRejectionDetail(rejected(text))).toEqual({
-        reason: 'csv_injection',
+        reason: 'bad_rows',
         summary: 'We found problems in 1 of your 2 rows.',
         rowProblems: [
           {
@@ -181,13 +181,10 @@ describe('normalizeCsv', () => {
       });
     });
 
-    test('a formula alongside an unrelated row fault still reports as csv_injection', () => {
+    test('a formula alongside an unrelated row fault reports both', () => {
       const text = [HEADER, 'beef,2026-01-05,5 oz', '=1+1,2026-01-06,1'].join('\n');
-      const rejection = rejected(text);
 
-      // Both faults are reported, but the file-wide reason is driven by the formula alone.
-      expect(rejection.reason).toBe('csv_injection');
-      expect(ruleNames(rejection)).toEqual([
+      expect(ruleNames(rejected(text))).toEqual([
         'The weight has a unit in it',
         'The product starts with =, +, -, or @, which spreadsheets treat as the start of a formula',
       ]);

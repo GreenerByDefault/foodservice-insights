@@ -58,18 +58,6 @@ describe('the summary', () => {
   });
 });
 
-describe('the reason', () => {
-  test('an ordinary rejection is bad_rows', () => {
-    expect(rejectionFor().reason).toBe('bad_rows');
-  });
-
-  test('a formula anywhere in the file outranks it', () => {
-    const rowGroups = [findingGroup(), findingGroup({ finding: { kind: 'formula', raw: '=cmd' } })];
-
-    expect(rejectionFor({ rowGroups }).reason).toBe('csv_injection');
-  });
-});
-
 describe('the rejectionDetail we keep but never show', () => {
   test('one line per problem, joined with a semicolon', () => {
     const rejectionDetail = rejectionFor({
@@ -155,7 +143,7 @@ describe('a date order finding, budgeted alongside row problems', () => {
 });
 
 describe('the whole record', () => {
-  test('bad_rows', () => {
+  test('a row problem with advice, short of every row', () => {
     expect(rejectionFor({ rowsRead: 900 })).toEqual({
       reason: 'bad_rows',
       summary: 'We found problems in 1 of your 900 rows.',
@@ -173,13 +161,13 @@ describe('the whole record', () => {
     });
   });
 
-  test('csv_injection', () => {
+  test('a row problem with no advice, spanning every row', () => {
     const rowGroups = [
       findingGroup({ finding: { kind: 'formula', raw: '=cmd' }, ranges: [{ start: 2, end: 3 }] }),
     ];
 
     expect(rejectionFor({ rowGroups, rowsRead: 2 })).toEqual({
-      reason: 'csv_injection',
+      reason: 'bad_rows',
       summary: 'We found problems in 2 of your 2 rows.',
       rowProblems: [
         {

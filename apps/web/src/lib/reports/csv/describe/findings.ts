@@ -27,9 +27,6 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   const shownKinds = shownRowProblems.length + (shownDateOrderProblem ? 1 : 0);
   const hidden = totalKinds - shownKinds;
 
-  const injection = findings.rowGroups.some((group) => group.finding.kind === 'formula');
-  const reason = injection ? 'csv_injection' : 'bad_rows';
-
   const scale = headline(findings.failingRowCount, findings.rowsRead);
   const truncationNote = hidden > 0 ? ` Showing ${shownKinds} of ${totalKinds} things to fix.` : '';
 
@@ -40,7 +37,7 @@ export function describeFindings(findings: Findings): RejectedUploadRecord {
   ];
 
   return {
-    reason,
+    reason: 'bad_rows',
     summary: `${scale}${truncationNote}`,
     ...(shownRowProblems.length > 0 && { rowProblems: shownRowProblems }),
     ...(shownDateOrderProblem && { dateOrderProblem: shownDateOrderProblem }),

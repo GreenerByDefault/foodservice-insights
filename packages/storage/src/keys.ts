@@ -31,8 +31,9 @@ import type {
 
 export const NORMALIZED_CSV_CONTENT_TYPE = 'text/csv';
 
-/** Not `text/csv`: a rejected upload's bytes may be `csv_injection`, and the original input
- * file's encoding may not be UTF-8 — neither is safe for a browser to render as text.
+/** Not `text/csv`: a rejected upload's bytes may carry a spreadsheet-formula payload, and the
+ * original input file's encoding may not be UTF-8 — neither is safe for a browser to render as
+ * text.
  */
 export const OPAQUE_CSV_CONTENT_TYPE = 'application/octet-stream';
 

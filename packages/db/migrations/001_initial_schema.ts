@@ -363,7 +363,6 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
       'too_large',
       'bad_columns',
       'unparseable',
-      'csv_injection',
       'empty',
       'bad_rows',
       'other',
