@@ -19,16 +19,12 @@ export type RejectedUploadRecord = {
   rejectionDetail?: string;
 };
 
-/** What we tell the user about a refused upload — the same words whether the browser or the
- * server worked it out. Everything else on a `RejectedUploadRecord` is for our records:
- * `rejectionDetail` is written for whoever is debugging and must never reach a screen. */
+/** What we tell the user about a refused upload. */
 export type UploadRejection = Pick<
   RejectedUploadRecord,
   'summary' | 'rowProblems' | 'dateOrderProblem'
 >;
 
-/** Both the browser and the server call this — the server before it answers with `json()`, the
- * browser as soon as it rejects a file itself. */
 export function userFacingRejection({
   summary,
   rowProblems,
@@ -41,9 +37,9 @@ export function userFacingRejection({
   };
 }
 
-/** `summary` being a string is what tells a rejection body apart from any other 400, now that no
- * `code` crosses the wire. */
 export function asUploadRejection(body: unknown): UploadRejection | undefined {
+  // Every other error response is shaped `{ message, code? }`, never `summary`, so a string
+  // `summary` is enough to identify this body as a rejection.
   if (!body || typeof body !== 'object' || !('summary' in body) || typeof body.summary !== 'string')
     return undefined;
 
