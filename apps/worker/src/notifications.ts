@@ -1,6 +1,6 @@
 /** The result-notification sweep: send the email a terminal `analysis_attempt` owes, once.
  *
- * The list of emails owed is *derived* from `analysis_attempt`, not pushed into a queue: a row
+ * The list of emails owed is *derived* from `analysis_attempt`, not pushed into a queue. A row
  * owes an email iff it is terminal, not canceled, unsent, its report is not soft-deleted, it
  * still has a requester, and it has attempts left (`isOwedEmail` plus the two extra joins in
  * `owedCandidates`). A sweep claims rows with a short-lived claim, sends, and stamps
@@ -87,9 +87,7 @@ export async function sendPendingNotifications(
 
   const attempts = await loadNotifiableAttempts(db, claimedIds);
 
-  // Each send is awaited concurrently, and each is wrapped in `sendOne` so that one failure
-  // cannot abort the rest — the pool's `max: 10` is shared with lease renewals, not a reason to
-  // serialize this.
+  // Awaited concurrently: `sendOne` never throws, so one failed send can't abort the rest.
   const sentIds = (
     await Promise.all(attempts.map((attempt) => sendOne(emailer, attempt, options)))
   ).filter((id): id is AnalysisAttemptId => id !== undefined);
@@ -100,11 +98,11 @@ export async function sendPendingNotifications(
 
 /** Claim the attempts this sweep will email about, in one `UPDATE`.
  *
- * The eligibility predicate is a top-level qual of the `UPDATE` itself, and repeated in the
+ * The eligibility predicate is a top-level qual of the `UPDATE` itself, and is repeated in the
  * candidate subquery, for exactly the `EvalPlanQual` reasons `reapExpiredAttempts` sets out at
- * length — read that comment first. Only the competing writer differs: there it is a lease
- * renewal, here it is another worker's sweep claiming the same row, and the recheck is what makes
- * the second one a zero-row no-op instead of a second email.
+ * length. Only the competing writer differs: there, it is a lease renewal; here, it is another
+ * worker's sweep claiming the same row, and the recheck is what makes the second one a zero-row
+ * no-op instead of a second email.
  */
 async function claimOwedNotifications(
   db: DatabaseExecutor,
@@ -136,16 +134,8 @@ async function claimOwedNotifications(
  * Raw SQL rather than the expression builder: the backoff needs `power()` against the row's own
  * `notification_attempts`, and this fragment has to compose into a plain `.where(...)` whether
  * it's evaluated against `analysis_attempt` alone (the `UPDATE`) or joined to `report` (the
- * candidate subquery) — a `RawBuilder<boolean>` does that unchanged either way, where an
+ * candidate subquery). A `RawBuilder<boolean>` does that unchanged either way, where an
  * `ExpressionBuilder` typed for one join set does not.
- *
- * `status <> 'canceled'` is not decoration: `analysis_attempt_canceled_is_not_notified` would
- * abort the whole statement — and with it every other row in the sweep — if a canceled row were
- * claimed.
- *
- * The exponent is `notification_attempts - 1`, which is safe: the constraint guarantees the
- * counter is at least 1 whenever `notification_claimed_at` is non-null, so the branch is only
- * ever evaluated for rows where it is.
  */
 function isOwedEmail(
   options: Pick<NotifyOptions, 'retryBaseMs' | 'maxAttempts'>,
@@ -153,11 +143,16 @@ function isOwedEmail(
   const retryBaseSecs = options.retryBaseMs / 1000;
   return sql<boolean>`
     finished_at IS NOT NULL
+      -- Not decoration: analysis_attempt_canceled_is_not_notified would abort the whole
+      -- statement, and with it every other row in the sweep, if a canceled row were claimed.
       AND status <> 'canceled'
       AND notification_email_sent_at IS NULL
       AND notification_attempts < ${options.maxAttempts}
       AND (notification_claimed_at IS NULL
            OR notification_claimed_at
+                -- notification_attempts - 1 is safe: the constraint guarantees the counter is at
+                -- least 1 whenever notification_claimed_at is non-null, so this branch only ever
+                -- runs for rows where it is.
                 < now() - make_interval(secs => ${retryBaseSecs} * power(2, notification_attempts - 1)))
   `;
 }
@@ -166,10 +161,7 @@ function isOwedEmail(
  * first — so a permanently unsendable row is claimed, then excluded for its (growing) backoff,
  * rather than starving the rest of the sweep. Same shape as `reaper.ts`'s `expiredCandidates`.
  *
- * The two joins here decide whether an email is *owed at all*, on top of `isOwedEmail`:
- * `report.deleted_at IS NULL` is what stops an email going out about a report the user just
- * deleted, and `requested_by_user_id IS NOT NULL` is what a report has before anyone has asked
- * for an analysis of it by email.
+ * The two `where`s below decide whether an email is *owed at all*, on top of `isOwedEmail`.
  */
 function owedCandidates(db: DatabaseExecutor, options: NotifyOptions) {
   const candidates = db
@@ -177,7 +169,9 @@ function owedCandidates(db: DatabaseExecutor, options: NotifyOptions) {
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
     .select('analysisAttempt.id')
     .where(isOwedEmail(options))
+    // Stops an email going out about a report the user just deleted.
     .where('report.deletedAt', 'is', null)
+    // A report has no requester until someone asks for an analysis of it by email.
     .where('analysisAttempt.requestedByUserId', 'is not', null)
     .orderBy('analysisAttempt.finishedAt')
     .limit(options.maxNotificationsPerSweep);
@@ -187,13 +181,8 @@ function owedCandidates(db: DatabaseExecutor, options: NotifyOptions) {
     : candidates.where('analysisAttempt.reportId', 'in', options.candidateReports);
 }
 
-/** One round trip for the sweep, not one per row — the pool's `max: 10` is shared with lease
- * renewals whose latency bounds `k`.
- *
- * `requested_by_user_id` references `app_user`, which mirrors `auth.users` but carries no email of
- * its own, hence the second join. The two result-file ids are correlated scalar subqueries rather
- * than left joins: `result_file` has no unique constraint on `(analysis_attempt_id, kind)`, so a
- * join would fan the row out.
+/** One round trip for the sweep, not one per row — the pool's small connection cap (`client.ts`)
+ * is shared with lease renewals whose latency bounds `k`.
  */
 async function loadNotifiableAttempts(
   db: DatabaseExecutor,
@@ -203,6 +192,7 @@ async function loadNotifiableAttempts(
     .selectFrom('analysisAttempt')
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
     .innerJoin('appUser', 'appUser.id', 'analysisAttempt.requestedByUserId')
+    // `app_user` mirrors `auth.users` but carries no email of its own, hence this second join.
     .innerJoin('auth.users', 'auth.users.id', 'appUser.id')
     .select((eb) => [
       'analysisAttempt.id',
@@ -261,6 +251,8 @@ async function loadNotifiableAttempts(
   });
 }
 
+// A correlated scalar subquery rather than a left join: `result_file` has no unique constraint
+// on `(analysis_attempt_id, kind)`, so a join would fan the row out.
 function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileKind) {
   return eb
     .selectFrom('resultFile')
@@ -270,8 +262,8 @@ function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileK
     .limit(1);
 }
 
-/** Send one attempt's email. Never throws: a failed send is logged and the attempt's claim is
- * left in place — see `sendPendingNotifications`. */
+/** Send one attempt's email. Never throws — a failed send is logged and the claim left in place
+ * for the sweep to retry later, rather than rejecting the `Promise.all` it runs inside. */
 async function sendOne(
   emailer: Emailer,
   attempt: NotifiableAttempt,
@@ -293,7 +285,9 @@ async function sendOne(
   return attempt.id;
 }
 
-/** Guarded by `notification_email_sent_at IS NULL`, so a second stamp for a row — because another
+/** Stamps `notification_email_sent_at` on the given attempts, returning the ids actually stamped.
+ *
+ * Guarded by `notification_email_sent_at IS NULL`, so a second stamp for a row — because another
  * worker's send won the race first — is a zero-row no-op, not a duplicate write.
  *
  * Wrapped in `retryOnTransientDbError`: this is the one statement in the path meeting
