@@ -4,7 +4,6 @@ type RejectedUploadReason =
   | 'too_large'
   | 'bad_columns'
   | 'unparseable'
-  | 'csv_injection'
   | 'empty'
   | 'bad_rows'
   | 'other';

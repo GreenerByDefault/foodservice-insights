@@ -132,7 +132,6 @@ CREATE TYPE "public"."rejected_upload_reason" AS ENUM (
     'too_large',
     'bad_columns',
     'unparseable',
-    'csv_injection',
     'empty',
     'bad_rows',
     'other'
