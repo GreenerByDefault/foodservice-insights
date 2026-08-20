@@ -32,5 +32,4 @@ def test_ai_usage_cost_is_a_decimal() -> None:
         cost_usd=Decimal("0.0001"),
         metadata={},
     )
-
     assert usage.cost_usd == Decimal("0.0001")
