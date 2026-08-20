@@ -81,8 +81,8 @@ export type SupervisionAction =
  * - **settling** — an attempt that has already exited is left alone; its settle is what
  *   disposes of it.
  * - **contract-violation** — a progress read that threw a `ContractError` is itself a verdict.
- * - **absorbed** — a progress read that threw anything else: the renewal was already skipped
- *   (principle 5 in `failures.ts`), and an error is not a verdict (principle 1).
+ * - **progress-read-failed** — a progress read that threw anything but `ContractError`: no action this tick,
+ *   only the next read gets another chance.
  * - **cancel-requested** — kills the child: the user's explicit intent beats a threshold that
  *   happened to fire in the same tick, matching `classifyVerdict`'s own precedence.
  * - **hung** — no progress for `noProgressAfterMs` kills the child.
@@ -151,7 +151,7 @@ function decideAction(
   // settling: an attempt that has already exited is left alone; its settle disposes of it.
   if (state.exited) return { kind: 'nothing' };
 
-  // contract-violation / absorbed: the progress read itself threw.
+  // contract-violation / progress-read-failed: the progress read itself threw.
   if (reading.progress.kind === 'failed') {
     return reading.progress.error instanceof ContractError
       ? {

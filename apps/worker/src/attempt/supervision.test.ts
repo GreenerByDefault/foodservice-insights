@@ -103,7 +103,7 @@ describe('the rule table', () => {
     });
   });
 
-  test('absorbed: a progress read that threw anything else is swallowed rather than treated as a verdict', () => {
+  test('progress-read-failed: a progress read that threw anything else is swallowed rather than treated as a verdict', () => {
     const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
     expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
   });
