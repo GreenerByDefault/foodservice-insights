@@ -47,8 +47,8 @@ const MAX_ATTEMPTS = 5;
 
 function notifyOptions(overrides: Partial<NotifyOptions> = {}): NotifyOptions {
   return {
-    retryBaseMs: RETRY_BASE_MS,
-    maxAttempts: MAX_ATTEMPTS,
+    notificationRetryBaseMs: RETRY_BASE_MS,
+    maxNotificationAttempts: MAX_ATTEMPTS,
     maxNotificationsPerSweep: 10,
     ...overrides,
   };
@@ -275,9 +275,9 @@ describe('sendPendingNotifications', () => {
   });
 
   // The doubling is the whole point of the exponent: a fixed retry interval would treat both rows
-  // below as expired (both are older than one `retryBaseMs`), and this test would then pass
+  // below as expired (both are older than one `notificationRetryBaseMs`), and this test would then pass
   // against that broken implementation too. Only the exponential backoff tells them apart.
-  test('the backoff doubles: attempt 3 is not re-claimed at 2x retryBaseMs but is at 5x', async () => {
+  test('the backoff doubles: attempt 3 is not re-claimed at 2x notificationRetryBaseMs but is at 5x', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
 

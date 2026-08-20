@@ -1,4 +1,4 @@
-export { initializeDatabase, shutdownDatabase } from './client.ts';
+export { DATABASE_LIMITS, initializeDatabase, shutdownDatabase } from './client.ts';
 export { isPermanentDatabaseError, isTransientDatabaseError } from './errors.ts';
 export { migrateToLatest } from './migrate.ts';
 export {

@@ -12,35 +12,13 @@ import type {
   ReportId,
 } from '@gbd/db';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
+import type { WorkerConfig } from '../config.ts';
 import { msAgo } from '../sql.ts';
 
-export type ReapOptions = {
-  /** How long the lease can go unrenewed before this reaper treats the owning parent as gone.
-   *
-   * Measured from the last renewal, not from when the attempt was first claimed — see
-   * `claimedCeilingMs` for that.
-   *
-   * This is deliberately the same value the parent itself will fence on once it can no longer
-   * renew. However, until the supervision loop lands, only the reaper uses it. */
-  leaseExpiresAfterMs: number;
-
-  /** How long an attempt can sit `processing` since it was claimed before this reaper gives up on
-   * it, independent of renewals.
-   *
-   * `leaseExpiresAfterMs` can't catch a parent that renews forever but never finishes —
-   * renewing is exactly what keeps it looking alive. This ceiling closes that gap: it fires on
-   * elapsed time alone, so a parent that never stops renewing still eventually trips this ceiling. */
-  claimedCeilingMs: number;
-
-  /** The most expired attempts one call to `reapExpiredAttempts` will end.
-   *
-   * Naively, a botched deploy or an outage that takes down every worker at once could leave
-   * the whole fleet's in-flight attempts stuck `processing` together. Reaping all of them in
-   * one pass would fire off a burst of failure emails the moment the fleet comes back — one per
-   * attempt, and enough of them at once risks tripping the email provider's own rate limiting or
-   * abuse detection. So, this caps how many one call can send. */
-  maxAttemptsPerSweep: number;
-
+export type ReapOptions = Pick<
+  WorkerConfig,
+  'leaseExpiresAfterMs' | 'claimedCeilingMs' | 'maxReapsPerSweep'
+> & {
   /** Narrows the sweep to these reports.
    *
    * **Test isolation only; production passes nothing.** Same reasoning as `ClaimOptions` in
@@ -79,12 +57,12 @@ function expiredCandidates(
     .select('id')
     .where('status', '=', 'processing')
     .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
-    // Oldest-renewed first, so a sweep capped by `maxAttemptsPerSweep` converges on the
+    // Oldest-renewed first, so a sweep capped by `maxReapsPerSweep` converges on the
     // longest-abandoned attempts rather than an arbitrary subset. An attempt that trips only the
     // claimed ceiling has a fresh lease and so sorts last, behind every dead one — deliberate,
     // since a parent still renewing is still doing something.
     .orderBy('leaseRenewedAt')
-    .limit(options.maxAttemptsPerSweep);
+    .limit(options.maxReapsPerSweep);
 
   return options.candidateReports === undefined
     ? candidates
@@ -112,7 +90,7 @@ function expiredCandidates(
  *
  * The subquery also repeats the predicate for an unrelated, non-correctness reason. Postgres
  * `UPDATE` has no `ORDER BY` or `LIMIT`, so the subquery is what decides which expired attempts a
- * capped sweep spends its `maxAttemptsPerSweep` on. If the subquery instead filtered only on
+ * capped sweep spends its `maxReapsPerSweep` on. If the subquery instead filtered only on
  * `status = 'processing'`, its `LIMIT`-sized batch could include fresh, unexpired rows. The
  * `UPDATE`'s own expiry check would then discard those, spending the cap before a genuinely
  * expired row further down the order got a turn. That failure would be narrower than the one
@@ -183,7 +161,7 @@ export type CancelSweepOptions = {
  *   claim commits first, the recheck sees `processing` and this is a zero-row no-op, leaving the
  *   row to the parent, which will see the request on its very next renewal. If this commits first,
  *   the claim's `SKIP LOCKED` scan re-reads the row and its new predicate excludes it.
- * - **No `maxAttemptsPerSweep`.** That cap bounds a burst of failure emails; a canceled attempt is
+ * - **No `maxReapsPerSweep`.** That cap bounds a burst of failure emails; a canceled attempt is
  *   never emailed — `notifications.ts`'s `status <> 'canceled'`, and
  *   `analysis_attempt_canceled_is_not_notified` behind it.
  *

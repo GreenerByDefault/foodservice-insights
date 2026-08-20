@@ -5,6 +5,7 @@ export {
   type EmailMessageKind,
   type EmailTransport,
   initializeEmailer,
+  MAX_SEND_DURATION_MS,
   type RenderedEmail,
 } from './client.ts';
 export { EmailError, emailRequest, isEmailError } from './errors.ts';
