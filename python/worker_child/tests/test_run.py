@@ -20,7 +20,7 @@ VALID_MANIFEST = (REPO_ROOT / "contract" / "fixtures" / "valid" / "run.json").re
 )
 
 
-def _ignore(stage: str) -> None:
+def _ignore() -> None:
     pass
 
 
@@ -56,10 +56,12 @@ def test_places_result_files_under_contract_names(run_directory: Path) -> None:
     assert (files_directory / layout.chart_file_name("category_breakdown")).is_file()
 
 
-def test_reports_progress_once_per_stage_the_analysis_reports(run_directory: Path) -> None:
-    run(run_directory, analyze=stub_analysis)  # stub_analysis reports 2 stages by default
+def test_reports_progress_once_per_report_progress_call(run_directory: Path) -> None:
+    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+        return stub_analysis(request, report_progress=report_progress, progress_calls=3)
 
-    assert read_json(run_directory / layout.PROGRESS) == {"sequence": 2}
+    run(run_directory, analyze=analyze)
+    assert read_json(run_directory / layout.PROGRESS) == {"sequence": 3}
 
 
 def test_the_real_analyze_is_not_ported_yet(run_directory: Path) -> None:

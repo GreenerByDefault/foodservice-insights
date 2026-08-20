@@ -44,22 +44,15 @@ def run(run_directory: Path, analyze: Analyze = default_analyze) -> int:
 
 def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     """Ordering is load-bearing: every result file lands before `result.json`, because the
-    parent treats a declared-but-missing file as a `contract_violation` (`verdict.ts`) — a
-    half-written result must never look complete.
+    parent treats a declared-but-missing file as a `contract_violation`.
     """
     _require_parent_created_directories(run_directory)
     manifest = _read_manifest(run_directory)
     request = _build_request(run_directory, manifest)
-    advance = progress_reporter(run_directory)
 
-    def report_progress(stage: str) -> None:
-        del stage  # the child writes only `sequence`; see analysis.py's file header
-        advance()
+    outcome = analyze(request, report_progress=progress_reporter(run_directory))
 
-    outcome = analyze(request, report_progress=report_progress)
-
-    # Validate the shape of `outcome` before touching the filesystem, so a bad cost or chart
-    # key fails without leaving a half-renamed `output/files` behind.
+    # Validate the shape of `outcome` before touching the filesystem.
     payload = result_payload(
         analysis_attempt_id=manifest.analysis_attempt_id,
         charts=list(outcome.charts),
