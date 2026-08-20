@@ -1,5 +1,3 @@
-"""The child's half of the golden fixtures in `contract/fixtures/`."""
-
 import json
 from decimal import Decimal
 from pathlib import Path

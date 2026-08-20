@@ -1,5 +1,3 @@
-"""Writing into the run directory while the parent may be reading it."""
-
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
