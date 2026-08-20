@@ -21,9 +21,9 @@ def run_directory(tmp_path: Path) -> Path:
     return tmp_path
 
 
-# Genuine end-to-end runs of the real `python -m worker_child` entrypoint. Every test
-# here fails before `analyze()` is called, so the library itself is never exercised.
-# A success-path test would need real `analyze()` dependencies.
+# Genuine end-to-end runs of the real `python -m worker_child` entrypoint, deliberately scoped
+# to paths that never reach `analyze()`. The success path and the library's own failure reasons
+# belong to `test_child_process.py`, which drives `worker_child.run.run()` directly with `stub_analysis`.
 def spawn(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "worker_child", *args],
@@ -46,6 +46,21 @@ def test_two_arguments_is_a_usage_error(tmp_path: Path) -> None:
 
     assert result.returncode == names.EXIT_USAGE_ERROR
     assert "usage" in result.stderr.lower()
+    assert result.stdout == ""
+
+
+def test_a_parent_created_directory_missing_is_a_contract_violation(
+    run_directory: Path,
+) -> None:
+    # Checked before the manifest is even read, so no `run.json` is needed to reach it.
+    (run_directory / "output" / "files").rmdir()
+
+    result = spawn(str(run_directory))
+
+    assert result.returncode == names.EXIT_WROTE_FAILURE
+    failure = json.loads((run_directory / layout.FAILURE).read_text(encoding="utf-8"))
+    assert failure["reason"] == "contract_violation"
+    assert not (run_directory / layout.RESULT).exists()
 
 
 def test_a_missing_manifest_is_a_contract_violation(run_directory: Path) -> None:
