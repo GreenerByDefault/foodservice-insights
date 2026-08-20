@@ -8,7 +8,7 @@ from worker_child.contract.fields import ContractError
 from worker_child.contract.names import ChildFailureReason
 
 
-def classify(error: Exception) -> tuple[ChildFailureReason, str]:
+def classify_error(error: Exception) -> tuple[ChildFailureReason, str]:
     detail = str(error) or repr(error)
     if isinstance(error, UpstreamApiError):
         return "upstream_api", detail

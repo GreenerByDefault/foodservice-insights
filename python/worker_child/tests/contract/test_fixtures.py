@@ -4,12 +4,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from worker_child.contract import layout
 from worker_child.contract.fields import ContractError
 from worker_child.contract.messages import (
     AiUsage,
     failure_payload,
     parse_run_manifest,
     progress_payload,
+    read_run_manifest,
     result_payload,
 )
 
@@ -79,6 +81,21 @@ def test_rejects_an_invalid_fixture(name: str) -> None:
 def test_rejects_bytes_that_are_not_json_at_all() -> None:
     with pytest.raises(ContractError):
         parse_run_manifest('{"analysisAttemptId":')
+
+
+def test_reads_the_manifest_from_where_the_parent_writes_it(tmp_path: Path) -> None:
+    (tmp_path / "input").mkdir()
+    (tmp_path / layout.MANIFEST).write_text(read("valid", "run.json"), encoding="utf-8")
+
+    # `parse_run_manifest` already covers the document's fields exhaustively above; this only
+    # checks that `read_run_manifest` finds the file and forwards it there.
+    manifest = read_run_manifest(tmp_path)
+    assert manifest.analysis_attempt_id == "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+
+
+def test_raises_a_contract_error_when_the_manifest_file_is_missing(tmp_path: Path) -> None:
+    with pytest.raises(ContractError):
+        read_run_manifest(tmp_path)
 
 
 # ---------------------------------------------------------------------------------------

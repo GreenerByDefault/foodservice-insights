@@ -10,15 +10,14 @@ from gbd_foodservice_insights.analysis import analyze as default_analyze
 
 from worker_child.artifacts import place_result_files
 from worker_child.contract import layout, names
-from worker_child.contract.fields import ContractError
 from worker_child.contract.messages import (
     AiUsage,
     RunManifest,
     failure_payload,
-    parse_run_manifest,
+    read_run_manifest,
     result_payload,
 )
-from worker_child.failures import classify
+from worker_child.failures import classify_error
 from worker_child.writer import progress_reporter, write_json_atomically
 
 # The real `analyze()` and `stub_analysis` both take `report_progress` as keyword-only with a
@@ -46,8 +45,8 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     """Ordering is load-bearing: every result file lands before `result.json`, because the
     parent treats a declared-but-missing file as a `contract_violation`.
     """
-    _require_parent_created_directories(run_directory)
-    manifest = _read_manifest(run_directory)
+    layout.require_created_by_parent(run_directory)
+    manifest = read_run_manifest(run_directory)
     request = _build_request(run_directory, manifest)
 
     outcome = analyze(request, report_progress=progress_reporter(run_directory))
@@ -69,25 +68,6 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     write_json_atomically(run_directory / layout.RESULT, payload)
 
 
-def _require_parent_created_directories(run_directory: Path) -> None:
-    missing = [
-        relative
-        for relative in layout.DIRECTORIES_CREATED_BY_PARENT
-        if not (run_directory / relative).is_dir()
-    ]
-    if missing:
-        raise ContractError(f"run directory is missing {', '.join(missing)}")
-
-
-def _read_manifest(run_directory: Path) -> RunManifest:
-    manifest_path = run_directory / layout.MANIFEST
-    try:
-        text = manifest_path.read_text(encoding="utf-8")
-    except OSError as error:
-        raise ContractError(f"{layout.MANIFEST}: {error}") from error
-    return parse_run_manifest(text)
-
-
 def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisRequest:
     return AnalysisRequest(
         run_id=manifest.analysis_attempt_id,
@@ -103,7 +83,7 @@ def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisReques
 
 
 def _write_failure(run_directory: Path, error: Exception) -> None:
-    reason, detail = classify(error)
+    reason, detail = classify_error(error)
     payload = failure_payload(
         reason=reason,
         detail=detail,
