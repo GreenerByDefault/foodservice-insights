@@ -56,7 +56,7 @@ describe('the rule table', () => {
     });
   });
 
-  describe('orphaned: a parked verdict', () => {
+  describe('parked: a parked verdict determines its own fate', () => {
     test('converts to canceled when a cancellation was requested', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
@@ -72,18 +72,18 @@ describe('the rule table', () => {
       });
     });
 
-    test('a parked record never expires on the upload retry budget', () => {
-      const state = aState({ parked: { stage: 'record', since: 0 } });
+    test('resumes an upload still within its retry budget', () => {
+      const state = aState({ parked: { stage: 'upload', since: 0 } });
       const reading = aReading();
-      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs * 100)).toEqual({
+      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
         kind: 'resume',
       });
     });
 
-    test('otherwise resumes', () => {
-      const state = aState({ parked: { stage: 'upload', since: 0 } });
+    test('resumes a parked record indefinitely, since only the upload stage has a retry budget', () => {
+      const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading();
-      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
+      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs * 100)).toEqual({
         kind: 'resume',
       });
     });
@@ -94,7 +94,7 @@ describe('the rule table', () => {
     expect(actionOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
   });
 
-  test('contract-violation: a progress read that threw a ContractError is a contract violation', () => {
+  test('contract-violation: a progress read that threw a ContractError kills the child with that reason', () => {
     const error = new ContractError('malformed progress.json');
     const reading = aReading({ progress: { kind: 'failed', error } });
     expect(actionOf(aState(), reading, 0)).toEqual({
@@ -103,7 +103,7 @@ describe('the rule table', () => {
     });
   });
 
-  test('absorbed: a progress read that threw anything else is absorbed', () => {
+  test('absorbed: a progress read that threw anything else is swallowed rather than treated as a verdict', () => {
     const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
     expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
   });

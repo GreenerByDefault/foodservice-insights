@@ -75,9 +75,9 @@ export type SupervisionAction =
  *   Dropped if a verdict is already parked (another verdict stands; do not spend the budget),
  *   killed if the child is still alive, otherwise a no-op (the settle already in flight will
  *   find zero rows).
- * - **orphaned** — a parked verdict has no child left to supervise: converted to `canceled` if
- *   one was requested, converted to `upload-expired` once `uploadRetryBudgetMs` has elapsed,
- *   otherwise resumed.
+ * - **parked** — once a verdict is parked, the child underneath it is no longer this rule's
+ *   concern: converted to `canceled` if one was requested, converted to `upload-expired` once
+ *   `uploadRetryBudgetMs` has elapsed, otherwise resumed.
  * - **settling** — an attempt that has already exited is left alone; its settle is what
  *   disposes of it.
  * - **contract-violation** — a progress read that threw a `ContractError` is itself a verdict.
@@ -136,7 +136,7 @@ function decideAction(
     return state.exited ? { kind: 'nothing' } : { kind: 'kill', kill: { reason: 'lost' } };
   }
 
-  // orphaned: a parked verdict has no child and no run directory left to check.
+  // parked: once parked, the verdict's fate no longer depends on the child underneath it.
   if (state.parked !== undefined) {
     if (cancelRequestedAt !== null) return { kind: 'convert', to: 'canceled' };
     if (
