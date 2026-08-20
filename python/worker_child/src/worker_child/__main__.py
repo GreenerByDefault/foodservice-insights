@@ -5,7 +5,7 @@ from pathlib import Path
 from worker_child.contract import names
 from worker_child.run import run
 
-USAGE = "usage: python -m worker_child <runDirectory>"
+USAGE = f"usage: python -m {names.MODULE} <{'> <'.join(names.POSITIONAL_ARGUMENTS)}>"
 
 
 def main(argv: list[str]) -> int:

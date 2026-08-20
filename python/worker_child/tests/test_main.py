@@ -7,22 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
+from support.contract_fixtures import INVALID_RUN_FIXTURE_NAMES, read
 from worker_child.contract import layout, names
-
-INVALID_RUN_FIXTURES = sorted(
-    path.name
-    for path in (Path(__file__).resolve().parents[3] / "contract" / "fixtures" / "invalid").glob(
-        "run.*.json"
-    )
-)
-
-
-@pytest.fixture
-def run_directory(tmp_path: Path) -> Path:
-    for relative in layout.DIRECTORIES_CREATED_BY_PARENT:
-        (tmp_path / relative).mkdir(parents=True)
-    return tmp_path
 
 
 def spawn(*args: str) -> subprocess.CompletedProcess[str]:
@@ -51,6 +37,8 @@ def test_two_arguments_is_a_usage_error(tmp_path: Path) -> None:
 
 
 def test_a_missing_manifest_is_a_contract_violation(run_directory: Path) -> None:
+    (run_directory / layout.MANIFEST).unlink()
+
     result = spawn(str(run_directory))
 
     assert result.returncode == names.EXIT_WROTE_FAILURE
@@ -62,9 +50,8 @@ def test_a_missing_manifest_is_a_contract_violation(run_directory: Path) -> None
 # One fixture is enough to prove a schema violation reaches `failure.json` through the real
 # process; `test_fixtures.py::test_rejects_an_invalid_fixture` covers the rest, in-process.
 def test_a_schema_violation_in_the_manifest_is_a_contract_violation(run_directory: Path) -> None:
-    fixtures = Path(__file__).resolve().parents[3] / "contract" / "fixtures" / "invalid"
     (run_directory / layout.MANIFEST).write_text(
-        (fixtures / INVALID_RUN_FIXTURES[0]).read_text(encoding="utf-8"), encoding="utf-8"
+        read("invalid", INVALID_RUN_FIXTURE_NAMES[0]), encoding="utf-8"
     )
 
     result = spawn(str(run_directory))

@@ -1,3 +1,7 @@
+"""The child copies the analysis library's enums into its own contract types so the seam is
+typed on both sides. These assert the two copies never drift apart.
+"""
+
 from typing import get_args
 
 from gbd_foodservice_insights.analysis import CountsBasis as LibraryCountsBasis

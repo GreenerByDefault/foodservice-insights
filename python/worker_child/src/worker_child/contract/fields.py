@@ -4,9 +4,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
 
-
-class ContractError(Exception):
-    """The other side of the seam wrote something we cannot accept."""
+from worker_child.contract import ContractError
 
 
 class Fields:

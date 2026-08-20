@@ -10,8 +10,8 @@ from gbd_foodservice_insights.analysis import analyze as default_analyze
 
 from worker_child.artifacts import place_result_files
 from worker_child.contract import layout, names
+from worker_child.contract.messages import AiUsage as ContractAiUsage
 from worker_child.contract.messages import (
-    AiUsage,
     RunManifest,
     failure_payload,
     read_run_manifest,
@@ -55,7 +55,7 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     payload = result_payload(
         analysis_attempt_id=manifest.analysis_attempt_id,
         charts=list(outcome.charts),
-        ai=AiUsage(
+        ai=ContractAiUsage(
             model=outcome.ai.model,
             input_tokens=outcome.ai.input_tokens,
             output_tokens=outcome.ai.output_tokens,

@@ -1,10 +1,14 @@
-"""Where every file lives in the run directory."""
+"""Where every file lives in the run directory.
+
+The diagram, and why the layout is shaped this way, live on the parent's half of this seam:
+`apps/worker/src/contract/layout.ts`. This module is the Python copy of the same names.
+"""
 
 import re
 from pathlib import Path
 from typing import Final
 
-from worker_child.contract.fields import ContractError
+from worker_child.contract import ContractError
 
 MANIFEST: Final = "input/run.json"
 INPUT_CSV: Final = "input/input.csv"
@@ -24,7 +28,15 @@ XLSX_FILE_NAME: Final = "report.xlsx"
 CHART_KEY_PATTERN: Final = re.compile(r"[a-z0-9]+(_[a-z0-9]+)*")
 
 
+def require_chart_key(chart_key: str) -> None:
+    if not CHART_KEY_PATTERN.fullmatch(chart_key):
+        raise ContractError(f"chart key '{chart_key}' is not snake_case")
+
+
 def chart_file_name(chart_key: str) -> str:
+    # The key becomes a path segment, so it is validated here rather than by each caller: the
+    # pattern is what makes traversal impossible by construction.
+    require_chart_key(chart_key)
     return f"chart-{chart_key}.png"
 
 

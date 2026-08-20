@@ -4,8 +4,7 @@ from pathlib import Path
 import pytest
 from gbd_foodservice_insights.analysis import AiUsage, AnalysisOutcome
 from worker_child.artifacts import place_result_files
-from worker_child.contract import layout
-from worker_child.contract.fields import ContractError
+from worker_child.contract import ContractError, layout
 
 ZERO_USAGE = AiUsage(model="m", input_tokens=0, output_tokens=0, cost_usd=Decimal("0"), metadata={})
 
