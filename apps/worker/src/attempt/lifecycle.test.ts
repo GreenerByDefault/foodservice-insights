@@ -129,6 +129,9 @@ async function expectParkThenResume(
   const parked = await settleAttempt(dependencies, prepared, ending);
 
   expect(parked).toMatchObject({ kind: 'parked', pending: { stage } });
+  if (stage === 'upload' && parked.kind === 'parked' && parked.pending.stage === 'upload') {
+    expect(parked.pending.lastError).toBeDefined();
+  }
   expect((await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).status).toBe('processing');
   expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
   // The bytes outlive the run directory, which is what makes the resume below possible.

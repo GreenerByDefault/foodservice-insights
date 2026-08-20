@@ -253,8 +253,16 @@ function writeVerdictOnce(
  * record and calls `resumeSettle` on a later tick.
  */
 export type PendingVerdict =
-  /** The child succeeded and its result files are not stored yet. */
-  | { stage: 'upload'; verdict: SucceededVerdict; contents: ReadonlyMap<string, Uint8Array> }
+  /** The child succeeded and its result files are not stored yet. `lastError` is the error the most
+   * recent upload attempt parked on, so a later expiry or conversion can record what actually
+   * failed instead of a generic timeout.
+   */
+  | {
+      stage: 'upload';
+      verdict: SucceededVerdict;
+      contents: ReadonlyMap<string, Uint8Array>;
+      lastError?: unknown;
+    }
   /** Every file is stored; only the database write is left. */
   | { stage: 'record'; verdict: RecordableVerdict };
 
@@ -357,7 +365,7 @@ async function storeResultFiles(
         'for the next supervision tick to retry',
       { error },
     );
-    return pending;
+    return { ...pending, lastError: error };
   }
 }
 
