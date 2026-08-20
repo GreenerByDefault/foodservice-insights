@@ -1,4 +1,4 @@
-/** A child is never mocked — see [`testing/fake-child.ts`](./testing/fake-child.ts) for why — and
+/** A child is never mocked — see [`testing/fake-child.ts`](../testing/fake-child.ts) for why — and
  * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
  * for the decision `supervise()` will make once the loop that reads a `Clock` lands. Where a store
  * or a database has to fail and come back, it is a real client that genuinely can
@@ -13,6 +13,15 @@ import { deletePrefix, getObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
 import { describe, expect, test } from 'vitest';
+import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from '../contract/layout.ts';
+import type { AttemptFixture } from '../testing/attempt-fixture.ts';
+import { withAttemptFixture } from '../testing/attempt-fixture.ts';
+import { aWorkerId } from '../testing/attempt-helpers.ts';
+import {
+  type FakeChildStep,
+  fakeChildCommand,
+  fakeResultFileContents,
+} from '../testing/fake-child.ts';
 import {
   type AttemptDependencies,
   failClaimedAttempt,
@@ -25,17 +34,8 @@ import {
   resumeSettle,
   settleAttempt,
   startAttempt,
-} from './attempt-lifecycle.ts';
-import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from './contract/layout.ts';
+} from './lifecycle.ts';
 import { markAttemptFailed } from './queue.ts';
-import type { AttemptFixture } from './testing/attempt-fixture.ts';
-import { withAttemptFixture } from './testing/attempt-fixture.ts';
-import { aWorkerId } from './testing/attempt-helpers.ts';
-import {
-  type FakeChildStep,
-  fakeChildCommand,
-  fakeResultFileContents,
-} from './testing/fake-child.ts';
 import type { Kill } from './verdict.ts';
 
 function dependencies(

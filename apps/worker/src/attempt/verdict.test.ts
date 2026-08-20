@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { type ChildOutcome, STDERR_TAIL_BYTES } from './child.ts';
-import { ContractError } from './contract/messages.ts';
+import { type ChildOutcome, STDERR_TAIL_BYTES } from '../child/spawn.ts';
+import { ContractError } from '../contract/messages.ts';
 import { type ChildEnding, classifyVerdict, type DocumentRead, type Kill } from './verdict.ts';
 
 const EXITED_0: ChildOutcome = { kind: 'exited', exitCode: 0, stderrTail: '' };

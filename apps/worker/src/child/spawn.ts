@@ -1,11 +1,11 @@
 /** Spawning the analysis child, and watching how it dies. Everything the parent and child agree on
- * lives in [`contract/`](./contract/); what is here is only what the operating system makes true.
+ * lives in [`contract/`](../contract/); what is here is only what the operating system makes true.
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { runPath } from './contract/layout.ts';
-import { INVOCATION } from './contract/names.ts';
+import { runPath } from '../contract/layout.ts';
+import { INVOCATION } from '../contract/names.ts';
 
 export type ChildCommand = {
   executable: string;

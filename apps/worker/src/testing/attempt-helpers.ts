@@ -1,7 +1,7 @@
 import { newResultFileId, type ResultFileKind } from '@gbd/db';
 import { aChecksum } from '@gbd/db/testing';
 import { RESULT_FILE_FORMATS } from '@gbd/storage';
-import type { ResultFileRecord } from '../queue.ts';
+import type { ResultFileRecord } from '../attempt/queue.ts';
 
 /** A worker id unique enough that two tests never collide, even when both are `aWorkerId()` and
  * neither names the other. */

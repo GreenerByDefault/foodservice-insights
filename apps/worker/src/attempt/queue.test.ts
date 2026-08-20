@@ -24,7 +24,10 @@ import {
 } from '@gbd/db/testing';
 import { NoResultError, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import { buildRunManifest, type ChildResult } from './contract/messages.ts';
+import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
+import { reapExpiredAttempts } from '../sweeps/reaper.ts';
+import { aResultFile, aWorkerId } from '../testing/attempt-helpers.ts';
+import { backdateAttemptTimeline } from '../testing/attempt-timeline.ts';
 import {
   claimNextAttempt,
   loadAttemptInputs,
@@ -33,9 +36,6 @@ import {
   markAttemptSucceeded,
   renewLease,
 } from './queue.ts';
-import { reapExpiredAttempts } from './reaper.ts';
-import { aResultFile, aWorkerId } from './testing/attempt-helpers.ts';
-import { backdateAttemptTimeline } from './testing/attempt-timeline.ts';
 
 /** A pending attempt on a report of its own, plus the narrowing every claim in this file needs. */
 async function pendingAttempt(

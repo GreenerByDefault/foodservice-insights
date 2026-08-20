@@ -1,4 +1,4 @@
-/** A claimed attempt real enough for `attempt-lifecycle.test.ts` to run `startAttempt`/`settleAttempt`
+/** A claimed attempt real enough for `attempt/lifecycle.test.ts` to run `startAttempt`/`settleAttempt`
  * against: a committed organization/report/input file, a real object at the input file's storage
  * key, and a run root of its own.
  *
@@ -18,7 +18,7 @@ import {
 } from '@gbd/db/testing';
 import { deletePrefix, organizationPrefix, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
-import { claimNextAttempt } from '../queue.ts';
+import { claimNextAttempt } from '../attempt/queue.ts';
 import { withTemporaryRunRoot } from './run-root.ts';
 
 export type AttemptFixture = {

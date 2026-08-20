@@ -109,7 +109,7 @@ column to the terminal-immutability trigger, not one of its excluded columns.
 
 This package owns the invariants; who claims an attempt and when is the worker's policy, so the
 claim from [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) and every terminal transition
-live in [`apps/worker/src/queue.ts`](../../apps/worker/src/queue.ts) and are tested beside it.
+live in [`apps/worker/src/attempt/queue.ts`](../../apps/worker/src/attempt/queue.ts) and are tested beside it.
 
 ## Open questions
 

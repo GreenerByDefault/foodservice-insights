@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { rename, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { ChildCommand } from '../child.ts';
+import type { ChildCommand } from '../child/spawn.ts';
 import {
   chartFileName,
   RESULT_FILE_NAMES,

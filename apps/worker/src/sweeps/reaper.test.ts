@@ -1,4 +1,4 @@
-/** `reapExpiredAttempts` against the real database.
+/** `reapExpiredAttempts` and `cancelRequestedPendingAttempts` against the real database.
  *
  * Every reap narrows the sweep with `candidateReports`. Turbo runs each package's tests
  * concurrently against one database, so a reap without it would end another file's attempts.
@@ -16,10 +16,10 @@ import {
 } from '@gbd/db/testing';
 import { type ControlledTransaction, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import { claimNextAttempt, markAttemptSucceeded, renewLease } from './queue.ts';
+import { claimNextAttempt, markAttemptSucceeded, renewLease } from '../attempt/queue.ts';
+import { aResultFile, aWorkerId } from '../testing/attempt-helpers.ts';
+import { backdateAttemptTimeline, type TimelineOffsetsMs } from '../testing/attempt-timeline.ts';
 import { cancelRequestedPendingAttempts, type ReapOptions, reapExpiredAttempts } from './reaper.ts';
-import { aResultFile, aWorkerId } from './testing/attempt-helpers.ts';
-import { backdateAttemptTimeline, type TimelineOffsetsMs } from './testing/attempt-timeline.ts';
 
 const LEASE_EXPIRES_AFTER_MS = 5 * 60_000;
 const CLAIMED_CEILING_MS = 20 * 60_000;

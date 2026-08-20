@@ -4,8 +4,8 @@
  */
 
 import type { AnalysisFailureReason } from '@gbd/db';
-import { type ChildOutcome, STDERR_TAIL_BYTES } from './child.ts';
-import { type ChildFailure, type ChildResult, ContractError } from './contract/messages.ts';
+import { type ChildOutcome, STDERR_TAIL_BYTES } from '../child/spawn.ts';
+import { type ChildFailure, type ChildResult, ContractError } from '../contract/messages.ts';
 
 /** Why the parent ended the child. */
 export type Kill =
