@@ -4,21 +4,18 @@
  * sends — ours and GoTrue's — in one inbox.
  */
 
-import type { EmailTransport, RenderedEmail } from '../client.ts';
+import { type EmailTransport, type RenderedEmail, SEND_TIMEOUT_MS } from '../client.ts';
 import { emailRequest } from '../errors.ts';
 
 export type MailpitConfig = {
   /** Mailpit's HTTP origin — `local_smtp.port`, not `smtp_port`. */
   endpoint: string;
-  /** How long one send may take. There are no retries. */
-  timeoutMs?: number;
+  testTimeoutOverrideMs?: number;
 };
-
-const DEFAULT_TIMEOUT_MS = 10_000;
 
 export function mailpitTransport(config: MailpitConfig): EmailTransport {
   const origin = config.endpoint.replace(/\/+$/, '');
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = config.testTimeoutOverrideMs ?? SEND_TIMEOUT_MS;
 
   return {
     name: 'mailpit',

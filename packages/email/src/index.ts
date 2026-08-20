@@ -6,6 +6,7 @@ export {
   type EmailTransport,
   initializeEmailer,
   type RenderedEmail,
+  SEND_TIMEOUT_MS,
 } from './client.ts';
 export { EmailError, emailRequest, isEmailError } from './errors.ts';
 export {

@@ -9,7 +9,10 @@ import { TEST_EMAILER_CONFIG } from './recording.ts';
  */
 export function unreachableEmailer(): Emailer {
   return initializeEmailer({
-    transport: mailpitTransport({ endpoint: UNREACHABLE_LOCALHOST_URL, timeoutMs: 1_000 }),
+    transport: mailpitTransport({
+      endpoint: UNREACHABLE_LOCALHOST_URL,
+      testTimeoutOverrideMs: 1_000,
+    }),
     ...TEST_EMAILER_CONFIG,
   });
 }
