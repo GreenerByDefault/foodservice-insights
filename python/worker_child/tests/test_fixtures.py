@@ -128,6 +128,24 @@ def test_refuses_to_write_a_reason_only_the_parent_may_claim() -> None:
         failure_payload(reason="hung", detail="whatever")  # ty: ignore[invalid-argument-type]
 
 
+def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
+    # `ai_cost_usd` is `numeric(10,4)`, enforced by the parent as `^\d{1,6}\.\d{4}$`; a cost at or
+    # above 1,000,000 would be rejected as a contract_violation after a full, paid-for run.
+    with pytest.raises(ContractError):
+        result_payload(
+            analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            charts=[],
+            ai=AiUsage(
+                model="gemini-2.5-pro",
+                input_tokens=1,
+                output_tokens=1,
+                cost_usd=Decimal("1000000.0000"),
+                metadata={},
+            ),
+            result_metadata={},
+        )
+
+
 def test_refuses_to_write_duplicate_chart_keys() -> None:
     with pytest.raises(ContractError):
         result_payload(
