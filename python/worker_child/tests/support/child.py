@@ -13,8 +13,6 @@ runs for real, as a real OS process.
 """
 
 import json
-import os
-import signal
 import subprocess
 import sys
 import threading
@@ -36,15 +34,11 @@ from gbd_foodservice_insights.analysis import (
 from gbd_foodservice_insights.testing import DEFAULT_CHART_KEYS, stub_analysis
 from worker_child.contract import layout
 from worker_child.run import Analyze, run
-from worker_child.writer import dump_json, write_atomically
+from worker_child.writer import write_atomically
 
-# Where the OS-level facts a scenario asks for get recorded — always beneath `work/`, the
+# Where a scenario records facts a test needs to observe — always beneath `work/`, the
 # child's own scratch directory, so this can never collide with anything the contract defines.
-DEBUG_FILES = {
-    "cwd": "cwd.txt",
-    "environment": "environment.json",
-    "grandchild_pid": "grandchild.pid",
-}
+GRANDCHILD_PID_FILE = "grandchild.pid"
 
 # How often a hung analysis checks in. Only ever observed by a test that has already sent a
 # kill signal; the process never reaches the other side of the loop on its own.
@@ -59,15 +53,19 @@ RAISES_BY_NAME: dict[str, type[Exception]] = {
 }
 
 
+# Every scenario calls `report_progress` this many times, from this many concurrent threads.
+# 2 is enough to exercise `writer.progress_reporter`'s locking under a real OS scheduler, the
+# one thing `test_writer.py`'s in-process `ThreadPoolExecutor` coverage of that locking can't.
+PROGRESS_CALLS = 2
+
+
 @dataclass(frozen=True)
 class Scenario:
     charts: tuple[str, ...] = DEFAULT_CHART_KEYS
     without_files: frozenset[str] = field(default_factory=frozenset)
     cost_usd: Decimal = Decimal("0.5")
-    progress_calls: int = 2
     raises: type[Exception] | None = None
     hang: bool = False
-    ignore_sigterm: bool = False
     spawn_grandchild: bool = False
 
 
@@ -77,10 +75,8 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         charts=tuple(data.get("charts", DEFAULT_CHART_KEYS)),
         without_files=frozenset(data.get("withoutFiles", ())),
         cost_usd=Decimal(str(data["costUsd"])) if "costUsd" in data else Decimal("0.5"),
-        progress_calls=data.get("progressCalls", 2),
         raises=RAISES_BY_NAME[raises_name] if raises_name is not None else None,
         hang=data.get("hang", False),
-        ignore_sigterm=data.get("ignoreSigterm", False),
         spawn_grandchild=data.get("spawnGrandchild", False),
     )
 
@@ -89,12 +85,9 @@ def build_analyze(scenario: Scenario) -> Analyze:
     def analyze(
         request: AnalysisRequest, *, report_progress: ReportProgress = lambda: None
     ) -> AnalysisOutcome:
-        _dump_debug_files(request.work_directory)
-        if scenario.ignore_sigterm:
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if scenario.spawn_grandchild:
             _spawn_grandchild(request.work_directory)
-        _report_progress_under_load(report_progress, scenario.progress_calls)
+        _report_progress_under_load(report_progress, PROGRESS_CALLS)
 
         if scenario.hang:
             while True:
@@ -121,11 +114,6 @@ def build_analyze(scenario: Scenario) -> Analyze:
     return analyze
 
 
-def _dump_debug_files(work_directory: Path) -> None:
-    write_atomically(work_directory / DEBUG_FILES["cwd"], os.getcwd().encode())
-    write_atomically(work_directory / DEBUG_FILES["environment"], dump_json(dict(os.environ)))
-
-
 def _report_progress_under_load(report_progress: ReportProgress, count: int) -> None:
     """Calls `report_progress` from `count` concurrent threads: proof that the writer's
     atomicity — already covered in-process in `test_writer.py` — holds under a real OS
@@ -149,7 +137,7 @@ def _spawn_grandchild(work_directory: Path) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    write_atomically(work_directory / DEBUG_FILES["grandchild_pid"], str(grandchild.pid).encode())
+    write_atomically(work_directory / GRANDCHILD_PID_FILE, str(grandchild.pid).encode())
 
 
 def main(argv: list[str]) -> int:

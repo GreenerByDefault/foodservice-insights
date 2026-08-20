@@ -5,14 +5,17 @@
 - `test_main.py` spawns the real entrypoint too, but only for paths that never reach
   `analyze()` (usage errors, manifest problems) — proving argv and exit-code wiring.
 - This file also spawns the real entrypoint, past a stubbed `analyze()` — see
-  `tests/support/child.py` for why — into the parts only a real OS process has: signals, the
-  grandchild, atomic writes under polling.
+  `tests/support/child.py` for why. It covers only what a real OS process proves that an
+  in-process call cannot: a successful and a failing run surviving the process boundary at
+  all, that nothing installs a SIGTERM handler, and that killing the child's process group
+  reaches a grandchild it spawned. `cwd`, the environment allowlist, and progress under
+  concurrent load are Python/OS guarantees or already covered in-process (`test_writer.py`),
+  and don't belong here just because they can be dressed up as a subprocess test.
 
 No test waits on wall-clock time to synchronize with the child. `wait_until` polls for a file
 the child itself writes at a known point (`progress.json`, `grandchild.pid`) — the same
-technique `apps/worker/src/child/spawn.test.ts` uses against `fake-child.ts`. The two SIGTERM
-tests are deterministic by construction: a child with no handler can only die by SIGTERM, and
-one that ignores it can only die by SIGKILL once escalated.
+technique `apps/worker/src/child/spawn.test.ts` uses against `fake-child.ts`. The SIGTERM test
+is deterministic by construction: a child with no handler can only die by SIGTERM.
 """
 
 import contextlib
@@ -49,23 +52,17 @@ def run_directory(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _filtered_environment(source: Mapping[str, str]) -> dict[str, str]:
-    return {name: source[name] for name in names.ENVIRONMENT_VARIABLES if name in source}
-
-
-def spawn_child(
-    scenario: Mapping[str, Any],
-    run_directory: Path,
-    *,
-    environment: Mapping[str, str] | None = None,
-) -> subprocess.Popen[bytes]:
+def spawn_child(scenario: Mapping[str, Any], run_directory: Path) -> subprocess.Popen[bytes]:
     """Spawns the real child exactly as the parent will: `cwd=work/`, only the environment
     allowlist, and as the leader of its own process group so a kill can reach a grandchild.
     """
+    allowlisted_environment = {
+        name: os.environ[name] for name in names.ENVIRONMENT_VARIABLES if name in os.environ
+    }
     return subprocess.Popen(
         [sys.executable, str(CHILD_SCRIPT), json.dumps(scenario), str(run_directory)],
         cwd=run_directory / layout.WORK_DIRECTORY,
-        env=_filtered_environment(environment if environment is not None else os.environ),
+        env=allowlisted_environment,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -128,50 +125,6 @@ def test_an_analysis_error_reaches_failure_json_through_a_real_process(
     assert read_json(run_directory / layout.FAILURE)["reason"] == "unusable_data"
 
 
-def test_the_child_runs_in_work_so_a_stray_relative_write_lands_in_scratch(
-    run_directory: Path,
-) -> None:
-    process = spawn_child({}, run_directory)
-    process.communicate(timeout=30)
-
-    work_directory = run_directory / layout.WORK_DIRECTORY
-    assert (work_directory / "cwd.txt").read_text(encoding="utf-8") == str(work_directory)
-
-
-def test_the_child_only_sees_the_env_var_allowlist(run_directory: Path) -> None:
-    parent_environment = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": "/home/analysis",
-        "LANG": "en_US.UTF-8",
-        "TZ": "UTC",
-        "GEMINI_API_KEY": "gemini-key",
-        "LLM_WHISPERER_API_KEY": "whisperer-key",
-        "OPENAI_API_KEY": "openai-key",
-        # Held by the parent for its own use; must never cross.
-        "DB_CONNECTION_STRING": "postgres://parent-only",
-        "S3_BUCKET": "parent-only",
-    }
-
-    process = spawn_child({}, run_directory, environment=parent_environment)
-    process.communicate(timeout=30)
-
-    assert process.returncode == names.EXIT_WROTE_RESULT
-    environment = read_json(run_directory / layout.WORK_DIRECTORY / "environment.json")
-    # Narrowed to the parent's own variables, because the real interpreter adds some of its own
-    # to every process it starts.
-    crossed = {name: value for name, value in environment.items() if name in parent_environment}
-    assert crossed == _filtered_environment(parent_environment)
-
-
-def test_progress_advances_under_concurrent_load(run_directory: Path) -> None:
-    process = spawn_child({"progressCalls": 50}, run_directory)
-
-    process.communicate(timeout=30)
-
-    assert process.returncode == names.EXIT_WROTE_RESULT
-    assert read_json(run_directory / layout.PROGRESS) == {"sequence": 50}
-
-
 def test_a_child_with_no_handler_dies_of_sigterm(run_directory: Path) -> None:
     process = spawn_child({"hang": True}, run_directory)
     try:
@@ -184,26 +137,6 @@ def test_a_child_with_no_handler_dies_of_sigterm(run_directory: Path) -> None:
 
         process.wait(timeout=5)
         assert process.returncode == -signal.SIGTERM
-    finally:
-        kill_group_if_alive(process)
-
-
-def test_a_child_that_ignores_sigterm_is_escalated_to_sigkill(run_directory: Path) -> None:
-    process = spawn_child({"hang": True, "ignoreSigterm": True}, run_directory)
-    try:
-        wait_until(
-            lambda: (run_directory / layout.PROGRESS).exists(),
-            "the child has installed its SIGTERM handler",
-        )
-
-        os.killpg(process.pid, signal.SIGTERM)
-        time.sleep(0.2)
-        assert process.poll() is None, "a child that ignores SIGTERM should not have exited yet"
-
-        os.killpg(process.pid, signal.SIGKILL)
-
-        process.wait(timeout=5)
-        assert process.returncode == -signal.SIGKILL
     finally:
         kill_group_if_alive(process)
 
