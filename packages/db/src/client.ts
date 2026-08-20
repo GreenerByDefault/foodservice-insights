@@ -3,17 +3,13 @@ import { Pool, type PoolConfig } from 'pg';
 import { isTransientDatabaseError } from './errors.ts';
 import type { Database } from './schema.ts';
 
-/** The pool and timeout limits `initializeDatabase` applies. All of these numbers can be
- * revisited; they're one object so a caller sizing its own timings against them — the worker's
- * lease expiry against `connectionTimeoutMs + statementTimeoutMs`, say — reads them as a group
- * instead of piecing together which ones travel together.
- */
+/** The pool and timeout limits `initializeDatabase` applies. */
 export type DatabaseLimits = {
   /** Always keep at least this many connections open, to lower the overhead of establishing
    * one. */
   minConnections: number;
 
-  /** At most this many concurrent connections. We don't expect many concurrent HTTP requests,
+  /** At most this many concurrent connections. We don't expect many concurrent requests,
    * and each connection consumes database memory. */
   maxConnections: number;
 
@@ -35,12 +31,11 @@ export type DatabaseLimits = {
   statementTimeoutMs: number;
 
   /** Server-side: kill transactions idle longer than this. This is the one that stops a hung
-   * transaction from holding locks indefinitely, which is what makes transaction-per-test safe
-   * to run concurrently. */
+   * transaction from holding locks indefinitely. */
   idleInTransactionSessionTimeoutMs: number;
 
   /** Server-side: kill connections idle longer than this, so connections are reclaimed even
-   * when a client dies without cleaning up — a SIGKILLed app, say. */
+   * when a client dies without cleaning up, such as a SIGKILLed app. */
   idleSessionTimeoutMs: number;
 };
 
@@ -60,20 +55,9 @@ export type DatabaseConfig = {
   limits?: Partial<DatabaseLimits>;
 };
 
-/** How long `shutdownDatabase` gives the pool to drain before giving up on a clean shutdown.
- *
- * Not part of `DatabaseLimits`: that type is what `buildPoolConfig` turns into `pg.Pool`'s own
- * config, and this never reaches the pool at all — it bounds *our* wait on `destroy()`, which
- * `shutdownDatabase` takes as a plain parameter since the handle it's given has already
- * forgotten whatever limits built it.
- */
+/** How long `shutdownDatabase` gives the pool to drain before giving up on a clean shutdown. */
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000;
 
-/** Turn a `DatabaseConfig` into what `pg.Pool` actually takes, merging `limits` over
- * `DEFAULT_LIMITS`. Pulled out as its own pure function so the merge and the field-by-field
- * mapping — the two things a caller's override can get wrong — are checkable without opening a
- * real connection; `client.test.ts` asserts against this directly.
- */
 export function buildPoolConfig(config: DatabaseConfig): PoolConfig {
   const limits = { ...DEFAULT_LIMITS, ...config.limits };
 
@@ -86,10 +70,7 @@ export function buildPoolConfig(config: DatabaseConfig): PoolConfig {
     maxLifetimeSeconds: limits.maxLifetimeSeconds,
     // Keep the pool open through periods of no activity.
     allowExitOnIdle: false,
-    // Server-side timeouts, so the database enforces these even if we don't. Unlike the fields
-    // above, `pg` does not type-check the contents of this string — a typo'd flag name here
-    // would fail silently, which is why `client.test.ts` also proves one of these against a real
-    // database rather than trusting this assembly alone.
+    // Server-side timeouts, so the database enforces these even if we don't.
     options:
       `-c statement_timeout=${limits.statementTimeoutMs} ` +
       `-c idle_in_transaction_session_timeout=${limits.idleInTransactionSessionTimeoutMs} ` +
