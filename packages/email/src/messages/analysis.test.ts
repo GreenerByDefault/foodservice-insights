@@ -7,7 +7,6 @@ import {
   SAMPLE_REPORT_ID,
 } from '../testing/fixtures.ts';
 import { recordingEmailer } from '../testing/recording.ts';
-import type { FollowUp } from './analysis.ts';
 import { renderAnalysisFailed, renderAnalysisSucceeded } from './analysis.ts';
 
 const emailer = recordingEmailer().service;
@@ -15,47 +14,65 @@ const emailer = recordingEmailer().service;
 const REPORT_URL = `https://example.test/orgs/${SAMPLE_ORGANIZATION_ID}/reports/${SAMPLE_REPORT_ID}`;
 const CONTACT_URL = 'mailto:support@example.test';
 
+const RETRY = {
+  action: 'retry',
+  text: 'This was not a problem with your file. You can run it again without uploading it a second time, or contact us if it keeps happening.',
+} as const;
+const NOT_YOUR_FAULT = {
+  action: 'contact',
+  text: 'This was not a problem with your file. Retrying is unlikely to help, so contact us and we will look into it.',
+} as const;
+
 /** What we tell the user for each failure reason, and what we ask them to do about it — written
  * independently of `FAILURE_EXPLANATIONS` in analysis.ts so a typo there, or a reason wired to
  * the wrong copy, fails a test instead of only ever agreeing with itself.
  */
-const REASON_EXPECTATIONS: Record<AnalysisFailureReason, { text: string; followUp: FollowUp }> = {
+const REASON_EXPECTATIONS: Record<
+  AnalysisFailureReason,
+  { whatHappened: string; followUp: { action: 'retry' | 'contact'; text: string } }
+> = {
   child_crashed: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
   hung: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
-  hard_timeout: { text: 'The analysis took too long, so we stopped it.', followUp: 'retry' },
+  hard_timeout: {
+    whatHappened: 'The analysis took too long, so we stopped it.',
+    followUp: RETRY,
+  },
   infrastructure: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
   contract_violation: {
-    text: 'The analysis finished in a state we could not read.',
-    followUp: 'contact-us',
+    whatHappened: 'The analysis finished in a state we could not read.',
+    followUp: NOT_YOUR_FAULT,
   },
   upstream_api: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
   abandoned: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
   unknown: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
   shut_down: {
-    text: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: 'retry',
+    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+    followUp: RETRY,
   },
   unusable_data: {
-    text: 'We could not produce a report we would stand behind from this file.',
-    followUp: 'revise-the-file',
+    whatHappened: 'We could not make a usable report from this file.',
+    followUp: {
+      action: 'contact',
+      text: 'Retrying is unlikely to help. Contact us and we can help figure out what to change.',
+    },
   },
 };
 
@@ -92,31 +109,20 @@ describe('renderAnalysisFailed', () => {
     expect(document.heading).toBe('We could not finish your report: Q1 procurement');
   });
 
-  const SECOND_PARAGRAPH: Record<FollowUp, string> = {
-    retry:
-      'This was not a problem with your file. You can run it again without uploading it a second time, or contact us if it keeps happening.',
-    'contact-us':
-      'This was not a problem with your file. Retrying is unlikely to help, so contact us and we will look into it.',
-    'revise-the-file':
-      'Review your file and upload a revised version, or contact us if you are not sure what to change.',
-  };
-  const ACTION: Record<FollowUp, { block: 'action'; label: string; url: string }> = {
-    retry: { block: 'action', label: 'Try again', url: REPORT_URL },
-    'contact-us': { block: 'action', label: 'Contact us', url: CONTACT_URL },
-    'revise-the-file': { block: 'action', label: 'Upload a revised file', url: REPORT_URL },
-  };
-
-  test.each(EVERY_REASON)('renders %s: its copy, and the follow-up it asks for', (reason) => {
-    const { text, followUp } = REASON_EXPECTATIONS[reason];
+  test.each(EVERY_REASON)('renders %s: its copy, and retry only when offered', (reason) => {
+    const { whatHappened, followUp } = REASON_EXPECTATIONS[reason];
+    const offerRetry = followUp.action === 'retry';
     const document = renderAnalysisFailed(emailer, anAnalysisFailed({ reason }));
 
     expect(document.blocks).toEqual([
-      { block: 'paragraph', text },
-      { block: 'paragraph', text: SECOND_PARAGRAPH[followUp] },
-      ACTION[followUp],
-      ...(followUp === 'contact-us'
-        ? []
-        : [{ block: 'links' as const, links: [{ label: 'Contact us', url: CONTACT_URL }] }]),
+      { block: 'paragraph', text: whatHappened },
+      { block: 'paragraph', text: followUp.text },
+      offerRetry
+        ? { block: 'action', label: 'Try again', url: REPORT_URL }
+        : { block: 'action', label: 'Contact us', url: CONTACT_URL },
+      ...(offerRetry
+        ? [{ block: 'links' as const, links: [{ label: 'Contact us', url: CONTACT_URL }] }]
+        : []),
     ]);
   });
 
