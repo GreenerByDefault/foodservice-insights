@@ -1,6 +1,7 @@
 """Writing into the run directory while the parent may be reading it."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,26 @@ def test_reports_progress_with_a_strictly_increasing_sequence(run_directory: Pat
     assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == 1
     assert [advance(), advance()] == [2, 3]
     assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == 3
+
+
+def test_survives_concurrent_writers_to_the_same_path(run_directory: Path) -> None:
+    path = run_directory / contract.RESULT
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda i: write_json_atomically(path, {"resultMetadata": i}), range(50)))
+    assert files_in(path.parent) == ["result.json"]
+
+
+def test_progress_reporter_is_safe_for_concurrent_callers(run_directory: Path) -> None:
+    advance = progress_reporter(run_directory)
+    path = run_directory / contract.PROGRESS
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        sequences = list(pool.map(lambda _: advance(), range(100)))
+
+    # The lock keeps the in-memory counter and the file monotonic together: every call gets a
+    # distinct sequence number, and the file on disk ends up agreeing with the highest one.
+    assert sorted(sequences) == list(range(1, 101))
+    assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == max(sequences)
 
 
 def test_each_run_reports_its_own_sequence(run_directory: Path, tmp_path_factory) -> None:

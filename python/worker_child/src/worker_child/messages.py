@@ -22,6 +22,11 @@ MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 SHA_256_PATTERN = re.compile(r"[0-9a-f]{64}")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
+# The parent stores `ai_cost_usd` as `numeric(10,4)` and enforces it with `^\d{1,6}\.\d{4}$`, so
+# anything at or above 1,000,000 is a contract violation the parent would reject after a full,
+# fully-paid-for run.
+MAXIMUM_COST_USD = Decimal("1000000")
+
 
 @dataclass(frozen=True, slots=True)
 class ReportInputs:
@@ -105,7 +110,7 @@ def result_payload(
         )
     _require(len(set(charts)) == len(charts), "chart keys must be unique")
     _require(ai.input_tokens >= 0 and ai.output_tokens >= 0, "token counts must not be negative")
-    _require(ai.cost_usd >= 0, "cost must not be negative")
+    _require(0 <= ai.cost_usd < MAXIMUM_COST_USD, f"cost must be within [0, {MAXIMUM_COST_USD})")
 
     return {
         "analysisAttemptId": analysis_attempt_id,
