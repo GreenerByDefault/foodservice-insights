@@ -246,6 +246,21 @@ describe('classifyVerdict', () => {
     });
   });
 
+  describe('a usage error', () => {
+    test('exit code 2 is a contract violation, not a crash', () => {
+      const outcome: ChildOutcome = {
+        kind: 'exited',
+        exitCode: 2,
+        stderrTail: 'usage: python -m worker_child <runDirectory>',
+      };
+      expect(classifyVerdict(anEnding({ outcome }))).toEqual({
+        kind: 'failed',
+        reason: 'contract_violation',
+        detail: 'invoked with the wrong arguments\nusage: python -m worker_child <runDirectory>',
+      });
+    });
+  });
+
   describe('a crash', () => {
     test('killed by a signal we did not send', () => {
       const outcome: ChildOutcome = { kind: 'signaled', signal: 'SIGSEGV', stderrTail: 'oops' };

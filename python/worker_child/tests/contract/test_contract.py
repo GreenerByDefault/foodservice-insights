@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from worker_child.contract import layout, names
+from worker_child.contract.fields import ContractError
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONTRACT: dict[str, Any] = json.loads(
@@ -62,7 +63,24 @@ def test_agrees_on_the_exit_codes() -> None:
     assert CONTRACT["exitCodes"] == {
         "wroteResult": names.EXIT_WROTE_RESULT,
         "wroteFailure": names.EXIT_WROTE_FAILURE,
+        "usageError": names.EXIT_USAGE_ERROR,
     }
+
+
+def test_require_created_by_parent_accepts_a_complete_run_directory(tmp_path: Path) -> None:
+    for relative in layout.DIRECTORIES_CREATED_BY_PARENT:
+        (tmp_path / relative).mkdir(parents=True)
+
+    layout.require_created_by_parent(tmp_path)  # does not raise
+
+
+def test_require_created_by_parent_names_every_missing_directory(tmp_path: Path) -> None:
+    (tmp_path / "input").mkdir()
+
+    with pytest.raises(ContractError) as excinfo:
+        layout.require_created_by_parent(tmp_path)
+
+    assert str(excinfo.value) == "run directory is missing output, output/files, work"
 
 
 def test_claims_exactly_the_reasons_the_parent_grants_a_child() -> None:

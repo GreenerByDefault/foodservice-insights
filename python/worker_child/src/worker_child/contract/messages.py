@@ -5,10 +5,11 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from worker_child.contract.fields import ContractError, parse_object
-from worker_child.contract.layout import CHART_KEY_PATTERN
+from worker_child.contract.layout import CHART_KEY_PATTERN, MANIFEST
 from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
@@ -59,6 +60,15 @@ class AiUsage:
     # `ai_cost_usd` is `numeric(10,4)`; a float would lose precision crossing to JSON.
     cost_usd: Decimal
     metadata: Mapping[str, Any]
+
+
+def read_run_manifest(run_directory: Path) -> RunManifest:
+    manifest_path = run_directory / MANIFEST
+    try:
+        text = manifest_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ContractError(f"{MANIFEST}: {error}") from error
+    return parse_run_manifest(text)
 
 
 def parse_run_manifest(text: str) -> RunManifest:

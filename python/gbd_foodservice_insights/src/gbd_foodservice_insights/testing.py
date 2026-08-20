@@ -20,7 +20,7 @@ PNG_MAGIC_BYTES = b"\x89PNG\r\n\x1a\nstub"
 DEFAULT_CHART_KEYS: tuple[str, ...] = ("category_breakdown",)
 
 
-def _ignore(stage: str) -> None:
+def _ignore() -> None:
     pass
 
 
@@ -38,7 +38,7 @@ def stub_analysis(
     cost_usd: Decimal = Decimal("0.5"),
     ai_metadata: Mapping[str, Any] = MappingProxyType({}),
     result_metadata: Mapping[str, Any] = MappingProxyType({}),
-    progress_stages: Sequence[str] = ("categorizing", "rendering"),
+    progress_calls: int = 2,
     raises: type[AnalysisError] | None = None,
 ) -> AnalysisOutcome:
     """The library's own definition of a valid `analyze()`, shipped for `worker_child`'s
@@ -50,8 +50,8 @@ def stub_analysis(
     expresses. Writes real files with real magic bytes into `request.output_directory`,
     unless told to skip one.
     """
-    for stage in progress_stages:
-        report_progress(stage)
+    for _ in range(progress_calls):
+        report_progress()
 
     if raises is not None:
         raise raises(f"stub_analysis: raising {raises.__name__} on request")

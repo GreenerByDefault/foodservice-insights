@@ -5,9 +5,9 @@ Four properties keep this seam agnostic and are worth preserving as the library 
 
 1. **The library never sees the run directory, the contract's documents, or exit codes.** It is
    handed a CSV, a scratch directory, an output directory, and the form's answers.
-2. **`report_progress` is a plain callable with a no-op default**, so notebooks and the lab are
-   unaffected. It carries a stage string for the log line; the child throws that away and writes
-   only `sequence`.
+2. **`report_progress` is a plain no-argument callable with a no-op default**, so notebooks and
+   the lab are unaffected. It carries no payload; the child's only use of it is to bump
+   `sequence`.
 3. **The library names its own charts**; the wrapper maps keys to contract filenames.
 4. **AI usage is the library's to report**.
 
@@ -23,7 +23,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
-type ReportProgress = Callable[[str], None]
+type ReportProgress = Callable[[], None]
 
 CountsBasis = Literal["people", "meals"]
 UnitSystem = Literal["lb", "kg"]
@@ -76,7 +76,7 @@ class UnusableDataError(AnalysisError):
     """Data is syntactically correct, but cannot be used, such as bogus product names."""
 
 
-def _ignore(stage: str) -> None:
+def _ignore() -> None:
     pass
 
 

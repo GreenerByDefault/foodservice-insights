@@ -54,14 +54,16 @@ def test_stub_analysis_can_declare_a_chart_it_never_writes(tmp_path: Path) -> No
     assert not outcome.charts["summary"].exists()
 
 
-def test_stub_analysis_reports_progress_in_order(tmp_path: Path) -> None:
-    stages: list[str] = []
-    stub_analysis(
-        _request(tmp_path),
-        report_progress=stages.append,
-        progress_stages=("categorizing", "rendering"),
-    )
-    assert stages == ["categorizing", "rendering"]
+def test_stub_analysis_reports_progress_the_requested_number_of_times(tmp_path: Path) -> None:
+    calls = 0
+
+    def count() -> None:
+        nonlocal calls
+        calls += 1
+
+    stub_analysis(_request(tmp_path), report_progress=count, progress_calls=3)
+
+    assert calls == 3
 
 
 def test_stub_analysis_can_report_a_cost(tmp_path: Path) -> None:

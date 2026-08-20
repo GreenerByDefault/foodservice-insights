@@ -34,7 +34,8 @@
   },
   "exitCodes": {
     "wroteResult": 0,
-    "wroteFailure": 1
+    "wroteFailure": 1,
+    "usageError": 2
   },
   "failureReasonClaimants": {
     "child_crashed": "parent",
