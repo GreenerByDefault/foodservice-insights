@@ -225,15 +225,13 @@ child?", and a parent whose clock is skewed poisons every other worker's livenes
 
 ### Canceling
 
-Canceling is two steps, not one. The web server soft-deletes the report and records a
-*request* — `cancel_requested_at` on any attempt still `pending` or `processing` — but never
-writes `analysis_attempt.status` itself: after insert, only a worker does. A worker turns the
-request into the terminal `canceled`: the owning parent's next lease renewal sees the request and
-kills its child, or, for an attempt nobody has claimed yet, the queue's cancel sweep converges the
-row directly. No email is sent — enforced by the `analysis_attempt_canceled_is_not_notified`
-constraint and the notification sweep's own predicate, not by convention. A finished attempt
-cannot be canceled at all: the terminal-immutability trigger does not exempt
-`cancel_requested_at`.
+Canceling is a soft-delete of a report that has not already reached a terminal attempt status.
+
+The web server only records the request; a worker converges it to the terminal `canceled` — the
+owning parent on its next lease renewal, or the queue's cancel sweep for an attempt nobody has
+claimed yet.
+
+No email is ever sent for a canceled attempt.
 
 ### Concurrency and scaling
 
