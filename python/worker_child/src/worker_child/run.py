@@ -8,17 +8,17 @@ from gbd_foodservice_insights.analysis import (
 )
 from gbd_foodservice_insights.analysis import analyze as default_analyze
 
-from worker_child import contract
 from worker_child.artifacts import place_result_files
-from worker_child.failures import classify
-from worker_child.messages import (
+from worker_child.contract import layout, names
+from worker_child.contract.fields import ContractError
+from worker_child.contract.messages import (
     AiUsage,
     RunManifest,
     failure_payload,
     parse_run_manifest,
     result_payload,
 )
-from worker_child.parse import ContractError
+from worker_child.failures import classify
 from worker_child.writer import progress_reporter, write_json_atomically
 
 # The real `analyze()` and `stub_analysis` both take `report_progress` as keyword-only with a
@@ -36,10 +36,10 @@ def run(run_directory: Path, analyze: Analyze = default_analyze) -> int:
     """
     try:
         _produce_result(run_directory, analyze)
-    except Exception as error:  # every remaining path becomes a failure document
+    except Exception as error:
         _write_failure(run_directory, error)
-        return contract.EXIT_WROTE_FAILURE
-    return contract.EXIT_WROTE_RESULT
+        return names.EXIT_WROTE_FAILURE
+    return names.EXIT_WROTE_RESULT
 
 
 def _produce_result(run_directory: Path, analyze: Analyze) -> None:
@@ -73,13 +73,13 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
         result_metadata=outcome.metadata,
     )
     place_result_files(run_directory, outcome)
-    write_json_atomically(run_directory / contract.RESULT, payload)
+    write_json_atomically(run_directory / layout.RESULT, payload)
 
 
 def _require_parent_created_directories(run_directory: Path) -> None:
     missing = [
         relative
-        for relative in contract.DIRECTORIES_CREATED_BY_PARENT
+        for relative in layout.DIRECTORIES_CREATED_BY_PARENT
         if not (run_directory / relative).is_dir()
     ]
     if missing:
@@ -87,20 +87,20 @@ def _require_parent_created_directories(run_directory: Path) -> None:
 
 
 def _read_manifest(run_directory: Path) -> RunManifest:
-    manifest_path = run_directory / contract.MANIFEST
+    manifest_path = run_directory / layout.MANIFEST
     try:
         text = manifest_path.read_text(encoding="utf-8")
     except OSError as error:
-        raise ContractError(f"{contract.MANIFEST}: {error}") from error
+        raise ContractError(f"{layout.MANIFEST}: {error}") from error
     return parse_run_manifest(text)
 
 
 def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisRequest:
     return AnalysisRequest(
         run_id=manifest.analysis_attempt_id,
-        input_csv=run_directory / contract.INPUT_CSV,
-        output_directory=run_directory / contract.RESULT_FILES_DIRECTORY,
-        work_directory=run_directory / contract.WORK_DIRECTORY,
+        input_csv=run_directory / layout.INPUT_CSV,
+        output_directory=run_directory / layout.RESULT_FILES_DIRECTORY,
+        work_directory=run_directory / layout.WORK_DIRECTORY,
         report_name=manifest.report.name,
         site_name=manifest.report.site_name,
         counts_basis=manifest.report.counts_basis,
@@ -116,4 +116,4 @@ def _write_failure(run_directory: Path, error: Exception) -> None:
         detail=detail,
         traceback=traceback.format_exc() if reason == "unknown" else None,
     )
-    write_json_atomically(run_directory / contract.FAILURE, payload)
+    write_json_atomically(run_directory / layout.FAILURE, payload)

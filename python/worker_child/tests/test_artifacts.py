@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 from gbd_foodservice_insights.analysis import AiUsage, AnalysisOutcome
-from worker_child import contract
 from worker_child.artifacts import place_result_files
-from worker_child.parse import ContractError
+from worker_child.contract import layout
+from worker_child.contract.fields import ContractError
 
 ZERO_USAGE = AiUsage(model="m", input_tokens=0, output_tokens=0, cost_usd=Decimal("0"), metadata={})
 
@@ -36,9 +36,9 @@ def test_renames_declared_files_to_contract_names(tmp_path: Path, output_directo
 
     place_result_files(tmp_path, outcome)
 
-    assert (output_directory / contract.PDF_FILE_NAME).read_bytes() == b"%PDF-stub"
-    assert (output_directory / contract.XLSX_FILE_NAME).read_bytes() == b"PKstub"
-    assert (output_directory / contract.chart_file_name("category_breakdown")).is_file()
+    assert (output_directory / layout.PDF_FILE_NAME).read_bytes() == b"%PDF-stub"
+    assert (output_directory / layout.XLSX_FILE_NAME).read_bytes() == b"PKstub"
+    assert (output_directory / layout.chart_file_name("category_breakdown")).is_file()
 
 
 def test_leaves_no_file_behind_under_the_librarys_own_name(

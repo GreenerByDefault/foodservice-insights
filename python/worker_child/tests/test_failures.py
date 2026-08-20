@@ -4,9 +4,9 @@ from gbd_foodservice_insights.analysis import (
     UnusableDataError,
     UpstreamApiError,
 )
-from worker_child.contract import CHILD_FAILURE_REASONS
+from worker_child.contract.fields import ContractError
+from worker_child.contract.names import CHILD_FAILURE_REASONS
 from worker_child.failures import classify
-from worker_child.parse import ContractError
 
 
 @pytest.mark.parametrize(

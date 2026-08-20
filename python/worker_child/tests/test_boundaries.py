@@ -4,8 +4,8 @@ from typing import get_args
 
 from gbd_foodservice_insights.analysis import CountsBasis as LibraryCountsBasis
 from gbd_foodservice_insights.analysis import UnitSystem as LibraryUnitSystem
-from worker_child.contract import CountsBasis as ChildCountsBasis
-from worker_child.contract import UnitSystem as ChildUnitSystem
+from worker_child.contract.names import CountsBasis as ChildCountsBasis
+from worker_child.contract.names import UnitSystem as ChildUnitSystem
 
 WORKER_CHILD_SRC = Path(__file__).resolve().parents[1] / "src" / "worker_child"
 # Never `gbd_foodservice_insights.testing`, which exists for tests, and never a future

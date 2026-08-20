@@ -11,7 +11,7 @@ from gbd_foodservice_insights.analysis import (
     UpstreamApiError,
 )
 from gbd_foodservice_insights.testing import stub_analysis
-from worker_child import contract
+from worker_child.contract import layout, names
 from worker_child.run import run
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -27,9 +27,9 @@ def _ignore(stage: str) -> None:
 @pytest.fixture
 def run_directory(tmp_path: Path) -> Path:
     """A run directory as the parent builds it, with a valid manifest already in place."""
-    for relative in contract.DIRECTORIES_CREATED_BY_PARENT:
+    for relative in layout.DIRECTORIES_CREATED_BY_PARENT:
         (tmp_path / relative).mkdir(parents=True)
-    (tmp_path / contract.MANIFEST).write_text(VALID_MANIFEST, encoding="utf-8")
+    (tmp_path / layout.MANIFEST).write_text(VALID_MANIFEST, encoding="utf-8")
     return tmp_path
 
 
@@ -40,55 +40,55 @@ def read_json(path: Path) -> dict:
 def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: Path) -> None:
     exit_code = run(run_directory, analyze=stub_analysis)
 
-    assert exit_code == contract.EXIT_WROTE_RESULT
-    result = read_json(run_directory / contract.RESULT)
+    assert exit_code == names.EXIT_WROTE_RESULT
+    result = read_json(run_directory / layout.RESULT)
     assert result["analysisAttemptId"] == "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
     assert result["charts"] == ["category_breakdown"]
-    assert not (run_directory / contract.FAILURE).exists()
+    assert not (run_directory / layout.FAILURE).exists()
 
 
 def test_places_result_files_under_contract_names(run_directory: Path) -> None:
     run(run_directory, analyze=stub_analysis)
 
-    files_directory = run_directory / contract.RESULT_FILES_DIRECTORY
-    assert (files_directory / contract.PDF_FILE_NAME).read_bytes().startswith(b"%PDF")
-    assert (files_directory / contract.XLSX_FILE_NAME).is_file()
-    assert (files_directory / contract.chart_file_name("category_breakdown")).is_file()
+    files_directory = run_directory / layout.RESULT_FILES_DIRECTORY
+    assert (files_directory / layout.PDF_FILE_NAME).read_bytes().startswith(b"%PDF")
+    assert (files_directory / layout.XLSX_FILE_NAME).is_file()
+    assert (files_directory / layout.chart_file_name("category_breakdown")).is_file()
 
 
 def test_reports_progress_once_per_stage_the_analysis_reports(run_directory: Path) -> None:
     run(run_directory, analyze=stub_analysis)  # stub_analysis reports 2 stages by default
 
-    assert read_json(run_directory / contract.PROGRESS) == {"sequence": 2}
+    assert read_json(run_directory / layout.PROGRESS) == {"sequence": 2}
 
 
 def test_the_real_analyze_is_not_ported_yet(run_directory: Path) -> None:
     exit_code = run(run_directory)  # no `analyze` override: exercises the production default
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    failure = read_json(run_directory / contract.FAILURE)
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "unknown"
     assert "NotImplementedError" in failure["traceback"]
 
 
 def test_writes_a_contract_violation_when_the_manifest_is_missing(run_directory: Path) -> None:
-    (run_directory / contract.MANIFEST).unlink()
+    (run_directory / layout.MANIFEST).unlink()
 
     exit_code = run(run_directory, analyze=stub_analysis)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    failure = read_json(run_directory / contract.FAILURE)
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "contract_violation"
-    assert not (run_directory / contract.RESULT).exists()
+    assert not (run_directory / layout.RESULT).exists()
 
 
 def test_writes_a_contract_violation_when_the_manifest_is_malformed(run_directory: Path) -> None:
-    (run_directory / contract.MANIFEST).write_text("not json", encoding="utf-8")
+    (run_directory / layout.MANIFEST).write_text("not json", encoding="utf-8")
 
     exit_code = run(run_directory, analyze=stub_analysis)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / contract.FAILURE)["reason"] == "contract_violation"
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
 
 
 def test_writes_a_contract_violation_when_a_parent_created_directory_is_missing(
@@ -98,8 +98,8 @@ def test_writes_a_contract_violation_when_a_parent_created_directory_is_missing(
 
     exit_code = run(run_directory, analyze=stub_analysis)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / contract.FAILURE)["reason"] == "contract_violation"
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
 
 
 @pytest.mark.parametrize(
@@ -118,8 +118,8 @@ def test_maps_each_analysis_error_to_its_reason(
 
     exit_code = run(run_directory, analyze=analyze)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / contract.FAILURE)["reason"] == reason
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == reason
 
 
 def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory: Path) -> None:
@@ -128,8 +128,8 @@ def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory:
 
     exit_code = run(run_directory, analyze=analyze)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    failure = read_json(run_directory / contract.FAILURE)
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "unknown"
     assert "RuntimeError" in failure["traceback"]
 
@@ -142,9 +142,9 @@ def test_declaring_a_file_the_library_never_wrote_is_a_contract_violation(
 
     exit_code = run(run_directory, analyze=analyze)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / contract.FAILURE)["reason"] == "contract_violation"
-    assert not (run_directory / contract.RESULT).exists()
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
+    assert not (run_directory / layout.RESULT).exists()
 
 
 def test_a_cost_outside_the_contracts_range_is_a_contract_violation(run_directory: Path) -> None:
@@ -153,8 +153,8 @@ def test_a_cost_outside_the_contracts_range_is_a_contract_violation(run_director
 
     exit_code = run(run_directory, analyze=analyze)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / contract.FAILURE)["reason"] == "contract_violation"
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
 
 
 def test_a_chart_key_that_is_not_snake_case_is_a_contract_violation(run_directory: Path) -> None:
@@ -163,5 +163,5 @@ def test_a_chart_key_that_is_not_snake_case_is_a_contract_violation(run_director
 
     exit_code = run(run_directory, analyze=analyze)
 
-    assert exit_code == contract.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / contract.FAILURE)["reason"] == "contract_violation"
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
