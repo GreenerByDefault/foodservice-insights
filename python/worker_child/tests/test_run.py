@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 VALID_MANIFEST = (REPO_ROOT / "contract" / "fixtures" / "valid" / "run.json").read_text(
     encoding="utf-8"
 )
+VALID_ANALYSIS_ATTEMPT_ID = json.loads(VALID_MANIFEST)["analysisAttemptId"]
 
 
 def _ignore() -> None:
@@ -42,7 +43,7 @@ def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: 
 
     assert exit_code == names.EXIT_WROTE_RESULT
     result = read_json(run_directory / layout.RESULT)
-    assert result["analysisAttemptId"] == "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+    assert result["analysisAttemptId"] == VALID_ANALYSIS_ATTEMPT_ID
     assert result["charts"] == ["category_breakdown"]
     assert not (run_directory / layout.FAILURE).exists()
 

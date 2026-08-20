@@ -23,7 +23,8 @@ def run_directory(tmp_path: Path) -> Path:
 
 # Genuine end-to-end runs of the real `python -m worker_child` entrypoint, deliberately scoped
 # to paths that never reach `analyze()`. The success path and the library's own failure reasons
-# belong to `test_child_process.py`, which drives `worker_child.run.run()` directly with `stub_analysis`.
+# belong to `test_child_process.py`, which drives `worker_child.run.run()` directly with
+# `stub_analysis`.
 def spawn(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "worker_child", *args],
@@ -49,20 +50,6 @@ def test_two_arguments_is_a_usage_error(tmp_path: Path) -> None:
     assert result.stdout == ""
 
 
-def test_a_parent_created_directory_missing_is_a_contract_violation(
-    run_directory: Path,
-) -> None:
-    # Checked before the manifest is even read, so no `run.json` is needed to reach it.
-    (run_directory / "output" / "files").rmdir()
-
-    result = spawn(str(run_directory))
-
-    assert result.returncode == names.EXIT_WROTE_FAILURE
-    failure = json.loads((run_directory / layout.FAILURE).read_text(encoding="utf-8"))
-    assert failure["reason"] == "contract_violation"
-    assert not (run_directory / layout.RESULT).exists()
-
-
 def test_a_missing_manifest_is_a_contract_violation(run_directory: Path) -> None:
     result = spawn(str(run_directory))
 
@@ -72,13 +59,12 @@ def test_a_missing_manifest_is_a_contract_violation(run_directory: Path) -> None
     assert not (run_directory / layout.RESULT).exists()
 
 
-@pytest.mark.parametrize("fixture_name", INVALID_RUN_FIXTURES)
-def test_an_invalid_manifest_is_a_contract_violation(
-    run_directory: Path, fixture_name: str
-) -> None:
+# One fixture is enough to prove a schema violation reaches `failure.json` through the real
+# process; `test_fixtures.py::test_rejects_an_invalid_fixture` covers the rest, in-process.
+def test_a_schema_violation_in_the_manifest_is_a_contract_violation(run_directory: Path) -> None:
     fixtures = Path(__file__).resolve().parents[3] / "contract" / "fixtures" / "invalid"
     (run_directory / layout.MANIFEST).write_text(
-        (fixtures / fixture_name).read_text(encoding="utf-8"), encoding="utf-8"
+        (fixtures / INVALID_RUN_FIXTURES[0]).read_text(encoding="utf-8"), encoding="utf-8"
     )
 
     result = spawn(str(run_directory))

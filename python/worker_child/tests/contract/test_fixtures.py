@@ -41,6 +41,7 @@ def document_of(file_name: str) -> str:
 
 VALID = fixture_names("valid")
 INVALID = fixture_names("invalid")
+VALID_ANALYSIS_ATTEMPT_ID = load("valid", "run.json")["analysisAttemptId"]
 
 REJECTED_HERE = [name for name in INVALID if document_of(name) in PARSED_BY_THE_CHILD]
 
@@ -58,7 +59,7 @@ def test_covers_every_document() -> None:
 def test_parses_the_run_manifest_the_parent_writes() -> None:
     manifest = parse_run_manifest(read("valid", "run.json"))
 
-    assert manifest.analysis_attempt_id == "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+    assert manifest.analysis_attempt_id == VALID_ANALYSIS_ATTEMPT_ID
     assert manifest.report.name == "Q1 2026 dining"
     assert manifest.report.site_name is None
     assert manifest.report.counts_basis == "meals"
@@ -90,7 +91,7 @@ def test_reads_the_manifest_from_where_the_parent_writes_it(tmp_path: Path) -> N
     # `parse_run_manifest` already covers the document's fields exhaustively above; this only
     # checks that `read_run_manifest` finds the file and forwards it there.
     manifest = read_run_manifest(tmp_path)
-    assert manifest.analysis_attempt_id == "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+    assert manifest.analysis_attempt_id == VALID_ANALYSIS_ATTEMPT_ID
 
 
 def test_raises_a_contract_error_when_the_manifest_file_is_missing(tmp_path: Path) -> None:
@@ -109,7 +110,7 @@ def test_progress_payload_is_the_fixture() -> None:
 
 def test_result_payload_is_the_fixture() -> None:
     payload = result_payload(
-        analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
         charts=["emissions_by_month", "emissions_by_category", "top_products"],
         ai=AiUsage(
             model="gemini-2.5-pro",
@@ -148,7 +149,7 @@ def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
     # above 1,000,000 would be rejected as a contract_violation after a full, paid-for run.
     with pytest.raises(ContractError):
         result_payload(
-            analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
             charts=[],
             ai=AiUsage(
                 model="gemini-2.5-pro",
@@ -164,7 +165,7 @@ def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
 def test_refuses_to_write_duplicate_chart_keys() -> None:
     with pytest.raises(ContractError):
         result_payload(
-            analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
             charts=["emissions_by_month", "emissions_by_month"],
             ai=AiUsage(
                 model="gemini-2.5-pro",
