@@ -29,7 +29,7 @@ UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 MAXIMUM_COST_USD = Decimal("1000000")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ReportInputs:
     name: str | None
     site_name: str | None
@@ -38,13 +38,13 @@ class ReportInputs:
     monthly_counts: Mapping[str, int]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RunManifest:
     analysis_attempt_id: str
     report: ReportInputs
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class AiUsage:
     model: str
     input_tokens: int
