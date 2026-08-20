@@ -1,11 +1,3 @@
-"""`stub_analysis`: the library's own definition of a valid `analyze()`, shipped for
-`worker_child`'s tests the same way `@gbd/db/testing` ships fakes for its consumers.
-
-It exists to test the *wrapper*, producing outcomes a mocked LLM never could — a missing
-declared file, an out-of-range cost, each exception type on demand. Every keyword names an
-outcome of the seam, not a library internal, so the port landing won't change what it expresses.
-"""
-
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from types import MappingProxyType
@@ -49,9 +41,14 @@ def stub_analysis(
     progress_stages: Sequence[str] = ("categorizing", "rendering"),
     raises: type[AnalysisError] | None = None,
 ) -> AnalysisOutcome:
-    """A stand-in `analyze()`. Writes real files with real magic bytes into
-    `request.output_directory`, unless told to skip one — which is how a wrapper test
-    produces a declared-but-missing file, the case a mocked LLM cannot.
+    """The library's own definition of a valid `analyze()`, shipped for `worker_child`'s
+    tests the same way `@gbd/db/testing` ships fakes for its consumers.
+
+    It exists to test the *wrapper*, producing outcomes a mocked LLM never could — a missing
+    declared file, an out-of-range cost, each exception type on demand. Every keyword names
+    an outcome of the seam, not a library internal, so the port landing won't change what it
+    expresses. Writes real files with real magic bytes into `request.output_directory`,
+    unless told to skip one.
     """
     for stage in progress_stages:
         report_progress(stage)

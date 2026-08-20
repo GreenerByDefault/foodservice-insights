@@ -1,5 +1,3 @@
-"""The child's half of the contract, checked against `contract/contract.json`."""
-
 import json
 from pathlib import Path
 from typing import Any
