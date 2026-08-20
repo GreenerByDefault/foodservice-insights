@@ -1,11 +1,16 @@
 import json
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 import pytest
-from worker_child.contract import layout
-from worker_child.contract.fields import ContractError
+from support.contract_fixtures import (
+    INVALID_RUN_FIXTURE_NAMES,
+    VALID_ANALYSIS_ATTEMPT_ID,
+    load,
+    names_in,
+    read,
+)
+from worker_child.contract import ContractError, layout
 from worker_child.contract.messages import (
     AiUsage,
     failure_payload,
@@ -15,35 +20,15 @@ from worker_child.contract.messages import (
     result_payload,
 )
 
-FIXTURES = Path(__file__).resolve().parents[4] / "contract" / "fixtures"
-
 DOCUMENTS = frozenset({"run", "progress", "result", "failure"})
-
-# The child only reads `run.json`; it writes the rest.
-PARSED_BY_THE_CHILD = frozenset({"run"})
-
-
-def fixture_names(directory: str) -> list[str]:
-    return sorted(path.name for path in (FIXTURES / directory).glob("*.json"))
-
-
-def read(directory: str, name: str) -> str:
-    return (FIXTURES / directory / name).read_text(encoding="utf-8")
-
-
-def load(directory: str, name: str) -> Any:
-    return json.loads(read(directory, name))
 
 
 def document_of(file_name: str) -> str:
     return file_name.split(".")[0]
 
 
-VALID = fixture_names("valid")
-INVALID = fixture_names("invalid")
-VALID_ANALYSIS_ATTEMPT_ID = load("valid", "run.json")["analysisAttemptId"]
-
-REJECTED_HERE = [name for name in INVALID if document_of(name) in PARSED_BY_THE_CHILD]
+VALID = names_in("valid")
+INVALID = names_in("invalid")
 
 
 def test_names_every_fixture_after_a_document_both_stacks_know() -> None:
@@ -53,7 +38,7 @@ def test_names_every_fixture_after_a_document_both_stacks_know() -> None:
 
 def test_covers_every_document() -> None:
     assert VALID == ["failure.json", "progress.json", "result.json", "run.json"]
-    assert REJECTED_HERE != []
+    assert INVALID_RUN_FIXTURE_NAMES != []
 
 
 def test_parses_the_run_manifest_the_parent_writes() -> None:
@@ -73,7 +58,7 @@ def test_parses_the_run_manifest_the_parent_writes() -> None:
     assert manifest.input_file.byte_size == 184320
 
 
-@pytest.mark.parametrize("name", REJECTED_HERE)
+@pytest.mark.parametrize("name", INVALID_RUN_FIXTURE_NAMES)
 def test_rejects_an_invalid_fixture(name: str) -> None:
     with pytest.raises(ContractError):
         parse_run_manifest(read("invalid", name))

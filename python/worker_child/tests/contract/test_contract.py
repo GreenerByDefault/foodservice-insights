@@ -1,15 +1,8 @@
-import json
 from pathlib import Path
-from typing import Any
 
 import pytest
-from worker_child.contract import layout, names
-from worker_child.contract.fields import ContractError
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CONTRACT: dict[str, Any] = json.loads(
-    (REPO_ROOT / "contract" / "contract.json").read_text(encoding="utf-8")
-)
+from support.contract_fixtures import CONTRACT, REPO_ROOT
+from worker_child.contract import ContractError, layout, names
 
 
 def test_repo_root_resolved_to_the_right_place() -> None:

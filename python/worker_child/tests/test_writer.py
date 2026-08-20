@@ -17,14 +17,6 @@ def files_in(directory: Path) -> list[str]:
     return sorted(path.name for path in directory.iterdir() if path.is_file())
 
 
-@pytest.fixture
-def run_directory(tmp_path: Path) -> Path:
-    """A run directory as the parent builds it: every directory present, no files."""
-    for relative in layout.DIRECTORIES_CREATED_BY_PARENT:
-        (tmp_path / relative).mkdir(parents=True)
-    return tmp_path
-
-
 def test_dump_json_encodes_sorted_indented_utf8_with_a_trailing_newline() -> None:
     assert dump_json({"b": 1, "a": "é"}) == '{\n  "a": "é",\n  "b": 1\n}\n'.encode()
 

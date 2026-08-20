@@ -29,27 +29,11 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-import pytest
+from support.child import GRANDCHILD_PID_FILE
+from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID
 from worker_child.contract import layout, names
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-VALID_MANIFEST = (REPO_ROOT / "contract" / "fixtures" / "valid" / "run.json").read_text(
-    encoding="utf-8"
-)
-VALID_ANALYSIS_ATTEMPT_ID = json.loads(VALID_MANIFEST)["analysisAttemptId"]
-
 CHILD_SCRIPT = Path(__file__).resolve().parent / "support" / "child.py"
-
-pytestmark = pytest.mark.slow
-
-
-@pytest.fixture
-def run_directory(tmp_path: Path) -> Path:
-    """A run directory as the parent builds it, with a valid manifest already in place."""
-    for relative in layout.DIRECTORIES_CREATED_BY_PARENT:
-        (tmp_path / relative).mkdir(parents=True)
-    (tmp_path / layout.MANIFEST).write_text(VALID_MANIFEST, encoding="utf-8")
-    return tmp_path
 
 
 def spawn_child(scenario: Mapping[str, Any], run_directory: Path) -> subprocess.Popen[bytes]:
@@ -144,7 +128,7 @@ def test_a_child_with_no_handler_dies_of_sigterm(run_directory: Path) -> None:
 def test_everything_the_child_spawned_dies_with_it(run_directory: Path) -> None:
     process = spawn_child({"spawnGrandchild": True, "hang": True}, run_directory)
     try:
-        pid_file = run_directory / layout.WORK_DIRECTORY / "grandchild.pid"
+        pid_file = run_directory / layout.WORK_DIRECTORY / GRANDCHILD_PID_FILE
         wait_until(pid_file.exists, "the child has spawned a subprocess of its own")
         grandchild_pid = int(pid_file.read_text(encoding="utf-8"))
         assert is_running(grandchild_pid)

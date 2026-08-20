@@ -44,6 +44,10 @@ select = [
 minversion = "9"
 addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
 testpaths = ["python"]
+# `worker_child`'s tests import shared helpers from `tests/support/`, and
+# `--import-mode=importlib` puts nothing on `sys.path` by itself. This makes `support`
+# importable in every test session, so no other test directory may claim that name.
+pythonpath = ["python/worker_child/tests"]
 markers = [
     "slow: takes long enough that you would not want it in the default run",
     "llm: calls a real LLM API",

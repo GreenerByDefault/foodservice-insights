@@ -16,27 +16,9 @@ from gbd_foodservice_insights.analysis import (
     UpstreamApiError,
 )
 from gbd_foodservice_insights.testing import stub_analysis
+from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID
 from worker_child.contract import layout, names
 from worker_child.run import run
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-VALID_MANIFEST = (REPO_ROOT / "contract" / "fixtures" / "valid" / "run.json").read_text(
-    encoding="utf-8"
-)
-VALID_ANALYSIS_ATTEMPT_ID = json.loads(VALID_MANIFEST)["analysisAttemptId"]
-
-
-def _ignore() -> None:
-    pass
-
-
-@pytest.fixture
-def run_directory(tmp_path: Path) -> Path:
-    """A run directory as the parent builds it, with a valid manifest already in place."""
-    for relative in layout.DIRECTORIES_CREATED_BY_PARENT:
-        (tmp_path / relative).mkdir(parents=True)
-    (tmp_path / layout.MANIFEST).write_text(VALID_MANIFEST, encoding="utf-8")
-    return tmp_path
 
 
 def read_json(path: Path) -> dict:
@@ -72,7 +54,7 @@ def test_places_result_files_under_contract_names(run_directory: Path) -> None:
 
 
 def test_reports_progress_once_per_report_progress_call(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+    def analyze(request: AnalysisRequest, *, report_progress):
         return stub_analysis(request, report_progress=report_progress, progress_calls=3)
 
     run(run_directory, analyze=analyze)
@@ -131,7 +113,7 @@ def test_writes_a_contract_violation_when_a_parent_created_directory_is_missing(
 def test_maps_each_analysis_error_to_its_reason(
     run_directory: Path, raises: type[AnalysisError], reason: str
 ) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+    def analyze(request: AnalysisRequest, *, report_progress):
         return stub_analysis(request, report_progress=report_progress, raises=raises)
 
     exit_code = run(run_directory, analyze=analyze)
@@ -145,7 +127,7 @@ def test_maps_each_analysis_error_to_its_reason(
 
 
 def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+    def analyze(request: AnalysisRequest, *, report_progress):
         raise RuntimeError("boom")
 
     exit_code = run(run_directory, analyze=analyze)
@@ -160,7 +142,7 @@ def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory:
 def test_declaring_a_file_the_library_never_wrote_is_a_contract_violation(
     run_directory: Path,
 ) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+    def analyze(request: AnalysisRequest, *, report_progress):
         return stub_analysis(request, report_progress=report_progress, write_pdf=False)
 
     exit_code = run(run_directory, analyze=analyze)
@@ -171,7 +153,7 @@ def test_declaring_a_file_the_library_never_wrote_is_a_contract_violation(
 
 
 def test_a_cost_outside_the_contracts_range_is_a_contract_violation(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+    def analyze(request: AnalysisRequest, *, report_progress):
         return stub_analysis(request, report_progress=report_progress, cost_usd=Decimal("1000000"))
 
     exit_code = run(run_directory, analyze=analyze)
@@ -181,7 +163,7 @@ def test_a_cost_outside_the_contracts_range_is_a_contract_violation(run_director
 
 
 def test_a_chart_key_that_is_not_snake_case_is_a_contract_violation(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress=_ignore):
+    def analyze(request: AnalysisRequest, *, report_progress):
         return stub_analysis(request, report_progress=report_progress, chart_keys=("Not Snake",))
 
     exit_code = run(run_directory, analyze=analyze)
