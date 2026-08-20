@@ -28,7 +28,11 @@ export type SupervisionState = {
   startedAt: number;
   lastProgressAt: number;
   lastProgressSequence?: number;
-  /** Stamped when the renewal statement is *issued*, rather than when it returns. */
+  /** Stamped when the renewal statement is *issued*, rather than when it returns.
+   * `lease_renewed_at` is set at commit, which is before the reply reaches us, so stamping on
+   * return would make the parent's measured lease age *underestimate* the database's and let it
+   * fence *after* a reaper was already entitled to reap. Stamping at issue makes the error
+   * conservative in the only safe direction. */
   renewalIssuedAt: number;
   exited: boolean;
   parked?: { stage: PendingVerdict['stage']; since: number };
@@ -60,27 +64,24 @@ export type SupervisionAction =
  * - `lastProgressAt`/`lastProgressSequence` advance only when `progressSequence` changes.
  *   `progress.json` carries no timestamp, so the parent keeps the clock reading itself; a file
  *   the child has not written yet leaves `lastProgressAt` at `startedAt`.
- * - `renewalIssuedAt` advances only on `lease.kind === 'held'`, to `reading.renewalIssuedAt`.
- *   **Stamped at issue, never at return** — `lease_renewed_at` is set at commit, which is before
- *   the reply reaches us, so stamping on return would make the parent's measured lease age
- *   *underestimate* the database's and let it fence *after* a reaper was already entitled to reap.
- *   Stamping at issue makes the error conservative in the only safe direction.
+ * - `renewalIssuedAt` advances only on `lease.kind === 'held'`, to `reading.renewalIssuedAt` — see
+ *   that field on `SupervisionState` for why it's stamped at issue, not at return.
  *
  * Then the rules:
  *
- * - **lost** — a renewal that came back `lost`: an attempt we may no longer write to at all.
- *   Dropped if a verdict is already parked (another verdict stands; do not spend the budget),
- *   killed if the child is still alive, otherwise a no-op (the settle already in flight will
- *   find zero rows).
- * - **parked** — once a verdict is parked, the child underneath it is no longer this rule's
- *   concern: converted to `canceled` if one was requested, converted to `upload-expired` once
- *   `uploadRetryBudgetMs` has elapsed, otherwise resumed.
- * - **settling** — an attempt that has already exited is left alone; its settle is what
+ * - **lost** — a renewal came back `lost`, so we may no longer write to this attempt. We drop a
+ *   parked verdict rather than deliver it (another verdict already stands; do not spend the
+ *   budget), kill a child that is still alive, or do nothing once it has already exited — the
+ *   settle already in flight will find zero rows.
+ * - **parked** — once a verdict is parked, the child underneath it no longer matters to this
+ *   rule. We convert it to `canceled` if one was requested, convert it to `upload-expired` once
+ *   `uploadRetryBudgetMs` has elapsed, or resume it otherwise.
+ * - **settling** — we leave an attempt that has already exited alone; its settle is what
  *   disposes of it.
  * - **contract-violation** — a progress read that threw a `ContractError` is itself a verdict.
- * - **progress-read-failed** — a progress read that threw anything but `ContractError`: no action this tick,
- *   only the next read gets another chance.
- * - **cancel-requested** — kills the child: the user's explicit intent beats a threshold that
+ * - **progress-read-failed** — a progress read that threw anything but `ContractError` takes no
+ *   action this tick; only the next read gets another chance.
+ * - **cancel-requested** — we kill the child: the user's explicit intent beats a threshold that
  *   happened to fire in the same tick, matching `classifyVerdict`'s own precedence.
  * - **hung** — no progress for `noProgressAfterMs` kills the child.
  * - **hard-ceiling** — running past `hardCeilingMs` kills the child regardless of how healthy
@@ -89,7 +90,7 @@ export type SupervisionAction =
  *   healthy parent's own inequalities keep this from ever firing before `hung` or
  *   `hard-ceiling` would.
  *
- * `lost` is checked before `contract-violation`: an attempt we may no longer write has nothing to
+ * We check `lost` before `contract-violation`: an attempt we may no longer write has nothing to
  * gain from a truthful kill reason, and `classifyVerdict` would turn either into a no-op write.
  */
 export function superviseAttempt(
