@@ -114,13 +114,14 @@ function advanceState(
     reading.progress.kind === 'read' ? reading.progress.progressSequence : undefined;
   const progressed =
     progressSequence !== undefined && progressSequence !== state.lastProgressSequence;
-  const renewed = reading.lease.kind === 'held' && reading.renewalIssuedAt !== undefined;
-
   return {
     ...state,
     lastProgressSequence: progressed ? progressSequence : state.lastProgressSequence,
     lastProgressAt: progressed ? now : state.lastProgressAt,
-    renewalIssuedAt: renewed ? (reading.renewalIssuedAt as number) : state.renewalIssuedAt,
+    renewalIssuedAt:
+      reading.lease.kind === 'held' && reading.renewalIssuedAt !== undefined
+        ? reading.renewalIssuedAt
+        : state.renewalIssuedAt,
   };
 }
 
