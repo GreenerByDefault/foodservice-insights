@@ -21,7 +21,6 @@ from worker_child.contract.names import (
 )
 
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
-SHA_256_PATTERN = re.compile(r"[0-9a-f]{64}")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 # The parent stores `ai_cost_usd` as `numeric(10,4)` and enforces it with `^\d{1,6}\.\d{4}$`, so
@@ -40,22 +39,9 @@ class ReportInputs:
 
 
 @dataclass(frozen=True)
-class InputFileFacts:
-    """What the parent says it put in `input.csv`. Parsed but never used: `AnalysisRequest` has
-    no slot for these, and nothing verifies the CSV against them. They are validated anyway so
-    that a manifest the parent got wrong fails at startup rather than midway through a paid run.
-    """
-
-    original_filename: str
-    byte_size: int
-    checksum_sha256: str
-
-
-@dataclass(frozen=True)
 class RunManifest:
     analysis_attempt_id: str
     report: ReportInputs
-    input_file: InputFileFacts
 
 
 @dataclass(frozen=True)
@@ -81,7 +67,6 @@ def parse_run_manifest(text: str) -> RunManifest:
     root = parse_object("run.json", text)
     analysis_attempt_id = root.matching("analysisAttemptId", UUID_PATTERN)
     report = root.nested("report")
-    input_file = root.nested("inputFile")
 
     manifest = RunManifest(
         analysis_attempt_id=analysis_attempt_id,
@@ -92,15 +77,9 @@ def parse_run_manifest(text: str) -> RunManifest:
             unit_system=report.literal("unitSystem", UNIT_SYSTEMS),
             monthly_counts=report.counts("monthlyCounts", MONTH_PATTERN),
         ),
-        input_file=InputFileFacts(
-            original_filename=input_file.string("originalFilename"),
-            byte_size=input_file.integer("byteSize", minimum=1),
-            checksum_sha256=input_file.matching("checksumSha256", SHA_256_PATTERN),
-        ),
     )
 
     report.done()
-    input_file.done()
     root.done()
     return manifest
 

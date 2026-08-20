@@ -6,7 +6,6 @@ import { CHILD_FAILURE_REASONS, COUNTS_BASES, UNIT_SYSTEMS } from './names.ts';
 export class ContractError extends Error {}
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
-const SHA_256_PATTERN = /^[0-9a-f]{64}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // `ai_cost_usd` is `numeric(10,4)`; float64 can't round-trip it, so it crosses as a string.
 const COST_USD_PATTERN = /^\d{1,6}\.\d{4}$/;
@@ -30,11 +29,6 @@ const RunManifestSchema = v.strictObject({
       v.record(v.pipe(v.string(), v.regex(MONTH_PATTERN)), wholeNumber),
       v.check((counts) => Object.keys(counts).length > 0, 'needs at least one month'),
     ),
-  }),
-  inputFile: v.strictObject({
-    originalFilename: nonEmptyString,
-    byteSize: v.pipe(v.number(), v.integer(), v.minValue(1)),
-    checksumSha256: v.pipe(v.string(), v.regex(SHA_256_PATTERN)),
   }),
 });
 
@@ -83,7 +77,6 @@ export type RunManifestInput = {
     unitSystem: UnitSystem;
     monthlyCounts: unknown;
   };
-  inputFile: { originalFilename: string; byteSize: number; checksumSha256: string };
 };
 
 export function buildRunManifest(input: RunManifestInput): RunManifest {

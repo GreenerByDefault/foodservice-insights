@@ -300,7 +300,6 @@ describe('loadAttemptInputs', () => {
       inputFile: {
         id: loaded.inputFile.id,
         storageKey: loaded.inputFile.storageKey,
-        originalFilename: loaded.inputFile.originalFilename,
         byteSize: loaded.inputFile.byteSize,
         checksumSha256: (loaded.inputFile.checksumSha256 as Buffer).toString('hex'),
       },
@@ -318,11 +317,6 @@ describe('loadAttemptInputs', () => {
       buildRunManifest({
         analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
         report: loaded.inputs.report,
-        inputFile: {
-          originalFilename: loaded.inputs.inputFile.originalFilename,
-          byteSize: loaded.inputs.inputFile.byteSize,
-          checksumSha256: loaded.inputs.inputFile.checksumSha256,
-        },
       }),
     ).not.toThrow();
   });

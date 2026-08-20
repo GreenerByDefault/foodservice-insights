@@ -54,8 +54,6 @@ def test_parses_the_run_manifest_the_parent_writes() -> None:
         "2025-02": 11360,
         "2025-03": 12890,
     }
-    assert manifest.input_file.original_filename == "Q1 exports (final).xlsx"
-    assert manifest.input_file.byte_size == 184320
 
 
 @pytest.mark.parametrize("name", INVALID_RUN_FIXTURE_NAMES)
@@ -169,17 +167,18 @@ def test_refuses_to_write_duplicate_chart_keys() -> None:
 
 
 def test_accepts_a_whole_number_written_as_a_float() -> None:
-    # JavaScript's JSON.parse cannot tell 184320.0 from 184320, so this side has to accept both.
+    # JavaScript's JSON.parse cannot tell 12040.0 from 12040, so this side has to accept both.
     manifest = json.loads(read("valid", "run.json"))
-    manifest["inputFile"]["byteSize"] = 184320.0
+    manifest["report"]["monthlyCounts"]["2025-01"] = 12040.0
 
-    assert parse_run_manifest(json.dumps(manifest)).input_file.byte_size == 184320
+    parsed = parse_run_manifest(json.dumps(manifest))
+    assert parsed.report.monthly_counts["2025-01"] == 12040
 
 
 def test_rejects_a_boolean_where_a_number_belongs() -> None:
     # `bool` subclasses `int`, so `True` would otherwise arrive as 1.
     manifest = json.loads(read("valid", "run.json"))
-    manifest["inputFile"]["byteSize"] = True
+    manifest["report"]["monthlyCounts"]["2025-01"] = True
 
     with pytest.raises(ContractError):
         parse_run_manifest(json.dumps(manifest))
