@@ -276,9 +276,10 @@ describe('the state transition', () => {
   });
 
   test('every threshold fires at exactly >=, not only strictly past it', () => {
-    // A lease renewed on this very tick, so the fencing threshold (hung/hard-ceiling are checked
-    // first anyway, but lease-expired has the shortest of the three default thresholds here)
-    // never preempts the boundary this sub-case is actually about.
+    // Keep the lease renewed on this very tick throughout. Lease-expired has the shortest
+    // of the three default thresholds, so an unrenewed lease would fire before the
+    // hung/hard-ceiling boundary each sub-case is actually testing (those two are checked
+    // first anyway, but there's no reason to rely on that ordering here).
     const freshLease = (now: number) => aReading({ renewalIssuedAt: now });
 
     expect(
