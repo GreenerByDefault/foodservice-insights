@@ -358,10 +358,6 @@ describe('sendPendingNotifications', () => {
     await expect(outcome).rejects.toThrow('not an EmailError');
   });
 
-  // `recordingEmailer`/`unreachableEmailer` are all-or-nothing, so a genuinely mixed sweep needs an
-  // emailer that fails for one recipient and not the other — a real transport, hand-written like
-  // `recordingEmailer`'s own, rather than a mock: it still throws the real `EmailError` a broken
-  // provider would.
   test("one row's send failure does not stop the rest of the sweep sending", async () => {
     const workerId = aWorkerId();
     const working = recordingEmailer();
@@ -370,6 +366,10 @@ describe('sendPendingNotifications', () => {
       const ok = await insertNotifiableAttempt(transaction, 'succeeded');
       const broken = await insertNotifiableAttempt(transaction, 'succeeded');
 
+      // `recordingEmailer`/`unreachableEmailer` are all-or-nothing, so a genuinely mixed sweep needs an
+      // emailer that fails for one recipient and not the other — a real transport, hand-written like
+      // `recordingEmailer`'s own, rather than a mock: it still throws the real `EmailError` a broken
+      // provider would.
       const emailer: Emailer = {
         ...working.service,
         transport: {
