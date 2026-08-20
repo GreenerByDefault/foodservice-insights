@@ -32,7 +32,7 @@ data and generate a PDF and an XLSX file.
 
 ### Errors during upload and processing
 
-Three distinct failures can reach the user, and each calls for a different answer:
+Four distinct failures can reach the user, and each calls for a different answer:
 
 - **Their file was rejected:** a clear error naming what to fix.
   - Catch errors as early as feasible — a client-side check gives better UX, but the server must
@@ -46,6 +46,9 @@ Three distinct failures can reach the user, and each calls for a different answe
   metadata.
   - The server allows only one retry at a time per report.
   - The error message makes clear this was not a problem with their file, mentions contacting GBD, and offers retrying when relevant.
+- **The analysis completed, but the report isn't usable:** the file has valid structure and data
+  types, but the library still can't make sense of it — e.g. product names that are valid text but
+  meaningless. Retrying will not help, so we say to contact GBD.
 
 ### Persistence
 
