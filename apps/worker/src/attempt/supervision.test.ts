@@ -207,35 +207,35 @@ describe('precedence', () => {
 });
 
 describe('the state transition', () => {
-  test('lastProgressAt is frozen when sequence repeats', () => {
-    const state = aState({ lastProgressAt: 0, lastSequence: 3 });
-    const reading = aReading({ progress: { kind: 'read', sequence: 3 } });
+  test('lastProgressAt is frozen when progressSequence repeats', () => {
+    const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
+    const reading = aReading({ progress: { kind: 'read', progressSequence: 3 } });
     const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(0);
-    expect(next.lastSequence).toBe(3);
+    expect(next.lastProgressSequence).toBe(3);
   });
 
-  test('lastProgressAt advances to now when sequence changes', () => {
-    const state = aState({ lastProgressAt: 0, lastSequence: 3 });
-    const reading = aReading({ progress: { kind: 'read', sequence: 4 } });
+  test('lastProgressAt advances to now when progressSequence changes', () => {
+    const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
+    const reading = aReading({ progress: { kind: 'read', progressSequence: 4 } });
     const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(500);
-    expect(next.lastSequence).toBe(4);
+    expect(next.lastProgressSequence).toBe(4);
   });
 
   test('lastProgressAt stays at startedAt while progress.json has never been written', () => {
     const state = aState({ startedAt: 10, lastProgressAt: 10 });
     const { state: next } = superviseAttempt(state, aReading(), THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(10);
-    expect(next.lastSequence).toBeUndefined();
+    expect(next.lastProgressSequence).toBeUndefined();
   });
 
-  test('lastProgressAt advances the first time sequence 0 is observed, not just on truthy sequences', () => {
+  test('lastProgressAt advances the first time progressSequence 0 is observed, not just on truthy sequences', () => {
     const state = aState({ startedAt: 10, lastProgressAt: 10 });
-    const reading = aReading({ progress: { kind: 'read', sequence: 0 } });
+    const reading = aReading({ progress: { kind: 'read', progressSequence: 0 } });
     const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(500);
-    expect(next.lastSequence).toBe(0);
+    expect(next.lastProgressSequence).toBe(0);
   });
 
   test('renewalIssuedAt advances only on a held lease, to the issue time', () => {

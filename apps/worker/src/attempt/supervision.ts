@@ -27,7 +27,7 @@ export type SupervisionThresholds = {
 export type SupervisionState = {
   startedAt: number;
   lastProgressAt: number;
-  lastSequence?: number;
+  lastProgressSequence?: number;
   /** Stamped when the renewal statement is *issued*, rather than when it returns. */
   renewalIssuedAt: number;
   exited: boolean;
@@ -35,8 +35,8 @@ export type SupervisionState = {
 };
 
 export type TickReading = {
-  /** No `sequence` means the child has not written `progress.json` yet — not an error. */
-  progress: { kind: 'read'; sequence?: number } | { kind: 'failed'; error: unknown };
+  /** No `progressSequence` means the child has not written `progress.json` yet — not an error. */
+  progress: { kind: 'read'; progressSequence?: number } | { kind: 'failed'; error: unknown };
   /** `skipped` when the progress read threw, per principle 5 in `failures.ts`. `failed` when the
    * statement itself threw. */
   lease: Lease | { kind: 'skipped' } | { kind: 'failed'; error: unknown };
@@ -60,9 +60,9 @@ export type SupervisionAction =
  *
  * The state transition happens first, and only two things ever move:
  *
- * - `lastProgressAt`/`lastSequence` advance only when `sequence` changes. `progress.json` carries
- *   no timestamp, so the parent keeps the clock reading itself; a file the child has not written
- *   yet leaves `lastProgressAt` at `startedAt`.
+ * - `lastProgressAt`/`lastProgressSequence` advance only when `progressSequence` changes.
+ *   `progress.json` carries no timestamp, so the parent keeps the clock reading itself; a file
+ *   the child has not written yet leaves `lastProgressAt` at `startedAt`.
  * - `renewalIssuedAt` advances only on `lease.kind === 'held'`, to `reading.renewalIssuedAt`.
  *   **Stamped at issue, never at return** — `lease_renewed_at` is set at commit, which is before
  *   the reply reaches us, so stamping on return would make the parent's measured lease age
@@ -110,13 +110,15 @@ function advanceState(
   reading: TickReading,
   now: number,
 ): SupervisionState {
-  const sequence = reading.progress.kind === 'read' ? reading.progress.sequence : undefined;
-  const progressed = sequence !== undefined && sequence !== state.lastSequence;
+  const progressSequence =
+    reading.progress.kind === 'read' ? reading.progress.progressSequence : undefined;
+  const progressed =
+    progressSequence !== undefined && progressSequence !== state.lastProgressSequence;
   const renewed = reading.lease.kind === 'held' && reading.renewalIssuedAt !== undefined;
 
   return {
     ...state,
-    lastSequence: progressed ? sequence : state.lastSequence,
+    lastProgressSequence: progressed ? progressSequence : state.lastProgressSequence,
     lastProgressAt: progressed ? now : state.lastProgressAt,
     renewalIssuedAt: renewed ? (reading.renewalIssuedAt as number) : state.renewalIssuedAt,
   };
