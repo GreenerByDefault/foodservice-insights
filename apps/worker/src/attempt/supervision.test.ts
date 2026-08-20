@@ -42,7 +42,7 @@ describe('the rule table', () => {
     test('drops a parked attempt rather than spending its resume budget', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading({ lease: { kind: 'lost' } });
-      expect(actionOf(state, reading, 0)).toEqual({ kind: 'drop' });
+      expect(actionOf(state, reading, 0)).toEqual({ kind: 'drop-parked-verdict' });
     });
 
     test('kills a child still alive', () => {
@@ -60,15 +60,14 @@ describe('the rule table', () => {
     test('converts to canceled when a cancellation was requested', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
-      expect(actionOf(state, reading, 0)).toEqual({ kind: 'convert', to: 'canceled' });
+      expect(actionOf(state, reading, 0)).toEqual({ kind: 'convert-parked-verdict-to-canceled' });
     });
 
     test('converts an upload past its retry budget to upload-expired', () => {
       const state = aState({ parked: { stage: 'upload', since: 0 } });
       const reading = aReading();
       expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs)).toEqual({
-        kind: 'convert',
-        to: 'upload-expired',
+        kind: 'convert-parked-verdict-to-upload-expired',
       });
     });
 
@@ -76,7 +75,7 @@ describe('the rule table', () => {
       const state = aState({ parked: { stage: 'upload', since: 0 } });
       const reading = aReading();
       expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
-        kind: 'resume',
+        kind: 'resume-parked-verdict',
       });
     });
 
@@ -84,7 +83,7 @@ describe('the rule table', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading();
       expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs * 100)).toEqual({
-        kind: 'resume',
+        kind: 'resume-parked-verdict',
       });
     });
   });
@@ -148,7 +147,7 @@ describe('precedence', () => {
   test('parked-lost outranks parked-cancel', () => {
     const state = aState({ parked: { stage: 'record', since: 0 } });
     const reading = aReading({ lease: { kind: 'lost' } });
-    expect(actionOf(state, reading, 0)).toEqual({ kind: 'drop' });
+    expect(actionOf(state, reading, 0)).toEqual({ kind: 'drop-parked-verdict' });
   });
 
   test('lost outranks contract-violation', () => {
@@ -315,11 +314,10 @@ describe('the state transition', () => {
 
     const parkedUpload = aState({ parked: { stage: 'upload', since: 0 } });
     expect(actionOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
-      kind: 'resume',
+      kind: 'resume-parked-verdict',
     });
     expect(actionOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs)).toEqual({
-      kind: 'convert',
-      to: 'upload-expired',
+      kind: 'convert-parked-verdict-to-upload-expired',
     });
   });
 });

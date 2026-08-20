@@ -47,13 +47,10 @@ export type TickReading = {
 export type SupervisionAction =
   | { kind: 'nothing' }
   | { kind: 'kill'; kill: Kill }
-  /** Deliver the parked verdict as it stands. */
-  | { kind: 'resume' }
-  /** Replace the parked verdict, then deliver it. `worker.ts` builds the replacement, because only
-   * it holds the `PendingVerdict` whose `lastError` the `upload-expired` branch reads. */
-  | { kind: 'convert'; to: 'canceled' | 'upload-expired' }
-  /** Stop renewing and forget the attempt; the reaper converges the row. */
-  | { kind: 'drop' };
+  | { kind: 'resume-parked-verdict' }
+  | { kind: 'convert-parked-verdict-to-canceled' }
+  | { kind: 'convert-parked-verdict-to-upload-expired' }
+  | { kind: 'drop-parked-verdict' };
 
 /** Decide what one attempt needs this tick: advance its state from what the tick read, then apply
  * the ordered rule table — first match wins.
@@ -135,20 +132,20 @@ function decideAction(
 
   // lost: we may no longer write to this attempt at all.
   if (reading.lease.kind === 'lost') {
-    if (state.parked !== undefined) return { kind: 'drop' };
+    if (state.parked !== undefined) return { kind: 'drop-parked-verdict' };
     return state.exited ? { kind: 'nothing' } : { kind: 'kill', kill: { reason: 'lost' } };
   }
 
   // parked: once parked, the verdict's fate no longer depends on the child underneath it.
   if (state.parked !== undefined) {
-    if (cancelRequestedAt !== null) return { kind: 'convert', to: 'canceled' };
+    if (cancelRequestedAt !== null) return { kind: 'convert-parked-verdict-to-canceled' };
     if (
       state.parked.stage === 'upload' &&
       now - state.parked.since >= thresholds.uploadRetryBudgetMs
     ) {
-      return { kind: 'convert', to: 'upload-expired' };
+      return { kind: 'convert-parked-verdict-to-upload-expired' };
     }
-    return { kind: 'resume' };
+    return { kind: 'resume-parked-verdict' };
   }
 
   // settling: an attempt that has already exited is left alone; its settle disposes of it.
