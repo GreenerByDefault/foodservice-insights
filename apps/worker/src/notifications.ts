@@ -1,11 +1,11 @@
 /** The result-notification sweep: send the email a terminal `analysis_attempt` owes, once.
  *
- * The list of emails owed is *derived* from `analysis_attempt`, not pushed into a queue. A row
- * owes an email iff it is terminal, not canceled, unsent, its report is not soft-deleted, it
- * still has a requester, and it has attempts left (`isOwedEmail` plus the two extra joins in
- * `owedCandidates`). A sweep claims rows with a short-lived claim, sends, and stamps
+ * The list of emails due is *derived* from `analysis_attempt`, not pushed into a queue. A row's
+ * email is due iff it is terminal, not canceled, unsent, its report is not soft-deleted, it
+ * still has a requester, and it has attempts left (`isEmailDue` plus the two extra joins in
+ * `dueCandidates`). A sweep claims rows with a short-lived claim, sends, and stamps
  * `notification_email_sent_at`. The claim gives mutual exclusion between workers; leaving a
- * failed send's claim in place gives retry backoff for free — `notification_attempts`, incremented
+ * failed send's claim in place gives retry backoff for free. `notification_attempts`, incremented
  * by the claim, both caps the spend and makes the claim expiry exponential.
  *
  * **Placeholder:** nothing calls `sendPendingNotifications` on an interval yet. That lands with
@@ -69,12 +69,12 @@ export type NotifiableAttempt = NotifiableAttemptCommon &
     | { status: 'succeeded'; pdfFileId: ResultFileId; xlsxFileId: ResultFileId }
   );
 
-/** Send the email every attempt this sweep claims is owed. Returns the ids of the attempts whose
+/** Send the email every attempt this sweep claims is due. Returns the ids of the attempts whose
  * email the provider accepted.
  *
- * **On a failed send: do nothing.** Leave the claim; its expiry is the backoff and the counter is
- * the budget. Log the error — the row records *that* it is stuck and how many tries are left, the
- * logs record why.
+ * **On a failed send: do nothing.** Leave the claim. Its expiry is the backoff and the counter is
+ * the budget. Log the error. The database row records that it is stuck and how many tries are left,
+ * whereas the logs record why.
  */
 export async function sendPendingNotifications(
   dependencies: NotifyDependencies,
@@ -82,7 +82,7 @@ export async function sendPendingNotifications(
 ): Promise<AnalysisAttemptId[]> {
   const { db, emailer, workerId } = dependencies;
 
-  const claimedIds = await claimOwedNotifications(db, workerId, options);
+  const claimedIds = await claimDueNotifications(db, workerId, options);
   if (claimedIds.length === 0) return [];
 
   const attempts = await loadNotifiableAttempts(db, claimedIds);
@@ -99,12 +99,12 @@ export async function sendPendingNotifications(
 /** Claim the attempts this sweep will email about, in one `UPDATE`.
  *
  * The eligibility predicate is a top-level qual of the `UPDATE` itself, and is repeated in the
- * candidate subquery, for exactly the `EvalPlanQual` reasons `reapExpiredAttempts` sets out at
- * length. Only the competing writer differs: there, it is a lease renewal; here, it is another
+ * candidate subquery, for exactly the `EvalPlanQual` reasons `reapExpiredAttempts` sets out.
+ * Only the competing writer differs: there, it is a lease renewal; here, it is another
  * worker's sweep claiming the same row, and the recheck is what makes the second one a zero-row
  * no-op instead of a second email.
  */
-async function claimOwedNotifications(
+async function claimDueNotifications(
   db: DatabaseExecutor,
   workerId: string,
   options: NotifyOptions,
@@ -116,35 +116,32 @@ async function claimOwedNotifications(
       notificationClaimedByWorkerId: workerId,
       notificationAttempts: sql<number>`notification_attempts + 1`,
     })
-    .where(isOwedEmail(options))
-    .where('id', 'in', owedCandidates(db, options))
+    .where(isEmailDue(options))
+    .where('id', 'in', dueCandidates(db, options))
     .returning('id')
     .execute();
 
   return claimed.map((row) => row.id);
 }
 
-/** A row owes an email iff it is terminal, not canceled, unsent, and has attempts left. Shared
- * between the candidate subquery and the `UPDATE`'s own `WHERE` (see `claimOwedNotifications`), so
- * the two copies cannot drift apart. It says nothing about the report or the requester —
- * `owedCandidates` adds those, since neither needs the same `EvalPlanQual` protection: the race
- * this predicate defends against is a competing *claim*, and a report deleted a millisecond after
- * the claim is benign.
- *
- * Raw SQL rather than the expression builder: the backoff needs `power()` against the row's own
- * `notification_attempts`, and this fragment has to compose into a plain `.where(...)` whether
- * it's evaluated against `analysis_attempt` alone (the `UPDATE`) or joined to `report` (the
- * candidate subquery). A `RawBuilder<boolean>` does that unchanged either way, where an
- * `ExpressionBuilder` typed for one join set does not.
+/** A row's email is due iff it is terminal, not canceled, unsent, and has attempts left. This
+ * function is shared between the candidate subquery and the `UPDATE`'s own `WHERE` (see
+ * `claimDueNotifications`), so the two copies cannot drift apart. It says nothing about the report
+ * or the requester — `dueCandidates` adds those, since neither needs the same `EvalPlanQual`
+ * protection: the race this predicate defends against is a competing *claim*, and a report deleted
+ * a millisecond after the claim is benign.
  */
-function isOwedEmail(
+function isEmailDue(
   options: Pick<NotifyOptions, 'retryBaseMs' | 'maxAttempts'>,
 ): RawBuilder<boolean> {
   const retryBaseSecs = options.retryBaseMs / 1000;
+  // Raw SQL rather than the expression builder: the backoff needs `power()` against the row's own
+  // `notification_attempts`, and this fragment has to compose into a plain `.where(...)` whether
+  // it's evaluated against `analysis_attempt` alone (the `UPDATE`) or joined to `report` (the
+  // candidate subquery). A `RawBuilder<boolean>` does that unchanged either way, where an
+  // `ExpressionBuilder` typed for one join set does not.
   return sql<boolean>`
     finished_at IS NOT NULL
-      -- Not decoration: analysis_attempt_canceled_is_not_notified would abort the whole
-      -- statement, and with it every other row in the sweep, if a canceled row were claimed.
       AND status <> 'canceled'
       AND notification_email_sent_at IS NULL
       AND notification_attempts < ${options.maxAttempts}
@@ -161,17 +158,17 @@ function isOwedEmail(
  * first — so a permanently unsendable row is claimed, then excluded for its (growing) backoff,
  * rather than starving the rest of the sweep. Same shape as `reaper.ts`'s `expiredCandidates`.
  *
- * The two `where`s below decide whether an email is *owed at all*, on top of `isOwedEmail`.
+ * The two `where`s below decide whether an email is *due at all*, on top of `isEmailDue`.
  */
-function owedCandidates(db: DatabaseExecutor, options: NotifyOptions) {
+function dueCandidates(db: DatabaseExecutor, options: NotifyOptions) {
   const candidates = db
     .selectFrom('analysisAttempt')
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
     .select('analysisAttempt.id')
-    .where(isOwedEmail(options))
+    .where(isEmailDue(options))
     // Stops an email going out about a report the user just deleted.
     .where('report.deletedAt', 'is', null)
-    // A report has no requester until someone asks for an analysis of it by email.
+    // Null means the requester's account was deleted, so there's no one to email.
     .where('analysisAttempt.requestedByUserId', 'is not', null)
     .orderBy('analysisAttempt.finishedAt')
     .limit(options.maxNotificationsPerSweep);
@@ -181,8 +178,11 @@ function owedCandidates(db: DatabaseExecutor, options: NotifyOptions) {
     : candidates.where('analysisAttempt.reportId', 'in', options.candidateReports);
 }
 
-/** One round trip for the sweep, not one per row — the pool's small connection cap (`client.ts`)
- * is shared with lease renewals whose latency bounds `k`.
+/** Loads the given attempts, joined with the report and requester data needed to notify on them.
+ *
+ * We take `ids` as a batch, rather than one attempt at a time, because the database connection pool
+ * is limited and shared with the reaper's lease renewals — a query per attempt would compete with
+ * those renewals for a connection.
  */
 async function loadNotifiableAttempts(
   db: DatabaseExecutor,
@@ -209,7 +209,7 @@ async function loadNotifiableAttempts(
     .where('analysisAttempt.id', 'in', ids)
     .execute();
 
-  // A `flatMap` rather than `map`, so a row this app itself wrote incorrectly is dropped.
+  // A `flatMap` rather than `map`, so a row the app itself wrote incorrectly is dropped.
   return rows.flatMap((row): NotifiableAttempt[] => {
     const common = {
       id: row.id,
@@ -227,13 +227,13 @@ async function loadNotifiableAttempts(
         {
           ...common,
           status: 'failed' as const,
-          // Guaranteed by `analysis_attempt_failure_reason_iff_failed`.
+          // Guaranteed by the database check `analysis_attempt_failure_reason_iff_failed`.
           failureReason: row.failureReason as AnalysisFailureReason,
         },
       ];
     }
 
-    // Guaranteed by `isOwedEmail`: only a `succeeded` or `failed` row is ever claimed, so
+    // Guaranteed by `isEmailDue`: only a `succeeded` or `failed` row is ever claimed, so
     // anything that isn't `failed` here is `succeeded`.
     if (row.pdfFileId === null || row.xlsxFileId === null) {
       console.error(`analysis attempt ${row.id}: succeeded but missing a result file`);
@@ -262,7 +262,9 @@ function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileK
     .limit(1);
 }
 
-/** Send one attempt's email. Never throws — a failed send is logged and the claim left in place
+/** Send one attempt's email.
+ *
+ * Does not throw on email errors. A failed send is logged and the claim left in place
  * for the sweep to retry later, rather than rejecting the `Promise.all` it runs inside. */
 async function sendOne(
   emailer: Emailer,
@@ -295,7 +297,7 @@ async function sendOne(
  * once the claim expires, and now also burns one of `maxAttempts` for nothing. The claim itself
  * needs no such retry: the next tick is the retry, per principle 2.
  *
- * `retryOnTransientDbError` must run on the pool handle, so under `withRollback` in tests this is
+ * `retryOnTransientDbError` must run on the pool handle. So, under `withRollback` in tests, this is
  * a path that must not be exercised — none of this file's tests simulate a transient failure here.
  */
 async function stampSent(

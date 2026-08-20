@@ -94,7 +94,7 @@ async function insertNotifiableAttempt(
 
 /** Simulate a prior claim: `notification_attempts`, `notification_claimed_at`, and
  * `notification_claimed_by_worker_id` all move together in one statement, exactly as
- * `claimOwedNotifications` itself does — `analysis_attempt_notification_attempts_iff_claimed`
+ * `claimDueNotifications` itself does — `analysis_attempt_notification_attempts_iff_claimed`
  * would reject any one of the three set alone. */
 async function markClaimed(
   transaction: Transaction<Database>,
