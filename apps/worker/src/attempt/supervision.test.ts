@@ -230,6 +230,14 @@ describe('the state transition', () => {
     expect(next.lastSequence).toBeUndefined();
   });
 
+  test('lastProgressAt advances the first time sequence 0 is observed, not just on truthy sequences', () => {
+    const state = aState({ startedAt: 10, lastProgressAt: 10 });
+    const reading = aReading({ progress: { kind: 'read', sequence: 0 } });
+    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    expect(next.lastProgressAt).toBe(500);
+    expect(next.lastSequence).toBe(0);
+  });
+
   test('renewalIssuedAt advances only on a held lease, to the issue time', () => {
     const state = aState({ renewalIssuedAt: 0 });
     const reading = aReading({
@@ -238,6 +246,16 @@ describe('the state transition', () => {
     });
     const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
     expect(next.renewalIssuedAt).toBe(500);
+  });
+
+  test('renewalIssuedAt is frozen when the lease is held but no renewal was issued this tick', () => {
+    const state = aState({ renewalIssuedAt: 0 });
+    const reading = aReading({
+      lease: { kind: 'held', cancelRequestedAt: null },
+      renewalIssuedAt: undefined,
+    });
+    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    expect(next.renewalIssuedAt).toBe(0);
   });
 
   test('renewalIssuedAt is frozen when the renewal was skipped', () => {
