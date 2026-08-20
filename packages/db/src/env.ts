@@ -14,7 +14,9 @@ import type { Database } from './schema.ts';
 
 loadLocalEnv();
 
-export const DATABASE: Kysely<Database> = initializeDatabase(requireEnv('DB_CONNECTION_STRING'));
+export const DATABASE: Kysely<Database> = initializeDatabase({
+  connectionString: requireEnv('DB_CONNECTION_STRING'),
+});
 
 /** Close `DATABASE`. Call this at the end of every script, or it will hang. */
 export async function shutdown(): Promise<void> {

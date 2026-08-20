@@ -101,7 +101,7 @@ export async function breakableDatabase(): Promise<Breakable<Kysely<Database>>> 
   const proxied = new URL(target);
   proxied.hostname = '127.0.0.1';
   proxied.port = String(proxy.port);
-  const service = initializeDatabase(proxied.toString());
+  const service = initializeDatabase({ connectionString: proxied.toString() });
 
   return {
     service,
