@@ -249,7 +249,6 @@ describe('claiming', () => {
             .where('reportId', 'in', candidateReports)
             .execute();
 
-          // The claim must skip the locked row rather than block on it — SKIP LOCKED, not a wait.
           expect(
             await claimNextAttempt(alpha.transaction, 'worker-a', { candidateReports }),
           ).toBeUndefined();
