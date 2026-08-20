@@ -4,6 +4,7 @@
  * call each of these and what to do with an in-flight record between calls.
  */
 
+import { createHash } from 'node:crypto';
 import type { DatabaseExecutor } from '@gbd/db';
 import {
   type AnalysisAttemptId,
@@ -67,6 +68,20 @@ export class MissingInputFileError extends Error {
   }
 }
 
+/** Thrown by `startAttempt` when the object the blob store served is not the object the upload
+ * recorded. Worth the hash of one CSV per run: a truncated read is still *valid* CSV, so nothing
+ * downstream would reject it — the attempt would spend its full AI budget and return a quietly
+ * under-counted report instead of failing.
+ */
+export class CorruptInputFileError extends Error {
+  constructor(
+    readonly storageKey: string,
+    problem: string,
+  ) {
+    super(`input file at ${storageKey} is not what was uploaded: ${problem}`);
+  }
+}
+
 // -------------------------------------------------------------
 // Starting an attempt
 // -------------------------------------------------------------
@@ -90,16 +105,12 @@ export async function startAttempt(
 
     const inputCsv = await getObject(dependencies.store, inputs.inputFile.storageKey);
     if (inputCsv === undefined) throw new MissingInputFileError(inputs.inputFile.storageKey);
+    requireInputFileIntact(inputs.inputFile, inputCsv);
     await writeInputCsv(runDirectory, inputCsv);
 
     const manifest = buildRunManifest({
       analysisAttemptId: attemptId,
       report: inputs.report,
-      inputFile: {
-        originalFilename: inputs.inputFile.originalFilename,
-        byteSize: inputs.inputFile.byteSize,
-        checksumSha256: inputs.inputFile.checksumSha256,
-      },
     });
     await writeManifest(runDirectory, manifest);
 
@@ -117,6 +128,29 @@ export async function startAttempt(
   } catch (error) {
     if (runDirectory !== undefined) await removeRunDirectory(runDirectory);
     throw error;
+  }
+}
+
+/** Checked here rather than in the child: the parent already holds the bytes and the expected
+ * digest, so a mismatch costs no child process and is classified as `infrastructure` — a
+ * transient blob store problem the user can retry — rather than as someone's bug.
+ */
+function requireInputFileIntact(
+  inputFile: { storageKey: string; byteSize: number; checksumSha256: string },
+  body: Uint8Array,
+): void {
+  if (body.byteLength !== inputFile.byteSize) {
+    throw new CorruptInputFileError(
+      inputFile.storageKey,
+      `expected ${inputFile.byteSize} bytes, got ${body.byteLength}`,
+    );
+  }
+  const digest = createHash('sha256').update(body).digest('hex');
+  if (digest !== inputFile.checksumSha256) {
+    throw new CorruptInputFileError(
+      inputFile.storageKey,
+      `expected sha256 ${inputFile.checksumSha256}, got ${digest}`,
+    );
   }
 }
 
@@ -407,7 +441,7 @@ export async function failClaimedAttempt(
   const failure =
     // Deterministic, so recorded directly instead of through `classifyAttemptFailure`, which
     // would otherwise see only an ordinary `Error` and have to guess at `unknown`.
-    error instanceof MissingInputFileError
+    error instanceof MissingInputFileError || error instanceof CorruptInputFileError
       ? { reason: 'infrastructure' as const, detail: error.message }
       : classifyAttemptFailure(error);
 

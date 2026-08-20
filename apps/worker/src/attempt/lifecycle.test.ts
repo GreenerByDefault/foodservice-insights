@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { DATABASE } from '@gbd/db/env';
 import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
-import { deletePrefix, getObject } from '@gbd/storage';
+import { deletePrefix, getObject, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
 import { describe, expect, test } from 'vitest';
@@ -24,6 +24,7 @@ import {
 } from '../testing/fake-child.ts';
 import {
   type AttemptDependencies,
+  CorruptInputFileError,
   failClaimedAttempt,
   MissingInputFileError,
   type PendingVerdict,
@@ -447,6 +448,44 @@ describe('failure rows', () => {
         status: 'failed',
         failureReason: 'infrastructure',
       });
+    });
+  });
+
+  test('an input object the blob store served corrupt fails the attempt as infrastructure', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      // Truncated, not garbage: still valid CSV, so only the checksum and size catch it.
+      await putObject(BLOB_STORE, fixture.inputCsvStorageKey, Buffer.from('filler'));
+      const attemptDependencies = dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]);
+
+      const start = startAttempt(attemptDependencies, fixture.attemptId);
+      await expect(start).rejects.toThrow(CorruptInputFileError);
+
+      await failClaimedAttempt(
+        attemptDependencies,
+        fixture.attemptId,
+        await start.catch((error) => error),
+      );
+
+      expect(await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'infrastructure',
+      });
+    });
+  });
+
+  test('an input object of the right size but the wrong bytes is still rejected', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const sameLength = Buffer.alloc(fixture.inputCsv.byteLength, 0x61);
+      await putObject(BLOB_STORE, fixture.inputCsvStorageKey, sameLength);
+
+      await expect(
+        startAttempt(
+          dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]),
+          fixture.attemptId,
+        ),
+      ).rejects.toThrow(CorruptInputFileError);
     });
   });
 
