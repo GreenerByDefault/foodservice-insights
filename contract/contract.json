@@ -4,7 +4,15 @@
     "module": "worker_child",
     "positionalArguments": ["runDirectory"],
     "workingDirectory": "work",
-    "secretEnvironmentVariables": ["GEMINI_API_KEY", "LLM_WHISPERER_API_KEY", "OPENAI_API_KEY"]
+    "environmentVariables": [
+      "PATH",
+      "HOME",
+      "LANG",
+      "TZ",
+      "GEMINI_API_KEY",
+      "LLM_WHISPERER_API_KEY",
+      "OPENAI_API_KEY"
+    ]
   },
   "runDirectory": {
     "manifest": "input/run.json",

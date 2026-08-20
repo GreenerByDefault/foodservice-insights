@@ -5,7 +5,11 @@ from typing import Final, Literal, get_args
 MODULE: Final = "worker_child"
 POSITIONAL_ARGUMENTS: Final = ("runDirectory",)
 WORKING_DIRECTORY: Final = "work"
-SECRET_ENVIRONMENT_VARIABLES: Final = (
+ENVIRONMENT_VARIABLES: Final = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "TZ",
     "GEMINI_API_KEY",
     "LLM_WHISPERER_API_KEY",
     "OPENAI_API_KEY",

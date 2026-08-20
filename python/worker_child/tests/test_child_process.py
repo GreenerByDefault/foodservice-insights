@@ -1,6 +1,12 @@
-"""Nothing here is mocked beyond `analyze()` — see `tests/support/child.py` for why: this is
-the only place `worker_child` is proven to behave correctly as a real OS process, under the
-exact conditions the parent imposes on it.
+"""Three files split `worker_child`'s test coverage:
+
+- `test_run.py` drives `run()` in-process with `stub_analysis` — no subprocess, cheaply
+  covering the success path and every failure reason `run()` maps.
+- `test_main.py` spawns the real entrypoint too, but only for paths that never reach
+  `analyze()` (usage errors, manifest problems) — proving argv and exit-code wiring.
+- This file also spawns the real entrypoint, past a stubbed `analyze()` — see
+  `tests/support/child.py` for why — into the parts only a real OS process has: signals, the
+  grandchild, atomic writes under polling.
 
 No test waits on wall-clock time to synchronize with the child. `wait_until` polls for a file
 the child itself writes at a known point (`progress.json`, `grandchild.pid`) — the same
@@ -31,10 +37,6 @@ VALID_ANALYSIS_ATTEMPT_ID = json.loads(VALID_MANIFEST)["analysisAttemptId"]
 
 CHILD_SCRIPT = Path(__file__).resolve().parent / "support" / "child.py"
 
-# Everything `spawnChild` grants the real child, mirrored exactly so a test invokes the process
-# the way production will.
-ALLOWED_ENVIRONMENT_VARIABLES = ("PATH", "HOME", "LANG", "TZ", *names.SECRET_ENVIRONMENT_VARIABLES)
-
 pytestmark = pytest.mark.slow
 
 
@@ -48,7 +50,7 @@ def run_directory(tmp_path: Path) -> Path:
 
 
 def _filtered_environment(source: Mapping[str, str]) -> dict[str, str]:
-    return {name: source[name] for name in ALLOWED_ENVIRONMENT_VARIABLES if name in source}
+    return {name: source[name] for name in names.ENVIRONMENT_VARIABLES if name in source}
 
 
 def spawn_child(

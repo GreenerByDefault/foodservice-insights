@@ -6,8 +6,17 @@ export const INVOCATION = {
   module: 'worker_child',
   positionalArguments: ['runDirectory'],
   workingDirectory: 'work',
-  // The only secrets the child may see.
-  secretEnvironmentVariables: ['GEMINI_API_KEY', 'LLM_WHISPERER_API_KEY', 'OPENAI_API_KEY'],
+  // Everything the child's environment is allowed to hold — inherited from the parent's own
+  // process (PATH, HOME, LANG, TZ) plus the secrets it needs (the API keys).
+  environmentVariables: [
+    'PATH',
+    'HOME',
+    'LANG',
+    'TZ',
+    'GEMINI_API_KEY',
+    'LLM_WHISPERER_API_KEY',
+    'OPENAI_API_KEY',
+  ],
 } as const;
 
 export const EXIT_CODES = {

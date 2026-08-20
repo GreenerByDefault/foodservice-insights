@@ -1,3 +1,7 @@
+"""See `test_child_process.py` for how the three test files here divide coverage. This one
+drives `run()` directly with `stub_analysis`: no subprocess, so it's where the success path
+and every failure reason `run()` maps get covered case by case."""
+
 import json
 from decimal import Decimal
 from pathlib import Path

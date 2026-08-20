@@ -1,3 +1,7 @@
+"""See `test_child_process.py` for how the three test files here divide coverage. This one
+spawns the real `python -m worker_child` entrypoint, but only for paths that never reach
+`analyze()` — argv handling and manifest problems the parent could produce."""
+
 import json
 import subprocess
 import sys
@@ -21,10 +25,6 @@ def run_directory(tmp_path: Path) -> Path:
     return tmp_path
 
 
-# Genuine end-to-end runs of the real `python -m worker_child` entrypoint, deliberately scoped
-# to paths that never reach `analyze()`. The success path and the library's own failure reasons
-# belong to `test_child_process.py`, which drives `worker_child.run.run()` directly with
-# `stub_analysis`.
 def spawn(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "worker_child", *args],
