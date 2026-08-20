@@ -1,1 +1,0 @@
-from gbd_foodservice_insights.testing import stub_analysis

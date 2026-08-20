@@ -21,9 +21,9 @@ def run_directory(tmp_path: Path) -> Path:
     return tmp_path
 
 
-# Genuine end-to-end runs of the real `python -m worker_child` entrypoint, on paths that
-# never reach the library — that stays valid today and forever, because the manifest is
-# read before `analyze()` is ever called.
+# Genuine end-to-end runs of the real `python -m worker_child` entrypoint. Every test
+# here fails before `analyze()` is called, so the library itself is never exercised.
+# A success-path test would need real `analyze()` dependencies.
 def spawn(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "worker_child", *args],
@@ -36,7 +36,7 @@ def spawn(*args: str) -> subprocess.CompletedProcess[str]:
 def test_no_arguments_is_a_usage_error() -> None:
     result = spawn()
 
-    assert result.returncode not in (names.EXIT_WROTE_RESULT, names.EXIT_WROTE_FAILURE)
+    assert result.returncode == names.EXIT_USAGE_ERROR
     assert "usage" in result.stderr.lower()
     assert result.stdout == ""
 
@@ -44,7 +44,7 @@ def test_no_arguments_is_a_usage_error() -> None:
 def test_two_arguments_is_a_usage_error(tmp_path: Path) -> None:
     result = spawn(str(tmp_path), str(tmp_path))
 
-    assert result.returncode not in (names.EXIT_WROTE_RESULT, names.EXIT_WROTE_FAILURE)
+    assert result.returncode == names.EXIT_USAGE_ERROR
     assert "usage" in result.stderr.lower()
 
 

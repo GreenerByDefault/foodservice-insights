@@ -13,6 +13,7 @@ export const INVOCATION = {
 export const EXIT_CODES = {
   wroteResult: 0,
   wroteFailure: 1,
+  usageError: 2,
 } as const;
 
 export const COUNTS_BASES = ['people', 'meals'] as const satisfies readonly CountsBasis[];

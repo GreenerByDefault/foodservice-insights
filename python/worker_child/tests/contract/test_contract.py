@@ -63,6 +63,7 @@ def test_agrees_on_the_exit_codes() -> None:
     assert CONTRACT["exitCodes"] == {
         "wroteResult": names.EXIT_WROTE_RESULT,
         "wroteFailure": names.EXIT_WROTE_FAILURE,
+        "usageError": names.EXIT_USAGE_ERROR,
     }
 
 

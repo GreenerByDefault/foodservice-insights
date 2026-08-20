@@ -13,6 +13,7 @@ SECRET_ENVIRONMENT_VARIABLES: Final = (
 
 EXIT_WROTE_RESULT: Final = 0
 EXIT_WROTE_FAILURE: Final = 1
+EXIT_USAGE_ERROR: Final = 2
 
 CountsBasis = Literal["people", "meals"]
 UnitSystem = Literal["lb", "kg"]

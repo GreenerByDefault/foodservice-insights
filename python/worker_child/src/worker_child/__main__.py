@@ -2,6 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
+from worker_child.contract import names
 from worker_child.run import run
 
 USAGE = "usage: python -m worker_child <runDirectory>"
@@ -15,7 +16,7 @@ def main(argv: list[str]) -> int:
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
     if len(argv) != 2:
         print(USAGE, file=sys.stderr)
-        return 2
+        return names.EXIT_USAGE_ERROR
     return run(Path(argv[1]))
 
 
