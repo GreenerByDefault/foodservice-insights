@@ -30,17 +30,24 @@ select = [
     "RUF", # ruff-specific
 ]
 
-# Enforce that nothing may import gbd_foodservice_insights_lab.
+# Enforce import bans to keep clear boundaries.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"gbd_foodservice_insights_lab".msg = "Product code must not import the lab. See .claude/rules/python.md."
+"gbd_foodservice_insights_lab".msg = "Product code must not import the lab."
+"gbd_foodservice_insights.testing".msg = "Product code must not import the tests."
 
 [tool.ruff.lint.per-file-ignores]
 "python/gbd_foodservice_insights_lab/**" = ["TID251"]
+"python/gbd_foodservice_insights/tests/**" = ["TID251"]
+"python/worker_child/tests/**" = ["TID251"]
 
 [tool.pytest.ini_options]
 minversion = "9"
 addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
 testpaths = ["python"]
+# `worker_child`'s tests import shared helpers from `tests/support/`, and
+# `--import-mode=importlib` puts nothing on `sys.path` by itself. This makes `support`
+# importable in every test session, so no other test directory may claim that name.
+pythonpath = ["python/worker_child/tests"]
 markers = [
     "slow: takes long enough that you would not want it in the default run",
     "llm: calls a real LLM API",

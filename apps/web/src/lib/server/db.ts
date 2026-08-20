@@ -20,7 +20,7 @@ let handle: Kysely<Database> | undefined;
  * `DatabaseExecutor` parameter, so tests can hand them a rolled-back transaction.
  */
 export function database(): Kysely<Database> {
-  handle ??= initializeDatabase(requireVar('DB_CONNECTION_STRING'));
+  handle ??= initializeDatabase({ connectionString: requireVar('DB_CONNECTION_STRING') });
   return handle;
 }
 

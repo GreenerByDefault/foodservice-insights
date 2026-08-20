@@ -19,8 +19,8 @@
  * else reads at all. Drop any field still unread when that lands.
  */
 
-import { DATABASE_LIMITS } from '@gbd/db';
-import { MAX_SEND_DURATION_MS } from '@gbd/email';
+import { DEFAULT_LIMITS } from '@gbd/db';
+import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
 
 export type WorkerConfig = {
@@ -181,7 +181,7 @@ function definedOverrides(overrides: WorkerOverrides): WorkerOverrides {
  * second pool, and a smaller expiry is all it buys.
  */
 const MAX_RENEWAL_ROUND_TRIP_MS =
-  DATABASE_LIMITS.connectionTimeoutMs + DATABASE_LIMITS.statementTimeoutMs;
+  DEFAULT_LIMITS.connectionTimeoutMs + DEFAULT_LIMITS.statementTimeoutMs;
 
 /** Connections one in-flight attempt can occupy at once: this tick's lease renewal, and a settle's
  * terminal write, which deliberately runs outside the tick. */
@@ -286,9 +286,9 @@ function workerConfigViolations(config: WorkerConfig): string[] {
 
   check(
     CONNECTIONS_PER_ATTEMPT * config.maxConcurrentAttempts + CONNECTIONS_FOR_LOOPS_AND_SWEEPS <=
-      DATABASE_LIMITS.maxConnections,
+      DEFAULT_LIMITS.maxConnections,
     `maxConcurrentAttempts must keep the worker's concurrent database work inside the pool's ` +
-      `${DATABASE_LIMITS.maxConnections} connections — ${CONNECTIONS_PER_ATTEMPT} per attempt plus ` +
+      `${DEFAULT_LIMITS.maxConnections} connections — ${CONNECTIONS_PER_ATTEMPT} per attempt plus ` +
       `${CONNECTIONS_FOR_LOOPS_AND_SWEEPS} for the loops and sweeps. Beyond that a lease renewal ` +
       'waits for a connection, which inflates the very round trip leaseExpiresAfterMs is sized ' +
       'against, so raising this lever means raising the pool',
@@ -301,9 +301,9 @@ function workerConfigViolations(config: WorkerConfig): string[] {
   );
 
   check(
-    config.notificationRetryBaseMs > MAX_SEND_DURATION_MS,
-    `notificationRetryBaseMs must exceed ${MAX_SEND_DURATION_MS}ms, the longest a send may run ` +
-      "(@gbd/email's MAX_SEND_DURATION_MS), or a claim expires while its own send is still in " +
+    config.notificationRetryBaseMs > SEND_TIMEOUT_MS,
+    `notificationRetryBaseMs must exceed ${SEND_TIMEOUT_MS}ms, the longest a send may run ` +
+      "(@gbd/email's SEND_TIMEOUT_MS), or a claim expires while its own send is still in " +
       'flight and two workers have the same email in the air',
   );
 

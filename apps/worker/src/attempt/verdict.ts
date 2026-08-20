@@ -6,6 +6,7 @@
 import type { AnalysisFailureReason } from '@gbd/db';
 import { type ChildOutcome, STDERR_TAIL_BYTES } from '../child/spawn.ts';
 import { type ChildFailure, type ChildResult, ContractError } from '../contract/messages.ts';
+import { EXIT_CODES } from '../contract/names.ts';
 
 /** Why the parent ended the child. */
 export type Kill =
@@ -97,18 +98,25 @@ function classify(ending: ChildEnding): Verdict {
       : { kind: 'failed', reason: 'infrastructure', detail: describe(read.error) };
   }
 
-  if (outcome.kind === 'exited' && outcome.exitCode === 0) {
+  if (outcome.kind === 'exited' && outcome.exitCode === EXIT_CODES.wroteResult) {
     const detail =
       read.kind === 'result' && read.missingResultFiles.length > 0
         ? `result.json declared file(s) never written: ${read.missingResultFiles.join(', ')}`
         : 'exited 0 without writing result.json';
     return { kind: 'failed', reason: 'contract_violation', detail };
   }
-  if (outcome.kind === 'exited' && outcome.exitCode === 1) {
+  if (outcome.kind === 'exited' && outcome.exitCode === EXIT_CODES.wroteFailure) {
     return {
       kind: 'failed',
       reason: 'contract_violation',
       detail: 'exited 1 without writing failure.json',
+    };
+  }
+  if (outcome.kind === 'exited' && outcome.exitCode === EXIT_CODES.usageError) {
+    return {
+      kind: 'failed',
+      reason: 'contract_violation',
+      detail: crashDetail('invoked with the wrong arguments', outcome.stderrTail),
     };
   }
 

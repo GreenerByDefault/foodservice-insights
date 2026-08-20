@@ -26,20 +26,13 @@ export type RenderedEmail = {
   readonly html: string;
 };
 
-/** The longest a transport may let one `send` run before it gives up. Part of the
- * `EmailTransport` contract rather than any one transport's detail: a caller that retries a send
- * has to know when the previous one can no longer be in flight, and it cannot ask the transport.
- *
- * Read by [`apps/worker/src/config.ts`](../../../apps/worker/src/config.ts), whose notification
- * retry delay has to exceed it — otherwise a retry goes out while the send it is retrying is still
- * open, and two workers have the same email in the air.
- */
-export const MAX_SEND_DURATION_MS = 10_000;
+/** How long a production transport's `send` may run before it gives up. */
+export const SEND_TIMEOUT_MS = 10_000;
 
 export type EmailTransport = {
   /** For log lines, and for the error a stub transport raises when asked to send. */
   readonly name: string;
-  /** Must reject rather than run longer than `MAX_SEND_DURATION_MS`. */
+  /** Implementors of this interface must timeout within `SEND_TIMEOUT_MS`. */
   send(email: RenderedEmail): Promise<void>;
 };
 

@@ -5,10 +5,13 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
-from worker_child.contract import (
-    CHART_KEY_PATTERN,
+from worker_child.contract import ContractError
+from worker_child.contract.fields import parse_object
+from worker_child.contract.layout import MANIFEST, require_chart_key
+from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
     UNIT_SYSTEMS,
@@ -16,7 +19,6 @@ from worker_child.contract import (
     CountsBasis,
     UnitSystem,
 )
-from worker_child.parse import ContractError, parse_object
 
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 SHA_256_PATTERN = re.compile(r"[0-9a-f]{64}")
@@ -28,7 +30,7 @@ UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 MAXIMUM_COST_USD = Decimal("1000000")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ReportInputs:
     name: str | None
     site_name: str | None
@@ -37,21 +39,26 @@ class ReportInputs:
     monthly_counts: Mapping[str, int]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class InputFileFacts:
+    """What the parent says it put in `input.csv`. Parsed but never used: `AnalysisRequest` has
+    no slot for these, and nothing verifies the CSV against them. They are validated anyway so
+    that a manifest the parent got wrong fails at startup rather than midway through a paid run.
+    """
+
     original_filename: str
     byte_size: int
     checksum_sha256: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RunManifest:
     analysis_attempt_id: str
     report: ReportInputs
     input_file: InputFileFacts
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class AiUsage:
     model: str
     input_tokens: int
@@ -59,6 +66,15 @@ class AiUsage:
     # `ai_cost_usd` is `numeric(10,4)`; a float would lose precision crossing to JSON.
     cost_usd: Decimal
     metadata: Mapping[str, Any]
+
+
+def read_run_manifest(run_directory: Path) -> RunManifest:
+    manifest_path = run_directory / MANIFEST
+    try:
+        text = manifest_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ContractError(f"{MANIFEST}: {error}") from error
+    return parse_run_manifest(text)
 
 
 def parse_run_manifest(text: str) -> RunManifest:
@@ -104,10 +120,7 @@ def result_payload(
 ) -> dict[str, Any]:
     _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
     for chart_key in charts:
-        _require(
-            CHART_KEY_PATTERN.fullmatch(chart_key),
-            f"chart key '{chart_key}' is not snake_case",
-        )
+        require_chart_key(chart_key)
     _require(len(set(charts)) == len(charts), "chart keys must be unique")
     _require(ai.input_tokens >= 0 and ai.output_tokens >= 0, "token counts must not be negative")
     _require(0 <= ai.cost_usd < MAXIMUM_COST_USD, f"cost must be within [0, {MAXIMUM_COST_USD})")

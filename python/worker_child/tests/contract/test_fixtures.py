@@ -1,48 +1,34 @@
-"""The child's half of the golden fixtures in `contract/fixtures/`."""
-
 import json
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 import pytest
-from worker_child.messages import (
+from support.contract_fixtures import (
+    INVALID_RUN_FIXTURE_NAMES,
+    VALID_ANALYSIS_ATTEMPT_ID,
+    load,
+    names_in,
+    read,
+)
+from worker_child.contract import ContractError, layout
+from worker_child.contract.messages import (
     AiUsage,
     failure_payload,
     parse_run_manifest,
     progress_payload,
+    read_run_manifest,
     result_payload,
 )
-from worker_child.parse import ContractError
-
-FIXTURES = Path(__file__).resolve().parents[3] / "contract" / "fixtures"
 
 DOCUMENTS = frozenset({"run", "progress", "result", "failure"})
-
-# The child only reads `run.json`; it writes the rest.
-PARSED_BY_THE_CHILD = frozenset({"run"})
-
-
-def fixture_names(directory: str) -> list[str]:
-    return sorted(path.name for path in (FIXTURES / directory).glob("*.json"))
-
-
-def read(directory: str, name: str) -> str:
-    return (FIXTURES / directory / name).read_text(encoding="utf-8")
-
-
-def load(directory: str, name: str) -> Any:
-    return json.loads(read(directory, name))
 
 
 def document_of(file_name: str) -> str:
     return file_name.split(".")[0]
 
 
-VALID = fixture_names("valid")
-INVALID = fixture_names("invalid")
-
-REJECTED_HERE = [name for name in INVALID if document_of(name) in PARSED_BY_THE_CHILD]
+VALID = names_in("valid")
+INVALID = names_in("invalid")
 
 
 def test_names_every_fixture_after_a_document_both_stacks_know() -> None:
@@ -52,13 +38,13 @@ def test_names_every_fixture_after_a_document_both_stacks_know() -> None:
 
 def test_covers_every_document() -> None:
     assert VALID == ["failure.json", "progress.json", "result.json", "run.json"]
-    assert REJECTED_HERE != []
+    assert INVALID_RUN_FIXTURE_NAMES != []
 
 
 def test_parses_the_run_manifest_the_parent_writes() -> None:
     manifest = parse_run_manifest(read("valid", "run.json"))
 
-    assert manifest.analysis_attempt_id == "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+    assert manifest.analysis_attempt_id == VALID_ANALYSIS_ATTEMPT_ID
     assert manifest.report.name == "Q1 2026 dining"
     assert manifest.report.site_name is None
     assert manifest.report.counts_basis == "meals"
@@ -72,7 +58,7 @@ def test_parses_the_run_manifest_the_parent_writes() -> None:
     assert manifest.input_file.byte_size == 184320
 
 
-@pytest.mark.parametrize("name", REJECTED_HERE)
+@pytest.mark.parametrize("name", INVALID_RUN_FIXTURE_NAMES)
 def test_rejects_an_invalid_fixture(name: str) -> None:
     with pytest.raises(ContractError):
         parse_run_manifest(read("invalid", name))
@@ -81,6 +67,21 @@ def test_rejects_an_invalid_fixture(name: str) -> None:
 def test_rejects_bytes_that_are_not_json_at_all() -> None:
     with pytest.raises(ContractError):
         parse_run_manifest('{"analysisAttemptId":')
+
+
+def test_reads_the_manifest_from_where_the_parent_writes_it(tmp_path: Path) -> None:
+    (tmp_path / "input").mkdir()
+    (tmp_path / layout.MANIFEST).write_text(read("valid", "run.json"), encoding="utf-8")
+
+    # `parse_run_manifest` already covers the document's fields exhaustively above; this only
+    # checks that `read_run_manifest` finds the file and forwards it there.
+    manifest = read_run_manifest(tmp_path)
+    assert manifest.analysis_attempt_id == VALID_ANALYSIS_ATTEMPT_ID
+
+
+def test_raises_a_contract_error_when_the_manifest_file_is_missing(tmp_path: Path) -> None:
+    with pytest.raises(ContractError):
+        read_run_manifest(tmp_path)
 
 
 # ---------------------------------------------------------------------------------------
@@ -94,7 +95,7 @@ def test_progress_payload_is_the_fixture() -> None:
 
 def test_result_payload_is_the_fixture() -> None:
     payload = result_payload(
-        analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
         charts=["emissions_by_month", "emissions_by_category", "top_products"],
         ai=AiUsage(
             model="gemini-2.5-pro",
@@ -133,7 +134,7 @@ def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
     # above 1,000,000 would be rejected as a contract_violation after a full, paid-for run.
     with pytest.raises(ContractError):
         result_payload(
-            analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
             charts=[],
             ai=AiUsage(
                 model="gemini-2.5-pro",
@@ -149,7 +150,7 @@ def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
 def test_refuses_to_write_duplicate_chart_keys() -> None:
     with pytest.raises(ContractError):
         result_payload(
-            analysis_attempt_id="0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
             charts=["emissions_by_month", "emissions_by_month"],
             ai=AiUsage(
                 model="gemini-2.5-pro",

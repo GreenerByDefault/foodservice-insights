@@ -1,4 +1,11 @@
-export { DATABASE_LIMITS, initializeDatabase, shutdownDatabase } from './client.ts';
+export {
+  type DatabaseConfig,
+  type DatabaseLimits,
+  DEFAULT_LIMITS,
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  initializeDatabase,
+  shutdownDatabase,
+} from './client.ts';
 export { isPermanentDatabaseError, isTransientDatabaseError } from './errors.ts';
 export { migrateToLatest } from './migrate.ts';
 export {
