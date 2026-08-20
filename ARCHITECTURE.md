@@ -225,8 +225,15 @@ child?", and a parent whose clock is skewed poisons every other worker's livenes
 
 ### Canceling
 
-When a user cancels, the web server marks the analysis attempt canceled in the database. The
-parent detects that and kills the child process. No email is sent.
+Canceling is two steps, not one. The web server soft-deletes the report and records a
+*request* — `cancel_requested_at` on any attempt still `pending` or `processing` — but never
+writes `analysis_attempt.status` itself: after insert, only a worker does. A worker turns the
+request into the terminal `canceled`: the owning parent's next lease renewal sees the request and
+kills its child, or, for an attempt nobody has claimed yet, the queue's cancel sweep converges the
+row directly. No email is sent — enforced by the `analysis_attempt_canceled_is_not_notified`
+constraint and the notification sweep's own predicate, not by convention. A finished attempt
+cannot be canceled at all: the terminal-immutability trigger does not exempt
+`cancel_requested_at`.
 
 ### Concurrency and scaling
 

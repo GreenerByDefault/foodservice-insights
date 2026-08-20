@@ -645,6 +645,10 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_cancel_requested_at_after_created_at',
       sql`cancel_requested_at IS NULL OR cancel_requested_at >= created_at`,
     )
+    .addCheckConstraint(
+      'analysis_attempt_canceled_requires_request',
+      sql`status <> 'canceled' OR cancel_requested_at IS NOT NULL`,
+    )
     .addCheckConstraint('analysis_attempt_ai_input_tokens_non_negative', sql`ai_input_tokens >= 0`)
     .addCheckConstraint(
       'analysis_attempt_ai_output_tokens_non_negative',

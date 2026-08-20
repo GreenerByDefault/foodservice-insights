@@ -165,6 +165,10 @@ export async function insertAnalysisAttempt(
     /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
      * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
     finishedAt?: Date;
+    /** Defaults to `new Date()` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
+     * forbids a canceled row with no request. Set explicitly for a `pending`/`processing` row a test
+     * wants to look like a cancel request has already landed on. */
+    cancelRequestedAt?: Date;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -172,6 +176,7 @@ export async function insertAnalysisAttempt(
 
   const isProcessing = status === 'processing';
   const isTerminal = status === 'succeeded' || status === 'failed' || status === 'canceled';
+  const isCanceled = status === 'canceled';
 
   return await database
     .insertInto('analysisAttempt')
@@ -194,6 +199,11 @@ export async function insertAnalysisAttempt(
             failureReason: status === 'failed' ? 'child_crashed' : null,
           }
         : {}),
+      ...(overrides.cancelRequestedAt !== undefined
+        ? { cancelRequestedAt: overrides.cancelRequestedAt }
+        : isCanceled
+          ? { cancelRequestedAt: new Date() }
+          : {}),
     })
     .returningAll()
     .executeTakeFirstOrThrow();

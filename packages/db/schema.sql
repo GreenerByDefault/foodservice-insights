@@ -473,6 +473,7 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     CONSTRAINT "analysis_attempt_attempt_number_range" CHECK ((("attempt_number" >= 1) AND ("attempt_number" <= 5))),
     CONSTRAINT "analysis_attempt_cancel_requested_at_after_created_at" CHECK ((("cancel_requested_at" IS NULL) OR ("cancel_requested_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_canceled_is_not_notified" CHECK ((("notification_claimed_at" IS NULL) OR ("status" <> 'canceled'::"public"."analysis_attempt_status"))),
+    CONSTRAINT "analysis_attempt_canceled_requires_request" CHECK ((("status" <> 'canceled'::"public"."analysis_attempt_status") OR ("cancel_requested_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_claimed_at_after_created_at" CHECK ((("claimed_at" IS NULL) OR ("claimed_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_failure_reason_iff_failed" CHECK ((("status" = 'failed'::"public"."analysis_attempt_status") = ("failure_reason" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_finished_at_after_created_at" CHECK ((("finished_at" IS NULL) OR ("finished_at" >= "created_at"))),
