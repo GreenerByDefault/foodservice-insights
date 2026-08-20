@@ -24,7 +24,7 @@ import type {
 } from '@gbd/db';
 import { type Emailer, type EmailMessage, isEmailError, sendEmail } from '@gbd/email';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
-import { retryOnTransientDbError } from './failures.ts';
+import { retryOnTransientDbError } from '../failures.ts';
 
 export type NotifyOptions = {
   /** The first retry's delay. Each further attempt doubles it, so a row's claim also holds
@@ -293,7 +293,7 @@ async function sendOne(
  * worker's send won the race first — is a zero-row no-op, not a duplicate write.
  *
  * Wrapped in `retryOnTransientDbError`: this is the one statement in the path meeting
- * [`failures.ts`](./failures.ts) principle 4 — losing it to a blip guarantees a duplicate email
+ * [`failures.ts`](../failures.ts) principle 4 — losing it to a blip guarantees a duplicate email
  * once the claim expires, and now also burns one of `maxAttempts` for nothing. The claim itself
  * needs no such retry: the next tick is the retry, per principle 2.
  *

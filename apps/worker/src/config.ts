@@ -21,7 +21,7 @@
  * - `H ≥ T + S` — otherwise the ceiling always fires first and the `hung` verdict is dead code.
  */
 
-import type { ChildCommand } from './child.ts';
+import type { ChildCommand } from './child/spawn.ts';
 
 export type WorkerConfig = {
   /** Written to `analysis_attempt.worker_id`, so it has to be unique per running process. */

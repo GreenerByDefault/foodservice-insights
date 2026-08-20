@@ -114,7 +114,7 @@ database.
 The queue is Postgres. A worker claims the oldest pending attempt with a single guarded
 `UPDATE ... FOR UPDATE SKIP LOCKED`, giving the semantics we need: roughly FIFO,
 concurrency-safe, and atomic. The statement lives in
-[`claimNextAttempt`](apps/worker/src/queue.ts), which this section is the contract for.
+[`claimNextAttempt`](apps/worker/src/attempt/queue.ts), which this section is the contract for.
 
 - *Rejected: a dedicated queue service such as Celery or Redis.* Postgres keeps the
   infrastructure smaller by having fewer components. The risk is that Postgres is not built for
@@ -200,7 +200,7 @@ notice it is itself hung:
    the longest valid API call including backoff — see [`config.ts`](apps/worker/src/config.ts).
 2. **The parent hard-kills** a child after `hardCeilingMs` no matter what, as a safety net for
    hung attempts — see [`config.ts`](apps/worker/src/config.ts).
-3. **Other workers reap**, in [`reaper.ts`](apps/worker/src/reaper.ts). The reaper exists for the
+3. **Other workers reap**, in [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The reaper exists for the
    *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
    namespace and takes every child with it, and the PaaS restarts the container — there is no
    orphan class of process to worry about. What can happen is a container dying (e.g. OOM) and

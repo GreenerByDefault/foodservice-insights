@@ -2,7 +2,7 @@
  *
  * Every write here obeys the two rules the state machine imposes on any code that touches
  * `analysis_attempt.status`, documented in
- * [`@gbd/db`'s README](../../../packages/db/README.md#the-analysis-attempt-state-machine):
+ * [`@gbd/db`'s README](../../../../packages/db/README.md#the-analysis-attempt-state-machine):
  *
  * 1. **A transition to a terminal status is one `UPDATE`.** Checks cannot be deferred, so
  *    `status`, `finished_at`, `failure_reason` and the `ai_*` columns are set together or the
@@ -30,7 +30,7 @@ import type {
 import { withTransaction } from '@gbd/db';
 import type { StoredFile } from '@gbd/storage';
 import { sql, type Updateable } from 'kysely';
-import type { ChildResult, RunManifestInput } from './contract/messages.ts';
+import type { ChildResult, RunManifestInput } from '../contract/messages.ts';
 
 // -----------------------------------------------------
 // Claiming

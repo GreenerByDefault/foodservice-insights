@@ -2,8 +2,9 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { AnalysisAttemptId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
-import { DIRECTORIES_CREATED_BY_PARENT, resultFilePath, runPath } from './contract/layout.ts';
-import { buildRunManifest, ContractError, parseRunManifest } from './contract/messages.ts';
+import { DIRECTORIES_CREATED_BY_PARENT, resultFilePath, runPath } from '../contract/layout.ts';
+import { buildRunManifest, ContractError, parseRunManifest } from '../contract/messages.ts';
+import { withTemporaryRunRoot } from '../testing/run-root.ts';
 import {
   createRunDirectory,
   readFailure,
@@ -14,7 +15,6 @@ import {
   writeInputCsv,
   writeManifest,
 } from './run-directory.ts';
-import { withTemporaryRunRoot } from './testing/run-root.ts';
 
 const ATTEMPT_ID = '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f' as AnalysisAttemptId;
 

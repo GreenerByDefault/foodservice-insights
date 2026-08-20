@@ -1,6 +1,6 @@
 /** Two sweeps, each converging a row nothing else will finish: `reapExpiredAttempts` for an
  * expired `processing` attempt (the reaping defense from
- * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping)), and
+ * [`ARCHITECTURE.md`](../../../../ARCHITECTURE.md#progress-leases-and-reaping)), and
  * `cancelRequestedPendingAttempts` for a `pending` attempt somebody has asked to cancel. */
 
 import type {
@@ -12,7 +12,7 @@ import type {
   ReportId,
 } from '@gbd/db';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
-import { msAgo } from './sql.ts';
+import { msAgo } from '../sql.ts';
 
 export type ReapOptions = {
   /** How long the lease can go unrenewed before this reaper treats the owning parent as gone.

@@ -1,4 +1,4 @@
-/** Nothing here is mocked — see [`testing/fake-child.ts`](./testing/fake-child.ts) for why.
+/** Nothing here is mocked — see [`testing/fake-child.ts`](../testing/fake-child.ts) for why.
  *
  * No test waits on wall-clock time either. A child reaches a known point by creating a file, never
  * by sleeping, and the kill-escalation tests are deterministic by construction: a child that
@@ -11,18 +11,18 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AnalysisAttemptId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
-import { type RunningChild, type SpawnChildOptions, spawnChild } from './child.ts';
-import { runPath } from './contract/layout.ts';
-import { INVOCATION } from './contract/names.ts';
-import { createRunDirectory, readProgress } from './run-directory.ts';
+import { runPath } from '../contract/layout.ts';
+import { INVOCATION } from '../contract/names.ts';
 import {
   type FakeChildStep,
   fakeChildCommand,
   fakeChildWorkDirectoryFilePath,
   releaseFakeChild,
-} from './testing/fake-child.ts';
-import { withTemporaryRunRoot } from './testing/run-root.ts';
-import { waitUntil } from './testing/waitUntil.ts';
+} from '../testing/fake-child.ts';
+import { withTemporaryRunRoot } from '../testing/run-root.ts';
+import { waitUntil } from '../testing/wait-until.ts';
+import { createRunDirectory, readProgress } from './run-directory.ts';
+import { type RunningChild, type SpawnChildOptions, spawnChild } from './spawn.ts';
 
 const ATTEMPT_ID = '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f' as AnalysisAttemptId;
 

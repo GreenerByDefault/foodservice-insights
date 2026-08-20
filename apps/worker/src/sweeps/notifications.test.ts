@@ -33,14 +33,14 @@ import {
 } from '@gbd/email/testing';
 import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { msAgo } from '../sql.ts';
+import { aWorkerId } from '../testing/attempt-helpers.ts';
 import {
   emailForNotifiableAttempt,
   type NotifiableAttempt,
   type NotifyOptions,
   sendPendingNotifications,
 } from './notifications.ts';
-import { msAgo } from './sql.ts';
-import { aWorkerId } from './testing/attempt-helpers.ts';
 
 const RETRY_BASE_MS = 5 * 60_000;
 const MAX_ATTEMPTS = 5;

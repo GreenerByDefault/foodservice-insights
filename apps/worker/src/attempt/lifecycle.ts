@@ -1,6 +1,6 @@
 /** One attempt, start to finish: load its inputs, spawn its child, read how the child ended, and
  * write the verdict. [`verdict.ts`](./verdict.ts) is the pure decision this file feeds and acts
- * on; [`worker.ts`](./worker.ts) (landing with the supervision loop) is what decides *when* to
+ * on; [`worker.ts`](../worker.ts) (landing with the supervision loop) is what decides *when* to
  * call each of these and what to do with an in-flight record between calls.
  */
 
@@ -13,17 +13,6 @@ import {
   type ResultFileKind,
 } from '@gbd/db';
 import { type BlobStore, getObject, isBlobStoreError, putResultFile } from '@gbd/storage';
-import { type ChildCommand, type ChildOutcome, type RunningChild, spawnChild } from './child.ts';
-import { chartFileName, RESULT_FILE_NAMES } from './contract/layout.ts';
-import { buildRunManifest, type ChildResult } from './contract/messages.ts';
-import { classifyAttemptFailure, retryOnTransientDbError } from './failures.ts';
-import {
-  loadAttemptInputs,
-  markAttemptCanceled,
-  markAttemptFailed,
-  markAttemptSucceeded,
-  type ResultFileRecord,
-} from './queue.ts';
 import {
   createRunDirectory,
   readFailure,
@@ -32,7 +21,23 @@ import {
   removeRunDirectory,
   writeInputCsv,
   writeManifest,
-} from './run-directory.ts';
+} from '../child/run-directory.ts';
+import {
+  type ChildCommand,
+  type ChildOutcome,
+  type RunningChild,
+  spawnChild,
+} from '../child/spawn.ts';
+import { chartFileName, RESULT_FILE_NAMES } from '../contract/layout.ts';
+import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
+import { classifyAttemptFailure, retryOnTransientDbError } from '../failures.ts';
+import {
+  loadAttemptInputs,
+  markAttemptCanceled,
+  markAttemptFailed,
+  markAttemptSucceeded,
+  type ResultFileRecord,
+} from './queue.ts';
 import { type ChildEnding, classifyVerdict, type Kill, type Verdict } from './verdict.ts';
 
 export type AttemptDependencies = {
@@ -201,7 +206,7 @@ export type RecordableVerdict =
   | Exclude<Verdict, { kind: 'succeeded' | 'unowned' }>;
 
 /** Write a verdict this worker already computed. Bounded transient retry, per principle 4 in
- * [`failures.ts`](./failures.ts): this is one of the writes a claimed attempt cannot afford to
+ * [`failures.ts`](../failures.ts): this is one of the writes a claimed attempt cannot afford to
  * lose to a blip. Returns whether we still owned the attempt, exactly like the `markAttempt*`
  * helpers this wraps.
  */

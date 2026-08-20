@@ -1,5 +1,5 @@
 /** The parent's side of the run directory. The layout itself, and why the parent creates every
- * directory and never lists one, is documented on [`contract/layout.ts`](./contract/layout.ts).
+ * directory and never lists one, is documented on [`contract/layout.ts`](../contract/layout.ts).
  */
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -10,7 +10,7 @@ import {
   type RunDirectoryEntry,
   resultFilePath,
   runPath,
-} from './contract/layout.ts';
+} from '../contract/layout.ts';
 import {
   type ChildFailure,
   type ChildResult,
@@ -19,7 +19,7 @@ import {
   parseProgress,
   parseResult,
   type RunManifest,
-} from './contract/messages.ts';
+} from '../contract/messages.ts';
 
 export async function createRunDirectory(
   runRoot: string,
