@@ -22,11 +22,11 @@ export function breakableEmailer(): Breakable<Emailer> {
 
   const reachable = mailpitTransport({
     endpoint: requireEnv('EMAIL_ENDPOINT'),
-    timeoutMs: FAST_TIMEOUT_MS,
+    testTimeoutOverrideMs: FAST_TIMEOUT_MS,
   });
   const unreachable = mailpitTransport({
     endpoint: UNREACHABLE_LOCALHOST_URL,
-    timeoutMs: FAST_TIMEOUT_MS,
+    testTimeoutOverrideMs: FAST_TIMEOUT_MS,
   });
 
   let broken = false;
