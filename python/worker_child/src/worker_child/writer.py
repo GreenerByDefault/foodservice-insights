@@ -8,8 +8,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from worker_child import contract
-from worker_child.messages import progress_payload
+from worker_child.contract import layout
+from worker_child.contract.messages import progress_payload
 
 
 def dump_json(payload: Mapping[str, Any]) -> bytes:
@@ -47,7 +47,7 @@ def write_json_atomically(path: Path, payload: Mapping[str, Any]) -> None:
 
 def progress_reporter(run_directory: Path) -> Callable[[], int]:
     """Returns a callable that reports progress once per call and returns the sequence written."""
-    path = run_directory / contract.PROGRESS
+    path = run_directory / layout.PROGRESS
     sequence = 0
     # Guards concurrent calls to `advance`: without it, increment-and-write races, and writes
     # could land out of order on disk even with a correct in-memory sequence.

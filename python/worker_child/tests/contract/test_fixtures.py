@@ -4,16 +4,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from worker_child.messages import (
+from worker_child.contract.fields import ContractError
+from worker_child.contract.messages import (
     AiUsage,
     failure_payload,
     parse_run_manifest,
     progress_payload,
     result_payload,
 )
-from worker_child.parse import ContractError
 
-FIXTURES = Path(__file__).resolve().parents[3] / "contract" / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[4] / "contract" / "fixtures"
 
 DOCUMENTS = frozenset({"run", "progress", "result", "failure"})
 
