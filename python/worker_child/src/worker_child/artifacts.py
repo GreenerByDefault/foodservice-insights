@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 
 from gbd_foodservice_insights.analysis import AnalysisOutcome
@@ -25,4 +24,5 @@ def _place(source: Path, destination: Path) -> None:
     if not source.is_file():
         raise ContractError(f"analyze() declared '{source}' but never wrote it")
     if source != destination:
-        shutil.move(str(source), destination)
+        # `Path.replace` is atomic, so safe with concurrency.
+        source.replace(destination)
