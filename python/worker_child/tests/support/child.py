@@ -3,14 +3,13 @@
 The mirror image of `apps/worker/src/testing/fake-child.ts`, including its reasoning for
 putting the scenario in argv rather than the environment: the seam cannot be widened to make
 testing easier. Every scenario knob names an *outcome of the seam* — what `analyze()` returns,
-raises, or does before returning — never an internal of the (still unported) library. That is
-exactly why this infrastructure survives the port landing.
+raises, or does before returning — never an internal of the library.
 
     python tests/support/child.py '<scenario-json>' <runDirectory>
 
 Builds an `analyze` from `gbd_foodservice_insights.testing.stub_analysis` and calls the real
-`worker_child.run.run(run_directory, analyze=...)`, so everything downstream — `run.py`,
-`failures.py`, `artifacts.py`, `writer.py` — runs for real, as a real OS process.
+`worker_child.run.run(run_directory, analyze=...)`, so everything downstream like `run.py`
+runs for real, as a real OS process.
 """
 
 import json
