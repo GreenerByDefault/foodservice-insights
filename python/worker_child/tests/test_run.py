@@ -42,9 +42,18 @@ def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: 
     exit_code = run(run_directory, analyze=stub_analysis)
 
     assert exit_code == names.EXIT_WROTE_RESULT
-    result = read_json(run_directory / layout.RESULT)
-    assert result["analysisAttemptId"] == VALID_ANALYSIS_ATTEMPT_ID
-    assert result["charts"] == ["category_breakdown"]
+    assert read_json(run_directory / layout.RESULT) == {
+        "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "charts": ["category_breakdown"],
+        "ai": {
+            "model": "gpt-4.1-mini",
+            "inputTokens": 1_000,
+            "outputTokens": 500,
+            "costUsd": "0.5000",
+            "metadata": {},
+        },
+        "resultMetadata": {},
+    }
     assert not (run_directory / layout.FAILURE).exists()
 
 
@@ -71,6 +80,7 @@ def test_the_real_analyze_is_not_ported_yet(run_directory: Path) -> None:
     assert exit_code == names.EXIT_WROTE_FAILURE
     failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "unknown"
+    assert failure["detail"] == "gbd_foodservice_insights.analyze is not ported yet"
     assert "NotImplementedError" in failure["traceback"]
 
 
@@ -122,7 +132,11 @@ def test_maps_each_analysis_error_to_its_reason(
     exit_code = run(run_directory, analyze=analyze)
 
     assert exit_code == names.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / layout.FAILURE)["reason"] == reason
+    assert read_json(run_directory / layout.FAILURE) == {
+        "reason": reason,
+        "detail": f"stub_analysis: raising {raises.__name__} on request",
+        "traceback": None,
+    }
 
 
 def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory: Path) -> None:
@@ -134,6 +148,7 @@ def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory:
     assert exit_code == names.EXIT_WROTE_FAILURE
     failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "unknown"
+    assert failure["detail"] == "boom"
     assert "RuntimeError" in failure["traceback"]
 
 
