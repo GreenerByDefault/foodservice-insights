@@ -11,6 +11,7 @@
  * Values that must be unique are randomised, because tests run concurrently against one database.
  */
 
+import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../generated/public/AnalysisAttemptStatus.ts';
 import type { AppUser } from '../generated/public/AppUser.ts';
@@ -57,6 +58,20 @@ export async function insertAppUser(
     .selectAll()
     .where('id', '=', id)
     .executeTakeFirstOrThrow();
+}
+
+/** `email` lives on `auth.users`, not the `app_user` row `insertAppUser` returns, so this reads
+ * it back separately. */
+export async function insertAppUserWithEmail(
+  database: DatabaseExecutor,
+): Promise<{ id: AppUser['id']; email: string }> {
+  const user = await insertAppUser(database);
+  const { email } = await database
+    .selectFrom('auth.users')
+    .select('email')
+    .where('id', '=', user.id)
+    .executeTakeFirstOrThrow();
+  return { id: user.id, email: email as string };
 }
 
 /** An organization and the admin it must have. Anything else would fail its deferred trigger. */
@@ -145,6 +160,11 @@ export async function insertAnalysisAttempt(
     attemptNumber?: number;
     status?: AnalysisAttemptStatus;
     workerId?: string;
+    requestedByUserId?: UsersId | null;
+    createdAt?: Date;
+    /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
+     * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
+    finishedAt?: Date;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -159,6 +179,8 @@ export async function insertAnalysisAttempt(
       reportId,
       attemptNumber: overrides.attemptNumber ?? 1,
       status,
+      requestedByUserId: overrides.requestedByUserId ?? null,
+      ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
       ...(isProcessing
         ? {
             workerId: overrides.workerId ?? 'test-worker',
@@ -167,7 +189,10 @@ export async function insertAnalysisAttempt(
           }
         : {}),
       ...(isTerminal
-        ? { finishedAt: new Date(), failureReason: status === 'failed' ? 'child_crashed' : null }
+        ? {
+            finishedAt: overrides.finishedAt ?? new Date(),
+            failureReason: status === 'failed' ? 'child_crashed' : null,
+          }
         : {}),
     })
     .returningAll()

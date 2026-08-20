@@ -19,6 +19,7 @@ export {
   aChecksum,
   insertAnalysisAttempt,
   insertAppUser,
+  insertAppUserWithEmail,
   insertInputFile,
   insertOrganization,
   insertReport,
