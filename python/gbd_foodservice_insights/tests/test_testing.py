@@ -20,7 +20,7 @@ def _request(tmp_path: Path) -> AnalysisRequest:
     return AnalysisRequest(
         run_id="test-run",
         input_csv=tmp_path / "input.csv",
-        artifacts_directory=tmp_path,
+        output_directory=tmp_path,
         work_directory=tmp_path,
         report_name=None,
         site_name=None,

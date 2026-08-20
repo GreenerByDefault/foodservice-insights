@@ -1,11 +1,9 @@
 """`stub_analysis`: the library's own definition of a valid `analyze()`, shipped for
 `worker_child`'s tests the same way `@gbd/db/testing` ships fakes for its consumers.
 
-A fake `analyze()` exists to test the *wrapper*: it produces outcomes the real library never
-would — a missing declared file, a cost outside range, each exception type on demand — which a
-mocked LLM inside the real pipeline could never be made to do. Every keyword here names an
-outcome of the seam, not anything about the library's internals, so the port landing does not
-change what this stub can express.
+It exists to test the *wrapper*, producing outcomes a mocked LLM never could — a missing
+declared file, an out-of-range cost, each exception type on demand. Every keyword names an
+outcome of the seam, not a library internal, so the port landing won't change what it expresses.
 """
 
 from collections.abc import Mapping, Sequence
@@ -52,7 +50,7 @@ def stub_analysis(
     raises: type[AnalysisError] | None = None,
 ) -> AnalysisOutcome:
     """A stand-in `analyze()`. Writes real files with real magic bytes into
-    `request.artifacts_directory`, unless told to skip one — which is how a wrapper test
+    `request.output_directory`, unless told to skip one — which is how a wrapper test
     produces a declared-but-missing file, the case a mocked LLM cannot.
     """
     for stage in progress_stages:
@@ -61,18 +59,18 @@ def stub_analysis(
     if raises is not None:
         raise raises(f"stub_analysis: raising {raises.__name__} on request")
 
-    pdf = request.artifacts_directory / "report.pdf"
+    pdf = request.output_directory / "report.pdf"
     if write_pdf:
         pdf.write_bytes(PDF_MAGIC_BYTES)
 
-    xlsx = request.artifacts_directory / "report.xlsx"
+    xlsx = request.output_directory / "report.xlsx"
     if write_xlsx:
         xlsx.write_bytes(XLSX_MAGIC_BYTES)
 
     written_charts = chart_keys if charts_to_write is None else charts_to_write
     charts = {}
     for key in chart_keys:
-        path = request.artifacts_directory / f"{key}.png"
+        path = request.output_directory / f"{key}.png"
         if key in written_charts:
             path.write_bytes(PNG_MAGIC_BYTES)
         charts[key] = path
