@@ -44,6 +44,6 @@ COUNTS_BASES: Final[tuple[CountsBasis, ...]] = get_args(CountsBasis)
 UNIT_SYSTEMS: Final[tuple[UnitSystem, ...]] = get_args(UnitSystem)
 
 # A strict subset of `analysis_failure_reason`; the rest are verdicts only the parent can reach.
-ChildFailureReason = Literal["contract_violation", "unknown", "upstream_api"]
+ChildFailureReason = Literal["contract_violation", "unknown", "upstream_api", "unusable_data"]
 
 CHILD_FAILURE_REASONS: Final[tuple[ChildFailureReason, ...]] = get_args(ChildFailureReason)

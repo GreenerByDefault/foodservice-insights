@@ -45,6 +45,7 @@
     "unknown": "either",
     "upstream_api": "child",
     "abandoned": "parent",
-    "shut_down": "parent"
+    "shut_down": "parent",
+    "unusable_data": "child"
   }
 }

@@ -31,6 +31,7 @@ export const FAILURE_REASON_CLAIMANT = {
   upstream_api: 'child',
   abandoned: 'parent',
   shut_down: 'parent',
+  unusable_data: 'child',
 } as const satisfies Record<AnalysisFailureReason, 'parent' | 'child' | 'either'>;
 
 export type FailureReasonClaimant = (typeof FAILURE_REASON_CLAIMANT)[AnalysisFailureReason];
