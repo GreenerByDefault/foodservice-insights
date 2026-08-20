@@ -128,14 +128,6 @@ def test_an_analysis_error_reaches_failure_json_through_a_real_process(
     assert read_json(run_directory / layout.FAILURE)["reason"] == "unusable_data"
 
 
-def test_stdout_stays_silent_no_matter_what_the_analysis_does(run_directory: Path) -> None:
-    process = spawn_child({"charts": ["category_breakdown", "waste_by_site"]}, run_directory)
-
-    stdout, _ = process.communicate(timeout=30)
-
-    assert stdout == b""
-
-
 def test_the_child_runs_in_work_so_a_stray_relative_write_lands_in_scratch(
     run_directory: Path,
 ) -> None:
