@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from worker_child.contract import (
-    CHART_KEY_PATTERN,
+from worker_child.contract.fields import ContractError, parse_object
+from worker_child.contract.layout import CHART_KEY_PATTERN
+from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
     UNIT_SYSTEMS,
@@ -16,7 +17,6 @@ from worker_child.contract import (
     CountsBasis,
     UnitSystem,
 )
-from worker_child.parse import ContractError, parse_object
 
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 SHA_256_PATTERN = re.compile(r"[0-9a-f]{64}")
