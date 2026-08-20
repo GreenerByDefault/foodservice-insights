@@ -42,7 +42,6 @@ export type AttemptFixture = Omit<ReportFixture, 'requester' | 'seedAttempt'> & 
 };
 
 const AN_INPUT_CSV = Buffer.from('filler bytes');
-// `startAttempt` verifies the downloaded object against the row, so the two must agree.
 const AN_INPUT_CSV_SHA256 = createHash('sha256').update(AN_INPUT_CSV).digest();
 
 /** Commit an organization with one report and one input file; write the input file's bytes to the
@@ -67,8 +66,7 @@ export async function withReportFixture<T>(
           const report = await insertReport(transaction, { organizationId: organization.id });
           const inputFile = await insertInputFile(transaction, {
             reportId: report.id,
-            byteSize: AN_INPUT_CSV.byteLength,
-            checksumSha256: AN_INPUT_CSV_SHA256,
+            object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
           });
           return {
             organizationId: organization.id,

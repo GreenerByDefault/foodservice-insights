@@ -128,17 +128,12 @@ export async function insertReport(
     .executeTakeFirstOrThrow();
 }
 
-/** `byteSize` and `checksumSha256` describe the object at `storageKey`. A caller that also writes
- * that object must pass both, or the row will not describe it — an inconsistency the worker now
- * rejects, since `startAttempt` verifies the bytes it downloads against these columns.
- */
 export async function insertInputFile(
   database: DatabaseExecutor,
   overrides: {
     reportId?: Report['id'];
     storageKey?: string;
-    byteSize?: number;
-    checksumSha256?: Buffer;
+    object?: { byteSize: number; checksumSha256: Buffer };
   } = {},
 ): Promise<InputFile> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -148,10 +143,10 @@ export async function insertInputFile(
     .values({
       reportId,
       storageKey: overrides.storageKey ?? `org/test/${crypto.randomUUID()}.csv`,
-      byteSize: overrides.byteSize ?? 1024,
+      byteSize: overrides.object?.byteSize ?? 1024,
       contentType: 'text/csv',
       originalFilename: 'procurement.csv',
-      checksumSha256: overrides.checksumSha256 ?? aChecksum(),
+      checksumSha256: overrides.object?.checksumSha256 ?? aChecksum(),
       isModified: false,
     })
     .returningAll()

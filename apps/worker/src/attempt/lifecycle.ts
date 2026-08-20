@@ -68,11 +68,6 @@ export class MissingInputFileError extends Error {
   }
 }
 
-/** Thrown by `startAttempt` when the object the blob store served is not the object the upload
- * recorded. Worth the hash of one CSV per run: a truncated read is still *valid* CSV, so nothing
- * downstream would reject it — the attempt would spend its full AI budget and return a quietly
- * under-counted report instead of failing.
- */
 export class CorruptInputFileError extends Error {
   constructor(
     readonly storageKey: string,
@@ -131,10 +126,6 @@ export async function startAttempt(
   }
 }
 
-/** Checked here rather than in the child: the parent already holds the bytes and the expected
- * digest, so a mismatch costs no child process and is classified as `infrastructure` — a
- * transient blob store problem the user can retry — rather than as someone's bug.
- */
 function requireInputFileIntact(
   inputFile: { storageKey: string; byteSize: number; checksumSha256: string },
   body: Uint8Array,

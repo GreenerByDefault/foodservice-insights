@@ -105,8 +105,6 @@ function nextPendingAttempt(
 export type AttemptInputs = {
   organizationId: OrganizationId;
   reportId: ReportId;
-  /** `byteSize` and `checksumSha256` are what the blob store measured for the object at
-   * `storageKey`, so `startAttempt` can check the bytes it downloads against them. */
   inputFile: {
     id: InputFileId;
     storageKey: string;
