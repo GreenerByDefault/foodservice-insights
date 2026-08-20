@@ -125,6 +125,22 @@ describe('analysis_attempt column invariants', () => {
     });
   });
 
+  test('rejects a canceled attempt with no cancel_requested_at', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction);
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ status: 'canceled', finishedAt: new Date() })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_canceled_requires_request',
+    });
+  });
+
   test('rejects finishing before the work started', async () => {
     const update = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
@@ -290,6 +306,7 @@ describe('analysis_attempt column invariants', () => {
       patch: () => ({
         status: 'canceled' as const,
         finishedAt: new Date(),
+        cancelRequestedAt: new Date(),
         leaseRenewedAt: LONG_AGO,
       }),
       constraint: 'analysis_attempt_lease_renewed_after_created_at',

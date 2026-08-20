@@ -67,11 +67,25 @@ export async function claimNextAttempt(
   return claimed?.id;
 }
 
+/** Get the oldest pending attempt not already cancel-requested. Locked for update.
+ *
+ * A cancel request on an unclaimed row means there is nothing to start — see
+ * `cancelRequestedPendingAttempts` in `reaper.ts` for who converges it to `canceled`.
+ */
 function nextPendingAttempt(
   db: DatabaseExecutor,
   candidateReports: readonly ReportId[] | undefined,
 ) {
-  const pending = db.selectFrom('analysisAttempt').select('id').where('status', '=', 'pending');
+  const pending = db
+    .selectFrom('analysisAttempt')
+    .select('id')
+    .where('status', '=', 'pending')
+    // No `EvalPlanQual` double-predicate here, unlike `reaper.ts`'s expiry sweep: `forUpdate` +
+    // `skipLocked` below make the single copy sufficient. A row a concurrent cancel holds locked
+    // is *skipped* rather than waited on, and a row whose cancel already committed is re-read at
+    // its new version once the lock is taken, so this predicate excludes it either way — the
+    // claim never selects a row it would then have to re-check.
+    .where('cancelRequestedAt', 'is', null);
 
   return (
     (candidateReports === undefined ? pending : pending.where('reportId', 'in', candidateReports))

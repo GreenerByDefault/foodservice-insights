@@ -225,8 +225,13 @@ child?", and a parent whose clock is skewed poisons every other worker's livenes
 
 ### Canceling
 
-When a user cancels, the web server marks the analysis attempt canceled in the database. The
-parent detects that and kills the child process. No email is sent.
+Canceling is a soft-delete of a report that has not already reached a terminal attempt status.
+
+The web server only records the request; a worker converges it to the terminal `canceled` — the
+owning parent on its next lease renewal, or the queue's cancel sweep for an attempt nobody has
+claimed yet.
+
+No email is ever sent for a canceled attempt.
 
 ### Concurrency and scaling
 

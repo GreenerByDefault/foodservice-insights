@@ -14,10 +14,10 @@ import {
   readAnalysisAttemptRow,
   withRollback,
 } from '@gbd/db/testing';
-import type { ControlledTransaction, Transaction } from 'kysely';
+import { type ControlledTransaction, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import { markAttemptSucceeded, renewLease } from './queue.ts';
-import { type ReapOptions, reapExpiredAttempts } from './reaper.ts';
+import { claimNextAttempt, markAttemptSucceeded, renewLease } from './queue.ts';
+import { cancelRequestedPendingAttempts, type ReapOptions, reapExpiredAttempts } from './reaper.ts';
 import { aResultFile, aWorkerId } from './testing/attempt-helpers.ts';
 import { backdateAttemptTimeline, type TimelineOffsetsMs } from './testing/attempt-timeline.ts';
 
@@ -40,12 +40,14 @@ async function processingAttempt(
   transaction: Transaction<Database>,
   workerId: string,
   offsets: TimelineOffsetsMs = {},
+  options: { cancelRequested?: boolean } = {},
 ): Promise<{ attemptId: AnalysisAttemptId; reportId: ReportId }> {
   const report = await insertReport(transaction);
   const attempt = await insertAnalysisAttempt(transaction, {
     reportId: report.id,
     status: 'processing',
     workerId,
+    ...(options.cancelRequested ? { cancelRequestedAt: new Date() } : {}),
   });
   await backdateAttemptTimeline(transaction, attempt.id, offsets);
   return { attemptId: attempt.id, reportId: report.id };
@@ -100,14 +102,12 @@ describe('reapExpiredAttempts', () => {
 
   test('cancel_requested_at set gives canceled with a NULL failure_reason', async () => {
     const outcome = await withRollback(DATABASE, async (transaction) => {
-      const { attemptId, reportId } = await processingAttempt(transaction, aWorkerId(), {
-        renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
-      });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ cancelRequestedAt: new Date() })
-        .where('id', '=', attemptId)
-        .execute();
+      const { attemptId, reportId } = await processingAttempt(
+        transaction,
+        aWorkerId(),
+        { renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000 },
+        { cancelRequested: true },
+      );
 
       const reaped = await reapExpiredAttempts(
         transaction,
@@ -427,6 +427,162 @@ describe('reapExpiredAttempts', () => {
 
     expect(result.reaped).toEqual([]);
     expect(result.row).toMatchObject({ status: 'failed', reapedByWorkerId: firstReaperId });
+  });
+});
+
+describe('cancelRequestedPendingAttempts', () => {
+  test('a pending attempt with a request becomes canceled with a NULL failure_reason', async () => {
+    const outcome = await withRollback(DATABASE, async (transaction) => {
+      const report = await insertReport(transaction);
+      const attempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        cancelRequestedAt: new Date(),
+      });
+
+      const converged = await cancelRequestedPendingAttempts(transaction, {
+        candidateReports: [report.id],
+      });
+      return { converged, row: await readAnalysisAttemptRow(transaction, attempt.id) };
+    });
+
+    expect(outcome.converged).toEqual([outcome.row.id]);
+    expect(outcome.row).toMatchObject({
+      status: 'canceled',
+      failureReason: null,
+      workerId: null,
+      reapedByWorkerId: null,
+    });
+    expect(outcome.row.finishedAt).toBeInstanceOf(Date);
+  });
+
+  // The middle case is the interesting one: it belongs to the parent (if renewing) or to
+  // `reapExpiredAttempts` (if not), never to this sweep, whose top-level qual is `status = 'pending'`.
+  test('a pending attempt with no request, a processing attempt with a request, and terminal rows are all untouched', async () => {
+    const outcome = await withRollback(DATABASE, async (transaction) => {
+      const pendingReport = await insertReport(transaction);
+      const pending = await insertAnalysisAttempt(transaction, { reportId: pendingReport.id });
+
+      const processingReport = await insertReport(transaction);
+      const processing = await insertAnalysisAttempt(transaction, {
+        reportId: processingReport.id,
+        status: 'processing',
+        workerId: aWorkerId(),
+        cancelRequestedAt: new Date(),
+      });
+
+      const terminalReport = await insertReport(transaction);
+      const terminal = await insertAnalysisAttempt(transaction, {
+        reportId: terminalReport.id,
+        status: 'succeeded',
+      });
+
+      const converged = await cancelRequestedPendingAttempts(transaction, {
+        candidateReports: [pendingReport.id, processingReport.id, terminalReport.id],
+      });
+
+      return {
+        converged,
+        pendingRow: await readAnalysisAttemptRow(transaction, pending.id),
+        processingRow: await readAnalysisAttemptRow(transaction, processing.id),
+        terminalRow: await readAnalysisAttemptRow(transaction, terminal.id),
+      };
+    });
+
+    expect(outcome.converged).toEqual([]);
+    expect(outcome.pendingRow.status).toBe('pending');
+    expect(outcome.processingRow.status).toBe('processing');
+    expect(outcome.terminalRow.status).toBe('succeeded');
+  });
+
+  test('candidateReports narrows the sweep', async () => {
+    const outcome = await withRollback(DATABASE, async (transaction) => {
+      const inScopeReport = await insertReport(transaction);
+      const inScope = await insertAnalysisAttempt(transaction, {
+        reportId: inScopeReport.id,
+        cancelRequestedAt: new Date(),
+      });
+
+      const outOfScopeReport = await insertReport(transaction);
+      const outOfScope = await insertAnalysisAttempt(transaction, {
+        reportId: outOfScopeReport.id,
+        cancelRequestedAt: new Date(),
+      });
+
+      const converged = await cancelRequestedPendingAttempts(transaction, {
+        candidateReports: [inScopeReport.id],
+      });
+
+      return {
+        converged,
+        inScopeId: inScope.id,
+        outOfScopeRow: await readAnalysisAttemptRow(transaction, outOfScope.id),
+      };
+    });
+
+    expect(outcome.converged).toEqual([outcome.inScopeId]);
+    expect(outcome.outOfScopeRow.status).toBe('pending');
+  });
+
+  // A real `claimNextAttempt` can never race this sweep for the same row — its own subquery
+  // excludes `cancel_requested_at IS NOT NULL` outright, which the next test shows directly.
+  // This instead proves the SQL mechanism that would defend the row if that ever stopped being
+  // true: `status = 'pending'` is a top-level qual of the `UPDATE`, so when this statement's row
+  // lock blocks on a concurrent write and that write commits first, Postgres rechecks the qual
+  // against what was just committed (`EvalPlanQual`) — a row no longer `pending` is then a
+  // zero-row no-op here.
+  test('a write that commits while the converge is blocked on the row makes the converge a zero-row no-op', async () => {
+    const result = await raceAgainstCommittedWrite(
+      DATABASE,
+      async (transaction) => {
+        const report = await insertReport(transaction);
+        const attempt = await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          cancelRequestedAt: new Date(),
+        });
+        return { attemptId: attempt.id, reportId: report.id };
+      },
+      async (transaction, fixture) => {
+        // Stands in for a claim: sets exactly what `claimNextAttempt` would, bypassing its own
+        // predicate to model the row transitioning out of `pending` mid-wait.
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({
+            status: 'processing',
+            workerId: aWorkerId(),
+            claimedAt: sql<Date>`now()`,
+            leaseRenewedAt: sql<Date>`now()`,
+          })
+          .where('id', '=', fixture.attemptId)
+          .execute();
+      },
+      async (transaction, fixture) =>
+        await cancelRequestedPendingAttempts(transaction, {
+          candidateReports: [fixture.reportId],
+        }),
+      (database, fixture) => readAnalysisAttemptRow(database, fixture.attemptId),
+    );
+
+    expect(result.result).toEqual([]);
+    expect(result.row.status).toBe('processing');
+  });
+
+  // Proves claimNextAttempt and cancelRequestedPendingAttempts agree once the cancel has
+  // already committed. Plain and sequential, since a `SKIP LOCKED` claim never blocks and so
+  // cannot go through `sendBlockingStatement`.
+  test('once converged, claimNextAttempt does not claim the row', async () => {
+    const claimed = await withRollback(DATABASE, async (transaction) => {
+      const report = await insertReport(transaction);
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        cancelRequestedAt: new Date(),
+      });
+
+      await cancelRequestedPendingAttempts(transaction, { candidateReports: [report.id] });
+
+      return await claimNextAttempt(transaction, aWorkerId(), { candidateReports: [report.id] });
+    });
+
+    expect(claimed).toBeUndefined();
   });
 });
 

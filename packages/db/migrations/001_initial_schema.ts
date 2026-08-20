@@ -603,6 +603,8 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_notification_sent_requires_claim',
       sql`notification_email_sent_at IS NULL OR notification_claimed_at IS NOT NULL`,
     )
+    // A canceled attempt's report was already soft-deleted by the request that canceled it, so
+    // there is no report left to point a notification email at.
     .addCheckConstraint(
       'analysis_attempt_canceled_is_not_notified',
       sql`notification_claimed_at IS NULL OR status <> 'canceled'`,
@@ -645,6 +647,10 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addCheckConstraint(
       'analysis_attempt_cancel_requested_at_after_created_at',
       sql`cancel_requested_at IS NULL OR cancel_requested_at >= created_at`,
+    )
+    .addCheckConstraint(
+      'analysis_attempt_canceled_requires_request',
+      sql`status <> 'canceled' OR cancel_requested_at IS NOT NULL`,
     )
     .addCheckConstraint('analysis_attempt_ai_input_tokens_non_negative', sql`ai_input_tokens >= 0`)
     .addCheckConstraint(

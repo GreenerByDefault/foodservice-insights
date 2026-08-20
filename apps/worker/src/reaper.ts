@@ -1,4 +1,7 @@
-/** The reaping defense from [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping). */
+/** Two sweeps, each converging a row nothing else will finish: `reapExpiredAttempts` for an
+ * expired `processing` attempt (the reaping defense from
+ * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping)), and
+ * `cancelRequestedPendingAttempts` for a `pending` attempt somebody has asked to cancel. */
 
 import type {
   AnalysisAttemptId,
@@ -161,4 +164,47 @@ export async function reapExpiredAttempts(
     .execute();
 
   return reaped.map((row) => row.id);
+}
+
+export type CancelSweepOptions = {
+  /** Narrows the sweep to these reports. Test isolation only; see `ReapOptions.candidateReports`. */
+  candidateReports?: readonly ReportId[];
+};
+
+/** End every `pending` attempt somebody has asked to cancel.
+ *
+ * Three things this deliberately does *not* have, each present in `reapExpiredAttempts`:
+ *
+ * - **No `workerId`.** A `pending` row has no owner, so there is nobody to take it from and
+ *   `reaped_by_worker_id` would be a lie.
+ * - **No expiry predicate, and no repeated top-level qual.** The race `reapExpiredAttempts` guards
+ *   against with `EvalPlanQual` is a lease renewal landing while the reap waits; the only competing
+ *   writer here is a claim, and `status = 'pending'` as a top-level qual already handles it. If the
+ *   claim commits first, the recheck sees `processing` and this is a zero-row no-op, leaving the
+ *   row to the parent, which will see the request on its very next renewal. If this commits first,
+ *   the claim's `SKIP LOCKED` scan re-reads the row and its new predicate excludes it.
+ * - **No `maxAttemptsPerSweep`.** That cap bounds a burst of failure emails; a canceled attempt is
+ *   never emailed — `notifications.ts`'s `status <> 'canceled'`, and
+ *   `analysis_attempt_canceled_is_not_notified` behind it.
+ *
+ * `finished_at = now()` is safe on a `pending` row: `analysis_attempt_finished_at_after_lease_renewed`
+ * tolerates a NULL `lease_renewed_at`, and `worker_id` stays NULL because
+ * `analysis_attempt_processing_is_claimed` only constrains `processing`.
+ */
+export async function cancelRequestedPendingAttempts(
+  db: DatabaseExecutor,
+  options: CancelSweepOptions,
+): Promise<AnalysisAttemptId[]> {
+  const converged = await db
+    .updateTable('analysisAttempt')
+    .set({ status: 'canceled', finishedAt: sql<Date>`now()` })
+    .where('status', '=', 'pending')
+    .where('cancelRequestedAt', 'is not', null)
+    .$if(options.candidateReports !== undefined, (qb) =>
+      qb.where('reportId', 'in', options.candidateReports ?? []),
+    )
+    .returning('id')
+    .execute();
+
+  return converged.map((row) => row.id);
 }

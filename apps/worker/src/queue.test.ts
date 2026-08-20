@@ -173,6 +173,21 @@ describe('claiming', () => {
     expect(second).toBeUndefined();
   });
 
+  test('a pending attempt with cancel_requested_at set is never claimed', async () => {
+    const claimed = await withRollback(DATABASE, async (transaction) => {
+      const { attemptId, reportIds } = await pendingAttempt(transaction);
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ cancelRequestedAt: sql<Date>`now()` })
+        .where('id', '=', attemptId)
+        .execute();
+
+      return await claimNextAttempt(transaction, aWorkerId(), { candidateReports: reportIds });
+    });
+
+    expect(claimed).toBeUndefined();
+  });
+
   describe('under concurrency', () => {
     /** `count` reports in one organization, each with a pending attempt waiting to be claimed. */
     async function withPendingAttempts(
@@ -217,6 +232,33 @@ describe('claiming', () => {
           .where('reportId', 'in', candidateReports)
           .execute();
         expect(workers.map((row) => row.workerId)).toEqual(['worker-a']);
+      });
+    });
+
+    // The load-bearing case for `nextPendingAttempt`'s comment: a cancel racing a claim is a
+    // `SKIP LOCKED` skip, not an `EvalPlanQual` recheck. `sendBlockingStatement` cannot express
+    // this — a `SKIP LOCKED` claim never blocks, so beta's write only needs to be uncommitted, not
+    // waited on.
+    test('skips a row a concurrent cancel holds locked, and never claims it once committed', async () => {
+      await withPendingAttempts(1, async (candidateReports) => {
+        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+          // Uncommitted, simulating the cancel endpoint's own transaction mid-flight.
+          await beta.transaction
+            .updateTable('analysisAttempt')
+            .set({ cancelRequestedAt: sql<Date>`now()` })
+            .where('reportId', 'in', candidateReports)
+            .execute();
+
+          expect(
+            await claimNextAttempt(alpha.transaction, 'worker-a', { candidateReports }),
+          ).toBeUndefined();
+
+          await beta.transaction.commit().execute();
+        });
+
+        // And once the cancel has committed, the row is excluded for good, not merely skipped
+        // while contended.
+        expect(await claimNextAttempt(DATABASE, 'worker-b', { candidateReports })).toBeUndefined();
       });
     });
 
@@ -315,14 +357,26 @@ describe('renewLease', () => {
   test('reports a cancellation request', async () => {
     const renewal = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
-      const attemptId = await claimedAttempt(transaction, workerId);
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ cancelRequestedAt: sql<Date>`now()` })
-        .where('id', '=', attemptId)
-        .execute();
-      const result = await renewLease(transaction, attemptId, workerId);
-      const { cancelRequestedAt } = await readAnalysisAttemptRow(transaction, attemptId);
+      // The attempt starts out `processing` with `cancelRequestedAt` already set, rather than
+      // being claimed and then canceled, because `claimNextAttempt` skips rows where
+      // `cancel_requested_at` is already set. So, this test can't go through the real claim path
+      // the way `claimedAttempt` does.
+      const report = await insertReport(transaction);
+      const attempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'processing',
+        workerId,
+        cancelRequestedAt: new Date(),
+      });
+      // `insertAnalysisAttempt` sets `claimedAt`/`leaseRenewedAt` to real wall-clock `Date`s,
+      // which land later than the frozen `now()` that `renewLease` is about to write with (the
+      // transaction from `withRollback` opened before them). Backdating re-derives every
+      // timestamp from that same frozen `now()`, so the two can't end up on the wrong side of
+      // `analysis_attempt_lease_renewed_after_claimed_at`.
+      await backdateAttemptTimeline(transaction, attempt.id);
+
+      const result = await renewLease(transaction, attempt.id, workerId);
+      const { cancelRequestedAt } = await readAnalysisAttemptRow(transaction, attempt.id);
       return { result, cancelRequestedAt };
     });
 
@@ -419,6 +473,14 @@ describe('finishing', () => {
     const attempt = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
+      // `analysis_attempt_canceled_requires_request` needs a request behind the verdict — in the
+      // real flow, this is what `renewLease` reporting `cancelRequestedAt` would have led the
+      // supervisor to act on.
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ cancelRequestedAt: sql<Date>`now()` })
+        .where('id', '=', attemptId)
+        .execute();
       const won = await markAttemptCanceled(transaction, attemptId, workerId);
       return { won, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });

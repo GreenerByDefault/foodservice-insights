@@ -499,6 +499,15 @@ describe('kills', () => {
           dependencies(fixture, workerId, steps),
           fixture.attemptId,
         );
+        // `analysis_attempt_canceled_requires_request` needs a request behind the verdict this
+        // kill is about to produce. In the real flow, `cancelRequestedAt` non-null is exactly
+        // what would have led `supervise()` to build this `Kill`.
+        if (kill.reason === 'canceled') {
+          await DATABASE.updateTable('analysisAttempt')
+            .set({ cancelRequestedAt: new Date() })
+            .where('id', '=', fixture.attemptId)
+            .execute();
+        }
         prepared.child.kill();
         const outcome = await prepared.child.exited;
         const ending = await readChildEnding(prepared, outcome, kill);

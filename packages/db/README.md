@@ -101,6 +101,12 @@ code that writes to this column:
 - **Guard terminal updates** with `WHERE id = $1 AND status = 'processing' AND worker_id = $2`, so
   losing the reaping race is a zero-row update rather than an exception.
 
+Canceling is the one transition to `canceled` that a non-worker request can trigger, but it's
+constrained the same way as the rest of the state machine. `analysis_attempt_canceled_is_not_notified`
+and the notification sweep's own predicate both exclude `canceled` attempts from email.
+`cancel_requested_at` is frozen the moment an attempt goes terminal too — it's just an ordinary
+column to the terminal-immutability trigger, not one of its excluded columns.
+
 This package owns the invariants; who claims an attempt and when is the worker's policy, so the
 claim from [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) and every terminal transition
 live in [`apps/worker/src/queue.ts`](../../apps/worker/src/queue.ts) and are tested beside it.
