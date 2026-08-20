@@ -523,13 +523,13 @@ describe('cancelRequestedPendingAttempts', () => {
     expect(outcome.outOfScopeRow.status).toBe('pending');
   });
 
-  // The load-bearing test. A real `claimNextAttempt` can never race this sweep for the same row —
-  // its own subquery excludes `cancel_requested_at IS NOT NULL` outright, which the next test
-  // shows directly. This instead proves the SQL mechanism that would defend the row if that ever
-  // stopped being true: `status = 'pending'` is a top-level qual of the `UPDATE`, so when this
-  // statement's row lock blocks on a concurrent write and that write commits first, Postgres
-  // rechecks the qual against what was just committed (`EvalPlanQual`) — a row no longer `pending`
-  // is then a zero-row no-op here, leaving it to the parent or to `reapExpiredAttempts`.
+  // A real `claimNextAttempt` can never race this sweep for the same row — its own subquery
+  // excludes `cancel_requested_at IS NOT NULL` outright, which the next test shows directly.
+  // This instead proves the SQL mechanism that would defend the row if that ever stopped being
+  // true: `status = 'pending'` is a top-level qual of the `UPDATE`, so when this statement's row
+  // lock blocks on a concurrent write and that write commits first, Postgres rechecks the qual
+  // against what was just committed (`EvalPlanQual`) — a row no longer `pending` is then a
+  // zero-row no-op here.
   test('a write that commits while the converge is blocked on the row makes the converge a zero-row no-op', async () => {
     const result = await raceAgainstCommittedWrite(
       DATABASE,
@@ -566,8 +566,9 @@ describe('cancelRequestedPendingAttempts', () => {
     expect(result.row.status).toBe('processing');
   });
 
-  // The other half: proves the two halves of this PR fit together. Plain and sequential, since a
-  // `SKIP LOCKED` claim never blocks and so cannot go through `sendBlockingStatement`.
+  // Proves claimNextAttempt and cancelRequestedPendingAttempts agree once the cancel has
+  // already committed. Plain and sequential, since a `SKIP LOCKED` claim never blocks and so
+  // cannot go through `sendBlockingStatement`.
   test('once converged, claimNextAttempt does not claim the row', async () => {
     const claimed = await withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction);

@@ -67,14 +67,10 @@ export async function claimNextAttempt(
   return claimed?.id;
 }
 
-/** A cancel request on an unclaimed row means there is nothing to start — see
- * `cancelRequestedPendingAttempts` in `reaper.ts` for who converges it to `canceled`.
+/** Get the oldest pending attempt not already cancel-requested. Locked for update.
  *
- * No `EvalPlanQual` double-predicate here, unlike `reaper.ts`'s expiry sweep. The `FOR UPDATE
- * SKIP LOCKED` below is what makes the single copy sufficient: a row a concurrent cancel holds
- * locked is *skipped* rather than waited on, and a row whose cancel already committed is re-read
- * at its new version once the lock is taken, so this predicate excludes it. Either way the claim
- * never selects a row it would then have to re-check.
+ * A cancel request on an unclaimed row means there is nothing to start — see
+ * `cancelRequestedPendingAttempts` in `reaper.ts` for who converges it to `canceled`.
  */
 function nextPendingAttempt(
   db: DatabaseExecutor,
@@ -84,6 +80,11 @@ function nextPendingAttempt(
     .selectFrom('analysisAttempt')
     .select('id')
     .where('status', '=', 'pending')
+    // No `EvalPlanQual` double-predicate here, unlike `reaper.ts`'s expiry sweep: `forUpdate` +
+    // `skipLocked` below make the single copy sufficient. A row a concurrent cancel holds locked
+    // is *skipped* rather than waited on, and a row whose cancel already committed is re-read at
+    // its new version once the lock is taken, so this predicate excludes it either way — the
+    // claim never selects a row it would then have to re-check.
     .where('cancelRequestedAt', 'is', null);
 
   return (
