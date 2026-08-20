@@ -1,5 +1,3 @@
-"""`classify`: pure and table-driven, exhaustive over `ChildFailureReason`."""
-
 import pytest
 from gbd_foodservice_insights.analysis import (
     InvalidInputError,

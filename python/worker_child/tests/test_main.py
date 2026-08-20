@@ -1,8 +1,3 @@
-"""The real `python -m worker_child`, on paths that never reach the library: genuine
-end-to-end runs of the real entrypoint, today and forever, because the manifest is read
-before `analyze()` is ever called.
-"""
-
 import json
 import subprocess
 import sys
@@ -26,6 +21,9 @@ def run_directory(tmp_path: Path) -> Path:
     return tmp_path
 
 
+# Genuine end-to-end runs of the real `python -m worker_child` entrypoint, on paths that
+# never reach the library — that stays valid today and forever, because the manifest is
+# read before `analyze()` is ever called.
 def spawn(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "worker_child", *args],

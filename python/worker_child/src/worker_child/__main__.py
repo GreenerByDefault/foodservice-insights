@@ -1,7 +1,3 @@
-"""`python -m worker_child <runDirectory>`. Argv, stderr logging, and nothing else — `run.py`
-chooses everything else, including the exit codes.
-"""
-
 import logging
 import sys
 from pathlib import Path
@@ -12,6 +8,9 @@ USAGE = "usage: python -m worker_child <runDirectory>"
 
 
 def main(argv: list[str]) -> int:
+    """`python -m worker_child <runDirectory>`. Argv, stderr logging, and nothing else —
+    `run.py` chooses everything else, including the exit codes.
+    """
     # The parent captures only stderr, so anything the library logs must land there.
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
     if len(argv) != 2:

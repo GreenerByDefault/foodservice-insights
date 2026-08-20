@@ -1,7 +1,3 @@
-"""`run()`: manifest → request, outcome → result, error → failure — every outcome and every
-exception becomes the right document, files, and exit code. `stub_analysis`, injected.
-"""
-
 import json
 from decimal import Decimal
 from pathlib import Path

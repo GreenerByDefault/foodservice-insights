@@ -1,7 +1,3 @@
-"""`place_result_files`: chart-key validation, and moving the library's declared files into
-`output/files` under contract names.
-"""
-
 from decimal import Decimal
 from pathlib import Path
 

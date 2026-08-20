@@ -1,8 +1,3 @@
-"""Chart-key validation, and moving the library's declared files into `output/files` under
-the names the contract promises. `analyze()` names its own charts; only this module knows
-`chart-{key}.png`.
-"""
-
 import shutil
 from pathlib import Path
 
@@ -13,6 +8,10 @@ from worker_child.parse import ContractError
 
 
 def place_result_files(run_directory: Path, outcome: AnalysisOutcome) -> None:
+    """Chart-key validation, and moving the library's declared files into `output/files`
+    under the names the contract promises. `analyze()` names its own charts; only this
+    module knows `chart-{key}.png`.
+    """
     destination = run_directory / contract.RESULT_FILES_DIRECTORY
     _place(outcome.pdf, destination / contract.PDF_FILE_NAME)
     _place(outcome.xlsx, destination / contract.XLSX_FILE_NAME)

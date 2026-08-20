@@ -1,9 +1,3 @@
-"""Import discipline: `worker_child` may reach only into `gbd_foodservice_insights`'s public
-surface — never `gbd_foodservice_insights.testing`, which exists for tests, and never a
-future private module — and the two stacks' copies of `CountsBasis`/`UnitSystem` must agree,
-since nothing enforces that at import time.
-"""
-
 import ast
 from pathlib import Path
 from typing import get_args
@@ -14,6 +8,8 @@ from worker_child.contract import CountsBasis as ChildCountsBasis
 from worker_child.contract import UnitSystem as ChildUnitSystem
 
 WORKER_CHILD_SRC = Path(__file__).resolve().parents[1] / "src" / "worker_child"
+# Never `gbd_foodservice_insights.testing`, which exists for tests, and never a future
+# private module.
 ALLOWED_GBD_MODULES = {"gbd_foodservice_insights", "gbd_foodservice_insights.analysis"}
 
 

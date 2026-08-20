@@ -1,15 +1,3 @@
-"""`run(run_directory, analyze) -> int`: reads `run.json`, calls the library, and writes
-exactly one of `result.json` or `failure.json`. The only place the exit codes are chosen.
-
-Ordering is load-bearing: every result file lands before `result.json`, because the parent
-treats a declared-but-missing file as a `contract_violation` (`verdict.ts`) — a half-written
-result must never look complete.
-
-If `failure.json` itself cannot be written, that exception is left to propagate rather than
-being swallowed here: a traceback on stderr and a nonzero exit reads as `child_crashed` with
-the stderr tail, which diagnoses better than a bare exit 1.
-"""
-
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -39,6 +27,13 @@ type Analyze = Callable[..., AnalysisOutcome]
 
 
 def run(run_directory: Path, analyze: Analyze = default_analyze) -> int:
+    """Reads `run.json`, calls the library, and writes exactly one of `result.json` or
+    `failure.json`. The only place the exit codes are chosen.
+
+    If `failure.json` itself cannot be written, that exception is left to propagate rather
+    than being swallowed here: a traceback on stderr and a nonzero exit reads as
+    `child_crashed` with the stderr tail, which diagnoses better than a bare exit 1.
+    """
     try:
         _produce_result(run_directory, analyze)
     except Exception as error:  # every remaining path becomes a failure document
@@ -48,6 +43,10 @@ def run(run_directory: Path, analyze: Analyze = default_analyze) -> int:
 
 
 def _produce_result(run_directory: Path, analyze: Analyze) -> None:
+    """Ordering is load-bearing: every result file lands before `result.json`, because the
+    parent treats a declared-but-missing file as a `contract_violation` (`verdict.ts`) — a
+    half-written result must never look complete.
+    """
     _require_parent_created_directories(run_directory)
     manifest = _read_manifest(run_directory)
     request = _build_request(run_directory, manifest)
