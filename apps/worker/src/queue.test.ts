@@ -357,10 +357,10 @@ describe('renewLease', () => {
   test('reports a cancellation request', async () => {
     const renewal = await withRollback(DATABASE, async (transaction) => {
       const workerId = aWorkerId();
-      // Born already `processing` with a request, rather than claimed and then canceled: a
-      // `cancel_requested_at` in place before the claim would make `claimNextAttempt` skip the
-      // row under the new predicate `nextPendingAttempt` gained in this PR, so this test cannot
-      // go through the real claim path the way `claimedAttempt` does.
+      // The attempt starts out `processing` with `cancelRequestedAt` already set, rather than
+      // being claimed and then canceled, because `claimNextAttempt` skips rows where
+      // `cancel_requested_at` is already set. So, this test can't go through the real claim path
+      // the way `claimedAttempt` does.
       const report = await insertReport(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
@@ -368,10 +368,10 @@ describe('renewLease', () => {
         workerId,
         cancelRequestedAt: new Date(),
       });
-      // `insertAnalysisAttempt`'s `claimedAt`/`leaseRenewedAt` are real wall-clock `Date`s, which
-      // land after `withRollback`'s transaction opened — later, then, than the frozen `now()`
-      // `renewLease` is about to write with. Backdating re-derives every timestamp from that same
-      // frozen `now()`, so the two cannot end up on the wrong side of
+      // `insertAnalysisAttempt` sets `claimedAt`/`leaseRenewedAt` to real wall-clock `Date`s,
+      // which land later than the frozen `now()` that `renewLease` is about to write with (the
+      // transaction from `withRollback` opened before them). Backdating re-derives every
+      // timestamp from that same frozen `now()`, so the two can't end up on the wrong side of
       // `analysis_attempt_lease_renewed_after_claimed_at`.
       await backdateAttemptTimeline(transaction, attempt.id);
 
