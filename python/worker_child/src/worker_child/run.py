@@ -20,8 +20,8 @@ from worker_child.contract.messages import (
 from worker_child.failures import classify_error
 from worker_child.writer import progress_reporter, write_json_atomically
 
-# The real `analyze()` and `stub_analysis` both take `report_progress` as keyword-only with a
-# default, but their defaults differ, so `Callable[..., AnalysisOutcome]` is the honest type.
+# `stub_analysis` takes extra keyword-only params beyond what `analyze()` does,
+# so `Callable[..., AnalysisOutcome]` is the honest type.
 type Analyze = Callable[..., AnalysisOutcome]
 
 
