@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 from worker_child import contract
-from worker_child.writer import progress_reporter, write_json_atomically
+from worker_child.writer import (
+    dump_json,
+    progress_reporter,
+    write_atomically,
+    write_json_atomically,
+)
 
 
 def files_in(directory: Path) -> list[str]:
@@ -20,27 +25,68 @@ def run_directory(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_leaves_no_temporary_file_behind(run_directory: Path) -> None:
-    path = run_directory / contract.PROGRESS
-    write_json_atomically(path, {"sequence": 1})
+def test_dump_json_encodes_sorted_indented_utf8_with_a_trailing_newline() -> None:
+    assert dump_json({"b": 1, "a": "é"}) == '{\n  "a": "é",\n  "b": 1\n}\n'.encode()
 
-    assert json.loads(path.read_text(encoding="utf-8")) == {"sequence": 1}
+
+def test_dump_json_refuses_nan() -> None:
+    # Python emits a bare `NaN`, which `JSON.parse` rejects.
+    with pytest.raises(ValueError):
+        dump_json({"resultMetadata": float("nan")})
+
+
+def test_write_atomically_leaves_no_temporary_file_behind(run_directory: Path) -> None:
+    path = run_directory / contract.PROGRESS
+    write_atomically(path, b"hello")
+
+    assert path.read_bytes() == b"hello"
     assert files_in(path.parent) == ["progress.json"]
 
 
-def test_replaces_rather_than_truncating(run_directory: Path) -> None:
+def test_write_atomically_replaces_rather_than_truncating(run_directory: Path) -> None:
     path = run_directory / contract.PROGRESS
-    write_json_atomically(path, {"sequence": 1})
+    write_atomically(path, b"a longer first payload")
     first_inode = path.stat().st_ino
 
-    write_json_atomically(path, {"sequence": 2})
+    write_atomically(path, b"second")
 
     assert path.stat().st_ino != first_inode
-    assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == 2
+    assert path.read_bytes() == b"second"
 
 
-def test_refuses_to_write_nan(run_directory: Path) -> None:
-    # Python emits a bare `NaN`, which `JSON.parse` rejects.
+def test_write_atomically_cleans_up_the_temporary_file_on_failure(
+    run_directory: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = run_directory / contract.PROGRESS
+
+    def broken_fsync(_: int) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("worker_child.writer.os.fsync", broken_fsync)
+
+    with pytest.raises(OSError):
+        write_atomically(path, b"partial")
+
+    assert not path.exists()
+    assert files_in(path.parent) == []
+
+
+def test_write_atomically_survives_concurrent_writers_to_the_same_path(run_directory: Path) -> None:
+    path = run_directory / contract.RESULT
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda i: write_atomically(path, str(i).encode()), range(50)))
+    assert files_in(path.parent) == ["result.json"]
+
+
+def test_write_json_atomically_writes_the_encoded_payload(run_directory: Path) -> None:
+    path = run_directory / contract.PROGRESS
+    write_json_atomically(path, {"sequence": 1})
+    assert json.loads(path.read_text(encoding="utf-8")) == {"sequence": 1}
+
+
+def test_write_json_atomically_rejects_nan_before_touching_the_filesystem(
+    run_directory: Path,
+) -> None:
     path = run_directory / contract.RESULT
     with pytest.raises(ValueError):
         write_json_atomically(path, {"resultMetadata": float("nan")})
@@ -57,13 +103,6 @@ def test_reports_progress_with_a_strictly_increasing_sequence(run_directory: Pat
     assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == 1
     assert [advance(), advance()] == [2, 3]
     assert json.loads(path.read_text(encoding="utf-8"))["sequence"] == 3
-
-
-def test_survives_concurrent_writers_to_the_same_path(run_directory: Path) -> None:
-    path = run_directory / contract.RESULT
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        list(pool.map(lambda i: write_json_atomically(path, {"resultMetadata": i}), range(50)))
-    assert files_in(path.parent) == ["result.json"]
 
 
 def test_progress_reporter_is_safe_for_concurrent_callers(run_directory: Path) -> None:
