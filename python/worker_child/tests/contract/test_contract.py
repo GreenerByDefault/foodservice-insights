@@ -21,7 +21,7 @@ def test_agrees_on_how_the_child_is_invoked() -> None:
         "module": names.MODULE,
         "positionalArguments": list(names.POSITIONAL_ARGUMENTS),
         "workingDirectory": names.WORKING_DIRECTORY,
-        "secretEnvironmentVariables": list(names.SECRET_ENVIRONMENT_VARIABLES),
+        "environmentVariables": list(names.ENVIRONMENT_VARIABLES),
     }
 
 

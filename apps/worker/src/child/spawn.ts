@@ -49,9 +49,6 @@ export const STDERR_TAIL_BYTES = 8_000;
  */
 const STDERR_FLUSH_MS = 250;
 
-/** Everything the child may see in addition to the contract's secret allowlist. */
-const INHERITED_ENVIRONMENT_VARIABLES = ['PATH', 'HOME', 'LANG', 'TZ'] as const;
-
 export function spawnChild(
   command: ChildCommand,
   runDirectory: string,
@@ -122,9 +119,8 @@ function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
 }
 
 function childEnvironment(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const allowed = [...INHERITED_ENVIRONMENT_VARIABLES, ...INVOCATION.secretEnvironmentVariables];
   return Object.fromEntries(
-    allowed.flatMap((name) => {
+    INVOCATION.environmentVariables.flatMap((name) => {
       const value = parent[name];
       return value === undefined ? [] : [[name, value] as const];
     }),

@@ -1,4 +1,9 @@
+"""See `test_child_process.py` for how the three test files here divide coverage. This one
+drives `run()` directly with `stub_analysis`: no subprocess, so it's where the success path
+and every failure reason `run()` maps get covered case by case."""
+
 import json
+import shutil
 from decimal import Decimal
 from pathlib import Path
 
@@ -183,3 +188,15 @@ def test_a_chart_key_that_is_not_snake_case_is_a_contract_violation(run_director
 
     assert exit_code == names.EXIT_WROTE_FAILURE
     assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
+
+
+def test_when_failure_json_itself_cannot_be_written_the_exception_propagates(
+    run_directory: Path,
+) -> None:
+    """Documented in `run()`: `_write_failure` runs outside the `try` that catches the
+    original error, so a second failure while writing `failure.json` must escape rather than
+    be swallowed by that same handler."""
+    shutil.rmtree(run_directory)
+
+    with pytest.raises(OSError):
+        run(run_directory, analyze=stub_analysis)

@@ -126,10 +126,7 @@ describe('how the child is invoked', () => {
 
       expect(crossed).toEqual(
         Object.fromEntries(
-          ['PATH', 'HOME', 'LANG', 'TZ', ...INVOCATION.secretEnvironmentVariables].map((name) => [
-            name,
-            PARENT_ENVIRONMENT[name],
-          ]),
+          INVOCATION.environmentVariables.map((name) => [name, PARENT_ENVIRONMENT[name]]),
         ),
       );
     });
