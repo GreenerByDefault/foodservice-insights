@@ -1,5 +1,5 @@
 /** The supervisor, driven through its own methods rather than its scheduler: every test calls
- * `claimAndStart()`, `supervise()`, `sweep()`, `notify()`, or `drain()` directly, and `run()` gets
+ * `claimAndStart()`, `supervise()`, `reap()`, `notify()`, or `drain()` directly, and `run()` gets
  * one smoke test.
  *
  * Nothing here is mocked. The child is a real process spawned through the same `spawnChild`
@@ -577,7 +577,7 @@ describe('cancellation, through the loop', () => {
         await requestCancel(attemptId);
         await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
 
-        expect(await other.worker.sweep()).toEqual({ reaped: [attemptId], canceled: [] });
+        expect(await other.worker.reap()).toEqual({ expired: [attemptId], canceled: [] });
         const reaped = await attemptRow(attemptId);
         expect(reaped.status).toBe('canceled');
         expect(reaped.failureReason).toBeNull();
@@ -594,12 +594,12 @@ describe('cancellation, through the loop', () => {
     );
   });
 
-  test('sweep converges a canceled pending attempt this worker never claimed', async () => {
+  test('reap converges a canceled pending attempt this worker never claimed', async () => {
     await withWorker({}, async (harness, fixture) => {
       const attemptId = await fixture.seedAttempt();
       await requestCancel(attemptId);
 
-      expect(await harness.worker.sweep()).toEqual({ reaped: [], canceled: [attemptId] });
+      expect(await harness.worker.reap()).toEqual({ expired: [], canceled: [attemptId] });
       expect((await attemptRow(attemptId)).status).toBe('canceled');
     });
   });
@@ -614,7 +614,7 @@ describe('losing a race with the real reaper', () => {
         const attemptId = await startOne(harness);
         await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
 
-        expect((await other.worker.sweep()).reaped).toEqual([attemptId]);
+        expect((await other.worker.reap()).expired).toEqual([attemptId]);
         const reaped = await attemptRow(attemptId);
 
         await harness.worker.supervise();
@@ -749,7 +749,7 @@ describe('parked verdicts', () => {
           );
 
           await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
-          expect((await other.worker.sweep()).reaped).toEqual([attemptId]);
+          expect((await other.worker.reap()).expired).toEqual([attemptId]);
 
           // Restored first, so what stops the upload is the drop and not the outage.
           store.restore();
@@ -917,13 +917,13 @@ describe('draining', () => {
 });
 
 describe('the sweeps, wired up', () => {
-  test("sweep reaps another worker's expired attempt under our own id", async () => {
+  test("reap converges another worker's expired attempt under our own id", async () => {
     await withWorker({}, async (harness, fixture) => {
       const attemptId = await fixture.seedAttempt();
       await claimNextAttempt(DATABASE, aWorkerId(), { candidateReports: [fixture.reportId] });
       await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
 
-      expect(await harness.worker.sweep()).toEqual({ reaped: [attemptId], canceled: [] });
+      expect(await harness.worker.reap()).toEqual({ expired: [attemptId], canceled: [] });
 
       const row = await attemptRow(attemptId);
       expect(row.failureReason).toBe('abandoned');
