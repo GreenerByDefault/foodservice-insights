@@ -130,7 +130,11 @@ export async function insertReport(
 
 export async function insertInputFile(
   database: DatabaseExecutor,
-  overrides: { reportId?: Report['id']; storageKey?: string } = {},
+  overrides: {
+    reportId?: Report['id'];
+    storageKey?: string;
+    object?: { byteSize: number; checksumSha256: Buffer };
+  } = {},
 ): Promise<InputFile> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
 
@@ -139,10 +143,10 @@ export async function insertInputFile(
     .values({
       reportId,
       storageKey: overrides.storageKey ?? `org/test/${crypto.randomUUID()}.csv`,
-      byteSize: 1024,
+      byteSize: overrides.object?.byteSize ?? 1024,
       contentType: 'text/csv',
       originalFilename: 'procurement.csv',
-      checksumSha256: aChecksum(),
+      checksumSha256: overrides.object?.checksumSha256 ?? aChecksum(),
       isModified: false,
     })
     .returningAll()

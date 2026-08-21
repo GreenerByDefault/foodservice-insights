@@ -105,7 +105,12 @@ function nextPendingAttempt(
 export type AttemptInputs = {
   organizationId: OrganizationId;
   reportId: ReportId;
-  inputFile: RunManifestInput['inputFile'] & { id: InputFileId; storageKey: string };
+  inputFile: {
+    id: InputFileId;
+    storageKey: string;
+    byteSize: number;
+    checksumSha256: string;
+  };
   report: RunManifestInput['report'];
 };
 
@@ -128,7 +133,6 @@ export async function loadAttemptInputs(
       'report.unitSystem',
       'report.monthlyCounts',
       'inputFile.storageKey',
-      'inputFile.originalFilename',
       'inputFile.byteSize',
       'inputFile.checksumSha256',
     ])
@@ -141,7 +145,6 @@ export async function loadAttemptInputs(
     inputFile: {
       id: row.inputFileId,
       storageKey: row.storageKey,
-      originalFilename: row.originalFilename,
       byteSize: row.byteSize,
       checksumSha256: (row.checksumSha256 as Buffer).toString('hex'),
     },

@@ -79,11 +79,6 @@ describe('valid fixtures', () => {
         unitSystem: 'lb',
         monthlyCounts: { '2025-01': 12040, '2025-02': 11360, '2025-03': 12890 },
       },
-      inputFile: {
-        originalFilename: 'Q1 exports (final).xlsx',
-        byteSize: 184320,
-        checksumSha256: 'b1946ac92492d2347c6235b4d2611184e2b5f0c1e0f5a1c9d2ea9b0f2e8a7c31',
-      },
     };
 
     expect(buildRunManifest(input)).toEqual(JSON.parse(read('valid', 'run.json')));

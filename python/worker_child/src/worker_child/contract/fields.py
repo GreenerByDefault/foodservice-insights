@@ -31,9 +31,6 @@ class Fields:
             raise self._fail(key, "a non-empty string or null")
         return value
 
-    def integer(self, key: str, *, minimum: int = 0) -> int:
-        return self._as_integer(key, self._take(key), minimum=minimum)
-
     def matching(self, key: str, pattern: re.Pattern[str]) -> str:
         value = self.string(key)
         if not pattern.fullmatch(value):

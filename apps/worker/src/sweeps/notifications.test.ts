@@ -299,7 +299,7 @@ describe('sendPendingNotifications', () => {
     expect(outcome.sent).not.toContain(outcome.notYetId);
   });
 
-  test('a row at maxAttempts is never claimed again, whatever its claim age', async () => {
+  test('a row at maxNotificationAttempts is never claimed again, whatever its claim age', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
     const outcome = await withRollback(DATABASE, async (transaction) => {

@@ -7,6 +7,7 @@
  * to code under test that reads through the pool directly, and the test would pass vacuously.
  */
 
+import { createHash } from 'node:crypto';
 import type { AnalysisAttemptId, OrganizationId, ReportId, UserId } from '@gbd/db';
 import { DATABASE } from '@gbd/db/env';
 import {
@@ -41,6 +42,7 @@ export type AttemptFixture = Omit<ReportFixture, 'requester' | 'seedAttempt'> & 
 };
 
 const AN_INPUT_CSV = Buffer.from('filler bytes');
+const AN_INPUT_CSV_SHA256 = createHash('sha256').update(AN_INPUT_CSV).digest();
 
 /** Commit an organization with one report and one input file; write the input file's bytes to the
  * real object its storage key names; hand the test a run root of its own and a `seedAttempt` to
@@ -62,7 +64,10 @@ export async function withReportFixture<T>(
             .where('id', '=', admin.id)
             .executeTakeFirstOrThrow();
           const report = await insertReport(transaction, { organizationId: organization.id });
-          const inputFile = await insertInputFile(transaction, { reportId: report.id });
+          const inputFile = await insertInputFile(transaction, {
+            reportId: report.id,
+            object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
+          });
           return {
             organizationId: organization.id,
             reportId: report.id,

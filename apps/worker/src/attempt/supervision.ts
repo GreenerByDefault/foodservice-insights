@@ -79,8 +79,8 @@ export type SupervisionAction =
  * - **cancel-requested** — we kill the child: the user's explicit intent beats a threshold that
  *   happened to fire in the same tick, matching `classifyVerdict`'s own precedence.
  * - **hung** — no progress for `killAfterNoProgressMs` kills the child.
- * - **hard-timeout** — running past `killAfterTotalRuntimeMs` kills the child regardless of how healthy
- *   it looks.
+ * - **hard-timeout** — running past `killAfterTotalRuntimeMs` kills the child regardless of how
+ *   healthy it looks.
  * - **lease-expired** — no successful renewal for `leaseExpiresAfterMs` fences the child — a
  *   healthy parent's own inequalities keep this from ever firing before `hung` or
  *   `hard-timeout` would.

@@ -1,22 +1,9 @@
 /** Everything the worker's behaviour is parameterised by, and the relations between those values.
  *
- * **The relations are enforced, not merely described.** `createWorkerConfig` refuses a
- * configuration that breaks one and names what it broke, so a mistuned override fails at boot
- * rather than as a worker that fences its own healthy children an hour later.
- * `workerConfigViolations` holds them all; the three that no code here can check are marked there
- * and documented on the field each one constrains.
- *
  * **Open:** every duration below is a placeholder nobody has measured. `killAfterNoProgressMs` is
  * the one that matters most — it has to exceed the longest valid API call the analysis library
- * makes, including its backoff, or a healthy run is killed as hung.
- *
- * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing calls
- * `createWorkerConfig`, so no field here reaches production yet: `attempt/supervision.ts` and both
- * sweeps take their values as `Pick`s of this type, but only tests construct one. What the next
- * change owes this file is an entrypoint that builds one config from the environment and a loop
- * that passes it to all of them, enforcing the four intervals — `queuePollIntervalMs`,
- * `superviseIntervalMs`, `reapIntervalMs`, `notifyIntervalMs` — and `drainGraceMs`, which nothing
- * else reads at all. Drop any field still unread when that lands.
+ * makes, including its backoff, or a healthy run is killed as hung. Nothing here can check that
+ * bound against the library, so it stays undocumented as a relation and is only noted here.
  */
 
 import { DEFAULT_LIMITS } from '@gbd/db';
@@ -32,8 +19,12 @@ export type WorkerConfig = {
 
   childCommand: ChildCommand;
 
-  /** How many attempts this worker holds at once — counting one whose child has already exited but
-   * whose verdict is not recorded yet, which is why this is not named for child processes. */
+  /** How many attempts this worker holds at once. Counts one whose child has already exited but
+   * whose verdict is stuck in memory, unrecorded.
+   *
+   * This is not a container-resource limit — a parked verdict costs no process and barely any
+   * memory. It is back-pressure: uncounted, a blob-store outage would let the worker keep
+   * claiming new attempts that each burn 2–15 minutes of AI spend, and then park too, unbounded. */
   maxConcurrentAttempts: number;
 
   /** How long to wait before asking the queue again, after a poll that did not start an attempt. */
@@ -137,12 +128,11 @@ export const WORKER_DEFAULTS = {
   maxNotificationsPerSweep: 5,
 } as const satisfies Omit<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
 
-/** The fields only the environment can supply; none of them has a sensible default. */
-export type WorkerEnvironment = Pick<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
+/** Fields with no sensible default, so the caller must provide them. */
+export type WorkerRequiredFields = Pick<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
 
-/** Anything with a default may be overridden — by an environment variable in production, or by a
- * test that needs a shorter interval than a human would wait for. */
-export type WorkerOverrides = Partial<Omit<WorkerConfig, keyof WorkerEnvironment>>;
+/** Fields with a default in `WORKER_DEFAULTS`, individually overridable. */
+export type WorkerDefaultableFields = Partial<Omit<WorkerConfig, keyof WorkerRequiredFields>>;
 
 export class WorkerConfigError extends Error {
   constructor(readonly violations: readonly string[]) {
@@ -151,13 +141,12 @@ export class WorkerConfigError extends Error {
   }
 }
 
-/** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below — the only
- * way to obtain a checked `WorkerConfig`, so callers should not assemble the object themselves. */
+/** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below. */
 export function createWorkerConfig(
-  environment: WorkerEnvironment,
-  overrides: WorkerOverrides = {},
+  required: WorkerRequiredFields,
+  overrides: WorkerDefaultableFields = {},
 ): WorkerConfig {
-  const config = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...environment };
+  const config = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...required };
   const violations = workerConfigViolations(config);
   if (violations.length > 0) throw new WorkerConfigError(violations);
   return config;
@@ -165,10 +154,10 @@ export function createWorkerConfig(
 
 /** Reading an optional environment variable yields `undefined`, and spreading that over a default
  * would replace the default with nothing at all. */
-function definedOverrides(overrides: WorkerOverrides): WorkerOverrides {
+function definedOverrides(overrides: WorkerDefaultableFields): WorkerDefaultableFields {
   return Object.fromEntries(
     Object.entries(overrides).filter(([, value]) => value !== undefined),
-  ) as WorkerOverrides;
+  ) as WorkerDefaultableFields;
 }
 
 /** The longest a single lease renewal can take to come back, successfully or not: the pool may
