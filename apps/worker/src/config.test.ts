@@ -1,11 +1,16 @@
+import { DATABASE } from '@gbd/db/env';
+import { SEND_TIMEOUT_MS } from '@gbd/email';
+import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import {
   createWorkerConfig,
+  EMAIL_LATENCY_TARGET_MS,
   WORKER_DEFAULTS,
   WorkerConfigError,
   type WorkerDefaultableFields,
   type WorkerRequiredFields,
 } from './config.ts';
+import { WORKER_DB_LIMITS } from './db.ts';
 
 const REQUIRED_FIELDS: WorkerRequiredFields = {
   workerId: 'worker-under-test',
@@ -26,12 +31,11 @@ function refusalFor(
   throw new Error(`expected ${JSON.stringify({ ...overrides, ...required })} to be refused`);
 }
 
-/** Naming every field the relation is between is what stops a case from passing on some
- * unrelated violation it happened to trip instead. */
-function expectOnlyViolation(overrides: WorkerDefaultableFields, ...fields: readonly string[]) {
+function expectOnlyViolation(overrides: WorkerDefaultableFields, ...fragments: readonly string[]) {
   const { violations } = refusalFor(overrides);
   expect(violations).toHaveLength(1);
-  for (const field of fields) expect(violations.join('\n')).toContain(field);
+  const [violation] = violations;
+  for (const fragment of fragments) expect(violation).toContain(fragment);
 }
 
 describe('createWorkerConfig', () => {
@@ -53,6 +57,16 @@ describe('createWorkerConfig', () => {
       ...REQUIRED_FIELDS,
     });
   });
+
+  test('reports every broken relation at once, not just the first', () => {
+    // At SEND_TIMEOUT_MS, this fails both to outlast the longest send (a strict `>`) and, at the
+    // shipped maxNotificationAttempts, to span the outage the retries are meant to survive.
+    const { violations } = refusalFor({ notificationRetryBaseMs: SEND_TIMEOUT_MS });
+    expect(violations).toEqual([
+      expect.stringContaining('notificationRetryBaseMs'),
+      expect.stringContaining('maxNotificationAttempts'),
+    ]);
+  });
 });
 
 describe('the values a configuration must supply', () => {
@@ -73,7 +87,10 @@ describe('the values a configuration must supply', () => {
   ];
 
   test.each(nonCounts)('refuses a %s duration or count', (_label, value) => {
-    expectOnlyViolation({ drainGraceMs: value }, 'drainGraceMs');
+    expectOnlyViolation(
+      { maxReapsPerSweep: value },
+      'maxReapsPerSweep must be a positive whole number',
+    );
   });
 });
 
@@ -81,8 +98,7 @@ describe('the relations between the thresholds a parent enforces on its own chil
   test('killAfterNoProgressMs must outlast the interval that samples it', () => {
     expectOnlyViolation(
       { killAfterNoProgressMs: WORKER_DEFAULTS.superviseIntervalMs },
-      'killAfterNoProgressMs',
-      'superviseIntervalMs',
+      'killAfterNoProgressMs must exceed superviseIntervalMs',
     );
   });
 
@@ -92,8 +108,95 @@ describe('the relations between the thresholds a parent enforces on its own chil
         killAfterTotalRuntimeMs:
           WORKER_DEFAULTS.killAfterNoProgressMs + WORKER_DEFAULTS.superviseIntervalMs - 1,
       },
-      'killAfterTotalRuntimeMs',
-      'killAfterNoProgressMs',
+      'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + superviseIntervalMs',
     );
+  });
+
+  test('leaseExpiresAfterMs must survive one slow renewal, so a healthy parent never fences itself', () => {
+    // At the boundary itself: one renewal taking the longest a connection wait plus a statement
+    // can take, followed by one more supervise tick before the lease is checked again.
+    const oneRenewalPlusOneTick =
+      WORKER_DB_LIMITS.connectionTimeoutMs +
+      WORKER_DB_LIMITS.statementTimeoutMs +
+      WORKER_DEFAULTS.superviseIntervalMs;
+    expectOnlyViolation(
+      { leaseExpiresAfterMs: oneRenewalPlusOneTick },
+      'leaseExpiresAfterMs must exceed one renewal round trip',
+      'plus superviseIntervalMs',
+    );
+  });
+
+  test('uploadRetryBudgetMs must buy more than two resumes', () => {
+    expectOnlyViolation(
+      { uploadRetryBudgetMs: 2 * WORKER_DEFAULTS.superviseIntervalMs },
+      'uploadRetryBudgetMs must buy more than two resumes',
+      '2 × superviseIntervalMs',
+    );
+  });
+});
+
+describe('the relations between a worker and the rest of the fleet', () => {
+  test('claimedCeilingMs must outlast an attempt that runs, is killed, then parks on the blob store', () => {
+    expectOnlyViolation(
+      {
+        claimedCeilingMs:
+          WORKER_DEFAULTS.killAfterTotalRuntimeMs +
+          WORKER_DEFAULTS.killGraceMs +
+          WORKER_DEFAULTS.uploadRetryBudgetMs,
+      },
+      'claimedCeilingMs must exceed the longest life of an attempt nothing is wrong with — ' +
+        'killAfterTotalRuntimeMs running, then killGraceMs dying, then uploadRetryBudgetMs ' +
+        'parked on the blob store',
+    );
+  });
+
+  test('reapIntervalMs must not outlast the expiry the sweep is looking for', () => {
+    expectOnlyViolation(
+      { reapIntervalMs: WORKER_DEFAULTS.leaseExpiresAfterMs + 1 },
+      'reapIntervalMs must not exceed leaseExpiresAfterMs',
+    );
+  });
+
+  test('maxConcurrentAttempts must keep the worker inside the connection pool', () => {
+    expectOnlyViolation(
+      { maxConcurrentAttempts: WORKER_DEFAULTS.maxConcurrentAttempts + 1 },
+      "maxConcurrentAttempts must keep the worker's concurrent database work inside the pool's",
+    );
+  });
+});
+
+describe('the relations the notification sweep rests on', () => {
+  test('notifyIntervalMs must stay under the latency users are promised', () => {
+    expectOnlyViolation(
+      { notifyIntervalMs: EMAIL_LATENCY_TARGET_MS },
+      `notifyIntervalMs must stay under the ${EMAIL_LATENCY_TARGET_MS}ms`,
+    );
+  });
+
+  test('notificationRetryBaseMs must outlast the longest send it could be retrying', () => {
+    // `maxNotificationAttempts` rises with it, so the outage relation below stays satisfied and
+    // this case is left testing one relation rather than two.
+    expectOnlyViolation(
+      { notificationRetryBaseMs: SEND_TIMEOUT_MS, maxNotificationAttempts: 10 },
+      'notificationRetryBaseMs must exceed',
+      'the longest a send may run',
+    );
+  });
+
+  test('the retries must span the longest outage they are meant to ride out', () => {
+    expectOnlyViolation(
+      { maxNotificationAttempts: WORKER_DEFAULTS.maxNotificationAttempts - 1 },
+      'notificationRetryBaseMs and maxNotificationAttempts must together span at least',
+    );
+  });
+
+  test('maxNotificationAttempts matches the literal in the notification index', async () => {
+    const { rows } = await sql<{ indexdef: string }>`
+      SELECT indexdef FROM pg_indexes WHERE indexname = 'analysis_attempt_notification_pending'
+    `.execute(DATABASE);
+
+    expect(rows.map((row) => row.indexdef)).toEqual([
+      expect.stringContaining(`notification_attempts < ${WORKER_DEFAULTS.maxNotificationAttempts}`),
+    ]);
   });
 });

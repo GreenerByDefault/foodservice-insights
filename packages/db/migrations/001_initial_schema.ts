@@ -748,7 +748,9 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
   //
   // `notification_attempts < 5` duplicates the worker's retry cap, but without it a row we've
   // given up on stays here forever (notification_email_sent_at never gets set) — an unbounded
-  // backlog. Changing the cap means migrating this index to match.
+  // backlog. Changing the cap means migrating this index to match. The cap itself belongs to
+  // `WORKER_DEFAULTS.maxNotificationAttempts` in `apps/worker/src/config.ts`, and that package's
+  // `config.test.ts` reads this index back to assert the two still agree.
   //
   // The cap must stay a literal: `notification_attempts < $1` would stop Postgres from proving
   // the WHERE clause implies this predicate once it's on a generic plan, silently falling back

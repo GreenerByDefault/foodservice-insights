@@ -12,35 +12,13 @@ import type {
   ReportId,
 } from '@gbd/db';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
+import type { WorkerConfig } from '../config.ts';
 import { msAgo } from '../sql.ts';
 
-export type ReapOptions = {
-  /** How long the lease can go unrenewed before this reaper treats the owning parent as gone.
-   *
-   * Measured from the last renewal, not from when the attempt was first claimed — see
-   * `claimedCeilingMs` for that.
-   *
-   * This is deliberately the same value the parent itself will fence on once it can no longer
-   * renew. However, until the supervision loop lands, only the reaper uses it. */
-  leaseExpiresAfterMs: number;
-
-  /** How long an attempt can sit `processing` since it was claimed before this reaper gives up on
-   * it, independent of renewals.
-   *
-   * `leaseExpiresAfterMs` can't catch a parent that renews forever but never finishes —
-   * renewing is exactly what keeps it looking alive. This ceiling closes that gap: it fires on
-   * elapsed time alone, so a parent that never stops renewing still eventually trips this ceiling. */
-  claimedCeilingMs: number;
-
-  /** The most expired attempts one call to `reapExpiredAttempts` will end.
-   *
-   * Naively, a botched deploy or an outage that takes down every worker at once could leave
-   * the whole fleet's in-flight attempts stuck `processing` together. Reaping all of them in
-   * one pass would fire off a burst of failure emails the moment the fleet comes back — one per
-   * attempt, and enough of them at once risks tripping the email provider's own rate limiting or
-   * abuse detection. So, this caps how many one call can send. */
-  maxReapsPerSweep: number;
-
+export type ReapOptions = Pick<
+  WorkerConfig,
+  'leaseExpiresAfterMs' | 'claimedCeilingMs' | 'maxReapsPerSweep'
+> & {
   /** Narrows the sweep to these reports.
    *
    * **Test isolation only; production passes nothing.** Same reasoning as `ClaimOptions` in

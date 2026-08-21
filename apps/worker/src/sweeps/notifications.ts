@@ -24,16 +24,13 @@ import type {
 } from '@gbd/db';
 import { type Emailer, type EmailMessage, isEmailError, sendEmail } from '@gbd/email';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
+import type { WorkerConfig } from '../config.ts';
 import { retryOnTransientDbError } from '../failures.ts';
 
-export type NotifyOptions = {
-  /** The first retry's delay. Each further attempt doubles it, so a row's claim also holds
-   *  longer each time. */
-  notificationRetryBaseMs: number;
-  /** How many times we will ever try to send one attempt's email. */
-  maxNotificationAttempts: number;
-  /** The most attempts one sweep will claim and send. */
-  maxNotificationsPerSweep: number;
+export type NotifyOptions = Pick<
+  WorkerConfig,
+  'notificationRetryBaseMs' | 'maxNotificationAttempts' | 'maxNotificationsPerSweep'
+> & {
   /** Narrows the sweep to these reports.
    *
    * **Test isolation only; production passes nothing.** Same reasoning as `ReapOptions.candidateReports`.

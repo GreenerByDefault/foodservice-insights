@@ -3,26 +3,19 @@
  * Side-effect free to facilitate testing.
  */
 
+import type { WorkerConfig } from '../config.ts';
 import { ContractError } from '../contract/messages.ts';
 import type { PendingVerdict } from './lifecycle.ts';
 import type { Lease } from './queue.ts';
 import type { Kill } from './verdict.ts';
 
-// TODO: Change this to the following once updating config.ts:
-//
-//   Pick<WorkerConfig, 'killAfterNoProgressMs' | 'killAfterTotalRuntimeMs' | 'leaseExpiresAfterMs' | 'uploadRetryBudgetMs'>
-export type SupervisionThresholds = {
-  /** How long a child may go without progressing before it is killed as hung. */
-  killAfterNoProgressMs: number;
-  /** How long a child may run in total, however healthy it looks. */
-  killAfterTotalRuntimeMs: number;
-  /** The parent's own fencing threshold — how long since the last renewal was *issued* before it
-   * must assume its lease is gone and stop. */
-  leaseExpiresAfterMs: number;
-  /** How long a verdict parked at `upload` may keep being resumed before it is converted to a
-   * failure instead. */
-  uploadRetryBudgetMs: number;
-};
+export type SupervisionThresholds = Pick<
+  WorkerConfig,
+  | 'killAfterNoProgressMs'
+  | 'killAfterTotalRuntimeMs'
+  | 'leaseExpiresAfterMs'
+  | 'uploadRetryBudgetMs'
+>;
 
 export type SupervisionState = {
   startedAt: number;
