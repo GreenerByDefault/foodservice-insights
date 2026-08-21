@@ -1,7 +1,3 @@
-/** The relations in [`config.ts`](./config.ts), exercised: that the shipped defaults satisfy every
- * one of them, and that each is actually enforced rather than merely written down.
- */
-
 import { describe, expect, test } from 'vitest';
 import {
   createWorkerConfig,
@@ -30,8 +26,8 @@ function refusalFor(
   throw new Error(`expected ${JSON.stringify({ ...overrides, ...required })} to be refused`);
 }
 
-/** Naming every field the relation is between is what stops a case passing on some unrelated
- * violation it happened to trip as well. */
+/** Naming every field the relation is between is what stops a case from passing on some
+ * unrelated violation it happened to trip instead. */
 function expectOnlyViolation(overrides: WorkerDefaultableFields, ...fields: readonly string[]) {
   const { violations } = refusalFor(overrides);
   expect(violations).toHaveLength(1);

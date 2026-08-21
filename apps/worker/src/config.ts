@@ -1,20 +1,9 @@
 /** Everything the worker's behaviour is parameterised by.
  *
- * **The relations enforced here are enforced, not merely described.** `createWorkerConfig`
- * refuses a configuration that breaks one and names what it broke, so a mistuned override fails
- * at boot rather than as a worker that kills its own healthy children an hour later.
- *
  * **Open:** every duration below is a placeholder nobody has measured. `killAfterNoProgressMs` is
  * the one that matters most — it has to exceed the longest valid API call the analysis library
  * makes, including its backoff, or a healthy run is killed as hung. Nothing here can check that
  * bound against the library, so it stays undocumented as a relation and is only noted here.
- *
- * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing constructs a
- * `WorkerConfig` yet, so no field here has been exercised by anything. What the next change owes
- * this file: an entrypoint that builds one by reading `workerId`, `runRoot`, and `childCommand`
- * out of the environment over these defaults, and a loop that actually enforces
- * `superviseIntervalMs`, `killAfterNoProgressMs`, `killAfterTotalRuntimeMs`, and `drainGraceMs` —
- * `killGraceMs` is the only one anything reads today. Drop any field still unread when that lands.
  */
 
 import type { ChildCommand } from './child/spawn.ts';
