@@ -1,12 +1,5 @@
 /** What each `analysis_failure_reason` means to the person who uploaded the file, and what we ask
- * them to do about it.
- *
- * `packages/email` and `apps/web`'s report page both have to say the same thing about a given
- * reason — `REQUIREMENTS.md` § User email requires the failure email and the report page to
- * follow the same rules — so this is the one place that sentence is written. It lives beside
- * `AnalysisFailureReason` rather than in either consumer so that neither has to depend on the
- * other to reach it.
- */
+ * them to do about it. */
 
 import type { AnalysisFailureReason } from './types.ts';
 

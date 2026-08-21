@@ -45,11 +45,8 @@ describe('renderAnalysisFailed', () => {
     expect(document.heading).toBe('We could not finish your report: Q1 procurement');
   });
 
-  // The copy itself — one sentence per `AnalysisFailureReason`, and which reasons share one — is
-  // `ANALYSIS_FAILURE_EXPLANATIONS`'s own concern, tested exhaustively in `@gbd/db`. This is only
-  // about whether `renderAnalysisFailed` wires that copy into the right shape: the paragraphs in
-  // order, and a "Try again" action with a contact link underneath when the reason offers retry,
-  // or a "Contact us" action alone when it does not.
+  // packages/db/src/analysis-failure-explanations.test.ts tests the copy exhaustively; this test
+  // is for the wiring.
   test.each(['child_crashed', 'unusable_data'] as const)(
     'renders %s: its copy, and retry only when offered',
     (reason) => {
