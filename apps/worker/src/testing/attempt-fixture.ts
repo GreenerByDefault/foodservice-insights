@@ -133,7 +133,10 @@ async function anotherReport(
   requesterId: UserId,
 ): Promise<SeededReport> {
   const report = await insertReport(DATABASE, { organizationId });
-  const inputFile = await insertInputFile(DATABASE, { reportId: report.id });
+  const inputFile = await insertInputFile(DATABASE, {
+    reportId: report.id,
+    object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
+  });
   return await seededReport(report.id, inputFile.storageKey, requesterId);
 }
 

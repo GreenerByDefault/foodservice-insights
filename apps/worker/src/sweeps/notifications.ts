@@ -7,9 +7,6 @@
  * `notification_email_sent_at`. The claim gives mutual exclusion between workers; leaving a
  * failed send's claim in place gives retry backoff for free. `notification_attempts`, incremented
  * by the claim, both caps the spend and makes the claim expiry exponential.
- *
- * **Placeholder:** nothing calls `sendPendingNotifications` on an interval yet. That lands with
- * the supervision loop, as a fourth method on `worker.ts` beside `sweep()`.
  */
 
 import type {
