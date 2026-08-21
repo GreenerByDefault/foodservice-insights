@@ -1,4 +1,8 @@
 export {
+  ANALYSIS_FAILURE_EXPLANATIONS,
+  type AnalysisFailureFollowUp,
+} from './analysis-failure-explanations.ts';
+export {
   type DatabaseConfig,
   type DatabaseLimits,
   DEFAULT_LIMITS,

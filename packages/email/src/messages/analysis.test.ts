@@ -1,4 +1,4 @@
-import type { AnalysisFailureReason } from '@gbd/db';
+import { ANALYSIS_FAILURE_EXPLANATIONS } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import {
   anAnalysisFailed,
@@ -13,70 +13,6 @@ const emailer = recordingEmailer().service;
 
 const REPORT_URL = `https://example.test/orgs/${SAMPLE_ORGANIZATION_ID}/reports/${SAMPLE_REPORT_ID}`;
 const CONTACT_URL = 'mailto:support@example.test';
-
-const RETRY = {
-  action: 'retry',
-  text: 'This was not a problem with your file. You can run it again without uploading it a second time, or contact us if it keeps happening.',
-} as const;
-const NOT_YOUR_FAULT = {
-  action: 'contact',
-  text: 'This was not a problem with your file. Retrying is unlikely to help, so contact us and we will look into it.',
-} as const;
-
-/** What we tell the user for each failure reason, and what we ask them to do about it — written
- * independently of `FAILURE_EXPLANATIONS` in analysis.ts so a typo there, or a reason wired to
- * the wrong copy, fails a test instead of only ever agreeing with itself.
- */
-const REASON_EXPECTATIONS: Record<
-  AnalysisFailureReason,
-  { whatHappened: string; followUp: { action: 'retry' | 'contact'; text: string } }
-> = {
-  child_crashed: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  hung: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  hard_timeout: {
-    whatHappened: 'The analysis took too long, so we stopped it.',
-    followUp: RETRY,
-  },
-  infrastructure: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  contract_violation: {
-    whatHappened: 'The analysis finished in a state we could not read.',
-    followUp: NOT_YOUR_FAULT,
-  },
-  upstream_api: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  abandoned: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  unknown: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  shut_down: {
-    whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-    followUp: RETRY,
-  },
-  unusable_data: {
-    whatHappened: 'We could not make a usable report from this file.',
-    followUp: {
-      action: 'contact',
-      text: 'Retrying is unlikely to help. Contact us and we can help figure out what to change.',
-    },
-  },
-};
-
-const EVERY_REASON = Object.keys(REASON_EXPECTATIONS) as AnalysisFailureReason[];
 
 describe('renderAnalysisSucceeded', () => {
   test('links the report page, the PDF, and the Excel sheet', () => {
@@ -109,27 +45,28 @@ describe('renderAnalysisFailed', () => {
     expect(document.heading).toBe('We could not finish your report: Q1 procurement');
   });
 
-  test.each(EVERY_REASON)('renders %s: its copy, and retry only when offered', (reason) => {
-    const { whatHappened, followUp } = REASON_EXPECTATIONS[reason];
-    const offerRetry = followUp.action === 'retry';
-    const document = renderAnalysisFailed(emailer, anAnalysisFailed({ reason }));
+  // The copy itself — one sentence per `AnalysisFailureReason`, and which reasons share one — is
+  // `ANALYSIS_FAILURE_EXPLANATIONS`'s own concern, tested exhaustively in `@gbd/db`. This is only
+  // about whether `renderAnalysisFailed` wires that copy into the right shape: the paragraphs in
+  // order, and a "Try again" action with a contact link underneath when the reason offers retry,
+  // or a "Contact us" action alone when it does not.
+  test.each(['child_crashed', 'unusable_data'] as const)(
+    'renders %s: its copy, and retry only when offered',
+    (reason) => {
+      const { whatHappened, followUp } = ANALYSIS_FAILURE_EXPLANATIONS[reason];
+      const offerRetry = followUp.action === 'retry';
+      const document = renderAnalysisFailed(emailer, anAnalysisFailed({ reason }));
 
-    expect(document.blocks).toEqual([
-      { block: 'paragraph', text: whatHappened },
-      { block: 'paragraph', text: followUp.text },
-      offerRetry
-        ? { block: 'action', label: 'Try again', url: REPORT_URL }
-        : { block: 'action', label: 'Contact us', url: CONTACT_URL },
-      ...(offerRetry
-        ? [{ block: 'links' as const, links: [{ label: 'Contact us', url: CONTACT_URL }] }]
-        : []),
-    ]);
-  });
-
-  test('shares one explanation across reasons the user can act on identically, but keeps hard_timeout, contract_violation, and unusable_data distinct', () => {
-    const explanations = EVERY_REASON.map(
-      (reason) => renderAnalysisFailed(emailer, anAnalysisFailed({ reason })).blocks[0],
-    );
-    expect(new Set(explanations.map((block) => JSON.stringify(block))).size).toBe(4);
-  });
+      expect(document.blocks).toEqual([
+        { block: 'paragraph', text: whatHappened },
+        { block: 'paragraph', text: followUp.text },
+        offerRetry
+          ? { block: 'action', label: 'Try again', url: REPORT_URL }
+          : { block: 'action', label: 'Contact us', url: CONTACT_URL },
+        ...(offerRetry
+          ? [{ block: 'links' as const, links: [{ label: 'Contact us', url: CONTACT_URL }] }]
+          : []),
+      ]);
+    },
+  );
 });
