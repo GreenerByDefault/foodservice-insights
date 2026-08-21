@@ -5,11 +5,6 @@
  * That is what lets a test push a run an hour into the past with
  * [`testing/clock.ts`](./testing/clock.ts) and call the supervision step directly, instead of
  * waiting an hour for a timer.
- *
- * **Placeholder — delete this paragraph once the supervision loop lands.** Nothing reads a `Clock`
- * yet. The loop that enforces the thresholds is the next change, and it is what has to take one as
- * a parameter rather than calling `Date.now()` itself; a `Clock` still unused when that change
- * lands is a seam nobody needed, so delete this file instead of keeping it on speculation.
  */
 
 export type Clock = { now(): number };

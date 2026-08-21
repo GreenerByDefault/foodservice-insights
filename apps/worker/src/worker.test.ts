@@ -1,0 +1,975 @@
+/** The supervisor, driven through its own methods rather than its scheduler: every test calls
+ * `claimAndStart()`, `supervise()`, `sweep()`, `notify()`, or `drain()` directly, and `run()` gets
+ * one smoke test.
+ *
+ * Nothing here is mocked. The child is a real process spawned through the same `spawnChild`
+ * production uses ([`testing/fake-child.ts`](./testing/fake-child.ts)), and a failing service is a
+ * real service that fails — `breakableDatabase`, `breakableBlobStore`. Nothing re-tests
+ * `attempt/supervision.ts`'s rule table, `attempt/verdict.ts`'s precedence, `sweeps/reaper.ts`'s
+ * predicates, or `sweeps/notifications.ts`'s backoff; what is proved here is the wiring around
+ * them.
+ *
+ * Two constraints on how a test may be written, both from [`worker.ts`](./worker.ts):
+ *
+ * - **A threshold test advances a `manualClock`; a drain test passes `SYSTEM_CLOCK`.** `drain()` is
+ *   the one method that sleeps, so a test that did both would hang — a manual clock never reaches a
+ *   deadline a real sleep is waiting for.
+ * - **`withRollback` cannot be used at all**, since the worker reads through `DATABASE`'s own pool.
+ *   [`testing/attempt-fixture.ts`](./testing/attempt-fixture.ts) commits instead.
+ */
+
+import { existsSync } from 'node:fs';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
+import { DATABASE } from '@gbd/db/env';
+import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
+import { type RecordingEmailer, recordingEmailer } from '@gbd/email/testing';
+import {
+  type BlobStore,
+  deletePrefix,
+  listObjectKeys,
+  organizationPrefix,
+  putObject,
+} from '@gbd/storage';
+import { BLOB_STORE } from '@gbd/storage/env';
+import { breakableBlobStore } from '@gbd/storage/testing';
+import { describe, expect, test } from 'vitest';
+import { claimNextAttempt, markAttemptFailed } from './attempt/queue.ts';
+import { readProgress } from './child/run-directory.ts';
+import { SYSTEM_CLOCK } from './clock.ts';
+import {
+  createWorkerConfig,
+  MINUTE_MS,
+  SECOND_MS,
+  type WorkerConfig,
+  type WorkerDefaultableFields,
+} from './config.ts';
+import { runPath } from './contract/layout.ts';
+import {
+  type ReportFixture,
+  type SeededReport,
+  withReportFixture,
+} from './testing/attempt-fixture.ts';
+import { aWorkerId } from './testing/attempt-helpers.ts';
+import { backdateAttemptTimeline } from './testing/attempt-timeline.ts';
+import { manualClock } from './testing/clock.ts';
+import { type FakeChildStep, fakeChildCommand, releaseFakeChild } from './testing/fake-child.ts';
+import { waitUntil } from './testing/wait-until.ts';
+import { createWorker, type Worker } from './worker.ts';
+
+/** Fast wherever a real timer is involved, generous wherever the manual clock is what moves.
+ *
+ * Passed through `createWorkerConfig` like any other configuration, so no test can lean on a set of
+ * values production would refuse. `leaseExpiresAfterMs` is the one that cannot be shortened: it has
+ * to clear a renewal round trip, which is the pool's connection plus statement timeout.
+ */
+const TEST_CONFIG: WorkerDefaultableFields = {
+  maxConcurrentAttempts: 2,
+  queuePollIntervalMs: 10,
+  superviseIntervalMs: 50,
+  killAfterNoProgressMs: 60 * SECOND_MS,
+  killAfterTotalRuntimeMs: 120 * SECOND_MS,
+  killGraceMs: 200,
+  drainGraceMs: 500,
+  leaseExpiresAfterMs: 61 * SECOND_MS,
+  claimedCeilingMs: 10 * MINUTE_MS,
+  reapIntervalMs: 50,
+  uploadRetryBudgetMs: 5 * SECOND_MS,
+  notifyIntervalMs: 50,
+};
+
+/** Succeeds the moment it is spawned. */
+const SUCCEEDING_STEPS: readonly FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
+
+/** Holds until the test releases it, then succeeds. */
+const HOLDING_STEPS: readonly FakeChildStep[] = [
+  { step: 'waitFor', sentinel: 'go' },
+  ...SUCCEEDING_STEPS,
+];
+
+/** Writes `result.json` and *then* holds, so a test can break a dependency across the settle. */
+const SUCCEEDING_ON_RELEASE_STEPS: readonly FakeChildStep[] = [
+  { step: 'result' },
+  { step: 'waitFor', sentinel: 'go' },
+  { step: 'exit', code: 0 },
+];
+
+type WorkerOptions = {
+  steps?: readonly FakeChildStep[];
+  overrides?: WorkerDefaultableFields;
+  db?: DatabaseExecutor;
+  store?: BlobStore;
+  /** Real time instead of a `ManualClock`, for the tests that let `drain()` sleep. */
+  systemClock?: boolean;
+};
+
+type Harness = {
+  worker: Worker;
+  workerId: string;
+  config: WorkerConfig;
+  emails: RecordingEmailer;
+  /** Every report this worker will claim from, `reports[0]` being the fixture's own. */
+  reports: readonly SeededReport[];
+  advance(milliseconds: number): void;
+  /** A second worker over the same queue, report, and run root, drained with the first. */
+  anotherWorker(options?: WorkerOptions): Harness;
+};
+
+/** One worker over `reports` reports of one organization.
+ *
+ * More than one report is what it takes to have more than one attempt in flight — a report may
+ * only have one non-terminal attempt at a time.
+ */
+async function withWorker<T>(
+  options: WorkerOptions & { reports?: number },
+  body: (harness: Harness, fixture: ReportFixture) => Promise<T>,
+): Promise<T> {
+  return await withReportFixture(async (fixture) => {
+    const drains: (() => Promise<void>)[] = [];
+    const reports: SeededReport[] = [fixture];
+    for (let index = 1; index < (options.reports ?? 1); index++) {
+      reports.push(await fixture.seedReport());
+    }
+
+    function build(workerOptions: WorkerOptions): Harness {
+      const workerId = aWorkerId();
+      const manual = workerOptions.systemClock === true ? undefined : manualClock();
+      const emails = recordingEmailer();
+      const config = createWorkerConfig(
+        {
+          workerId,
+          runRoot: fixture.runRoot,
+          childCommand: fakeChildCommand(workerOptions.steps ?? SUCCEEDING_STEPS),
+        },
+        { ...TEST_CONFIG, ...workerOptions.overrides },
+      );
+      const worker = createWorker({
+        db: workerOptions.db ?? DATABASE,
+        store: workerOptions.store ?? BLOB_STORE,
+        emailer: emails.service,
+        clock: manual ?? SYSTEM_CLOCK,
+        config,
+        candidateReports: reports.map((report) => report.reportId),
+      });
+
+      drains.push(async () => {
+        // Advanced *after* the drain has started, so the graceful phase sees its own deadline
+        // already past: a manual clock would otherwise never reach a deadline `drain()` is really
+        // sleeping towards, and cleanup would tick until the test timed out.
+        const draining = worker.drain();
+        manual?.advance(config.drainGraceMs);
+        await draining;
+      });
+
+      return {
+        worker,
+        workerId,
+        config,
+        emails,
+        reports,
+        advance(milliseconds) {
+          if (manual === undefined) {
+            throw new Error('worker.test: this worker runs on the system clock');
+          }
+          manual.advance(milliseconds);
+        },
+        anotherWorker: (nested = {}) => build(nested),
+      };
+    }
+
+    const harness = build(options);
+    try {
+      return await body(harness, fixture);
+    } finally {
+      // Kills whatever is still running, so no fake child outlives its run root.
+      for (const drain of drains) await drain();
+    }
+  });
+}
+
+async function withBreakable<S>(
+  open: () => Promise<Breakable<S>>,
+  body: (breakable: Breakable<S>) => Promise<void>,
+): Promise<void> {
+  const breakable = await open();
+  try {
+    await body(breakable);
+  } finally {
+    await breakable.close();
+  }
+}
+
+function runDirectory(fixture: ReportFixture, attemptId: AnalysisAttemptId): string {
+  return join(fixture.runRoot, attemptId);
+}
+
+async function release(
+  fixture: ReportFixture,
+  attemptId: AnalysisAttemptId,
+  sentinel = 'go',
+): Promise<void> {
+  await releaseFakeChild(runDirectory(fixture, attemptId), sentinel);
+}
+
+function attemptRow(attemptId: AnalysisAttemptId) {
+  return readAnalysisAttemptRow(DATABASE, attemptId);
+}
+
+async function resultFileRows(attemptId: AnalysisAttemptId) {
+  return await DATABASE.selectFrom('resultFile')
+    .selectAll()
+    .where('analysisAttemptId', '=', attemptId)
+    .execute();
+}
+
+/** Every object an attempt has uploaded. The fixture's input files are not under this prefix, so
+ * this is exactly what the code under test has written. */
+async function uploadedKeys(fixture: ReportFixture): Promise<string[]> {
+  return await listObjectKeys(BLOB_STORE, organizationPrefix(fixture.organizationId));
+}
+
+/** Tick until the database shows what the tick was supposed to bring about.
+ *
+ * A resume is launched by a tick and deliberately never awaited by it, so "tick once and assert" is
+ * only ever a race. Ticking until the row moves is not.
+ */
+async function superviseUntil(
+  worker: Worker,
+  condition: () => Promise<boolean>,
+  description: string,
+): Promise<void> {
+  await waitUntil(async () => {
+    await worker.supervise();
+    return await condition();
+  }, description);
+}
+
+async function statusIs(attemptId: AnalysisAttemptId, status: string): Promise<boolean> {
+  return (await attemptRow(attemptId)).status === status;
+}
+
+async function requestCancel(attemptId: AnalysisAttemptId): Promise<void> {
+  await DATABASE.updateTable('analysisAttempt')
+    .set({ cancelRequestedAt: new Date() })
+    .where('id', '=', attemptId)
+    .execute();
+}
+
+async function deleteInputObject(fixture: ReportFixture): Promise<void> {
+  await deletePrefix(BLOB_STORE, fixture.inputCsvStorageKey);
+}
+
+async function restoreInputObject(fixture: ReportFixture): Promise<void> {
+  await putObject(BLOB_STORE, fixture.inputCsvStorageKey, fixture.inputCsv);
+}
+
+/** Seed one attempt on `harness.reports[report]` and claim it through the worker itself. Claims are
+ * oldest-first, so starting them in order is what makes which attempt is which deterministic. */
+async function startOne(harness: Harness, report = 0): Promise<AnalysisAttemptId> {
+  const attemptId = await reportAt(harness, report).seedAttempt();
+  expect(await harness.worker.claimAndStart()).toBe('started');
+  return attemptId;
+}
+
+function reportAt(harness: Harness, index: number): SeededReport {
+  const report = harness.reports[index];
+  if (report === undefined) throw new Error(`worker.test: no report seeded at ${index}`);
+  return report;
+}
+
+describe('claiming and capacity', () => {
+  test('refuses at the limit, then claims again once a finished attempt frees its slot', async () => {
+    await withWorker(
+      { steps: HOLDING_STEPS, reports: 2, overrides: { maxConcurrentAttempts: 1 } },
+      async (harness, fixture) => {
+        const first = await startOne(harness);
+        const second = await reportAt(harness, 1).seedAttempt();
+
+        expect(await harness.worker.claimAndStart()).toBe('at-capacity');
+
+        await release(fixture, first);
+        // Polled rather than asserted once: the slot is freed a few microtasks after the verdict
+        // lands, and an `at-capacity` poll has no side effect.
+        await waitUntil(
+          async () => (await harness.worker.claimAndStart()) === 'started',
+          'the finished attempt frees its slot',
+        );
+
+        expect(await statusIs(first, 'succeeded')).toBe(true);
+        expect((await attemptRow(second)).status).toBe('processing');
+      },
+    );
+  });
+
+  test('a parked verdict still occupies its slot', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        {
+          steps: SUCCEEDING_ON_RELEASE_STEPS,
+          store: store.service,
+          reports: 2,
+          overrides: { maxConcurrentAttempts: 1 },
+        },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+          await reportAt(harness, 1).seedAttempt();
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the settle gives up and parks the verdict',
+          );
+
+          expect(await harness.worker.claimAndStart()).toBe('at-capacity');
+          expect((await attemptRow(attemptId)).status).toBe('processing');
+        },
+      );
+    });
+  });
+
+  test('refuses once a drain has begun', async () => {
+    await withWorker({}, async (harness, fixture) => {
+      const attemptId = await fixture.seedAttempt();
+      await harness.worker.drain();
+
+      expect(await harness.worker.claimAndStart()).toBe('draining');
+      expect((await attemptRow(attemptId)).status).toBe('pending');
+    });
+  });
+
+  test('records infrastructure and frees the slot when the input object is gone', async () => {
+    await withWorker({ overrides: { maxConcurrentAttempts: 1 } }, async (harness, fixture) => {
+      const attemptId = await fixture.seedAttempt();
+      await deleteInputObject(fixture);
+
+      expect(await harness.worker.claimAndStart()).toBe('start-failed');
+
+      const row = await attemptRow(attemptId);
+      expect(row.status).toBe('failed');
+      expect(row.failureReason).toBe('infrastructure');
+      expect(row.failureDetail).toContain(fixture.inputCsvStorageKey);
+
+      // The slot is free: with a capacity of one, a second attempt still starts.
+      await restoreInputObject(fixture);
+      await fixture.seedAttempt();
+      expect(await harness.worker.claimAndStart()).toBe('started');
+    });
+  });
+
+  test('two workers over one queue claim disjoint attempts', async () => {
+    await withWorker({ steps: HOLDING_STEPS, reports: 2 }, async (first) => {
+      const second = first.anotherWorker({ steps: HOLDING_STEPS });
+      await reportAt(first, 0).seedAttempt();
+      await reportAt(first, 1).seedAttempt();
+
+      const outcomes = await Promise.all([
+        first.worker.claimAndStart(),
+        second.worker.claimAndStart(),
+      ]);
+
+      expect(outcomes).toEqual(['started', 'started']);
+      const claimed = await DATABASE.selectFrom('analysisAttempt')
+        .select(['id', 'workerId'])
+        .where(
+          'reportId',
+          'in',
+          first.reports.map((report) => report.reportId),
+        )
+        .where('status', '=', 'processing')
+        .execute();
+      expect(claimed).toHaveLength(2);
+      expect(new Set(claimed.map((row) => row.workerId))).toEqual(
+        new Set([first.workerId, second.workerId]),
+      );
+    });
+  });
+});
+
+describe('supervision', () => {
+  test('renews the lease on a child that is making progress', async () => {
+    const steps: FakeChildStep[] = [
+      { step: 'progress', sequence: 1 },
+      { step: 'waitFor', sentinel: 'go' },
+      { step: 'progress', sequence: 2 },
+      { step: 'waitFor', sentinel: 'never' },
+    ];
+    await withWorker({ steps }, async (harness, fixture) => {
+      const attemptId = await startOne(harness);
+      await waitUntil(
+        async () => (await readProgress(runDirectory(fixture, attemptId)))?.sequence === 1,
+        'the child writes its first progress',
+      );
+      await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+
+      const claimed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+      await harness.worker.supervise();
+      const afterFirstTick = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+
+      await release(fixture, attemptId);
+      await waitUntil(
+        async () => (await readProgress(runDirectory(fixture, attemptId)))?.sequence === 2,
+        'the child writes its second progress',
+      );
+      await harness.worker.supervise();
+      const afterSecondTick = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+
+      expect(afterFirstTick.getTime()).toBeGreaterThan(claimed.getTime());
+      expect(afterSecondTick.getTime()).toBeGreaterThan(afterFirstTick.getTime());
+    });
+  });
+
+  test('a progress read that fails skips the renewal and leaves the child alone', async () => {
+    const steps: FakeChildStep[] = [
+      { step: 'waitFor', sentinel: 'go' },
+      { step: 'progress', sequence: 1 },
+      { step: 'waitFor', sentinel: 'never' },
+    ];
+    await withWorker({ steps }, async (harness, fixture) => {
+      const attemptId = await startOne(harness);
+      // A directory where `progress.json` belongs: EISDIR, a real read error rather than a mocked
+      // one, and not the ENOENT of a child that has not written yet.
+      const progress = runPath(runDirectory(fixture, attemptId), 'progress');
+      await mkdir(progress);
+      await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+
+      const before = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+      await harness.worker.supervise();
+      expect((await attemptRow(attemptId)).leaseRenewedAt).toEqual(before);
+
+      // The child is still alive, which is what "does not kill" means: it runs on once the read
+      // is possible again.
+      await rm(progress, { recursive: true });
+      await release(fixture, attemptId);
+      await waitUntil(
+        async () => (await readProgress(runDirectory(fixture, attemptId)))?.sequence === 1,
+        'the child runs on past the failed read',
+      );
+    });
+  });
+
+  test('a malformed progress.json is a contract violation and kills the child', async () => {
+    const steps: FakeChildStep[] = [
+      { step: 'writeRaw', entry: 'progress', contents: '{ not json' },
+      { step: 'waitFor', sentinel: 'never' },
+    ];
+    await withWorker({ steps }, async (harness, fixture) => {
+      const attemptId = await startOne(harness);
+      await waitUntil(
+        () => existsSync(runPath(runDirectory(fixture, attemptId), 'progress')),
+        'the child writes its malformed progress',
+      );
+
+      await harness.worker.supervise();
+      await waitUntil(() => statusIs(attemptId, 'failed'), 'the attempt is failed');
+
+      expect((await attemptRow(attemptId)).failureReason).toBe('contract_violation');
+    });
+  });
+
+  test('no progress within killAfterNoProgressMs is hung', async () => {
+    await withWorker({ steps: [{ step: 'waitFor', sentinel: 'never' }] }, async (harness) => {
+      const attemptId = await startOne(harness);
+
+      harness.advance(harness.config.killAfterNoProgressMs);
+      await harness.worker.supervise();
+
+      await waitUntil(() => statusIs(attemptId, 'failed'), 'the attempt is failed');
+      expect((await attemptRow(attemptId)).failureReason).toBe('hung');
+    });
+  });
+
+  test('running past killAfterTotalRuntimeMs is a hard timeout, however healthy it looks', async () => {
+    const steps: FakeChildStep[] = [
+      { step: 'progress', sequence: 1 },
+      { step: 'waitFor', sentinel: 'go' },
+      { step: 'progress', sequence: 2 },
+      { step: 'waitFor', sentinel: 'never' },
+    ];
+    // The two thresholds are independent, so the ceiling can be reached with progress still
+    // flowing — the only way it ever fires before `hung` would.
+    const overrides = { killAfterTotalRuntimeMs: 60 * SECOND_MS + 50 };
+    await withWorker({ steps, overrides }, async (harness, fixture) => {
+      const attemptId = await startOne(harness);
+      const directory = runDirectory(fixture, attemptId);
+      await waitUntil(
+        async () => (await readProgress(directory))?.sequence === 1,
+        'the child writes its first progress',
+      );
+
+      harness.advance(60 * SECOND_MS);
+      await release(fixture, attemptId);
+      await waitUntil(
+        async () => (await readProgress(directory))?.sequence === 2,
+        'the child writes its second progress',
+      );
+      // Fresh progress this tick, so `hung` cannot fire on any later one.
+      await harness.worker.supervise();
+      expect(await statusIs(attemptId, 'processing')).toBe(true);
+
+      harness.advance(50);
+      await harness.worker.supervise();
+
+      await waitUntil(() => statusIs(attemptId, 'failed'), 'the attempt is failed');
+      expect((await attemptRow(attemptId)).failureReason).toBe('hard_timeout');
+    });
+  });
+
+  test('a lease it can no longer renew fences the parent, and writes nothing', async () => {
+    await withBreakable(breakableDatabase, async (database) => {
+      await withWorker(
+        {
+          steps: [{ step: 'waitFor', sentinel: 'never' }],
+          db: database.service,
+          // Both kill thresholds pushed past the lease expiry, so fencing is what fires.
+          overrides: {
+            killAfterNoProgressMs: 200 * SECOND_MS,
+            killAfterTotalRuntimeMs: 300 * SECOND_MS,
+          },
+        },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          database.break();
+          harness.advance(harness.config.leaseExpiresAfterMs);
+          await harness.worker.supervise();
+
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the fenced child dies and its settle finds nothing to write',
+          );
+          database.restore();
+
+          // Still `processing`: an attempt we may no longer own is one we write nothing for, and
+          // another worker's reaper is what converges the row.
+          const row = await attemptRow(attemptId);
+          expect(row.status).toBe('processing');
+          expect(row.finishedAt).toBeNull();
+        },
+      );
+    });
+  });
+});
+
+describe('cancellation, through the loop', () => {
+  test('a cancel request on our own attempt kills the child and records canceled', async () => {
+    await withWorker({ steps: [{ step: 'waitFor', sentinel: 'never' }] }, async (harness) => {
+      const attemptId = await startOne(harness);
+      await requestCancel(attemptId);
+
+      await harness.worker.supervise();
+      await waitUntil(() => statusIs(attemptId, 'canceled'), 'the attempt is canceled');
+
+      const row = await attemptRow(attemptId);
+      expect(row.failureReason).toBeNull();
+      // A canceled attempt is never emailed about.
+      expect(row.notificationEmailSentAt).toBeNull();
+    });
+  });
+
+  test('the same request converged by another worker leaves the owner nothing to write', async () => {
+    await withWorker(
+      { steps: [{ step: 'waitFor', sentinel: 'never' }] },
+      async (harness, fixture) => {
+        const other = harness.anotherWorker();
+        const attemptId = await startOne(harness);
+        await requestCancel(attemptId);
+        await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+
+        expect(await other.worker.sweep()).toEqual({ reaped: [attemptId], canceled: [] });
+        const reaped = await attemptRow(attemptId);
+        expect(reaped.status).toBe('canceled');
+        expect(reaped.failureReason).toBeNull();
+        expect(reaped.reapedByWorkerId).toBe(other.workerId);
+
+        // The owner still kills its child, and its own tick writes nothing.
+        await harness.worker.supervise();
+        await waitUntil(
+          () => !existsSync(runDirectory(fixture, attemptId)),
+          'the owner kills the child it no longer owns',
+        );
+        expect(await attemptRow(attemptId)).toEqual(reaped);
+      },
+    );
+  });
+
+  test('sweep converges a canceled pending attempt this worker never claimed', async () => {
+    await withWorker({}, async (harness, fixture) => {
+      const attemptId = await fixture.seedAttempt();
+      await requestCancel(attemptId);
+
+      expect(await harness.worker.sweep()).toEqual({ reaped: [], canceled: [attemptId] });
+      expect((await attemptRow(attemptId)).status).toBe('canceled');
+    });
+  });
+});
+
+describe('losing a race with the real reaper', () => {
+  test("a reaped attempt's child is killed and the reaper's verdict stands", async () => {
+    await withWorker(
+      { steps: [{ step: 'waitFor', sentinel: 'never' }] },
+      async (harness, fixture) => {
+        const other = harness.anotherWorker();
+        const attemptId = await startOne(harness);
+        await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+
+        expect((await other.worker.sweep()).reaped).toEqual([attemptId]);
+        const reaped = await attemptRow(attemptId);
+
+        await harness.worker.supervise();
+        await waitUntil(
+          () => !existsSync(runDirectory(fixture, attemptId)),
+          'the owner kills the child it no longer owns',
+        );
+
+        expect(reaped.failureReason).toBe('abandoned');
+        expect(reaped.reapedByWorkerId).toBe(other.workerId);
+        expect(await attemptRow(attemptId)).toEqual(reaped);
+      },
+    );
+  });
+});
+
+describe('parked verdicts', () => {
+  test('a verdict parked at record lands once the database comes back', async () => {
+    await withBreakable(breakableDatabase, async (database) => {
+      await withWorker(
+        { steps: SUCCEEDING_ON_RELEASE_STEPS, db: database.service },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          // Broken across the terminal write only: the upload happens against a healthy store, so
+          // the verdict parks at `record` with its files already stored.
+          database.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the terminal write fails and the verdict parks',
+          );
+          expect(await statusIs(attemptId, 'processing')).toBe(true);
+
+          database.restore();
+          await superviseUntil(
+            harness.worker,
+            () => statusIs(attemptId, 'succeeded'),
+            'the parked verdict lands',
+          );
+          expect(await resultFileRows(attemptId)).toHaveLength(3);
+        },
+      );
+    });
+  });
+
+  test('a verdict parked at upload lands once the store comes back, renewing throughout', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+          await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the upload fails and the verdict parks',
+          );
+          const parked = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+
+          // The database is healthy throughout, so a parked record keeps its lease renewed — which
+          // is why this stage needs `uploadRetryBudgetMs` and cannot rely on fencing.
+          await harness.worker.supervise();
+          const renewed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+          expect(renewed.getTime()).toBeGreaterThan(parked.getTime());
+
+          store.restore();
+          await superviseUntil(
+            harness.worker,
+            () => statusIs(attemptId, 'succeeded'),
+            'the parked verdict lands',
+          );
+
+          const files = await resultFileRows(attemptId);
+          expect(files).toHaveLength(3);
+          expect(await uploadedKeys(fixture)).toHaveLength(files.length);
+        },
+      );
+    });
+  });
+
+  test('a verdict parked at upload past its budget fails with the store error it parked on', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the upload fails and the verdict parks',
+          );
+
+          harness.advance(harness.config.uploadRetryBudgetMs);
+          await superviseUntil(
+            harness.worker,
+            () => statusIs(attemptId, 'failed'),
+            'the budget runs out and the verdict is converted',
+          );
+
+          const row = await attemptRow(attemptId);
+          expect(row.failureReason).toBe('infrastructure');
+          expect(row.failureDetail).toContain('blob store');
+          expect(await resultFileRows(attemptId)).toHaveLength(0);
+          expect(await uploadedKeys(fixture)).toEqual([]);
+        },
+      );
+    });
+  });
+
+  test('a reap mid-park drops the verdict without uploading at all', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        {
+          steps: SUCCEEDING_ON_RELEASE_STEPS,
+          store: store.service,
+          overrides: { maxConcurrentAttempts: 1 },
+        },
+        async (harness, fixture) => {
+          const other = harness.anotherWorker();
+          const attemptId = await startOne(harness);
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the upload fails and the verdict parks',
+          );
+
+          await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+          expect((await other.worker.sweep()).reaped).toEqual([attemptId]);
+
+          // Restored first, so what stops the upload is the drop and not the outage.
+          store.restore();
+          await harness.worker.supervise();
+
+          expect((await attemptRow(attemptId)).failureReason).toBe('abandoned');
+          expect(await resultFileRows(attemptId)).toHaveLength(0);
+          expect(await uploadedKeys(fixture)).toEqual([]);
+          // Dropping the record is what frees the slot and stops the lease being renewed.
+          await fixture.seedAttempt();
+          expect(await harness.worker.claimAndStart()).toBe('started');
+        },
+      );
+    });
+  });
+
+  test('a cancel mid-park records canceled with the budget unspent', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the upload fails and the verdict parks',
+          );
+
+          await requestCancel(attemptId);
+          // Restored, so an unconverted resume would happily upload a report the user just deleted.
+          store.restore();
+          await superviseUntil(
+            harness.worker,
+            () => statusIs(attemptId, 'canceled'),
+            'the parked verdict is converted to canceled',
+          );
+
+          expect((await attemptRow(attemptId)).failureReason).toBeNull();
+          expect(await resultFileRows(attemptId)).toHaveLength(0);
+          expect(await uploadedKeys(fixture)).toEqual([]);
+        },
+      );
+    });
+  });
+});
+
+describe('draining', () => {
+  test('every in-flight attempt settles before drain resolves', async () => {
+    await withWorker(
+      {
+        steps: HOLDING_STEPS,
+        systemClock: true,
+        reports: 2,
+        overrides: { drainGraceMs: 5 * SECOND_MS },
+      },
+      async (harness, fixture) => {
+        const first = await startOne(harness);
+        const second = await startOne(harness, 1);
+
+        const draining = harness.worker.drain();
+        expect(await harness.worker.claimAndStart()).toBe('draining');
+        await release(fixture, first);
+        await release(fixture, second);
+        await draining;
+
+        expect(await statusIs(first, 'succeeded')).toBe(true);
+        expect(await statusIs(second, 'succeeded')).toBe(true);
+      },
+    );
+  });
+
+  test('a child that ignores SIGTERM is killed at the deadline and recorded shut_down', async () => {
+    await withWorker(
+      {
+        steps: [{ step: 'ignoreSigterm' }, { step: 'hang' }],
+        systemClock: true,
+        overrides: { drainGraceMs: 300 },
+      },
+      async (harness) => {
+        const attemptId = await startOne(harness);
+
+        await harness.worker.drain();
+
+        const row = await attemptRow(attemptId);
+        expect(row.status).toBe('failed');
+        expect(row.failureReason).toBe('shut_down');
+      },
+    );
+  });
+
+  test('a verdict still parked at upload at the deadline is failed rather than abandoned', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        {
+          steps: SUCCEEDING_ON_RELEASE_STEPS,
+          store: store.service,
+          systemClock: true,
+          overrides: { drainGraceMs: 300 },
+        },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the upload fails and the verdict parks',
+          );
+
+          await harness.worker.drain();
+
+          const row = await attemptRow(attemptId);
+          expect(row.status).toBe('failed');
+          expect(row.failureReason).toBe('infrastructure');
+        },
+      );
+    });
+  });
+
+  test('leases keep being renewed through a long drain', async () => {
+    await withWorker(
+      {
+        steps: HOLDING_STEPS,
+        systemClock: true,
+        overrides: { drainGraceMs: 10 * SECOND_MS, superviseIntervalMs: 50 },
+      },
+      async (harness, fixture) => {
+        const attemptId = await startOne(harness);
+        await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+
+        const draining = harness.worker.drain();
+        // A drain that stopped ticking `supervise()` would have the rest of the fleet reap this
+        // worker's own healthy attempts.
+        const renewals = new Set<number>();
+        await waitUntil(async () => {
+          renewals.add(((await attemptRow(attemptId)).leaseRenewedAt as Date).getTime());
+          return renewals.size > 2;
+        }, 'the lease is renewed more than once during the drain');
+
+        await release(fixture, attemptId);
+        await draining;
+        expect(await statusIs(attemptId, 'succeeded')).toBe(true);
+      },
+    );
+  });
+
+  test('two concurrent drains drain once', async () => {
+    await withWorker(
+      {
+        steps: [{ step: 'ignoreSigterm' }, { step: 'hang' }],
+        systemClock: true,
+        overrides: { drainGraceMs: 300 },
+      },
+      async (harness) => {
+        const attemptId = await startOne(harness);
+
+        await Promise.all([harness.worker.drain(), harness.worker.drain()]);
+
+        expect((await attemptRow(attemptId)).failureReason).toBe('shut_down');
+      },
+    );
+  });
+});
+
+describe('the sweeps, wired up', () => {
+  test("sweep reaps another worker's expired attempt under our own id", async () => {
+    await withWorker({}, async (harness, fixture) => {
+      const attemptId = await fixture.seedAttempt();
+      await claimNextAttempt(DATABASE, aWorkerId(), { candidateReports: [fixture.reportId] });
+      await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+
+      expect(await harness.worker.sweep()).toEqual({ reaped: [attemptId], canceled: [] });
+
+      const row = await attemptRow(attemptId);
+      expect(row.failureReason).toBe('abandoned');
+      expect(row.reapedByWorkerId).toBe(harness.workerId);
+    });
+  });
+
+  test('notify sends one email per terminal attempt and never a second', async () => {
+    await withWorker({}, async (harness, fixture) => {
+      const attemptId = await fixture.seedAttempt();
+      await claimNextAttempt(DATABASE, harness.workerId, {
+        candidateReports: [fixture.reportId],
+      });
+      await markAttemptFailed(DATABASE, attemptId, harness.workerId, {
+        reason: 'infrastructure',
+        detail: 'something unreachable',
+      });
+
+      expect(await harness.worker.notify()).toEqual([attemptId]);
+      expect(harness.emails.sent()).toHaveLength(1);
+      expect(harness.emails.sent()[0]?.to).toBe(fixture.requester.email);
+      expect((await attemptRow(attemptId)).notificationEmailSentAt).toBeInstanceOf(Date);
+
+      expect(await harness.worker.notify()).toEqual([]);
+      expect(harness.emails.sent()).toHaveLength(1);
+    });
+  });
+});
+
+describe('run', () => {
+  test('carries two seeded attempts all the way to a sent email, then drains', async () => {
+    await withWorker({ systemClock: true, reports: 2 }, async (harness) => {
+      const first = await reportAt(harness, 0).seedAttempt();
+      const second = await reportAt(harness, 1).seedAttempt();
+
+      const running = harness.worker.run();
+      await waitUntil(
+        async () =>
+          (await statusIs(first, 'succeeded')) &&
+          (await statusIs(second, 'succeeded')) &&
+          harness.emails.sent().length === 2,
+        'both attempts succeed and both emails are sent',
+      );
+
+      await harness.worker.drain();
+      await expect(running).resolves.toBeUndefined();
+    });
+  });
+});
