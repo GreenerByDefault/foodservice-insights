@@ -97,13 +97,6 @@ function definedOverrides(overrides: WorkerDefaultableFields): WorkerDefaultable
   ) as WorkerDefaultableFields;
 }
 
-/** Every relation between these values that can be decided from the values alone, as one message
- * per relation the config breaks.
- *
- * See `ARCHITECTURE.md` § Progress, leases, and reaping for the reasoning behind the two below.
- * The bound on `killAfterNoProgressMs` against the analysis library's longest legal API call is
- * missing because nothing here can decide it; it stays documented on the field itself instead.
- */
 function workerConfigViolations(config: WorkerConfig): string[] {
   const violations: string[] = [];
   const check = (holds: boolean, violation: string) => {
