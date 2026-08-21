@@ -50,7 +50,6 @@ import { classifyAttemptFailure } from './failures.ts';
 import { sendPendingNotifications } from './sweeps/notifications.ts';
 import { cancelRequestedPendingAttempts, reapExpiredAttempts } from './sweeps/reaper.ts';
 
-// TODO: can/should we DRY this with AttempDependencies? Ditto simplify part of createWorker. Valid to say no.
 export type WorkerDependencies = {
   db: DatabaseExecutor;
   store: BlobStore;
@@ -78,29 +77,19 @@ export type Worker = {
  * Deliberately mutable. `state` is replaced wholesale rather than mutated field by field.
  */
 type InFlight = {
-  // TOOD: probably call this preparedAttempt everywhere. I think it will read better.
-  prepared: PreparedAttempt;
+  preparedAttempt: PreparedAttempt;
   state: SupervisionState;
   kill?: Kill;
-  // TODO: probably call this pendingVerdict everywhere.
-  pending?: PendingVerdict;
+  pendingVerdict?: PendingVerdict;
   /** The settle or resume currently running, so no tick starts a second and `drain()` can await it. */
-  // TODO: maybe call this settlingPromise? That clarifies it's a noun and not a verb.
-  settling?: Promise<void>;
+  settlingPromise?: Promise<void>;
 };
 
 // TODO: should we rewrite to be a class?
 export function createWorker(dependencies: WorkerDependencies): Worker {
   const { db, store, emailer, clock, config, candidateReports } = dependencies;
 
-  const attemptDependencies: AttemptDependencies = {
-    db,
-    store,
-    workerId: config.workerId,
-    runRoot: config.runRoot,
-    childCommand: config.childCommand,
-    killGraceMs: config.killGraceMs,
-  };
+  const attemptDependencies: AttemptDependencies = { ...config, db, store };
 
   const inFlight = new Map<AnalysisAttemptId, InFlight>();
   let draining = false;
@@ -121,15 +110,15 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     const attemptId = await claimNextAttempt(db, config.workerId, { candidateReports });
     if (attemptId === undefined) return 'queue-empty';
 
-    let prepared: PreparedAttempt;
+    let preparedAttempt: PreparedAttempt;
     try {
-      prepared = await startAttempt(attemptDependencies, attemptId);
+      preparedAttempt = await startAttempt(attemptDependencies, attemptId);
     } catch (error) {
       await failToStart(attemptId, error);
       return 'start-failed';
     }
 
-    startTracking(prepared);
+    startTracking(preparedAttempt);
     return 'started';
   }
 
@@ -147,16 +136,16 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
   }
 
-  function startTracking(prepared: PreparedAttempt): void {
+  function startTracking(preparedAttempt: PreparedAttempt): void {
     const startedAt = clock.now();
     const record: InFlight = {
-      prepared,
+      preparedAttempt,
       state: { startedAt, lastProgressAt: startedAt, renewalIssuedAt: startedAt, exited: false },
     };
-    inFlight.set(prepared.attemptId, record);
+    inFlight.set(preparedAttempt.attemptId, record);
     // Stored at attach time, so there is no window in which a child has exited and no tick knows a
     // settle is running.
-    record.settling = guardSettle(record, settleWhenExited(record));
+    record.settlingPromise = guardSettle(record, settleWhenExited(record));
   }
 
   /** Await the child, then read how it ended and deliver the verdict.
@@ -165,17 +154,18 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
    * reaching the event loop unhandled and taking the process down with it.
    */
   async function settleWhenExited(record: InFlight): Promise<void> {
-    const outcome = await record.prepared.child.exited;
+    const outcome = await record.preparedAttempt.child.exited;
     // Set in the same microtask the await resolves in, so no tick can see a dead child as live.
     record.state = { ...record.state, exited: true };
 
-    const ending = await readChildEnding(record.prepared, outcome, record.kill);
-    applySettleOutcome(record, await settleAttempt(attemptDependencies, record.prepared, ending));
+    const ending = await readChildEnding(record.preparedAttempt, outcome, record.kill);
+    applySettleOutcome(
+      record,
+      await settleAttempt(attemptDependencies, record.preparedAttempt, ending),
+    );
   }
 
-  // TODO: improve the naming here. For example, the docstring is confusing about settling vs settle. Those are
-  // kinda vague names. I wonder if we should rename the concept of settling entirely even.
-  /** Hold `settling` for the lifetime of one settle or resume, absorbing whatever it throws.
+  /** Hold `settlingPromise` for the lifetime of one settle or resume, absorbing whatever it throws.
    *
    * // TODO: the connection to resumeSettle is confusing to me. I don't understand how this function relates to it,
    * // like why resumeSettle would be in the call path etc.
@@ -188,26 +178,26 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       await settle;
     } catch (error) {
       console.error(
-        `Could not deliver the verdict for attempt ${record.prepared.attemptId}; abandoning it ` +
+        `Could not deliver the verdict for attempt ${record.preparedAttempt.attemptId}; abandoning it ` +
           'to the reaper',
         error,
       );
-      inFlight.delete(record.prepared.attemptId);
+      inFlight.delete(record.preparedAttempt.attemptId);
     } finally {
-      record.settling = undefined;
+      record.settlingPromise = undefined;
     }
   }
 
   function applySettleOutcome(record: InFlight, outcome: SettleOutcome): void {
     if (outcome.kind !== 'parked') {
-      inFlight.delete(record.prepared.attemptId);
+      inFlight.delete(record.preparedAttempt.attemptId);
       return;
     }
 
     // A resume that parks again should keep its original `since`, so `uploadRetryBudgetMs` is spent
     // rather than restarted on every tick.
     const parkedSince = record.state.parked?.since ?? clock.now();
-    record.pending = outcome.pending;
+    record.pendingVerdict = outcome.pending;
     record.state = {
       ...record.state,
       parked: { stage: outcome.pending.stage, since: parkedSince },
@@ -254,17 +244,17 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
           resuming.push(record);
           break;
         case 'convert-parked-verdict-to-canceled':
-          record.pending = { stage: 'record', verdict: { kind: 'canceled' } };
+          record.pendingVerdict = { stage: 'record', verdict: { kind: 'canceled' } };
           resuming.push(record);
           break;
         case 'convert-parked-verdict-to-upload-expired':
-          record.pending = expireUpload(record.pending);
+          record.pendingVerdict = expireUpload(record.pendingVerdict);
           resuming.push(record);
           break;
         case 'drop-parked-verdict':
           // Deleting is what stops the lease being renewed. Abandoning must always stop renewing,
           // or reaping can never converge the row.
-          inFlight.delete(record.prepared.attemptId);
+          inFlight.delete(record.preparedAttempt.attemptId);
           break;
       }
     }
@@ -283,7 +273,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
     let progressSequence: number | undefined;
     try {
-      progressSequence = (await readProgress(record.prepared.runDirectory))?.sequence;
+      progressSequence = (await readProgress(record.preparedAttempt.runDirectory))?.sequence;
     } catch (error) {
       // Principle 5 in `failures.ts`: a renewal asserts that the checks ran, and this one did not.
       return { progress: { kind: 'failed', error }, lease: { kind: 'skipped' } };
@@ -295,11 +285,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // Stamped before the statement is issued; `SupervisionState.renewalIssuedAt` covers why.
     const renewalIssuedAt = clock.now();
     try {
-      const lease = await renewLease(db, record.prepared.attemptId, config.workerId);
+      const lease = await renewLease(db, record.preparedAttempt.attemptId, config.workerId);
       return { lease, renewalIssuedAt };
     } catch (error) {
       // Principle 2 in `failures.ts`: absorbed, and the next tick is the retry.
-      console.error(`Could not renew the lease on attempt ${record.prepared.attemptId}`, error);
+      console.error(
+        `Could not renew the lease on attempt ${record.preparedAttempt.attemptId}`,
+        error,
+      );
       return { lease: { kind: 'failed', error }, renewalIssuedAt };
     }
   }
@@ -307,23 +300,23 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   function kill(record: InFlight, reason: Kill): void {
     // Recorded before the kill, so the settle continuation knows why the child died.
     record.kill = reason;
-    record.prepared.child.kill();
+    record.preparedAttempt.child.kill();
   }
 
   /** A verdict whose upload budget has run out, or which a drain will not wait for, recorded as the
    * failure the store actually handed us rather than left to the reaper's `abandoned` hours later. */
-  function expireUpload(pending: PendingVerdict | undefined): PendingVerdict {
-    const lastError = pending?.stage === 'upload' ? pending.lastError : undefined;
+  function expireUpload(pendingVerdict: PendingVerdict | undefined): PendingVerdict {
+    const lastError = pendingVerdict?.stage === 'upload' ? pendingVerdict.lastError : undefined;
     const { reason, detail } = classifyAttemptFailure(lastError);
     return { stage: 'record', verdict: { kind: 'failed', reason, detail } };
   }
 
   function launchResume(record: InFlight): void {
-    if (record.settling !== undefined || record.pending === undefined) return;
-    record.settling = guardSettle(
+    if (record.settlingPromise !== undefined || record.pendingVerdict === undefined) return;
+    record.settlingPromise = guardSettle(
       record,
-      resumeSettle(attemptDependencies, record.prepared, record.pending).then((outcome) =>
-        applySettleOutcome(record, outcome),
+      resumeSettle(attemptDependencies, record.preparedAttempt, record.pendingVerdict).then(
+        (outcome) => applySettleOutcome(record, outcome),
       ),
     );
   }
@@ -389,7 +382,8 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // A verdict still parked at `upload` takes the same conversion as a budget expiry, written
     // through the ordinary resume path rather than abandoned to the reaper.
     for (const record of inFlight.values()) {
-      if (record.pending?.stage === 'upload') record.pending = expireUpload(record.pending);
+      if (record.pendingVerdict?.stage === 'upload')
+        record.pendingVerdict = expireUpload(record.pendingVerdict);
       launchResume(record);
     }
     await awaitAllSettling();
@@ -406,7 +400,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   /** Every settle or resume still running. Each is bounded by `recordVerdict`'s retry and the blob
    * store's request deadline. */
   async function awaitAllSettling(): Promise<void> {
-    await Promise.all([...inFlight.values()].map((record) => record.settling));
+    await Promise.all([...inFlight.values()].map((record) => record.settlingPromise));
   }
 
   /** Wait out one supervise interval, unless every in-flight attempt finishes first — so a drain
@@ -417,7 +411,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // and waking on it would retry whatever it parked on as fast as that dependency can refuse.
     const blockingOnAttempt = [...inFlight.values()]
       .filter((record) => record.state.parked === undefined)
-      .map((record) => record.settling ?? record.prepared.child.exited);
+      .map((record) => record.settlingPromise ?? record.preparedAttempt.child.exited);
     try {
       await Promise.race([sleep(intervalMs, controller.signal), ...blockingOnAttempt]);
     } finally {
