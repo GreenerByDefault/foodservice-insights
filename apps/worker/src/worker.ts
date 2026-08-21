@@ -127,7 +127,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       return 'start-failed';
     }
 
-    register(prepared);
+    startTracking(prepared);
     return 'started';
   }
 
@@ -145,7 +145,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
   }
 
-  function register(prepared: PreparedAttempt): void {
+  function startTracking(prepared: PreparedAttempt): void {
     const startedAt = clock.now();
     const record: InFlight = {
       prepared,
@@ -154,11 +154,11 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     inFlight.set(prepared.attemptId, record);
     // Stored at attach time, so there is no window in which a child has exited and no tick knows a
     // settle is running.
-    record.settling = track(record, settleWhenExited(record));
+    record.settling = guardSettle(record, settleWhenExited(record));
   }
 
   /** Await the child, then read how it ended and deliver the verdict. Only ever awaited through
-   * `track`, which is what keeps a rejection here from reaching the event loop unhandled and
+   * `guardSettle`, which is what keeps a rejection here from reaching the event loop unhandled and
    * taking the process down with it. */
   async function settleWhenExited(record: InFlight): Promise<void> {
     const outcome = await record.prepared.child.exited;
@@ -175,7 +175,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
    * not expect — abandon the attempt, and abandoning must stop renewing the lease or the row stays
    * `processing` forever and the reaper can never converge it (principle 3 in `failures.ts`).
    */
-  async function track(record: InFlight, settle: Promise<void>): Promise<void> {
+  async function guardSettle(record: InFlight, settle: Promise<void>): Promise<void> {
     try {
       await settle;
     } catch (error) {
@@ -249,7 +249,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
           resuming.push(record);
           break;
         case 'convert-parked-verdict-to-upload-expired':
-          record.pending = uploadExpired(record.pending);
+          record.pending = expireUpload(record.pending);
           resuming.push(record);
           break;
         case 'drop-parked-verdict':
@@ -303,7 +303,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   /** A verdict whose upload budget has run out, or which a drain will not wait for, recorded as the
    * failure the store actually handed us rather than left to the reaper's `abandoned` hours later. */
-  function uploadExpired(pending: PendingVerdict | undefined): PendingVerdict {
+  function expireUpload(pending: PendingVerdict | undefined): PendingVerdict {
     const lastError = pending?.stage === 'upload' ? pending.lastError : undefined;
     const { reason, detail } = classifyAttemptFailure(lastError);
     return { stage: 'record', verdict: { kind: 'failed', reason, detail } };
@@ -311,7 +311,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   function launchResume(record: InFlight): void {
     if (record.settling !== undefined || record.pending === undefined) return;
-    record.settling = track(
+    record.settling = guardSettle(
       record,
       resumeSettle(attemptDependencies, record.prepared, record.pending).then((outcome) =>
         applySettleOutcome(record, outcome),
@@ -374,15 +374,15 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
     // Awaited before the conversion below, not after: a resume launched by the last graceful tick
     // is still in flight, and it is what decides where its verdict finally parks.
-    await settlements();
+    await awaitAllSettling();
 
     // A verdict still parked at `upload` takes the same conversion as a budget expiry, written
     // through the ordinary resume path rather than abandoned to the reaper.
     for (const record of inFlight.values()) {
-      if (record.pending?.stage === 'upload') record.pending = uploadExpired(record.pending);
+      if (record.pending?.stage === 'upload') record.pending = expireUpload(record.pending);
       launchResume(record);
     }
-    await settlements();
+    await awaitAllSettling();
 
     for (const attemptId of inFlight.keys()) {
       console.error(
@@ -395,7 +395,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   /** Every settle or resume still running. Each is bounded by `recordVerdict`'s retry and the blob
    * store's request deadline. */
-  async function settlements(): Promise<void> {
+  async function awaitAllSettling(): Promise<void> {
     await Promise.all([...inFlight.values()].map((record) => record.settling));
   }
 
@@ -405,11 +405,11 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     const controller = new AbortController();
     // A parked record is deliberately not raced on: its resume finishing does not end the drain,
     // and waking on it would retry whatever it parked on as fast as that dependency can refuse.
-    const settlements = [...inFlight.values()]
+    const blockingOnAttempt = [...inFlight.values()]
       .filter((record) => record.state.parked === undefined)
       .map((record) => record.settling ?? record.prepared.child.exited);
     try {
-      await Promise.race([sleep(intervalMs, controller.signal), ...settlements]);
+      await Promise.race([sleep(intervalMs, controller.signal), ...blockingOnAttempt]);
     } finally {
       controller.abort();
     }
