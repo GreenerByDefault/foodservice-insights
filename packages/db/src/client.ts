@@ -39,10 +39,6 @@ export type DatabaseLimits = {
   idleSessionTimeoutMs: number;
 };
 
-/** [`apps/worker/src/config.ts`](../../../apps/worker/src/config.ts) checks its lease
- * thresholds against `connectionTimeoutMs + statementTimeoutMs` — the longest a single
- * statement can take to come back either way — and its concurrency against `maxConnections`.
- * Those checks read these defaults directly, not a copy of them, so they can't drift. */
 export const DEFAULT_LIMITS: DatabaseLimits = {
   minConnections: 2,
   maxConnections: 10,

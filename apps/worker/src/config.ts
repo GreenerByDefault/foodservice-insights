@@ -6,9 +6,9 @@
  * bound against the library, so it stays undocumented as a relation and is only noted here.
  */
 
-import { DEFAULT_LIMITS } from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
+import { WORKER_DB_LIMITS } from './db.ts';
 
 export type WorkerConfig = {
   /** Written to `analysis_attempt.worker_id`, so it has to be unique per running process. */
@@ -170,7 +170,7 @@ function definedOverrides(overrides: WorkerDefaultableFields): WorkerDefaultable
  * second pool, and a smaller expiry is all it buys.
  */
 const MAX_RENEWAL_ROUND_TRIP_MS =
-  DEFAULT_LIMITS.connectionTimeoutMs + DEFAULT_LIMITS.statementTimeoutMs;
+  WORKER_DB_LIMITS.connectionTimeoutMs + WORKER_DB_LIMITS.statementTimeoutMs;
 
 /** Connections one in-flight attempt can occupy at once: this tick's lease renewal, and a settle's
  * terminal write, which deliberately runs outside the tick. */
@@ -275,9 +275,9 @@ function workerConfigViolations(config: WorkerConfig): string[] {
 
   check(
     CONNECTIONS_PER_ATTEMPT * config.maxConcurrentAttempts + CONNECTIONS_FOR_LOOPS_AND_SWEEPS <=
-      DEFAULT_LIMITS.maxConnections,
+      WORKER_DB_LIMITS.maxConnections,
     `maxConcurrentAttempts must keep the worker's concurrent database work inside the pool's ` +
-      `${DEFAULT_LIMITS.maxConnections} connections — ${CONNECTIONS_PER_ATTEMPT} per attempt plus ` +
+      `${WORKER_DB_LIMITS.maxConnections} connections — ${CONNECTIONS_PER_ATTEMPT} per attempt plus ` +
       `${CONNECTIONS_FOR_LOOPS_AND_SWEEPS} for the loops and sweeps. Beyond that a lease renewal ` +
       'waits for a connection, which inflates the very round trip leaseExpiresAfterMs is sized ' +
       'against, so raising this lever means raising the pool',

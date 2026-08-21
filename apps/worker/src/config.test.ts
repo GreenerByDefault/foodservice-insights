@@ -1,4 +1,3 @@
-import { DEFAULT_LIMITS } from '@gbd/db';
 import { DATABASE } from '@gbd/db/env';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import { sql } from 'kysely';
@@ -11,6 +10,7 @@ import {
   type WorkerDefaultableFields,
   type WorkerRequiredFields,
 } from './config.ts';
+import { WORKER_DB_LIMITS } from './db.ts';
 
 const REQUIRED_FIELDS: WorkerRequiredFields = {
   workerId: 'worker-under-test',
@@ -116,8 +116,8 @@ describe('the relations between the thresholds a parent enforces on its own chil
     // At the boundary itself: one renewal taking the longest a connection wait plus a statement
     // can take, followed by one more supervise tick before the lease is checked again.
     const oneRenewalPlusOneTick =
-      DEFAULT_LIMITS.connectionTimeoutMs +
-      DEFAULT_LIMITS.statementTimeoutMs +
+      WORKER_DB_LIMITS.connectionTimeoutMs +
+      WORKER_DB_LIMITS.statementTimeoutMs +
       WORKER_DEFAULTS.superviseIntervalMs;
     expectOnlyViolation(
       { leaseExpiresAfterMs: oneRenewalPlusOneTick },
