@@ -23,12 +23,8 @@ import {
   writeInputCsv,
   writeManifest,
 } from '../child/run-directory.ts';
-import {
-  type ChildCommand,
-  type ChildOutcome,
-  type RunningChild,
-  spawnChild,
-} from '../child/spawn.ts';
+import { type ChildOutcome, type RunningChild, spawnChild } from '../child/spawn.ts';
+import type { WorkerConfig } from '../config.ts';
 import { chartFileName, RESULT_FILE_NAMES } from '../contract/layout.ts';
 import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
 import { classifyAttemptFailure, retryOnTransientDbError } from '../failures.ts';
@@ -41,13 +37,12 @@ import {
 } from './queue.ts';
 import { type ChildEnding, classifyVerdict, type Kill, type Verdict } from './verdict.ts';
 
-export type AttemptDependencies = {
+export type AttemptDependencies = Pick<
+  WorkerConfig,
+  'workerId' | 'runRoot' | 'childCommand' | 'killGraceMs'
+> & {
   db: DatabaseExecutor;
   store: BlobStore;
-  workerId: string;
-  runRoot: string;
-  childCommand: ChildCommand;
-  killGraceMs: number;
 };
 
 export type PreparedAttempt = {
