@@ -9,8 +9,6 @@ import type { PendingVerdict } from './lifecycle.ts';
 import type { Lease } from './queue.ts';
 import type { Kill } from './verdict.ts';
 
-/** The four thresholds this decision reads, documented in [`config.ts`](../config.ts) alongside
- * the relations they have to satisfy. */
 export type SupervisionThresholds = Pick<
   WorkerConfig,
   | 'killAfterNoProgressMs'
