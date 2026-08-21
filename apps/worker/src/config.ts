@@ -48,9 +48,7 @@ export type WorkerConfig = {
    * The hosting platform's own shutdown grace has to exceed this plus `killGraceMs` plus one
    * terminal write, or the platform kills the worker mid-drain and every attempt still draining is
    * left to another worker's reaper instead of recording `shut_down`. Nothing here can check a
-   * setting that lives on the platform. **Open:** the platform is unchosen
-   * (`ARCHITECTURE.md` § Hosting), and the default below already exceeds a 30 s grace once
-   * `killGraceMs` is added to it. */
+   * setting that lives on the platform. */
   drainGraceMs: number;
 
   /** How long a lease may go unrenewed before the attempt is treated as abandoned.
@@ -70,7 +68,7 @@ export type WorkerConfig = {
 
   /** The most expired attempts one `reapExpiredAttempts` will end.
    *
-   * A burst cap on failure emails. A botched deploy or an outage that takes down every worker at
+   * This is a burst cap on failure emails. A botched deploy or an outage that takes down every worker at
    * once leaves the whole fleet's in-flight attempts stuck `processing` together, and reaping all
    * of them in one pass would fire off one failure email per attempt the moment the fleet comes
    * back — enough at once to risk the email provider's rate limiting or abuse detection. */
@@ -97,9 +95,8 @@ export type WorkerConfig = {
 
   /** How many times we will ever try to send one attempt's email.
    *
-   * **This is the source of truth for the cap.** The `analysis_attempt_notification_pending` index
-   * repeats it as a literal, because a parameter there would cost the index its use; a test in
-   * `config.test.ts` asserts the two agree. */
+   * A test in `config.test.ts` asserts that this value agrees with the database index's
+   * hardcoding of the value. */
   maxNotificationAttempts: number;
 
   /** The most notifications one sweep will claim and send. */
@@ -164,30 +161,25 @@ function definedOverrides(overrides: WorkerDefaultableFields): WorkerDefaultable
  * spend `connectionTimeoutMs` finding a connection and the server `statementTimeoutMs` running the
  * statement. Renewals are issued concurrently across attempts, so this bounds one round trip
  * rather than one per attempt.
- *
- * *Rejected: a shorter per-renewal statement timeout, to buy a smaller `leaseExpiresAfterMs`.* It
- * needs either a `SET LOCAL` inside a transaction — a BEGIN/COMMIT per renewal, every tick — or a
- * second pool, and a smaller expiry is all it buys.
  */
 const MAX_RENEWAL_ROUND_TRIP_MS =
   WORKER_DB_LIMITS.connectionTimeoutMs + WORKER_DB_LIMITS.statementTimeoutMs;
 
-/** Connections one in-flight attempt can occupy at once: this tick's lease renewal, and a settle's
- * terminal write, which deliberately runs outside the tick. */
-const CONNECTIONS_PER_ATTEMPT = 2;
+/** Database connections one in-flight attempt can occupy at once: this tick's lease renewal, and a
+ * settle's terminal write, which deliberately runs outside the tick. */
+const DATABASE_CONNECTIONS_PER_ATTEMPT = 2;
 
-/** Connections the rest of the worker occupies: the claim poll, the two reap sweeps, and the
- * notification sweep, one statement each. `maxNotificationsPerSweep` does not enter this — a
- * sweep's concurrent sends are HTTP requests, and it holds one connection either side of them. */
-const CONNECTIONS_FOR_LOOPS_AND_SWEEPS = 4;
+/** Database connections the rest of the worker occupies: the claim poll, the two reap sweeps, and
+ * the notification sweep, one statement each.
+ *
+ * `maxNotificationsPerSweep` does not enter this — a sweep's concurrent sends are HTTP requests,
+ * and it holds one connection either side of them. */
+const DATABASE_CONNECTIONS_FOR_LOOPS_AND_SWEEPS = 4;
 
-/** The longest email outage the notification retries are meant to ride out. Delivery is best
- * effort (`REQUIREMENTS.md` § User email), but not so best-effort that an hour of provider trouble
- * loses every email of that hour. */
+/** The longest email outage the notification retries are meant to ride out. */
 const EMAIL_OUTAGE_TO_SURVIVE_MS = 60 * MINUTE_MS;
 
-/** Users are told an email typically arrives within 30 s — `REQUIREMENTS.md` § User email. */
-const EMAIL_LATENCY_TARGET_MS = 30 * SECOND_MS;
+export const EMAIL_LATENCY_TARGET_MS = 30 * SECOND_MS;
 
 /** How long the bounded exponential backoff spans, from the first send attempt to the last:
  * `base × (2⁰ + 2¹ + … + 2ⁿ⁻²)` for `n` attempts, matching the claim expiry
@@ -200,14 +192,7 @@ function notificationRetryWindowMs(
 }
 
 /** Every relation between these values that can be decided from the values alone, as one message
- * per relation the config breaks.
- *
- * Three bounds are missing because nothing here can decide them, and each is documented on the
- * field it constrains instead: the analysis library's longest legal API call, against
- * `killAfterNoProgressMs`; the platform's shutdown grace, against `drainGraceMs`; and the
- * `analysis_attempt_notification_pending` index literal, against `maxNotificationAttempts`, which
- * `config.test.ts` checks because it takes a database to read.
- */
+ * per relation the config breaks. */
 function workerConfigViolations(config: WorkerConfig): string[] {
   const violations: string[] = [];
   const check = (holds: boolean, violation: string) => {
@@ -232,21 +217,22 @@ function workerConfigViolations(config: WorkerConfig): string[] {
 
   check(
     config.killAfterNoProgressMs > config.superviseIntervalMs,
-    'killAfterNoProgressMs must exceed superviseIntervalMs, because progress is only sampled once ' +
-      'per tick and an observed gap therefore overstates the real one by up to one interval',
+    'killAfterNoProgressMs must exceed superviseIntervalMs. Progress is only sampled once per ' +
+      'tick, so an observed gap overstates the real one by up to one interval.',
   );
 
   check(
     config.killAfterTotalRuntimeMs >= config.killAfterNoProgressMs + config.superviseIntervalMs,
-    'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + superviseIntervalMs, or the ' +
-      'total-runtime kill always fires first and the hung verdict is dead code',
+    'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + superviseIntervalMs. ' +
+      'Otherwise, the total-runtime kill always fires first, and the hung verdict is dead code.',
   );
 
   check(
     config.leaseExpiresAfterMs > MAX_RENEWAL_ROUND_TRIP_MS + config.superviseIntervalMs,
     `leaseExpiresAfterMs must exceed one renewal round trip (${MAX_RENEWAL_ROUND_TRIP_MS}ms) plus ` +
-      'superviseIntervalMs, or a healthy parent fences itself the first time a renewal is slow',
+      'superviseIntervalMs. Otherwise, a healthy parent fences itself the first time a renewal is slow.',
   );
+
   // Deliberately *not* checked: that a parent fences before another worker's reaper may reap.
   // Fencing is sampled once per tick, so a parent can fence up to superviseIntervalMs after the
   // reaper was already entitled to reap. The overlap is harmless, since every terminal write is
@@ -258,49 +244,50 @@ function workerConfigViolations(config: WorkerConfig): string[] {
       config.killAfterTotalRuntimeMs + config.killGraceMs + config.uploadRetryBudgetMs,
     'claimedCeilingMs must exceed the longest life of an attempt nothing is wrong with — ' +
       'killAfterTotalRuntimeMs running, then killGraceMs dying, then uploadRetryBudgetMs parked on ' +
-      'the blob store — or the reaper abandons an attempt that is still legitimately finishing',
+      'the blob store. Otherwise, the reaper abandons an attempt that is still legitimately finishing.',
   );
 
   check(
     config.uploadRetryBudgetMs > 2 * config.superviseIntervalMs,
-    'uploadRetryBudgetMs must buy more than two resumes (2 × superviseIntervalMs), or the budget ' +
-      'is not worth having as a field',
+    'uploadRetryBudgetMs must buy more than two resumes (2 × superviseIntervalMs). Otherwise, the ' +
+      'budget is not worth having as a field.',
   );
 
   check(
     config.reapIntervalMs <= config.leaseExpiresAfterMs,
-    'reapIntervalMs must not exceed leaseExpiresAfterMs, or an abandoned attempt waits longer for ' +
-      'the sweep than for the expiry the sweep is looking for',
+    'reapIntervalMs must not exceed leaseExpiresAfterMs. Otherwise, an abandoned attempt waits ' +
+      'longer for the sweep than for the expiry the sweep is looking for.',
   );
 
   check(
-    CONNECTIONS_PER_ATTEMPT * config.maxConcurrentAttempts + CONNECTIONS_FOR_LOOPS_AND_SWEEPS <=
+    DATABASE_CONNECTIONS_PER_ATTEMPT * config.maxConcurrentAttempts +
+      DATABASE_CONNECTIONS_FOR_LOOPS_AND_SWEEPS <=
       WORKER_DB_LIMITS.maxConnections,
     `maxConcurrentAttempts must keep the worker's concurrent database work inside the pool's ` +
-      `${WORKER_DB_LIMITS.maxConnections} connections — ${CONNECTIONS_PER_ATTEMPT} per attempt plus ` +
-      `${CONNECTIONS_FOR_LOOPS_AND_SWEEPS} for the loops and sweeps. Beyond that a lease renewal ` +
-      'waits for a connection, which inflates the very round trip leaseExpiresAfterMs is sized ' +
-      'against, so raising this lever means raising the pool',
+      `${WORKER_DB_LIMITS.maxConnections} connections — ${DATABASE_CONNECTIONS_PER_ATTEMPT} per ` +
+      `attempt plus ${DATABASE_CONNECTIONS_FOR_LOOPS_AND_SWEEPS} for the loops and sweeps. Beyond ` +
+      'that, a lease renewal waits for a connection, which inflates the very round trip ' +
+      'leaseExpiresAfterMs is sized against. So, raising this lever means raising the pool too.',
   );
 
   check(
     config.notifyIntervalMs < EMAIL_LATENCY_TARGET_MS,
-    `notifyIntervalMs must stay under the ${EMAIL_LATENCY_TARGET_MS}ms users are promised, since a ` +
-      'terminal attempt waits up to one interval for its turn',
+    `notifyIntervalMs must stay under the ${EMAIL_LATENCY_TARGET_MS}ms users are promised. ` +
+      'Otherwise, a terminal attempt waits up to one interval for its turn.',
   );
 
   check(
     config.notificationRetryBaseMs > SEND_TIMEOUT_MS,
     `notificationRetryBaseMs must exceed ${SEND_TIMEOUT_MS}ms, the longest a send may run ` +
-      "(@gbd/email's SEND_TIMEOUT_MS), or a claim expires while its own send is still in " +
-      'flight and two workers have the same email in the air',
+      'Otherwise, a claim expires while its own send is still in ' +
+      'flight, and two workers end up with the same email in the air.',
   );
 
   check(
     notificationRetryWindowMs(config) >= EMAIL_OUTAGE_TO_SURVIVE_MS,
-    `notificationRetryBaseMs and maxNotificationAttempts must span at least ` +
-      `${EMAIL_OUTAGE_TO_SURVIVE_MS}ms of email outage between them, and span ` +
-      `${notificationRetryWindowMs(config)}ms`,
+    'notificationRetryBaseMs and maxNotificationAttempts must together span at least ' +
+      `${EMAIL_OUTAGE_TO_SURVIVE_MS}ms of email outage. Together, they span only ` +
+      `${notificationRetryWindowMs(config)}ms.`,
   );
 
   return violations;

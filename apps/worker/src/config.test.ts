@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import {
   createWorkerConfig,
-  SECOND_MS,
+  EMAIL_LATENCY_TARGET_MS,
   WORKER_DEFAULTS,
   WorkerConfigError,
   type WorkerDefaultableFields,
@@ -167,11 +167,9 @@ describe('the relations between a worker and the rest of the fleet', () => {
 
 describe('the relations the notification sweep rests on', () => {
   test('notifyIntervalMs must stay under the latency users are promised', () => {
-    // The 30 s promise (`REQUIREMENTS.md` § User email) is config.ts's private
-    // EMAIL_LATENCY_TARGET_MS, so this can only be pinned to the fragment below, not the value.
     expectOnlyViolation(
-      { notifyIntervalMs: 30 * SECOND_MS },
-      'notifyIntervalMs must stay under the',
+      { notifyIntervalMs: EMAIL_LATENCY_TARGET_MS },
+      `notifyIntervalMs must stay under the ${EMAIL_LATENCY_TARGET_MS}ms`,
     );
   });
 
@@ -188,7 +186,7 @@ describe('the relations the notification sweep rests on', () => {
   test('the retries must span the longest outage they are meant to ride out', () => {
     expectOnlyViolation(
       { maxNotificationAttempts: WORKER_DEFAULTS.maxNotificationAttempts - 1 },
-      'notificationRetryBaseMs and maxNotificationAttempts must span at least',
+      'notificationRetryBaseMs and maxNotificationAttempts must together span at least',
     );
   });
 
