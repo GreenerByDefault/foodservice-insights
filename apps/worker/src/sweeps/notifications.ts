@@ -29,9 +29,9 @@ import { retryOnTransientDbError } from '../failures.ts';
 export type NotifyOptions = {
   /** The first retry's delay. Each further attempt doubles it, so a row's claim also holds
    *  longer each time. */
-  retryBaseMs: number;
+  notificationRetryBaseMs: number;
   /** How many times we will ever try to send one attempt's email. */
-  maxAttempts: number;
+  maxNotificationAttempts: number;
   /** The most attempts one sweep will claim and send. */
   maxNotificationsPerSweep: number;
   /** Narrows the sweep to these reports.
@@ -132,9 +132,9 @@ async function claimDueNotifications(
  * a millisecond after the claim is benign.
  */
 function isEmailDue(
-  options: Pick<NotifyOptions, 'retryBaseMs' | 'maxAttempts'>,
+  options: Pick<NotifyOptions, 'notificationRetryBaseMs' | 'maxNotificationAttempts'>,
 ): RawBuilder<boolean> {
-  const retryBaseSecs = options.retryBaseMs / 1000;
+  const retryBaseSecs = options.notificationRetryBaseMs / 1000;
   // Raw SQL rather than the expression builder: the backoff needs `power()` against the row's own
   // `notification_attempts`, and this fragment has to compose into a plain `.where(...)` whether
   // it's evaluated against `analysis_attempt` alone (the `UPDATE`) or joined to `report` (the
@@ -144,7 +144,7 @@ function isEmailDue(
     finished_at IS NOT NULL
       AND status <> 'canceled'
       AND notification_email_sent_at IS NULL
-      AND notification_attempts < ${options.maxAttempts}
+      AND notification_attempts < ${options.maxNotificationAttempts}
       AND (notification_claimed_at IS NULL
            OR notification_claimed_at
                 -- notification_attempts - 1 is safe: the constraint guarantees the counter is at
@@ -269,7 +269,7 @@ function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileK
 async function sendOne(
   emailer: Emailer,
   attempt: NotifiableAttempt,
-  options: Pick<NotifyOptions, 'maxAttempts'>,
+  options: Pick<NotifyOptions, 'maxNotificationAttempts'>,
 ): Promise<AnalysisAttemptId | undefined> {
   const email = emailForNotifiableAttempt(attempt);
 
@@ -279,7 +279,7 @@ async function sendOne(
     if (!isEmailError(error)) throw error;
     console.error(
       `Could not send the notification email for analysis attempt ${attempt.id} ` +
-        `(attempt ${attempt.notificationAttempts} of ${options.maxAttempts})`,
+        `(attempt ${attempt.notificationAttempts} of ${options.maxNotificationAttempts})`,
       error,
     );
     return undefined;
@@ -294,7 +294,7 @@ async function sendOne(
  *
  * Wrapped in `retryOnTransientDbError`: this is the one statement in the path meeting
  * [`failures.ts`](../failures.ts) principle 4 — losing it to a blip guarantees a duplicate email
- * once the claim expires, and now also burns one of `maxAttempts` for nothing. The claim itself
+ * once the claim expires, and now also burns one of `maxNotificationAttempts` for nothing. The claim itself
  * needs no such retry: the next tick is the retry, per principle 2.
  *
  * `retryOnTransientDbError` must run on the pool handle. So, under `withRollback` in tests, this is

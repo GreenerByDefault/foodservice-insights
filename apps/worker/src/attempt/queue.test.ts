@@ -93,7 +93,7 @@ async function simulateReap(
   const reaped = await reapExpiredAttempts(transaction, 'the-reaper', {
     leaseExpiresAfterMs: 60_000,
     claimedCeilingMs: 60_000,
-    maxAttemptsPerSweep: 1,
+    maxReapsPerSweep: 1,
     candidateReports: [(await readAnalysisAttemptRow(transaction, attemptId)).reportId],
   });
   if (reaped.length !== 1) throw new Error('simulateReap: the fixture attempt was not reaped');

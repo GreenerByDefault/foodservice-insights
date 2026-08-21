@@ -33,7 +33,7 @@
  * 6. **Fencing.** Once the last successful renewal is older than the lease expiry, the parent
  *    must kill the child and stop, symmetrically with principle 1: the write fails ⇒ still run
  *    the checks; the checks cannot be evaluated ⇒ skip the write. Otherwise it keeps burning AI
- *    quota for up to `hardCeilingMs` and then discards a completed, fully-paid-for result on a
+ *    quota for up to `killAfterTotalRuntimeMs` and then discards a completed, fully-paid-for result on a
  *    zero-row update.
  */
 

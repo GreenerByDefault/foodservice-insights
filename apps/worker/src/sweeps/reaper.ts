@@ -39,7 +39,7 @@ export type ReapOptions = {
    * one pass would fire off a burst of failure emails the moment the fleet comes back — one per
    * attempt, and enough of them at once risks tripping the email provider's own rate limiting or
    * abuse detection. So, this caps how many one call can send. */
-  maxAttemptsPerSweep: number;
+  maxReapsPerSweep: number;
 
   /** Narrows the sweep to these reports.
    *
@@ -79,12 +79,12 @@ function expiredCandidates(
     .select('id')
     .where('status', '=', 'processing')
     .where((eb) => isExpired(eb, leaseExpiresBefore, claimedBefore))
-    // Oldest-renewed first, so a sweep capped by `maxAttemptsPerSweep` converges on the
+    // Oldest-renewed first, so a sweep capped by `maxReapsPerSweep` converges on the
     // longest-abandoned attempts rather than an arbitrary subset. An attempt that trips only the
     // claimed ceiling has a fresh lease and so sorts last, behind every dead one — deliberate,
     // since a parent still renewing is still doing something.
     .orderBy('leaseRenewedAt')
-    .limit(options.maxAttemptsPerSweep);
+    .limit(options.maxReapsPerSweep);
 
   return options.candidateReports === undefined
     ? candidates
@@ -112,7 +112,7 @@ function expiredCandidates(
  *
  * The subquery also repeats the predicate for an unrelated, non-correctness reason. Postgres
  * `UPDATE` has no `ORDER BY` or `LIMIT`, so the subquery is what decides which expired attempts a
- * capped sweep spends its `maxAttemptsPerSweep` on. If the subquery instead filtered only on
+ * capped sweep spends its `maxReapsPerSweep` on. If the subquery instead filtered only on
  * `status = 'processing'`, its `LIMIT`-sized batch could include fresh, unexpired rows. The
  * `UPDATE`'s own expiry check would then discard those, spending the cap before a genuinely
  * expired row further down the order got a turn. That failure would be narrower than the one
@@ -183,7 +183,7 @@ export type CancelSweepOptions = {
  *   claim commits first, the recheck sees `processing` and this is a zero-row no-op, leaving the
  *   row to the parent, which will see the request on its very next renewal. If this commits first,
  *   the claim's `SKIP LOCKED` scan re-reads the row and its new predicate excludes it.
- * - **No `maxAttemptsPerSweep`.** That cap bounds a burst of failure emails; a canceled attempt is
+ * - **No `maxReapsPerSweep`.** That cap bounds a burst of failure emails; a canceled attempt is
  *   never emailed — `notifications.ts`'s `status <> 'canceled'`, and
  *   `analysis_attempt_canceled_is_not_notified` behind it.
  *
