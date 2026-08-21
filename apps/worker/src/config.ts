@@ -28,8 +28,12 @@ export type WorkerConfig = {
 
   childCommand: ChildCommand;
 
-  /** How many attempts this worker holds at once — counting one whose child has already exited
-   * but whose verdict is not recorded yet, which is why this is not named for child processes. */
+  /** How many attempts this worker holds at once. Counts one whose child has already exited but
+   * whose verdict is stuck in memory, unrecorded.
+   *
+   * This is not a container-resource limit — a parked verdict costs no process and barely any
+   * memory. It is back-pressure: uncounted, a blob-store outage would let the worker keep
+   * claiming new attempts that each burn 2–15 minutes of AI spend, and then park too, unbounded. */
   maxConcurrentAttempts: number;
 
   /** How long to wait before asking the queue again, after a poll that did not start an attempt. */
