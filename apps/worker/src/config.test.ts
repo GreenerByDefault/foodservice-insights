@@ -7,32 +7,32 @@ import {
   createWorkerConfig,
   WORKER_DEFAULTS,
   WorkerConfigError,
-  type WorkerEnvironment,
-  type WorkerOverrides,
+  type WorkerDefaultableFields,
+  type WorkerRequiredFields,
 } from './config.ts';
 
-const AN_ENVIRONMENT: WorkerEnvironment = {
+const REQUIRED_FIELDS: WorkerRequiredFields = {
   workerId: 'worker-under-test',
   runRoot: '/tmp/worker-under-test',
   childCommand: { executable: 'python3', leadingArguments: ['-m', 'gbd_foodservice_insights'] },
 };
 
 function refusalFor(
-  overrides: WorkerOverrides,
-  environment: Partial<WorkerEnvironment> = {},
+  overrides: WorkerDefaultableFields,
+  required: Partial<WorkerRequiredFields> = {},
 ): WorkerConfigError {
   try {
-    createWorkerConfig({ ...AN_ENVIRONMENT, ...environment }, overrides);
+    createWorkerConfig({ ...REQUIRED_FIELDS, ...required }, overrides);
   } catch (error) {
     if (error instanceof WorkerConfigError) return error;
     throw error;
   }
-  throw new Error(`expected ${JSON.stringify({ ...overrides, ...environment })} to be refused`);
+  throw new Error(`expected ${JSON.stringify({ ...overrides, ...required })} to be refused`);
 }
 
 /** Naming every field the relation is between is what stops a case passing on some unrelated
  * violation it happened to trip as well. */
-function expectOnlyViolation(overrides: WorkerOverrides, ...fields: readonly string[]) {
+function expectOnlyViolation(overrides: WorkerDefaultableFields, ...fields: readonly string[]) {
   const { violations } = refusalFor(overrides);
   expect(violations).toHaveLength(1);
   for (const field of fields) expect(violations.join('\n')).toContain(field);
@@ -40,34 +40,34 @@ function expectOnlyViolation(overrides: WorkerOverrides, ...fields: readonly str
 
 describe('createWorkerConfig', () => {
   test('the shipped defaults satisfy every relation', () => {
-    expect(createWorkerConfig(AN_ENVIRONMENT)).toEqual({ ...WORKER_DEFAULTS, ...AN_ENVIRONMENT });
+    expect(createWorkerConfig(REQUIRED_FIELDS)).toEqual({ ...WORKER_DEFAULTS, ...REQUIRED_FIELDS });
   });
 
   test('an override applies', () => {
-    expect(createWorkerConfig(AN_ENVIRONMENT, { maxConcurrentAttempts: 1 })).toEqual({
+    expect(createWorkerConfig(REQUIRED_FIELDS, { maxConcurrentAttempts: 1 })).toEqual({
       ...WORKER_DEFAULTS,
-      ...AN_ENVIRONMENT,
+      ...REQUIRED_FIELDS,
       maxConcurrentAttempts: 1,
     });
   });
 
   test('an absent override leaves the default alone rather than erasing it', () => {
-    expect(createWorkerConfig(AN_ENVIRONMENT, { maxConcurrentAttempts: undefined })).toEqual({
+    expect(createWorkerConfig(REQUIRED_FIELDS, { maxConcurrentAttempts: undefined })).toEqual({
       ...WORKER_DEFAULTS,
-      ...AN_ENVIRONMENT,
+      ...REQUIRED_FIELDS,
     });
   });
 });
 
 describe('the values a configuration must supply', () => {
-  const blanks: readonly [string, Partial<WorkerEnvironment>][] = [
+  const blanks: readonly [string, Partial<WorkerRequiredFields>][] = [
     ['workerId', { workerId: '   ' }],
     ['runRoot', { runRoot: '' }],
     ['childCommand.executable', { childCommand: { executable: '', leadingArguments: [] } }],
   ];
 
-  test.each(blanks)('refuses a blank %s', (field, environment) => {
-    const { violations } = refusalFor({}, environment);
+  test.each(blanks)('refuses a blank %s', (field, required) => {
+    const { violations } = refusalFor({}, required);
     expect(violations).toEqual([expect.stringContaining(field)]);
   });
 

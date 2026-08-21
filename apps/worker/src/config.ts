@@ -65,12 +65,11 @@ export const WORKER_DEFAULTS = {
   drainGraceMs: 30 * SECOND_MS,
 } as const satisfies Omit<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
 
-/** The fields only the environment can supply; none of them has a sensible default. */
-export type WorkerEnvironment = Pick<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
+/** Fields with no sensible default, so the caller must provide them. */
+export type WorkerRequiredFields = Pick<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
 
-/** Anything with a default may be overridden — by an environment variable in production, or by a
- * test that needs a shorter interval than a human would wait for. */
-export type WorkerOverrides = Partial<Omit<WorkerConfig, keyof WorkerEnvironment>>;
+/** Fields with a default in `WORKER_DEFAULTS`, individually overridable. */
+export type WorkerDefaultableFields = Partial<Omit<WorkerConfig, keyof WorkerRequiredFields>>;
 
 export class WorkerConfigError extends Error {
   constructor(readonly violations: readonly string[]) {
@@ -79,13 +78,12 @@ export class WorkerConfigError extends Error {
   }
 }
 
-/** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below — the only
- * way to obtain a checked `WorkerConfig`, so callers should not assemble the object themselves. */
+/** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below. */
 export function createWorkerConfig(
-  environment: WorkerEnvironment,
-  overrides: WorkerOverrides = {},
+  required: WorkerRequiredFields,
+  overrides: WorkerDefaultableFields = {},
 ): WorkerConfig {
-  const config = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...environment };
+  const config = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...required };
   const violations = workerConfigViolations(config);
   if (violations.length > 0) throw new WorkerConfigError(violations);
   return config;
@@ -93,10 +91,10 @@ export function createWorkerConfig(
 
 /** Reading an optional environment variable yields `undefined`, and spreading that over a default
  * would replace the default with nothing at all. */
-function definedOverrides(overrides: WorkerOverrides): WorkerOverrides {
+function definedOverrides(overrides: WorkerDefaultableFields): WorkerDefaultableFields {
   return Object.fromEntries(
     Object.entries(overrides).filter(([, value]) => value !== undefined),
-  ) as WorkerOverrides;
+  ) as WorkerDefaultableFields;
 }
 
 /** Every relation between these values that can be decided from the values alone, as one message
