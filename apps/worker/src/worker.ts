@@ -50,6 +50,7 @@ import { classifyAttemptFailure } from './failures.ts';
 import { sendPendingNotifications } from './sweeps/notifications.ts';
 import { cancelRequestedPendingAttempts, reapExpiredAttempts } from './sweeps/reaper.ts';
 
+// TODO: can/should we DRY this with AttempDependencies? Ditto simplify part of createWorker. Valid to say no.
 export type WorkerDependencies = {
   db: DatabaseExecutor;
   store: BlobStore;
@@ -65,7 +66,7 @@ export type ClaimOutcome = 'started' | 'queue-empty' | 'at-capacity' | 'start-fa
 export type Worker = {
   claimAndStart(): Promise<ClaimOutcome>;
   supervise(): Promise<void>;
-  sweep(): Promise<{ reaped: AnalysisAttemptId[]; canceled: AnalysisAttemptId[] }>;
+  reap(): Promise<{ expired: AnalysisAttemptId[]; canceled: AnalysisAttemptId[] }>;
   notify(): Promise<AnalysisAttemptId[]>;
   drain(): Promise<void>;
   run(): Promise<void>;
@@ -74,20 +75,21 @@ export type Worker = {
 /** One attempt this worker holds, from the moment its child is spawned to the moment its verdict
  * is recorded — or abandoned.
  *
- * Deliberately mutable, which is why it lives here rather than in `attempt/lifecycle.ts`: that
- * file stays a set of plain functions over immutable values, and this is the one place that has to
- * hold "what has happened to this attempt so far" across ticks. `state` is still replaced
- * wholesale rather than mutated field by field.
+ * Deliberately mutable. `state` is replaced wholesale rather than mutated field by field.
  */
 type InFlight = {
+  // TOOD: probably call this preparedAttempt everywhere. I think it will read better.
   prepared: PreparedAttempt;
   state: SupervisionState;
   kill?: Kill;
+  // TODO: probably call this pendingVerdict everywhere.
   pending?: PendingVerdict;
   /** The settle or resume currently running, so no tick starts a second and `drain()` can await it. */
+  // TODO: maybe call this settlingPromise? That clarifies it's a noun and not a verb.
   settling?: Promise<void>;
 };
 
+// TODO: should we rewrite to be a class?
 export function createWorker(dependencies: WorkerDependencies): Worker {
   const { db, store, emailer, clock, config, candidateReports } = dependencies;
 
@@ -111,11 +113,11 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   async function claimAndStart(): Promise<ClaimOutcome> {
     if (draining) return 'draining';
-    // Counting parked verdicts, per `maxConcurrentAttempts` in `config.ts`.
+    // This check includes parked verdicts, per `maxConcurrentAttempts` in `config.ts`.
     if (inFlight.size >= config.maxConcurrentAttempts) return 'at-capacity';
 
-    // Deliberately not retried: the claim loop is the retry, and a *permanent* error propagates to
-    // `run()`, which drains and exits nonzero.
+    // Deliberately not retried because the claim loop is the retry, and a *permanent* error
+    // propagates to `run()`, which drains and exits nonzero.
     const attemptId = await claimNextAttempt(db, config.workerId, { candidateReports });
     if (attemptId === undefined) return 'queue-empty';
 
@@ -157,9 +159,11 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     record.settling = guardSettle(record, settleWhenExited(record));
   }
 
-  /** Await the child, then read how it ended and deliver the verdict. Only ever awaited through
-   * `guardSettle`, which is what keeps a rejection here from reaching the event loop unhandled and
-   * taking the process down with it. */
+  /** Await the child, then read how it ended and deliver the verdict.
+   *
+   * This is only ever awaited through `guardSettle`, which is what keeps a rejection here from
+   * reaching the event loop unhandled and taking the process down with it.
+   */
   async function settleWhenExited(record: InFlight): Promise<void> {
     const outcome = await record.prepared.child.exited;
     // Set in the same microtask the await resolves in, so no tick can see a dead child as live.
@@ -169,8 +173,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     applySettleOutcome(record, await settleAttempt(attemptDependencies, record.prepared, ending));
   }
 
+  // TODO: improve the naming here. For example, the docstring is confusing about settling vs settle. Those are
+  // kinda vague names. I wonder if we should rename the concept of settling entirely even.
   /** Hold `settling` for the lifetime of one settle or resume, absorbing whatever it throws.
    *
+   * // TODO: the connection to resumeSettle is confusing to me. I don't understand how this function relates to it,
+   * // like why resumeSettle would be in the call path etc.
    * `resumeSettle` parks the failures it expects, so anything reaching here is a failure it does
    * not expect — abandon the attempt, and abandoning must stop renewing the lease or the row stays
    * `processing` forever and the reaper can never converge it (principle 3 in `failures.ts`).
@@ -196,12 +204,13 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       return;
     }
 
+    // A resume that parks again should keep its original `since`, so `uploadRetryBudgetMs` is spent
+    // rather than restarted on every tick.
+    const parkedSince = record.state.parked?.since ?? clock.now();
     record.pending = outcome.pending;
     record.state = {
       ...record.state,
-      // A resume that parks again keeps the original `since`, so `uploadRetryBudgetMs` is spent
-      // rather than restarted on every tick.
-      parked: { stage: outcome.pending.stage, since: record.state.parked?.since ?? clock.now() },
+      parked: { stage: outcome.pending.stage, since: parkedSince },
     };
   }
 
@@ -323,13 +332,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // Sweeps
   // -----------------------------------------------------------
 
-  async function sweep(): Promise<{
-    reaped: AnalysisAttemptId[];
+  async function reap(): Promise<{
+    expired: AnalysisAttemptId[];
     canceled: AnalysisAttemptId[];
   }> {
-    const reaped = await reapExpiredAttempts(db, config.workerId, { ...config, candidateReports });
+    // TODO: should this be Promise.all()?
+    const expired = await reapExpiredAttempts(db, config.workerId, { ...config, candidateReports });
     const canceled = await cancelRequestedPendingAttempts(db, { candidateReports });
-    return { reaped, canceled };
+    return { expired, canceled };
   }
 
   async function notify(): Promise<AnalysisAttemptId[]> {
@@ -422,7 +432,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   async function run(): Promise<void> {
     const tickers = [
       startTicker('supervise', supervise, config.superviseIntervalMs),
-      startTicker('sweep', sweep, config.reapIntervalMs),
+      startTicker('reap', reap, config.reapIntervalMs),
       startTicker('notify', notify, config.notifyIntervalMs),
     ];
 
@@ -440,11 +450,13 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
   }
 
-  return { claimAndStart, supervise, sweep, notify, drain, run };
+  return { claimAndStart, supervise, reap, notify, drain, run };
 }
 
 /** Run `tick` every `intervalMs`, re-arming only once the previous one has *resolved*.
  *
+ * // TODO: the type signature is not clear that it returns a stop function. Improve the modeling.
+ * // TODO: probably inline the setInterval comment?
  * `setInterval` would let a slow tick re-enter, and the returned stop function is what lets a drain
  * take over a tick rather than race it: it resolves once the tick in flight has finished.
  */

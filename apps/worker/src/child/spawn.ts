@@ -18,6 +18,7 @@ export type ChildOutcome =
   | { kind: 'spawn-failed'; error: Error };
 
 export type RunningChild = {
+  // TODO: add a one-line docstring for what this is.
   readonly exited: Promise<ChildOutcome>;
 
   /** Terminate the child and everything it spawned. Safe to call more than once, and safe to call
