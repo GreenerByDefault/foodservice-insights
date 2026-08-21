@@ -9,8 +9,8 @@ import {
 } from './supervision.ts';
 
 const THRESHOLDS: SupervisionThresholds = {
-  noProgressAfterMs: 1_000,
-  hardCeilingMs: 5_000,
+  killAfterNoProgressMs: 1_000,
+  killAfterTotalRuntimeMs: 5_000,
   leaseExpiresAfterMs: 300,
   uploadRetryBudgetMs: 200,
 };
@@ -112,16 +112,16 @@ describe('the rule table', () => {
     expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'kill', kill: { reason: 'canceled' } });
   });
 
-  test('hung: no progress for noProgressAfterMs kills as hung', () => {
-    expect(actionOf(aState(), aReading(), THRESHOLDS.noProgressAfterMs)).toEqual({
+  test('hung: no progress for killAfterNoProgressMs kills as hung', () => {
+    expect(actionOf(aState(), aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hung' },
     });
   });
 
-  test('hard-ceiling: running past hardCeilingMs kills as hard-timeout, even with fresh progress', () => {
-    const state = aState({ lastProgressAt: THRESHOLDS.hardCeilingMs });
-    expect(actionOf(state, aReading(), THRESHOLDS.hardCeilingMs)).toEqual({
+  test('hard-timeout: running past killAfterTotalRuntimeMs kills as hard-timeout, even with fresh progress', () => {
+    const state = aState({ lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs });
+    expect(actionOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hard-timeout' },
     });
@@ -161,7 +161,7 @@ describe('precedence', () => {
   test('contract-violation outranks hung', () => {
     const error = new ContractError('malformed');
     const reading = aReading({ progress: { kind: 'failed', error } });
-    expect(actionOf(aState(), reading, THRESHOLDS.noProgressAfterMs)).toEqual({
+    expect(actionOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'contract-violation', detail: error.message },
     });
@@ -169,15 +169,15 @@ describe('precedence', () => {
 
   test('canceled outranks hung', () => {
     const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
-    expect(actionOf(aState(), reading, THRESHOLDS.noProgressAfterMs)).toEqual({
+    expect(actionOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'canceled' },
     });
   });
 
   test('hung outranks hard-timeout', () => {
-    const state = aState({ startedAt: -THRESHOLDS.hardCeilingMs });
-    expect(actionOf(state, aReading(), THRESHOLDS.noProgressAfterMs)).toEqual({
+    const state = aState({ startedAt: -THRESHOLDS.killAfterTotalRuntimeMs });
+    expect(actionOf(state, aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hung' },
     });
@@ -185,10 +185,10 @@ describe('precedence', () => {
 
   test('hard-timeout outranks fenced', () => {
     const state = aState({
-      lastProgressAt: THRESHOLDS.hardCeilingMs,
+      lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs,
       renewalIssuedAt: -THRESHOLDS.leaseExpiresAfterMs,
     });
-    expect(actionOf(state, aReading(), THRESHOLDS.hardCeilingMs)).toEqual({
+    expect(actionOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hard-timeout' },
     });
@@ -197,8 +197,8 @@ describe('precedence', () => {
   test('exited outranks every threshold', () => {
     const state = aState({
       exited: true,
-      lastProgressAt: -THRESHOLDS.noProgressAfterMs,
-      startedAt: -THRESHOLDS.hardCeilingMs,
+      lastProgressAt: -THRESHOLDS.killAfterNoProgressMs,
+      startedAt: -THRESHOLDS.killAfterTotalRuntimeMs,
       renewalIssuedAt: -THRESHOLDS.leaseExpiresAfterMs,
     });
     expect(actionOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
@@ -278,27 +278,39 @@ describe('the state transition', () => {
   test('every threshold fires at exactly >=, not only strictly past it', () => {
     // Keep the lease renewed on this very tick throughout. Lease-expired has the shortest
     // of the three default thresholds, so an unrenewed lease would fire before the
-    // hung/hard-ceiling boundary each sub-case is actually testing (those two are checked
+    // hung/hard-timeout boundary each sub-case is actually testing (those two are checked
     // first anyway, but there's no reason to rely on that ordering here).
     const freshLease = (now: number) => aReading({ renewalIssuedAt: now });
 
     expect(
       actionOf(
         aState(),
-        freshLease(THRESHOLDS.noProgressAfterMs - 1),
-        THRESHOLDS.noProgressAfterMs - 1,
+        freshLease(THRESHOLDS.killAfterNoProgressMs - 1),
+        THRESHOLDS.killAfterNoProgressMs - 1,
       ),
     ).toEqual({ kind: 'nothing' });
     expect(
-      actionOf(aState(), freshLease(THRESHOLDS.noProgressAfterMs), THRESHOLDS.noProgressAfterMs),
+      actionOf(
+        aState(),
+        freshLease(THRESHOLDS.killAfterNoProgressMs),
+        THRESHOLDS.killAfterNoProgressMs,
+      ),
     ).toEqual({ kind: 'kill', kill: { reason: 'hung' } });
 
-    const pastHung = aState({ lastProgressAt: THRESHOLDS.hardCeilingMs });
+    const pastHung = aState({ lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs });
     expect(
-      actionOf(pastHung, freshLease(THRESHOLDS.hardCeilingMs - 1), THRESHOLDS.hardCeilingMs - 1),
+      actionOf(
+        pastHung,
+        freshLease(THRESHOLDS.killAfterTotalRuntimeMs - 1),
+        THRESHOLDS.killAfterTotalRuntimeMs - 1,
+      ),
     ).toEqual({ kind: 'nothing' });
     expect(
-      actionOf(pastHung, freshLease(THRESHOLDS.hardCeilingMs), THRESHOLDS.hardCeilingMs),
+      actionOf(
+        pastHung,
+        freshLease(THRESHOLDS.killAfterTotalRuntimeMs),
+        THRESHOLDS.killAfterTotalRuntimeMs,
+      ),
     ).toEqual({ kind: 'kill', kill: { reason: 'hard-timeout' } });
 
     const pastHungAndCeiling = aState({

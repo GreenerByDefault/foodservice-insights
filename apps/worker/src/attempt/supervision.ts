@@ -1,6 +1,6 @@
 /** What a live attempt needs, decided from one tick's readings.
  *
- * Side-effect free to faciliate testing.
+ * Side-effect free to facilitate testing.
  */
 
 import { ContractError } from '../contract/messages.ts';
@@ -10,12 +10,12 @@ import type { Kill } from './verdict.ts';
 
 // TODO: Change this to the following once updating config.ts:
 //
-//   Pick<WorkerConfig, 'noProgressAfterMs' | 'hardCeilingMs' | 'leaseExpiresAfterMs' | 'uploadRetryBudgetMs'>
+//   Pick<WorkerConfig, 'killAfterNoProgressMs' | 'killAfterTotalRuntimeMs' | 'leaseExpiresAfterMs' | 'uploadRetryBudgetMs'>
 export type SupervisionThresholds = {
   /** How long a child may go without progressing before it is killed as hung. */
-  noProgressAfterMs: number;
+  killAfterNoProgressMs: number;
   /** How long a child may run in total, however healthy it looks. */
-  hardCeilingMs: number;
+  killAfterTotalRuntimeMs: number;
   /** The parent's own fencing threshold — how long since the last renewal was *issued* before it
    * must assume its lease is gone and stop. */
   leaseExpiresAfterMs: number;
@@ -83,12 +83,12 @@ export type SupervisionAction =
  *   action this tick; only the next read gets another chance.
  * - **cancel-requested** — we kill the child: the user's explicit intent beats a threshold that
  *   happened to fire in the same tick, matching `classifyVerdict`'s own precedence.
- * - **hung** — no progress for `noProgressAfterMs` kills the child.
- * - **hard-ceiling** — running past `hardCeilingMs` kills the child regardless of how healthy
- *   it looks.
+ * - **hung** — no progress for `killAfterNoProgressMs` kills the child.
+ * - **hard-timeout** — running past `killAfterTotalRuntimeMs` kills the child regardless of how
+ *   healthy it looks.
  * - **lease-expired** — no successful renewal for `leaseExpiresAfterMs` fences the child — a
  *   healthy parent's own inequalities keep this from ever firing before `hung` or
- *   `hard-ceiling` would.
+ *   `hard-timeout` would.
  *
  * We check `lost` before `contract-violation`: an attempt we may no longer write has nothing to
  * gain from a truthful kill reason, and `classifyVerdict` would turn either into a no-op write.
@@ -165,13 +165,13 @@ function decideAction(
   // cancel-requested: the user's explicit intent beats a threshold firing the same tick.
   if (cancelRequestedAt !== null) return { kind: 'kill', kill: { reason: 'canceled' } };
 
-  // hung: no progress for noProgressAfterMs.
-  if (now - state.lastProgressAt >= thresholds.noProgressAfterMs) {
+  // hung: no progress for killAfterNoProgressMs.
+  if (now - state.lastProgressAt >= thresholds.killAfterNoProgressMs) {
     return { kind: 'kill', kill: { reason: 'hung' } };
   }
 
-  // hard-ceiling: ran past hardCeilingMs regardless of how healthy it looks.
-  if (now - state.startedAt >= thresholds.hardCeilingMs) {
+  // hard-timeout: ran past killAfterTotalRuntimeMs regardless of how healthy it looks.
+  if (now - state.startedAt >= thresholds.killAfterTotalRuntimeMs) {
     return { kind: 'kill', kill: { reason: 'hard-timeout' } };
   }
 
