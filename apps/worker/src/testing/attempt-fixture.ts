@@ -128,10 +128,6 @@ async function seededReport(
   };
 }
 
-/** Committed through `DATABASE` rather than the set-up transaction, for the same reason the whole
- * fixture is committed: the worker reads through its own pool. Teardown needs nothing extra —
- * deleting the organization cascades to its reports, and the objects are under its prefix.
- */
 async function anotherReport(
   organizationId: OrganizationId,
   requesterId: UserId,
