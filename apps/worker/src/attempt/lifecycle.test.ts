@@ -25,6 +25,7 @@ import {
 import {
   type AttemptDependencies,
   CorruptInputFileError,
+  deliverVerdict,
   failClaimedAttempt,
   MissingInputFileError,
   type PendingVerdict,
@@ -32,7 +33,6 @@ import {
   type ReadEnding,
   readChildEnding,
   recordVerdict,
-  resumeSettle,
   settleAttempt,
   startAttempt,
 } from './lifecycle.ts';
@@ -140,7 +140,7 @@ async function expectParkThenResume(
 
   if (parked.kind !== 'parked') throw new Error('expected a parked verdict');
   breakable.restore();
-  const resumed = await resumeSettle(dependencies, prepared, parked.pending);
+  const resumed = await deliverVerdict(dependencies, prepared, parked.pending);
 
   expect(resumed).toEqual({ kind: 'recorded' });
   expect((await readAnalysisAttemptRow(DATABASE, fixture.attemptId)).status).toBe('succeeded');

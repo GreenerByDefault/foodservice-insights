@@ -27,11 +27,11 @@ import type { Emailer } from '@gbd/email';
 import type { BlobStore } from '@gbd/storage';
 import {
   type AttemptDependencies,
+  deliverVerdict,
   failClaimedAttempt,
   type PendingVerdict,
   type PreparedAttempt,
   readChildEnding,
-  resumeSettle,
   type SettleOutcome,
   settleAttempt,
   startAttempt,
@@ -81,7 +81,11 @@ type InFlight = {
   state: SupervisionState;
   kill?: Kill;
   pendingVerdict?: PendingVerdict;
-  /** The settle or resume currently running, so no tick starts a second and `drain()` can await it. */
+  /** This attempt's path to a settled outcome, from wherever it currently sits.
+   *
+   * A fresh attempt's path spans awaiting the child's exit through `deliverVerdict`; a resume's is
+   * `deliverVerdict` alone. Either way, holding it here is what stops a tick from starting a
+   * second one, and lets `drain()` await it. */
   settlingPromise?: Promise<void>;
 };
 
@@ -144,14 +148,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     };
     inFlight.set(preparedAttempt.attemptId, record);
     // Stored at attach time, so there is no window in which a child has exited and no tick knows a
-    // settle is running.
-    record.settlingPromise = guardSettle(record, settleWhenExited(record));
+    // delivery is running.
+    record.settlingPromise = guardSettlingPromise(record, settleWhenExited(record));
   }
 
   /** Await the child, then read how it ended and deliver the verdict.
    *
-   * This is only ever awaited through `guardSettle`, which is what keeps a rejection here from
-   * reaching the event loop unhandled and taking the process down with it.
+   * This is only ever awaited through `guardSettlingPromise`, which is what keeps a rejection here
+   * from reaching the event loop unhandled and taking the process down with it.
    */
   async function settleWhenExited(record: InFlight): Promise<void> {
     const outcome = await record.preparedAttempt.child.exited;
@@ -159,23 +163,25 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     record.state = { ...record.state, exited: true };
 
     const ending = await readChildEnding(record.preparedAttempt, outcome, record.kill);
-    applySettleOutcome(
+    applyDeliveryOutcome(
       record,
       await settleAttempt(attemptDependencies, record.preparedAttempt, ending),
     );
   }
 
-  /** Hold `settlingPromise` for the lifetime of one settle or resume, absorbing whatever it throws.
+  /** Hold `record.settlingPromise` for the lifetime of one attempt's path to a settled outcome,
+   * absorbing whatever it throws.
    *
-   * // TODO: the connection to resumeSettle is confusing to me. I don't understand how this function relates to it,
-   * // like why resumeSettle would be in the call path etc.
-   * `resumeSettle` parks the failures it expects, so anything reaching here is a failure it does
-   * not expect — abandon the attempt, and abandoning must stop renewing the lease or the row stays
-   * `processing` forever and the reaper can never converge it (principle 3 in `failures.ts`).
+   * Both callers below end up in `deliverVerdict` — `settleWhenExited` reaches it through
+   * `settleAttempt`, which classifies the verdict and then calls it; `launchResume` calls it
+   * directly to carry a parked verdict further. Either way, `deliverVerdict` parks the failures it
+   * expects, so anything reaching here is a failure it does not expect — abandon the attempt, and
+   * abandoning must stop renewing the lease or the row stays `processing` forever and the reaper
+   * can never converge it (principle 3 in `failures.ts`).
    */
-  async function guardSettle(record: InFlight, settle: Promise<void>): Promise<void> {
+  async function guardSettlingPromise(record: InFlight, settling: Promise<void>): Promise<void> {
     try {
-      await settle;
+      await settling;
     } catch (error) {
       console.error(
         `Could not deliver the verdict for attempt ${record.preparedAttempt.attemptId}; abandoning it ` +
@@ -188,7 +194,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
   }
 
-  function applySettleOutcome(record: InFlight, outcome: SettleOutcome): void {
+  /** Fold a `deliverVerdict` outcome into the in-flight record: drop it once the verdict is off
+   * our hands, or hold `pendingVerdict` for the next tick's `launchResume` if it parked. */
+  function applyDeliveryOutcome(record: InFlight, outcome: SettleOutcome): void {
     if (outcome.kind !== 'parked') {
       inFlight.delete(record.preparedAttempt.attemptId);
       return;
@@ -313,10 +321,10 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   function launchResume(record: InFlight): void {
     if (record.settlingPromise !== undefined || record.pendingVerdict === undefined) return;
-    record.settlingPromise = guardSettle(
+    record.settlingPromise = guardSettlingPromise(
       record,
-      resumeSettle(attemptDependencies, record.preparedAttempt, record.pendingVerdict).then(
-        (outcome) => applySettleOutcome(record, outcome),
+      deliverVerdict(attemptDependencies, record.preparedAttempt, record.pendingVerdict).then(
+        (outcome) => applyDeliveryOutcome(record, outcome),
       ),
     );
   }
@@ -329,9 +337,10 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     expired: AnalysisAttemptId[];
     canceled: AnalysisAttemptId[];
   }> {
-    // TODO: should this be Promise.all()?
-    const expired = await reapExpiredAttempts(db, config.workerId, { ...config, candidateReports });
-    const canceled = await cancelRequestedPendingAttempts(db, { candidateReports });
+    const [expired, canceled] = await Promise.all([
+      reapExpiredAttempts(db, config.workerId, { ...config, candidateReports }),
+      cancelRequestedPendingAttempts(db, { candidateReports }),
+    ]);
     return { expired, canceled };
   }
 
@@ -447,18 +456,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   return { claimAndStart, supervise, reap, notify, drain, run };
 }
 
-/** Run `tick` every `intervalMs`, re-arming only once the previous one has *resolved*.
- *
- * // TODO: the type signature is not clear that it returns a stop function. Improve the modeling.
- * // TODO: probably inline the setInterval comment?
- * `setInterval` would let a slow tick re-enter, and the returned stop function is what lets a drain
- * take over a tick rather than race it: it resolves once the tick in flight has finished.
- */
-function startTicker(
-  name: string,
-  tick: () => Promise<unknown>,
-  intervalMs: number,
-): () => Promise<void> {
+/** Stops a ticker started by `startTicker`; resolves once its tick in flight has finished —
+ * that's what lets a drain take over a tick rather than race it. */
+type StopTicker = () => Promise<void>;
+
+/** Run `tick` every `intervalMs`, re-arming only once the previous one has *resolved*. */
+function startTicker(name: string, tick: () => Promise<unknown>, intervalMs: number): StopTicker {
   const controller = new AbortController();
 
   const loop = (async () => {
