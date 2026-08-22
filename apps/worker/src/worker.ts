@@ -89,7 +89,6 @@ type InFlight = {
   settlingPromise?: Promise<void>;
 };
 
-// TODO: should we rewrite to be a class?
 export function createWorker(dependencies: WorkerDependencies): Worker {
   const { db, store, emailer, clock, config, candidateReports } = dependencies;
 
