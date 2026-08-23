@@ -7,21 +7,6 @@
  * `attempt/supervision.ts` decides what a live attempt needs, `attempt/verdict.ts` what a dead
  * child means, `sweeps/` what a row nobody owns needs — so this file is about *when* and *in what
  * order*, not about what.
- *
- * TODO: can we rework these comments like moving them inline? I don't like how the rest of the file
- * refers to e.g. "principle 1 from the header". Does it really need to be top-level?
- * 
- * Three of the relations [`config.ts`](./config.ts) refuses a configuration over constrain this
- * file rather than the values, and breaking one here turns a passing check there into a lie:
- *
- * 1. **Renewals are issued concurrently across attempts** (phase 1 below). `leaseExpiresAfterMs` is
- *    sized against *one* renewal round trip; ticked serially, the real worst-case gap is that times
- *    `maxConcurrentAttempts`, and a healthy parent fences its own children under load.
- * 2. **A settle is never awaited inside a supervise tick** (phase 3 below), for the same reason —
- *    the tick's duration is part of that gap, and a settle can sit behind a blob-store retry storm.
- * 3. **At most two concurrent statements per in-flight attempt** — this tick's renewal, and a
- *    settle's terminal write, which rides outside the tick. A third makes renewals queue for a
- *    connection, which inflates the very round trip the lease is sized against.
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
@@ -219,12 +204,10 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // Supervising
   // -----------------------------------------------------------
 
-  // TODO: should this comment move inline? Can it be improved?
-  /** A second concurrent call awaits the tick already in flight rather than starting a new one,
-   * which is what makes phase 2's reasoning hold under any scheduler and makes `drain()`'s handoff
-   * from `run()`'s own ticker safe.
-   */
   async function supervise(): Promise<void> {
+    // A second concurrent call awaits the tick already in flight rather than starting a new one.
+    // That's what makes phase 2's reasoning hold under any scheduler, and what makes `drain()`'s
+    // handoff from `run()`'s own ticker safe.
     ticking ??= superviseOnce().finally(() => {
       ticking = undefined;
     });
@@ -232,8 +215,8 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   }
 
   async function superviseOnce(): Promise<void> {
-    // Phase 1: every database round trip this tick, concurrently across attempts. The concurrency
-    // is relation 1 in this file's header, not an optimisation.
+    // Phase 1: every database round trip this tick, concurrently across attempts.
+    // The concurrency is deliberate, as explained in config.py with `leaseExpiresAfterMs`.
     const ticked = await Promise.all(
       [...inFlight.values()].map(async (record) => ({ record, reading: await readTick(record) })),
     );
@@ -274,7 +257,8 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       }
     }
 
-    // Phase 3: launch, never await — relation 2 in this file's header.
+    // Phase 3: launch, never await. A settle can sit behind a blob-store retry storm, and awaiting
+    // it here would fold its duration into this tick's own gap against `leaseExpiresAfterMs`.
     for (const record of resuming) launchResume(record);
   }
 
@@ -300,6 +284,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // Stamped before the statement is issued; `SupervisionState.renewalIssuedAt` covers why.
     const renewalIssuedAt = clock.now();
     try {
+      // One of at most two connections this attempt may hold at once — the other being a settle's
+      // terminal write, which rides outside the tick (`DATABASE_CONNECTIONS_PER_ATTEMPT` in
+      // config.ts).
       const lease = await renewLease(db, record.preparedAttempt.attemptId, config.workerId);
       return { lease, renewalIssuedAt };
     } catch (error) {
