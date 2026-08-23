@@ -166,7 +166,7 @@ export async function loadAttemptInputs(
  * cross-worker reaper took it away. Either way there is nothing left for us to record. */
 export type Lease = { kind: 'held'; cancelRequestedAt: Date | null } | { kind: 'lost' };
 
-/** One statement per attempt per supervision tick, answering both questions that tick has: do we
+/** One statement per attempt per direct tick, answering both questions that tick has: do we
  * still own this attempt, and has someone asked for it to be canceled.
  */
 export async function renewLease(

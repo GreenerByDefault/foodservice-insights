@@ -469,7 +469,7 @@ describe('finishing', () => {
       const attemptId = await claimedAttempt(transaction, workerId);
       // `analysis_attempt_canceled_requires_request` needs a request behind the verdict — in the
       // real flow, this is what `renewLease` reporting `cancelRequestedAt` would have led the
-      // supervisor to act on.
+      // direct tick to act on.
       await transaction
         .updateTable('analysisAttempt')
         .set({ cancelRequestedAt: sql<Date>`now()` })

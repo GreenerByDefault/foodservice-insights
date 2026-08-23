@@ -1,10 +1,10 @@
-/** The process that hosts the decisions the rest of `src/` makes: claim attempts, supervise the
+/** The process that hosts the decisions the rest of `src/` makes: claim attempts, direct the
  * children running them, deliver verdicts a settle could not, and run the sweeps that converge
  * rows nobody else will.
  *
  * Every method here is called directly by a test; `run()` is the only scheduler, and it is thin on
  * purpose. The behaviour each method wires up belongs to the module it calls —
- * `attempt/supervision.ts` decides what a live attempt needs, `attempt/verdict.ts` what a dead
+ * `attempt/directive.ts` decides what a live attempt needs, `attempt/verdict.ts` what a dead
  * child means, `sweeps/` what a row nobody owns needs — so this file is about *when* and *in what
  * order*, not about what.
  */
@@ -13,6 +13,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { AnalysisAttemptId, DatabaseExecutor, ReportId } from '@gbd/db';
 import type { Emailer } from '@gbd/email';
 import type { BlobStore } from '@gbd/storage';
+import { decideDirective, type TickReading, type TickState } from './attempt/directive.ts';
 import {
   type AttemptDependencies,
   deliverVerdict,
@@ -25,11 +26,6 @@ import {
   startAttempt,
 } from './attempt/lifecycle.ts';
 import { claimNextAttempt, renewLease } from './attempt/queue.ts';
-import {
-  type SupervisionState,
-  superviseAttempt,
-  type TickReading,
-} from './attempt/supervision.ts';
 import type { Kill } from './attempt/verdict.ts';
 import { readProgress } from './child/run-directory.ts';
 import type { Clock } from './clock.ts';
@@ -52,7 +48,7 @@ export type ClaimOutcome = 'started' | 'queue-empty' | 'at-capacity' | 'start-fa
 
 export type Worker = {
   claimAndStart(): Promise<ClaimOutcome>;
-  supervise(): Promise<void>;
+  direct(): Promise<void>;
   reap(): Promise<{ expired: AnalysisAttemptId[]; canceled: AnalysisAttemptId[] }>;
   notify(): Promise<AnalysisAttemptId[]>;
   drain(): Promise<void>;
@@ -66,7 +62,7 @@ export type Worker = {
  */
 type InFlight = {
   preparedAttempt: PreparedAttempt;
-  state: SupervisionState;
+  state: TickState;
   kill?: Kill;
   pendingVerdict?: PendingVerdict;
   /** This attempt's path to a settled outcome, from wherever it currently sits.
@@ -199,22 +195,21 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     };
   }
 
-  // TODO: is there a more descriptive name than "supervising"? It's okay to rename supervision.ts.
   // -----------------------------------------------------------
-  // Supervising
+  // Directing
   // -----------------------------------------------------------
 
-  async function supervise(): Promise<void> {
+  async function direct(): Promise<void> {
     // A second concurrent call awaits the tick already in flight rather than starting a new one.
     // That's what makes phase 2's reasoning hold under any scheduler, and what makes `drain()`'s
     // handoff from `run()`'s own ticker safe.
-    ticking ??= superviseOnce().finally(() => {
+    ticking ??= directOnce().finally(() => {
       ticking = undefined;
     });
     await ticking;
   }
 
-  async function superviseOnce(): Promise<void> {
+  async function directOnce(): Promise<void> {
     // Phase 1: every database round trip this tick, concurrently across attempts.
     // The concurrency is deliberate, as explained in config.py with `leaseExpiresAfterMs`.
     const ticked = await Promise.all(
@@ -226,14 +221,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     const now = clock.now();
     const resuming: InFlight[] = [];
     for (const { record, reading } of ticked) {
-      const { state, action } = superviseAttempt(record.state, reading, config, now);
+      const { state, directive } = decideDirective(record.state, reading, config, now);
       record.state = state;
 
-      switch (action.kind) {
+      switch (directive.kind) {
         case 'nothing':
           break;
         case 'kill':
-          kill(record, action.kill);
+          kill(record, directive.kill);
           break;
         case 'resume-parked-verdict':
           resuming.push(record);
@@ -276,7 +271,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   }
 
   async function renew(record: InFlight): Promise<Omit<TickReading, 'progress'>> {
-    // Stamped before the statement is issued; `SupervisionState.renewalIssuedAt` covers why.
+    // Stamped before the statement is issued; `TickState.renewalIssuedAt` covers why.
     const renewalIssuedAt = clock.now();
     try {
       // One of at most two connections this attempt may hold at once — the other being a settle's
@@ -355,14 +350,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   }
 
   async function drainOnce(): Promise<void> {
-    // Ticking `supervise()` throughout is load-bearing: a five-minute drain that stopped renewing
+    // Ticking `direct()` throughout is load-bearing: a five-minute drain that stopped renewing
     // would have the rest of the fleet reap this worker's own healthy attempts. It is also why
-    // `run()` stops its supervise ticker before awaiting the drain, rather than racing it.
+    // `run()` stops its direct ticker before awaiting the drain, rather than racing it.
     const deadline = clock.now() + config.drainGraceMs;
     while (inFlight.size > 0 && clock.now() < deadline) {
-      await supervise();
+      await direct();
       if (inFlight.size === 0) break;
-      await sleepUnlessSettled(config.superviseIntervalMs);
+      await sleepUnlessSettled(config.directIntervalMs);
     }
 
     for (const record of inFlight.values()) {
@@ -397,7 +392,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     await Promise.all([...inFlight.values()].map((record) => record.settlingPromise));
   }
 
-  /** Wait out one supervise interval, unless every in-flight attempt finishes first — so a drain
+  /** Wait out one direct interval, unless every in-flight attempt finishes first — so a drain
    * that is done resolves in milliseconds instead of sitting out the interval. */
   async function sleepUnlessSettled(intervalMs: number): Promise<void> {
     const controller = new AbortController();
@@ -419,7 +414,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   async function run(): Promise<void> {
     const tickers = [
-      startTicker('supervise', supervise, config.superviseIntervalMs),
+      startTicker('direct', direct, config.directIntervalMs),
       startTicker('reap', reap, config.reapIntervalMs),
       startTicker('notify', notify, config.notifyIntervalMs),
     ];
@@ -431,14 +426,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
         if (outcome !== 'started') await sleep(config.queuePollIntervalMs);
       }
     } finally {
-      // Stopped before the drain so the drain owns the supervise tick, and awaited so a tick in
+      // Stopped before the drain so the drain owns the direct tick, and awaited so a tick in
       // flight — a notification send, say — is never abandoned half way.
       for (const stop of tickers) await stop();
       await drain();
     }
   }
 
-  return { claimAndStart, supervise, reap, notify, drain, run };
+  return { claimAndStart, direct, reap, notify, drain, run };
 }
 
 /** Stops a ticker started by `startTicker`; resolves once its tick in flight has finished —

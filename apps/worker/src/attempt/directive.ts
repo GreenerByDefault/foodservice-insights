@@ -9,7 +9,7 @@ import type { PendingVerdict } from './lifecycle.ts';
 import type { Lease } from './queue.ts';
 import type { Kill } from './verdict.ts';
 
-export type SupervisionThresholds = Pick<
+export type TickThresholds = Pick<
   WorkerConfig,
   | 'killAfterNoProgressMs'
   | 'killAfterTotalRuntimeMs'
@@ -17,7 +17,7 @@ export type SupervisionThresholds = Pick<
   | 'uploadRetryBudgetMs'
 >;
 
-export type SupervisionState = {
+export type TickState = {
   startedAt: number;
   lastProgressAt: number;
   lastProgressSequence?: number;
@@ -41,7 +41,7 @@ export type TickReading = {
   renewalIssuedAt?: number;
 };
 
-export type SupervisionAction =
+export type AttemptDirective =
   | { kind: 'nothing' }
   | { kind: 'kill'; kill: Kill }
   | { kind: 'resume-parked-verdict' }
@@ -58,7 +58,7 @@ export type SupervisionAction =
  *   `progress.json` carries no timestamp, so the parent keeps the clock reading itself; a file
  *   the child has not written yet leaves `lastProgressAt` at `startedAt`.
  * - `renewalIssuedAt` advances only on `lease.kind === 'held'`, to `reading.renewalIssuedAt` — see
- *   that field on `SupervisionState` for why it's stamped at issue, not at return.
+ *   that field on `TickState` for why it's stamped at issue, not at return.
  *
  * Then the rules:
  *
@@ -86,21 +86,17 @@ export type SupervisionAction =
  * We check `lost` before `contract-violation`: an attempt we may no longer write has nothing to
  * gain from a truthful kill reason, and `classifyVerdict` would turn either into a no-op write.
  */
-export function superviseAttempt(
-  state: SupervisionState,
+export function decideDirective(
+  state: TickState,
   reading: TickReading,
-  thresholds: SupervisionThresholds,
+  thresholds: TickThresholds,
   now: number,
-): { state: SupervisionState; action: SupervisionAction } {
+): { state: TickState; directive: AttemptDirective } {
   const nextState = advanceState(state, reading, now);
-  return { state: nextState, action: decideAction(nextState, reading, thresholds, now) };
+  return { state: nextState, directive: decideAction(nextState, reading, thresholds, now) };
 }
 
-function advanceState(
-  state: SupervisionState,
-  reading: TickReading,
-  now: number,
-): SupervisionState {
+function advanceState(state: TickState, reading: TickReading, now: number): TickState {
   const progressSequence =
     reading.progress.kind === 'read' ? reading.progress.progressSequence : undefined;
   const progressed =
@@ -117,11 +113,11 @@ function advanceState(
 }
 
 function decideAction(
-  state: SupervisionState,
+  state: TickState,
   reading: TickReading,
-  thresholds: SupervisionThresholds,
+  thresholds: TickThresholds,
   now: number,
-): SupervisionAction {
+): AttemptDirective {
   const cancelRequestedAt = reading.lease.kind === 'held' ? reading.lease.cancelRequestedAt : null;
 
   // lost: we may no longer write to this attempt at all.

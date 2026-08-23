@@ -1,11 +1,11 @@
-/** The supervisor, driven through its own methods rather than its scheduler: every test calls
- * `claimAndStart()`, `supervise()`, `reap()`, `notify()`, or `drain()` directly, and `run()` gets
+/** The worker, driven through its own methods rather than its scheduler: every test calls
+ * `claimAndStart()`, `direct()`, `reap()`, `notify()`, or `drain()` directly, and `run()` gets
  * one smoke test.
  *
  * Nothing here is mocked. The child is a real process spawned through the same `spawnChild`
  * production uses ([`testing/fake-child.ts`](./testing/fake-child.ts)), and a failing service is a
  * real service that fails — `breakableDatabase`, `breakableBlobStore`. Nothing re-tests
- * `attempt/supervision.ts`'s rule table, `attempt/verdict.ts`'s precedence, `sweeps/reaper.ts`'s
+ * `attempt/directive.ts`'s rule table, `attempt/verdict.ts`'s precedence, `sweeps/reaper.ts`'s
  * predicates, or `sweeps/notifications.ts`'s backoff; what is proved here is the wiring around
  * them.
  *
@@ -67,7 +67,7 @@ import { createWorker, type Worker } from './worker.ts';
 const TEST_CONFIG: WorkerDefaultableFields = {
   maxConcurrentAttempts: 2,
   queuePollIntervalMs: 10,
-  superviseIntervalMs: 50,
+  directIntervalMs: 50,
   killAfterNoProgressMs: 60 * SECOND_MS,
   killAfterTotalRuntimeMs: 120 * SECOND_MS,
   killGraceMs: 200,
@@ -234,13 +234,13 @@ async function uploadedKeys(fixture: ReportFixture): Promise<string[]> {
  * A resume is launched by a tick and deliberately never awaited by it, so "tick once and assert" is
  * only ever a race. Ticking until the row moves is not.
  */
-async function superviseUntil(
+async function directUntil(
   worker: Worker,
   condition: () => Promise<boolean>,
   description: string,
 ): Promise<void> {
   await waitUntil(async () => {
-    await worker.supervise();
+    await worker.direct();
     return await condition();
   }, description);
 }
@@ -387,7 +387,7 @@ describe('claiming and capacity', () => {
   });
 });
 
-describe('supervision', () => {
+describe('directing', () => {
   test('renews the lease on a child that is making progress', async () => {
     const steps: FakeChildStep[] = [
       { step: 'progress', sequence: 1 },
@@ -404,7 +404,7 @@ describe('supervision', () => {
       await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
       const claimed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
-      await harness.worker.supervise();
+      await harness.worker.direct();
       const afterFirstTick = (await attemptRow(attemptId)).leaseRenewedAt as Date;
 
       await release(fixture, attemptId);
@@ -412,7 +412,7 @@ describe('supervision', () => {
         async () => (await readProgress(runDirectory(fixture, attemptId)))?.sequence === 2,
         'the child writes its second progress',
       );
-      await harness.worker.supervise();
+      await harness.worker.direct();
       const afterSecondTick = (await attemptRow(attemptId)).leaseRenewedAt as Date;
 
       expect(afterFirstTick.getTime()).toBeGreaterThan(claimed.getTime());
@@ -435,7 +435,7 @@ describe('supervision', () => {
       await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
       const before = (await attemptRow(attemptId)).leaseRenewedAt as Date;
-      await harness.worker.supervise();
+      await harness.worker.direct();
       expect((await attemptRow(attemptId)).leaseRenewedAt).toEqual(before);
 
       // The child is still alive, which is what "does not kill" means: it runs on once the read
@@ -461,7 +461,7 @@ describe('supervision', () => {
         'the child writes its malformed progress',
       );
 
-      await harness.worker.supervise();
+      await harness.worker.direct();
       await waitUntil(() => statusIs(attemptId, 'failed'), 'the attempt is failed');
 
       expect((await attemptRow(attemptId)).failureReason).toBe('contract_violation');
@@ -473,7 +473,7 @@ describe('supervision', () => {
       const attemptId = await startOne(harness);
 
       harness.advance(harness.config.killAfterNoProgressMs);
-      await harness.worker.supervise();
+      await harness.worker.direct();
 
       await waitUntil(() => statusIs(attemptId, 'failed'), 'the attempt is failed');
       expect((await attemptRow(attemptId)).failureReason).toBe('hung');
@@ -505,11 +505,11 @@ describe('supervision', () => {
         'the child writes its second progress',
       );
       // Fresh progress this tick, so `hung` cannot fire on any later one.
-      await harness.worker.supervise();
+      await harness.worker.direct();
       expect(await statusIs(attemptId, 'processing')).toBe(true);
 
       harness.advance(50);
-      await harness.worker.supervise();
+      await harness.worker.direct();
 
       await waitUntil(() => statusIs(attemptId, 'failed'), 'the attempt is failed');
       expect((await attemptRow(attemptId)).failureReason).toBe('hard_timeout');
@@ -533,7 +533,7 @@ describe('supervision', () => {
 
           database.break();
           harness.advance(harness.config.leaseExpiresAfterMs);
-          await harness.worker.supervise();
+          await harness.worker.direct();
 
           await waitUntil(
             () => !existsSync(runDirectory(fixture, attemptId)),
@@ -558,7 +558,7 @@ describe('cancellation, through the loop', () => {
       const attemptId = await startOne(harness);
       await requestCancel(attemptId);
 
-      await harness.worker.supervise();
+      await harness.worker.direct();
       await waitUntil(() => statusIs(attemptId, 'canceled'), 'the attempt is canceled');
 
       const row = await attemptRow(attemptId);
@@ -584,7 +584,7 @@ describe('cancellation, through the loop', () => {
         expect(reaped.reapedByWorkerId).toBe(other.workerId);
 
         // The owner still kills its child, and its own tick writes nothing.
-        await harness.worker.supervise();
+        await harness.worker.direct();
         await waitUntil(
           () => !existsSync(runDirectory(fixture, attemptId)),
           'the owner kills the child it no longer owns',
@@ -617,7 +617,7 @@ describe('losing a race with the real reaper', () => {
         expect((await other.worker.reap()).expired).toEqual([attemptId]);
         const reaped = await attemptRow(attemptId);
 
-        await harness.worker.supervise();
+        await harness.worker.direct();
         await waitUntil(
           () => !existsSync(runDirectory(fixture, attemptId)),
           'the owner kills the child it no longer owns',
@@ -650,7 +650,7 @@ describe('parked verdicts', () => {
           expect(await statusIs(attemptId, 'processing')).toBe(true);
 
           database.restore();
-          await superviseUntil(
+          await directUntil(
             harness.worker,
             () => statusIs(attemptId, 'succeeded'),
             'the parked verdict lands',
@@ -679,12 +679,12 @@ describe('parked verdicts', () => {
 
           // The database is healthy throughout, so a parked record keeps its lease renewed — which
           // is why this stage needs `uploadRetryBudgetMs` and cannot rely on fencing.
-          await harness.worker.supervise();
+          await harness.worker.direct();
           const renewed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
           expect(renewed.getTime()).toBeGreaterThan(parked.getTime());
 
           store.restore();
-          await superviseUntil(
+          await directUntil(
             harness.worker,
             () => statusIs(attemptId, 'succeeded'),
             'the parked verdict lands',
@@ -713,7 +713,7 @@ describe('parked verdicts', () => {
           );
 
           harness.advance(harness.config.uploadRetryBudgetMs);
-          await superviseUntil(
+          await directUntil(
             harness.worker,
             () => statusIs(attemptId, 'failed'),
             'the budget runs out and the verdict is converted',
@@ -753,7 +753,7 @@ describe('parked verdicts', () => {
 
           // Restored first, so what stops the upload is the drop and not the outage.
           store.restore();
-          await harness.worker.supervise();
+          await harness.worker.direct();
 
           expect((await attemptRow(attemptId)).failureReason).toBe('abandoned');
           expect(await resultFileRows(attemptId)).toHaveLength(0);
@@ -783,7 +783,7 @@ describe('parked verdicts', () => {
           await requestCancel(attemptId);
           // Restored, so an unconverted resume would happily upload a report the user just deleted.
           store.restore();
-          await superviseUntil(
+          await directUntil(
             harness.worker,
             () => statusIs(attemptId, 'canceled'),
             'the parked verdict is converted to canceled',
@@ -876,14 +876,14 @@ describe('draining', () => {
       {
         steps: HOLDING_STEPS,
         systemClock: true,
-        overrides: { drainGraceMs: 10 * SECOND_MS, superviseIntervalMs: 50 },
+        overrides: { drainGraceMs: 10 * SECOND_MS, directIntervalMs: 50 },
       },
       async (harness, fixture) => {
         const attemptId = await startOne(harness);
         await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
         const draining = harness.worker.drain();
-        // A drain that stopped ticking `supervise()` would have the rest of the fleet reap this
+        // A drain that stopped ticking `direct()` would have the rest of the fleet reap this
         // worker's own healthy attempts.
         const renewals = new Set<number>();
         await waitUntil(async () => {

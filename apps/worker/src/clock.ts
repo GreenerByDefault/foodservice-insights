@@ -3,7 +3,7 @@
  * Every threshold the parent enforces is a subtraction against this — a child that has stopped
  * making progress, a child past the hard ceiling — rather than a file mtime or a bare `Date.now()`.
  * That is what lets a test push a run an hour into the past with
- * [`testing/clock.ts`](./testing/clock.ts) and call the supervision step directly, instead of
+ * [`testing/clock.ts`](./testing/clock.ts) and call `direct()` directly, instead of
  * waiting an hour for a timer.
  */
 

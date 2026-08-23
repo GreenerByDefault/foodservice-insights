@@ -1,6 +1,6 @@
 /** A child is never mocked — see [`testing/fake-child.ts`](../testing/fake-child.ts) for why — and
  * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
- * for the decision `supervise()` will make once the loop that reads a `Clock` lands. Where a store
+ * for the decision `direct()` will make once the loop that reads a `Clock` lands. Where a store
  * or a database has to fail and come back, it is a real client that genuinely can
  * (`breakableBlobStore` from `@gbd/storage/testing`, `breakableDatabase` from `@gbd/db/testing`).
  */
@@ -543,7 +543,7 @@ describe('kills', () => {
         );
         // `analysis_attempt_canceled_requires_request` needs a request behind the verdict this
         // kill is about to produce. In the real flow, `cancelRequestedAt` non-null is exactly
-        // what would have led `supervise()` to build this `Kill`.
+        // what would have led `direct()` to build this `Kill`.
         if (kill.reason === 'canceled') {
           await DATABASE.updateTable('analysisAttempt')
             .set({ cancelRequestedAt: new Date() })
