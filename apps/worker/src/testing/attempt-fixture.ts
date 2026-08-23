@@ -38,11 +38,7 @@ export type ReportFixture = SeededReport & {
   requester: { id: UserId; email: string };
   inputCsv: Uint8Array;
   runRoot: string;
-  /** Another report on the same organization, committed the same way.
-   *
-   * `analysis_attempt_one_open_per_report` allows a report only one non-terminal attempt at a time,
-   * so a test that needs two attempts in flight at once needs two reports.
-   */
+  /** Another report on the same organization, committed the same way. */
   seedReport(): Promise<SeededReport>;
 };
 
