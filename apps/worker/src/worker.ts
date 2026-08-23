@@ -247,11 +247,6 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
           resuming.push(record);
           break;
         case 'drop-parked-verdict':
-          // TODO: I think this comment is a lie because the reaper does converge attempts
-          // that keep getting renewed. Rather than making the comment longer, we should simplify it.
-          //
-          // Deleting is what stops the lease being renewed. Abandoning must always stop renewing,
-          // or reaping can never converge the row.
           inFlight.delete(record.preparedAttempt.attemptId);
           break;
       }
@@ -349,18 +344,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // Draining
   // -----------------------------------------------------------
 
-  // TODO: smells wrong to mention the tests & clock in this docstring. Can we just remove it because
-  // the tests already document it? Also, can/should we inline the memoized comment?
-  /** Memoized: SIGTERM and `run()`'s own exit both call it. `draining` is set before the first
-   * await, so `claimAndStart` refuses immediately.
-   *
-   * The one method whose durations are **real time, not the injected `Clock`** — it sleeps. So a
-   * drain test shortens `drainGraceMs` and `superviseIntervalMs` and passes `SYSTEM_CLOCK`, where a
-   * threshold test advances a `manualClock`; a test doing both would hang, because a manual clock
-   * never reaches a deadline a real sleep is waiting for.
+  /** SIGTERM and `run()`'s own exit both call it. `draining` is set before the first await, so
+   * `claimAndStart` refuses immediately.
    */
   async function drain(): Promise<void> {
     draining = true;
+    // Memoized: run the drain once even if both callers race into it.
     drained ??= drainOnce();
     await drained;
   }
