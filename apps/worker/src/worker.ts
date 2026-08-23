@@ -8,6 +8,9 @@
  * child means, `sweeps/` what a row nobody owns needs — so this file is about *when* and *in what
  * order*, not about what.
  *
+ * TODO: can we rework these comments like moving them inline? I don't like how the rest of the file
+ * refers to e.g. "principle 1 from the header". Does it really need to be top-level?
+ * 
  * Three of the relations [`config.ts`](./config.ts) refuses a configuration over constrain this
  * file rather than the values, and breaking one here turns a passing check there into a lie:
  *
@@ -211,10 +214,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     };
   }
 
+  // TODO: is there a more descriptive name than "supervising"? It's okay to rename supervision.ts.
   // -----------------------------------------------------------
   // Supervising
   // -----------------------------------------------------------
 
+  // TODO: should this comment move inline? Can it be improved?
   /** A second concurrent call awaits the tick already in flight rather than starting a new one,
    * which is what makes phase 2's reasoning hold under any scheduler and makes `drain()`'s handoff
    * from `run()`'s own ticker safe.
@@ -259,6 +264,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
           resuming.push(record);
           break;
         case 'drop-parked-verdict':
+          // TODO: I think this comment is a lie because the reaper does converge attempts
+          // that keep getting renewed. Rather than making the comment longer, we should simplify it.
+          //
           // Deleting is what stops the lease being renewed. Abandoning must always stop renewing,
           // or reaping can never converge the row.
           inFlight.delete(record.preparedAttempt.attemptId);
@@ -273,7 +281,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   async function readTick(record: InFlight): Promise<TickReading> {
     // A parked verdict has no child and no run directory left to read, and one whose child has
     // exited has no threshold left to evaluate — its settle is what disposes of it. Both still
-    // need their lease renewed, or a slow settle is fenced out from under itself.
+    // need their lease renewed, or a slow settle would be fenced out from under itself.
     if (record.state.parked !== undefined || record.state.exited) {
       return { progress: { kind: 'read' }, ...(await renew(record)) };
     }
@@ -311,7 +319,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   }
 
   /** A verdict whose upload budget has run out, or which a drain will not wait for, recorded as the
-   * failure the store actually handed us rather than left to the reaper's `abandoned` hours later. */
+   * failure the store actually handed us rather than left to the reaper's `abandoned` later. */
   function expireUpload(pendingVerdict: PendingVerdict | undefined): PendingVerdict {
     const lastError = pendingVerdict?.stage === 'upload' ? pendingVerdict.lastError : undefined;
     const { reason, detail } = classifyAttemptFailure(lastError);
@@ -354,6 +362,8 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // Draining
   // -----------------------------------------------------------
 
+  // TODO: smells wrong to mention the tests & clock in this docstring. Can we just remove it because
+  // the tests already document it? Also, can/should we inline the memoized comment?
   /** Memoized: SIGTERM and `run()`'s own exit both call it. `draining` is set before the first
    * await, so `claimAndStart` refuses immediately.
    *
