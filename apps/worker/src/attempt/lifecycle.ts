@@ -23,12 +23,8 @@ import {
   writeInputCsv,
   writeManifest,
 } from '../child/run-directory.ts';
-import {
-  type ChildCommand,
-  type ChildOutcome,
-  type RunningChild,
-  spawnChild,
-} from '../child/spawn.ts';
+import { type ChildOutcome, type RunningChild, spawnChild } from '../child/spawn.ts';
+import type { WorkerConfig } from '../config.ts';
 import { chartFileName, RESULT_FILE_NAMES } from '../contract/layout.ts';
 import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
 import { classifyAttemptFailure, retryOnTransientDbError } from '../failures.ts';
@@ -41,13 +37,12 @@ import {
 } from './queue.ts';
 import { type ChildEnding, classifyVerdict, type Kill, type Verdict } from './verdict.ts';
 
-export type AttemptDependencies = {
+export type AttemptDependencies = Pick<
+  WorkerConfig,
+  'workerId' | 'runRoot' | 'childCommand' | 'killGraceMs'
+> & {
   db: DatabaseExecutor;
   store: BlobStore;
-  workerId: string;
-  runRoot: string;
-  childCommand: ChildCommand;
-  killGraceMs: number;
 };
 
 export type PreparedAttempt = {
@@ -275,7 +270,7 @@ function writeVerdictOnce(
  *
  * Settling is two steps that can each fail independently — storing the result files, then
  * writing the verdict — so this says which one is left. `worker.ts` holds it on the in-flight
- * record and calls `resumeSettle` on a later tick.
+ * record and calls `deliverVerdict` again on a later tick to carry it the rest of the way.
  */
 export type PendingVerdict =
   /** The child succeeded and its result files are not stored yet. `lastError` is the error the most
@@ -313,7 +308,7 @@ export async function settleAttempt(
     const verdict = classifyVerdict(ending);
     if (verdict.kind === 'unowned') return { kind: 'lost' };
 
-    return await resumeSettle(
+    return await deliverVerdict(
       dependencies,
       prepared,
       verdict.kind === 'succeeded'
@@ -325,12 +320,15 @@ export async function settleAttempt(
   }
 }
 
-/** Carry a parked verdict the rest of the way, from whichever step it stopped at.
+/** Carry a verdict as far as it will go, from whichever step it starts at.
  *
- * `settleAttempt` is the first of these; every later one comes from a supervision tick. Classifying
- * happens only in `settleAttempt`, which is what makes an `unowned` verdict unrepresentable here.
+ * `settleAttempt` calls this immediately after classifying a freshly-ended child, so it is not
+ * only a "resume" — it is the delivery step for every verdict, first attempt included. A
+ * supervision tick calls it again, unchanged, to carry a verdict this returned as `parked` the
+ * rest of the way. Classifying happens only in `settleAttempt`, which is what makes an `unowned`
+ * verdict unrepresentable here.
  */
-export async function resumeSettle(
+export async function deliverVerdict(
   dependencies: AttemptDependencies,
   prepared: PreparedAttempt,
   pending: PendingVerdict,

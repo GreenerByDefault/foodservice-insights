@@ -22,22 +22,32 @@ import { BLOB_STORE } from '@gbd/storage/env';
 import { claimNextAttempt } from '../attempt/queue.ts';
 import { withTemporaryRunRoot } from './run-root.ts';
 
-export type ReportFixture = {
-  organizationId: OrganizationId;
+/** One report with a real input object behind it, and its own attempt sequence. */
+export type SeededReport = {
   reportId: ReportId;
-  /** The requester of every seeded attempt, so a notify sweep has somewhere to send. */
-  requester: { id: UserId; email: string };
-  inputCsv: Uint8Array;
   /** The input file's storage key, so a test can delete the object out from under an attempt to
    * exercise `MissingInputFileError`. */
   inputCsvStorageKey: string;
-  runRoot: string;
-  /** Insert another pending attempt on this fixture's report, with the next `attemptNumber`. */
+  /** Insert another pending attempt on this report, with the next `attemptNumber`. */
   seedAttempt(): Promise<AnalysisAttemptId>;
 };
 
+export type ReportFixture = SeededReport & {
+  organizationId: OrganizationId;
+  /** The requester of every seeded attempt, so a notify sweep has somewhere to send. */
+  requester: { id: UserId; email: string };
+  inputCsv: Uint8Array;
+  runRoot: string;
+  /** Another report on the same organization, committed the same way.
+   *
+   * `analysis_attempt_one_open_per_report` allows a report only one non-terminal attempt at a time,
+   * so a test that needs two attempts in flight at once needs two reports.
+   */
+  seedReport(): Promise<SeededReport>;
+};
+
 /** A single claimed attempt. */
-export type AttemptFixture = Omit<ReportFixture, 'requester' | 'seedAttempt'> & {
+export type AttemptFixture = Omit<ReportFixture, 'requester' | 'seedAttempt' | 'seedReport'> & {
   attemptId: AnalysisAttemptId;
 };
 
@@ -45,9 +55,10 @@ const AN_INPUT_CSV = Buffer.from('filler bytes');
 const AN_INPUT_CSV_SHA256 = createHash('sha256').update(AN_INPUT_CSV).digest();
 
 /** Commit an organization with one report and one input file; write the input file's bytes to the
- * real object its storage key names; hand the test a run root of its own and a `seedAttempt` to
- * insert pending attempts against the report one at a time. Torn down however the test ends,
- * including the objects any code under test writes under the organization's prefix.
+ * real object its storage key names; hand the test a run root of its own, a `seedAttempt` to insert
+ * pending attempts against the report one at a time, and a `seedReport` for when one report is not
+ * enough. Torn down however the test ends, including the objects any code under test writes under
+ * the organization's prefix.
  */
 export async function withReportFixture<T>(
   body: (fixture: ReportFixture) => Promise<T>,
@@ -76,25 +87,15 @@ export async function withReportFixture<T>(
           };
         },
         async (setUp) => {
-          await putObject(BLOB_STORE, setUp.storageKey, AN_INPUT_CSV);
-          let attemptNumber = 0;
+          const requester = setUp.requester;
           try {
             return await body({
+              ...(await seededReport(setUp.reportId, setUp.storageKey, requester.id)),
               organizationId: setUp.organizationId,
-              reportId: setUp.reportId,
-              requester: setUp.requester,
+              requester,
               inputCsv: AN_INPUT_CSV,
-              inputCsvStorageKey: setUp.storageKey,
               runRoot,
-              seedAttempt: async () => {
-                attemptNumber += 1;
-                const attempt = await insertAnalysisAttempt(DATABASE, {
-                  reportId: setUp.reportId,
-                  attemptNumber,
-                  requestedByUserId: setUp.requester.id,
-                });
-                return attempt.id;
-              },
+              seedReport: () => anotherReport(setUp.organizationId, requester.id),
             });
           } finally {
             await deletePrefix(BLOB_STORE, organizationPrefix(setUp.organizationId));
@@ -102,6 +103,38 @@ export async function withReportFixture<T>(
         },
       ),
   );
+}
+
+/** Write the report's input object, and hand back its own attempt sequence. */
+async function seededReport(
+  reportId: ReportId,
+  storageKey: string,
+  requesterId: UserId,
+): Promise<SeededReport> {
+  await putObject(BLOB_STORE, storageKey, AN_INPUT_CSV);
+  let attemptNumber = 0;
+  return {
+    reportId,
+    inputCsvStorageKey: storageKey,
+    seedAttempt: async () => {
+      attemptNumber += 1;
+      const attempt = await insertAnalysisAttempt(DATABASE, {
+        reportId,
+        attemptNumber,
+        requestedByUserId: requesterId,
+      });
+      return attempt.id;
+    },
+  };
+}
+
+async function anotherReport(
+  organizationId: OrganizationId,
+  requesterId: UserId,
+): Promise<SeededReport> {
+  const report = await insertReport(DATABASE, { organizationId });
+  const inputFile = await insertInputFile(DATABASE, { reportId: report.id });
+  return await seededReport(report.id, inputFile.storageKey, requesterId);
 }
 
 /** A `ReportFixture` with one attempt already seeded and claimed by `workerId`. */
