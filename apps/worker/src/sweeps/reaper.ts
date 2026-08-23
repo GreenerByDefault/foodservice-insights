@@ -101,8 +101,8 @@ function expiredCandidates(
  * database's help — for no progress, or for exceeding the total allowable time. This reaping
  * defends against the parent itself dying, leaving nothing to converge the rows it claimed. So the
  * filter could only ever matter where that reasoning has already failed — a parent alive but no
- * longer supervising — which is exactly when we want the reap. Reaping one of our own costs
- * nothing: the next `renewLease` returns `lost` and the supervision loop kills the child.
+ * longer directing — which is exactly when we want the reap. Reaping one of our own costs
+ * nothing: the next `renewLease` returns `lost` and the direct loop kills the child.
  */
 export async function reapExpiredAttempts(
   db: DatabaseExecutor,

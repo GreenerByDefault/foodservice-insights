@@ -31,7 +31,7 @@ export type WorkerConfig = {
   queuePollIntervalMs: number;
 
   /** How often to mirror child progress into the database and check the kill thresholds below. */
-  superviseIntervalMs: number;
+  directIntervalMs: number;
 
   /** How long a child may go without progressing before it is killed as `hung`. */
   killAfterNoProgressMs: number;
@@ -54,7 +54,7 @@ export type WorkerConfig = {
   /** How long a lease may go unrenewed before the attempt is treated as abandoned.
    *
    * Deliberately one constant with two readers: the owning parent fences itself on it
-   * (`attempt/supervision.ts`), and every other worker's reaper expires the row on it
+   * (`attempt/directive.ts`), and every other worker's reaper expires the row on it
    * (`sweeps/reaper.ts`). */
   leaseExpiresAfterMs: number;
 
@@ -109,7 +109,7 @@ export const MINUTE_MS = 60 * SECOND_MS;
 export const WORKER_DEFAULTS = {
   maxConcurrentAttempts: 3,
   queuePollIntervalMs: 2 * SECOND_MS,
-  superviseIntervalMs: 30 * SECOND_MS,
+  directIntervalMs: 30 * SECOND_MS,
   killAfterNoProgressMs: 10 * MINUTE_MS,
   killAfterTotalRuntimeMs: 20 * MINUTE_MS,
   killGraceMs: 10 * SECOND_MS,
@@ -216,25 +216,25 @@ function workerConfigViolations(config: WorkerConfig): string[] {
   }
 
   check(
-    config.killAfterNoProgressMs > config.superviseIntervalMs,
-    'killAfterNoProgressMs must exceed superviseIntervalMs. Progress is only sampled once per ' +
+    config.killAfterNoProgressMs > config.directIntervalMs,
+    'killAfterNoProgressMs must exceed directIntervalMs. Progress is only sampled once per ' +
       'tick, so an observed gap overstates the real one by up to one interval.',
   );
 
   check(
-    config.killAfterTotalRuntimeMs >= config.killAfterNoProgressMs + config.superviseIntervalMs,
-    'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + superviseIntervalMs. ' +
+    config.killAfterTotalRuntimeMs >= config.killAfterNoProgressMs + config.directIntervalMs,
+    'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + directIntervalMs. ' +
       'Otherwise, the total-runtime kill always fires first, and the hung verdict is dead code.',
   );
 
   check(
-    config.leaseExpiresAfterMs > MAX_RENEWAL_ROUND_TRIP_MS + config.superviseIntervalMs,
+    config.leaseExpiresAfterMs > MAX_RENEWAL_ROUND_TRIP_MS + config.directIntervalMs,
     `leaseExpiresAfterMs must exceed one renewal round trip (${MAX_RENEWAL_ROUND_TRIP_MS}ms) plus ` +
-      'superviseIntervalMs. Otherwise, a healthy parent fences itself the first time a renewal is slow.',
+      'directIntervalMs. Otherwise, a healthy parent fences itself the first time a renewal is slow.',
   );
 
   // Deliberately *not* checked: that a parent fences before another worker's reaper may reap.
-  // Fencing is sampled once per tick, so a parent can fence up to superviseIntervalMs after the
+  // Fencing is sampled once per tick, so a parent can fence up to directIntervalMs after the
   // reaper was already entitled to reap. The overlap is harmless, since every terminal write is
   // guarded and the loser writes nothing, and subtracting an interval from leaseExpiresAfterMs
   // would cost more clarity than 30s against a multi-minute expiry is worth.
@@ -248,8 +248,8 @@ function workerConfigViolations(config: WorkerConfig): string[] {
   );
 
   check(
-    config.uploadRetryBudgetMs > 2 * config.superviseIntervalMs,
-    'uploadRetryBudgetMs must buy more than two resumes (2 × superviseIntervalMs). Otherwise, the ' +
+    config.uploadRetryBudgetMs > 2 * config.directIntervalMs,
+    'uploadRetryBudgetMs must buy more than two resumes (2 × directIntervalMs). Otherwise, the ' +
       'budget is not worth having as a field.',
   );
 
