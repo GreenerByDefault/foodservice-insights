@@ -37,7 +37,10 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "style": {
+        "useTemplate": "error"
+      }
     }
   },
   "assist": {
