@@ -5,8 +5,7 @@
  * columns a test needs to overtake is what gives them somewhere to move from.
  */
 
-import type { AnalysisAttemptId, Database } from '@gbd/db';
-import type { Transaction } from 'kysely';
+import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
 import { msAgo } from '../sql.ts';
 
 /** How far in the past (in milliseconds) each column should land. Unset columns default to the
@@ -27,7 +26,7 @@ export type TimelineOffsetsMs = {
 };
 
 export async function backdateAttemptTimeline(
-  transaction: Transaction<Database>,
+  db: DatabaseExecutor,
   attemptId: AnalysisAttemptId,
   offsets: TimelineOffsetsMs = {},
 ): Promise<void> {
@@ -37,7 +36,7 @@ export async function backdateAttemptTimeline(
   const finishedAgo = offsets.finishedAgo ?? offsets.notificationClaimedAgo ?? renewedAgo;
   const notificationClaimedAgo = offsets.notificationClaimedAgo ?? finishedAgo;
 
-  await transaction
+  await db
     .updateTable('analysisAttempt')
     .set({
       createdAt: msAgo(createdAgo),
