@@ -1,7 +1,7 @@
 /** One attempt, start to finish: load its inputs, spawn its child, read how the child ended, and
  * write the verdict. [`verdict.ts`](./verdict.ts) is the pure decision this file feeds and acts
- * on; [`worker.ts`](../worker.ts) (landing with the direct loop) is what decides *when* to
- * call each of these and what to do with an in-flight record between calls.
+ * on; [`worker.ts`](../worker.ts) is what decides *when* to call each of these and what to do
+ * with an in-flight record between calls.
  */
 
 import { createHash } from 'node:crypto';

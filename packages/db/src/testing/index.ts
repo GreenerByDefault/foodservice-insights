@@ -1,5 +1,5 @@
 export type { Breakable } from './breakable.ts';
-export { breakableDatabase } from './breakable.ts';
+export { breakableDatabase, withBreakable } from './breakable.ts';
 export type {
   BlockedStatement,
   ConcurrentTransaction,

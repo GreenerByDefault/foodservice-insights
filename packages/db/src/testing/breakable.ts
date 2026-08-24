@@ -21,6 +21,19 @@ export type Breakable<T> = {
   close(): Promise<void>;
 };
 
+/** Open a `Breakable`, run `body` against it, and close it whether `body` throws or not. */
+export async function withBreakable<S>(
+  open: () => Promise<Breakable<S>>,
+  body: (breakable: Breakable<S>) => Promise<void>,
+): Promise<void> {
+  const breakable = await open();
+  try {
+    await body(breakable);
+  } finally {
+    await breakable.close();
+  }
+}
+
 type TcpProxy = {
   readonly port: number;
   break(): void;
