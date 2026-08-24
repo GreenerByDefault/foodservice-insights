@@ -46,7 +46,7 @@ catalog:
   # --- Database ---------------------------------------------------------------
   kysely: ^0.29.5
   pg: ^8.23.0
-  '@types/pg': ^8.20.4
+  '@types/pg': ^8.23.1
   kanel: ^4.0.3
   kanel-kysely: ^4.0.0
   # Only here because kanel peer-depends on it to format its output. We format with
