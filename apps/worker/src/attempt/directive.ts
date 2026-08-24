@@ -93,7 +93,7 @@ export function decideDirective(
   now: number,
 ): { state: TickState; directive: AttemptDirective } {
   const nextState = advanceState(state, reading, now);
-  return { state: nextState, directive: decideAction(nextState, reading, thresholds, now) };
+  return { state: nextState, directive: directiveFor(nextState, reading, thresholds, now) };
 }
 
 function advanceState(state: TickState, reading: TickReading, now: number): TickState {
@@ -112,7 +112,7 @@ function advanceState(state: TickState, reading: TickReading, now: number): Tick
   };
 }
 
-function decideAction(
+function directiveFor(
   state: TickState,
   reading: TickReading,
   thresholds: TickThresholds,
