@@ -1,6 +1,6 @@
 /** A child is never mocked — see [`testing/fake-child.ts`](../testing/fake-child.ts) for why — and
  * nothing waits on the wall clock: a `Kill` is a value the test constructs directly, standing in
- * for the decision `direct()` will make once the loop that reads a `Clock` lands. Where a store
+ * for the decision `direct()` makes from its own `Clock` loop. Where a store
  * or a database has to fail and come back, it is a real client that genuinely can
  * (`breakableBlobStore` from `@gbd/storage/testing`, `breakableDatabase` from `@gbd/db/testing`).
  */
