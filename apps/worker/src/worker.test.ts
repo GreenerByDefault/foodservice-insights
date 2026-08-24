@@ -23,7 +23,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
 import { DATABASE } from '@gbd/db/env';
-import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
+import { breakableDatabase, readAnalysisAttemptRow, withBreakable } from '@gbd/db/testing';
 import { type RecordingEmailer, recordingEmailer } from '@gbd/email/testing';
 import {
   type BlobStore,
@@ -186,18 +186,6 @@ async function withWorker<T>(
       for (const drain of drains) await drain();
     }
   });
-}
-
-async function withBreakable<S>(
-  open: () => Promise<Breakable<S>>,
-  body: (breakable: Breakable<S>) => Promise<void>,
-): Promise<void> {
-  const breakable = await open();
-  try {
-    await body(breakable);
-  } finally {
-    await breakable.close();
-  }
 }
 
 function runDirectory(fixture: ReportFixture, attemptId: AnalysisAttemptId): string {
