@@ -107,9 +107,20 @@ and the notification sweep's own predicate both exclude `canceled` attempts from
 `cancel_requested_at` is frozen the moment an attempt goes terminal too — it's just an ordinary
 column to the terminal-immutability trigger, not one of its excluded columns.
 
-This package owns the invariants; who claims an attempt and when is the worker's policy, so the
-claim from [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue) and every terminal transition
-live in [`apps/worker/src/attempt/queue.ts`](../../apps/worker/src/attempt/queue.ts) and are tested beside it.
+**A terminal row is otherwise frozen, except for four notification columns** —
+`notification_email_sent_at`, `notification_claimed_at`, `notification_claimed_by_worker_id`, and
+`notification_attempts` — which the terminal-immutability trigger masks out of its comparison
+rather than freezing. That exemption is why
+[`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) can claim and stamp a
+`succeeded` row at all.
+
+This package owns the invariants; who claims an attempt and when is the worker's policy. The claim
+itself is documented at [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue), and every terminal
+transition is tested beside the code that writes it — `attempt/queue.ts` writes the transitions a
+parent reaches through its own lifecycle,
+[`sweeps/reaper.ts`](../../apps/worker/src/sweeps/reaper.ts) writes the ones reaping converges, and
+[`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) writes the notification
+columns above.
 
 ## Open questions
 
@@ -125,10 +136,13 @@ live in [`apps/worker/src/attempt/queue.ts`](../../apps/worker/src/attempt/queue
 - **Open:** nothing stops a retry racing a soft delete. Inserting an `analysis_attempt` takes only
   a `KEY SHARE` lock on its `report`, which does not conflict with the `UPDATE` that sets
   `deleted_at`, so a report can be deleted and gain a sixth attempt at the same moment — and the
-  worker then analyses it and emails about it. The UI hides retry on a deleted report, so this is
-  only the window between the click and the delete. Closing it means the insert reading
-  `deleted_at` under `FOR NO KEY UPDATE`, which needs the product to first commit to "a deleted
-  report gets no new attempts" as an invariant rather than a UI affordance.
+  worker then analyses it. It no longer also emails about it:
+  [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) joins on
+  `report.deleted_at IS NULL`, so a deleted report's attempt is analysed but never notified. The
+  UI hides retry on a deleted report, so the remaining window is only between the click and the
+  delete. Closing it means the insert reading `deleted_at` under `FOR NO KEY UPDATE`, which needs
+  the product to first commit to "a deleted report gets no new attempts" as an invariant rather
+  than a UI affordance.
 - **Open:** "exactly one `input_file` per report" is enforced only as *at most* one. The app writes
   both in a single transaction; a deferred constraint trigger would make it *exactly* one, at the
   cost of every report fixture needing a file.

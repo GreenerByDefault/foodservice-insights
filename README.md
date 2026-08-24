@@ -22,6 +22,7 @@ Everything above that heading is common to both.
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
 | [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`apps/web/README.md`](apps/web/README.md) | The web app's design |
+| [`apps/worker/README.md`](apps/worker/README.md) | Running the worker parent, and where its pieces live |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
 | [`packages/storage/README.md`](packages/storage/README.md) | The blob store, and its key layout |
 | [`packages/email/README.md`](packages/email/README.md) | The emails we send, and reading them locally |
