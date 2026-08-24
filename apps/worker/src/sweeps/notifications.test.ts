@@ -13,7 +13,6 @@ import {
   type ReportId,
   type UserId,
 } from '@gbd/db';
-import { DATABASE } from '@gbd/db/env';
 import {
   insertAnalysisAttempt,
   insertAppUserWithEmail,
@@ -33,6 +32,7 @@ import {
 } from '@gbd/email/testing';
 import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { WORKER_DATABASE } from '../db.ts';
 import { msAgo } from '../sql.ts';
 import { aWorkerId } from '../testing/attempt-helpers.ts';
 import {
@@ -117,7 +117,7 @@ describe('sendPendingNotifications', () => {
   test('a succeeded attempt is claimed, sent, and stamped', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId, email } = await insertNotifiableAttempt(
         transaction,
         'succeeded',
@@ -142,7 +142,7 @@ describe('sendPendingNotifications', () => {
   test('a failed attempt is claimed, sent, and stamped', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId, email } = await insertNotifiableAttempt(transaction, 'failed');
 
       const sent = await sendPendingNotifications(
@@ -161,7 +161,7 @@ describe('sendPendingNotifications', () => {
   test('canceled, pending, processing, and already-sent attempts are never claimed', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const requester = await insertAppUserWithEmail(transaction);
 
       const canceledReport = await insertReport(transaction);
@@ -217,7 +217,7 @@ describe('sendPendingNotifications', () => {
   test('a soft-deleted report is never claimed', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
       await transaction
         .updateTable('report')
@@ -239,7 +239,7 @@ describe('sendPendingNotifications', () => {
   test('a NULL requester is never claimed', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { reportId } = await insertNotifiableAttempt(transaction, 'succeeded', {
         requestedByUserId: null,
       });
@@ -256,7 +256,7 @@ describe('sendPendingNotifications', () => {
   test('a fresh claim is not re-claimed before its backoff; an expired one is', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const fresh = await insertNotifiableAttempt(transaction, 'succeeded');
       await markClaimed(transaction, fresh.attemptId, 1, RETRY_BASE_MS - 60_000);
 
@@ -281,7 +281,7 @@ describe('sendPendingNotifications', () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
 
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const notYet = await insertNotifiableAttempt(transaction, 'succeeded');
       await markClaimed(transaction, notYet.attemptId, 3, RETRY_BASE_MS * 2);
 
@@ -302,7 +302,7 @@ describe('sendPendingNotifications', () => {
   test('a row at maxNotificationAttempts is never claimed again, whatever its claim age', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
       await markClaimed(transaction, attemptId, MAX_ATTEMPTS, RETRY_BASE_MS * 1_000);
 
@@ -317,7 +317,7 @@ describe('sendPendingNotifications', () => {
 
   test('a send failure leaves notification_email_sent_at NULL, the claim in place, and the counter incremented', async () => {
     const workerId = aWorkerId();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
 
       const sent = await sendPendingNotifications(
@@ -347,7 +347,7 @@ describe('sendPendingNotifications', () => {
       },
     };
 
-    const outcome = withRollback(DATABASE, async (transaction) => {
+    const outcome = withRollback(WORKER_DATABASE, async (transaction) => {
       const { reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
       return sendPendingNotifications(
         { db: transaction, emailer, workerId },
@@ -362,7 +362,7 @@ describe('sendPendingNotifications', () => {
     const workerId = aWorkerId();
     const working = recordingEmailer();
 
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const ok = await insertNotifiableAttempt(transaction, 'succeeded');
       const broken = await insertNotifiableAttempt(transaction, 'succeeded');
 
@@ -400,7 +400,7 @@ describe('sendPendingNotifications', () => {
   test('maxNotificationsPerSweep caps a sweep, oldest finished_at first', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const oldest = await insertNotifiableAttempt(transaction, 'succeeded', {
         finishedAgo: 120_000,
       });
@@ -425,7 +425,7 @@ describe('sendPendingNotifications', () => {
   test('the stamp is guarded: a second stamp is a zero-row no-op', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
 
       const first = await sendPendingNotifications(
@@ -462,7 +462,7 @@ describe('sendPendingNotifications', () => {
   test('a succeeded attempt missing its xlsx sends nothing, keeps its claim, and stays unstamped', async () => {
     const workerId = aWorkerId();
     const emailer = recordingEmailer();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const report = await insertReport(transaction);
       const requester = await insertAppUserWithEmail(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
@@ -497,7 +497,7 @@ describe('sendPendingNotifications', () => {
     const secondEmailer = recordingEmailer();
 
     const { result: sent, row } = await raceAgainstCommittedWrite(
-      DATABASE,
+      WORKER_DATABASE,
       async (transaction, trash) => {
         const { organization } = await insertFixtureOrganization(transaction, trash);
         const report = await insertReport(transaction, { organizationId: organization.id });

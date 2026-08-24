@@ -1,7 +1,9 @@
-/** The database, configured from the environment.
+/** The database, configured from the environment, with `@gbd/db`'s default pool limits.
  *
- * **Not for the web app**, which uses Vite to load env vars. This entry point is
- * for everything else.
+ * **Not for the web app**, which uses Vite to load env vars. This entry point is for `@gbd/db`'s
+ * own scripts and tests, and for any other package's or app's tests that just need a real
+ * connection. An app whose production wiring needs its own pool limits owns its own singleton
+ * instead — see `apps/worker/src/db.ts`.
  *
  * Importing this module connects to a database, so import it only where that is wanted.
  * `TEST_DB=1` selects the test stack.

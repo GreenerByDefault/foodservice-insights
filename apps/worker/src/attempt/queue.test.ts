@@ -10,7 +10,6 @@
  */
 
 import type { AnalysisAttemptId, Database, OrganizationId, ReportId } from '@gbd/db';
-import { DATABASE } from '@gbd/db/env';
 import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
@@ -25,6 +24,7 @@ import {
 import { NoResultError, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
+import { WORKER_DATABASE } from '../db.ts';
 import { reapExpiredAttempts } from '../sweeps/reaper.ts';
 import { aResultFile, aWorkerId } from '../testing/attempt-helpers.ts';
 import { backdateAttemptTimeline } from '../testing/attempt-timeline.ts';
@@ -120,7 +120,7 @@ const A_RESULT: ChildResult = {
 
 describe('claiming', () => {
   test('takes the oldest pending attempt', async () => {
-    const claimed = await withRollback(DATABASE, async (transaction) => {
+    const claimed = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
 
       // The oldest is inserted second, so a query with no `ORDER BY` cannot pass by taking
@@ -140,7 +140,7 @@ describe('claiming', () => {
 
   test('marks the attempt as this worker processing it', async () => {
     const workerId = aWorkerId();
-    const attempt = await withRollback(DATABASE, async (transaction) => {
+    const attempt = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId: pendingId, reportIds } = await pendingAttempt(transaction);
       // Backdate creation before claiming, so `claimedAt` and `leaseRenewedAt` land measurably
       // after `createdAt` instead of sharing the transaction's start time with it — the same
@@ -164,7 +164,7 @@ describe('claiming', () => {
   });
 
   test('finds nothing once the only attempt is claimed', async () => {
-    const second = await withRollback(DATABASE, async (transaction) => {
+    const second = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { reportIds } = await pendingAttempt(transaction);
       await claimNextAttempt(transaction, aWorkerId(), { candidateReports: reportIds });
       return await claimNextAttempt(transaction, aWorkerId(), { candidateReports: reportIds });
@@ -174,7 +174,7 @@ describe('claiming', () => {
   });
 
   test('a pending attempt with cancel_requested_at set is never claimed', async () => {
-    const claimed = await withRollback(DATABASE, async (transaction) => {
+    const claimed = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportIds } = await pendingAttempt(transaction);
       await transaction
         .updateTable('analysisAttempt')
@@ -195,7 +195,7 @@ describe('claiming', () => {
       body: (reportIds: ReportId[]) => Promise<void>,
     ): Promise<void> {
       await withCommittedFixture(
-        DATABASE,
+        WORKER_DATABASE,
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const reportIds: ReportId[] = [];
@@ -212,7 +212,7 @@ describe('claiming', () => {
 
     test('never hands the same attempt to two workers', async () => {
       await withPendingAttempts(1, async (candidateReports) => {
-        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+        await withConcurrentTransactions(WORKER_DATABASE, async (alpha, beta) => {
           expect(
             await claimNextAttempt(alpha.transaction, 'worker-a', { candidateReports }),
           ).toBeDefined();
@@ -227,7 +227,7 @@ describe('claiming', () => {
           await alpha.transaction.commit().execute();
         });
 
-        const workers = await DATABASE.selectFrom('analysisAttempt')
+        const workers = await WORKER_DATABASE.selectFrom('analysisAttempt')
           .select('workerId')
           .where('reportId', 'in', candidateReports)
           .execute();
@@ -241,7 +241,7 @@ describe('claiming', () => {
     // waited on.
     test('skips a row a concurrent cancel holds locked, and never claims it once committed', async () => {
       await withPendingAttempts(1, async (candidateReports) => {
-        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+        await withConcurrentTransactions(WORKER_DATABASE, async (alpha, beta) => {
           // Uncommitted, simulating the cancel endpoint's own transaction mid-flight.
           await beta.transaction
             .updateTable('analysisAttempt')
@@ -258,13 +258,15 @@ describe('claiming', () => {
 
         // And once the cancel has committed, the row is excluded for good, not merely skipped
         // while contended.
-        expect(await claimNextAttempt(DATABASE, 'worker-b', { candidateReports })).toBeUndefined();
+        expect(
+          await claimNextAttempt(WORKER_DATABASE, 'worker-b', { candidateReports }),
+        ).toBeUndefined();
       });
     });
 
     test('hands two workers different attempts', async () => {
       await withPendingAttempts(2, async (candidateReports) => {
-        const claimed = await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+        const claimed = await withConcurrentTransactions(WORKER_DATABASE, async (alpha, beta) => {
           const byAlpha = await claimNextAttempt(alpha.transaction, 'worker-a', {
             candidateReports,
           });
@@ -283,7 +285,7 @@ describe('claiming', () => {
 
 describe('loadAttemptInputs', () => {
   test('returns a manifest the contract accepts, and the input file to fetch', async () => {
-    const loaded = await withRollback(DATABASE, async (transaction) => {
+    const loaded = await withRollback(WORKER_DATABASE, async (transaction) => {
       const report = await insertReport(transaction, {
         name: 'Q3 procurement',
         siteName: 'North kitchen',
@@ -322,7 +324,7 @@ describe('loadAttemptInputs', () => {
   });
 
   test('throws when the report has no input file', async () => {
-    const load = withRollback(DATABASE, async (transaction) => {
+    const load = withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId } = await pendingAttempt(transaction);
       await loadAttemptInputs(transaction, attemptId);
     });
@@ -333,7 +335,7 @@ describe('loadAttemptInputs', () => {
 
 describe('renewLease', () => {
   test('moves lease_renewed_at while the attempt is still ours', async () => {
-    const renewal = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       await backdateAttemptTimeline(transaction, attemptId);
@@ -349,7 +351,7 @@ describe('renewLease', () => {
   });
 
   test('reports a cancellation request', async () => {
-    const renewal = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       // The attempt starts out `processing` with `cancelRequestedAt` already set, rather than
       // being claimed and then canceled, because `claimNextAttempt` skips rows where
@@ -378,7 +380,7 @@ describe('renewLease', () => {
   });
 
   test('is lost once another writer has finished the attempt', async () => {
-    const renewal = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       await simulateReap(transaction, attemptId);
@@ -389,7 +391,7 @@ describe('renewLease', () => {
   });
 
   test('is lost when the attempt belongs to a different worker', async () => {
-    const renewal = await withRollback(DATABASE, async (transaction) => {
+    const renewal = await withRollback(WORKER_DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, aWorkerId());
       return await renewLease(transaction, attemptId, aWorkerId());
     });
@@ -406,7 +408,7 @@ describe('finishing', () => {
     const workerId = aWorkerId();
     const resultFiles = [aResultFile(), aResultFile('xlsx'), aResultFile('chart', 'total_spend')];
 
-    const finished = await withRollback(DATABASE, async (transaction) => {
+    const finished = await withRollback(WORKER_DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, workerId);
 
       const won = await markAttemptSucceeded(transaction, attemptId, workerId, {
@@ -445,7 +447,7 @@ describe('finishing', () => {
   });
 
   test('records a failure with its reason and detail', async () => {
-    const attempt = await withRollback(DATABASE, async (transaction) => {
+    const attempt = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       const won = await markAttemptFailed(transaction, attemptId, workerId, {
@@ -464,7 +466,7 @@ describe('finishing', () => {
   });
 
   test('records a cancellation', async () => {
-    const attempt = await withRollback(DATABASE, async (transaction) => {
+    const attempt = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const attemptId = await claimedAttempt(transaction, workerId);
       // `analysis_attempt_canceled_requires_request` needs a request behind the verdict — in the
@@ -492,7 +494,7 @@ describe('finishing', () => {
     //
     // This is the ordinary ownership mismatch; see 'losing the race' below for the reaper, which
     // ends an attempt without ever claiming it and so isn't guarded by `worker_id` at all.
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, aWorkerId());
       const won = await markAttemptFailed(transaction, attemptId, aWorkerId(), {
         reason: 'hung',
@@ -518,7 +520,7 @@ describe('finishing', () => {
       failureReason: string | null;
       resultFiles: unknown[];
     }> {
-      return await withRollback(DATABASE, async (transaction) => {
+      return await withRollback(WORKER_DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
         await simulateReap(transaction, attemptId);
@@ -589,7 +591,7 @@ describe('finishing', () => {
   // already won.
   describe('replayed after a lost commit ack', () => {
     test('a second markAttemptFailed returns false and changes nothing', async () => {
-      const outcome = await withRollback(DATABASE, async (transaction) => {
+      const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
         const failure = { reason: 'child_crashed' as const, detail: 'exit code 1' };
@@ -605,7 +607,7 @@ describe('finishing', () => {
     });
 
     test('a second markAttemptSucceeded returns false and inserts no more result files', async () => {
-      const outcome = await withRollback(DATABASE, async (transaction) => {
+      const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
         const succeed = () =>
