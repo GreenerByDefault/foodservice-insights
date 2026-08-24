@@ -97,8 +97,8 @@ describe('the values a configuration must supply', () => {
 describe('the relations between the thresholds a parent enforces on its own child', () => {
   test('killAfterNoProgressMs must outlast the interval that samples it', () => {
     expectOnlyViolation(
-      { killAfterNoProgressMs: WORKER_DEFAULTS.superviseIntervalMs },
-      'killAfterNoProgressMs must exceed superviseIntervalMs',
+      { killAfterNoProgressMs: WORKER_DEFAULTS.directIntervalMs },
+      'killAfterNoProgressMs must exceed directIntervalMs',
     );
   });
 
@@ -106,31 +106,31 @@ describe('the relations between the thresholds a parent enforces on its own chil
     expectOnlyViolation(
       {
         killAfterTotalRuntimeMs:
-          WORKER_DEFAULTS.killAfterNoProgressMs + WORKER_DEFAULTS.superviseIntervalMs - 1,
+          WORKER_DEFAULTS.killAfterNoProgressMs + WORKER_DEFAULTS.directIntervalMs - 1,
       },
-      'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + superviseIntervalMs',
+      'killAfterTotalRuntimeMs must be at least killAfterNoProgressMs + directIntervalMs',
     );
   });
 
   test('leaseExpiresAfterMs must survive one slow renewal, so a healthy parent never fences itself', () => {
     // At the boundary itself: one renewal taking the longest a connection wait plus a statement
-    // can take, followed by one more supervise tick before the lease is checked again.
+    // can take, followed by one more direct tick before the lease is checked again.
     const oneRenewalPlusOneTick =
       WORKER_DB_LIMITS.connectionTimeoutMs +
       WORKER_DB_LIMITS.statementTimeoutMs +
-      WORKER_DEFAULTS.superviseIntervalMs;
+      WORKER_DEFAULTS.directIntervalMs;
     expectOnlyViolation(
       { leaseExpiresAfterMs: oneRenewalPlusOneTick },
       'leaseExpiresAfterMs must exceed one renewal round trip',
-      'plus superviseIntervalMs',
+      'plus directIntervalMs',
     );
   });
 
   test('uploadRetryBudgetMs must buy more than two resumes', () => {
     expectOnlyViolation(
-      { uploadRetryBudgetMs: 2 * WORKER_DEFAULTS.superviseIntervalMs },
+      { uploadRetryBudgetMs: 2 * WORKER_DEFAULTS.directIntervalMs },
       'uploadRetryBudgetMs must buy more than two resumes',
-      '2 × superviseIntervalMs',
+      '2 × directIntervalMs',
     );
   });
 });

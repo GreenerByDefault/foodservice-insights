@@ -11,7 +11,7 @@
  *    of one. A failing lease-renewal write skips that tick, but never the local no-progress and
  *    hard-ceiling checks, which read the clock and the progress file rather than the database.
  * 2. **Loops retry by ticking; attempts fail terminally.** A failure in the claim poll or a
- *    supervise tick is logged and absorbed — the next tick is the retry. A failure while
+ *    direct tick is logged and absorbed — the next tick is the retry. A failure while
  *    processing a *claimed* attempt becomes `failed('infrastructure')`, because a claimed
  *    attempt can never return to the queue.
  * 3. **The reaper is the backstop for a verdict we cannot record.** If even `markAttemptFailed`

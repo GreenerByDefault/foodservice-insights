@@ -1,21 +1,21 @@
 import { describe, expect, test } from 'vitest';
 import { ContractError } from '../contract/messages.ts';
 import {
-  type SupervisionAction,
-  type SupervisionState,
-  type SupervisionThresholds,
-  superviseAttempt,
+  type AttemptDirective,
+  decideDirective,
   type TickReading,
-} from './supervision.ts';
+  type TickState,
+  type TickThresholds,
+} from './directive.ts';
 
-const THRESHOLDS: SupervisionThresholds = {
+const THRESHOLDS: TickThresholds = {
   killAfterNoProgressMs: 1_000,
   killAfterTotalRuntimeMs: 5_000,
   leaseExpiresAfterMs: 300,
   uploadRetryBudgetMs: 200,
 };
 
-function aState(overrides: Partial<SupervisionState> = {}): SupervisionState {
+function aState(overrides: Partial<TickState> = {}): TickState {
   return { startedAt: 0, lastProgressAt: 0, renewalIssuedAt: 0, exited: false, ...overrides };
 }
 
@@ -28,13 +28,13 @@ function aReading(overrides: Partial<TickReading> = {}): TickReading {
   };
 }
 
-function actionOf(
-  state: SupervisionState,
+function directiveOf(
+  state: TickState,
   reading: TickReading,
   now: number,
-  thresholds: SupervisionThresholds = THRESHOLDS,
-): SupervisionAction {
-  return superviseAttempt(state, reading, thresholds, now).action;
+  thresholds: TickThresholds = THRESHOLDS,
+): AttemptDirective {
+  return decideDirective(state, reading, thresholds, now).directive;
 }
 
 describe('the rule table', () => {
@@ -42,17 +42,17 @@ describe('the rule table', () => {
     test('drops a parked attempt rather than spending its resume budget', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading({ lease: { kind: 'lost' } });
-      expect(actionOf(state, reading, 0)).toEqual({ kind: 'drop-parked-verdict' });
+      expect(directiveOf(state, reading, 0)).toEqual({ kind: 'drop-parked-verdict' });
     });
 
     test('kills a child still alive', () => {
       const reading = aReading({ lease: { kind: 'lost' } });
-      expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'kill', kill: { reason: 'lost' } });
+      expect(directiveOf(aState(), reading, 0)).toEqual({ kind: 'kill', kill: { reason: 'lost' } });
     });
 
     test('does nothing once the child has already exited', () => {
       const reading = aReading({ lease: { kind: 'lost' } });
-      expect(actionOf(aState({ exited: true }), reading, 0)).toEqual({ kind: 'nothing' });
+      expect(directiveOf(aState({ exited: true }), reading, 0)).toEqual({ kind: 'nothing' });
     });
   });
 
@@ -60,13 +60,15 @@ describe('the rule table', () => {
     test('converts to canceled when a cancellation was requested', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
-      expect(actionOf(state, reading, 0)).toEqual({ kind: 'convert-parked-verdict-to-canceled' });
+      expect(directiveOf(state, reading, 0)).toEqual({
+        kind: 'convert-parked-verdict-to-canceled',
+      });
     });
 
     test('converts an upload past its retry budget to upload-expired', () => {
       const state = aState({ parked: { stage: 'upload', since: 0 } });
       const reading = aReading();
-      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs)).toEqual({
+      expect(directiveOf(state, reading, THRESHOLDS.uploadRetryBudgetMs)).toEqual({
         kind: 'convert-parked-verdict-to-upload-expired',
       });
     });
@@ -74,7 +76,7 @@ describe('the rule table', () => {
     test('resumes an upload still within its retry budget', () => {
       const state = aState({ parked: { stage: 'upload', since: 0 } });
       const reading = aReading();
-      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
+      expect(directiveOf(state, reading, THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
         kind: 'resume-parked-verdict',
       });
     });
@@ -82,7 +84,7 @@ describe('the rule table', () => {
     test('resumes a parked record indefinitely, since only the upload stage has a retry budget', () => {
       const state = aState({ parked: { stage: 'record', since: 0 } });
       const reading = aReading();
-      expect(actionOf(state, reading, THRESHOLDS.uploadRetryBudgetMs * 100)).toEqual({
+      expect(directiveOf(state, reading, THRESHOLDS.uploadRetryBudgetMs * 100)).toEqual({
         kind: 'resume-parked-verdict',
       });
     });
@@ -90,13 +92,13 @@ describe('the rule table', () => {
 
   test('settling: an already-exited attempt is left alone', () => {
     const state = aState({ exited: true, lastProgressAt: -10_000 });
-    expect(actionOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
+    expect(directiveOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
   });
 
   test('contract-violation: a progress read that threw a ContractError kills the child with that reason', () => {
     const error = new ContractError('malformed progress.json');
     const reading = aReading({ progress: { kind: 'failed', error } });
-    expect(actionOf(aState(), reading, 0)).toEqual({
+    expect(directiveOf(aState(), reading, 0)).toEqual({
       kind: 'kill',
       kill: { reason: 'contract-violation', detail: error.message },
     });
@@ -104,16 +106,19 @@ describe('the rule table', () => {
 
   test('progress-read-failed: a progress read that threw anything else is swallowed rather than treated as a verdict', () => {
     const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
-    expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
+    expect(directiveOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
   });
 
   test('cancel-requested: a cancellation request kills the child', () => {
     const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
-    expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'kill', kill: { reason: 'canceled' } });
+    expect(directiveOf(aState(), reading, 0)).toEqual({
+      kind: 'kill',
+      kill: { reason: 'canceled' },
+    });
   });
 
   test('hung: no progress for killAfterNoProgressMs kills as hung', () => {
-    expect(actionOf(aState(), aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
+    expect(directiveOf(aState(), aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hung' },
     });
@@ -121,7 +126,7 @@ describe('the rule table', () => {
 
   test('hard-timeout: running past killAfterTotalRuntimeMs kills as hard-timeout, even with fresh progress', () => {
     const state = aState({ lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs });
-    expect(actionOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
+    expect(directiveOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hard-timeout' },
     });
@@ -132,14 +137,14 @@ describe('the rule table', () => {
       lastProgressAt: THRESHOLDS.leaseExpiresAfterMs,
       startedAt: THRESHOLDS.leaseExpiresAfterMs,
     });
-    expect(actionOf(state, aReading(), THRESHOLDS.leaseExpiresAfterMs)).toEqual({
+    expect(directiveOf(state, aReading(), THRESHOLDS.leaseExpiresAfterMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'fenced' },
     });
   });
 
   test('otherwise, nothing', () => {
-    expect(actionOf(aState(), aReading(), 0)).toEqual({ kind: 'nothing' });
+    expect(directiveOf(aState(), aReading(), 0)).toEqual({ kind: 'nothing' });
   });
 });
 
@@ -147,7 +152,7 @@ describe('precedence', () => {
   test('parked-lost outranks parked-cancel', () => {
     const state = aState({ parked: { stage: 'record', since: 0 } });
     const reading = aReading({ lease: { kind: 'lost' } });
-    expect(actionOf(state, reading, 0)).toEqual({ kind: 'drop-parked-verdict' });
+    expect(directiveOf(state, reading, 0)).toEqual({ kind: 'drop-parked-verdict' });
   });
 
   test('lost outranks contract-violation', () => {
@@ -155,13 +160,13 @@ describe('precedence', () => {
       progress: { kind: 'failed', error: new ContractError('malformed') },
       lease: { kind: 'lost' },
     });
-    expect(actionOf(aState(), reading, 0)).toEqual({ kind: 'kill', kill: { reason: 'lost' } });
+    expect(directiveOf(aState(), reading, 0)).toEqual({ kind: 'kill', kill: { reason: 'lost' } });
   });
 
   test('contract-violation outranks hung', () => {
     const error = new ContractError('malformed');
     const reading = aReading({ progress: { kind: 'failed', error } });
-    expect(actionOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs)).toEqual({
+    expect(directiveOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'contract-violation', detail: error.message },
     });
@@ -169,7 +174,7 @@ describe('precedence', () => {
 
   test('canceled outranks hung', () => {
     const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
-    expect(actionOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs)).toEqual({
+    expect(directiveOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'canceled' },
     });
@@ -177,7 +182,7 @@ describe('precedence', () => {
 
   test('hung outranks hard-timeout', () => {
     const state = aState({ startedAt: -THRESHOLDS.killAfterTotalRuntimeMs });
-    expect(actionOf(state, aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
+    expect(directiveOf(state, aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hung' },
     });
@@ -188,7 +193,7 @@ describe('precedence', () => {
       lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs,
       renewalIssuedAt: -THRESHOLDS.leaseExpiresAfterMs,
     });
-    expect(actionOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
+    expect(directiveOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'hard-timeout' },
     });
@@ -201,7 +206,7 @@ describe('precedence', () => {
       startedAt: -THRESHOLDS.killAfterTotalRuntimeMs,
       renewalIssuedAt: -THRESHOLDS.leaseExpiresAfterMs,
     });
-    expect(actionOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
+    expect(directiveOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
   });
 });
 
@@ -209,7 +214,7 @@ describe('the state transition', () => {
   test('lastProgressAt is frozen when progressSequence repeats', () => {
     const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
     const reading = aReading({ progress: { kind: 'read', progressSequence: 3 } });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(0);
     expect(next.lastProgressSequence).toBe(3);
   });
@@ -217,14 +222,14 @@ describe('the state transition', () => {
   test('lastProgressAt advances to now when progressSequence changes', () => {
     const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
     const reading = aReading({ progress: { kind: 'read', progressSequence: 4 } });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(500);
     expect(next.lastProgressSequence).toBe(4);
   });
 
   test('lastProgressAt stays at startedAt while progress.json has never been written', () => {
     const state = aState({ startedAt: 10, lastProgressAt: 10 });
-    const { state: next } = superviseAttempt(state, aReading(), THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, aReading(), THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(10);
     expect(next.lastProgressSequence).toBeUndefined();
   });
@@ -232,7 +237,7 @@ describe('the state transition', () => {
   test('lastProgressAt advances the first time progressSequence 0 is observed, not just on truthy sequences', () => {
     const state = aState({ startedAt: 10, lastProgressAt: 10 });
     const reading = aReading({ progress: { kind: 'read', progressSequence: 0 } });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.lastProgressAt).toBe(500);
     expect(next.lastProgressSequence).toBe(0);
   });
@@ -243,7 +248,7 @@ describe('the state transition', () => {
       lease: { kind: 'held', cancelRequestedAt: null },
       renewalIssuedAt: 500,
     });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.renewalIssuedAt).toBe(500);
   });
 
@@ -253,7 +258,7 @@ describe('the state transition', () => {
       lease: { kind: 'held', cancelRequestedAt: null },
       renewalIssuedAt: undefined,
     });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.renewalIssuedAt).toBe(0);
   });
 
@@ -264,14 +269,14 @@ describe('the state transition', () => {
       lease: { kind: 'skipped' },
       renewalIssuedAt: undefined,
     });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.renewalIssuedAt).toBe(0);
   });
 
   test('renewalIssuedAt is frozen when the renewal statement itself failed', () => {
     const state = aState({ renewalIssuedAt: 0 });
     const reading = aReading({ lease: { kind: 'failed', error: new Error('ECONNRESET') } });
-    const { state: next } = superviseAttempt(state, reading, THRESHOLDS, 500);
+    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
     expect(next.renewalIssuedAt).toBe(0);
   });
 
@@ -283,14 +288,14 @@ describe('the state transition', () => {
     const freshLease = (now: number) => aReading({ renewalIssuedAt: now });
 
     expect(
-      actionOf(
+      directiveOf(
         aState(),
         freshLease(THRESHOLDS.killAfterNoProgressMs - 1),
         THRESHOLDS.killAfterNoProgressMs - 1,
       ),
     ).toEqual({ kind: 'nothing' });
     expect(
-      actionOf(
+      directiveOf(
         aState(),
         freshLease(THRESHOLDS.killAfterNoProgressMs),
         THRESHOLDS.killAfterNoProgressMs,
@@ -299,14 +304,14 @@ describe('the state transition', () => {
 
     const pastHung = aState({ lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs });
     expect(
-      actionOf(
+      directiveOf(
         pastHung,
         freshLease(THRESHOLDS.killAfterTotalRuntimeMs - 1),
         THRESHOLDS.killAfterTotalRuntimeMs - 1,
       ),
     ).toEqual({ kind: 'nothing' });
     expect(
-      actionOf(
+      directiveOf(
         pastHung,
         freshLease(THRESHOLDS.killAfterTotalRuntimeMs),
         THRESHOLDS.killAfterTotalRuntimeMs,
@@ -317,19 +322,21 @@ describe('the state transition', () => {
       lastProgressAt: THRESHOLDS.leaseExpiresAfterMs,
       startedAt: THRESHOLDS.leaseExpiresAfterMs,
     });
-    expect(actionOf(pastHungAndCeiling, aReading(), THRESHOLDS.leaseExpiresAfterMs - 1)).toEqual({
-      kind: 'nothing',
-    });
-    expect(actionOf(pastHungAndCeiling, aReading(), THRESHOLDS.leaseExpiresAfterMs)).toEqual({
+    expect(directiveOf(pastHungAndCeiling, aReading(), THRESHOLDS.leaseExpiresAfterMs - 1)).toEqual(
+      {
+        kind: 'nothing',
+      },
+    );
+    expect(directiveOf(pastHungAndCeiling, aReading(), THRESHOLDS.leaseExpiresAfterMs)).toEqual({
       kind: 'kill',
       kill: { reason: 'fenced' },
     });
 
     const parkedUpload = aState({ parked: { stage: 'upload', since: 0 } });
-    expect(actionOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
+    expect(directiveOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs - 1)).toEqual({
       kind: 'resume-parked-verdict',
     });
-    expect(actionOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs)).toEqual({
+    expect(directiveOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs)).toEqual({
       kind: 'convert-parked-verdict-to-upload-expired',
     });
   });

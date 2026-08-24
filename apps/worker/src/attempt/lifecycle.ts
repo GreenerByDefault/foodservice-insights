@@ -1,6 +1,6 @@
 /** One attempt, start to finish: load its inputs, spawn its child, read how the child ended, and
  * write the verdict. [`verdict.ts`](./verdict.ts) is the pure decision this file feeds and acts
- * on; [`worker.ts`](../worker.ts) (landing with the supervision loop) is what decides *when* to
+ * on; [`worker.ts`](../worker.ts) (landing with the direct loop) is what decides *when* to
  * call each of these and what to do with an in-flight record between calls.
  */
 
@@ -324,7 +324,7 @@ export async function settleAttempt(
  *
  * `settleAttempt` calls this immediately after classifying a freshly-ended child, so it is not
  * only a "resume" — it is the delivery step for every verdict, first attempt included. A
- * supervision tick calls it again, unchanged, to carry a verdict this returned as `parked` the
+ * direct tick calls it again, unchanged, to carry a verdict this returned as `parked` the
  * rest of the way. Classifying happens only in `settleAttempt`, which is what makes an `unowned`
  * verdict unrepresentable here.
  */
@@ -345,7 +345,7 @@ export async function deliverVerdict(
   } catch (error) {
     console.error(
       `Could not record the verdict for attempt ${prepared.attemptId}; parking it for the ` +
-        'next supervision tick to retry',
+        'next direct tick to retry',
       { verdict: stored.verdict.kind, error },
     );
     return { kind: 'parked', pending: stored };
@@ -385,7 +385,7 @@ async function storeResultFiles(
     if (!isBlobStoreError(error)) throw error;
     console.error(
       `Could not store the result files for attempt ${prepared.attemptId}; parking the verdict ` +
-        'for the next supervision tick to retry',
+        'for the next direct tick to retry',
       { error },
     );
     return { ...pending, lastError: error };
