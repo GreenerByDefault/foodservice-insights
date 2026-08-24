@@ -1,13 +1,9 @@
 /** The worker's production entrypoint: reads the environment, builds a `WorkerConfig`, and runs
- * `createWorker(...).run()` until a signal or an unrecoverable error ends it.
- *
- * Nothing here belongs in `dist/testing/` — `tsconfig.build.json` excludes `src/testing/**`, and
- * this file is the only thing that runs in production.
- */
+ * `createWorker(...).run()` until a signal or an unrecoverable error ends it. */
 
+import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { loadLocalEnv, optionalIntEnv, requireEnv } from '@gbd/core/env';
-import { uuidV7 } from '@gbd/db';
 import { EMAILER } from '@gbd/email/env';
 import { bucketExists } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownBlobStore } from '@gbd/storage/env';
@@ -23,10 +19,9 @@ async function main(): Promise<void> {
   try {
     const config = createWorkerConfig(
       {
-        // `hostname()` + `pid` alone repeats across a quick container restart that reuses both,
-        // which is exactly the collision `reap`'s "excluding our own worker_id" logic depends on
-        // not happening.
-        workerId: process.env.WORKER_ID ?? `${hostname()}-${process.pid}-${uuidV7().slice(0, 8)}`,
+        // We add an abbreviated v4 UUID to avoid collisions between workers, e.g. from PID reuse.
+        workerId:
+          process.env.WORKER_ID ?? `${hostname()}-${process.pid}-${randomUUID().slice(0, 8)}`,
         runRoot: requireEnv('WORKER_RUN_ROOT'),
         childCommand: {
           executable: requireEnv('PYTHON_BIN'),
@@ -36,8 +31,6 @@ async function main(): Promise<void> {
       { maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS') },
     );
 
-    // A wrong `S3_BUCKET` otherwise reads as "every input file missing" on every attempt, rather
-    // than as the configuration error it actually is.
     if (!(await bucketExists(BLOB_STORE))) {
       throw new Error(
         'The configured S3 bucket does not exist; refusing to start rather than fail every ' +
@@ -68,7 +61,7 @@ async function main(): Promise<void> {
 
     await worker.run();
   } finally {
-    // There is no emailer shutdown: `@gbd/email/env`'s own header says why.
+    // There is no emailer shutdown.
     await shutdownDatabase();
     shutdownBlobStore();
   }
