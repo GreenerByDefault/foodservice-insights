@@ -180,9 +180,7 @@ const DATABASE_CONNECTIONS_FOR_LOOPS_AND_SWEEPS = 4;
 /** The longest email outage the notification retries are meant to ride out. */
 const EMAIL_OUTAGE_TO_SURVIVE_MS = 60 * MINUTE_MS;
 
-/** The latency [`REQUIREMENTS.md`](../../../REQUIREMENTS.md#user-email) promises for a result
- * email, which stays that file's number to own — this constant is the one place code checks
- * against it. */
+/** The latency a result email must arrive within. */
 export const EMAIL_LATENCY_TARGET_MS = 30 * SECOND_MS;
 
 /** How long the bounded exponential backoff spans, from the first send attempt to the last:

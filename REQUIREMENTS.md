@@ -91,7 +91,9 @@ The user receives an email when the analysis completes.
 - Sending is retried a bounded number of times and then gives up — the cap is
   `WORKER_DEFAULTS.maxNotificationAttempts` in
   [`apps/worker/src/config.ts`](apps/worker/src/config.ts).
-- Email typically sends within 30 seconds, but is best effort. Delivery is not guaranteed.
+- Email typically sends within `EMAIL_LATENCY_TARGET_MS` in
+  [`apps/worker/src/config.ts`](apps/worker/src/config.ts), but is best effort. Delivery is not
+  guaranteed.
 
 ### Multiple reports
 
