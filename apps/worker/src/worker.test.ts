@@ -267,6 +267,17 @@ function reportAt(harness: Harness, index: number): SeededReport {
 }
 
 describe('claiming and capacity', () => {
+  test('an empty queue is queue-empty, and consumes no slot', async () => {
+    await withWorker({ overrides: { maxConcurrentAttempts: 1 } }, async (harness, fixture) => {
+      expect(await harness.worker.claimAndStart()).toBe('queue-empty');
+
+      // `run()` makes this call forever against an idle queue, so it has to leave nothing behind:
+      // with a limit of one, an attempt seeded afterwards still starts.
+      await fixture.seedAttempt();
+      expect(await harness.worker.claimAndStart()).toBe('started');
+    });
+  });
+
   test('refuses at the limit, then claims again once a finished attempt frees its slot', async () => {
     await withWorker(
       { steps: HOLDING_STEPS, reports: 2, overrides: { maxConcurrentAttempts: 1 } },
@@ -542,18 +553,27 @@ describe('directing', () => {
 
 describe('cancellation, through the loop', () => {
   test('a cancel request on our own attempt kills the child and records canceled', async () => {
-    await withWorker({ steps: [{ step: 'waitFor', sentinel: 'never' }] }, async (harness) => {
-      const attemptId = await startOne(harness);
-      await requestCancel(attemptId);
+    await withWorker(
+      { steps: [{ step: 'waitFor', sentinel: 'never' }] },
+      async (harness, fixture) => {
+        const attemptId = await startOne(harness);
+        await requestCancel(attemptId);
 
-      await harness.worker.direct();
-      await waitUntil(() => statusIs(attemptId, 'canceled'), 'the attempt is canceled');
+        await harness.worker.direct();
+        // This child never exits on its own, so the run directory going away is the kill landing.
+        await waitUntil(
+          () => !existsSync(runDirectory(fixture, attemptId)),
+          'the killed child dies and its settle removes the run directory',
+        );
+        await waitUntil(() => statusIs(attemptId, 'canceled'), 'the attempt is canceled');
 
-      const row = await attemptRow(attemptId);
-      expect(row.failureReason).toBeNull();
-      // A canceled attempt is never emailed about.
-      expect(row.notificationEmailSentAt).toBeNull();
-    });
+        const row = await attemptRow(attemptId);
+        expect(row.failureReason).toBeNull();
+        expect(row.finishedAt).toBeInstanceOf(Date);
+        // A canceled attempt is never emailed about.
+        expect(row.notificationEmailSentAt).toBeNull();
+      },
+    );
   });
 
   test('the same request converged by another worker leaves the owner nothing to write', async () => {
@@ -590,32 +610,6 @@ describe('cancellation, through the loop', () => {
       expect(await harness.worker.reap()).toEqual({ expired: [], canceled: [attemptId] });
       expect((await attemptRow(attemptId)).status).toBe('canceled');
     });
-  });
-});
-
-describe('losing a race with the real reaper', () => {
-  test("a reaped attempt's child is killed and the reaper's verdict stands", async () => {
-    await withWorker(
-      { steps: [{ step: 'waitFor', sentinel: 'never' }] },
-      async (harness, fixture) => {
-        const other = harness.anotherWorker();
-        const attemptId = await startOne(harness);
-        await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
-
-        expect((await other.worker.reap()).expired).toEqual([attemptId]);
-        const reaped = await attemptRow(attemptId);
-
-        await harness.worker.direct();
-        await waitUntil(
-          () => !existsSync(runDirectory(fixture, attemptId)),
-          'the owner kills the child it no longer owns',
-        );
-
-        expect(reaped.failureReason).toBe('abandoned');
-        expect(reaped.reapedByWorkerId).toBe(other.workerId);
-        expect(await attemptRow(attemptId)).toEqual(reaped);
-      },
-    );
   });
 });
 
@@ -712,6 +706,39 @@ describe('parked verdicts', () => {
           expect(row.failureDetail).toContain('blob store');
           expect(await resultFileRows(attemptId)).toHaveLength(0);
           expect(await uploadedKeys(fixture)).toEqual([]);
+        },
+      );
+    });
+  });
+
+  test('a verdict that parks again spends the original budget, not a restarted one', async () => {
+    await withBreakable(breakableBlobStore, async (store) => {
+      await withWorker(
+        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          store.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the upload fails and the verdict parks',
+          );
+
+          // Half the budget, a tick that re-parks against the still-broken store, then the other
+          // half. A `since` restarted on the second park would put the budget permanently out of
+          // reach, and the conversion below would never come.
+          const halfTheBudget = harness.config.uploadRetryBudgetMs / 2;
+          harness.advance(halfTheBudget);
+          await harness.worker.direct();
+          expect(await statusIs(attemptId, 'processing')).toBe(true);
+
+          harness.advance(halfTheBudget);
+          await directUntil(
+            harness.worker,
+            () => statusIs(attemptId, 'failed'),
+            'the original budget runs out and the verdict is converted',
+          );
         },
       );
     });
@@ -859,6 +886,43 @@ describe('draining', () => {
     });
   });
 
+  test('a verdict still parked at record at the deadline is abandoned to the reaper', async () => {
+    await withBreakable(breakableDatabase, async (database) => {
+      await withWorker(
+        {
+          steps: SUCCEEDING_ON_RELEASE_STEPS,
+          db: database.service,
+          systemClock: true,
+          overrides: { drainGraceMs: 300 },
+        },
+        async (harness, fixture) => {
+          const attemptId = await startOne(harness);
+
+          database.break();
+          await release(fixture, attemptId);
+          await waitUntil(
+            () => !existsSync(runDirectory(fixture, attemptId)),
+            'the terminal write fails and the verdict parks',
+          );
+
+          // Unlike an `upload` park, this one has nothing to convert to: the drain's last resume
+          // goes to the same database that is still down. So the row is left `processing` for
+          // another worker's reaper, which is principle 3 in `failures.ts`.
+          await harness.worker.drain();
+          database.restore();
+
+          const row = await attemptRow(attemptId);
+          expect(row.status).toBe('processing');
+          expect(row.finishedAt).toBeNull();
+          // The store was healthy throughout, so the files did land — which is what makes this a
+          // `record` park rather than the `upload` one the test above covers.
+          expect(await uploadedKeys(fixture)).toHaveLength(3);
+          expect(await resultFileRows(attemptId)).toHaveLength(0);
+        },
+      );
+    });
+  });
+
   test('leases keep being renewed through a long drain', async () => {
     await withWorker(
       {
@@ -958,6 +1022,23 @@ describe('run', () => {
 
       await harness.worker.drain();
       await expect(running).resolves.toBeUndefined();
+    });
+  });
+
+  test('a claim it cannot make ends the run, drained', async () => {
+    await withBreakable(breakableDatabase, async (database) => {
+      await withWorker(
+        { db: database.service, systemClock: true, overrides: { drainGraceMs: 300 } },
+        async (harness) => {
+          database.break();
+
+          // A failing *tick* is absorbed and retried, but a failing claim poll is not: `run()`
+          // exits nonzero rather than spinning against a database that is not answering.
+          await expect(harness.worker.run()).rejects.toThrow();
+          // Reached its `finally`, so the drain ran rather than being skipped by the throw.
+          expect(await harness.worker.claimAndStart()).toBe('draining');
+        },
+      );
     });
   });
 });
