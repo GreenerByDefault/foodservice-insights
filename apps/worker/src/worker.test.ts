@@ -73,7 +73,7 @@ const TEST_CONFIG: WorkerDefaultableFields = {
   killAfterTotalRuntimeMs: 120 * SECOND_MS,
   killGraceMs: 200,
   drainGraceMs: 500,
-  leaseExpiresAfterMs: MAX_RENEWAL_ROUND_TRIP_MS + (1 * SECOND_MS),
+  leaseExpiresAfterMs: MAX_RENEWAL_ROUND_TRIP_MS + 1 * SECOND_MS,
   claimedCeilingMs: 10 * MINUTE_MS,
   reapIntervalMs: 50,
   uploadRetryBudgetMs: 5 * SECOND_MS,
