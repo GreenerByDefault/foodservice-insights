@@ -237,14 +237,6 @@ alive but no longer directing — exactly when the reap should fire. Reaping one
 nothing: the next lease renewal returns "lost" and the direct loop kills the child. See
 [`reaper.ts`](apps/worker/src/sweeps/reaper.ts).
 
-*Rejected: a `SELECT` to find expired attempts, then an `UPDATE` to end them.* Splitting the read
-from the write reopens the race the guarded `UPDATE` exists to close — an attempt could stop being
-expired between the two statements. The reap is one guarded `UPDATE` instead, per
-[`reaper.ts`](apps/worker/src/sweeps/reaper.ts).
-
-*Rejected: a shorter per-renewal statement timeout.* Already recorded on
-`MAX_RENEWAL_ROUND_TRIP_MS` in [`config.ts`](apps/worker/src/config.ts).
-
 ### Canceling
 
 Canceling is a soft-delete of a report that has not already reached a terminal attempt status.
@@ -295,8 +287,7 @@ one: Render's shutdown delay defaults to 30s (configurable up to 300s), but Rail
 `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**. An unconfigured Railway service SIGKILLs
 the worker mid-drain, and the failure looks like a worker bug rather than a platform default. This
 is the one relation `createWorkerConfig` cannot check, since it depends on a setting that lives on
-the platform, not in this repo. Note that the defaults for `drainGraceMs` plus `killGraceMs` already
-exceed Render's 30s default.
+the platform, not in this repo.
 
 ## Hosting
 
@@ -350,19 +341,6 @@ turns the claim's own expiry into the backoff: bounded exponential, doubling fro
 This is deliberately at-least-once, not at-most-once: a response lost after the provider accepted
 the email looks identical to a send that never went out, so an occasional duplicate is the
 tradeoff for never silently dropping one.
-
-- *Rejected: an outbox table.* A query derived from `analysis_attempt` needs no second table kept
-  in sync with it.
-- *Rejected: the owning parent sending the email inline, as part of settling.* Ties email
-  delivery's latency and failure modes to the settle path, for a send that can be retried on its
-  own schedule instead.
-- *Rejected: `SELECT … FOR UPDATE SKIP LOCKED` spanning the send.* Would hold a row lock, and a
-  database connection, for as long as the HTTP request to the email provider takes.
-- *Rejected: stamping "sent" before sending.* Marks a send successful before knowing that it was.
-- *Rejected: a permanent/transient split in `@gbd/email`.* `packages/email` exposes one
-  `EmailError` by design, the same reasoning as `@gbd/storage`'s one `BlobStoreError` — so nothing
-  there can tell a provider's permanent rejection from a transient outage. The bounded attempt
-  counter here stands in for that distinction instead.
 
 ## File links
 
