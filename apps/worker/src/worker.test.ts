@@ -23,7 +23,12 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
 import { DATABASE } from '@gbd/db/env';
-import { breakableDatabase, readAnalysisAttemptRow, withBreakable } from '@gbd/db/testing';
+import {
+  type Breakable,
+  breakableDatabase,
+  readAnalysisAttemptRow,
+  withBreakable,
+} from '@gbd/db/testing';
 import { type RecordingEmailer, recordingEmailer } from '@gbd/email/testing';
 import {
   type BlobStore,
@@ -200,6 +205,34 @@ async function release(
   await releaseFakeChild(runDirectory(fixture, attemptId), sentinel);
 }
 
+/** Break the store, release the child, and wait for its verdict to park at upload. */
+async function parkAtUpload(
+  fixture: ReportFixture,
+  store: Breakable<BlobStore>,
+  attemptId: AnalysisAttemptId,
+): Promise<void> {
+  store.break();
+  await release(fixture, attemptId);
+  await waitUntil(
+    () => !existsSync(runDirectory(fixture, attemptId)),
+    'the upload fails and the verdict parks',
+  );
+}
+
+/** Break the database, release the child, and wait for its verdict to park at record. */
+async function parkAtRecord(
+  fixture: ReportFixture,
+  database: Breakable<DatabaseExecutor>,
+  attemptId: AnalysisAttemptId,
+): Promise<void> {
+  database.break();
+  await release(fixture, attemptId);
+  await waitUntil(
+    () => !existsSync(runDirectory(fixture, attemptId)),
+    'the terminal write fails and the verdict parks',
+  );
+}
+
 function attemptRow(attemptId: AnalysisAttemptId) {
   return readAnalysisAttemptRow(DATABASE, attemptId);
 }
@@ -314,12 +347,7 @@ describe('claiming and capacity', () => {
           const attemptId = await startOne(harness);
           await reportAt(harness, 1).seedAttempt();
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the settle gives up and parks the verdict',
-          );
+          await parkAtUpload(fixture, store, attemptId);
 
           expect(await harness.worker.claimAndStart()).toBe('at-capacity');
           expect((await attemptRow(attemptId)).status).toBe('processing');
@@ -623,12 +651,7 @@ describe('parked verdicts', () => {
 
           // Broken across the terminal write only: the upload happens against a healthy store, so
           // the verdict parks at `record` with its files already stored.
-          database.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the terminal write fails and the verdict parks',
-          );
+          await parkAtRecord(fixture, database, attemptId);
           expect(await statusIs(attemptId, 'processing')).toBe(true);
 
           database.restore();
@@ -651,12 +674,7 @@ describe('parked verdicts', () => {
           const attemptId = await startOne(harness);
           await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the upload fails and the verdict parks',
-          );
+          await parkAtUpload(fixture, store, attemptId);
           const parked = (await attemptRow(attemptId)).leaseRenewedAt as Date;
 
           // The database is healthy throughout, so a parked record keeps its lease renewed — which
@@ -687,12 +705,7 @@ describe('parked verdicts', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the upload fails and the verdict parks',
-          );
+          await parkAtUpload(fixture, store, attemptId);
 
           harness.advance(harness.config.uploadRetryBudgetMs);
           await directUntil(
@@ -718,12 +731,7 @@ describe('parked verdicts', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the upload fails and the verdict parks',
-          );
+          await parkAtUpload(fixture, store, attemptId);
 
           // Half the budget, a tick that re-parks against the still-broken store, then the other
           // half. A `since` restarted on the second park would put the budget permanently out of
@@ -756,12 +764,7 @@ describe('parked verdicts', () => {
           const other = harness.anotherWorker();
           const attemptId = await startOne(harness);
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the upload fails and the verdict parks',
-          );
+          await parkAtUpload(fixture, store, attemptId);
 
           await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
           expect((await other.worker.reap()).expired).toEqual([attemptId]);
@@ -788,12 +791,7 @@ describe('parked verdicts', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the upload fails and the verdict parks',
-          );
+          await parkAtUpload(fixture, store, attemptId);
 
           await requestCancel(attemptId);
           // Restored, so an unconverted resume would happily upload a report the user just deleted.
@@ -869,12 +867,7 @@ describe('draining', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          store.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the upload fails and the verdict parks',
-          );
+          await parkAtUpload(fixture, store, attemptId);
 
           await harness.worker.drain();
 
@@ -898,12 +891,7 @@ describe('draining', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          database.break();
-          await release(fixture, attemptId);
-          await waitUntil(
-            () => !existsSync(runDirectory(fixture, attemptId)),
-            'the terminal write fails and the verdict parks',
-          );
+          await parkAtRecord(fixture, database, attemptId);
 
           // Unlike an `upload` park, this one has nothing to convert to: the drain's last resume
           // goes to the same database that is still down. So the row is left `processing` for
