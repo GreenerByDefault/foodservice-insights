@@ -45,6 +45,7 @@ import { readProgress } from './child/run-directory.ts';
 import { SYSTEM_CLOCK } from './clock.ts';
 import {
   createWorkerConfig,
+  MAX_RENEWAL_ROUND_TRIP_MS,
   MINUTE_MS,
   SECOND_MS,
   type WorkerConfig,
@@ -63,12 +64,7 @@ import { type FakeChildStep, fakeChildCommand, releaseFakeChild } from './testin
 import { waitUntil } from './testing/wait-until.ts';
 import { createWorker, type Worker } from './worker.ts';
 
-/** Fast wherever a real timer is involved, generous wherever the manual clock is what moves.
- *
- * Passed through `createWorkerConfig` like any other configuration, so no test can lean on a set of
- * values production would refuse. `leaseExpiresAfterMs` is the one that cannot be shortened: it has
- * to clear a renewal round trip, which is the pool's connection plus statement timeout.
- */
+/** Fast wherever a real timer is involved, generous wherever the manual clock is what moves. */
 const TEST_CONFIG: WorkerDefaultableFields = {
   maxConcurrentAttempts: 2,
   queuePollIntervalMs: 10,
@@ -77,7 +73,7 @@ const TEST_CONFIG: WorkerDefaultableFields = {
   killAfterTotalRuntimeMs: 120 * SECOND_MS,
   killGraceMs: 200,
   drainGraceMs: 500,
-  leaseExpiresAfterMs: 61 * SECOND_MS,
+  leaseExpiresAfterMs: MAX_RENEWAL_ROUND_TRIP_MS + (1 * SECOND_MS),
   claimedCeilingMs: 10 * MINUTE_MS,
   reapIntervalMs: 50,
   uploadRetryBudgetMs: 5 * SECOND_MS,

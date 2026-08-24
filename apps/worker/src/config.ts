@@ -162,7 +162,7 @@ function definedOverrides(overrides: WorkerDefaultableFields): WorkerDefaultable
  * statement. Renewals are issued concurrently across attempts, so this bounds one round trip
  * rather than one per attempt.
  */
-const MAX_RENEWAL_ROUND_TRIP_MS =
+export const MAX_RENEWAL_ROUND_TRIP_MS =
   WORKER_DB_LIMITS.connectionTimeoutMs + WORKER_DB_LIMITS.statementTimeoutMs;
 
 /** Database connections one in-flight attempt can occupy at once: this tick's lease renewal, and a
