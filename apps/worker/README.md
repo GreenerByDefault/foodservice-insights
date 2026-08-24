@@ -28,20 +28,16 @@ rather than here.
 
 ## Layout
 
-- [`worker.ts`](src/worker.ts) is the process itself — claiming, directing in-flight attempts, the
-  sweeps, and draining. Read it, not this file, for how those actually work.
-- [`attempt/directive.ts`](src/attempt/directive.ts) decides what a live attempt needs each tick;
-  [`attempt/verdict.ts`](src/attempt/verdict.ts) decides what a dead child means;
-  [`attempt/lifecycle.ts`](src/attempt/lifecycle.ts) and [`attempt/queue.ts`](src/attempt/queue.ts)
-  start and claim attempts.
-- [`sweeps/reaper.ts`](src/sweeps/reaper.ts) and
-  [`sweeps/notifications.ts`](src/sweeps/notifications.ts) converge rows nobody else will.
-- [`child/spawn.ts`](src/child/spawn.ts) and [`child/run-directory.ts`](src/child/run-directory.ts)
-  are the OS-level half of the parent ↔ child contract in [`contract/`](../../contract/).
-- [`db.ts`](src/db.ts) owns the worker's own database handle, tuned separately from
-  `@gbd/db/env`'s.
-- [`failures.ts`](src/failures.ts) is the reasoning behind "an error is not a verdict" — read it
-  before touching any error handling here.
+| File | Role |
+| --- | --- |
+| [`worker.ts`](src/worker.ts) | The process itself — claiming, directing in-flight attempts, the sweeps, and draining. |
+| [`attempt/directive.ts`](src/attempt/directive.ts) | Decides what a live attempt needs each tick. |
+| [`attempt/verdict.ts`](src/attempt/verdict.ts) | Decides what a dead child means. |
+| [`attempt/lifecycle.ts`](src/attempt/lifecycle.ts), [`attempt/queue.ts`](src/attempt/queue.ts) | Start and claim attempts. |
+| [`sweeps/reaper.ts`](src/sweeps/reaper.ts), [`sweeps/notifications.ts`](src/sweeps/notifications.ts) | Converge rows nobody else will. |
+| [`child/spawn.ts`](src/child/spawn.ts), [`child/run-directory.ts`](src/child/run-directory.ts) | The OS-level half of the parent ↔ child contract in [`contract/`](../../contract/). |
+| [`db.ts`](src/db.ts) | Owns the worker's own database handle. |
+| [`failures.ts`](src/failures.ts) | The reasoning behind "an error is not a verdict" — read it before touching any error handling here. |
 
 ## Testing
 
