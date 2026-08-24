@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
-import { findRepoRoot, loadLocalEnv, requireEnv } from './env.ts';
+import { findRepoRoot, loadLocalEnv, optionalIntEnv, requireEnv } from './env.ts';
 
 /** A throwaway repo root holding the given env files. */
 function fakeRepo(files: Record<string, string>): string {
@@ -15,7 +15,7 @@ function fakeRepo(files: Record<string, string>): string {
 }
 
 const originalCwd = process.cwd();
-const touchedVars = ['ONLY_IN_ENV', 'ONLY_IN_TEST_ENV', 'PRESET', 'TEST_DB'];
+const touchedVars = ['ONLY_IN_ENV', 'ONLY_IN_TEST_ENV', 'PRESET', 'TEST_DB', 'COUNT'];
 
 afterEach(() => {
   process.chdir(originalCwd);
@@ -72,5 +72,26 @@ describe('requireEnv', () => {
 
   test('names the variable and where to put it', () => {
     expect(() => requireEnv('PRESET')).toThrow(/'PRESET'.*\.env\.test/s);
+  });
+});
+
+describe('optionalIntEnv', () => {
+  test('returns undefined when unset', () => {
+    expect(optionalIntEnv('COUNT')).toBeUndefined();
+  });
+
+  test('parses a whole number', () => {
+    process.env.COUNT = '3';
+    expect(optionalIntEnv('COUNT')).toBe(3);
+  });
+
+  test('throws on a set-but-unparseable value, rather than returning NaN', () => {
+    process.env.COUNT = 'not-a-number';
+    expect(() => optionalIntEnv('COUNT')).toThrow(/COUNT.*whole number.*not-a-number/);
+  });
+
+  test('throws on a fractional value', () => {
+    process.env.COUNT = '1.5';
+    expect(() => optionalIntEnv('COUNT')).toThrow(/COUNT.*whole number.*1\.5/);
   });
 });

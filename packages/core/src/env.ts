@@ -51,3 +51,11 @@ export function requireEnv(name: string): string {
       'at the repo root — see the README.',
   );
 }
+
+export function optionalIntEnv(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) throw new Error(`${name} must be a whole number, not '${raw}'`);
+  return value;
+}

@@ -6,7 +6,7 @@
  */
 
 import { hostname } from 'node:os';
-import { loadLocalEnv, requireEnv } from '@gbd/core/env';
+import { loadLocalEnv, optionalIntEnv, requireEnv } from '@gbd/core/env';
 import { uuidV7 } from '@gbd/db';
 import { EMAILER } from '@gbd/email/env';
 import { bucketExists } from '@gbd/storage';
@@ -72,16 +72,6 @@ async function main(): Promise<void> {
     await shutdownDatabase();
     shutdownBlobStore();
   }
-}
-
-/** `process.env` values are strings or absent, never numbers, so a set-but-unparseable value is
- * distinguished from an unset one instead of silently becoming `NaN`. */
-function optionalIntEnv(name: string): number | undefined {
-  const raw = process.env[name];
-  if (raw === undefined) return undefined;
-  const value = Number(raw);
-  if (!Number.isInteger(value)) throw new Error(`${name} must be a whole number, not '${raw}'`);
-  return value;
 }
 
 main().catch((error) => {
