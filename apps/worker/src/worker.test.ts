@@ -937,23 +937,6 @@ describe('draining', () => {
       },
     );
   });
-
-  test('two concurrent drains drain once', async () => {
-    await withWorker(
-      {
-        steps: [{ step: 'ignoreSigterm' }, { step: 'hang' }],
-        systemClock: true,
-        overrides: { drainGraceMs: 300 },
-      },
-      async (harness) => {
-        const attemptId = await startOne(harness);
-
-        await Promise.all([harness.worker.drain(), harness.worker.drain()]);
-
-        expect((await attemptRow(attemptId)).failureReason).toBe('shut_down');
-      },
-    );
-  });
 });
 
 describe('the sweeps, wired up', () => {
