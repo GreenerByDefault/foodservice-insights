@@ -1,4 +1,3 @@
-import { DATABASE } from '@gbd/db/env';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
@@ -10,7 +9,7 @@ import {
   type WorkerDefaultableFields,
   type WorkerRequiredFields,
 } from './config.ts';
-import { WORKER_DB_LIMITS } from './db.ts';
+import { WORKER_DATABASE, WORKER_DB_LIMITS } from './db.ts';
 
 const REQUIRED_FIELDS: WorkerRequiredFields = {
   workerId: 'worker-under-test',
@@ -193,7 +192,7 @@ describe('the relations the notification sweep rests on', () => {
   test('maxNotificationAttempts matches the literal in the notification index', async () => {
     const { rows } = await sql<{ indexdef: string }>`
       SELECT indexdef FROM pg_indexes WHERE indexname = 'analysis_attempt_notification_pending'
-    `.execute(DATABASE);
+    `.execute(WORKER_DATABASE);
 
     expect(rows.map((row) => row.indexdef)).toEqual([
       expect.stringContaining(`notification_attempts < ${WORKER_DEFAULTS.maxNotificationAttempts}`),

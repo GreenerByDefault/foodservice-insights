@@ -5,7 +5,6 @@
  */
 
 import type { AnalysisAttemptId, Database, ReportId } from '@gbd/db';
-import { DATABASE } from '@gbd/db/env';
 import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
@@ -17,6 +16,7 @@ import {
 import { type ControlledTransaction, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { claimNextAttempt, markAttemptSucceeded, renewLease } from '../attempt/queue.ts';
+import { WORKER_DATABASE } from '../db.ts';
 import { aResultFile, aWorkerId } from '../testing/attempt-helpers.ts';
 import { backdateAttemptTimeline, type TimelineOffsetsMs } from '../testing/attempt-timeline.ts';
 import { cancelRequestedPendingAttempts, type ReapOptions, reapExpiredAttempts } from './reaper.ts';
@@ -63,7 +63,7 @@ const A_MINIMAL_RESULT = {
 describe('reapExpiredAttempts', () => {
   test('an expired lease is reaped failed(abandoned) with reaped_by_worker_id set', async () => {
     const reaperId = aWorkerId();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await processingAttempt(transaction, aWorkerId(), {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
       });
@@ -86,7 +86,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('a freshly renewed lease is untouched', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await processingAttempt(transaction, aWorkerId());
       const reaped = await reapExpiredAttempts(
         transaction,
@@ -101,7 +101,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('cancel_requested_at set gives canceled with a NULL failure_reason', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await processingAttempt(
         transaction,
         aWorkerId(),
@@ -126,7 +126,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('the claimed_at ceiling catches an attempt whose lease is renewed forever', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await processingAttempt(transaction, aWorkerId(), {
         claimedAgo: CLAIMED_CEILING_MS + 60_000,
         renewedAgo: 0,
@@ -145,7 +145,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('limit caps a sweep, and the oldest lease goes first', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const oldest = await processingAttempt(transaction, aWorkerId(), {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 120_000,
       });
@@ -168,7 +168,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('a sweep under the limit reaps every expired attempt it is given', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const first = await processingAttempt(transaction, aWorkerId(), {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 120_000,
       });
@@ -188,7 +188,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('an expired attempt outside candidateReports is left untouched', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const inScope = await processingAttempt(transaction, aWorkerId(), {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
       });
@@ -214,7 +214,7 @@ describe('reapExpiredAttempts', () => {
 
   test('a worker reaps its own expired rows', async () => {
     const workerId = aWorkerId();
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { attemptId, reportId } = await processingAttempt(transaction, workerId, {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
       });
@@ -235,7 +235,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test("the owning worker's later markAttemptSucceeded returns false and writes no result_file rows", async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const { attemptId, reportId } = await processingAttempt(transaction, workerId, {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
@@ -266,7 +266,7 @@ describe('reapExpiredAttempts', () => {
   // beyond what `renewLease` already does — it reports `lost` once `status` has moved off
   // `processing`, same as any other writer reaching a verdict first.
   test("the owning worker's later renewLease reports the lease lost", async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
       const { attemptId, reportId } = await processingAttempt(transaction, workerId, {
         renewedAgo: LEASE_EXPIRES_AFTER_MS + 60_000,
@@ -284,7 +284,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('pending and terminal rows are never touched', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const pendingReport = await insertReport(transaction);
       const pending = await insertAnalysisAttempt(transaction, { reportId: pendingReport.id });
 
@@ -318,7 +318,7 @@ describe('reapExpiredAttempts', () => {
   });
 
   test('a capped sweep still reaches a ceiling-expired attempt behind fresher rows', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       // Fresh leases, so only the ceiling condemns the first one. Its lease is the *newest* of the
       // three, which is exactly what would push it out of a cap that ordered without filtering.
       const overCeiling = await processingAttempt(transaction, aWorkerId(), {
@@ -432,7 +432,7 @@ describe('reapExpiredAttempts', () => {
 
 describe('cancelRequestedPendingAttempts', () => {
   test('a pending attempt with a request becomes canceled with a NULL failure_reason', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const report = await insertReport(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
@@ -458,7 +458,7 @@ describe('cancelRequestedPendingAttempts', () => {
   // The middle case is the interesting one: it belongs to the parent (if renewing) or to
   // `reapExpiredAttempts` (if not), never to this sweep, whose top-level qual is `status = 'pending'`.
   test('a pending attempt with no request, a processing attempt with a request, and terminal rows are all untouched', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const pendingReport = await insertReport(transaction);
       const pending = await insertAnalysisAttempt(transaction, { reportId: pendingReport.id });
 
@@ -495,7 +495,7 @@ describe('cancelRequestedPendingAttempts', () => {
   });
 
   test('candidateReports narrows the sweep', async () => {
-    const outcome = await withRollback(DATABASE, async (transaction) => {
+    const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
       const inScopeReport = await insertReport(transaction);
       const inScope = await insertAnalysisAttempt(transaction, {
         reportId: inScopeReport.id,
@@ -532,7 +532,7 @@ describe('cancelRequestedPendingAttempts', () => {
   // zero-row no-op here.
   test('a write that commits while the converge is blocked on the row makes the converge a zero-row no-op', async () => {
     const result = await raceAgainstCommittedWrite(
-      DATABASE,
+      WORKER_DATABASE,
       async (transaction) => {
         const report = await insertReport(transaction);
         const attempt = await insertAnalysisAttempt(transaction, {
@@ -570,7 +570,7 @@ describe('cancelRequestedPendingAttempts', () => {
   // already committed. Plain and sequential, since a `SKIP LOCKED` claim never blocks and so
   // cannot go through `sendBlockingStatement`.
   test('once converged, claimNextAttempt does not claim the row', async () => {
-    const claimed = await withRollback(DATABASE, async (transaction) => {
+    const claimed = await withRollback(WORKER_DATABASE, async (transaction) => {
       const report = await insertReport(transaction);
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
@@ -602,7 +602,7 @@ async function raceReapAgainstCommittedWrite(
 ) {
   const reaperId = options.reaperId ?? aWorkerId();
   const { result: reaped, row } = await raceAgainstCommittedWrite(
-    DATABASE,
+    WORKER_DATABASE,
     async (transaction, trash) => {
       const { organization } = await insertFixtureOrganization(transaction, trash);
       const report = await insertReport(transaction, { organizationId: organization.id });

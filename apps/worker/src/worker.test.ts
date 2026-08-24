@@ -14,7 +14,7 @@
  * - **A threshold test advances a `manualClock`; a drain test passes `SYSTEM_CLOCK`.** `drain()` is
  *   the one method that sleeps, so a test that did both would hang — a manual clock never reaches a
  *   deadline a real sleep is waiting for.
- * - **`withRollback` cannot be used at all**, since the worker reads through `DATABASE`'s own pool.
+ * - **`withRollback` cannot be used at all**, since the worker reads through `WORKER_DATABASE`'s own pool.
  *   [`testing/attempt-fixture.ts`](./testing/attempt-fixture.ts) commits instead.
  */
 
@@ -22,7 +22,6 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
-import { DATABASE } from '@gbd/db/env';
 import {
   type Breakable,
   breakableDatabase,
@@ -52,6 +51,7 @@ import {
   type WorkerDefaultableFields,
 } from './config.ts';
 import { runPath } from './contract/layout.ts';
+import { WORKER_DATABASE } from './db.ts';
 import {
   type ReportFixture,
   type SeededReport,
@@ -146,7 +146,7 @@ async function withWorker<T>(
         { ...TEST_CONFIG, ...workerOptions.overrides },
       );
       const worker = createWorker({
-        db: workerOptions.db ?? DATABASE,
+        db: workerOptions.db ?? WORKER_DATABASE,
         store: workerOptions.store ?? BLOB_STORE,
         emailer: emails.service,
         clock: manual ?? SYSTEM_CLOCK,
@@ -230,11 +230,11 @@ async function parkAtRecord(
 }
 
 function attemptRow(attemptId: AnalysisAttemptId) {
-  return readAnalysisAttemptRow(DATABASE, attemptId);
+  return readAnalysisAttemptRow(WORKER_DATABASE, attemptId);
 }
 
 async function resultFileRows(attemptId: AnalysisAttemptId) {
-  return await DATABASE.selectFrom('resultFile')
+  return await WORKER_DATABASE.selectFrom('resultFile')
     .selectAll()
     .where('analysisAttemptId', '=', attemptId)
     .execute();
@@ -267,7 +267,7 @@ async function statusIs(attemptId: AnalysisAttemptId, status: string): Promise<b
 }
 
 async function requestCancel(attemptId: AnalysisAttemptId): Promise<void> {
-  await DATABASE.updateTable('analysisAttempt')
+  await WORKER_DATABASE.updateTable('analysisAttempt')
     .set({ cancelRequestedAt: new Date() })
     .where('id', '=', attemptId)
     .execute();
@@ -393,7 +393,7 @@ describe('claiming and capacity', () => {
       ]);
 
       expect(outcomes).toEqual(['started', 'started']);
-      const claimed = await DATABASE.selectFrom('analysisAttempt')
+      const claimed = await WORKER_DATABASE.selectFrom('analysisAttempt')
         .select(['id', 'workerId'])
         .where(
           'reportId',
@@ -424,7 +424,7 @@ describe('directing', () => {
         async () => (await readProgress(runDirectory(fixture, attemptId)))?.sequence === 1,
         'the child writes its first progress',
       );
-      await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+      await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
       const claimed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
       await harness.worker.direct();
@@ -455,7 +455,7 @@ describe('directing', () => {
       // one, and not the ENOENT of a child that has not written yet.
       const progress = runPath(runDirectory(fixture, attemptId), 'progress');
       await mkdir(progress);
-      await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+      await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
       const before = (await attemptRow(attemptId)).leaseRenewedAt as Date;
       await harness.worker.direct();
@@ -607,7 +607,7 @@ describe('cancellation, through the loop', () => {
         const other = harness.anotherWorker();
         const attemptId = await startOne(harness);
         await requestCancel(attemptId);
-        await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+        await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
 
         expect(await other.worker.reap()).toEqual({ expired: [attemptId], canceled: [] });
         const reaped = await attemptRow(attemptId);
@@ -668,7 +668,7 @@ describe('parked verdicts', () => {
         { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
-          await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+          await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
           await parkAtUpload(fixture, store, attemptId);
           const parked = (await attemptRow(attemptId)).leaseRenewedAt as Date;
@@ -762,7 +762,7 @@ describe('parked verdicts', () => {
 
           await parkAtUpload(fixture, store, attemptId);
 
-          await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+          await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
           expect((await other.worker.reap()).expired).toEqual([attemptId]);
 
           // Restored first, so what stops the upload is the drop and not the outage.
@@ -916,7 +916,7 @@ describe('draining', () => {
       },
       async (harness, fixture) => {
         const attemptId = await startOne(harness);
-        await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+        await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
         const draining = harness.worker.drain();
         // A drain that stopped ticking `direct()` would have the rest of the fleet reap this
@@ -939,8 +939,10 @@ describe('the sweeps, wired up', () => {
   test("reap converges another worker's expired attempt under our own id", async () => {
     await withWorker({}, async (harness, fixture) => {
       const attemptId = await fixture.seedAttempt();
-      await claimNextAttempt(DATABASE, aWorkerId(), { candidateReports: [fixture.reportId] });
-      await backdateAttemptTimeline(DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
+      await claimNextAttempt(WORKER_DATABASE, aWorkerId(), {
+        candidateReports: [fixture.reportId],
+      });
+      await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
 
       expect(await harness.worker.reap()).toEqual({ expired: [attemptId], canceled: [] });
 
@@ -953,10 +955,10 @@ describe('the sweeps, wired up', () => {
   test('notify sends one email per terminal attempt and never a second', async () => {
     await withWorker({}, async (harness, fixture) => {
       const attemptId = await fixture.seedAttempt();
-      await claimNextAttempt(DATABASE, harness.workerId, {
+      await claimNextAttempt(WORKER_DATABASE, harness.workerId, {
         candidateReports: [fixture.reportId],
       });
-      await markAttemptFailed(DATABASE, attemptId, harness.workerId, {
+      await markAttemptFailed(WORKER_DATABASE, attemptId, harness.workerId, {
         reason: 'infrastructure',
         detail: 'something unreachable',
       });

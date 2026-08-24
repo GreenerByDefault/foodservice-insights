@@ -9,7 +9,6 @@
 
 import { createHash } from 'node:crypto';
 import type { AnalysisAttemptId, OrganizationId, ReportId, UserId } from '@gbd/db';
-import { DATABASE } from '@gbd/db/env';
 import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
@@ -20,6 +19,7 @@ import {
 import { deletePrefix, organizationPrefix, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { claimNextAttempt } from '../attempt/queue.ts';
+import { WORKER_DATABASE } from '../db.ts';
 import { withTemporaryRunRoot } from './run-root.ts';
 
 /** One report with a real input object behind it, and its own attempt sequence. */
@@ -62,7 +62,7 @@ export async function withReportFixture<T>(
   return await withTemporaryRunRoot(
     async (runRoot) =>
       await withCommittedFixture(
-        DATABASE,
+        WORKER_DATABASE,
         async (transaction, trash) => {
           const { organization, admin } = await insertFixtureOrganization(transaction, trash);
           const { email } = await transaction
@@ -114,7 +114,7 @@ async function seededReport(
     inputCsvStorageKey: storageKey,
     seedAttempt: async () => {
       attemptNumber += 1;
-      const attempt = await insertAnalysisAttempt(DATABASE, {
+      const attempt = await insertAnalysisAttempt(WORKER_DATABASE, {
         reportId,
         attemptNumber,
         requestedByUserId: requesterId,
@@ -128,8 +128,8 @@ async function anotherReport(
   organizationId: OrganizationId,
   requesterId: UserId,
 ): Promise<SeededReport> {
-  const report = await insertReport(DATABASE, { organizationId });
-  const inputFile = await insertInputFile(DATABASE, {
+  const report = await insertReport(WORKER_DATABASE, { organizationId });
+  const inputFile = await insertInputFile(WORKER_DATABASE, {
     reportId: report.id,
     object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
   });
@@ -143,7 +143,7 @@ export async function withAttemptFixture<T>(
 ): Promise<T> {
   return await withReportFixture(async (fixture) => {
     const seededAttemptId = await fixture.seedAttempt();
-    const attemptId = await claimNextAttempt(DATABASE, workerId, {
+    const attemptId = await claimNextAttempt(WORKER_DATABASE, workerId, {
       candidateReports: [fixture.reportId],
     });
     if (attemptId === undefined) {
