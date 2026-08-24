@@ -87,6 +87,10 @@ The user receives an email when the analysis completes.
 
 - Success includes links to download the result files, and potentially metadata.
 - Failure follows the same rules as § Errors during upload and processing.
+- No email for a canceled attempt.
+- Sending is retried a bounded number of times and then gives up — the cap is
+  `WORKER_DEFAULTS.maxNotificationAttempts` in
+  [`apps/worker/src/config.ts`](apps/worker/src/config.ts).
 - Email typically sends within 30 seconds, but is best effort. Delivery is not guaranteed.
 
 ### Multiple reports

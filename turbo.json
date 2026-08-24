@@ -22,7 +22,14 @@
     "EMAIL_FROM_ADDRESS",
     "EMAIL_GBD_ADDRESS",
     "EMAIL_SUPPORT_ADDRESS",
-    "SITE_URL"
+    "SITE_URL",
+    "WORKER_ID",
+    "WORKER_RUN_ROOT",
+    "WORKER_MAX_CONCURRENT_ATTEMPTS",
+    "PYTHON_BIN",
+    "GEMINI_API_KEY",
+    "LLM_WHISPERER_API_KEY",
+    "OPENAI_API_KEY"
   ],
   "tasks": {
     "dev": {

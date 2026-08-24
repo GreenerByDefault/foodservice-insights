@@ -148,10 +148,12 @@ Parent lifecycle:
 3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
 4. The child runs, writes its results into that folder, and exits.
   - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
-5. Upload the result files to the blob store, save metadata to the database, and email the result.
+5. Upload the result files to the blob store and save metadata to the database.
 
 Whenever a child fails in any way — including being killed by its parent — the parent marks the
-analysis attempt failed and sends an email.
+analysis attempt failed. Either way, the parent does not send the email itself — a separate,
+derived sweep does, in [`sweeps/notifications.ts`](apps/worker/src/sweeps/notifications.ts); see
+§ Email below. A `canceled` row gets no email at all.
 
 Refer to [`contract/`](contract/) for the worker ↔ child contract.
 
@@ -191,22 +193,28 @@ write.* The two rules this adds on top — a renewal asserts that the checks ran
 lease has expired — are decided in
 [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
 
-Three layered defenses, because a hung analysis has to be caught even if the process that should
+Four layered defenses, because a hung analysis has to be caught even if the process that should
 notice it is itself hung:
 
 1. **The child reports progress** by updating a file every time it makes progress, such as
    finishing an API call. The parent checks that file roughly every 30 seconds. If the child has
-   not progressed in `noProgressAfterMs`, the parent kills it as hung. The threshold must exceed
+   not progressed in `killAfterNoProgressMs`, the parent kills it as hung. The threshold must exceed
    the longest valid API call including backoff — see [`config.ts`](apps/worker/src/config.ts).
-2. **The parent hard-kills** a child after `hardCeilingMs` no matter what, as a safety net for
-   hung attempts — see [`config.ts`](apps/worker/src/config.ts).
-3. **Other workers reap**, in [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The reaper exists for the
+2. **The parent hard-kills** a child after `killAfterTotalRuntimeMs` no matter what, as a safety net
+   for hung attempts — see [`config.ts`](apps/worker/src/config.ts).
+3. **The parent fences a claim it has held too long.** `claimedCeilingMs` catches a parent that
+   keeps renewing a lease forever but never actually finishes the attempt — a failure the other two
+   defenses cannot, since both watch the *child*, and this parent's child may look perfectly
+   healthy. See [`config.ts`](apps/worker/src/config.ts).
+4. **Other workers reap**, in [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The reaper exists for the
    *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
    namespace and takes every child with it, and the PaaS restarts the container — there is no
    orphan class of process to worry about. What can happen is a container dying (e.g. OOM) and
    leaving its claimed attempts stuck `processing`, with nobody left to reach a verdict and nothing
    else to ever converge them. So, every worker proactively looks for `processing` attempts whose
-   lease has expired, marks them `failed('abandoned')`, and sends an email.
+   lease has expired and marks them `failed('abandoned')` — see
+   [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The notification sweep sends the email, on its
+   own schedule, once the row is terminal.
 
 Reaping introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
@@ -222,6 +230,20 @@ converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/s
 *Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
 onto one medium: a parent whose database is down stops being able to answer "should I kill this
 child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
+
+*Rejected: excluding the reaper's own `worker_id` from the sweep.* A live parent already kills its
+own children locally, so the only case where the reap's own filter would matter is a parent that is
+alive but no longer directing — exactly when the reap should fire. Reaping one of our own costs
+nothing: the next lease renewal returns "lost" and the direct loop kills the child. See
+[`reaper.ts`](apps/worker/src/sweeps/reaper.ts).
+
+*Rejected: a `SELECT` to find expired attempts, then an `UPDATE` to end them.* Splitting the read
+from the write reopens the race the guarded `UPDATE` exists to close — an attempt could stop being
+expired between the two statements. The reap is one guarded `UPDATE` instead, per
+[`reaper.ts`](apps/worker/src/sweeps/reaper.ts).
+
+*Rejected: a shorter per-renewal statement timeout.* Already recorded on
+`MAX_RENEWAL_ROUND_TRIP_MS` in [`config.ts`](apps/worker/src/config.ts).
 
 ### Canceling
 
@@ -262,6 +284,20 @@ kills the old container. Two mitigations:
 2. **Let the worker drain.** The parent distinguishes `SIGTERM` from `SIGKILL`. Even if we cannot
    drain every attempt, we can catch most of them.
 
+A grace period is worth being generous with: an attempt takes 2–15 minutes but typically about 5,
+so a drain that runs long usually saves real work our own deploy would otherwise destroy. An
+attempt still draining when the grace runs out gets `failed('shut_down')` — the one verdict that
+means "nothing was wrong with this attempt, we just ran out of time to finish it."
+
+**The hosting platform's own shutdown grace has to exceed `drainGraceMs` plus `killGraceMs`**,
+[`config.ts`](apps/worker/src/config.ts) covers why — and this is a real trap, not a hypothetical
+one: Render's shutdown delay defaults to 30s (configurable up to 300s), but Railway's
+`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**. An unconfigured Railway service SIGKILLs
+the worker mid-drain, and the failure looks like a worker bug rather than a platform default. This
+is the one relation `createWorkerConfig` cannot check, since it depends on a setting that lives on
+the platform, not in this repo. Note that the defaults for `drainGraceMs` plus `killGraceMs` already
+exceed Render's 30s default.
+
 ## Hosting
 
 What we care about: manual horizontal and vertical scaling; reliability, including automatic
@@ -290,12 +326,43 @@ for real.
 Every other test fakes the transport with an in-memory `recordingEmailer()`, asserting only that
 the right email was asked for.
 
-**Open:** decide which email provider, such as SendGrid.
+**Open:** decide which email provider, such as SendGrid. Idempotency-key support should be part of
+that evaluation — it would close the last duplicate-send window § Result notifications leaves open.
 
 The `packages/email` code does not retry failures. Instead, callers must decide how to handle
 failure.
 
 Sign-in codes and email-change confirmations go through Supabase Auth, not us.
+
+### Result notifications
+
+Sending the result email is not part of settling an attempt. A separate, derived sweep,
+[`sweeps/notifications.ts`](apps/worker/src/sweeps/notifications.ts), computes which rows are
+"due" straight from `analysis_attempt` — terminal, not canceled, unsent, still has a requester,
+attempts remaining — rather than pushing a job onto a queue when an attempt finishes.
+
+A sweep claims due rows with a short-lived claim, which is what gives mutual exclusion between
+workers, then sends. `notification_attempts`, incremented by the claim, both caps the spend and
+turns the claim's own expiry into the backoff: bounded exponential, doubling from
+`notificationRetryBaseMs` each try. Its total window, and its floor against `@gbd/email`'s
+`SEND_TIMEOUT_MS`, are both checked in [`config.ts`](apps/worker/src/config.ts).
+
+This is deliberately at-least-once, not at-most-once: a response lost after the provider accepted
+the email looks identical to a send that never went out, so an occasional duplicate is the
+tradeoff for never silently dropping one.
+
+- *Rejected: an outbox table.* A query derived from `analysis_attempt` needs no second table kept
+  in sync with it.
+- *Rejected: the owning parent sending the email inline, as part of settling.* Ties email
+  delivery's latency and failure modes to the settle path, for a send that can be retried on its
+  own schedule instead.
+- *Rejected: `SELECT … FOR UPDATE SKIP LOCKED` spanning the send.* Would hold a row lock, and a
+  database connection, for as long as the HTTP request to the email provider takes.
+- *Rejected: stamping "sent" before sending.* Marks a send successful before knowing that it was.
+- *Rejected: a permanent/transient split in `@gbd/email`.* `packages/email` exposes one
+  `EmailError` by design, the same reasoning as `@gbd/storage`'s one `BlobStoreError` — so nothing
+  there can tell a provider's permanent rejection from a transient outage. The bounded attempt
+  counter here stands in for that distinction instead.
 
 ## File links
 
@@ -358,8 +425,14 @@ handling.
 | A third-party API rate limits us, e.g. Gemini | The child retries with backoff, then fails; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk |
 | Workers cannot keep up with demand | Alert on attempts waiting too long to be claimed |
 | Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. Alert when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
-| Email is slow or down | Auth stops working — **Open:** can we alert on this? The worker times out its email request; email is best effort |
+| Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. Auth's own OTP email is a separate system this doesn't cover — **Open:** can we alert on that too? |
+| The blob store is down while uploading a completed attempt's results | The verdict parks rather than being discarded — the analysis work is already paid for. It resumes on later ticks for up to `uploadRetryBudgetMs`, then converts to `failed('infrastructure')` |
 | Database exhausts connections | Clients and the database periodically terminate connections, plus timeouts, to limit zombie connections. Use connection pools and cap the number of connections |
+
+Two alert queries name what "notifications are broken" means concretely, both against
+`analysis_attempt`: **gave up** is terminal, not `canceled`, unsent, and
+`notification_attempts >= 5`; **stuck** is the same query without the attempts clause, and with
+`finished_at < now() - interval '1 hour'` in its place.
 
 ## Data model
 
