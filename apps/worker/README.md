@@ -37,7 +37,7 @@ rather than here.
 | [`sweeps/reaper.ts`](src/sweeps/reaper.ts), [`sweeps/notifications.ts`](src/sweeps/notifications.ts) | Converge rows nobody else will. |
 | [`child/spawn.ts`](src/child/spawn.ts), [`child/run-directory.ts`](src/child/run-directory.ts) | The OS-level half of the parent ↔ child contract in [`contract/`](../../contract/). |
 | [`db.ts`](src/db.ts) | Owns the worker's own database handle. |
-| [`failures.ts`](src/failures.ts) | The reasoning behind "an error is not a verdict" — read it before touching any error handling here. |
+| [`failures.ts`](src/failures.ts) | The six named rules every failure path here obeys — read it before touching any error handling. |
 
 ## Testing
 

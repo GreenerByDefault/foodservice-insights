@@ -54,7 +54,9 @@ async function main(): Promise<void> {
       }
       draining = true;
       console.error(`Received ${signal}; draining`);
-      void worker.drain();
+      // `run()`'s own `finally` awaits the same memoized drain; this `catch` is only so that an
+      // unexpected rejection cannot reach the event loop and kill the process mid-drain.
+      void worker.drain().catch((error) => console.error('The drain failed', error));
     };
     process.on('SIGTERM', onSignal);
     process.on('SIGINT', onSignal);

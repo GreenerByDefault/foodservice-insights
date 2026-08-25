@@ -21,6 +21,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
 import {
   type Breakable,
@@ -892,7 +893,7 @@ describe('draining', () => {
 
           // Unlike an `upload` park, this one has nothing to convert to: the drain's last resume
           // goes to the same database that is still down. So the row is left `processing` for
-          // another worker's reaper, which is principle 3 in `failures.ts`.
+          // another worker's reaper, which is `reaper-is-the-backstop` in `failures.ts`.
           await harness.worker.drain();
           database.restore();
 
@@ -995,20 +996,52 @@ describe('run', () => {
     });
   });
 
-  test('a claim it cannot make ends the run, drained', async () => {
+  test('a database it cannot reach costs the poll, not the run', async () => {
     await withBreakable(breakableDatabase, async (database) => {
       await withWorker(
         { db: database.service, systemClock: true, overrides: { drainGraceMs: 300 } },
-        async (harness) => {
+        async (harness, fixture) => {
           database.break();
+          const attemptId = await fixture.seedAttempt();
 
-          // A failing *tick* is absorbed and retried, but a failing claim poll is not: `run()`
-          // exits nonzero rather than spinning against a database that is not answering.
-          await expect(harness.worker.run()).rejects.toThrow();
-          // Reached its `finally`, so the drain ran rather than being skipped by the throw.
-          expect(await harness.worker.claimAndStart()).toBe('draining');
+          let ended = false;
+          const running = harness.worker.run().finally(() => {
+            ended = true;
+          });
+
+          // `absorb-or-fail`: many polls' worth of a database that is not answering, absorbed
+          // rather than unwound into `run()`'s drain — which would have failed every attempt this
+          // worker was already holding over an outage that said nothing about them.
+          await delay(20 * harness.config.queuePollIntervalMs);
+          expect(ended).toBe(false);
+          expect(await statusIs(attemptId, 'pending')).toBe(true);
+
+          database.restore();
+          await waitUntil(
+            () => statusIs(attemptId, 'succeeded'),
+            'the attempt is claimed and succeeds once the database is back',
+          );
+          await harness.worker.drain();
+          await expect(running).resolves.toBeUndefined();
         },
       );
     });
+  });
+
+  test('a claim Postgres refuses ends the run, drained', async () => {
+    await withWorker(
+      // Every statement this worker issues names a schema that is not there, so the claim comes
+      // back as a refusal rather than an outage — the one claim failure ticking cannot fix.
+      {
+        db: WORKER_DATABASE.withSchema('no_such_schema'),
+        systemClock: true,
+        overrides: { drainGraceMs: 300 },
+      },
+      async (harness) => {
+        await expect(harness.worker.run()).rejects.toThrow();
+        // Reached its `finally`, so the drain ran rather than being skipped by the throw.
+        expect(await harness.worker.claimAndStart()).toBe('draining');
+      },
+    );
   });
 });

@@ -225,9 +225,9 @@ export type RecordableVerdict =
   | (SucceededVerdict & { resultFiles: readonly ResultFileRecord[] })
   | Exclude<Verdict, { kind: 'succeeded' | 'unowned' }>;
 
-/** Write a verdict this worker already computed. Bounded transient retry, per principle 4 in
- * [`failures.ts`](../failures.ts): this is one of the writes a claimed attempt cannot afford to
- * lose to a blip. Returns whether we still owned the attempt, exactly like the `markAttempt*`
+/** Write a verdict this worker already computed. One of the two writes with no retry layer
+ * anywhere else, so it carries its own — `one-retry-layer` in
+ * [`failures.ts`](../failures.ts). Returns whether we still owned the attempt, exactly like the `markAttempt*`
  * helpers this wraps.
  */
 export async function recordVerdict(

@@ -109,6 +109,46 @@ describe('the rule table', () => {
     expect(directiveOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
   });
 
+  test('progress-read-failed suppresses hung, since an unreadable file is not a stalled child', () => {
+    const reading = aReading({
+      progress: { kind: 'failed', error: new Error('EIO') },
+      lease: { kind: 'skipped' },
+      renewalIssuedAt: undefined,
+    });
+    // The other two clock rules are pushed out of range, so `hung` is the only one that could
+    // fire here — and it does not.
+    const thresholds = {
+      ...THRESHOLDS,
+      killAfterTotalRuntimeMs: 10_000,
+      leaseExpiresAfterMs: 10_000,
+    };
+    expect(directiveOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs, thresholds)).toEqual({
+      kind: 'nothing',
+    });
+  });
+
+  test('progress-read-failed still lets hard-timeout fire', () => {
+    const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
+    expect(directiveOf(aState(), reading, THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
+      kind: 'kill',
+      kill: { reason: 'hard-timeout' },
+    });
+  });
+
+  // The case that closes the gap: a progress read failing every tick also skips every renewal
+  // (`no-check-no-renewal`), so fencing is the only local rule left that can end the child.
+  test('progress-read-failed still lets lease-expired fence, with the renewal skipped alongside', () => {
+    const reading = aReading({
+      progress: { kind: 'failed', error: new Error('EIO') },
+      lease: { kind: 'skipped' },
+      renewalIssuedAt: undefined,
+    });
+    expect(directiveOf(aState(), reading, THRESHOLDS.leaseExpiresAfterMs)).toEqual({
+      kind: 'kill',
+      kill: { reason: 'fenced' },
+    });
+  });
+
   test('cancel-requested: a cancellation request kills the child', () => {
     const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
     expect(directiveOf(aState(), reading, 0)).toEqual({
