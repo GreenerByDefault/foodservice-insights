@@ -5,7 +5,10 @@ import type { Transaction } from 'kysely';
 import type { Actor } from '$lib/server/auth/types';
 
 /** The `report.*` audit actions a route may record. Extend this as new report actions are added. */
-export type ReportAuditAction = 'report.deleted' | 'report.cancel_requested';
+export type ReportAuditAction =
+  | 'report.deleted'
+  | 'report.cancel_requested'
+  | 'report.retry_requested';
 
 /** Takes a `Transaction`, not a `DatabaseExecutor`: an audit event only ever makes sense
  * committed atomically with the write it records, never on its own. */

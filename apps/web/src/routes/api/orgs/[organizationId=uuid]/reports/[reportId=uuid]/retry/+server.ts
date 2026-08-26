@@ -1,15 +1,83 @@
-/** **Stub:** every handler here answers 501 until its feature lands. */
-
+import {
+  type DatabaseExecutor,
+  isPermanentDatabaseError,
+  type OrganizationId,
+  POSTGRES_CODE_CHECK_VIOLATION,
+  POSTGRES_CODE_UNIQUE_VIOLATION,
+  type ReportId,
+  withTransaction,
+} from '@gbd/db';
 import { error } from '@sveltejs/kit';
+import type { Actor } from '$lib/server/auth/types';
+import { database, withDbErrorHandling } from '$lib/server/db';
+import { recordReportAuditEvent } from '$lib/server/reports/audit';
+import { requireReportAccess } from '$lib/server/reports/guards';
+import { requireReportRouteContext } from '$lib/server/reports/route-context';
 import type { RequestHandler } from './$types';
 
-/** Retry: insert the next `analysis_attempt` and let a worker claim it. A retry is a new attempt,
- * never a mutation of the old one.
+/** Retry a failed analysis. */
+export const POST: RequestHandler = async (event) => {
+  const { organizationId, reportId, actor } = requireReportRouteContext(event);
+
+  await withDbErrorHandling(() => _retryReport(database(), { organizationId, reportId, actor }), {
+    action: 'retry a report',
+    context: { organizationId, reportId },
+  });
+
+  return new Response(null, { status: 204 });
+};
+
+/** Insert the next `analysis_attempt` for `reportId`, so a worker can claim it. A retry is a new
+ * attempt, never a mutation of the old one.
  *
- * Do not check first. A trigger already requires the latest attempt to be exactly `failed`, the
- * number to be one higher, and the report not to be deleted; a CHECK caps it at five, and a unique
- * partial index allows only one attempt in flight — so attempt the insert and map
- * `check_violation` and `unique_violation` to a 409. Checking beforehand would duplicate all five
- * rules and still race.
+ * - 404 if the report doesn't exist in this organization, or is already soft-deleted.
+ * - 403 if the caller neither created the report nor is an organization admin.
+ * - 409 if the latest attempt isn't `failed`, or the report already has 5 attempts.
  */
-export const POST: RequestHandler = () => error(501, { message: 'Not implemented yet' });
+export async function _retryReport(
+  db: DatabaseExecutor,
+  params: { organizationId: OrganizationId; reportId: ReportId; actor: Actor },
+): Promise<void> {
+  const { organizationId, actor } = params;
+
+  await withTransaction(db, async (transaction) => {
+    const report = await requireReportAccess(transaction, params, 'retry it');
+
+    // Every report gets its first attempt atomically with its own insert, so there's always one
+    // here — `executeTakeFirstOrThrow` so a broken invariant fails loudly.
+    const latest = await transaction
+      .selectFrom('analysisAttempt')
+      .select('attemptNumber')
+      .where('reportId', '=', report.id)
+      .orderBy('attemptNumber', 'desc')
+      .executeTakeFirstOrThrow();
+
+    try {
+      await transaction
+        .insertInto('analysisAttempt')
+        .values({
+          reportId: report.id,
+          attemptNumber: latest.attemptNumber + 1,
+          status: 'pending',
+          requestedByUserId: actor.userId,
+        })
+        .execute();
+    } catch (cause) {
+      if (
+        isPermanentDatabaseError(cause) &&
+        (cause.code === POSTGRES_CODE_CHECK_VIOLATION ||
+          cause.code === POSTGRES_CODE_UNIQUE_VIOLATION)
+      ) {
+        error(409, { message: 'This report cannot be retried right now' });
+      }
+      throw cause;
+    }
+
+    await recordReportAuditEvent(transaction, {
+      action: 'report.retry_requested',
+      actor,
+      organizationId,
+      reportId: report.id,
+    });
+  });
+}
