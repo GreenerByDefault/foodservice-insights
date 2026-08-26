@@ -445,7 +445,7 @@ describe('starting a new attempt', () => {
 
   test('refuses a retry racing a soft delete', async () => {
     // The rule above holds between transactions only because of the trigger's report lock; without
-    // it both of these commit. See the migration.
+    // it, both of these commit.
     await withCommittedFixture(
       DATABASE,
       async (transaction, trash) => {

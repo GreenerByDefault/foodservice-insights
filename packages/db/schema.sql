@@ -178,10 +178,11 @@ CREATE OR REPLACE FUNCTION "public"."analysis_attempt_check_new_attempt"() RETUR
       latest_number smallint;
       latest_status analysis_attempt_status;
     BEGIN
-      -- FOR NO KEY UPDATE rather than a plain read: the insert's own foreign key takes only KEY
-      -- SHARE, which does not conflict with the UPDATE that sets deleted_at, so a retry and a
-      -- delete would otherwise both commit. This also fixes the lock order for anything writing
-      -- both tables — report, then analysis_attempt.
+      -- Lock the report row FOR NO KEY UPDATE rather than a plain read: the insert's own
+      -- foreign key only takes KEY SHARE, which wouldn't conflict with a concurrent delete's
+      -- UPDATE of deleted_at, so a retry and a delete could otherwise both commit. Locking here
+      -- also fixes the lock order for anything writing both tables — report, then
+      -- analysis_attempt.
       SELECT deleted_at INTO report_deleted_at
         FROM report
        WHERE id = NEW.report_id
