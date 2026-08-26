@@ -768,9 +768,28 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     CREATE FUNCTION analysis_attempt_check_new_attempt() RETURNS trigger
     LANGUAGE plpgsql AS $$
     DECLARE
+      report_deleted_at timestamptz;
       latest_number smallint;
       latest_status analysis_attempt_status;
     BEGIN
+      -- Lock the report row FOR NO KEY UPDATE rather than a plain read: the insert's own
+      -- foreign key only takes KEY SHARE, which wouldn't conflict with a concurrent delete's
+      -- UPDATE of deleted_at, so a retry and a delete could otherwise both commit. Locking here
+      -- also fixes the lock order for anything writing both tables — report, then
+      -- analysis_attempt.
+      SELECT deleted_at INTO report_deleted_at
+        FROM report
+       WHERE id = NEW.report_id
+         FOR NO KEY UPDATE;
+
+      IF report_deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'report %: deleted at %, so a new attempt is not allowed',
+          NEW.report_id, report_deleted_at
+          USING ERRCODE = 'check_violation',
+                CONSTRAINT = 'analysis_attempt_no_attempt_for_deleted_report',
+                TABLE = 'analysis_attempt';
+      END IF;
+
       -- BEFORE INSERT, so NEW is not in the table yet and "latest" needs no self-exclusion.
       SELECT attempt_number, status INTO latest_number, latest_status
         FROM analysis_attempt
