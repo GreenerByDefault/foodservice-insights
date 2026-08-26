@@ -23,6 +23,7 @@ export {
   insertInputFile,
   insertOrganization,
   insertReport,
+  insertReportWithAttempt,
   insertResultFile,
   readAnalysisAttemptRow,
 } from './fixtures.ts';

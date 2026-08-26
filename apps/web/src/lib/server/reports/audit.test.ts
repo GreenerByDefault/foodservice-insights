@@ -1,6 +1,7 @@
 import { insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
+import { reportAuditEvents } from '$lib/server/tests/audit';
 import { recordReportAuditEvent } from './audit';
 
 describe('recordReportAuditEvent', () => {
@@ -16,19 +17,18 @@ describe('recordReportAuditEvent', () => {
         reportId: report.id,
       });
 
-      const event = await transaction
-        .selectFrom('auditEvent')
-        .select(['action', 'actorUserId', 'actorKind', 'organizationId', 'targetType', 'targetId'])
-        .where('targetId', '=', report.id)
-        .executeTakeFirstOrThrow();
-      expect(event).toEqual({
-        action: 'report.deleted',
-        actorUserId: admin.id,
-        actorKind: 'user',
-        organizationId: organization.id,
-        targetType: 'report',
-        targetId: report.id,
-      });
+      // Spelled out rather than built with `expectedReportAuditEvent`: this is the test that pins the
+      // shape that helper claims, so asserting against the helper here would prove nothing.
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+        {
+          action: 'report.deleted',
+          actorUserId: admin.id,
+          actorKind: 'user',
+          organizationId: organization.id,
+          targetType: 'report',
+          targetId: report.id,
+        },
+      ]);
     });
   });
 });

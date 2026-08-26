@@ -1,48 +1,16 @@
-import type {
-  AnalysisAttemptStatus,
-  DatabaseExecutor,
-  OrganizationId,
-  ReportId,
-  UserId,
-} from '@gbd/db';
 import {
   insertAnalysisAttempt,
   insertAppUser,
   insertOrganization,
   insertReport,
+  insertReportWithAttempt,
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
+import { expectedReportAuditEvent, reportAuditEvents } from '$lib/server/tests/audit';
 import { statusOf } from '$lib/server/tests/http-error';
 import { cancelActiveAttempt, requestCancellation } from './cancel';
-
-/** A report and the one active attempt `requestCancellation` should find on it. */
-async function insertReportWithAttempt(
-  transaction: DatabaseExecutor,
-  organizationId: OrganizationId,
-  overrides: { createdByUserId?: UserId; status?: AnalysisAttemptStatus } = {},
-) {
-  const report = await insertReport(transaction, {
-    organizationId,
-    createdByUserId: overrides.createdByUserId ?? null,
-  });
-  const attempt = await insertAnalysisAttempt(transaction, {
-    reportId: report.id,
-    status: overrides.status ?? 'pending',
-  });
-  return { report, attempt };
-}
-
-/** The one `report.cancel_requested` audit row for `reportId`, or `undefined` if none was
- * written. */
-async function auditEventFor(transaction: DatabaseExecutor, reportId: ReportId) {
-  return await transaction
-    .selectFrom('auditEvent')
-    .select(['action', 'actorUserId', 'actorKind', 'organizationId', 'targetType', 'targetId'])
-    .where('targetId', '=', reportId)
-    .executeTakeFirst();
-}
 
 describe('cancelActiveAttempt', () => {
   test.each(['pending', 'processing'] as const)(
@@ -119,7 +87,8 @@ describe('requestCancellation', () => {
   test('a member can cancel a pending attempt on their own report', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
-      const { report, attempt } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: admin.id,
       });
 
@@ -137,14 +106,14 @@ describe('requestCancellation', () => {
       expect(updated.status).toBe('pending');
       expect(updated.cancelRequestedAt).toBeInstanceOf(Date);
 
-      expect(await auditEventFor(transaction, report.id)).toEqual({
-        action: 'report.cancel_requested',
-        actorUserId: admin.id,
-        actorKind: 'user',
-        organizationId: organization.id,
-        targetType: 'report',
-        targetId: report.id,
-      });
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+        expectedReportAuditEvent({
+          action: 'report.cancel_requested',
+          actorUserId: admin.id,
+          organizationId: organization.id,
+          reportId: report.id,
+        }),
+      ]);
     });
   });
 
@@ -152,7 +121,8 @@ describe('requestCancellation', () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
       const creator = await insertAppUser(transaction);
-      const { report, attempt } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: creator.id,
         status: 'processing',
       });
@@ -171,8 +141,14 @@ describe('requestCancellation', () => {
       expect(updated.cancelRequestedAt).toBeInstanceOf(Date);
 
       // The audit trail names the admin who acted, not the creator whose report it is.
-      const event = await auditEventFor(transaction, report.id);
-      expect(event?.actorUserId).toBe(admin.id);
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+        expectedReportAuditEvent({
+          action: 'report.cancel_requested',
+          actorUserId: admin.id,
+          organizationId: organization.id,
+          reportId: report.id,
+        }),
+      ]);
     });
   });
 
@@ -181,7 +157,8 @@ describe('requestCancellation', () => {
       const { organization } = await insertOrganization(transaction);
       const creator = await insertAppUser(transaction);
       const bystander = await insertAppUser(transaction);
-      const { report, attempt } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: creator.id,
       });
 
@@ -201,7 +178,7 @@ describe('requestCancellation', () => {
         .where('id', '=', attempt.id)
         .executeTakeFirstOrThrow();
       expect(untouched.cancelRequestedAt).toBeNull();
-      expect(await auditEventFor(transaction, report.id)).toBeUndefined();
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
     });
   });
 
@@ -211,7 +188,8 @@ describe('requestCancellation', () => {
   test('no active attempt to cancel is a 409, and no audit event is written', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
-      const { report } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: admin.id,
         status: 'succeeded',
       });
@@ -225,7 +203,7 @@ describe('requestCancellation', () => {
           }),
         ),
       ).resolves.toEqual({ status: 409 });
-      expect(await auditEventFor(transaction, report.id)).toBeUndefined();
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
     });
   });
 });
