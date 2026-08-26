@@ -846,9 +846,7 @@ CREATE TABLE IF NOT EXISTS "public"."report" (
     "unit_system" "public"."unit_system" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "deleted_at" timestamp with time zone,
-    "deleted_by_user_id" "uuid",
     CONSTRAINT "report_deleted_at_after_created_at" CHECK ((("deleted_at" IS NULL) OR ("deleted_at" >= "created_at"))),
-    CONSTRAINT "report_deleted_by_requires_deleted_at" CHECK ((("deleted_by_user_id" IS NULL) OR ("deleted_at" IS NOT NULL))),
     CONSTRAINT "report_monthly_counts_is_object" CHECK ((("jsonb_typeof"("monthly_counts") = 'object'::"text") AND ("monthly_counts" <> '{}'::"jsonb")))
 );
 
@@ -1125,13 +1123,6 @@ CREATE INDEX "report_created_by_user_id_created_at" ON "public"."report" USING "
 
 
 --
--- Name: report_deleted_by_user_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX "report_deleted_by_user_id" ON "public"."report" USING "btree" ("deleted_by_user_id");
-
-
---
 -- Name: report_organization_id_created_at; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -1344,14 +1335,6 @@ ALTER TABLE ONLY "public"."rejected_upload"
 
 ALTER TABLE ONLY "public"."report"
     ADD CONSTRAINT "report_created_by_user_id_fkey" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."app_user"("id") ON DELETE SET NULL;
-
-
---
--- Name: report report_deleted_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY "public"."report"
-    ADD CONSTRAINT "report_deleted_by_user_id_fkey" FOREIGN KEY ("deleted_by_user_id") REFERENCES "public"."app_user"("id") ON DELETE SET NULL;
 
 
 --

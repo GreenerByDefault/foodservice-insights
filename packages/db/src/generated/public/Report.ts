@@ -29,8 +29,6 @@ export default interface ReportTable {
   createdAt: ColumnType<Date, Date | string | undefined, Date | string>;
 
   deletedAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deletedByUserId: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type Report = Selectable<ReportTable>;

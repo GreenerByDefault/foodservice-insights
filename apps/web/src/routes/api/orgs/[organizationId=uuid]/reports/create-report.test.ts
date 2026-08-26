@@ -95,7 +95,6 @@ describe('a valid upload', () => {
         unitSystem: 'lb',
         monthlyCounts: { '2026-01': 120, '2026-02': 135 },
         deletedAt: null,
-        deletedByUserId: null,
       });
 
       const inputFile = await transaction

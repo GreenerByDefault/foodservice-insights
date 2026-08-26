@@ -133,7 +133,7 @@ describe('countReportsSince', () => {
       });
       await transaction
         .updateTable('report')
-        .set({ deletedAt: new Date(), deletedByUserId: admin.id })
+        .set({ deletedAt: new Date() })
         .where('id', '=', report.id)
         .execute();
 
