@@ -46,6 +46,7 @@ Four distinct failures can reach the user, and each calls for a different answer
   metadata.
   - The server allows only one retry at a time per report.
   - The error message makes clear this was not a problem with their file, mentions contacting GBD, and offers retrying when relevant.
+  - A retry re-runs the same file and metadata; neither can be changed.
 - **The analysis completed, but the report isn't usable:** the file has valid structure and data
   types, but the library still can't make sense of it — e.g. product names that are valid text but
   meaningless. Retrying will not help, so we say to contact GBD.
@@ -73,8 +74,16 @@ targeting 15 seconds.
 - While waiting, the user sees a timeline of key events and a loading state naming the current
   stage: file upload / validation, waiting in queue, analyzing.
 - The UI warns when a stage takes longer than expected.
-- The user can cancel the request. This essentially soft-deletes the report — in-flight requests get a
-  cancel button rather than a delete button.
+- The user can cancel the analysis. The waiting page shows a cancel button rather than delete.
+
+#### Canceling
+
+Canceling stops the analysis. The report stays visible, with its own screen saying
+it was stopped and offering to delete it.
+
+- **Canceling is final for that report.** It cannot be retried, and running the same data again
+  means a new upload.
+- **Deleting a report that is still running cancels it too**.
 
 ### Result page
 
@@ -126,12 +135,14 @@ Within each org, a user has a role. Admins have every member permission plus the
 | --- | :---: | :---: |
 | Upload a new report | ✅ | ✅ |
 | Read all org reports | ✅ | ✅ |
+| Cancel their own reports | ✅ | ✅ |
 | Delete their own reports | ✅ | ✅ |
 | Leave an organization | ✅ | ✅ |
 | Create a new organization | ✅ | ✅ |
 | Rename themself | ✅ | ✅ |
 | Change their email | ✅ | ✅ |
 | Delete their account | ✅ | ✅ |
+| Cancel any report in the org | — | ✅ |
 | Delete any report in the org | — | ✅ |
 | Invite a new user to the org | — | ✅ |
 | Remove a user from the org | — | ✅ |
@@ -202,6 +213,7 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
 - The roles table above governs what members and admins may delete.
 - **Deleting a report** removes it from the UI and makes its file links inaccessible, but does
   not delete any data. We keep everything for debugging.
+  - Deleting one whose analysis is still running cancels that analysis as well.
 - **A deleted report cannot be retried.**
 - **A user deleting their account** hard-deletes the user, but does *not* delete that member's
   reports in the organization.
@@ -255,8 +267,7 @@ Follow security best practices for web development.
 - **Org creation:** a user can create up to 5 organizations.
 - **Hourly reports:** 5 valid reports per hour, enforced per organization *and* per user.
 - **Weekly reports:** 20 valid reports per 7 rolling days, per organization *and* per user.
-- **Report retries:** a report can be attempted up to 5 times. (Retries exist for internal
-  errors.)
+- **Report retries:** a report can be attempted up to 5 times. Retries exist for internal errors.
 - **Invites:** an organization can invite 5 users per hour.
 - Cloudflare for DDoS protection, and potentially geo-restrictions.
 

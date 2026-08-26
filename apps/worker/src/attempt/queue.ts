@@ -286,6 +286,11 @@ type TerminalColumns = Updateable<Database['analysisAttempt']> & {
  * Guarded by `worker_id`, not staleness — this is the *owning* worker recording its own verdict.
  * The reaper ends an attempt it never claimed, so it writes a separate statement with a
  * different guard rather than calling this one.
+ *
+ * **Deliberately not guarded on `cancel_requested_at`.** A cancel is honoured by killing the child;
+ * one that finished first has already done the work, and discarding a report we are holding serves
+ * nobody. So a terminal row can carry a non-null `cancel_requested_at`, and readers have to let the
+ * status win.
  */
 async function markIfStillOwned(
   db: DatabaseExecutor,
