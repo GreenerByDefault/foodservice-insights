@@ -16,16 +16,9 @@ layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 
-**A page's `load` narrows to a discriminated union, keyed on the screen rather than on a column, so
-the page has no conditionals about nullable columns in it.** Assert a column's non-nullability once,
-in the load, naming the constraint that guarantees it — see `reports/[reportId]/+page.server.ts`,
-where `analysis_attempt_processing_is_claimed`, `analysis_attempt_finished_at_iff_terminal` and
-`analysis_attempt_canceled_requires_request` turn a status and a timestamp that the type system
-otherwise can't relate into a type where the illegal combination cannot be constructed. The variant
-is the load's own judgment, not a copy of the column: that same page maps a non-terminal attempt
-carrying `cancel_requested_at` onto its `canceled` variant, and the view is spared the rule.
-Status-dependent copy is resolved the same way: the load hands the view a sentence to render, never
-a code for the view to interpret, so a view can never invent a variant its data did not send.
+**When a page's data has multiple meaningfully different shapes, its `load` narrows them into a
+discriminated union rather than leaving the view to branch on nullable columns.** See
+`reports/[reportId]/+page.server.ts` for an example.
 
 **A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions and remote functions.*
 Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler, which makes the
