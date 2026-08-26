@@ -18,6 +18,7 @@ export {
   POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from './postgres-codes.ts';
+export { countReportsSince, lockReportRateLimit } from './report-rate-limit.ts';
 export type { Database, DatabaseExecutor } from './schema.ts';
 export { withTransaction } from './transactions.ts';
 export {

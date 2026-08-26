@@ -366,6 +366,7 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
       'empty',
       'bad_rows',
       'other',
+      'rate_limited',
     ])
     .execute();
 

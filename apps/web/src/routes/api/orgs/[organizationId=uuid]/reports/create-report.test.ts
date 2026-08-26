@@ -1,10 +1,24 @@
 import type { RejectedUploadReason, ReportId } from '@gbd/db';
+import { insertReport } from '@gbd/db/testing';
 import { getObject } from '@gbd/storage';
-import { describe, expect, test } from 'vitest';
-import { MAX_UPLOAD_BYTES } from '$lib/reports/limits';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_BYTES } from '$lib/reports/limits';
 import { FIELD } from '$lib/reports/metadata';
+import { lockAndCheckReportRateLimit } from '$lib/server/reports/rate-limit';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _createReport } from './+server.ts';
+
+// Only `lockAndCheckReportRateLimit` is mocked, and it defaults to the real implementation — a
+// test below overrides it for one call to simulate the recheck losing a race that the initial
+// check won.
+vi.mock('$lib/server/reports/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/server/reports/rate-limit')>();
+  return { ...actual, lockAndCheckReportRateLimit: vi.fn(actual.lockAndCheckReportRateLimit) };
+});
+
+beforeEach(() => {
+  vi.mocked(lockAndCheckReportRateLimit).mockClear();
+});
 
 const RAW_CSV = 'product,date ordered,weight\nbeef mince,2026-01-05,12\n';
 const NORMALIZED_CSV = 'product,date,weight\nbeef mince,2026-01-05,12\n';
@@ -244,6 +258,110 @@ describe('a rejected upload', () => {
       inputFileOriginalFilename: 'big.csv',
       inputFileByteSize: MAX_UPLOAD_BYTES + 1,
       inputFileStorageKey: null,
+    });
+  });
+});
+
+// The weekly report limit uses the same mechanism, which uses the same abstraction as the
+// hourly limit. So, testing the hourly limit wiring implies the same wiring works for
+// the weekly limit.
+describe('the hourly report limit', () => {
+  test('still accepts the upload one report under the limit', async () => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+      for (let i = 0; i < HOURLY_REPORT_LIMIT - 1; i++) {
+        await insertReport(transaction, { organizationId, createdByUserId: adminUserId });
+      }
+
+      const response = await _createReport(
+        transaction,
+        store,
+        { organizationId, userId: adminUserId },
+        createUploadRequest(),
+      );
+
+      expect(response.status).toBe(201);
+    });
+  });
+
+  test('refuses the upload once the organization has reached the limit, before ever writing the accepted input file', async () => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+      // Other members' reports count against the organization too — the admin's own count stays
+      // at zero, so this exercises the organization check specifically.
+      for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+        await insertReport(transaction, { organizationId, createdByUserId: null });
+      }
+
+      const response = await _createReport(
+        transaction,
+        store,
+        { organizationId, userId: adminUserId },
+        createUploadRequest(),
+      );
+      const body = (await response.json()) as { summary: string };
+
+      expect(response.status).toBe(429);
+      expect(body.summary).toContain('organization');
+
+      const recorded = await transaction
+        .selectFrom('rejectedUpload')
+        .selectAll()
+        .where('organizationId', '=', organizationId)
+        .executeTakeFirstOrThrow();
+      expect(recorded).toMatchObject({
+        rejectionReason: 'rate_limited' satisfies RejectedUploadReason,
+        reportName: 'Q1 procurement',
+        // No storage key: a rate-limited rejection never writes bytes — see
+        // `recordRateLimitRejection`'s doc comment.
+        inputFileByteSize: RAW_CSV.length,
+        inputFileStorageKey: null,
+      });
+
+      // Still just the seeded reports at the limit — the refused upload added none.
+      const reports = await transaction
+        .selectFrom('report')
+        .select((eb) => eb.fn.countAll<string>().as('count'))
+        .where('organizationId', '=', organizationId)
+        .executeTakeFirstOrThrow();
+      expect(Number(reports.count)).toBe(HOURLY_REPORT_LIMIT);
+    });
+  });
+
+  test('still refuses with 429 when the limit is only hit on the recheck inside the write transaction', async () => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+      // The initial check (outside the write transaction) sees room; the recheck (inside it, see
+      // `_createReport`'s comment on why it exists) is what actually catches this upload.
+      const mocked = vi.mocked(lockAndCheckReportRateLimit);
+      mocked.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+        scope: 'user',
+        window: 'hourly',
+        limit: HOURLY_REPORT_LIMIT,
+      });
+
+      const response = await _createReport(
+        transaction,
+        store,
+        { organizationId, userId: adminUserId },
+        createUploadRequest(),
+      );
+
+      expect(response.status).toBe(429);
+      expect(mocked).toHaveBeenCalledTimes(2);
+
+      const reports = await transaction
+        .selectFrom('report')
+        .selectAll()
+        .where('organizationId', '=', organizationId)
+        .execute();
+      expect(reports).toEqual([]);
+
+      const recorded = await transaction
+        .selectFrom('rejectedUpload')
+        .selectAll()
+        .where('organizationId', '=', organizationId)
+        .executeTakeFirstOrThrow();
+      expect(recorded).toMatchObject({
+        rejectionReason: 'rate_limited' satisfies RejectedUploadReason,
+      });
     });
   });
 });

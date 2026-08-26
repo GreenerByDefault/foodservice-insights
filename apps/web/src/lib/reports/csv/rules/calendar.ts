@@ -11,6 +11,7 @@
  * anything Node-only.
  */
 
+import { DAY_MS } from '@gbd/core';
 import { EARLIEST_DATE, MAX_FUTURE_DAYS } from '../../limits.ts';
 
 export type DateBounds = { earliest: string; latest: string };
@@ -21,10 +22,9 @@ export type DateBounds = { earliest: string; latest: string };
  * reads every one of its rows against the same instant.
  */
 export function dateBoundsAt(now: Date): DateBounds {
-  const dayInMs = 24 * 60 * 60 * 1000;
   return {
     earliest: EARLIEST_DATE,
-    latest: new Date(now.getTime() + MAX_FUTURE_DAYS * dayInMs).toISOString().slice(0, 10),
+    latest: new Date(now.getTime() + MAX_FUTURE_DAYS * DAY_MS).toISOString().slice(0, 10),
   };
 }
 

@@ -6,6 +6,7 @@ type RejectedUploadReason =
   | 'unparseable'
   | 'empty'
   | 'bad_rows'
-  | 'other';
+  | 'other'
+  | 'rate_limited';
 
 export type { RejectedUploadReason as default };

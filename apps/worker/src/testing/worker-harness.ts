@@ -4,6 +4,7 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { MINUTE_MS, SECOND_MS } from '@gbd/core';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
 import { type Breakable, readAnalysisAttemptRow } from '@gbd/db/testing';
 import { type RecordingEmailer, recordingEmailer } from '@gbd/email/testing';
@@ -21,8 +22,6 @@ import { SYSTEM_CLOCK } from '../clock.ts';
 import {
   createWorkerConfig,
   MAX_RENEWAL_ROUND_TRIP_MS,
-  MINUTE_MS,
-  SECOND_MS,
   type WorkerConfig,
   type WorkerDefaultableFields,
 } from '../config.ts';

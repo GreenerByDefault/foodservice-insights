@@ -21,6 +21,11 @@ import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
+import {
+  describeRateLimitExceeded,
+  lockAndCheckReportRateLimit,
+  type RateLimitExceeded,
+} from '$lib/server/reports/rate-limit';
 import { blobStore, withBlobStoreErrorHandling } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
@@ -55,6 +60,27 @@ export async function _createReport(
   }
 
   const { organizationId, userId } = uploader;
+
+  // Refuse before spending a blob write on an upload that's already over the rate limit.
+  const initialRateLimitViolation = await withDbErrorHandling(
+    () =>
+      withTransaction(db, (transaction) =>
+        lockAndCheckReportRateLimit(transaction, { organizationId, userId }),
+      ),
+    { action: 'check the report rate limit', context: { organizationId } },
+  );
+  if (initialRateLimitViolation) {
+    const rejection = await recordRateLimitRejection(
+      db,
+      store,
+      uploader,
+      raw,
+      outcome.file,
+      initialRateLimitViolation,
+    );
+    return json(userFacingRejection(rejection), { status: 429 });
+  }
+
   const reportId = newReportId();
   const inputFileId = newInputFileId();
 
@@ -65,10 +91,28 @@ export async function _createReport(
     { action: 'store an uploaded input file', context: { organizationId, reportId, inputFileId } },
   );
 
-  await withDbErrorHandling(
+  const write = await withDbErrorHandling(
     () =>
-      withTransaction(db, (transaction) =>
-        insertReport(transaction, {
+      withTransaction(db, async (transaction) => {
+        // Even though we already checked the rate limit, we must recheck because this
+        // is a new database transaction.
+        const exceeded = await lockAndCheckReportRateLimit(transaction, {
+          organizationId,
+          userId,
+        });
+        if (exceeded) {
+          const rejection = await recordRateLimitRejection(
+            transaction,
+            store,
+            uploader,
+            raw,
+            outcome.file,
+            exceeded,
+          );
+          return { ok: false as const, rejection };
+        }
+
+        await insertReport(transaction, {
           reportId,
           organizationId,
           userId,
@@ -76,10 +120,14 @@ export async function _createReport(
           metadata: outcome.metadata,
           stored,
           file: outcome.file,
-        }),
-      ),
+        });
+        return { ok: true as const };
+      }),
     { action: 'record an accepted upload', context: { organizationId, reportId } },
   );
+
+  // Always a rate-limit rejection: it's the only reason `write.ok` can be false here.
+  if (!write.ok) return json(userFacingRejection(write.rejection), { status: 429 });
 
   return json(
     { reportId },
@@ -140,6 +188,28 @@ async function insertReport(
       requestedByUserId: input.userId,
     })
     .execute();
+}
+
+async function recordRateLimitRejection(
+  db: DatabaseExecutor,
+  store: BlobStore,
+  uploader: Uploader,
+  raw: RawSubmission,
+  file: FileDescription,
+  exceeded: RateLimitExceeded,
+): Promise<RejectedUploadRecord> {
+  const rejection = describeRateLimitExceeded(exceeded);
+  await recordRejection(
+    db,
+    store,
+    uploader,
+    raw,
+    // We set `bytes: null` because there is no value in us seeing the input file
+    // for a report that was rate limited.
+    { fileDescription: file, bytes: null },
+    rejection,
+  );
+  return rejection;
 }
 
 /** Keep a rejected upload: the bytes in the blob store, the reason and the raw metadata in

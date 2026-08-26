@@ -69,6 +69,10 @@ Design reasoning:
 - **`app_user.organizations_created_count` is maintained by a trigger, not by the app.** The limit
   it feeds only holds if the read and the write are one statement. Application code must never
   write that column.
+- **The hourly and weekly report limits in [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits)
+  can't use that trick — they're windowed, not cumulative.**
+  [`report-rate-limit.ts`](src/report-rate-limit.ts) exports `lockReportRateLimit`, an advisory
+  lock the app takes instead; see its doc comment for why.
 
 ## Conventions
 
@@ -128,8 +132,3 @@ columns above.
   worker child fills `ai_metadata` and `result_metadata` from two deliberately opaque bags in
   [`contract/`](../../contract/), so their shape is unconstrained until the analysis library is
   ported. Deciding which keys graduate out of those bags into structured columns is a follow-up.
-- **Open:** the hourly and weekly report limits in
-  [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits) still have the race the organization
-  creation limit no longer has — two uploads that each count four and then both insert. Closing it
-  means putting the count and the insert under one lock, per organization *and* per user, which
-  needs the upload path to exist first so it can fix the order the two are taken in.
