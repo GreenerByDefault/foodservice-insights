@@ -1,17 +1,78 @@
-<!-- **Stub:** renders a placeholder. It will be one route for all four outcomes, because they are
-     the same report at different moments:
-       queued or processing — the timeline of events, the current stage, a warning when a stage
-         overruns, and a cancel button, polling with `invalidate()` roughly every ten seconds;
-       succeeded — download buttons for the input file, the PDF and the XLSX, the eight or so
-         charts, and the run's metadata;
-       failed — what happened, said in a way that makes clear the file was not at fault, and a
-         retry;
-       canceled — the report is stopped for good, so a short panel saying so and a delete button.
-     Every file link goes through `/file/...`, which is public and permanent by design.
-     Cancel, retry and delete are the endpoints under `/api/orgs/[organizationId]/reports/`.
-     A poll that fails to reach the server is not a failed analysis: keep the last known state on
-     screen and say the app is reconnecting, rather than an error page. Retry is offered only on a
-     terminal status — never while unreachable, never mid-poll — and polling stops once terminal. -->
-<h1 class="text-2xl font-semibold tracking-tight">Report</h1>
+<script lang="ts">
+import type { PageProps } from './$types';
 
-<p class="text-muted-foreground">Boilerplate only. Real features arrive in later phases.</p>
+let { data }: PageProps = $props();
+</script>
+
+<!-- Deliberately undesigned: a switch over `data.attempt.status` rendering plain text and plain
+     links, so every one of the four reachable outcomes (`canceled` is unreachable — see the
+     `Attempt` doc comment in +page.server.ts) is legible before any of them is designed. The
+     waiting view, the success view, the failure view and polling each replace one branch in a
+     later PR. -->
+<svelte:head>
+  <title>{data.report.name}</title>
+</svelte:head>
+
+<h1 class="text-2xl font-semibold tracking-tight">{data.report.name}</h1>
+
+{#if data.attempt.status === 'pending'}
+  <p class="text-muted-foreground">
+    Waiting to start. We checked your file
+    <time datetime={data.attempt.createdAt.toISOString()}
+      >{data.attempt.createdAt.toISOString()}</time
+    >.
+  </p>
+{:else if data.attempt.status === 'processing'}
+  <p class="text-muted-foreground">
+    Analyzing. Started
+    <time datetime={data.attempt.claimedAt.toISOString()}
+      >{data.attempt.claimedAt.toISOString()}</time
+    >.
+  </p>
+{:else if data.attempt.status === 'succeeded'}
+  <p class="text-muted-foreground">
+    Finished
+    <time datetime={data.attempt.finishedAt.toISOString()}
+      >{data.attempt.finishedAt.toISOString()}</time
+    >.
+  </p>
+  <ul>
+    {#if data.attempt.files.pdf}
+      <li>
+        <a class="underline hover:no-underline" href="/file/result/{data.attempt.files.pdf.id}">
+          Download PDF
+        </a>
+      </li>
+    {/if}
+    {#if data.attempt.files.xlsx}
+      <li>
+        <a class="underline hover:no-underline" href="/file/result/{data.attempt.files.xlsx.id}">
+          Download Excel
+        </a>
+      </li>
+    {/if}
+    {#each data.attempt.files.charts as chart (chart.id)}
+      <li>
+        <a class="underline hover:no-underline" href="/file/result/{chart.id}">{chart.chartKey}</a>
+      </li>
+    {/each}
+  </ul>
+  <p>
+    <a class="underline hover:no-underline" href="/file/input/{data.inputFile.id}">
+      {data.inputFile.originalFilename}
+    </a>
+  </p>
+{:else if data.attempt.status === 'failed'}
+  <p>{data.attempt.failure.whatHappened}</p>
+  <p class="text-muted-foreground">{data.attempt.failure.followUpText}</p>
+  {#if data.attempt.attemptNumber > 1}
+    <p class="text-muted-foreground">This was attempt {data.attempt.attemptNumber}.</p>
+  {/if}
+  <p>
+    <a class="underline hover:no-underline" href={data.attempt.failure.contactMailto}>
+      Contact us
+    </a>
+  </p>
+{:else if data.attempt.status === 'canceled'}
+  <p class="text-muted-foreground">This report was canceled.</p>
+{/if}

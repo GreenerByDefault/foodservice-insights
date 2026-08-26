@@ -16,6 +16,15 @@ layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 
+**A page's `load` narrows to a discriminated union, keyed on the column driving the view, so the
+page has no conditionals about nullable columns in it.** Assert a column's non-nullability once,
+in the load, naming the constraint that guarantees it — see `reports/[reportId]/+page.server.ts`,
+where `analysis_attempt_processing_is_claimed` and `analysis_attempt_finished_at_iff_terminal`
+turn a status and a timestamp that the type system otherwise can't relate into a type where the
+illegal combination cannot be constructed. Status-dependent copy is resolved the same way: the
+load hands the view a sentence to render, never a code for the view to interpret, so a view can
+never invent a variant its data did not send.
+
 **A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions and remote functions.*
 Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler, which makes the
 code harder for newcomers to follow without a strong enough payoff. See
