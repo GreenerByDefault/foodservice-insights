@@ -157,9 +157,12 @@ export async function insertInputFile(
     .executeTakeFirstOrThrow();
 }
 
-/** An attempt in `status`, with whatever other columns that status's CHECK constraints require —
- * `finished_at` for a terminal status, `worker_id`/`claimed_at`/`lease_renewed_at` for
- * `processing`. See `analysis_attempt` in schema.sql for the constraints themselves.
+/** An attempt in `status`, with whatever other columns make it a state the app can actually
+ * produce. `finished_at` for a terminal status; `worker_id`/`claimed_at`/`lease_renewed_at` for
+ * `processing`, `succeeded`, and `failed`, since reaching either terminal status means the worker
+ * claimed the attempt first — the CHECK constraints don't require this, the state machine does.
+ * `canceled` is the exception: `ARCHITECTURE.md` § Canceling allows canceling a `pending` attempt
+ * that was never claimed. See `analysis_attempt` in schema.sql for the constraints themselves.
  */
 export async function insertAnalysisAttempt(
   database: DatabaseExecutor,
@@ -182,7 +185,7 @@ export async function insertAnalysisAttempt(
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
   const status = overrides.status ?? 'pending';
 
-  const isProcessing = status === 'processing';
+  const isClaimed = status === 'processing' || status === 'succeeded' || status === 'failed';
   const isTerminal = status === 'succeeded' || status === 'failed' || status === 'canceled';
   const isCanceled = status === 'canceled';
 
@@ -194,11 +197,13 @@ export async function insertAnalysisAttempt(
       status,
       requestedByUserId: overrides.requestedByUserId ?? null,
       ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
-      ...(isProcessing
+      // A backdated finishedAt still has to satisfy analysis_attempt_finished_at_after_lease_renewed,
+      // so a claim added on the caller's behalf must not be later than it.
+      ...(isClaimed
         ? {
             workerId: overrides.workerId ?? 'test-worker',
-            claimedAt: NOW,
-            leaseRenewedAt: NOW,
+            claimedAt: overrides.finishedAt ?? NOW,
+            leaseRenewedAt: overrides.finishedAt ?? NOW,
           }
         : {}),
       ...(isTerminal
