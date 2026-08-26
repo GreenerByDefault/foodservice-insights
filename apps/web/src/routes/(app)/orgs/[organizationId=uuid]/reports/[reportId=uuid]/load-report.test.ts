@@ -273,6 +273,10 @@ describe('a cancel request', () => {
         analysisAttemptId: attempt.id,
         kind: 'pdf',
       });
+      const xlsx = await insertResultFile(transaction, {
+        analysisAttemptId: attempt.id,
+        kind: 'xlsx',
+      });
 
       const data = await _loadReport(transaction, {
         organizationId: organization.id,
@@ -285,7 +289,11 @@ describe('a cancel request', () => {
         createdAt: expect.any(Date),
         claimedAt: expect.any(Date),
         finishedAt: expect.any(Date),
-        files: { pdf: { href: `/file/result/${pdf.id}` }, xlsx: null, charts: [] },
+        files: {
+          pdf: { href: `/file/result/${pdf.id}` },
+          xlsx: { href: `/file/result/${xlsx.id}` },
+          charts: [],
+        },
       });
     });
   });
@@ -312,13 +320,21 @@ describe('a cancel request', () => {
 });
 
 describe('succeeded', () => {
-  test('a missing PDF still renders what exists', async () => {
+  // A succeeded attempt is guaranteed a pdf and an xlsx result file —
+  // `analysis_attempt_succeeded_has_result_files` — so this is the only shape this fixture needs
+  // to cover; the `requireConstraint` calls in `loadResultFiles` are what would fail loudly if
+  // that guarantee were ever dropped.
+  test('the pdf and xlsx the database guarantees both come back', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'succeeded',
+      });
+      const pdf = await insertResultFile(transaction, {
+        analysisAttemptId: attempt.id,
+        kind: 'pdf',
       });
       const xlsx = await insertResultFile(transaction, {
         analysisAttemptId: attempt.id,
@@ -333,7 +349,7 @@ describe('succeeded', () => {
 
       expect(data.attempt.status).toBe('succeeded');
       if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
-      expect(data.attempt.files.pdf).toBeNull();
+      expect(data.attempt.files.pdf).toEqual({ href: `/file/result/${pdf.id}` });
       expect(data.attempt.files.xlsx).toEqual({ href: `/file/result/${xlsx.id}` });
     });
   });
@@ -346,6 +362,8 @@ describe('succeeded', () => {
         reportId: report.id,
         status: 'succeeded',
       });
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
       // Inserted out of alphabetical order on purpose — `result_file.id` and `created_at` cannot
       // be trusted to order these (see the trap this load's comment names), so only an explicit
       // `ORDER BY chart_key` can make this test fail if that ordering is ever dropped.

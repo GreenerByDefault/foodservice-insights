@@ -35,8 +35,8 @@ export type FileLink = { href: string };
 export type ChartLink = { href: string; chartKey: string };
 
 export type ResultFiles = {
-  pdf: FileLink | null;
-  xlsx: FileLink | null;
+  pdf: FileLink;
+  xlsx: FileLink;
   charts: ChartLink[];
 };
 
@@ -246,8 +246,18 @@ async function loadResultFiles(
     .execute();
 
   return {
-    pdf: toFileLink(files.find((file) => file.kind === 'pdf')),
-    xlsx: toFileLink(files.find((file) => file.kind === 'xlsx')),
+    pdf: toFileLink(
+      requireConstraint(
+        files.find((file) => file.kind === 'pdf') ?? null,
+        'analysis_attempt_succeeded_has_pdf',
+      ),
+    ),
+    xlsx: toFileLink(
+      requireConstraint(
+        files.find((file) => file.kind === 'xlsx') ?? null,
+        'analysis_attempt_succeeded_has_xlsx',
+      ),
+    ),
     charts: files
       .filter((file) => file.kind === 'chart')
       .map((file) => ({
@@ -257,8 +267,8 @@ async function loadResultFiles(
   };
 }
 
-function toFileLink(file: { id: ResultFileId } | undefined): FileLink | null {
-  return file ? { href: resultFileHref(file.id) } : null;
+function toFileLink(file: { id: ResultFileId }): FileLink {
+  return { href: resultFileHref(file.id) };
 }
 
 function resultFileHref(id: ResultFileId): string {

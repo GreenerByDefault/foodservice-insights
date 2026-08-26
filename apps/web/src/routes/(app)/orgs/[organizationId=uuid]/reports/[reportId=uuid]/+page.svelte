@@ -38,20 +38,14 @@ let { data }: PageProps = $props();
     >.
   </p>
   <ul>
-    {#if data.attempt.files.pdf}
-      <li>
-        <a class="underline hover:no-underline" href={data.attempt.files.pdf.href}>
-          Download PDF
-        </a>
-      </li>
-    {/if}
-    {#if data.attempt.files.xlsx}
-      <li>
-        <a class="underline hover:no-underline" href={data.attempt.files.xlsx.href}>
-          Download Excel
-        </a>
-      </li>
-    {/if}
+    <li>
+      <a class="underline hover:no-underline" href={data.attempt.files.pdf.href}> Download PDF </a>
+    </li>
+    <li>
+      <a class="underline hover:no-underline" href={data.attempt.files.xlsx.href}>
+        Download Excel
+      </a>
+    </li>
     {#each data.attempt.files.charts as chart (chart.href)}
       <li>
         <a class="underline hover:no-underline" href={chart.href}>{chart.chartKey}</a>
