@@ -21,6 +21,11 @@ import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
+import {
+  describeRateLimitExceeded,
+  lockAndCheckReportRateLimit,
+  type RateLimitExceeded,
+} from '$lib/server/reports/rate-limit';
 import { blobStore, withBlobStoreErrorHandling } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
@@ -55,6 +60,23 @@ export async function _createReport(
   }
 
   const { organizationId, userId } = uploader;
+
+  // Refuse before spending a blob write on an upload that's already over the limit — cheap
+  // insurance against a client that's over and keeps trying. This alone doesn't make the limit
+  // race-free: it's a separate transaction, so another upload can still land in the gap before
+  // the write below — see the recheck there for what actually closes it.
+  const early = await withDbErrorHandling(
+    () =>
+      withTransaction(db, (transaction) =>
+        lockAndCheckReportRateLimit(transaction, { organizationId, userId, now: new Date() }),
+      ),
+    { action: 'check the report rate limit', context: { organizationId } },
+  );
+  if (early) {
+    const rejection = await recordRateLimitRejection(db, store, uploader, raw, outcome.file, early);
+    return json(userFacingRejection(rejection), { status: 400 });
+  }
+
   const reportId = newReportId();
   const inputFileId = newInputFileId();
 
@@ -65,10 +87,30 @@ export async function _createReport(
     { action: 'store an uploaded input file', context: { organizationId, reportId, inputFileId } },
   );
 
-  await withDbErrorHandling(
+  const write = await withDbErrorHandling(
     () =>
-      withTransaction(db, (transaction) =>
-        insertReport(transaction, {
+      withTransaction(db, async (transaction) => {
+        // The early check above already let this through once, in a separate transaction — this
+        // is the recheck, atomically with the insert it guards, that actually closes the race. See
+        // `lockAndCheckReportRateLimit`'s doc comment.
+        const exceeded = await lockAndCheckReportRateLimit(transaction, {
+          organizationId,
+          userId,
+          now: new Date(),
+        });
+        if (exceeded) {
+          const rejection = await recordRateLimitRejection(
+            transaction,
+            store,
+            uploader,
+            raw,
+            outcome.file,
+            exceeded,
+          );
+          return { ok: false as const, rejection };
+        }
+
+        await insertReport(transaction, {
           reportId,
           organizationId,
           userId,
@@ -76,10 +118,13 @@ export async function _createReport(
           metadata: outcome.metadata,
           stored,
           file: outcome.file,
-        }),
-      ),
+        });
+        return { ok: true as const };
+      }),
     { action: 'record an accepted upload', context: { organizationId, reportId } },
   );
+
+  if (!write.ok) return json(userFacingRejection(write.rejection), { status: 400 });
 
   return json(
     { reportId },
@@ -140,6 +185,32 @@ async function insertReport(
       requestedByUserId: input.userId,
     })
     .execute();
+}
+
+/** Unlike a validation rejection, a rate-limited upload's bytes have nothing to do with why it was
+ * refused — the file could be perfectly valid. So this always passes `bytes: null` to
+ * `recordRejection`: there is no diagnostic value in keeping a copy, and skipping the write is
+ * what lets the early check in `_createReport` refuse an over-the-limit upload before
+ * `putInputFile` ever runs.
+ */
+async function recordRateLimitRejection(
+  db: DatabaseExecutor,
+  store: BlobStore,
+  uploader: Uploader,
+  raw: RawSubmission,
+  file: FileDescription,
+  exceeded: RateLimitExceeded,
+): Promise<RejectedUploadRecord> {
+  const rejection = describeRateLimitExceeded(exceeded);
+  await recordRejection(
+    db,
+    store,
+    uploader,
+    raw,
+    { fileDescription: file, bytes: null },
+    rejection,
+  );
+  return rejection;
 }
 
 /** Keep a rejected upload: the bytes in the blob store, the reason and the raw metadata in

@@ -1,7 +1,8 @@
 import type { RejectedUploadReason, ReportId } from '@gbd/db';
+import { insertReport } from '@gbd/db/testing';
 import { getObject } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
-import { MAX_UPLOAD_BYTES } from '$lib/reports/limits';
+import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_BYTES } from '$lib/reports/limits';
 import { FIELD } from '$lib/reports/metadata';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _createReport } from './+server.ts';
@@ -244,6 +245,71 @@ describe('a rejected upload', () => {
       inputFileOriginalFilename: 'big.csv',
       inputFileByteSize: MAX_UPLOAD_BYTES + 1,
       inputFileStorageKey: null,
+    });
+  });
+});
+
+// The weekly report limit uses the same mechanism, which uses the same abstraction as the
+// hourly limit. So, testing the hourly limit wiring implies the same wiring works for
+// the weekly limit.
+describe('the hourly report limit', () => {
+  test('still accepts the upload one report under the limit', async () => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+      for (let i = 0; i < HOURLY_REPORT_LIMIT - 1; i++) {
+        await insertReport(transaction, { organizationId, createdByUserId: adminUserId });
+      }
+
+      const response = await _createReport(
+        transaction,
+        store,
+        { organizationId, userId: adminUserId },
+        createUploadRequest(),
+      );
+
+      expect(response.status).toBe(201);
+    });
+  });
+
+  test('refuses the upload once the organization has reached the limit, before ever writing the accepted input file', async () => {
+    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+      // Other members' reports count against the organization too — the admin's own count stays
+      // at zero, so this exercises the organization check specifically.
+      for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+        await insertReport(transaction, { organizationId, createdByUserId: null });
+      }
+
+      const response = await _createReport(
+        transaction,
+        store,
+        { organizationId, userId: adminUserId },
+        createUploadRequest(),
+      );
+      const body = (await response.json()) as { summary: string };
+
+      expect(response.status).toBe(400);
+      expect(body.summary).toContain('organization');
+
+      const recorded = await transaction
+        .selectFrom('rejectedUpload')
+        .selectAll()
+        .where('organizationId', '=', organizationId)
+        .executeTakeFirstOrThrow();
+      expect(recorded).toMatchObject({
+        rejectionReason: 'rate_limited' satisfies RejectedUploadReason,
+        reportName: 'Q1 procurement',
+        // No storage key: a rate-limited rejection never writes bytes — see
+        // `recordRateLimitRejection`'s doc comment.
+        inputFileByteSize: RAW_CSV.length,
+        inputFileStorageKey: null,
+      });
+
+      // Still just the seeded reports at the limit — the refused upload added none.
+      const reports = await transaction
+        .selectFrom('report')
+        .select((eb) => eb.fn.countAll<string>().as('count'))
+        .where('organizationId', '=', organizationId)
+        .executeTakeFirstOrThrow();
+      expect(Number(reports.count)).toBe(HOURLY_REPORT_LIMIT);
     });
   });
 });

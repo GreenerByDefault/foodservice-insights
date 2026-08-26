@@ -6,6 +6,7 @@
  * bound against the library, so it stays undocumented as a relation and is only noted here.
  */
 
+import { MINUTE_MS, SECOND_MS } from '@gbd/core';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
 import { WORKER_DB_LIMITS } from './db.ts';
@@ -105,9 +106,6 @@ export type WorkerConfig = {
   /** The most notifications one sweep will claim and send. */
   maxNotificationsPerSweep: number;
 };
-
-export const SECOND_MS = 1_000;
-export const MINUTE_MS = 60 * SECOND_MS;
 
 export const WORKER_DEFAULTS = {
   maxConcurrentAttempts: 3,

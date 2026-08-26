@@ -4,6 +4,8 @@
  */
 export const APP_NAME = 'Foodservice Insights';
 
+export * from './time.ts';
+
 /**
  * Exhaustiveness check for discriminated unions. Calling this is a type error unless
  * every case has already been handled, which turns a missed case into a compile

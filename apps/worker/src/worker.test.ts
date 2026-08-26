@@ -21,12 +21,12 @@
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
+import { SECOND_MS } from '@gbd/core';
 import { breakableDatabase, withBreakable } from '@gbd/db/testing';
 import { breakableBlobStore } from '@gbd/storage/testing';
 import { describe, expect, test } from 'vitest';
 import { claimNextAttempt, markAttemptFailed } from './attempt/queue.ts';
 import { readProgress } from './child/run-directory.ts';
-import { SECOND_MS } from './config.ts';
 import { runPath } from './contract/layout.ts';
 import { WORKER_DATABASE } from './db.ts';
 import { aWorkerId } from './testing/attempt-helpers.ts';

@@ -265,8 +265,9 @@ Follow security best practices for web development.
 - Payload limits.
 - Server-side form validation.
 - **Org creation:** a user can create up to 5 organizations.
-- **Hourly reports:** 5 valid reports per hour, enforced per organization *and* per user.
-- **Weekly reports:** 20 valid reports per 7 rolling days, per organization *and* per user.
+- **Hourly and weekly reports:** valid reports per rolling hour and per rolling 7 days, enforced
+  per organization *and* per user — see `HOURLY_REPORT_LIMIT` and `WEEKLY_REPORT_LIMIT` in
+  [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
 - **Report retries:** a report can be attempted up to 5 times. Retries exist for internal errors.
 - **Invites:** an organization can invite 5 users per hour.
 - Cloudflare for DDoS protection, and potentially geo-restrictions.

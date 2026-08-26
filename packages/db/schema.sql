@@ -135,7 +135,8 @@ CREATE TYPE "public"."rejected_upload_reason" AS ENUM (
     'unparseable',
     'empty',
     'bad_rows',
-    'other'
+    'other',
+    'rate_limited'
 );
 
 

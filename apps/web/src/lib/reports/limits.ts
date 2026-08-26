@@ -76,3 +76,8 @@ export const MAX_QUOTED_CHARS = 40;
 
 /** Anything older is a misparsed two-digit year or a placeholder, not procurement data. */
 export const EARLIEST_DATE = '2000-01-01';
+
+/** How many reports an organization, and separately a user, may
+ * create in a rolling hour or a rolling 7 days. */
+export const HOURLY_REPORT_LIMIT = 5;
+export const WEEKLY_REPORT_LIMIT = 20;
