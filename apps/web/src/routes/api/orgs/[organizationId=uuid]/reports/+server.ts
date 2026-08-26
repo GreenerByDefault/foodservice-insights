@@ -61,19 +61,16 @@ export async function _createReport(
 
   const { organizationId, userId } = uploader;
 
-  // Refuse before spending a blob write on an upload that's already over the limit — cheap
-  // insurance against a client that's over and keeps trying. This alone doesn't make the limit
-  // race-free: it's a separate transaction, so another upload can still land in the gap before
-  // the write below — see the recheck there for what actually closes it.
-  const early = await withDbErrorHandling(
+  // Refuse before spending a blob write on an upload that's already over the rate limit.
+  const initialRateLimitViolation = await withDbErrorHandling(
     () =>
       withTransaction(db, (transaction) =>
         lockAndCheckReportRateLimit(transaction, { organizationId, userId }),
       ),
     { action: 'check the report rate limit', context: { organizationId } },
   );
-  if (early) {
-    const rejection = await recordRateLimitRejection(db, store, uploader, raw, outcome.file, early);
+  if (initialRateLimitViolation) {
+    const rejection = await recordRateLimitRejection(db, store, uploader, raw, outcome.file, initialRateLimitViolation);
     return json(userFacingRejection(rejection), { status: 400 });
   }
 
@@ -90,9 +87,8 @@ export async function _createReport(
   const write = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction) => {
-        // The early check above already let this through once, in a separate transaction — this
-        // is the recheck, atomically with the insert it guards, that actually closes the race. See
-        // `lockAndCheckReportRateLimit`'s doc comment.
+        // Even though we already checked the rate limit, we must recheck because this
+        // is a new database transaction.
         const exceeded = await lockAndCheckReportRateLimit(transaction, {
           organizationId,
           userId,
@@ -186,12 +182,6 @@ async function insertReport(
     .execute();
 }
 
-/** Unlike a validation rejection, a rate-limited upload's bytes have nothing to do with why it was
- * refused — the file could be perfectly valid. So this always passes `bytes: null` to
- * `recordRejection`: there is no diagnostic value in keeping a copy, and skipping the write is
- * what lets the early check in `_createReport` refuse an over-the-limit upload before
- * `putInputFile` ever runs.
- */
 async function recordRateLimitRejection(
   db: DatabaseExecutor,
   store: BlobStore,
@@ -206,6 +196,8 @@ async function recordRateLimitRejection(
     store,
     uploader,
     raw,
+    // We set `bytes: null` because there is no value in us seeing the input file
+    // for a report that was rate limited.
     { fileDescription: file, bytes: null },
     rejection,
   );

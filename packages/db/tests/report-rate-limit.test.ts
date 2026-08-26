@@ -1,6 +1,7 @@
 /** The advisory lock and the windowed counts that close the race `lockReportRateLimit`'s doc
  * comment describes, in `../src/report-rate-limit.ts`. */
 
+import { DAY_MS, HOUR_MS, WEEK_MS } from '@gbd/core';
 import type { ControlledTransaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
@@ -97,7 +98,7 @@ describe('countReportsSince', () => {
       return await countReportsSince(transaction, {
         organizationId: organization.id,
         userId: admin.id,
-        windowSeconds: 60 * 60,
+        windowSeconds: HOUR_MS / 1000,
       });
     });
 
@@ -110,13 +111,13 @@ describe('countReportsSince', () => {
       await insertReport(transaction, {
         organizationId: organization.id,
         createdByUserId: admin.id,
-        createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 8 * DAY_MS),
       });
 
       return await countReportsSince(transaction, {
         organizationId: organization.id,
         userId: admin.id,
-        windowSeconds: 7 * 24 * 60 * 60,
+        windowSeconds: WEEK_MS / 1000,
       });
     });
 
@@ -139,7 +140,7 @@ describe('countReportsSince', () => {
       return await countReportsSince(transaction, {
         organizationId: organization.id,
         userId: admin.id,
-        windowSeconds: 60 * 60,
+        windowSeconds: HOUR_MS / 1000,
       });
     });
 
@@ -159,7 +160,7 @@ describe('the count-then-insert race', () => {
     const { organizationCount } = await countReportsSince(transaction, {
       organizationId,
       userId,
-      windowSeconds: 60 * 60,
+      windowSeconds: HOUR_MS / 1000,
     });
     if (organizationCount >= HOURLY_LIMIT) return { inserted: false };
 

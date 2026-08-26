@@ -44,15 +44,10 @@ export async function lockReportRateLimit(
 /** How many `report` rows exist for `organizationId`, and separately for `userId`, created within
  * the last `windowSeconds`.
  *
- * The cutoff is computed by Postgres, as `now() - windowSeconds`, not by the caller — `created_at`
- * is itself stamped by Postgres's `now()`, so comparing it against a cutoff from the app server's
- * clock would expose the window boundary to clock skew between the two machines. Computing both
- * ends of the comparison in the database keeps them on one clock.
+ * The cutoff is computed by Postgres, not by the caller, to avoid clock skew.
  *
- * Meaningful only once `lockReportRateLimit` has been called in the same transaction — otherwise
- * this count and whatever it gates can still race. Reports never fall out of the count once
- * created, deleted or not: like `organizations_created_count`, the limit is on reports *created*
- * in the window, not on how many still exist.
+ * This function should always be preceded by a call to `lockReportRateLimit` in the same
+ * transaction to avoid race conditions.
  */
 export async function countReportsSince(
   database: DatabaseExecutor,

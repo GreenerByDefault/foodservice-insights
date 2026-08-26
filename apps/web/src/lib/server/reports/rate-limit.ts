@@ -63,19 +63,24 @@ export async function lockAndCheckReportRateLimit(
 }
 
 const WINDOW_PHRASE: Record<RateLimitWindow, string> = {
-  hourly: 'in the past hour',
-  weekly: 'in the past 7 days',
+  hourly: 'per hour',
+  weekly: 'per week',
+};
+
+const RETRY_PHRASE: Record<RateLimitWindow, string> = {
+  hourly: 'Try again in a little while.',
+  weekly: 'Try again next week.',
 };
 
 const SCOPE_PHRASE: Record<RateLimitScope, string> = {
-  organization: 'Your organization has',
-  user: "You've",
+  organization: 'Your organization has reached its',
+  user: "You've reached your",
 };
 
 export function describeRateLimitExceeded(exceeded: RateLimitExceeded): RejectedUploadRecord {
   return {
     reason: 'rate_limited',
-    summary: `${SCOPE_PHRASE[exceeded.scope]} created ${exceeded.limit} reports ${WINDOW_PHRASE[exceeded.window]}. Try again later.`,
+    summary: `${SCOPE_PHRASE[exceeded.scope]} limit of ${exceeded.limit} reports ${WINDOW_PHRASE[exceeded.window]}. ${RETRY_PHRASE[exceeded.window]}`,
     rejectionDetail: `${exceeded.scope} at the ${exceeded.window} limit of ${exceeded.limit}`,
   };
 }
