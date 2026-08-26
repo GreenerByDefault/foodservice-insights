@@ -16,6 +16,10 @@ layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 
+**When a page's data has multiple meaningfully different shapes, its `load` narrows them into a
+discriminated union rather than leaving the view to branch on nullable columns.** See
+`reports/[reportId]/+page.server.ts` for an example.
+
 **A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions and remote functions.*
 Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler, which makes the
 code harder for newcomers to follow without a strong enough payoff. See

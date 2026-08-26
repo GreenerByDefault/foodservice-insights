@@ -15,6 +15,7 @@ import { sql } from 'kysely';
 import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../generated/public/AnalysisAttemptStatus.ts';
+import type AnalysisFailureReason from '../generated/public/AnalysisFailureReason.ts';
 import type { AppUser } from '../generated/public/AppUser.ts';
 import type { InputFile } from '../generated/public/InputFile.ts';
 import type { Organization } from '../generated/public/Organization.ts';
@@ -177,6 +178,11 @@ export async function insertAnalysisAttempt(
     workerId?: string;
     requestedByUserId?: UsersId | null;
     createdAt?: Date;
+    /** Only meaningful for `processing`, `succeeded`, and `failed` — the statuses a claim implies.
+     * Defaults to `finishedAt` so a terminal row's claim and finish line up without repeating the
+     * timestamp; set this explicitly to backdate a claim on a `processing` row, which has no
+     * `finishedAt` of its own. */
+    claimedAt?: Date;
     /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
      * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
     finishedAt?: Date;
@@ -184,6 +190,10 @@ export async function insertAnalysisAttempt(
      * forbids a canceled row with no request. Set explicitly for a `pending`/`processing` row a test
      * wants to look like a cancel request has already landed on. */
     cancelRequestedAt?: Date;
+    /** Only meaningful for `status: 'failed'` — `analysis_attempt_failure_reason_iff_failed` requires
+     * one there and forbids one everywhere else. Defaults to `'child_crashed'`, an arbitrary member of
+     * `analysis_failure_reason`; set this to exercise a specific reason's copy. */
+    failureReason?: AnalysisFailureReason;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -202,18 +212,20 @@ export async function insertAnalysisAttempt(
       requestedByUserId: overrides.requestedByUserId ?? null,
       ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
       // A backdated finishedAt still has to satisfy analysis_attempt_finished_at_after_lease_renewed,
-      // so a claim added on the caller's behalf must not be later than it.
+      // so a claim added on the caller's behalf must not be later than it — hence claimedAt falling
+      // back to finishedAt when the caller only backdated the finish.
       ...(isClaimed
         ? {
             workerId: overrides.workerId ?? 'test-worker',
-            claimedAt: overrides.finishedAt ?? NOW,
-            leaseRenewedAt: overrides.finishedAt ?? NOW,
+            claimedAt: overrides.claimedAt ?? overrides.finishedAt ?? NOW,
+            leaseRenewedAt: overrides.claimedAt ?? overrides.finishedAt ?? NOW,
           }
         : {}),
       ...(isTerminal
         ? {
             finishedAt: overrides.finishedAt ?? NOW,
-            failureReason: status === 'failed' ? 'child_crashed' : null,
+            failureReason:
+              status === 'failed' ? (overrides.failureReason ?? 'child_crashed') : null,
           }
         : {}),
       ...(overrides.cancelRequestedAt !== undefined

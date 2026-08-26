@@ -1,20 +1,263 @@
+import {
+  ANALYSIS_FAILURE_EXPLANATIONS,
+  type AnalysisAttemptId,
+  type AnalysisAttemptStatus,
+  type AnalysisFailureReason,
+  type DatabaseExecutor,
+  type InputFileId,
+  type OrganizationId,
+  type ReportId,
+  type ResultFileId,
+  requireConstraint,
+} from '@gbd/db';
+import { error } from '@sveltejs/kit';
+import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { database, withDbErrorHandling } from '$lib/server/db';
+import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
 
-/** **Stub:** loads nothing yet. It will return everything the result page shows, in one query: the
- * report, its `input_file`, its latest `analysis_attempt`, and that attempt's `result_file` rows.
+export const load: PageServerLoad = async ({ params }) => {
+  const organizationId = params.organizationId as OrganizationId;
+  const reportId = params.reportId as ReportId;
+
+  return await withDbErrorHandling(
+    () =>
+      _loadReport(database(), {
+        organizationId,
+        reportId,
+        supportEmail: requireVar('EMAIL_SUPPORT_ADDRESS'),
+      }),
+    { action: 'load a report', context: { organizationId, reportId } },
+  );
+};
+
+export type FileLink = { href: string };
+export type ChartLink = { href: string; chartKey: string };
+
+export type ResultFiles = {
+  pdf: FileLink;
+  xlsx: FileLink;
+  charts: ChartLink[];
+};
+
+/** What we ask the user to do next, and what to say about it. */
+export type FailureCopy = {
+  whatHappened: string;
+  followUpText: string;
+  canRetry: boolean;
+  contactMailto: string;
+};
+
+/** One report at one of its five reachable moments. `status` is the *screen*, not the column:
+ * they agree except for a cancel the worker hasn't converged on yet, which shows as `canceled`
+ * (see `toAttempt`).
  *
- * Filter on the report id *and* the organization from the route, so a report belonging to someone
- * else is a 404 rather than a leak.
+ * `claimedAt`/`finishedAt` are non-nullable where the DB guarantees them
+ * (`analysis_attempt_processing_is_claimed`, `analysis_attempt_finished_at_iff_terminal`), so
+ * nothing downstream handles a status paired with a timestamp that can't be missing.
  *
- * Return the attempt's timestamps raw and let the page derive the timeline from them, so the
- * loading view and the finished view come from one shape and one query.
- *
- * Still wrapped in `withDbErrorHandling`, but the query here catches `isTransientDatabaseError`
- * itself, inside the callback, rather than letting the wrapper's generic 503 fire. A poll is not
- * an analysis (see ARCHITECTURE.md § Client ↔ server), so a database that cannot be reached
- * returns `{ reachable: false }` next to the report instead of throwing — the page keeps the last
- * known state on screen and says it is reconnecting, rather than `+error.svelte` replacing the
- * timeline on every poll during an outage. A statement Postgres refused is a different failure —
- * our bug, not an outage — and still reaches the wrapper to become its normal 500.
+ * `canceled` carries `cancelRequestedAt` rather than `finishedAt`: it's the only timestamp
+ * non-null on both branches this screen is reached from, and the more meaningful one to show.
  */
-export const load: PageServerLoad = () => ({});
+export type Attempt =
+  | { status: 'pending'; createdAt: Date }
+  | { status: 'processing'; createdAt: Date; claimedAt: Date }
+  | { status: 'succeeded'; createdAt: Date; claimedAt: Date; finishedAt: Date; files: ResultFiles }
+  | { status: 'failed'; finishedAt: Date; attemptNumber: number; failure: FailureCopy }
+  | { status: 'canceled'; stoppedAt: Date };
+
+export type ReportPageData = {
+  report: { id: ReportId; name: string };
+  inputFile: { href: string; originalFilename: string; byteSize: number };
+  attempt: Attempt;
+};
+
+type ReportRow = {
+  reportId: ReportId;
+  reportName: string;
+  inputFileId: InputFileId;
+  inputFileOriginalFilename: string;
+  inputFileByteSize: number;
+  attemptId: AnalysisAttemptId;
+  attemptNumber: number;
+  status: AnalysisAttemptStatus;
+  createdAt: Date;
+  claimedAt: Date | null;
+  finishedAt: Date | null;
+  cancelRequestedAt: Date | null;
+  failureReason: AnalysisFailureReason | null;
+};
+
+/** Everything the report page shows, for one report in one organization.
+ *
+ * Filters on report id, organization id, and `deleted_at is null` — so someone else's report,
+ * or a deleted one, 404s instead of leaking. Canceled reports stay visible.
+ */
+export async function _loadReport(
+  db: DatabaseExecutor,
+  params: { organizationId: OrganizationId; reportId: ReportId; supportEmail: string },
+): Promise<ReportPageData> {
+  // Latest attempt via `order by attempt_number desc limit 1`, safe because of the
+  // `(report_id, attempt_number)` unique constraint. Result files aren't joined here — they
+  // only exist once an attempt succeeds, so paying for the join on every poll to use it once
+  // is the wrong trade.
+  const row: ReportRow | undefined = await db
+    .selectFrom('report')
+    .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
+    .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
+    .select([
+      'report.id as reportId',
+      'report.name as reportName',
+      'inputFile.id as inputFileId',
+      'inputFile.originalFilename as inputFileOriginalFilename',
+      'inputFile.byteSize as inputFileByteSize',
+      'analysisAttempt.id as attemptId',
+      'analysisAttempt.attemptNumber as attemptNumber',
+      'analysisAttempt.status as status',
+      'analysisAttempt.createdAt as createdAt',
+      'analysisAttempt.claimedAt as claimedAt',
+      'analysisAttempt.finishedAt as finishedAt',
+      'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
+      'analysisAttempt.failureReason as failureReason',
+    ])
+    .where('report.id', '=', params.reportId)
+    .where('report.organizationId', '=', params.organizationId)
+    .where('report.deletedAt', 'is', null)
+    .orderBy('analysisAttempt.attemptNumber', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+
+  if (!row) return await failNotFoundOrBug(db, params);
+
+  return {
+    report: { id: row.reportId, name: row.reportName },
+    inputFile: {
+      href: `/file/input/${row.inputFileId}`,
+      originalFilename: row.inputFileOriginalFilename,
+      byteSize: row.inputFileByteSize,
+    },
+    attempt: await toAttempt(db, row, params.supportEmail),
+  };
+}
+
+/** The join found nothing. A report with no attempt should be impossible — one transaction
+ * creates `report`, `input_file` and the first `analysis_attempt` together — so distinguish
+ * "no such report" (404) from that invariant being violated (our bug, 500).
+ */
+async function failNotFoundOrBug(
+  db: DatabaseExecutor,
+  params: { organizationId: OrganizationId; reportId: ReportId },
+): Promise<never> {
+  const reportExists = await db
+    .selectFrom('report')
+    .select('id')
+    .where('id', '=', params.reportId)
+    .where('organizationId', '=', params.organizationId)
+    .where('deletedAt', 'is', null)
+    .executeTakeFirst();
+
+  if (!reportExists) error(404, { message: 'Not found', code: 'not_found' });
+
+  console.error('A report has no analysis_attempt', { reportId: params.reportId });
+  error(500, { message: UNEXPECTED_ERROR_MESSAGE });
+}
+
+async function toAttempt(
+  db: DatabaseExecutor,
+  row: ReportRow,
+  supportEmail: string,
+): Promise<Attempt> {
+  // We allow requests that were cancelled but still succeeded or failed to pass through.
+  if (row.cancelRequestedAt !== null && (row.status === 'pending' || row.status === 'processing')) {
+    return { status: 'canceled', stoppedAt: row.cancelRequestedAt };
+  }
+
+  switch (row.status) {
+    case 'pending':
+      return { status: 'pending', createdAt: row.createdAt };
+    case 'processing':
+      return {
+        status: 'processing',
+        createdAt: row.createdAt,
+        claimedAt: requireConstraint(row.claimedAt, 'analysis_attempt_processing_is_claimed'),
+      };
+    case 'succeeded':
+      return {
+        status: 'succeeded',
+        createdAt: row.createdAt,
+        claimedAt: requireConstraint(row.claimedAt, 'analysis_attempt_processing_is_claimed'),
+        finishedAt: requireConstraint(row.finishedAt, 'analysis_attempt_finished_at_iff_terminal'),
+        files: await loadResultFiles(db, row.attemptId),
+      };
+    case 'failed':
+      return {
+        status: 'failed',
+        finishedAt: requireConstraint(row.finishedAt, 'analysis_attempt_finished_at_iff_terminal'),
+        attemptNumber: row.attemptNumber,
+        failure: toFailureCopy(
+          requireConstraint(row.failureReason, 'analysis_attempt_failure_reason_iff_failed'),
+          supportEmail,
+        ),
+      };
+    case 'canceled':
+      return {
+        status: 'canceled',
+        stoppedAt: requireConstraint(
+          row.cancelRequestedAt,
+          'analysis_attempt_canceled_requires_request',
+        ),
+      };
+  }
+}
+
+async function loadResultFiles(
+  db: DatabaseExecutor,
+  attemptId: AnalysisAttemptId,
+): Promise<ResultFiles> {
+  const files = await db
+    .selectFrom('resultFile')
+    .select(['id', 'kind', 'chartKey'])
+    .where('analysisAttemptId', '=', attemptId)
+    // Ensure a consistent order.
+    .orderBy('chartKey')
+    .execute();
+
+  return {
+    pdf: toFileLink(
+      requireConstraint(
+        files.find((file) => file.kind === 'pdf') ?? null,
+        'analysis_attempt_succeeded_has_pdf',
+      ),
+    ),
+    xlsx: toFileLink(
+      requireConstraint(
+        files.find((file) => file.kind === 'xlsx') ?? null,
+        'analysis_attempt_succeeded_has_xlsx',
+      ),
+    ),
+    charts: files
+      .filter((file) => file.kind === 'chart')
+      .map((file) => ({
+        href: resultFileHref(file.id),
+        chartKey: requireConstraint(file.chartKey, 'result_file_chart_key_iff_chart'),
+      })),
+  };
+}
+
+function toFileLink(file: { id: ResultFileId }): FileLink {
+  return { href: resultFileHref(file.id) };
+}
+
+function resultFileHref(id: ResultFileId): string {
+  return `/file/result/${id}`;
+}
+
+function toFailureCopy(reason: AnalysisFailureReason, supportEmail: string): FailureCopy {
+  const explanation = ANALYSIS_FAILURE_EXPLANATIONS[reason];
+  return {
+    whatHappened: explanation.whatHappened,
+    followUpText: explanation.followUp.text,
+    canRetry: explanation.followUp.action === 'retry',
+    contactMailto: `mailto:${supportEmail}`,
+  };
+}
