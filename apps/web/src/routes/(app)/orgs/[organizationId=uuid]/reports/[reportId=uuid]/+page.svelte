@@ -6,7 +6,7 @@
          charts, and the run's metadata;
        failed — what happened, said in a way that makes clear the file was not at fault, and a
          retry;
-       canceled — a dead end, since canceling soft-deletes the report.
+       canceled — the report is stopped for good, so a short panel saying so and a delete button.
      Every file link goes through `/file/...`, which is public and permanent by design.
      Cancel, retry and delete are the endpoints under `/api/orgs/[organizationId]/reports/`.
      A poll that fails to reach the server is not a failed analysis: keep the last known state on

@@ -248,13 +248,19 @@ nothing: the next lease renewal returns "lost" and the direct loop kills the chi
 
 ### Canceling
 
-Canceling is a soft-delete of a report that has not already reached a terminal attempt status.
+The web server never writes `analysis_attempt.status`. Canceling writes `cancel_requested_at` on a
+non-terminal attempt, and a worker converges it to `canceled` — the owning parent on its next lease
+renewal, or the queue's cancel sweep if nobody has claimed it.
 
-The web server only records the request; a worker converges it to the terminal `canceled` — the
-owning parent on its next lease renewal, or the queue's cancel sweep for an attempt nobody has
-claimed yet.
-
-No email is ever sent for a canceled attempt.
+- **Deleting a report also writes `cancel_requested_at`**, in the same transaction as
+  `report.deleted_at`. Soft-deleting on its own would not stop anything, because no worker reads
+  `deleted_at` — `cancel_requested_at` is what ends an analysis, whichever action the user took.
+- **A cancel request does not guarantee a `canceled` row.** The owning parent enforces a cancel by
+  killing its child, and only notices the request on its next lease renewal. A child that finishes
+  before that tick records `succeeded` or `failed`, and that verdict stands — see `markIfStillOwned`
+  in [`queue.ts`](apps/worker/src/attempt/queue.ts). So a terminal attempt can carry a
+  `cancel_requested_at`, and a reader has to trust `status` over the request.
+- **No email is ever sent for a canceled attempt.**
 
 ### Concurrency and scaling
 

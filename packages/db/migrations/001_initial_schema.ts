@@ -634,8 +634,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_notification_sent_requires_claim',
       sql`notification_email_sent_at IS NULL OR notification_claimed_at IS NOT NULL`,
     )
-    // A canceled attempt's report was already soft-deleted by the request that canceled it, so
-    // there is no report left to point a notification email at.
+    // The user asked us to stop, so there is nothing to tell them. REQUIREMENTS.md § User email.
     .addCheckConstraint(
       'analysis_attempt_canceled_is_not_notified',
       sql`notification_claimed_at IS NULL OR status <> 'canceled'`,
