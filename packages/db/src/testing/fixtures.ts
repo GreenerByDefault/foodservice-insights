@@ -158,11 +158,15 @@ export async function insertInputFile(
 }
 
 /** An attempt in `status`, with whatever other columns make it a state the app can actually
- * produce. `finished_at` for a terminal status; `worker_id`/`claimed_at`/`lease_renewed_at` for
- * `processing`, `succeeded`, and `failed`, since reaching either terminal status means the worker
- * claimed the attempt first — the CHECK constraints don't require this, the state machine does.
- * `canceled` is the exception: `ARCHITECTURE.md` § Canceling allows canceling a `pending` attempt
- * that was never claimed. See `analysis_attempt` in schema.sql for the constraints themselves.
+ * produce:
+ * - `finished_at` for any terminal status.
+ * - `worker_id`/`claimed_at`/`lease_renewed_at` for `processing`, `succeeded`, and `failed` —
+ *   reaching one of those means the worker claimed the attempt first. The CHECK constraints
+ *   don't require this; the state machine does.
+ * - `canceled` is the exception: `ARCHITECTURE.md` § Canceling allows canceling a `pending`
+ *   attempt that was never claimed.
+ *
+ * See `analysis_attempt` in schema.sql for the constraints themselves.
  */
 export async function insertAnalysisAttempt(
   database: DatabaseExecutor,
