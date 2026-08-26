@@ -30,19 +30,20 @@ rather than here.
 
 | File | Role |
 | --- | --- |
-| [`worker.ts`](src/worker.ts) | The process itself — claiming, directing in-flight attempts, the sweeps, and draining. |
+| [`worker.ts`](src/worker.ts) | The process itself — claiming, directing in-flight attempts, the sweeps, and draining. Its real-time scheduling lives in [`ticker.ts`](src/ticker.ts). |
 | [`attempt/directive.ts`](src/attempt/directive.ts) | Decides what a live attempt needs each tick. |
 | [`attempt/verdict.ts`](src/attempt/verdict.ts) | Decides what a dead child means. |
 | [`attempt/lifecycle.ts`](src/attempt/lifecycle.ts), [`attempt/queue.ts`](src/attempt/queue.ts) | Start and claim attempts. |
 | [`sweeps/converge.ts`](src/sweeps/converge.ts), [`sweeps/notifications.ts`](src/sweeps/notifications.ts) | Converge rows nobody else will. |
 | [`child/spawn.ts`](src/child/spawn.ts), [`child/run-directory.ts`](src/child/run-directory.ts) | The OS-level half of the parent ↔ child contract in [`contract/`](../../contract/). |
 | [`db.ts`](src/db.ts) | Owns the worker's own database handle. |
-| [`failures.ts`](src/failures.ts) | The six named rules every failure path here obeys — read it before touching any error handling. |
+| [`clock.ts`](src/clock.ts) | The only source of "now" the worker reads — the seam that lets a test move time without a real sleep. |
+| [`failures.ts`](src/failures.ts) | The six named rules every failure path here obeys — read it before touching any error handling. [`retry.ts`](src/retry.ts) is the one-retry-layer rule's implementation. |
 
 ## Testing
 
 [`worker.test.ts`](src/worker.test.ts) runs the whole thing end to end against a real spawned
 child (faked via [`src/testing/fake-child.ts`](src/testing/fake-child.ts)) and real breakable
-database/blob-store proxies. `directive.test.ts` and `config.test.ts` cover their own modules'
-decision tables with no database, no child, and no clock, which is what lets `worker.test.ts` skip
-re-testing either.
+database/blob-store proxies. `directive.test.ts`, `verdict.test.ts`, and `config.test.ts` cover
+their own modules' decision tables with no database, no child, and no clock, which is what lets
+`worker.test.ts` skip re-testing any of them.
