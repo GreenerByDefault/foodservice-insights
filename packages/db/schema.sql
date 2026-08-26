@@ -174,9 +174,33 @@ CREATE OR REPLACE FUNCTION "public"."analysis_attempt_check_new_attempt"() RETUR
     LANGUAGE "plpgsql"
     AS $$
     DECLARE
+      report_deleted_at timestamptz;
       latest_number smallint;
       latest_status analysis_attempt_status;
     BEGIN
+      -- Locks the report against a concurrent soft delete, which the foreign key below does not:
+      -- it takes KEY SHARE, and that does not conflict with the UPDATE setting deleted_at. Without
+      -- this, a retry and a delete both commit and leave a fresh pending attempt on a deleted
+      -- report for a worker to claim and analyse. FOR NO KEY UPDATE conflicts in both directions,
+      -- so one of the two waits: the delete then finds the new attempt and cancel-requests it, or
+      -- this read sees deleted_at already set and rejects.
+      --
+      -- Same lock order as the delete endpoint — report first, then analysis_attempt — so the two
+      -- cannot deadlock. A report_id matching no row leaves this NULL and falls through to the
+      -- foreign key, which is the error worth reporting.
+      SELECT deleted_at INTO report_deleted_at
+        FROM report
+       WHERE id = NEW.report_id
+         FOR NO KEY UPDATE;
+
+      IF report_deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'report %: deleted at %, so a new attempt is not allowed',
+          NEW.report_id, report_deleted_at
+          USING ERRCODE = 'check_violation',
+                CONSTRAINT = 'analysis_attempt_no_attempt_for_deleted_report',
+                TABLE = 'analysis_attempt';
+      END IF;
+
       -- BEFORE INSERT, so NEW is not in the table yet and "latest" needs no self-exclusion.
       SELECT attempt_number, status INTO latest_number, latest_status
         FROM analysis_attempt

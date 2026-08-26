@@ -18,6 +18,7 @@ import {
   POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '../src/postgres-codes.ts';
+import type { DatabaseExecutor } from '../src/schema.ts';
 import {
   insertFixtureOrganization,
   sendBlockingStatement,
@@ -45,6 +46,14 @@ async function fail(transaction: Transaction, attemptId: AnalysisAttempt['id']):
     .updateTable('analysisAttempt')
     .set({ status: 'failed', finishedAt: new Date(), failureReason: 'child_crashed' })
     .where('id', '=', attemptId)
+    .execute();
+}
+
+async function softDelete(database: DatabaseExecutor, reportId: Report['id']): Promise<void> {
+  await database
+    .updateTable('report')
+    .set({ deletedAt: new Date() })
+    .where('id', '=', reportId)
     .execute();
 }
 
@@ -420,11 +429,105 @@ describe('starting a new attempt', () => {
     });
   });
 
+  test('refuses a retry on a soft-deleted report', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      const report = await insertReport(transaction);
+      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+      await softDelete(transaction, report.id);
+      await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_no_attempt_for_deleted_report',
+    });
+  });
+
+  test('refuses a retry racing a soft delete', async () => {
+    // The rule above is only worth having if it also holds between transactions, and by default it
+    // would not: the insert's foreign key takes KEY SHARE on the report, which does not conflict
+    // with the UPDATE setting `deleted_at`, so both commit and a worker analyses an attempt on a
+    // deleted report. The trigger's `FOR NO KEY UPDATE` is what makes this insert wait.
+    await withCommittedFixture(
+      DATABASE,
+      async (transaction, trash) => {
+        const { organization } = await insertFixtureOrganization(transaction, trash);
+        const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+        return report;
+      },
+      async (report) => {
+        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+          await softDelete(alpha.transaction, report.id);
+
+          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+            transaction
+              .insertInto('analysisAttempt')
+              .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+              .execute(),
+          );
+
+          await alpha.transaction.commit().execute();
+
+          await expect(blocked.result).rejects.toMatchObject({
+            code: POSTGRES_CODE_CHECK_VIOLATION,
+            constraint: 'analysis_attempt_no_attempt_for_deleted_report',
+          });
+        });
+
+        const attempts = await DATABASE.selectFrom('analysisAttempt')
+          .select('attemptNumber')
+          .where('reportId', '=', report.id)
+          .execute();
+        expect(attempts.map((row) => row.attemptNumber)).toEqual([1]);
+      },
+    );
+  });
+
+  test('makes a soft delete wait for a retry that got there first', async () => {
+    // The same lock from the other side, and what the delete endpoint depends on: it stamps
+    // `cancel_requested_at` on whatever attempt is active, so it must not slip past an uncommitted
+    // retry and miss the attempt that insert is about to add.
+    await withCommittedFixture(
+      DATABASE,
+      async (transaction, trash) => {
+        const { organization } = await insertFixtureOrganization(transaction, trash);
+        const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+        return report;
+      },
+      async (report) => {
+        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+          await alpha.transaction
+            .insertInto('analysisAttempt')
+            .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+            .execute();
+
+          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+            softDelete(transaction, report.id),
+          );
+
+          await alpha.transaction.commit().execute();
+          await blocked.result;
+          await beta.transaction.commit().execute();
+        });
+
+        const attempts = await DATABASE.selectFrom('analysisAttempt')
+          .select('attemptNumber')
+          .where('reportId', '=', report.id)
+          .orderBy('attemptNumber')
+          .execute();
+        expect(attempts.map((row) => row.attemptNumber)).toEqual([1, 2]);
+      },
+    );
+  });
+
   test('refuses the second of two concurrent retries', async () => {
-    // REQUIREMENTS.md allows one retry at a time per report, and the insert trigger cannot enforce
-    // that alone: it reads the latest attempt under its own snapshot, so both of these see attempt
-    // 1 failed and both are waved through. The unique index they then both write to is what
-    // actually serialises them.
+    // REQUIREMENTS.md allows one retry at a time per report. The trigger's report lock is what
+    // serialises the two: beta waits on it, and its next statement then reads under a fresh
+    // READ COMMITTED snapshot that includes alpha's attempt 2, so it rejects on the status rule
+    // rather than colliding in the index. The two unique indexes behind it are backstops that no
+    // path now reaches.
     await withCommittedFixture(
       DATABASE,
       async (transaction, trash) => {
@@ -449,12 +552,9 @@ describe('starting a new attempt', () => {
 
           await alpha.transaction.commit().execute();
 
-          // `analysis_attempt_one_active_per_report` is violated too; the composite one reports
-          // because Postgres maintains indexes in OID order and it was created with the table.
-          // Callers should surface either as a conflict rather than an error.
           await expect(blocked.result).rejects.toMatchObject({
-            code: POSTGRES_CODE_UNIQUE_VIOLATION,
-            constraint: 'analysis_attempt_report_id_attempt_number',
+            code: POSTGRES_CODE_CHECK_VIOLATION,
+            constraint: 'analysis_attempt_new_attempt_only_after_failure',
           });
         });
 
@@ -492,10 +592,10 @@ describe('starting a new attempt', () => {
 
 describe('at most one active attempt per report', () => {
   // There is no violation left to provoke: the insert trigger rejects every sequential path to a
-  // second active attempt, and on the concurrent path above the composite unique constraint
-  // reports first. So the definition is all there is to assert, and the word worth asserting is
-  // `UNIQUE` — drop the partiality and three tests above fail, but demote this to a plain index
-  // and nothing else in the suite notices. The migration says why the index is worth keeping.
+  // second active attempt, and since it took a report lock it rejects the concurrent path too.
+  // So the definition is all there is to assert, and the word worth asserting is `UNIQUE` — drop
+  // the partiality and three tests above fail, but demote this to a plain index and nothing else
+  // in the suite notices. The migration says why the index is worth keeping.
   test('still has its partial unique index', async () => {
     const definition = await withRollback(DATABASE, async (transaction) => {
       const { rows } = await sql<{ definition: string | null }>`

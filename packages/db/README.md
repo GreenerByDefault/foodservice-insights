@@ -114,6 +114,11 @@ rather than freezing. That exemption is why
 [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) can claim and stamp a
 `succeeded` row at all.
 
+**A soft-deleted report accepts no new attempt.** The insert trigger reads `report.deleted_at`
+under `FOR NO KEY UPDATE`, so a retry racing a delete is refused rather than analysed. That lock
+also fixes the order any writer touching both tables must take them in — report, then
+`analysis_attempt`.
+
 This package owns the invariants; who claims an attempt and when is the worker's policy. The claim
 itself is documented at [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue), and every terminal
 transition is tested beside the code that writes it — `attempt/queue.ts` writes the transitions a
@@ -133,16 +138,6 @@ columns above.
   creation limit no longer has — two uploads that each count four and then both insert. Closing it
   means putting the count and the insert under one lock, per organization *and* per user, which
   needs the upload path to exist first so it can fix the order the two are taken in.
-- **Open:** nothing stops a retry racing a soft delete. Inserting an `analysis_attempt` takes only
-  a `KEY SHARE` lock on its `report`, which does not conflict with the `UPDATE` that sets
-  `deleted_at`, so a report can be deleted and gain a sixth attempt at the same moment — and the
-  worker then analyses it. It no longer also emails about it:
-  [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) joins on
-  `report.deleted_at IS NULL`, so a deleted report's attempt is analysed but never notified. The
-  UI hides retry on a deleted report, so the remaining window is only between the click and the
-  delete. Closing it means the insert reading `deleted_at` under `FOR NO KEY UPDATE`, which needs
-  the product to first commit to "a deleted report gets no new attempts" as an invariant rather
-  than a UI affordance.
 - **Open:** "exactly one `input_file` per report" is enforced only as *at most* one. The app writes
   both in a single transaction; a deferred constraint trigger would make it *exactly* one, at the
   cost of every report fixture needing a file.
