@@ -1,3 +1,8 @@
+/** The parent's half of parsing and validating the documents `contract/` defines: the manifest it
+ * writes for the child, and the progress/result/failure documents it reads back. A document that
+ * fails to parse or fails its schema throws `ContractError`.
+ */
+
 import type { AnalysisAttemptId, CountsBasis, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
 import { CHART_KEY_PATTERN } from './layout.ts';

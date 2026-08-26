@@ -130,13 +130,13 @@ function directiveFor(
 ): AttemptDirective {
   const cancelRequestedAt = reading.lease.kind === 'held' ? reading.lease.cancelRequestedAt : null;
 
-  // lost: we may no longer write to this attempt at all.
+  // The `lost` rule.
   if (reading.lease.kind === 'lost') {
     if (state.parked !== undefined) return { kind: 'drop-parked-verdict' };
     return state.exited ? { kind: 'nothing' } : { kind: 'kill', kill: { reason: 'lost' } };
   }
 
-  // parked: once parked, the verdict's fate no longer depends on the child underneath it.
+  // The `parked` rule.
   if (state.parked !== undefined) {
     if (cancelRequestedAt !== null) return { kind: 'convert-parked-verdict-to-canceled' };
     if (
@@ -148,10 +148,10 @@ function directiveFor(
     return { kind: 'resume-parked-verdict' };
   }
 
-  // settling: an attempt that has already exited is left alone; its settle disposes of it.
+  // The `settling` rule.
   if (state.exited) return { kind: 'nothing' };
 
-  // contract-violation: the progress read threw something the child is answerable for.
+  // The `contract-violation` rule.
   const progressUnknown = reading.progress.kind === 'failed';
   if (reading.progress.kind === 'failed' && reading.progress.error instanceof ContractError) {
     return {
@@ -160,20 +160,20 @@ function directiveFor(
     };
   }
 
-  // cancel-requested: the user's explicit intent beats a threshold firing the same tick.
+  // The `cancel-requested` rule.
   if (cancelRequestedAt !== null) return { kind: 'kill', kill: { reason: 'canceled' } };
 
-  // hung: no progress for killAfterNoProgressMs.
+  // The `hung` rule.
   if (!progressUnknown && now - state.lastProgressAt >= thresholds.killAfterNoProgressMs) {
     return { kind: 'kill', kill: { reason: 'hung' } };
   }
 
-  // hard-timeout: ran past killAfterTotalRuntimeMs regardless of how healthy it looks.
+  // The `hard-timeout` rule.
   if (now - state.startedAt >= thresholds.killAfterTotalRuntimeMs) {
     return { kind: 'kill', kill: { reason: 'hard-timeout' } };
   }
 
-  // lease-expired: no successful renewal for leaseExpiresAfterMs.
+  // The `lease-expired` rule.
   if (now - state.renewalIssuedAt >= thresholds.leaseExpiresAfterMs) {
     return { kind: 'kill', kill: { reason: 'fenced' } };
   }
