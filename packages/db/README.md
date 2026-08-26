@@ -133,6 +133,3 @@ columns above.
   creation limit no longer has — two uploads that each count four and then both insert. Closing it
   means putting the count and the insert under one lock, per organization *and* per user, which
   needs the upload path to exist first so it can fix the order the two are taken in.
-- **Open:** "exactly one `input_file` per report" is enforced only as *at most* one. The app writes
-  both in a single transaction; a deferred constraint trigger would make it *exactly* one, at the
-  cost of every report fixture needing a file.

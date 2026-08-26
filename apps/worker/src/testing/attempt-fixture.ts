@@ -128,12 +128,16 @@ async function anotherReport(
   organizationId: OrganizationId,
   requesterId: UserId,
 ): Promise<SeededReport> {
-  const report = await insertReport(WORKER_DATABASE, { organizationId });
-  const inputFile = await insertInputFile(WORKER_DATABASE, {
-    reportId: report.id,
-    object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
+  // One transaction: `report_has_an_input_file` is deferred to commit, and two separate
+  // autocommit statements would each be their own commit.
+  const inputFile = await WORKER_DATABASE.transaction().execute(async (transaction) => {
+    const report = await insertReport(transaction, { organizationId });
+    return await insertInputFile(transaction, {
+      reportId: report.id,
+      object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
+    });
   });
-  return await seededReport(report.id, inputFile.storageKey, requesterId);
+  return await seededReport(inputFile.reportId, inputFile.storageKey, requesterId);
 }
 
 /** A `ReportFixture` with one attempt already seeded and claimed by `workerId`. */

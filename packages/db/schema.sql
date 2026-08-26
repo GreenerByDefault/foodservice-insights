@@ -403,6 +403,33 @@ CREATE OR REPLACE FUNCTION "public"."organization_member_check_admin_remains"() 
 ALTER FUNCTION "public"."organization_member_check_admin_remains"() OWNER TO "postgres";
 
 --
+-- Name: report_check_has_input_file(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."report_check_has_input_file"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+    BEGIN
+      -- Deleted in the same transaction it was created in: nothing to enforce.
+      IF NOT EXISTS (SELECT 1 FROM report WHERE id = NEW.id) THEN
+        RETURN NULL;
+      END IF;
+
+      IF EXISTS (SELECT 1 FROM input_file WHERE report_id = NEW.id) THEN
+        RETURN NULL;
+      END IF;
+
+      RAISE EXCEPTION 'report % must have an input file', NEW.id
+        USING ERRCODE = 'check_violation',
+              CONSTRAINT = 'report_has_an_input_file',
+              TABLE = 'report';
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."report_check_has_input_file"() OWNER TO "postgres";
+
+--
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1164,6 +1191,13 @@ CREATE OR REPLACE TRIGGER "organization_member_set_updated_at" BEFORE UPDATE ON 
 --
 
 CREATE OR REPLACE TRIGGER "organization_set_updated_at" BEFORE UPDATE ON "public"."organization" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+--
+-- Name: report report_has_an_input_file; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE CONSTRAINT TRIGGER "report_has_an_input_file" AFTER INSERT ON "public"."report" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "public"."report_check_has_input_file"();
 
 
 --
