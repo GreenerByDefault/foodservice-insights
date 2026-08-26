@@ -79,9 +79,11 @@ export type WorkerConfig = {
    * failure instead.
    *
    * **The two parked stages are not symmetric**, which is why only this one needs a budget. A
-   * verdict parked at `record` is already bounded by fencing: the database that cannot take the
-   * write cannot take the renewals either. One parked at `upload` sits behind a *healthy* database
-   * whose renewals keep succeeding, so fencing never fires and nothing else would ever stop it.
+   * verdict parked at `record` is bounded by the database it is waiting on: the database that
+   * cannot take the write cannot take another worker's reap either, so nothing else can claim the
+   * row while it waits, and the first renewal that comes back once the database returns either
+   * lets the write land or reports it `lost`. One parked at `upload` sits behind a *healthy*
+   * database whose renewals keep succeeding, so nothing would ever stop it.
    * Nor can it be bounded by telling a permanent failure from an outage — `@gbd/storage` exposes
    * one `BlobStoreError` by design, so a wrong `S3_BUCKET` parks exactly like an outage and only a
    * budget tells the two apart. */

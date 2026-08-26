@@ -81,7 +81,10 @@ export async function sendPendingNotifications(
 
   const attempts = await loadNotifiableAttempts(db, claimedIds);
 
-  // Awaited concurrently: `sendOne` never throws, so one failed send can't abort the rest.
+  // Awaited concurrently: `sendOne` swallows every *delivery* failure, so one provider refusal
+  // cannot abort the rest. A non-`EmailError` is a bug rather than a delivery failure and does
+  // reject here, costing this sweep's other sends their stamp and so a duplicate each once their
+  // claims expire — the deliberate price of not silently retrying a bug forever.
   const sentIds = (
     await Promise.all(attempts.map((attempt) => sendOne(emailer, attempt, options)))
   ).filter((id): id is AnalysisAttemptId => id !== undefined);
@@ -286,10 +289,11 @@ async function sendOne(
  * Guarded by `notification_email_sent_at IS NULL`, so a second stamp for a row — because another
  * worker's send won the race first — is a zero-row no-op, not a duplicate write.
  *
- * Wrapped in `retryOnTransientDbError`: this is the one statement in the path meeting
- * [`failures.ts`](../failures.ts) principle 4 — losing it to a blip guarantees a duplicate email
- * once the claim expires, and now also burns one of `maxNotificationAttempts` for nothing. The claim itself
- * needs no such retry: the next tick is the retry, per principle 2.
+ * Wrapped in `retryOnTransientDbError`, as the one statement here with no retry layer anywhere
+ * else — `one-retry-layer` in [`failures.ts`](../failures.ts). Losing this stamp to a blip
+ * guarantees a duplicate email once the claim expires, and burns one of
+ * `maxNotificationAttempts` to do it. The claim itself needs no such retry: the next tick is the
+ * retry, per `absorb-or-fail`.
  *
  * `retryOnTransientDbError` must run on the pool handle. So, under `withRollback` in tests, this is
  * a path that must not be exercised — none of this file's tests simulate a transient failure here.

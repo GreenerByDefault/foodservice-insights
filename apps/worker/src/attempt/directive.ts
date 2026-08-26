@@ -34,8 +34,8 @@ export type TickState = {
 export type TickReading = {
   /** No `progressSequence` means the child has not written `progress.json` yet — not an error. */
   progress: { kind: 'read'; progressSequence?: number } | { kind: 'failed'; error: unknown };
-  /** `skipped` when the progress read threw, per principle 5 in `failures.ts`. `failed` when the
-   * statement itself threw. */
+  /** `skipped` when the progress read threw, per `no-check-no-renewal` in `failures.ts`;
+   * `failed` when the statement itself threw. */
   lease: Lease | { kind: 'skipped' } | { kind: 'failed'; error: unknown };
   /** When the renewal was issued, if one was issued at all. */
   renewalIssuedAt?: number;
@@ -72,16 +72,21 @@ export type AttemptDirective =
  * - **settling** — we leave an attempt that has already exited alone; its settle is what
  *   disposes of it.
  * - **contract-violation** — a progress read that threw a `ContractError` is itself a verdict.
- * - **progress-read-failed** — a progress read that threw anything but `ContractError` takes no
- *   action this tick; only the next read gets another chance.
  * - **cancel-requested** — we kill the child: the user's explicit intent beats a threshold that
  *   happened to fire in the same tick, matching `classifyVerdict`'s own precedence.
- * - **hung** — no progress for `killAfterNoProgressMs` kills the child.
+ * - **hung** — no progress for `killAfterNoProgressMs` kills the child. This is the one rule a
+ *   failed progress read disables: an unreadable file cannot tell a stalled child from a stalled
+ *   filesystem, so only the next read gets another chance.
  * - **hard-timeout** — running past `killAfterTotalRuntimeMs` kills the child regardless of how
  *   healthy it looks.
  * - **lease-expired** — no successful renewal for `leaseExpiresAfterMs` fences the child — a
  *   healthy parent's own inequalities keep this from ever firing before `hung` or
  *   `hard-timeout` would.
+ *
+ * The last two read nothing but the clock, so they keep firing through a progress read that
+ * throws every tick — otherwise a single unreadable byte in `progress.json` would suppress
+ * `hung`, suppress the renewal (`no-check-no-renewal`), and thereby buy the child
+ * unbounded runtime that no local rule could ever end.
  *
  * We check `lost` before `contract-violation`: an attempt we may no longer write has nothing to
  * gain from a truthful kill reason, and `classifyVerdict` would turn either into a no-op write.
@@ -141,21 +146,20 @@ function directiveFor(
   // settling: an attempt that has already exited is left alone; its settle disposes of it.
   if (state.exited) return { kind: 'nothing' };
 
-  // contract-violation / progress-read-failed: the progress read itself threw.
-  if (reading.progress.kind === 'failed') {
-    return reading.progress.error instanceof ContractError
-      ? {
-          kind: 'kill',
-          kill: { reason: 'contract-violation', detail: reading.progress.error.message },
-        }
-      : { kind: 'nothing' };
+  // contract-violation: the progress read threw something the child is answerable for.
+  const progressUnknown = reading.progress.kind === 'failed';
+  if (reading.progress.kind === 'failed' && reading.progress.error instanceof ContractError) {
+    return {
+      kind: 'kill',
+      kill: { reason: 'contract-violation', detail: reading.progress.error.message },
+    };
   }
 
   // cancel-requested: the user's explicit intent beats a threshold firing the same tick.
   if (cancelRequestedAt !== null) return { kind: 'kill', kill: { reason: 'canceled' } };
 
   // hung: no progress for killAfterNoProgressMs.
-  if (now - state.lastProgressAt >= thresholds.killAfterNoProgressMs) {
+  if (!progressUnknown && now - state.lastProgressAt >= thresholds.killAfterNoProgressMs) {
     return { kind: 'kill', kill: { reason: 'hung' } };
   }
 

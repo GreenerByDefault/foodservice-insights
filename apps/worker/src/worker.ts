@@ -10,7 +10,12 @@
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
-import type { AnalysisAttemptId, DatabaseExecutor, ReportId } from '@gbd/db';
+import {
+  type AnalysisAttemptId,
+  type DatabaseExecutor,
+  isPermanentDatabaseError,
+  type ReportId,
+} from '@gbd/db';
 import type { Emailer } from '@gbd/email';
 import type { BlobStore } from '@gbd/storage';
 import { decideDirective, type TickReading, type TickState } from './attempt/directive.ts';
@@ -44,7 +49,13 @@ export type WorkerDependencies = {
   candidateReports?: readonly ReportId[];
 };
 
+/** How one turn of the claim path ended. `start-failed` means we claimed an attempt and then
+ * could not start it, so its verdict is already recorded (or already abandoned). */
 export type ClaimOutcome = 'started' | 'queue-empty' | 'at-capacity' | 'start-failed' | 'draining';
+
+/** `ClaimOutcome`, plus the one ending only `pollQueue` can reach: the claim statement itself
+ * failed, so we never learned whether there was anything to claim. */
+type PollOutcome = ClaimOutcome | 'claim-failed';
 
 export type Worker = {
   claimAndStart(): Promise<ClaimOutcome>;
@@ -92,8 +103,8 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // This check includes parked verdicts, per `maxConcurrentAttempts` in `config.ts`.
     if (inFlight.size >= config.maxConcurrentAttempts) return 'at-capacity';
 
-    // Deliberately not retried because the claim loop is the retry, and a *permanent* error
-    // propagates to `run()`, which drains and exits nonzero.
+    // Deliberately unguarded: `pollQueue` is the one place a claim failure is resolved, and it
+    // needs the error to decide between absorbing the poll and ending the worker.
     const attemptId = await claimNextAttempt(db, config.workerId, { candidateReports });
     if (attemptId === undefined) return 'queue-empty';
 
@@ -109,12 +120,36 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     return 'started';
   }
 
+  /** `claimAndStart`, with the claim statement's own failure resolved by `absorb-or-fail` in
+   * `failures.ts`. This is what `run()` polls; `claimAndStart` is the same step with the error
+   * still on it, which is what makes it worth testing directly.
+   *
+   * A database we could not reach is absorbed, and the next poll is the retry. That matters beyond
+   * the poll itself: propagating would unwind into `run()`'s drain, so one failover would cost us
+   * every attempt this worker is *already* running, killed as `shut_down` — an error turned into a
+   * verdict for attempts the error said nothing about.
+   *
+   * A statement Postgres *refuses* propagates instead. No amount of polling fixes a claim it will
+   * not run, and `run()`'s `finally` turns the throw into a drain and a nonzero exit.
+   */
+  async function pollQueue(): Promise<PollOutcome> {
+    try {
+      return await claimAndStart();
+    } catch (error) {
+      if (isPermanentDatabaseError(error)) throw error;
+      console.error('Could not claim from the queue; the next poll is the retry', error);
+      return 'claim-failed';
+    }
+  }
+
+  /** Log that a claimed attempt never got off the ground, and record that as its verdict. */
   async function recordStartFailure(attemptId: AnalysisAttemptId, error: unknown): Promise<void> {
     console.error(`Could not start claimed attempt ${attemptId}`, error);
     try {
       await failClaimedAttempt(attemptDependencies, attemptId, error);
     } catch (failure) {
-      // Principle 3 in `failures.ts`: nothing is left to try, and the reaper converges the row.
+      // `reaper-is-the-backstop` in `failures.ts`: nothing is left to try, and the reaper
+      // converges the row.
       console.error(
         `Could not record a verdict for attempt ${attemptId} after it failed to start; ` +
           'abandoning it to the reaper',
@@ -149,15 +184,15 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     applyDeliveryOutcome(record, await settleAttempt(attemptDependencies, record.prepared, ending));
   }
 
-  /** Hold `record.settlingPromise` for the lifetime of one attempt's path to a settled outcome,
-   * absorbing whatever it throws.
+  /** Carry one attempt's path to a settled outcome for its whole lifetime, abandoning the attempt
+   * if that path throws. Held as `record.settlingPromise` throughout.
    *
    * Both callers below end up in `deliverVerdict` — `settleWhenExited` reaches it through
    * `settleAttempt`, which classifies the verdict and then calls it; `launchResume` calls it
    * directly to carry a parked verdict further. Either way, `deliverVerdict` parks the failures it
    * expects, so anything reaching here is a failure it does not expect — abandon the attempt, and
    * abandoning must stop renewing the lease or the row stays `processing` forever and the reaper
-   * can never converge it (principle 3 in `failures.ts`).
+   * can never converge it (`reaper-is-the-backstop` in `failures.ts`).
    */
   async function settleOrAbandon(record: InFlightAttempt, settling: Promise<void>): Promise<void> {
     try {
@@ -261,7 +296,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     try {
       progressSequence = (await readProgress(record.prepared.runDirectory))?.sequence;
     } catch (error) {
-      // Principle 5 in `failures.ts`: a renewal asserts that the checks ran, and this one did not.
+      // `no-check-no-renewal` in `failures.ts`: this tick has no check to stand behind.
       return { progress: { kind: 'failed', error }, lease: { kind: 'skipped' } };
     }
     return { progress: { kind: 'read', progressSequence }, ...(await renew(record)) };
@@ -277,7 +312,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       const lease = await renewLease(db, record.prepared.attemptId, config.workerId);
       return { lease, renewalIssuedAt };
     } catch (error) {
-      // Principle 2 in `failures.ts`: absorbed, and the next tick is the retry.
+      // `absorb-or-fail` in `failures.ts`: absorbed, and the next tick is the retry.
       console.error(`Could not renew the lease on attempt ${record.prepared.attemptId}`, error);
       return { lease: { kind: 'failed', error }, renewalIssuedAt };
     }
@@ -333,12 +368,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // Draining
   // -----------------------------------------------------------
 
-  /** SIGTERM and `run()`'s own exit both call it. `shuttingDown` is set before the first await, so
-   * `claimAndStart` refuses immediately.
+  /** SIGTERM and `run()`'s own exit both call it. `shuttingDown` is set before the first await,
+   * so `claimAndStart` refuses immediately.
    */
   async function drain(): Promise<void> {
     shuttingDown = true;
-    // Memoized: run the drain once even if both callers race into it.
+    // Memoized: run the drain once even if both callers race into it, exactly as `direct()` does.
     drainingPromise ??= drainOnce();
     await drainingPromise;
   }
@@ -415,7 +450,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
     try {
       while (!shuttingDown) {
-        const outcome = await claimAndStart();
+        const outcome = await pollQueue();
         if (outcome === 'draining') break;
         if (outcome !== 'started') await sleep(config.queuePollIntervalMs);
       }
@@ -445,7 +480,7 @@ function startTicker(name: string, tick: () => Promise<unknown>, intervalMs: num
       try {
         await tick();
       } catch (error) {
-        // Principle 2 in `failures.ts`: the next tick is the retry.
+        // `absorb-or-fail` in `failures.ts`: the next tick is the retry.
         console.error(`The worker's ${name} tick failed; the next tick is the retry`, error);
       }
     }

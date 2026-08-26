@@ -187,11 +187,10 @@ Child progress is an *input* to the renewal decision, never the value written. "
 this attempt?" is the renewal's *answer*. "Tell other parents I am alive" is its *effect*.
 
 That rule has a corollary: a parent that cannot evaluate its child's health must **stop
-renewing**, so the reaper converges the attempt. This is the same shape as "an error is not a
-verdict" below: *the write fails ⇒ still run the checks; the checks cannot be evaluated ⇒ skip the
-write.* The two rules this adds on top — a renewal asserts that the checks ran, and fencing once a
-lease has expired — are decided in
-[`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
+renewing**, so the reaper converges the attempt. This is the same shape as "only a zero-row update
+means lost" below: *the write fails ⇒ still run the checks; the checks cannot be evaluated ⇒ skip the
+write.* The two rules this adds on top — no check, no renewal; and fencing once a lease has expired — are
+decided in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts), which names them.
 
 Four layered defenses, because a hung analysis has to be caught even if the process that should
 notice it is itself hung:
@@ -202,10 +201,12 @@ notice it is itself hung:
    the longest valid API call including backoff — see [`config.ts`](apps/worker/src/config.ts).
 2. **The parent hard-kills** a child after `killAfterTotalRuntimeMs` no matter what, as a safety net
    for hung attempts — see [`config.ts`](apps/worker/src/config.ts).
-3. **The parent fences a claim it has held too long.** `claimedCeilingMs` catches a parent that
-   keeps renewing a lease forever but never actually finishes the attempt — a failure the other two
-   defenses cannot, since both watch the *child*, and this parent's child may look perfectly
-   healthy. See [`config.ts`](apps/worker/src/config.ts).
+3. **A claim held too long is reaped, regardless of what its lease says.** `claimedCeilingMs` catches a
+   parent that keeps renewing a lease forever but never actually finishes the attempt — a failure
+   the other two defenses cannot, since both watch the *child*, and this parent's child may look
+   perfectly healthy. It is the second, independent predicate of the same sweep as defense 4, since
+   the parent this catches is by definition not going to catch itself. See
+   [`config.ts`](apps/worker/src/config.ts).
 4. **Other workers reap**, in [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The reaper exists for the
    *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
    namespace and takes every child with it, and the PaaS restarts the container — there is no
@@ -221,11 +222,19 @@ hung, does not realize it. **All database updates to an analysis attempt must be
 tolerate this** — see the terminal-state and status invariants in
 [`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-state-machine).
 
-When the parent's own database calls fail, **an error is not a verdict**: a zero-row guarded
-update is the only "we lost the attempt". A *thrown* lease-renewal error skips that write but
-never the local no-progress and hard-ceiling checks, which read the clock and the progress file. A
-parent that gives up on recording a verdict stops renewing the lease first, so reaping can
-converge the attempt. Reasoning in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
+When the parent's own database calls fail, **only a zero-row guarded update means we lost the
+attempt**; an error means only that we still do not know.
+
+A *thrown* lease-renewal error skips that write, but the local no-progress and hard-ceiling
+checks still run — they read the clock and the progress file, not the database. A progress read
+that itself throws is the mirror image: it skips the renewal, and it skips the no-progress check
+it could not evaluate. But the two rules that read nothing but the clock — the hard ceiling and
+fencing — keep firing regardless, so an unreadable `progress.json` can never buy a child unbounded
+runtime.
+
+A parent that gives up on recording a verdict stops renewing the lease first, so reaping can
+still converge the attempt. Reasoning in
+[`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
 
 *Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
 onto one medium: a parent whose database is down stops being able to answer "should I kill this

@@ -1,40 +1,54 @@
 /** What a database or blob store failure *means* in the worker.
  *
  * The web app answers an infrastructure failure with an HTTP status and is done
- * (`apps/web/src/lib/server/db.ts`); the worker has no response to shape, so each failure
- * becomes one of three things instead. The principles, resting on two architectural facts —
- * retrying an attempt is a user action, and the cross-worker reaper converges any attempt whose
- * lease expires ([`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping)):
+ * (`apps/web/src/lib/server/db.ts`). The worker has no response to shape, so a failure here
+ * becomes one of three things instead: absorbed by the loop that hit it, recorded as the failure
+ * of the attempt that hit it, or abandoned for another worker to converge. The named rules below
+ * decide which, and the rest of the package cites them by name.
  *
- * 1. **An error is not a verdict.** A zero-row guarded update is the only "we lost the attempt".
- *    A *thrown* error means unknown ownership — never kill the child or write a verdict because
- *    of one. A failing lease-renewal write skips that tick, but never the local no-progress and
- *    hard-ceiling checks, which read the clock and the progress file rather than the database.
- * 2. **Loops retry by ticking; attempts fail terminally.** A failure in the claim poll or a
- *    direct tick is logged and absorbed — the next tick is the retry. A failure while
- *    processing a *claimed* attempt becomes `failed('infrastructure')`, because a claimed
- *    attempt can never return to the queue.
- * 3. **The reaper is the backstop for a verdict we cannot record.** If even `markAttemptFailed`
- *    cannot be written: kill the child first, log loudly, and abandon — and abandoning stops
- *    renewing the lease, or the row would stay `processing` forever and the reaper could never
- *    converge it.
- * 4. **Bounded retry only where one transient statement would otherwise terminally fail an
- *    attempt** — loading a claimed attempt's inputs, and the `markAttempt*` writes, which record up
- *    to ~20 minutes of child work and real AI spend. Everything else already retries: the loops
- *    by ticking, and every blob store request inside the SDK (`MAX_ATTEMPTS` in
- *    `packages/storage/src/client.ts`). *Rejected: a second retry layer on blob calls — it would
- *    multiply the worst-case latency for no added coverage.*
- * 5. **A renewal asserts that the checks ran.** If the progress read throws — `EIO`, `ENOSPC`,
- *    a `ContractError` from a malformed `progress.json` — skip the renewal rather than treating a
- *    missing file (`ENOENT`, already mapped to `undefined`) the same as a read we could not
- *    trust. Renewing anyway would let one bad byte in `progress.json` produce a parent that
- *    renews forever and never evaluates a threshold. (A `ContractError` there is itself a
- *    *verdict*, `contract_violation` — not an absorbed tick error.)
- * 6. **Fencing.** Once the last successful renewal is older than the lease expiry, the parent
- *    must kill the child and stop, symmetrically with principle 1: the write fails ⇒ still run
- *    the checks; the checks cannot be evaluated ⇒ skip the write. Otherwise it keeps burning AI
- *    quota for up to `killAfterTotalRuntimeMs` and then discards a completed, fully-paid-for result on a
- *    zero-row update.
+ * Two architectural facts hold all six up: retrying an attempt is a *user* action, so nothing here
+ * may quietly re-run one; and the cross-worker reaper converges any attempt whose lease expires, so
+ * letting go of an attempt is always safe
+ * ([`ARCHITECTURE.md`](../../../ARCHITECTURE.md#progress-leases-and-reaping)).
+ *
+ * - **only-zero-rows-means-lost.** Losing an attempt has exactly one signal: a guarded update that
+ *   matches no rows. A *thrown* error is not that signal — it leaves ownership exactly as unknown
+ *   as it was — so no error may conclude that this attempt is gone, kill its child, or hand it to
+ *   another worker. (An error can still fail an attempt we *do* still own; that is `absorb-or-fail`
+ *   below, and it is a different question from this one.) A failing lease-renewal write therefore
+ *   costs that tick its renewal and nothing else: the no-progress and hard-ceiling checks read the
+ *   clock and the progress file, not the database, so they still run.
+ * - **absorb-or-fail.** Loops retry by ticking; attempts fail terminally. A failure in the claim
+ *   poll or a direct tick is logged and absorbed, because the next tick is already the retry. A
+ *   failure while processing a *claimed* attempt becomes `failed('infrastructure')`, because a
+ *   claimed attempt can never return to the queue and so has no next tick to wait for. The one
+ *   exception is a claim statement Postgres *refuses*, which ticking will meet again unchanged:
+ *   the worker drains and exits nonzero.
+ * - **reaper-is-the-backstop** for a verdict we cannot record. When even `markAttemptFailed` will
+ *   not go through, kill the child, log loudly, and abandon the attempt — and abandoning it means
+ *   stopping the lease renewals too, or the row sits `processing` forever with nothing left alive
+ *   to converge it.
+ * - **one-retry-layer.** Every path retries in exactly one place, and this file is that place only
+ *   where nothing else already is: loading a claimed attempt's inputs, and the `markAttempt*`
+ *   writes. Those two are unrepeatable — they carry up to ~20 minutes of child work and real AI
+ *   spend that a single dropped connection would otherwise throw away. Everywhere else the layer
+ *   already exists: the loops retry by ticking, and every blob store request retries inside the
+ *   SDK (`MAX_ATTEMPTS` in `packages/storage/src/client.ts`). *Rejected: a second layer on top of
+ *   the blob calls — it multiplies the worst-case latency and covers nothing new.*
+ * - **no-check-no-renewal.** A renewal tells the rest of the fleet that this parent just looked at
+ *   its child, so it may only be issued by a tick that actually did. If the progress read throws —
+ *   `EIO`, `ENOSPC`, a `ContractError` from a malformed `progress.json` — skip the renewal rather
+ *   than treat an unreadable file the way we treat an absent one (`ENOENT`, already mapped to
+ *   `undefined`). Renewing on a read we could not trust would let one bad byte in `progress.json`
+ *   produce a parent that renews forever and evaluates nothing. Skipping the renewal does not
+ *   suspend the clock-only checks, though: `fencing` is exactly what has to end such a child.
+ *   (A `ContractError` there is itself a *verdict*, `contract_violation`, not an absorbed error.)
+ * - **fencing.** Once the last successful renewal is older than the lease expiry, the parent must
+ *   kill its child and stop. This is `only-zero-rows-means-lost` and `no-check-no-renewal` meeting
+ *   from opposite sides — the write fails ⇒ still run the checks; the checks cannot be run ⇒ skip
+ *   the write — and without it a
+ *   parent burns AI quota for up to `killAfterTotalRuntimeMs` only to have its finished,
+ *   fully-paid-for result discarded by a zero-row update.
  */
 
 import {
@@ -44,8 +58,8 @@ import {
 } from '@gbd/db';
 import { isBlobStoreError } from '@gbd/storage';
 
-/** What to record in the database when an analysis fails due
- * to the parent's own machinery. */
+/** What to record when an attempt fails through the parent's own machinery rather than through
+ * anything the child did. */
 export type AttemptFailure = {
   reason: Extract<AnalysisFailureReason, 'infrastructure' | 'unknown'>;
   detail: string;
@@ -87,13 +101,10 @@ export interface RetryOptions {
   action: string;
   /** Structured context — entity IDs, etc. — logged next to the error. */
   context?: Record<string, unknown>;
-  /** The wait before each retry.
+  /** The wait before each retry, so there is always one more attempt than there are waits.
    *
-   * The first attempt has no wait, so there is one more attempt than
-   * there are waits.
-   *
-   * This layer bridges *blips* — a reset pooled connection, one dropped packet —
-   * not outages, which are the caller's problem.
+   * Size these for *blips* — a reset pooled connection, one dropped packet. An outage outlasts any
+   * bound worth putting here and is the caller's to handle.
    */
   waitsMs?: readonly number[];
   /** Injected by tests so no assertion waits on the wall clock. */
