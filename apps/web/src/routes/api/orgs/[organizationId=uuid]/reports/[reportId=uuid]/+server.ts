@@ -45,7 +45,7 @@ export async function _deleteReport(
 
     await transaction
       .updateTable('report')
-      .set({ deletedAt: sql<Date>`now()`, deletedByUserId: actor.userId })
+      .set({ deletedAt: sql<Date>`now()` })
       .where('id', '=', report.id)
       .execute();
 

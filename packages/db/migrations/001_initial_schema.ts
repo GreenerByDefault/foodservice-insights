@@ -388,16 +388,9 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
     .addColumn('unit_system', sql`unit_system`, (column) => column.notNull())
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addColumn('deleted_at', 'timestamptz')
-    .addColumn('deleted_by_user_id', 'uuid', (column) =>
-      column.references('app_user.id').onDelete('set null'),
-    )
     .addCheckConstraint(
       'report_deleted_at_after_created_at',
       sql`deleted_at IS NULL OR deleted_at >= created_at`,
-    )
-    .addCheckConstraint(
-      'report_deleted_by_requires_deleted_at',
-      sql`deleted_by_user_id IS NULL OR deleted_at IS NOT NULL`,
     )
     .addCheckConstraint(
       'report_monthly_counts_is_object',
@@ -420,12 +413,6 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
   await sql`
     CREATE INDEX report_created_by_user_id_created_at ON report (created_by_user_id, created_at DESC)
   `.execute(database);
-
-  await database.schema
-    .createIndex('report_deleted_by_user_id')
-    .on('report')
-    .column('deleted_by_user_id')
-    .execute();
 
   // --- input_file -----------------------------------------------------------
 

@@ -35,23 +35,6 @@ describe('report', () => {
     });
   });
 
-  test('rejects recording who deleted a report that is not deleted', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const user = await insertAppUser(transaction);
-      const report = await insertReport(transaction);
-      await transaction
-        .updateTable('report')
-        .set({ deletedByUserId: user.id })
-        .where('id', '=', report.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'report_deleted_by_requires_deleted_at',
-    });
-  });
-
   test.each([
     ['an array', JSON.stringify([1, 2, 3])],
     ['a bare number', JSON.stringify(42)],
