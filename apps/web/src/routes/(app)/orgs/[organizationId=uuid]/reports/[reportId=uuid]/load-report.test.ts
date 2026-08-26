@@ -144,7 +144,12 @@ describe('each status narrows to the right variant', () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'pending' });
+      const createdAt = new Date('2026-01-15T10:00:00Z');
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'pending',
+        createdAt,
+      });
 
       const data = await _loadReport(transaction, {
         organizationId: organization.id,
@@ -152,10 +157,7 @@ describe('each status narrows to the right variant', () => {
         supportEmail: SUPPORT_EMAIL,
       });
 
-      expect(data.attempt).toEqual({
-        status: 'pending',
-        createdAt: expect.any(Date),
-      });
+      expect(data.attempt).toEqual({ status: 'pending', createdAt });
     });
   });
 
@@ -163,7 +165,17 @@ describe('each status narrows to the right variant', () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'processing' });
+      const createdAt = new Date('2026-01-15T10:00:00Z');
+      const claimedAt = new Date('2026-01-15T10:05:00Z');
+      // insertAnalysisAttempt only exposes a `finishedAt` override, but for a non-terminal status
+      // it writes that value into claimedAt/leaseRenewedAt instead (finishedAt itself stays null) —
+      // it's the fixture's only knob for backdating a claim on an unclaimed-by-default row.
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'processing',
+        createdAt,
+        finishedAt: claimedAt,
+      });
 
       const data = await _loadReport(transaction, {
         organizationId: organization.id,
@@ -171,11 +183,7 @@ describe('each status narrows to the right variant', () => {
         supportEmail: SUPPORT_EMAIL,
       });
 
-      expect(data.attempt).toEqual({
-        status: 'processing',
-        createdAt: expect.any(Date),
-        claimedAt: expect.any(Date),
-      });
+      expect(data.attempt).toEqual({ status: 'processing', createdAt, claimedAt });
     });
   });
 
@@ -183,8 +191,17 @@ describe('each status narrows to the right variant', () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
+      // claimedAt derives from finishedAt (see the 'processing' test above), and must be after
+      // createdAt — analysis_attempt_claimed_at_after_created_at — so this needs both set.
+      const createdAt = new Date('2026-01-15T10:00:00Z');
+      const finishedAt = new Date('2026-01-15T10:05:00Z');
       // insertAnalysisAttempt defaults a failed attempt's failure_reason to 'child_crashed'.
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'failed',
+        createdAt,
+        finishedAt,
+      });
 
       const data = await _loadReport(transaction, {
         organizationId: organization.id,
@@ -194,7 +211,7 @@ describe('each status narrows to the right variant', () => {
 
       expect(data.attempt).toEqual({
         status: 'failed',
-        finishedAt: expect.any(Date),
+        finishedAt,
         attemptNumber: 1,
         failure: {
           whatHappened: 'Something on our end interrupted the analysis before it could finish.',
@@ -202,6 +219,49 @@ describe('each status narrows to the right variant', () => {
             'This was not a problem with your file. You can run it again without uploading it a second time, or contact us if it keeps happening.',
           canRetry: true,
           contactMailto: `mailto:${SUPPORT_EMAIL}`,
+        },
+      });
+    });
+  });
+
+  test('succeeded', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id);
+      const createdAt = new Date('2026-01-15T10:00:00Z');
+      // insertAnalysisAttempt sets claimedAt from the same override as finishedAt for a terminal
+      // status, so the two are necessarily equal here — that's the fixture's design, not this test's.
+      const finishedAt = new Date('2026-01-15T10:05:00Z');
+      const attempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'succeeded',
+        createdAt,
+        finishedAt,
+      });
+      const pdf = await insertResultFile(transaction, {
+        analysisAttemptId: attempt.id,
+        kind: 'pdf',
+      });
+      const xlsx = await insertResultFile(transaction, {
+        analysisAttemptId: attempt.id,
+        kind: 'xlsx',
+      });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.attempt).toEqual({
+        status: 'succeeded',
+        createdAt,
+        claimedAt: finishedAt,
+        finishedAt,
+        files: {
+          pdf: { href: `/file/result/${pdf.id}` },
+          xlsx: { href: `/file/result/${xlsx.id}` },
+          charts: [],
         },
       });
     });
@@ -319,83 +379,47 @@ describe('a cancel request', () => {
   });
 });
 
-describe('succeeded', () => {
-  // A succeeded attempt is guaranteed a pdf and an xlsx result file —
-  // `analysis_attempt_succeeded_has_result_files` — so this is the only shape this fixture needs
-  // to cover; the `requireConstraint` calls in `loadResultFiles` are what would fail loudly if
-  // that guarantee were ever dropped.
-  test('the pdf and xlsx the database guarantees both come back', async () => {
-    await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
-      const attempt = await insertAnalysisAttempt(transaction, {
-        reportId: report.id,
-        status: 'succeeded',
-      });
-      const pdf = await insertResultFile(transaction, {
-        analysisAttemptId: attempt.id,
-        kind: 'pdf',
-      });
-      const xlsx = await insertResultFile(transaction, {
-        analysisAttemptId: attempt.id,
-        kind: 'xlsx',
-      });
-
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
-
-      expect(data.attempt.status).toBe('succeeded');
-      if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
-      expect(data.attempt.files.pdf).toEqual({ href: `/file/result/${pdf.id}` });
-      expect(data.attempt.files.xlsx).toEqual({ href: `/file/result/${xlsx.id}` });
+test('charts come back ordered by chart_key, not insertion order', async () => {
+  await withRollback(database(), async (transaction) => {
+    const { organization } = await insertOrganization(transaction);
+    const report = await aReportWithInputFile(transaction, organization.id);
+    const attempt = await insertAnalysisAttempt(transaction, {
+      reportId: report.id,
+      status: 'succeeded',
     });
-  });
-
-  test('charts come back ordered by chart_key, not insertion order', async () => {
-    await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
-      const attempt = await insertAnalysisAttempt(transaction, {
-        reportId: report.id,
-        status: 'succeeded',
-      });
-      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
-      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-      // Inserted out of alphabetical order on purpose — `result_file.id` and `created_at` cannot
-      // be trusted to order these (see the trap this load's comment names), so only an explicit
-      // `ORDER BY chart_key` can make this test fail if that ordering is ever dropped.
-      const totalSpend = await insertResultFile(transaction, {
-        analysisAttemptId: attempt.id,
-        kind: 'chart',
-        chartKey: 'total_spend',
-      });
-      const avgOrder = await insertResultFile(transaction, {
-        analysisAttemptId: attempt.id,
-        kind: 'chart',
-        chartKey: 'avg_order',
-      });
-      const topProducts = await insertResultFile(transaction, {
-        analysisAttemptId: attempt.id,
-        kind: 'chart',
-        chartKey: 'top_products',
-      });
-
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
-
-      expect(data.attempt.status).toBe('succeeded');
-      if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
-      expect(data.attempt.files.charts).toEqual([
-        { href: `/file/result/${avgOrder.id}`, chartKey: 'avg_order' },
-        { href: `/file/result/${topProducts.id}`, chartKey: 'top_products' },
-        { href: `/file/result/${totalSpend.id}`, chartKey: 'total_spend' },
-      ]);
+    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
+    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
+    // Inserted out of alphabetical order on purpose — `result_file.id` and `created_at` cannot
+    // be trusted to order these (see the trap this load's comment names), so only an explicit
+    // `ORDER BY chart_key` can make this test fail if that ordering is ever dropped.
+    const totalSpend = await insertResultFile(transaction, {
+      analysisAttemptId: attempt.id,
+      kind: 'chart',
+      chartKey: 'total_spend',
     });
+    const avgOrder = await insertResultFile(transaction, {
+      analysisAttemptId: attempt.id,
+      kind: 'chart',
+      chartKey: 'avg_order',
+    });
+    const topProducts = await insertResultFile(transaction, {
+      analysisAttemptId: attempt.id,
+      kind: 'chart',
+      chartKey: 'top_products',
+    });
+
+    const data = await _loadReport(transaction, {
+      organizationId: organization.id,
+      reportId: report.id,
+      supportEmail: SUPPORT_EMAIL,
+    });
+
+    expect(data.attempt.status).toBe('succeeded');
+    if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
+    expect(data.attempt.files.charts).toEqual([
+      { href: `/file/result/${avgOrder.id}`, chartKey: 'avg_order' },
+      { href: `/file/result/${topProducts.id}`, chartKey: 'top_products' },
+      { href: `/file/result/${totalSpend.id}`, chartKey: 'total_spend' },
+    ]);
   });
 });
