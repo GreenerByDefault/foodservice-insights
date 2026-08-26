@@ -286,7 +286,7 @@ describe('the hourly report limit', () => {
       );
       const body = (await response.json()) as { summary: string };
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(429);
       expect(body.summary).toContain('organization');
 
       const recorded = await transaction

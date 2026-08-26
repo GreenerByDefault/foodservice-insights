@@ -70,8 +70,15 @@ export async function _createReport(
     { action: 'check the report rate limit', context: { organizationId } },
   );
   if (initialRateLimitViolation) {
-    const rejection = await recordRateLimitRejection(db, store, uploader, raw, outcome.file, initialRateLimitViolation);
-    return json(userFacingRejection(rejection), { status: 400 });
+    const rejection = await recordRateLimitRejection(
+      db,
+      store,
+      uploader,
+      raw,
+      outcome.file,
+      initialRateLimitViolation,
+    );
+    return json(userFacingRejection(rejection), { status: 429 });
   }
 
   const reportId = newReportId();
@@ -119,7 +126,8 @@ export async function _createReport(
     { action: 'record an accepted upload', context: { organizationId, reportId } },
   );
 
-  if (!write.ok) return json(userFacingRejection(write.rejection), { status: 400 });
+  // Always a rate-limit rejection: it's the only reason `write.ok` can be false here.
+  if (!write.ok) return json(userFacingRejection(write.rejection), { status: 429 });
 
   return json(
     { reportId },
