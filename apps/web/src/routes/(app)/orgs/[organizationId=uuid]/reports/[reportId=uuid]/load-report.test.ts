@@ -285,7 +285,7 @@ describe('a cancel request', () => {
         createdAt: expect.any(Date),
         claimedAt: expect.any(Date),
         finishedAt: expect.any(Date),
-        files: { pdf: { id: pdf.id }, xlsx: null, charts: [] },
+        files: { pdf: { href: `/file/result/${pdf.id}` }, xlsx: null, charts: [] },
       });
     });
   });
@@ -334,7 +334,7 @@ describe('succeeded', () => {
       expect(data.attempt.status).toBe('succeeded');
       if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
       expect(data.attempt.files.pdf).toBeNull();
-      expect(data.attempt.files.xlsx).toEqual({ id: xlsx.id });
+      expect(data.attempt.files.xlsx).toEqual({ href: `/file/result/${xlsx.id}` });
     });
   });
 
@@ -374,9 +374,9 @@ describe('succeeded', () => {
       expect(data.attempt.status).toBe('succeeded');
       if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
       expect(data.attempt.files.charts).toEqual([
-        { id: avgOrder.id, chartKey: 'avg_order' },
-        { id: topProducts.id, chartKey: 'top_products' },
-        { id: totalSpend.id, chartKey: 'total_spend' },
+        { href: `/file/result/${avgOrder.id}`, chartKey: 'avg_order' },
+        { href: `/file/result/${topProducts.id}`, chartKey: 'top_products' },
+        { href: `/file/result/${totalSpend.id}`, chartKey: 'total_spend' },
       ]);
     });
   });

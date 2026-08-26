@@ -31,8 +31,8 @@ export const load: PageServerLoad = async ({ params }) => {
   );
 };
 
-export type FileLink = { id: ResultFileId };
-export type ChartLink = { id: ResultFileId; chartKey: string };
+export type FileLink = { href: string };
+export type ChartLink = { href: string; chartKey: string };
 
 export type ResultFiles = {
   pdf: FileLink | null;
@@ -70,7 +70,7 @@ export type Attempt =
 
 export type ReportPageData = {
   report: { id: ReportId; name: string };
-  inputFile: { id: InputFileId; originalFilename: string; byteSize: number };
+  inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
 };
 
@@ -137,7 +137,7 @@ export async function _loadReport(
   return {
     report: { id: row.reportId, name: row.reportName },
     inputFile: {
-      id: row.inputFileId,
+      href: `/file/input/${row.inputFileId}`,
       originalFilename: row.inputFileOriginalFilename,
       byteSize: row.inputFileByteSize,
     },
@@ -251,14 +251,18 @@ async function loadResultFiles(
     charts: files
       .filter((file) => file.kind === 'chart')
       .map((file) => ({
-        id: file.id,
+        href: resultFileHref(file.id),
         chartKey: requireConstraint(file.chartKey, 'result_file_chart_key_iff_chart'),
       })),
   };
 }
 
 function toFileLink(file: { id: ResultFileId } | undefined): FileLink | null {
-  return file ? { id: file.id } : null;
+  return file ? { href: resultFileHref(file.id) } : null;
+}
+
+function resultFileHref(id: ResultFileId): string {
+  return `/file/result/${id}`;
 }
 
 function toFailureCopy(reason: AnalysisFailureReason, supportEmail: string): FailureCopy {

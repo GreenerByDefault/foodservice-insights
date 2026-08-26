@@ -40,26 +40,26 @@ let { data }: PageProps = $props();
   <ul>
     {#if data.attempt.files.pdf}
       <li>
-        <a class="underline hover:no-underline" href="/file/result/{data.attempt.files.pdf.id}">
+        <a class="underline hover:no-underline" href={data.attempt.files.pdf.href}>
           Download PDF
         </a>
       </li>
     {/if}
     {#if data.attempt.files.xlsx}
       <li>
-        <a class="underline hover:no-underline" href="/file/result/{data.attempt.files.xlsx.id}">
+        <a class="underline hover:no-underline" href={data.attempt.files.xlsx.href}>
           Download Excel
         </a>
       </li>
     {/if}
-    {#each data.attempt.files.charts as chart (chart.id)}
+    {#each data.attempt.files.charts as chart (chart.href)}
       <li>
-        <a class="underline hover:no-underline" href="/file/result/{chart.id}">{chart.chartKey}</a>
+        <a class="underline hover:no-underline" href={chart.href}>{chart.chartKey}</a>
       </li>
     {/each}
   </ul>
   <p>
-    <a class="underline hover:no-underline" href="/file/input/{data.inputFile.id}">
+    <a class="underline hover:no-underline" href={data.inputFile.href}>
       {data.inputFile.originalFilename}
     </a>
   </p>
