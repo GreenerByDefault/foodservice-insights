@@ -60,8 +60,8 @@ export type Worker = {
  *
  * Deliberately mutable. `state` is replaced wholesale rather than mutated field by field.
  */
-type InFlight = {
-  preparedAttempt: PreparedAttempt;
+type InFlightAttempt = {
+  prepared: PreparedAttempt;
   state: TickState;
   kill?: Kill;
   pendingVerdict?: PendingVerdict;
@@ -78,17 +78,17 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   const attemptDependencies: AttemptDependencies = { ...config, db, store };
 
-  const inFlight = new Map<AnalysisAttemptId, InFlight>();
-  let draining = false;
-  let drained: Promise<void> | undefined;
-  let ticking: Promise<void> | undefined;
+  const inFlight = new Map<AnalysisAttemptId, InFlightAttempt>();
+  let shuttingDown = false;
+  let drainingPromise: Promise<void> | undefined;
+  let tickingPromise: Promise<void> | undefined;
 
   // -----------------------------------------------------------
   // Claiming and starting
   // -----------------------------------------------------------
 
   async function claimAndStart(): Promise<ClaimOutcome> {
-    if (draining) return 'draining';
+    if (shuttingDown) return 'draining';
     // This check includes parked verdicts, per `maxConcurrentAttempts` in `config.ts`.
     if (inFlight.size >= config.maxConcurrentAttempts) return 'at-capacity';
 
@@ -97,19 +97,19 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     const attemptId = await claimNextAttempt(db, config.workerId, { candidateReports });
     if (attemptId === undefined) return 'queue-empty';
 
-    let preparedAttempt: PreparedAttempt;
+    let prepared: PreparedAttempt;
     try {
-      preparedAttempt = await startAttempt(attemptDependencies, attemptId);
+      prepared = await startAttempt(attemptDependencies, attemptId);
     } catch (error) {
-      await failToStart(attemptId, error);
+      await recordStartFailure(attemptId, error);
       return 'start-failed';
     }
 
-    startTracking(preparedAttempt);
+    startTracking(prepared);
     return 'started';
   }
 
-  async function failToStart(attemptId: AnalysisAttemptId, error: unknown): Promise<void> {
+  async function recordStartFailure(attemptId: AnalysisAttemptId, error: unknown): Promise<void> {
     console.error(`Could not start claimed attempt ${attemptId}`, error);
     try {
       await failClaimedAttempt(attemptDependencies, attemptId, error);
@@ -123,33 +123,30 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
   }
 
-  function startTracking(preparedAttempt: PreparedAttempt): void {
+  function startTracking(prepared: PreparedAttempt): void {
     const startedAt = clock.now();
-    const record: InFlight = {
-      preparedAttempt,
+    const record: InFlightAttempt = {
+      prepared,
       state: { startedAt, lastProgressAt: startedAt, renewalIssuedAt: startedAt, exited: false },
     };
-    inFlight.set(preparedAttempt.attemptId, record);
+    inFlight.set(prepared.attemptId, record);
     // Stored at attach time, so there is no window in which a child has exited and no tick knows a
     // delivery is running.
-    record.settlingPromise = guardSettlingPromise(record, settleWhenExited(record));
+    record.settlingPromise = settleOrAbandon(record, settleWhenExited(record));
   }
 
   /** Await the child, then read how it ended and deliver the verdict.
    *
-   * This is only ever awaited through `guardSettlingPromise`, which is what keeps a rejection here
+   * This is only ever awaited through `settleOrAbandon`, which is what keeps a rejection here
    * from reaching the event loop unhandled and taking the process down with it.
    */
-  async function settleWhenExited(record: InFlight): Promise<void> {
-    const outcome = await record.preparedAttempt.child.exited;
+  async function settleWhenExited(record: InFlightAttempt): Promise<void> {
+    const outcome = await record.prepared.child.exited;
     // Set in the same microtask the await resolves in, so no tick can see a dead child as live.
     record.state = { ...record.state, exited: true };
 
-    const ending = await readChildEnding(record.preparedAttempt, outcome, record.kill);
-    applyDeliveryOutcome(
-      record,
-      await settleAttempt(attemptDependencies, record.preparedAttempt, ending),
-    );
+    const ending = await readChildEnding(record.prepared, outcome, record.kill);
+    applyDeliveryOutcome(record, await settleAttempt(attemptDependencies, record.prepared, ending));
   }
 
   /** Hold `record.settlingPromise` for the lifetime of one attempt's path to a settled outcome,
@@ -162,16 +159,16 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
    * abandoning must stop renewing the lease or the row stays `processing` forever and the reaper
    * can never converge it (principle 3 in `failures.ts`).
    */
-  async function guardSettlingPromise(record: InFlight, settling: Promise<void>): Promise<void> {
+  async function settleOrAbandon(record: InFlightAttempt, settling: Promise<void>): Promise<void> {
     try {
       await settling;
     } catch (error) {
       console.error(
-        `Could not deliver the verdict for attempt ${record.preparedAttempt.attemptId}; abandoning it ` +
+        `Could not deliver the verdict for attempt ${record.prepared.attemptId}; abandoning it ` +
           'to the reaper',
         error,
       );
-      inFlight.delete(record.preparedAttempt.attemptId);
+      inFlight.delete(record.prepared.attemptId);
     } finally {
       record.settlingPromise = undefined;
     }
@@ -179,9 +176,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   /** Fold a `deliverVerdict` outcome into the in-flight record: drop it once the verdict is off
    * our hands, or hold `pendingVerdict` for the next tick's `launchResume` if it parked. */
-  function applyDeliveryOutcome(record: InFlight, outcome: SettleOutcome): void {
+  function applyDeliveryOutcome(record: InFlightAttempt, outcome: SettleOutcome): void {
     if (outcome.kind !== 'parked') {
-      inFlight.delete(record.preparedAttempt.attemptId);
+      inFlight.delete(record.prepared.attemptId);
       return;
     }
 
@@ -203,15 +200,15 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // A second concurrent call awaits the tick already in flight rather than starting a new one.
     // That's what makes phase 2's reasoning hold under any scheduler, and what makes `drain()`'s
     // handoff from `run()`'s own ticker safe.
-    ticking ??= directOnce().finally(() => {
-      ticking = undefined;
+    tickingPromise ??= directOnce().finally(() => {
+      tickingPromise = undefined;
     });
-    await ticking;
+    await tickingPromise;
   }
 
   async function directOnce(): Promise<void> {
     // Phase 1: every database round trip this tick, concurrently across attempts.
-    // The concurrency is deliberate, as explained in config.py with `leaseExpiresAfterMs`.
+    // The concurrency is deliberate, as explained in config.ts with `leaseExpiresAfterMs`.
     const ticked = await Promise.all(
       [...inFlight.values()].map(async (record) => ({ record, reading: await readTick(record) })),
     );
@@ -219,7 +216,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // Phase 2: synchronous, no I/O. That is what makes the `exited` guard airtight — a child that
     // exits mid-tick cannot observe a half-applied decision.
     const now = clock.now();
-    const resuming: InFlight[] = [];
+    const resuming: InFlightAttempt[] = [];
     for (const { record, reading } of ticked) {
       const { state, directive } = decideDirective(record.state, reading, config, now);
       record.state = state;
@@ -242,7 +239,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
           resuming.push(record);
           break;
         case 'drop-parked-verdict':
-          inFlight.delete(record.preparedAttempt.attemptId);
+          inFlight.delete(record.prepared.attemptId);
           break;
       }
     }
@@ -252,7 +249,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     for (const record of resuming) launchResume(record);
   }
 
-  async function readTick(record: InFlight): Promise<TickReading> {
+  async function readTick(record: InFlightAttempt): Promise<TickReading> {
     // A parked verdict has no child and no run directory left to read, and one whose child has
     // exited has no threshold left to evaluate — its settle is what disposes of it. Both still
     // need their lease renewed, or a slow settle would be fenced out from under itself.
@@ -262,7 +259,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
     let progressSequence: number | undefined;
     try {
-      progressSequence = (await readProgress(record.preparedAttempt.runDirectory))?.sequence;
+      progressSequence = (await readProgress(record.prepared.runDirectory))?.sequence;
     } catch (error) {
       // Principle 5 in `failures.ts`: a renewal asserts that the checks ran, and this one did not.
       return { progress: { kind: 'failed', error }, lease: { kind: 'skipped' } };
@@ -270,29 +267,26 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     return { progress: { kind: 'read', progressSequence }, ...(await renew(record)) };
   }
 
-  async function renew(record: InFlight): Promise<Omit<TickReading, 'progress'>> {
+  async function renew(record: InFlightAttempt): Promise<Omit<TickReading, 'progress'>> {
     // Stamped before the statement is issued; `TickState.renewalIssuedAt` covers why.
     const renewalIssuedAt = clock.now();
     try {
       // One of at most two connections this attempt may hold at once — the other being a settle's
       // terminal write, which rides outside the tick (`DATABASE_CONNECTIONS_PER_ATTEMPT` in
       // config.ts).
-      const lease = await renewLease(db, record.preparedAttempt.attemptId, config.workerId);
+      const lease = await renewLease(db, record.prepared.attemptId, config.workerId);
       return { lease, renewalIssuedAt };
     } catch (error) {
       // Principle 2 in `failures.ts`: absorbed, and the next tick is the retry.
-      console.error(
-        `Could not renew the lease on attempt ${record.preparedAttempt.attemptId}`,
-        error,
-      );
+      console.error(`Could not renew the lease on attempt ${record.prepared.attemptId}`, error);
       return { lease: { kind: 'failed', error }, renewalIssuedAt };
     }
   }
 
-  function kill(record: InFlight, reason: Kill): void {
+  function kill(record: InFlightAttempt, reason: Kill): void {
     // Recorded before the kill, so the settle continuation knows why the child died.
     record.kill = reason;
-    record.preparedAttempt.child.kill();
+    record.prepared.child.kill();
   }
 
   /** A verdict whose upload budget has run out, or which a drain will not wait for, recorded as the
@@ -303,12 +297,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     return { stage: 'record', verdict: { kind: 'failed', reason, detail } };
   }
 
-  function launchResume(record: InFlight): void {
+  function launchResume(record: InFlightAttempt): void {
     if (record.settlingPromise !== undefined || record.pendingVerdict === undefined) return;
-    record.settlingPromise = guardSettlingPromise(
+    record.settlingPromise = settleOrAbandon(
       record,
-      deliverVerdict(attemptDependencies, record.preparedAttempt, record.pendingVerdict).then(
-        (outcome) => applyDeliveryOutcome(record, outcome),
+      deliverVerdict(attemptDependencies, record.prepared, record.pendingVerdict).then((outcome) =>
+        applyDeliveryOutcome(record, outcome),
       ),
     );
   }
@@ -339,14 +333,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // Draining
   // -----------------------------------------------------------
 
-  /** SIGTERM and `run()`'s own exit both call it. `draining` is set before the first await, so
+  /** SIGTERM and `run()`'s own exit both call it. `shuttingDown` is set before the first await, so
    * `claimAndStart` refuses immediately.
    */
   async function drain(): Promise<void> {
-    draining = true;
+    shuttingDown = true;
     // Memoized: run the drain once even if both callers race into it.
-    drained ??= drainOnce();
-    await drained;
+    drainingPromise ??= drainOnce();
+    await drainingPromise;
   }
 
   async function drainOnce(): Promise<void> {
@@ -400,7 +394,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // and waking on it would retry whatever it parked on as fast as that dependency can refuse.
     const blockingOnAttempt = [...inFlight.values()]
       .filter((record) => record.state.parked === undefined)
-      .map((record) => record.settlingPromise ?? record.preparedAttempt.child.exited);
+      .map((record) => record.settlingPromise ?? record.prepared.child.exited);
     try {
       await Promise.race([sleep(intervalMs, controller.signal), ...blockingOnAttempt]);
     } finally {
@@ -420,7 +414,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     ];
 
     try {
-      while (!draining) {
+      while (!shuttingDown) {
         const outcome = await claimAndStart();
         if (outcome === 'draining') break;
         if (outcome !== 'started') await sleep(config.queuePollIntervalMs);
