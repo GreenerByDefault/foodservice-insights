@@ -201,6 +201,7 @@ describe('claiming', () => {
           const reportIds: ReportId[] = [];
           for (let index = 0; index < count; index++) {
             const report = await insertReport(transaction, { organizationId: organization.id });
+            await insertInputFile(transaction, { reportId: report.id });
             await insertAnalysisAttempt(transaction, { reportId: report.id });
             reportIds.push(report.id);
           }

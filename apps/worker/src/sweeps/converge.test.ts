@@ -8,6 +8,7 @@ import type { AnalysisAttemptId, Database, ReportId } from '@gbd/db';
 import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
+  insertInputFile,
   insertReport,
   raceAgainstCommittedWrite,
   readAnalysisAttemptRow,
@@ -47,6 +48,7 @@ async function processingAttempt(
   options: { cancelRequested?: boolean } = {},
 ): Promise<{ attemptId: AnalysisAttemptId; reportId: ReportId }> {
   const report = await insertReport(transaction);
+  await insertInputFile(transaction, { reportId: report.id });
   const attempt = await insertAnalysisAttempt(transaction, {
     reportId: report.id,
     status: 'processing',
@@ -539,6 +541,7 @@ describe('cancelRequestedPendingAttempts', () => {
       WORKER_DATABASE,
       async (transaction) => {
         const report = await insertReport(transaction);
+        await insertInputFile(transaction, { reportId: report.id });
         const attempt = await insertAnalysisAttempt(transaction, {
           reportId: report.id,
           cancelRequestedAt: new Date(),
@@ -610,6 +613,7 @@ async function raceReapAgainstCommittedWrite(
     async (transaction, trash) => {
       const { organization } = await insertFixtureOrganization(transaction, trash);
       const report = await insertReport(transaction, { organizationId: organization.id });
+      await insertInputFile(transaction, { reportId: report.id });
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'processing',

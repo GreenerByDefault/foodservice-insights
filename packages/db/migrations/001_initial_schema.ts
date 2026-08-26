@@ -455,6 +455,37 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
       'Whether storage_key holds bytes the user did not send. When true, the upload as received is at the same key suffixed -original, which no row references. When false, storage_key is it.'
   `.execute(database);
 
+  // `input_file.report_id` is UNIQUE; this closes the other half of "exactly one" — a report with
+  // zero. Deferred so the transaction that inserts a report and then its input_file isn't tripped
+  // mid-flight.
+  await sql`
+    CREATE FUNCTION report_check_has_input_file() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      -- Deleted in the same transaction it was created in: nothing to enforce.
+      IF NOT EXISTS (SELECT 1 FROM report WHERE id = NEW.id) THEN
+        RETURN NULL;
+      END IF;
+
+      IF EXISTS (SELECT 1 FROM input_file WHERE report_id = NEW.id) THEN
+        RETURN NULL;
+      END IF;
+
+      RAISE EXCEPTION 'report % must have an input file', NEW.id
+        USING ERRCODE = 'check_violation',
+              CONSTRAINT = 'report_has_an_input_file',
+              TABLE = 'report';
+    END;
+    $$
+  `.execute(database);
+
+  await sql`
+    CREATE CONSTRAINT TRIGGER report_has_an_input_file
+      AFTER INSERT ON report
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE FUNCTION report_check_has_input_file()
+  `.execute(database);
+
   // --- rejected_upload ------------------------------------------------------
 
   await database.schema

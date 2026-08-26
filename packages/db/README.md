@@ -133,14 +133,3 @@ columns above.
   creation limit no longer has — two uploads that each count four and then both insert. Closing it
   means putting the count and the insert under one lock, per organization *and* per user, which
   needs the upload path to exist first so it can fix the order the two are taken in.
-
-## Known limitations
-
-- **"Exactly one `input_file` per report" is enforced only as *at most* one.** The schema only has
-  `UNIQUE (report_id)` on `input_file`; nothing stops a report with zero. In practice, this holds
-  because [`+server.ts`](../../apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/+server.ts)
-  is the only code path that inserts a `report` row, and it always inserts the matching
-  `input_file` in the same transaction. Accepted as-is: a deferred constraint trigger would enforce
-  it, but at the cost of every test fixture that creates a bare report — `insertReport` and
-  everything built on it, 50 call sites — needing a file too. Revisit if a second report-creation
-  path is ever added.

@@ -17,6 +17,7 @@ import {
   insertAnalysisAttempt,
   insertAppUserWithEmail,
   insertFixtureOrganization,
+  insertInputFile,
   insertReport,
   insertResultFile,
   raceAgainstCommittedWrite,
@@ -501,6 +502,7 @@ describe('sendPendingNotifications', () => {
       async (transaction, trash) => {
         const { organization } = await insertFixtureOrganization(transaction, trash);
         const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertInputFile(transaction, { reportId: report.id });
         const requester = await insertAppUserWithEmail(transaction);
         trash.user(requester.id);
         const attempt = await insertAnalysisAttempt(transaction, {

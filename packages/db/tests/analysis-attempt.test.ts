@@ -25,7 +25,12 @@ import {
   withCommittedFixture,
   withConcurrentTransactions,
 } from '../src/testing/concurrency.ts';
-import { aChecksum, insertAnalysisAttempt, insertReport } from '../src/testing/fixtures.ts';
+import {
+  aChecksum,
+  insertAnalysisAttempt,
+  insertInputFile,
+  insertReport,
+} from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
@@ -451,6 +456,7 @@ describe('starting a new attempt', () => {
       async (transaction, trash) => {
         const { organization } = await insertFixtureOrganization(transaction, trash);
         const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertInputFile(transaction, { reportId: report.id });
         await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
         return report;
       },
@@ -490,6 +496,7 @@ describe('starting a new attempt', () => {
       async (transaction, trash) => {
         const { organization } = await insertFixtureOrganization(transaction, trash);
         const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertInputFile(transaction, { reportId: report.id });
         await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
         return report;
       },
@@ -528,6 +535,7 @@ describe('starting a new attempt', () => {
       async (transaction, trash) => {
         const { organization } = await insertFixtureOrganization(transaction, trash);
         const report = await insertReport(transaction, { organizationId: organization.id });
+        await insertInputFile(transaction, { reportId: report.id });
         await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
         return report;
       },
@@ -744,6 +752,7 @@ describe('a terminal attempt is final', () => {
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const report = await insertReport(transaction, { organizationId: organization.id });
+          await insertInputFile(transaction, { reportId: report.id });
           return await insertAnalysisAttempt(transaction, {
             reportId: report.id,
             status: 'processing',

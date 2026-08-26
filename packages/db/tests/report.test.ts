@@ -14,7 +14,7 @@ import {
   insertOrganization,
   insertReport,
 } from '../src/testing/fixtures.ts';
-import { withRollback } from '../src/testing/transactions.ts';
+import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 
 describe('report', () => {
   test('rejects a soft delete that predates creation', async () => {
@@ -82,6 +82,27 @@ describe('report', () => {
     });
 
     expect(remaining).toBeUndefined();
+  });
+
+  test('report_has_an_input_file fails with no input file attached', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertReport(transaction);
+      await checkDeferredConstraints(transaction);
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'report_has_an_input_file',
+    });
+  });
+
+  test('report_has_an_input_file passes once the input file is attached', async () => {
+    await withRollback(DATABASE, async (transaction) => {
+      const report = await insertReport(transaction);
+      await insertInputFile(transaction, { reportId: report.id });
+
+      await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
+    });
   });
 
   test('outlives the user who created it, forgetting only who they were', async () => {
