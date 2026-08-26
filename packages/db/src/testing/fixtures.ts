@@ -238,6 +238,29 @@ export async function insertAnalysisAttempt(
     .executeTakeFirstOrThrow();
 }
 
+/** A report and the one attempt on it, for a test about acting on a report rather than about
+ * either row's own constraints. Defaults to `pending` — the state a report just submitted is in,
+ * and the one an action like canceling or deleting has something to do about.
+ */
+export async function insertReportWithAttempt(
+  database: DatabaseExecutor,
+  overrides: {
+    organizationId?: Organization['id'];
+    createdByUserId?: AppUser['id'] | null;
+    status?: AnalysisAttemptStatus;
+  } = {},
+): Promise<{ report: Report; attempt: AnalysisAttempt }> {
+  const report = await insertReport(database, {
+    organizationId: overrides.organizationId,
+    createdByUserId: overrides.createdByUserId ?? null,
+  });
+  const attempt = await insertAnalysisAttempt(database, {
+    reportId: report.id,
+    status: overrides.status ?? 'pending',
+  });
+  return { report, attempt };
+}
+
 export async function readAnalysisAttemptRow(
   database: DatabaseExecutor,
   attemptId: AnalysisAttempt['id'],

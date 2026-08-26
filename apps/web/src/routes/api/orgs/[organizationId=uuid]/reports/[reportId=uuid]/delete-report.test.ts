@@ -1,48 +1,14 @@
-import type {
-  AnalysisAttemptStatus,
-  DatabaseExecutor,
-  OrganizationId,
-  ReportId,
-  UserId,
-} from '@gbd/db';
 import {
-  insertAnalysisAttempt,
   insertAppUser,
   insertOrganization,
-  insertReport,
+  insertReportWithAttempt,
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
+import { expectedReportAuditEvent, reportAuditEvents } from '$lib/server/tests/audit';
 import { statusOf } from '$lib/server/tests/http-error';
 import { _deleteReport } from './+server.ts';
-
-/** A report and the one active attempt `_deleteReport` should find on it. */
-async function insertReportWithAttempt(
-  transaction: DatabaseExecutor,
-  organizationId: OrganizationId,
-  overrides: { createdByUserId?: UserId; status?: AnalysisAttemptStatus } = {},
-) {
-  const report = await insertReport(transaction, {
-    organizationId,
-    createdByUserId: overrides.createdByUserId ?? null,
-  });
-  const attempt = await insertAnalysisAttempt(transaction, {
-    reportId: report.id,
-    status: overrides.status ?? 'pending',
-  });
-  return { report, attempt };
-}
-
-/** The audit rows for `reportId`, in insertion order. */
-async function auditEventsFor(transaction: DatabaseExecutor, reportId: ReportId) {
-  return await transaction
-    .selectFrom('auditEvent')
-    .select(['action', 'actorUserId', 'actorKind', 'organizationId', 'targetType', 'targetId'])
-    .where('targetId', '=', reportId)
-    .orderBy('id')
-    .execute();
-}
 
 // The 404/403 access checks are `requireReportAccess`'s own guarantee (see guards.test.ts) — these
 // only check that _deleteReport wires it up: an allowed caller's delete goes through and a denied
@@ -51,7 +17,8 @@ describe('_deleteReport', () => {
   test('a member can delete their own report, canceling its pending attempt', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
-      const { report, attempt } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: admin.id,
       });
 
@@ -63,11 +30,10 @@ describe('_deleteReport', () => {
 
       const updatedReport = await transaction
         .selectFrom('report')
-        .select(['deletedAt', 'deletedByUserId'])
+        .select('deletedAt')
         .where('id', '=', report.id)
         .executeTakeFirstOrThrow();
       expect(updatedReport.deletedAt).toBeInstanceOf(Date);
-      expect(updatedReport.deletedByUserId).toBe(admin.id);
 
       const updatedAttempt = await transaction
         .selectFrom('analysisAttempt')
@@ -77,23 +43,19 @@ describe('_deleteReport', () => {
       expect(updatedAttempt.status).toBe('pending');
       expect(updatedAttempt.cancelRequestedAt).toBeInstanceOf(Date);
 
-      expect(await auditEventsFor(transaction, report.id)).toEqual([
-        {
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+        expectedReportAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
-          actorKind: 'user',
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
-        },
-        {
+          reportId: report.id,
+        }),
+        expectedReportAuditEvent({
           action: 'report.cancel_requested',
           actorUserId: admin.id,
-          actorKind: 'user',
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
-        },
+          reportId: report.id,
+        }),
       ]);
     });
   });
@@ -102,9 +64,11 @@ describe('_deleteReport', () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
       const creator = await insertAppUser(transaction);
-      const { report } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: creator.id,
-        status: 'processing',
+        // Uses a completed report so that there is nothing to cancel.
+        status: 'succeeded',
       });
 
       await _deleteReport(transaction, {
@@ -115,11 +79,19 @@ describe('_deleteReport', () => {
 
       const updatedReport = await transaction
         .selectFrom('report')
-        .select('deletedByUserId')
+        .select('deletedAt')
         .where('id', '=', report.id)
         .executeTakeFirstOrThrow();
-      // The audit trail names the admin who acted, not the creator whose report it is.
-      expect(updatedReport.deletedByUserId).toBe(admin.id);
+      expect(updatedReport.deletedAt).toBeInstanceOf(Date);
+
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+        expectedReportAuditEvent({
+          action: 'report.deleted',
+          actorUserId: admin.id,
+          organizationId: organization.id,
+          reportId: report.id,
+        }),
+      ]);
     });
   });
 
@@ -129,7 +101,8 @@ describe('_deleteReport', () => {
   test('deleting a report whose attempt already finished still deletes it, with no cancel event', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
-      const { report, attempt } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: admin.id,
         status: 'succeeded',
       });
@@ -154,15 +127,13 @@ describe('_deleteReport', () => {
         .executeTakeFirstOrThrow();
       expect(untouchedAttempt.cancelRequestedAt).toBeNull();
 
-      expect(await auditEventsFor(transaction, report.id)).toEqual([
-        {
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+        expectedReportAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
-          actorKind: 'user',
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
-        },
+          reportId: report.id,
+        }),
       ]);
     });
   });
@@ -172,7 +143,8 @@ describe('_deleteReport', () => {
       const { organization } = await insertOrganization(transaction);
       const creator = await insertAppUser(transaction);
       const bystander = await insertAppUser(transaction);
-      const { report, attempt } = await insertReportWithAttempt(transaction, organization.id, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
+        organizationId: organization.id,
         createdByUserId: creator.id,
       });
 
@@ -200,7 +172,7 @@ describe('_deleteReport', () => {
         .executeTakeFirstOrThrow();
       expect(untouchedAttempt.cancelRequestedAt).toBeNull();
 
-      expect(await auditEventsFor(transaction, report.id)).toEqual([]);
+      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
     });
   });
 });
