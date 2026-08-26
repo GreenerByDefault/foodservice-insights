@@ -32,6 +32,7 @@ import {
   insertReport,
 } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
+import { MAX_ANALYSIS_ATTEMPTS } from '../src/types.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 
@@ -571,19 +572,44 @@ describe('starting a new attempt', () => {
     );
   });
 
-  test('stops at five attempts', async () => {
-    // The retry limit from REQUIREMENTS.md. Reaching it is the only way past the insert trigger
-    // to the range check, since the trigger rejects any number that is not latest + 1.
+  // Together, these two tests pin MAX_ANALYSIS_ATTEMPTS to the
+  // `analysis_attempt_attempt_number_range` CHECK constraint it mirrors, in both directions: if
+  // the migration's bound ever moves without the constant moving with it, either the boundary
+  // insert below starts failing (constant now claims one more attempt than the DB allows) or the
+  // one-past-boundary insert in the second test starts succeeding (constant now claims one fewer
+  // than the DB allows).
+
+  test('allows exactly MAX_ANALYSIS_ATTEMPTS attempts', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction);
-      for (let attemptNumber = 1; attemptNumber <= 5; attemptNumber++) {
+      for (let attemptNumber = 1; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
+        const attempt = await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          attemptNumber,
+        });
+        if (attemptNumber < MAX_ANALYSIS_ATTEMPTS) await fail(transaction, attempt.id);
+      }
+    });
+
+    await expect(insert).resolves.toBeUndefined();
+  });
+
+  test('stops at MAX_ANALYSIS_ATTEMPTS attempts', async () => {
+    // Reaching the limit is the only way past the insert trigger to the range check, since the
+    // trigger rejects any number that is not latest + 1.
+    const insert = withRollback(DATABASE, async (transaction) => {
+      const report = await insertReport(transaction);
+      for (let attemptNumber = 1; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
         const attempt = await insertAnalysisAttempt(transaction, {
           reportId: report.id,
           attemptNumber,
         });
         await fail(transaction, attempt.id);
       }
-      await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 6 });
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: MAX_ANALYSIS_ATTEMPTS + 1,
+      });
     });
 
     await expect(insert).rejects.toMatchObject({

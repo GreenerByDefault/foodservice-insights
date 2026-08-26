@@ -32,7 +32,8 @@ export const POST: RequestHandler = async (event) => {
  *
  * - 404 if the report doesn't exist in this organization, or is already soft-deleted.
  * - 403 if the caller neither created the report nor is an organization admin.
- * - 409 if the latest attempt isn't `failed`, or the report already has 5 attempts.
+ * - 409 if the latest attempt isn't `failed`, or the report already has `MAX_ANALYSIS_ATTEMPTS`
+ *   attempts.
  */
 export async function _retryReport(
   db: DatabaseExecutor,

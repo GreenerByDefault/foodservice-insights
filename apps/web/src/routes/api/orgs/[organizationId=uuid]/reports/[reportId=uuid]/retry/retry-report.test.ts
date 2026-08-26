@@ -1,3 +1,4 @@
+import { MAX_ANALYSIS_ATTEMPTS } from '@gbd/db';
 import {
   insertAnalysisAttempt,
   insertAppUser,
@@ -137,7 +138,7 @@ describe('_retryReport', () => {
     });
   });
 
-  test('a report already at five attempts is a 409', async () => {
+  test('a report already at the attempt cap is a 409', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
       const { report } = await insertReportWithAttempt(transaction, {
@@ -147,7 +148,7 @@ describe('_retryReport', () => {
       });
       // Every earlier attempt must itself be `failed`, or the "only after a failure" trigger
       // would refuse the next insert before we ever reach the attempt-number cap.
-      for (const attemptNumber of [2, 3, 4, 5] as const) {
+      for (let attemptNumber = 2; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
         await insertAnalysisAttempt(transaction, {
           reportId: report.id,
           attemptNumber,

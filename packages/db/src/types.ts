@@ -19,6 +19,11 @@ export type { default as ResultFileKind } from './generated/public/ResultFileKin
 export type { default as UnitSystem } from './generated/public/UnitSystem.ts';
 export type { InputFileId, RejectedUploadId, ReportId, ResultFileId };
 
+/** How many attempts a report may have, enforced by the `analysis_attempt_attempt_number_range`
+ * CHECK constraint (`packages/db/schema.sql`). Mirrored here — not read from the DB — for the TS
+ * call sites (route handlers, tests) that need the number without a query. */
+export const MAX_ANALYSIS_ATTEMPTS = 5;
+
 export function newInputFileId(): InputFileId {
   return crypto.randomUUID() as InputFileId;
 }
