@@ -19,8 +19,8 @@ export type RateLimitScope = 'organization' | 'user';
 export type RateLimitWindow = 'hourly' | 'weekly';
 export type RateLimitExceeded = { scope: RateLimitScope; window: RateLimitWindow; limit: number };
 
-/** Whether `organizationId` or `userId` is at or over its hourly or weekly report limit, as of
- * `now`. `undefined` means neither is.
+/** Whether `organizationId` or `userId` is at or over its hourly or weekly report limit.
+ * `undefined` means neither is.
  *
  * Always locks first, so this is the only way to check the limit — there is no bare
  * `checkReportRateLimit` to call by mistake without the lock. That makes any one call, on its
@@ -31,14 +31,14 @@ export type RateLimitExceeded = { scope: RateLimitScope; window: RateLimitWindow
  */
 export async function lockAndCheckReportRateLimit(
   database: DatabaseExecutor,
-  { organizationId, userId, now }: { organizationId: OrganizationId; userId: UserId; now: Date },
+  { organizationId, userId }: { organizationId: OrganizationId; userId: UserId },
 ): Promise<RateLimitExceeded | undefined> {
   await lockReportRateLimit(database, { organizationId, userId });
 
   const hourly = await countReportsSince(database, {
     organizationId,
     userId,
-    since: new Date(now.getTime() - HOUR_MS),
+    windowSeconds: HOUR_MS / 1000,
   });
   if (hourly.organizationCount >= HOURLY_REPORT_LIMIT) {
     return { scope: 'organization', window: 'hourly', limit: HOURLY_REPORT_LIMIT };
@@ -50,7 +50,7 @@ export async function lockAndCheckReportRateLimit(
   const weekly = await countReportsSince(database, {
     organizationId,
     userId,
-    since: new Date(now.getTime() - WEEK_MS),
+    windowSeconds: WEEK_MS / 1000,
   });
   if (weekly.organizationCount >= WEEKLY_REPORT_LIMIT) {
     return { scope: 'organization', window: 'weekly', limit: WEEKLY_REPORT_LIMIT };

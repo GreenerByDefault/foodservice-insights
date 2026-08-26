@@ -97,7 +97,7 @@ describe('countReportsSince', () => {
       return await countReportsSince(transaction, {
         organizationId: organization.id,
         userId: admin.id,
-        since: new Date(Date.now() - 60 * 60 * 1000),
+        windowSeconds: 60 * 60,
       });
     });
 
@@ -116,7 +116,7 @@ describe('countReportsSince', () => {
       return await countReportsSince(transaction, {
         organizationId: organization.id,
         userId: admin.id,
-        since: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        windowSeconds: 7 * 24 * 60 * 60,
       });
     });
 
@@ -139,7 +139,7 @@ describe('countReportsSince', () => {
       return await countReportsSince(transaction, {
         organizationId: organization.id,
         userId: admin.id,
-        since: new Date(Date.now() - 60 * 60 * 1000),
+        windowSeconds: 60 * 60,
       });
     });
 
@@ -159,7 +159,7 @@ describe('the count-then-insert race', () => {
     const { organizationCount } = await countReportsSince(transaction, {
       organizationId,
       userId,
-      since: new Date(Date.now() - 60 * 60 * 1000),
+      windowSeconds: 60 * 60,
     });
     if (organizationCount >= HOURLY_LIMIT) return { inserted: false };
 

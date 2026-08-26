@@ -68,7 +68,7 @@ export async function _createReport(
   const early = await withDbErrorHandling(
     () =>
       withTransaction(db, (transaction) =>
-        lockAndCheckReportRateLimit(transaction, { organizationId, userId, now: new Date() }),
+        lockAndCheckReportRateLimit(transaction, { organizationId, userId }),
       ),
     { action: 'check the report rate limit', context: { organizationId } },
   );
@@ -96,7 +96,6 @@ export async function _createReport(
         const exceeded = await lockAndCheckReportRateLimit(transaction, {
           organizationId,
           userId,
-          now: new Date(),
         });
         if (exceeded) {
           const rejection = await recordRateLimitRejection(

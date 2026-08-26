@@ -41,8 +41,13 @@ export async function lockReportRateLimit(
   );
 }
 
-/** How many `report` rows exist for `organizationId`, and separately for `userId`, created at or
- * after `since`.
+/** How many `report` rows exist for `organizationId`, and separately for `userId`, created within
+ * the last `windowSeconds`.
+ *
+ * The cutoff is computed by Postgres, as `now() - windowSeconds`, not by the caller — `created_at`
+ * is itself stamped by Postgres's `now()`, so comparing it against a cutoff from the app server's
+ * clock would expose the window boundary to clock skew between the two machines. Computing both
+ * ends of the comparison in the database keeps them on one clock.
  *
  * Meaningful only once `lockReportRateLimit` has been called in the same transaction — otherwise
  * this count and whatever it gates can still race. Reports never fall out of the count once
@@ -54,9 +59,11 @@ export async function countReportsSince(
   {
     organizationId,
     userId,
-    since,
-  }: { organizationId: OrganizationId; userId: UserId; since: Date },
+    windowSeconds,
+  }: { organizationId: OrganizationId; userId: UserId; windowSeconds: number },
 ): Promise<{ organizationCount: number; userCount: number }> {
+  const since = sql<Date>`now() - make_interval(secs => ${windowSeconds})`;
+
   const organizationRow = await database
     .selectFrom('report')
     .select((eb) => eb.fn.countAll<string>().as('count'))
