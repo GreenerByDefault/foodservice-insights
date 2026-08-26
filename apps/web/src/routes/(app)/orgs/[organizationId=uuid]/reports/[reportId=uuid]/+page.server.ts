@@ -48,22 +48,25 @@ export type FailureCopy = {
   contactMailto: string;
 };
 
-/** One report at one of its four reachable moments, plus `canceled`, which the union carries only
- * so the switch stays exhaustive. Canceling soft-deletes the report, so every query here already
- * filters `deleted_at is null` before a `canceled` attempt could ever be read back: the row this
- * page could show as canceled is a 404 from the moment it is requested.
+/** One report at one of its five reachable moments. `status` here is the *screen*, not the column:
+ * the two agree except for a cancel the worker has not converged yet, which arrives as `canceled`
+ * per the ordering in `toAttempt`.
  *
  * `claimedAt` is non-nullable on `processing`, and `finishedAt` non-nullable on every terminal
  * status, because the database already guarantees it: `analysis_attempt_processing_is_claimed`
  * and `analysis_attempt_finished_at_iff_terminal`. Asserting that once here means nothing
  * downstream has to handle a status paired with a missing timestamp that cannot actually occur.
+ *
+ * `canceled` carries `cancel_requested_at` rather than `finished_at`, because it is the only
+ * timestamp non-null in both branches the screen is reachable from — and it is the better one to
+ * show anyway: when the user stopped the report, not when a worker got round to it.
  */
 export type Attempt =
   | { status: 'pending'; createdAt: Date }
   | { status: 'processing'; createdAt: Date; claimedAt: Date }
   | { status: 'succeeded'; createdAt: Date; claimedAt: Date; finishedAt: Date; files: ResultFiles }
   | { status: 'failed'; finishedAt: Date; attemptNumber: number; failure: FailureCopy }
-  | { status: 'canceled'; finishedAt: Date };
+  | { status: 'canceled'; stoppedAt: Date };
 
 export type ReportPageData = {
   report: { id: ReportId; name: string };
@@ -83,13 +86,16 @@ type ReportRow = {
   createdAt: Date;
   claimedAt: Date | null;
   finishedAt: Date | null;
+  cancelRequestedAt: Date | null;
   failureReason: AnalysisFailureReason | null;
 };
 
 /** Everything the report page shows, for one report in one organization.
  *
  * Filters on the report id *and* the organization, and on `deleted_at is null`, so a report
- * belonging to someone else — or soft-deleted by a cancel — is a 404, not a leak.
+ * belonging to someone else — or one the user deleted — is a 404, not a leak. A *canceled* report
+ * is not filtered out: canceling stops the analysis and leaves the report visible
+ * (REQUIREMENTS.md § Canceling), so it loads here like any other and gets its own screen.
  */
 export async function _loadReport(
   db: DatabaseExecutor,
@@ -116,6 +122,7 @@ export async function _loadReport(
       'analysisAttempt.createdAt as createdAt',
       'analysisAttempt.claimedAt as claimedAt',
       'analysisAttempt.finishedAt as finishedAt',
+      'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
       'analysisAttempt.failureReason as failureReason',
     ])
     .where('report.id', '=', params.reportId)
@@ -162,11 +169,30 @@ async function failNotFoundOrBug(
   error(500, { message: UNEXPECTED_ERROR_MESSAGE });
 }
 
+/** The status picks the screen; a cancel *request* decides only the non-terminal case.
+ *
+ * That ordering is this page's one piece of real logic, and it reads as redundant without the race
+ * it exists for. A worker records its verdict guarded on `status` and its own id, never on
+ * `cancel_requested_at`, and the owning parent enforces a cancel by killing its child only on its
+ * *next* lease renewal — so a child that finishes inside that window leaves a `succeeded` or
+ * `failed` row carrying `cancel_requested_at`, permanently (`markIfStillOwned` in
+ * apps/worker/src/attempt/queue.ts). Keying the screen on the request alone would hide a finished
+ * report and contradict the "ready" email the notifications sweep already sent for it.
+ *
+ * The other direction is the ordinary case: the web server only writes the request, and a worker
+ * converges it up to a reap interval later. We render that gap as `canceled` rather than a
+ * "stopping" state, because there is no un-cancel and nothing for the user to do with the
+ * distinction.
+ */
 async function toAttempt(
   db: DatabaseExecutor,
   row: ReportRow,
   supportEmail: string,
 ): Promise<Attempt> {
+  if (row.cancelRequestedAt !== null && (row.status === 'pending' || row.status === 'processing')) {
+    return { status: 'canceled', stoppedAt: row.cancelRequestedAt };
+  }
+
   switch (row.status) {
     case 'pending':
       return { status: 'pending', createdAt: row.createdAt };
@@ -197,7 +223,10 @@ async function toAttempt(
     case 'canceled':
       return {
         status: 'canceled',
-        finishedAt: requireConstraint(row.finishedAt, 'analysis_attempt_finished_at_iff_terminal'),
+        stoppedAt: requireConstraint(
+          row.cancelRequestedAt,
+          'analysis_attempt_canceled_requires_request',
+        ),
       };
   }
 }

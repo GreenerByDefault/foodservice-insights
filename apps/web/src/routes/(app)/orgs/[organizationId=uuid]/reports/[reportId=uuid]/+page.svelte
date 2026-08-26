@@ -5,10 +5,11 @@ let { data }: PageProps = $props();
 </script>
 
 <!-- Deliberately undesigned: a switch over `data.attempt.status` rendering plain text and plain
-     links, so every one of the four reachable outcomes (`canceled` is unreachable — see the
-     `Attempt` doc comment in +page.server.ts) is legible before any of them is designed. The
-     waiting view, the success view, the failure view and polling each replace one branch in a
-     later PR. -->
+     links, so every one of the five outcomes is legible before any of them is designed. The
+     waiting view, the success view, the failure view, the stopped panel and polling each replace
+     one branch in a later PR. `data.attempt.status` is the screen rather than the column — the load
+     settles the cancel-versus-verdict ordering, so a cancel no worker has converged yet already
+     arrives here as `canceled`. -->
 <svelte:head>
   <title>{data.report.name}</title>
 </svelte:head>
@@ -74,5 +75,10 @@ let { data }: PageProps = $props();
     </a>
   </p>
 {:else if data.attempt.status === 'canceled'}
-  <p class="text-muted-foreground">This report was canceled.</p>
+  <p class="text-muted-foreground">
+    You stopped this report
+    <time datetime={data.attempt.stoppedAt.toISOString()}
+      >{data.attempt.stoppedAt.toISOString()}</time
+    >. It cannot be run again.
+  </p>
 {/if}

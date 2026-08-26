@@ -90,11 +90,17 @@ describe('a report the caller may see', () => {
     });
   });
 
-  test('a soft-deleted report is a 404', async () => {
+  test('a soft-deleted report is a 404, cancel request and all', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
-      await insertAnalysisAttempt(transaction, { reportId: report.id });
+      // Deleting a running report writes `cancel_requested_at` in the same transaction as
+      // `deleted_at` (REQUIREMENTS.md § Data deletion), so this is the shape a deleted report
+      // usually arrives in — and it must be a 404, not the stopped screen.
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        cancelRequestedAt: new Date(),
+      });
       await transaction
         .updateTable('report')
         .set({ deletedAt: new Date() })
@@ -205,7 +211,68 @@ describe('each status narrows to the right variant', () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'canceled' });
+      const stoppedAt = new Date();
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'canceled',
+        cancelRequestedAt: stoppedAt,
+      });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      // `stoppedAt` is the request, not `finished_at`, which the fixture sets to a later `now()`.
+      expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
+    });
+  });
+});
+
+/** The load's one real rule: a terminal status outranks a cancel request, and a request on a
+ * non-terminal row is already the stopped screen even though no worker has converged it.
+ */
+describe('a cancel request', () => {
+  test.for(['pending', 'processing'] as const)(
+    'gives the stopped screen on a %s row, timed from the request',
+    async (status) => {
+      await withRollback(database(), async (transaction) => {
+        const { organization } = await insertOrganization(transaction);
+        const report = await aReportWithInputFile(transaction, organization.id);
+        const stoppedAt = new Date();
+        await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          status,
+          cancelRequestedAt: stoppedAt,
+        });
+
+        const data = await _loadReport(transaction, {
+          organizationId: organization.id,
+          reportId: report.id,
+          supportEmail: SUPPORT_EMAIL,
+        });
+
+        expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
+      });
+    },
+  );
+
+  test('loses to a succeeded row, whose files are intact', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id);
+      // The child finished inside the window before the parent's next lease renewal could kill it,
+      // so the verdict stands and carries the request forever — see `markIfStillOwned`.
+      const attempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'succeeded',
+        cancelRequestedAt: new Date(),
+      });
+      const pdf = await insertResultFile(transaction, {
+        analysisAttemptId: attempt.id,
+        kind: 'pdf',
+      });
 
       const data = await _loadReport(transaction, {
         organizationId: organization.id,
@@ -214,9 +281,32 @@ describe('each status narrows to the right variant', () => {
       });
 
       expect(data.attempt).toEqual({
-        status: 'canceled',
+        status: 'succeeded',
+        createdAt: expect.any(Date),
+        claimedAt: expect.any(Date),
         finishedAt: expect.any(Date),
+        files: { pdf: { id: pdf.id }, xlsx: null, charts: [] },
       });
+    });
+  });
+
+  test('loses to a failed row, which keeps its retry copy', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id);
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'failed',
+        cancelRequestedAt: new Date(),
+      });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.attempt.status).toBe('failed');
     });
   });
 });
