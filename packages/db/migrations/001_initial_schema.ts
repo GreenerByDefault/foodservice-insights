@@ -971,6 +971,53 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .on('result_file')
     .column('analysis_attempt_id')
     .execute();
+
+  // Closes the other half of "exactly one pdf, exactly one xlsx": the partial unique indexes
+  // above only stop a second one from appearing, not a succeeded attempt from having none.
+  // Deferred, so the transaction that flips status to 'succeeded' and inserts the result_file
+  // rows isn't tripped mid-flight — `markAttemptSucceeded` in apps/worker does both together.
+  await sql`
+    CREATE FUNCTION analysis_attempt_check_has_result_files() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      current_status analysis_attempt_status;
+    BEGIN
+      SELECT status INTO current_status FROM analysis_attempt WHERE id = NEW.id;
+
+      -- Deleted in the same transaction it was created in: nothing to enforce.
+      IF NOT FOUND OR current_status <> 'succeeded' THEN
+        RETURN NULL;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM result_file WHERE analysis_attempt_id = NEW.id AND kind = 'pdf'
+      ) THEN
+        RAISE EXCEPTION 'analysis_attempt % succeeded with no pdf result file', NEW.id
+          USING ERRCODE = 'check_violation',
+                CONSTRAINT = 'analysis_attempt_succeeded_has_pdf',
+                TABLE = 'analysis_attempt';
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM result_file WHERE analysis_attempt_id = NEW.id AND kind = 'xlsx'
+      ) THEN
+        RAISE EXCEPTION 'analysis_attempt % succeeded with no xlsx result file', NEW.id
+          USING ERRCODE = 'check_violation',
+                CONSTRAINT = 'analysis_attempt_succeeded_has_xlsx',
+                TABLE = 'analysis_attempt';
+      END IF;
+
+      RETURN NULL;
+    END;
+    $$
+  `.execute(database);
+
+  await sql`
+    CREATE CONSTRAINT TRIGGER analysis_attempt_succeeded_has_result_files
+      AFTER INSERT OR UPDATE ON analysis_attempt
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE FUNCTION analysis_attempt_check_has_result_files()
+  `.execute(database);
 }
 
 // ---------------------------------------------------------------------------
