@@ -256,10 +256,6 @@ claimed yet.
 
 No email is ever sent for a canceled attempt.
 
-A soft-deleted report also accepts no *new* attempt — one more `check_violation` for the retry
-endpoint to map to a 409. The database enforces it by locking the report, so anything writing both
-tables has to take them in that order: report, then `analysis_attempt`.
-
 ### Concurrency and scaling
 
 Three independent levers:

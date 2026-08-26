@@ -444,10 +444,8 @@ describe('starting a new attempt', () => {
   });
 
   test('refuses a retry racing a soft delete', async () => {
-    // The rule above is only worth having if it also holds between transactions, and by default it
-    // would not: the insert's foreign key takes KEY SHARE on the report, which does not conflict
-    // with the UPDATE setting `deleted_at`, so both commit and a worker analyses an attempt on a
-    // deleted report. The trigger's `FOR NO KEY UPDATE` is what makes this insert wait.
+    // The rule above holds between transactions only because of the trigger's report lock; without
+    // it both of these commit. See the migration.
     await withCommittedFixture(
       DATABASE,
       async (transaction, trash) => {
@@ -485,9 +483,8 @@ describe('starting a new attempt', () => {
   });
 
   test('makes a soft delete wait for a retry that got there first', async () => {
-    // The same lock from the other side, and what the delete endpoint depends on: it stamps
-    // `cancel_requested_at` on whatever attempt is active, so it must not slip past an uncommitted
-    // retry and miss the attempt that insert is about to add.
+    // The same lock from the other side, and what lets the delete endpoint stamp
+    // `cancel_requested_at` on an attempt a retry is still inserting.
     await withCommittedFixture(
       DATABASE,
       async (transaction, trash) => {
@@ -523,11 +520,9 @@ describe('starting a new attempt', () => {
   });
 
   test('refuses the second of two concurrent retries', async () => {
-    // REQUIREMENTS.md allows one retry at a time per report. The trigger's report lock is what
-    // serialises the two: beta waits on it, and its next statement then reads under a fresh
-    // READ COMMITTED snapshot that includes alpha's attempt 2, so it rejects on the status rule
-    // rather than colliding in the index. The two unique indexes behind it are backstops that no
-    // path now reaches.
+    // REQUIREMENTS.md allows one retry at a time per report. The trigger's report lock serialises
+    // the two, so beta re-reads the latest attempt after alpha commits and rejects on the status
+    // rule — the unique indexes behind it are backstops nothing now reaches.
     await withCommittedFixture(
       DATABASE,
       async (transaction, trash) => {

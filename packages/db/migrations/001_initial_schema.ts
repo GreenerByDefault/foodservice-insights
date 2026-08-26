@@ -772,16 +772,10 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       latest_number smallint;
       latest_status analysis_attempt_status;
     BEGIN
-      -- Locks the report against a concurrent soft delete, which the foreign key below does not:
-      -- it takes KEY SHARE, and that does not conflict with the UPDATE setting deleted_at. Without
-      -- this, a retry and a delete both commit and leave a fresh pending attempt on a deleted
-      -- report for a worker to claim and analyse. FOR NO KEY UPDATE conflicts in both directions,
-      -- so one of the two waits: the delete then finds the new attempt and cancel-requests it, or
-      -- this read sees deleted_at already set and rejects.
-      --
-      -- Same lock order as the delete endpoint — report first, then analysis_attempt — so the two
-      -- cannot deadlock. A report_id matching no row leaves this NULL and falls through to the
-      -- foreign key, which is the error worth reporting.
+      -- FOR NO KEY UPDATE rather than a plain read: the insert's own foreign key takes only KEY
+      -- SHARE, which does not conflict with the UPDATE that sets deleted_at, so a retry and a
+      -- delete would otherwise both commit. This also fixes the lock order for anything writing
+      -- both tables — report, then analysis_attempt.
       SELECT deleted_at INTO report_deleted_at
         FROM report
        WHERE id = NEW.report_id
@@ -838,9 +832,6 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
 
   // BEFORE, so the row is rejected before index maintenance and before the check constraints are
   // evaluated — which makes it deterministic which name a failing insert reports.
-  //
-  // The trigger's name is the rule it started as; the function raises under two constraint names
-  // now, the other being `analysis_attempt_no_attempt_for_deleted_report`.
   await sql`
     CREATE TRIGGER analysis_attempt_new_attempt_only_after_failure
       BEFORE INSERT ON analysis_attempt

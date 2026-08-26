@@ -114,11 +114,6 @@ rather than freezing. That exemption is why
 [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) can claim and stamp a
 `succeeded` row at all.
 
-**A soft-deleted report accepts no new attempt.** The insert trigger reads `report.deleted_at`
-under `FOR NO KEY UPDATE`, so a retry racing a delete is refused rather than analysed. That lock
-also fixes the order any writer touching both tables must take them in — report, then
-`analysis_attempt`.
-
 This package owns the invariants; who claims an attempt and when is the worker's policy. The claim
 itself is documented at [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue), and every terminal
 transition is tested beside the code that writes it — `attempt/queue.ts` writes the transitions a

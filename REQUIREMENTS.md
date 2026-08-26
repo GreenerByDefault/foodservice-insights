@@ -202,9 +202,7 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
 - The roles table above governs what members and admins may delete.
 - **Deleting a report** removes it from the UI and makes its file links inaccessible, but does
   not delete any data. We keep everything for debugging.
-- **A deleted report gets no new analysis attempts.** Deleting is the end of the line for a report,
-  not just the removal of its retry button, so a retry that arrives after the delete is refused
-  rather than analysed.
+- **A deleted report cannot be retried.**
 - **A user deleting their account** hard-deletes the user, but does *not* delete that member's
   reports in the organization.
   - The app displays the submitter as a deleted user.

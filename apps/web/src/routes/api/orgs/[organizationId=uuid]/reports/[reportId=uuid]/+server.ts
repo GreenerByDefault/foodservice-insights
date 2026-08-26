@@ -12,10 +12,6 @@ import type { RequestHandler } from './$types';
  * `canceled`, which costs up to the queue's reap interval for an unclaimed attempt — invisible,
  * since the report is soft-deleted immediately.
  *
- * Soft-delete the report first, then the attempt: the insert trigger on `analysis_attempt` takes
- * the report lock in that order, and reversing it here is what would deadlock the two. Taking it
- * first is also what makes the second update see a retry that committed in the meantime.
- *
  * Guard that update with `status in ('pending', 'processing')`. Nothing is wrong if it touches no
  * rows; it means the attempt finished first, and the report is soft-deleted either way. Which audit
  * event to write follows from what the update actually did.
