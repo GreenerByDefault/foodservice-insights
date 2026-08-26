@@ -27,3 +27,6 @@ export type AuthContext = {
   user: AuthenticatedUser;
   organizations: readonly OrganizationAccess[];
 };
+
+/** Who is making a request, and in what role. */
+export type Actor = { userId: UserId; role: OrganizationRole };
