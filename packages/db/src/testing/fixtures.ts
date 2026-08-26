@@ -11,6 +11,7 @@
  * Values that must be unique are randomised, because tests run concurrently against one database.
  */
 
+import { sql } from 'kysely';
 import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../generated/public/AnalysisAttemptStatus.ts';
@@ -21,6 +22,9 @@ import type { Report } from '../generated/public/Report.ts';
 import type { ResultFile } from '../generated/public/ResultFile.ts';
 import type ResultFileKind from '../generated/public/ResultFileKind.ts';
 import type { DatabaseExecutor } from '../schema.ts';
+
+/** Postgres's clock, not the process's, for any timestamp a fixture means as "now". */
+const NOW = sql<Date>`now()`;
 
 /** A 32-byte checksum, the only length `checksum_sha256` accepts. */
 export function aChecksum(): Buffer {
@@ -169,7 +173,7 @@ export async function insertAnalysisAttempt(
     /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
      * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
     finishedAt?: Date;
-    /** Defaults to `new Date()` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
+    /** Defaults to `now()` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
      * forbids a canceled row with no request. Set explicitly for a `pending`/`processing` row a test
      * wants to look like a cancel request has already landed on. */
     cancelRequestedAt?: Date;
@@ -193,20 +197,20 @@ export async function insertAnalysisAttempt(
       ...(isProcessing
         ? {
             workerId: overrides.workerId ?? 'test-worker',
-            claimedAt: new Date(),
-            leaseRenewedAt: new Date(),
+            claimedAt: NOW,
+            leaseRenewedAt: NOW,
           }
         : {}),
       ...(isTerminal
         ? {
-            finishedAt: overrides.finishedAt ?? new Date(),
+            finishedAt: overrides.finishedAt ?? NOW,
             failureReason: status === 'failed' ? 'child_crashed' : null,
           }
         : {}),
       ...(overrides.cancelRequestedAt !== undefined
         ? { cancelRequestedAt: overrides.cancelRequestedAt }
         : isCanceled
-          ? { cancelRequestedAt: new Date() }
+          ? { cancelRequestedAt: NOW }
           : {}),
     })
     .returningAll()

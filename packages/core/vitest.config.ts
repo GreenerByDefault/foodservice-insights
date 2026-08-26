@@ -4,5 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     expect: { requireAssertions: true },
+    // Only print logs for tests that fail.
+    silent: 'passed-only',
   },
 });

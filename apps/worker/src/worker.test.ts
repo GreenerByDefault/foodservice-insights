@@ -38,6 +38,7 @@ import {
 } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
+import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { claimNextAttempt, markAttemptFailed } from './attempt/queue.ts';
 import { readProgress } from './child/run-directory.ts';
@@ -268,7 +269,7 @@ async function statusIs(attemptId: AnalysisAttemptId, status: string): Promise<b
 
 async function requestCancel(attemptId: AnalysisAttemptId): Promise<void> {
   await WORKER_DATABASE.updateTable('analysisAttempt')
-    .set({ cancelRequestedAt: new Date() })
+    .set({ cancelRequestedAt: sql<Date>`now()` })
     .where('id', '=', attemptId)
     .execute();
 }

@@ -47,6 +47,8 @@ export default defineConfig(({ command }) => ({
   ],
   test: {
     expect: { requireAssertions: true },
+    // Only print logs for tests that fail.
+    silent: 'passed-only',
     projects: [
       {
         extends: './vite.config.ts',
