@@ -158,9 +158,7 @@ function directiveFor(
   // cancel-requested: the user's explicit intent beats a threshold firing the same tick.
   if (cancelRequestedAt !== null) return { kind: 'kill', kill: { reason: 'canceled' } };
 
-  // hung: no progress for killAfterNoProgressMs. The only rule a failed read disables — the two
-  // below read the clock alone and must still fire, or an unreadable progress file would leave
-  // the child with no local rule able to end it at all.
+  // hung: no progress for killAfterNoProgressMs.
   if (!progressUnknown && now - state.lastProgressAt >= thresholds.killAfterNoProgressMs) {
     return { kind: 'kill', kill: { reason: 'hung' } };
   }
