@@ -55,6 +55,34 @@ describe('lockAndCheckReportRateLimit', () => {
     });
   });
 
+  test('reports the user, not the organization, once only the user reaches the weekly limit', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      // Old enough to clear the user's hourly window, and under a different organization so the
+      // organization's own weekly count stays at zero — isolates the user weekly branch.
+      for (let i = 0; i < WEEKLY_REPORT_LIMIT; i++) {
+        const elsewhere = await insertOrganization(transaction);
+        await insertReport(transaction, {
+          organizationId: elsewhere.organization.id,
+          createdByUserId: admin.id,
+          createdAt: twoHoursAgo,
+        });
+      }
+
+      const result = await lockAndCheckReportRateLimit(transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+      });
+
+      expect(result).toEqual({
+        scope: 'user',
+        window: 'weekly',
+        limit: WEEKLY_REPORT_LIMIT,
+      } satisfies RateLimitExceeded);
+    });
+  });
+
   test('checks the hourly limit before the weekly one', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
