@@ -34,7 +34,7 @@ rather than here.
 | [`attempt/directive.ts`](src/attempt/directive.ts) | Decides what a live attempt needs each tick. |
 | [`attempt/verdict.ts`](src/attempt/verdict.ts) | Decides what a dead child means. |
 | [`attempt/lifecycle.ts`](src/attempt/lifecycle.ts), [`attempt/queue.ts`](src/attempt/queue.ts) | Start and claim attempts. |
-| [`sweeps/reaper.ts`](src/sweeps/reaper.ts), [`sweeps/notifications.ts`](src/sweeps/notifications.ts) | Converge rows nobody else will. |
+| [`sweeps/converge.ts`](src/sweeps/converge.ts), [`sweeps/notifications.ts`](src/sweeps/notifications.ts) | Converge rows nobody else will. |
 | [`child/spawn.ts`](src/child/spawn.ts), [`child/run-directory.ts`](src/child/run-directory.ts) | The OS-level half of the parent ↔ child contract in [`contract/`](../../contract/). |
 | [`db.ts`](src/db.ts) | Owns the worker's own database handle. |
 | [`failures.ts`](src/failures.ts) | The six named rules every failure path here obeys — read it before touching any error handling. |

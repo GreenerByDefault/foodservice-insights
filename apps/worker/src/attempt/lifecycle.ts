@@ -27,7 +27,8 @@ import { type ChildOutcome, type RunningChild, spawnChild } from '../child/spawn
 import type { WorkerConfig } from '../config.ts';
 import { chartFileName, RESULT_FILE_NAMES } from '../contract/layout.ts';
 import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
-import { classifyAttemptFailure, retryOnTransientDbError } from '../failures.ts';
+import { classifyAttemptFailure } from '../failures.ts';
+import { retryOnTransientDbError } from '../retry.ts';
 import {
   loadAttemptInputs,
   markAttemptCanceled,
@@ -60,6 +61,7 @@ export type PreparedAttempt = {
 export class MissingInputFileError extends Error {
   constructor(readonly storageKey: string) {
     super(`input file missing at ${storageKey}`);
+    this.name = 'MissingInputFileError';
   }
 }
 
@@ -69,6 +71,7 @@ export class CorruptInputFileError extends Error {
     problem: string,
   ) {
     super(`input file at ${storageKey} is not what was uploaded: ${problem}`);
+    this.name = 'CorruptInputFileError';
   }
 }
 

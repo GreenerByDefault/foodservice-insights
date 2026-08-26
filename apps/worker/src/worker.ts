@@ -9,7 +9,6 @@
  * order*, not about what.
  */
 
-import { setTimeout as delay } from 'node:timers/promises';
 import {
   type AnalysisAttemptId,
   type DatabaseExecutor,
@@ -18,7 +17,12 @@ import {
 } from '@gbd/db';
 import type { Emailer } from '@gbd/email';
 import type { BlobStore } from '@gbd/storage';
-import { decideDirective, type TickReading, type TickState } from './attempt/directive.ts';
+import {
+  decideDirective,
+  type LeaseReading,
+  type TickReading,
+  type TickState,
+} from './attempt/directive.ts';
 import {
   type AttemptDependencies,
   deliverVerdict,
@@ -36,8 +40,9 @@ import { readProgress } from './child/run-directory.ts';
 import type { Clock } from './clock.ts';
 import type { WorkerConfig } from './config.ts';
 import { classifyAttemptFailure } from './failures.ts';
+import { cancelRequestedPendingAttempts, reapExpiredAttempts } from './sweeps/converge.ts';
 import { sendPendingNotifications } from './sweeps/notifications.ts';
-import { cancelRequestedPendingAttempts, reapExpiredAttempts } from './sweeps/reaper.ts';
+import { sleep, startTicker } from './ticker.ts';
 
 export type WorkerDependencies = {
   db: DatabaseExecutor;
@@ -302,7 +307,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     return { progress: { kind: 'read', progressSequence }, ...(await renew(record)) };
   }
 
-  async function renew(record: InFlightAttempt): Promise<Omit<TickReading, 'progress'>> {
+  async function renew(record: InFlightAttempt): Promise<LeaseReading> {
     // Stamped before the statement is issued; `TickState.renewalIssuedAt` covers why.
     const renewalIssuedAt = clock.now();
     try {
@@ -463,41 +468,4 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   }
 
   return { claimAndStart, direct, reap, notify, drain, run };
-}
-
-/** Stops a ticker started by `startTicker`; resolves once its tick in flight has finished —
- * that's what lets a drain take over a tick rather than race it. */
-type StopTicker = () => Promise<void>;
-
-/** Run `tick` every `intervalMs`, re-arming only once the previous one has *resolved*. */
-function startTicker(name: string, tick: () => Promise<unknown>, intervalMs: number): StopTicker {
-  const controller = new AbortController();
-
-  const loop = (async () => {
-    for (;;) {
-      await sleep(intervalMs, controller.signal);
-      if (controller.signal.aborted) return;
-      try {
-        await tick();
-      } catch (error) {
-        // `absorb-or-fail` in `failures.ts`: the next tick is the retry.
-        console.error(`The worker's ${name} tick failed; the next tick is the retry`, error);
-      }
-    }
-  })();
-
-  return async () => {
-    controller.abort();
-    await loop;
-  };
-}
-
-/** Real time, not the injected `Clock`: this is the only thing in the file that actually waits.
- * Resolves rather than rejecting when aborted, so an abort is never an unhandled rejection. */
-async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  try {
-    await delay(ms, undefined, { signal });
-  } catch {
-    // Aborted, which is the caller asking to stop waiting.
-  }
 }
