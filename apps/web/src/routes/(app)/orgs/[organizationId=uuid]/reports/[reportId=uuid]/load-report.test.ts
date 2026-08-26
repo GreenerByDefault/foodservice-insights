@@ -12,14 +12,8 @@ import { database } from '$lib/server/db';
 import { statusOf } from '$lib/server/tests/http-error';
 import { _loadReport } from './+page.server.ts';
 
-// `_loadReport` takes this as a plain parameter rather than reading `$env/dynamic/private`
-// itself, so tests never need a SvelteKit env context.
 const SUPPORT_EMAIL = 'support@foodservice-insights.test';
 
-/** A report with the input file it always has — one transaction writes both, so every fixture
- * below needs both to look like a real report rather than the one this file's own "no attempt"
- * test deliberately leaves incomplete.
- */
 async function aReportWithInputFile(transaction: DatabaseExecutor, organizationId: OrganizationId) {
   const report = await insertReport(transaction, { organizationId });
   await insertInputFile(transaction, { reportId: report.id });
@@ -167,14 +161,11 @@ describe('each status narrows to the right variant', () => {
       const report = await aReportWithInputFile(transaction, organization.id);
       const createdAt = new Date('2026-01-15T10:00:00Z');
       const claimedAt = new Date('2026-01-15T10:05:00Z');
-      // insertAnalysisAttempt only exposes a `finishedAt` override, but for a non-terminal status
-      // it writes that value into claimedAt/leaseRenewedAt instead (finishedAt itself stays null) —
-      // it's the fixture's only knob for backdating a claim on an unclaimed-by-default row.
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'processing',
         createdAt,
-        finishedAt: claimedAt,
+        claimedAt,
       });
 
       const data = await _loadReport(transaction, {
@@ -191,16 +182,14 @@ describe('each status narrows to the right variant', () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
-      // claimedAt derives from finishedAt (see the 'processing' test above), and must be after
-      // createdAt — analysis_attempt_claimed_at_after_created_at — so this needs both set.
       const createdAt = new Date('2026-01-15T10:00:00Z');
       const finishedAt = new Date('2026-01-15T10:05:00Z');
-      // insertAnalysisAttempt defaults a failed attempt's failure_reason to 'child_crashed'.
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'failed',
         createdAt,
         finishedAt,
+        failureReason: 'child_crashed',
       });
 
       const data = await _loadReport(transaction, {
@@ -229,13 +218,13 @@ describe('each status narrows to the right variant', () => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
       const createdAt = new Date('2026-01-15T10:00:00Z');
-      // insertAnalysisAttempt sets claimedAt from the same override as finishedAt for a terminal
-      // status, so the two are necessarily equal here — that's the fixture's design, not this test's.
+      const claimedAt = new Date('2026-01-15T10:03:00Z');
       const finishedAt = new Date('2026-01-15T10:05:00Z');
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'succeeded',
         createdAt,
+        claimedAt,
         finishedAt,
       });
       const pdf = await insertResultFile(transaction, {
@@ -256,7 +245,7 @@ describe('each status narrows to the right variant', () => {
       expect(data.attempt).toEqual({
         status: 'succeeded',
         createdAt,
-        claimedAt: finishedAt,
+        claimedAt,
         finishedAt,
         files: {
           pdf: { href: `/file/result/${pdf.id}` },
@@ -271,11 +260,15 @@ describe('each status narrows to the right variant', () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
-      const stoppedAt = new Date();
+      const createdAt = new Date('2026-01-15T10:00:00Z');
+      const stoppedAt = new Date('2026-01-15T10:05:00Z');
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'canceled',
+        createdAt,
         cancelRequestedAt: stoppedAt,
+        // Intentionally different value than stoppedAt.
+        finishedAt: new Date('2026-01-15T11:00:00Z'),
       });
 
       const data = await _loadReport(transaction, {
@@ -284,7 +277,6 @@ describe('each status narrows to the right variant', () => {
         supportEmail: SUPPORT_EMAIL,
       });
 
-      // `stoppedAt` is the request, not `finished_at`, which the fixture sets to a later `now()`.
       expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
     });
   });
@@ -318,7 +310,7 @@ describe('a cancel request', () => {
     },
   );
 
-  test('loses to a succeeded row, whose files are intact', async () => {
+  test('loses to a succeeded row', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       const report = await aReportWithInputFile(transaction, organization.id);
@@ -389,9 +381,7 @@ test('charts come back ordered by chart_key, not insertion order', async () => {
     });
     await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
     await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-    // Inserted out of alphabetical order on purpose — `result_file.id` and `created_at` cannot
-    // be trusted to order these (see the trap this load's comment names), so only an explicit
-    // `ORDER BY chart_key` can make this test fail if that ordering is ever dropped.
+    // Inserted out of alphabetical order on purpose.
     const totalSpend = await insertResultFile(transaction, {
       analysisAttemptId: attempt.id,
       kind: 'chart',
