@@ -1,12 +1,13 @@
 /** What a child's ending *means*.
  *
- * Keep this file side-effect free to faciliate testing.
+ * Keep this file side-effect free to facilitate testing.
  */
 
 import type { AnalysisFailureReason } from '@gbd/db';
 import { type ChildOutcome, STDERR_TAIL_BYTES } from '../child/spawn.ts';
 import { type ChildFailure, type ChildResult, ContractError } from '../contract/messages.ts';
 import { EXIT_CODES } from '../contract/names.ts';
+import { describe } from '../failures.ts';
 
 /** Why the parent ended the child. */
 export type Kill =
@@ -135,10 +136,6 @@ function classify(ending: ChildEnding): Verdict {
 
 function crashDetail(head: string, stderrTail: string): string {
   return stderrTail.length > 0 ? `${head}\n${stderrTail}` : head;
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function truncate(detail: string): string {

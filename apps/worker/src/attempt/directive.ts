@@ -31,14 +31,19 @@ export type TickState = {
   parked?: { stage: PendingVerdict['stage']; since: number };
 };
 
-export type TickReading = {
-  /** No `progressSequence` means the child has not written `progress.json` yet — not an error. */
-  progress: { kind: 'read'; progressSequence?: number } | { kind: 'failed'; error: unknown };
+/** What one tick's lease renewal read, on its own — `worker.ts`'s `renew` returns exactly this,
+ * before `readTick` folds in the progress read to build the full `TickReading`. */
+export type LeaseReading = {
   /** `skipped` when the progress read threw, per `no-check-no-renewal` in `failures.ts`;
    * `failed` when the statement itself threw. */
   lease: Lease | { kind: 'skipped' } | { kind: 'failed'; error: unknown };
   /** When the renewal was issued, if one was issued at all. */
   renewalIssuedAt?: number;
+};
+
+export type TickReading = LeaseReading & {
+  /** No `progressSequence` means the child has not written `progress.json` yet — not an error. */
+  progress: { kind: 'read'; progressSequence?: number } | { kind: 'failed'; error: unknown };
 };
 
 export type AttemptDirective =

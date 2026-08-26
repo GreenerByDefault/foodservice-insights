@@ -19,7 +19,11 @@ import { claimNextAttempt, markAttemptSucceeded, renewLease } from '../attempt/q
 import { WORKER_DATABASE } from '../db.ts';
 import { aResultFile, aWorkerId } from '../testing/attempt-helpers.ts';
 import { backdateAttemptTimeline, type TimelineOffsetsMs } from '../testing/attempt-timeline.ts';
-import { cancelRequestedPendingAttempts, type ReapOptions, reapExpiredAttempts } from './reaper.ts';
+import {
+  cancelRequestedPendingAttempts,
+  type ReapOptions,
+  reapExpiredAttempts,
+} from './converge.ts';
 
 const LEASE_EXPIRES_AFTER_MS = 5 * 60_000;
 const CLAIMED_CEILING_MS = 20 * 60_000;

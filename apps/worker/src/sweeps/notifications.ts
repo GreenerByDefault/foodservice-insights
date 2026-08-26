@@ -22,7 +22,7 @@ import type {
 import { type Emailer, type EmailMessage, isEmailError, sendEmail } from '@gbd/email';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
 import type { WorkerConfig } from '../config.ts';
-import { retryOnTransientDbError } from '../failures.ts';
+import { retryOnTransientDbError } from '../retry.ts';
 
 export type NotifyOptions = Pick<
   WorkerConfig,

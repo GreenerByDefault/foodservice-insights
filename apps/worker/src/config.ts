@@ -56,15 +56,15 @@ export type WorkerConfig = {
    *
    * Deliberately one constant with two readers: the owning parent fences itself on it
    * (`attempt/directive.ts`), and every other worker's reaper expires the row on it
-   * (`sweeps/reaper.ts`). */
+   * (`sweeps/converge.ts`). */
   leaseExpiresAfterMs: number;
 
   /** How long an attempt may sit `processing` since it was claimed before the reaper gives up on
-   * it, independent of renewals — `sweeps/reaper.ts` covers why renewals alone cannot catch a
+   * it, independent of renewals — `sweeps/converge.ts` covers why renewals alone cannot catch a
    * parent that renews forever and never finishes. */
   claimedCeilingMs: number;
 
-  /** How often to run both of `sweeps/reaper.ts`'s sweeps. */
+  /** How often to run both of `sweeps/converge.ts`'s sweeps. */
   reapIntervalMs: number;
 
   /** The most expired attempts one `reapExpiredAttempts` will end.

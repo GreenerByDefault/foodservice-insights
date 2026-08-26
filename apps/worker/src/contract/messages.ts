@@ -3,7 +3,12 @@ import * as v from 'valibot';
 import { CHART_KEY_PATTERN } from './layout.ts';
 import { CHILD_FAILURE_REASONS, COUNTS_BASES, UNIT_SYSTEMS } from './names.ts';
 
-export class ContractError extends Error {}
+export class ContractError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ContractError';
+  }
+}
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

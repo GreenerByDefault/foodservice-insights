@@ -25,7 +25,7 @@ import { NoResultError, sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
 import { WORKER_DATABASE } from '../db.ts';
-import { reapExpiredAttempts } from '../sweeps/reaper.ts';
+import { reapExpiredAttempts } from '../sweeps/converge.ts';
 import { aResultFile, aWorkerId } from '../testing/attempt-helpers.ts';
 import { backdateAttemptTimeline } from '../testing/attempt-timeline.ts';
 import {
