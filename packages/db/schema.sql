@@ -167,6 +167,48 @@ CREATE TYPE "public"."unit_system" AS ENUM (
 ALTER TYPE "public"."unit_system" OWNER TO "postgres";
 
 --
+-- Name: analysis_attempt_check_has_result_files(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."analysis_attempt_check_has_result_files"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+    DECLARE
+      current_status analysis_attempt_status;
+    BEGIN
+      SELECT status INTO current_status FROM analysis_attempt WHERE id = NEW.id;
+
+      -- Deleted in the same transaction it was created in: nothing to enforce.
+      IF NOT FOUND OR current_status <> 'succeeded' THEN
+        RETURN NULL;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM result_file WHERE analysis_attempt_id = NEW.id AND kind = 'pdf'
+      ) THEN
+        RAISE EXCEPTION 'analysis_attempt % succeeded with no pdf result file', NEW.id
+          USING ERRCODE = 'check_violation',
+                CONSTRAINT = 'analysis_attempt_succeeded_has_pdf',
+                TABLE = 'analysis_attempt';
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM result_file WHERE analysis_attempt_id = NEW.id AND kind = 'xlsx'
+      ) THEN
+        RAISE EXCEPTION 'analysis_attempt % succeeded with no xlsx result file', NEW.id
+          USING ERRCODE = 'check_violation',
+                CONSTRAINT = 'analysis_attempt_succeeded_has_xlsx',
+                TABLE = 'analysis_attempt';
+      END IF;
+
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."analysis_attempt_check_has_result_files"() OWNER TO "postgres";
+
+--
 -- Name: analysis_attempt_check_new_attempt(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1128,6 +1170,13 @@ CREATE UNIQUE INDEX "result_file_one_xlsx_per_attempt" ON "public"."result_file"
 --
 
 CREATE OR REPLACE TRIGGER "analysis_attempt_new_attempt_only_after_failure" BEFORE INSERT ON "public"."analysis_attempt" FOR EACH ROW EXECUTE FUNCTION "public"."analysis_attempt_check_new_attempt"();
+
+
+--
+-- Name: analysis_attempt analysis_attempt_succeeded_has_result_files; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE CONSTRAINT TRIGGER "analysis_attempt_succeeded_has_result_files" AFTER INSERT OR UPDATE ON "public"."analysis_attempt" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "public"."analysis_attempt_check_has_result_files"();
 
 
 --

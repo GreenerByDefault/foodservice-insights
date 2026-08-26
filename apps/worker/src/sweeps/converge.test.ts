@@ -405,7 +405,7 @@ describe('reapExpiredAttempts', () => {
       async (transaction, attemptId) => {
         await markAttemptSucceeded(transaction, attemptId, workerId, {
           result: A_MINIMAL_RESULT,
-          resultFiles: [],
+          resultFiles: [aResultFile('pdf'), aResultFile('xlsx')],
         });
       },
     );
