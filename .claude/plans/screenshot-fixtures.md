@@ -25,8 +25,8 @@ fixture lives in the placeholder organization, because `identifyUser` returns th
 for every request and `_resolvePostSignInDestination` redirects `/orgs` whenever the user belongs to
 exactly one organization — a second organization would break `auth.e2e.ts`.
 
-**Assumed landed: the `seed` → `seed:identity` precursor.** See *Seeding commands* below for what
-that PR covers and what this one adds on top.
+**The `seed` → `seed:identity` rename has landed.** `pnpm seed:identity` and
+`packages/db/scripts/seed-identity.ts` are what *Seeding commands* below builds on.
 
 ---
 
@@ -245,54 +245,13 @@ than mixing the two.
 
 ## Seeding commands
 
-Once there are two things to seed, a bare `pnpm seed` stops naming which one.
+`pnpm seed:identity` already exists. This PR adds
+`pnpm seed:reports` alongside it, following the same `seed:<what>` naming:
 
 | Command | Writes | When |
 | --- | --- | --- |
 | `pnpm seed:identity` | the placeholder user, organization and membership | Required. Nothing serves a request without it. Deleted when auth lands. |
 | `pnpm seed:reports` | one report per screen state, in the placeholder organization | Optional. Re-runnable; clears what it wrote last time. |
-
-### Precursor, landing separately: `seed` → `seed:identity`
-
-Eleven references, one of which is a user-visible error message:
-
-- `packages/db/package.json` — `"seed"` → `"seed:identity"`, pointing at `scripts/seed-identity.ts`
-  (renamed from `scripts/seed.ts`, along with its doc comment's usage lines).
-- `turbo.json` — the `seed` task becomes `seed:identity`.
-- `package.json` — `"seed:identity": "turbo run seed:identity"`.
-- `apps/web/playwright.config.ts` — `pnpm -r run seed` → `pnpm -r run seed:identity`.
-- `apps/web/src/hooks.server.ts` — the "run `pnpm seed`" text in the no-such-user error.
-- `apps/web/src/hooks.server.test.ts` — the `/pnpm seed/` assertion. It would still pass against
-  `seed:identity` by substring, which is exactly why it needs changing deliberately.
-- `apps/web/src/lib/server/auth/identify.ts` — the doc comment.
-- `packages/db/src/seed.ts` — the doc comment listing what to delete when auth lands names
-  `scripts/seed.ts` and the `seed` task; both move.
-- `README.md` — three places, below.
-
-`packages/db/src/seed.ts` and the `@gbd/db/seed` subpath keep their names: the module exports
-`PLACEHOLDER_ORGANIZATION_ID` to two e2e specs and is fairly named for what it holds.
-
-**`README.md`, rewritten rather than patched.** Three places, because part of the confusion is that
-the getting-started path never mentions seeding at all — a new developer runs `pnpm migrate`, then
-`pnpm dev`, and meets the error message from `hooks.server.ts`.
-
-1. **First-time setup** (under *Start the databases*) currently says only `pnpm migrate`. It becomes
-   `pnpm migrate` then `pnpm seed:identity`, with one line saying the app will not serve a request
-   without the placeholder identity, and one saying the test stack does both for itself.
-2. **The commands table** (*Occasional tasks → Database and blob store commands*) renames the `seed`
-   row, said in terms of what it writes rather than what it is called.
-3. A new short **Seeding** subsection replacing the one-line table entry, answering "which do I run
-   when" directly:
-   - after a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`
-   - for tests — neither by hand: `test:e2e` and `test:screenshots` truncate, migrate and seed the
-     test stack themselves
-   - `TEST_DB=1` on any of them targets the test stack
-
-   The three *Reset a database* snippets get the new name in the same pass.
-
-Load the `writing-docs` skill before touching any of it.
-
-### This PR: `seed:reports`
 
 `apps/web/scripts/seed-reports.ts` — `clearReportFixtures`, then `insertReportFixture` for every
 `ReportState`, printing each URL. It reuses the catalogue verbatim, so the states a human walks
@@ -306,8 +265,8 @@ script in `apps/web/package.json`, a `seed:reports` task in `turbo.json`
 `apps/web/scripts/seed-reports.ts` has to reach `e2e/fixtures/reports.ts` without pulling in
 Playwright — which is why the catalogue and the `test.extend` fixture are separate files.
 
-The precursor's new **Seeding** README subsection gains one line for it: *to have something to look
-at on the report page — `pnpm seed:reports`.*
+The README's **Seeding** subsection (`### Occasional tasks → Seeding`) gains one line for it: *to
+have something to look at on the report page — `pnpm seed:reports`.*
 
 ---
 
@@ -332,7 +291,7 @@ at on the report page — `pnpm seed:reports`.*
   section: the placeholder organization is the only one, the one-transaction rule and which
   deferred triggers force it, timings as offsets from an anchor, the setup-project reset, per-test
   teardown, and the shared-with-e2e answer above.
-- `README.md` — the one `seed:reports` line in the *Seeding* subsection the precursor adds.
+- `README.md` — the one `seed:reports` line in the *Seeding* subsection.
 - `.claude/plans/visual-testing.md` — deleted.
 
 **Reused as-is** — no changes needed to `packages/db/src/testing/fixtures.ts`. Every override the

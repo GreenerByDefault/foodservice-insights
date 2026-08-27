@@ -16,7 +16,7 @@
     "test:unit": "TEST_DB=1 vitest run",
     "test": "pnpm run test:unit",
     "migrate": "node scripts/migrate.ts",
-    "seed": "node scripts/seed.ts",
+    "seed:identity": "node scripts/seed-identity.ts",
     "truncate": "node scripts/truncate.ts",
     "gen-types": "kanel && biome check --write src/generated && node scripts/dump-schema.ts"
   },

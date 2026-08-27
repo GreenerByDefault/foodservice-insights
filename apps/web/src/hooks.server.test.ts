@@ -125,7 +125,9 @@ describe('handle', () => {
   test('fails loudly when the identified user has no database row, rather than 401ing silently', async () => {
     vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
 
-    await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(/pnpm seed/);
+    await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(
+      /pnpm seed:identity/,
+    );
   });
 });
 

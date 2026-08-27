@@ -109,13 +109,15 @@ scripts/supabase stop
 TEST_DB=1 scripts/supabase stop
 ```
 
-First time only, set up the dev stack's database schema and blob store bucket:
+First time only, set up the dev stack's database schema and blob store bucket, then seed the
+placeholder identity — the app will not serve a request without it:
 
 ```sh
 pnpm migrate
+pnpm seed:identity
 ```
 
-The test stack does that for itself whenever you run the tests.
+The test stack does both for itself whenever you run the tests.
 
 ### Everyday commands
 
@@ -205,7 +207,7 @@ avoid clashes between tests. If the test database gets into a strange state,
 | Command | What it does |
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
-| `pnpm seed` | Create the phase-one placeholder user and organization the app runs as until Supabase Auth lands. Required. |
+| `pnpm seed:identity` | Create the placeholder user, organization, and membership the app runs as until Supabase Auth lands |
 | `pnpm truncate` | Delete every row, object, and local email, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/) and [`packages/db/schema.sql`](packages/db/schema.sql) from the live database |
 
@@ -213,6 +215,13 @@ avoid clashes between tests. If the test database gets into a strange state,
 Use a pnpm filter to reach just one: `pnpm --filter @gbd/storage run migrate`.
 
 Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
+
+#### Seeding
+
+Which to run when:
+
+- After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
+- For tests, `test:e2e` and `test:screenshots` truncate, migrate, and seed the test stack themselves.
 
 #### Add a database migration
 
@@ -232,7 +241,7 @@ back before it will run, so re-seed it:
 
 ```sh
 pnpm truncate
-pnpm seed
+pnpm seed:identity
 ```
 
 Rebuild the dev database from nothing, when the schema itself is wrong. A reset takes the blob
@@ -241,7 +250,7 @@ store's bucket with it, which `pnpm migrate` puts back:
 ```sh
 scripts/supabase db reset
 pnpm migrate
-pnpm seed
+pnpm seed:identity
 ```
 
 Same for the test database, when it gets into a strange state:
@@ -249,7 +258,7 @@ Same for the test database, when it gets into a strange state:
 ```sh
 TEST_DB=1 scripts/supabase db reset
 TEST_DB=1 pnpm migrate
-TEST_DB=1 pnpm seed
+TEST_DB=1 pnpm seed:identity
 ```
 
 #### Read local email

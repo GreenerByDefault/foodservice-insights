@@ -65,7 +65,7 @@
       "dependsOn": ["^build"],
       "cache": false
     },
-    "seed": {
+    "seed:identity": {
       "dependsOn": ["^build"],
       "cache": false
     },

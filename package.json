@@ -18,7 +18,7 @@
     "lint": "biome ci --error-on-warnings .",
     "fmt": "biome check --write .",
     "migrate": "turbo run migrate",
-    "seed": "turbo run seed",
+    "seed:identity": "turbo run seed:identity",
     "truncate": "turbo run truncate",
     "db:gen-types": "turbo run gen-types"
   },

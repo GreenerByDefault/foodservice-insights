@@ -82,7 +82,7 @@ export default defineConfig({
     //
     // Seeding is only temporary until we add full auth. We should remove it afterwards.
     command:
-      'pnpm -r run truncate && pnpm -r run migrate && pnpm -r run seed && ' +
+      'pnpm -r run truncate && pnpm -r run migrate && pnpm -r run seed:identity && ' +
       'node --env-file-if-exists=../../.env.test start.js',
     env: {
       PORT: String(PORT),
