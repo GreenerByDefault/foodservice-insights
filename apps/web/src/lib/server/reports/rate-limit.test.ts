@@ -1,25 +1,31 @@
-/** `lockReportRateLimit` and `countReportsSince` already have exhaustive coverage in `@gbd/db`
- * for locking and windowing — see that package's `report-rate-limit.test.ts`. What's untested
- * there is this module's own logic: which scope and window `lockAndCheckReportRateLimit` reports
- * first when more than one is exceeded, and how `describeRateLimitExceeded` turns that into copy.
+/** Locking and windowing already have exhaustive coverage in `@gbd/db`'s
+ * `report-rate-limit.test.ts` — this file only covers this module's own logic on top.
  */
 
-import { insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
+import {
+  insertInputFile,
+  insertOrganization,
+  insertReport,
+  sendBlockingStatement,
+  withConcurrentTransactions,
+  withRollback,
+} from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { HOURLY_REPORT_LIMIT, WEEKLY_REPORT_LIMIT } from '$lib/reports/limits';
 import { database } from '$lib/server/db';
 import {
+  checkReportRateLimit,
   describeRateLimitExceeded,
   lockAndCheckReportRateLimit,
   type RateLimitExceeded,
 } from './rate-limit';
 
-describe('lockAndCheckReportRateLimit', () => {
+describe('checkReportRateLimit', () => {
   test('undefined when neither the organization nor the user is near a limit', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
 
-      const result = await lockAndCheckReportRateLimit(transaction, {
+      const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
       });
@@ -42,7 +48,7 @@ describe('lockAndCheckReportRateLimit', () => {
         });
       }
 
-      const result = await lockAndCheckReportRateLimit(transaction, {
+      const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
       });
@@ -70,7 +76,7 @@ describe('lockAndCheckReportRateLimit', () => {
         });
       }
 
-      const result = await lockAndCheckReportRateLimit(transaction, {
+      const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
       });
@@ -91,7 +97,7 @@ describe('lockAndCheckReportRateLimit', () => {
         await insertReport(transaction, { organizationId: organization.id, createdByUserId: null });
       }
 
-      const result = await lockAndCheckReportRateLimit(transaction, {
+      const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
       });
@@ -116,7 +122,7 @@ describe('lockAndCheckReportRateLimit', () => {
         });
       }
 
-      const result = await lockAndCheckReportRateLimit(transaction, {
+      const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
       });
@@ -125,6 +131,73 @@ describe('lockAndCheckReportRateLimit', () => {
         scope: 'organization',
         window: 'weekly',
         limit: WEEKLY_REPORT_LIMIT,
+      } satisfies RateLimitExceeded);
+    });
+  });
+});
+
+describe('lockAndCheckReportRateLimit', () => {
+  test('delegates to checkReportRateLimit', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+        await insertReport(transaction, { organizationId: organization.id, createdByUserId: null });
+      }
+
+      const result = await lockAndCheckReportRateLimit(transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+      });
+
+      expect(result).toEqual({
+        scope: 'organization',
+        window: 'hourly',
+        limit: HOURLY_REPORT_LIMIT,
+      } satisfies RateLimitExceeded);
+    });
+  });
+
+  test('blocks a concurrent call for the same organization until the first commits, and then counts its write', async () => {
+    // Proves the lock is real, not just present in the name: without it, both transactions would
+    // count the same (limit - 1) reports, both decide they're under the limit, and neither would
+    // see the other's insert. `withRollback` can't express this — see this file's header comment.
+    await withConcurrentTransactions(database(), async (alpha, beta) => {
+      const { organization, admin } = await insertOrganization(alpha.transaction);
+      for (let i = 0; i < HOURLY_REPORT_LIMIT - 1; i++) {
+        const report = await insertReport(alpha.transaction, {
+          organizationId: organization.id,
+          createdByUserId: null,
+        });
+        await insertInputFile(alpha.transaction, { reportId: report.id });
+      }
+
+      const alphaResult = await lockAndCheckReportRateLimit(alpha.transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+      });
+      expect(alphaResult).toBeUndefined();
+
+      // Pushes the organization to the limit, but not yet visible to `beta` — it's still
+      // uncommitted. `beta`'s check below only reads it correctly because it waits for the lock.
+      const lastReport = await insertReport(alpha.transaction, {
+        organizationId: organization.id,
+        createdByUserId: null,
+      });
+      await insertInputFile(alpha.transaction, { reportId: lastReport.id });
+
+      const blocked = await sendBlockingStatement(database(), beta, alpha, (transaction) =>
+        lockAndCheckReportRateLimit(transaction, {
+          organizationId: organization.id,
+          userId: admin.id,
+        }),
+      );
+
+      await alpha.transaction.commit().execute();
+
+      await expect(blocked.result).resolves.toEqual({
+        scope: 'organization',
+        window: 'hourly',
+        limit: HOURLY_REPORT_LIMIT,
       } satisfies RateLimitExceeded);
     });
   });
