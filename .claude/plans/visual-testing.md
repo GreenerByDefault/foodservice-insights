@@ -22,6 +22,11 @@ CI (`.github/workflows/ci.yml`) runs `ubuntu-latest` only. Developers are on mac
 constraint that shapes the whole design, because font rasterization differs between the two and
 a snapshot taken on one platform will not match the other.
 
+The layout-invariants half already exists: `apps/web/e2e/lib/layout.ts` exports
+`expectNoHorizontalOverflow(page)`, and `apps/web/e2e/layout.e2e.ts` runs it at the widths in
+`apps/web/e2e/lib/viewports.ts` (`mobile`/`tablet`/`desktop`) against every route reachable with
+today's seed data. What's left is the pixel-snapshot half below.
+
 ## Decisions
 
 **Accepted: pixel snapshots via `toHaveScreenshot`, committed to Git.** Committing them buys
@@ -130,7 +135,7 @@ its environment:
   debugging.
 
 Both Chromiums must be Playwright 1.62.1: the host one via the `playwright` catalog pin in
-`pnpm-workspace.yaml`, the container one via the image tag. See the lockstep note in PR 2.
+`pnpm-workspace.yaml`, the container one via the image tag. See the lockstep note in PR 1.
 
 Everything else in the stack is free to vary, and does.
 
@@ -153,45 +158,14 @@ The x86 row is the one that carries a real constraint, and it is a product const
 than a visual one: production is x86, so the job that exercises server behaviour has to be too.
 That job never touches the container.
 
-**Verify in PR 2, before anything is built on top of it:** that the whole e2e setup — the
+**Verify in PR 1, before anything is built on top of it:** that the whole e2e setup — the
 Supabase CLI stack, the app build, `migrate`, `seed` — comes up cleanly on the arm runner. Its
 images support arm64 and the build output is plain JS, but a native dependency without an arm
-prebuild would surface here, and it is much cheaper to find now than in PR 3.
+prebuild would surface here, and it is much cheaper to find now than in PR 2.
 
 ---
 
-## PR 1 — Layout invariants
-
-Independently valuable, needs no fixtures and no Docker, and lands the fast half first.
-
-Add `apps/web/e2e/support/layout.ts` exporting one helper:
-
-```ts
-export async function expectNoHorizontalOverflow(page: Page): Promise<void>
-```
-
-It reads `document.documentElement.scrollWidth` against `clientWidth`, allowing 1px for
-subpixel rounding, and reports the offending element when it fails — find it by walking
-elements whose `getBoundingClientRect().right` exceeds the viewport, so the failure names a
-selector rather than just saying the page is too wide.
-
-Add `layout.e2e.ts` applying it at 390, 768, and 1280 to every route reachable with today's
-seed data: `/`, `/sign-in`, `/orgs`, `/orgs/:id`, `/orgs/:id/settings`, `/orgs/:id/members`,
-`/orgs/:id/reports/new`, `/account`, `/invites`, and a 404. One navigation per route with two
-`setViewportSize` calls, not three navigations — resizing and re-reading is nearly free.
-
-Deliberately *not* in this PR: clipped-text detection inside `overflow: hidden`. It is the
-other genuinely invisible-in-a-screenshot defect, but Tailwind's `truncate` makes clipping
-intentional in many places, so any check needs an exclusion for `text-overflow: ellipsis` and
-will still be noisy. Add it later only if it finds a real bug without false positives.
-
-**Tests:** the helper is the test. Add one negative case — a fixture page with a deliberately
-overflowing element — asserting the helper fails and names the element, so we know it isn't
-vacuously passing.
-
----
-
-## PR 2 — Containerized browser, one screenshot
+## PR 1 — Containerized browser, one screenshot
 
 The risky PR. Keep it to a single image so the cross-platform question is answered before any
 investment in fixtures.
@@ -241,7 +215,7 @@ way from the cause — comment it at both sites.
 
 ---
 
-## PR 3 — Deterministic fixtures
+## PR 2 — Deterministic fixtures
 
 The substantive work, and the part most likely to sink the whole thing if done casually. Every
 `created_at DEFAULT now()` that surfaces in the UI as a date or a relative time makes the tree
@@ -266,7 +240,7 @@ each fixture produces the report state it claims, so a fixture that silently deg
 
 ---
 
-## PR 4 — Curate, and fold the invariants in
+## PR 3 — Curate, and fold the invariants in
 
 - Extend snapshots to the remaining states worth capturing. **Curate.** Screenshotting every
   route in every state is where this gets expensive in both CI minutes and permanent Git bytes.
@@ -275,13 +249,13 @@ each fixture produces the report state it claims, so a fixture that silently deg
 - Call `expectNoHorizontalOverflow` from inside the screenshot page visits rather than from a
   separate `layout.e2e.ts` pass, so each state costs one navigation instead of two. Keep the
   standalone pass only for routes that have no screenshot.
-- Re-read PR 1's assertions against what the snapshots now cover and delete anything redundant.
-  The rule from `## Decisions` is the test: if a violation would be visible in a committed PNG,
-  the assertion is not earning its runtime.
+- Re-read the `layout.e2e.ts` assertions against what the snapshots now cover and delete
+  anything redundant. The rule from `## Decisions` is the test: if a violation would be visible
+  in a committed PNG, the assertion is not earning its runtime.
 
 ---
 
-## PR 5 — Contact sheet (optional)
+## PR 4 — Contact sheet (optional)
 
 A generated `index.html` laying the PNGs out as a browsable sheet, for showing a client without
 handing them a GitHub folder. Skip unless someone actually asks; browsing the directory on
@@ -295,9 +269,9 @@ GitHub may be enough.
 
 Beyond that, two things the test suite cannot tell you:
 
-- **The cross-platform claim, at PR 2.** Generate the snapshot on an Apple Silicon Mac, push,
+- **The cross-platform claim, at PR 1.** Generate the snapshot on an Apple Silicon Mac, push,
   and confirm the arm64 CI job's `git diff --exit-code` passes. This must be proven on one
-  image before PR 3 starts. If it fails, check first that both sides really ran the same image
+  image before PR 2 starts. If it fails, check first that both sides really ran the same image
   tag at the same `--platform`.
-- **Determinism, at PR 3.** Run the screenshot suite twice in a row locally with no code change
+- **Determinism, at PR 2.** Run the screenshot suite twice in a row locally with no code change
   and confirm the tree stays clean. A timestamp leak will not show up in a single run.
