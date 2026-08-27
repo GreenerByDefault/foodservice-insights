@@ -130,7 +130,8 @@ Turborepo.
 | `pnpm fmt` | Biome, applying fixes |
 | `pnpm test:unit` | Unit and component tests (vitest) |
 | `pnpm test:e2e` | End-to-end tests (Playwright) |
-| `pnpm test` | Both test suites |
+| `pnpm test:screenshots` | Pixel snapshots, needs Docker (Playwright) |
+| `pnpm test` | Every test suite |
 | `pnpm build` | Production build of every package |
 
 To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web dev`. However, not all packages implement every command.
@@ -147,6 +148,7 @@ macOS.
 | Component | Colocated with the component | vitest, real Chromium | `*.svelte.test.ts` |
 | Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
 | Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
+| Screenshots | `apps/web/e2e/` | Playwright, containerized Chromium | `*.screenshot.ts` |
 | System e2e | `tests/e2e/` (not yet) | Playwright | `*.e2e.ts` |
 
 **Component tests** render a single component in a real browser via
@@ -161,6 +163,17 @@ pnpm --filter @gbd/web test:e2e -- --ui
 
 CI uploads a Playwright report as a build artifact on failure. Download it and open the
 trace with `pnpm exec playwright show-trace <path-to-zip>`.
+
+**Screenshots** compare the app against PNGs committed under `apps/web/e2e/__screenshots__/`,
+which double as a gallery of the UI. After an intentional visual change, regenerate and commit
+them:
+
+```sh
+pnpm --filter @gbd/web run screenshots:update
+```
+
+They are captured through a browser in Docker, so the images match between macOS and CI. See
+[`apps/web/e2e/README.md`](apps/web/e2e/README.md).
 
 #### Tests and the database
 

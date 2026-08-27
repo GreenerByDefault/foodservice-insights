@@ -200,13 +200,19 @@ investment in fixtures.
   `--update-snapshots`. This is the command humans and agents run after an intentional UI
   change, so it needs to be documented in `apps/web/e2e/README.md`; Playwright's own failure
   text will name the bare `playwright` command instead, which is the one discoverability hole.
-- In the `screenshots` job: `git diff --exit-code -- apps/web/e2e/__screenshots__`, an
-  `if: failure()` artifact upload of the regenerated PNGs, and an `if: failure()` annotation
-  printing the update command. A fork contributor's path is: red check, download artifact,
-  commit.
+- In the `screenshots` job: `updateSnapshots: 'none'` under `CI`, so a missing or differing
+  snapshot is a hard failure rather than a silent write, plus an `if: failure()` step that
+  regenerates and uploads the PNGs as an artifact and annotates with the update command. A fork
+  contributor's path is: red check, download artifact, commit. (`git diff --exit-code` was the
+  original design; with `updateSnapshots: 'none'` nothing is ever written to the committed path,
+  so the diff could never fail and the check would be dead.)
+- Exactness needs `threshold: 0` *and* `maxDiffPixels: 0`. `maxDiffPixels: 0` alone still lets
+  every pixel drift by up to the default `threshold` of 0.2.
 - Run PNGs through `oxipng` in the update script.
-- One screenshot: `/sign-in`. Static, no database state, so a failure here is unambiguously the
-  container plumbing.
+- One screenshot: the 404 page at `/no-such-page`. Renders no database content, so a failure
+  here is unambiguously the container plumbing. (Not `/sign-in`: the placeholder `identifyUser`
+  resolves every request to the seeded user, so that route always redirects to `/orgs`. It
+  becomes reachable, and worth capturing, once real auth lands.)
 
 **Version lockstep is load-bearing.** `connect()` requires the client and browser server to be
 the same Playwright version. The image tag must track `playwright: 1.62.1` in
