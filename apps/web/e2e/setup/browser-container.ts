@@ -21,22 +21,20 @@ const run = promisify(execFile);
 /** The one definition of "correct output" for every committed PNG.
  *
  * **Version lockstep:** `chromium.connect()` refuses a client and server on different Playwright
- * versions, so the `v<version>` in this tag must match the `playwright` catalog pin in
- * `pnpm-workspace.yaml`. Bump both in the same commit.
+ * versions, so this must match the `playwright` catalog pin in `pnpm-workspace.yaml`. Bump both
+ * in the same commit.
  */
-export const BROWSER_IMAGE = 'mcr.microsoft.com/playwright:v1.62.1-noble';
+const IMAGE_PLAYWRIGHT_VERSION = '1.62.1';
+export const BROWSER_IMAGE = `mcr.microsoft.com/playwright:v${IMAGE_PLAYWRIGHT_VERSION}-noble`;
 
 /** Pinned in the invocation, not inherited from the host, so an x86 Linux developer or a fork
  * contributor gets an emulated arm64 browser — slow, but producing the same pixels — instead of
  * amd64 output and an unexplainable red build.
+ *
+ * We use ARM64 because most of our developers use Apple Silicon and we want to keep tests
+ * fast for them.
  */
 const BROWSER_PLATFORM = 'linux/arm64';
-
-const IMAGE_PLAYWRIGHT_VERSION = (() => {
-  const version = /:v(\d+\.\d+\.\d+)-/.exec(BROWSER_IMAGE)?.[1];
-  if (!version) throw new Error(`Cannot read a Playwright version out of "${BROWSER_IMAGE}"`);
-  return version;
-})();
 
 const CONTAINER_NAME = 'gbd-web-screenshot-browser';
 /** Well outside the ephemeral range, so a stray listener is unlikely to have claimed it. */
