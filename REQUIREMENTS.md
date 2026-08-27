@@ -268,7 +268,8 @@ Follow security best practices for web development.
 - **Hourly and weekly reports:** valid reports per rolling hour and per rolling 7 days, enforced
   per organization *and* per user — see `HOURLY_REPORT_LIMIT` and `WEEKLY_REPORT_LIMIT` in
   [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
-- **Report retries:** a report can be attempted up to 5 times. Retries exist for internal errors.
+- **Report retries:** a report can be attempted up to `MAX_ANALYSIS_ATTEMPTS` times — see
+  [`packages/db/src/types.ts`](packages/db/src/types.ts). Retries exist for internal errors.
 - **Invites:** an organization can invite 5 users per hour.
 - Cloudflare for DDoS protection, and potentially geo-restrictions.
 

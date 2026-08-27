@@ -28,6 +28,7 @@ export {
   type AuditEventId,
   type CountsBasis,
   type InputFileId,
+  MAX_ANALYSIS_ATTEMPTS,
   newInputFileId,
   newRejectedUploadId,
   newReportId,
