@@ -510,8 +510,24 @@ Shape A path as `too_large` or `empty` already do.
 
 **`.../reports/new/+page.svelte`** — heading, keep the sentence naming the organization
 (`REQUIREMENTS.md § Users and organizations` requires it), render
-`<UploadForm organizationId={data.organization.id} />`, drop the stub comment. `+page.server.ts`
-keeps its stub: the upload-allowance load is a separate change.
+`<UploadForm organizationId={data.organization.id} />`, drop the stub comment.
+
+**`+page.server.ts` is no longer a stub — the rate-limit load shipped ahead of this PR.** It
+exports `_loadRateLimitWarning(db, { organizationId, userId })`, returning
+`{ rateLimitWarning: string | undefined }`: `undefined` in the common case, or the one sentence
+`describeRateLimitExceeded` produces for whichever scope/window is exceeded first (same priority
+order the POST endpoint uses). It's an unlocked read —
+`$lib/server/reports/rate-limit.ts`'s `checkReportRateLimit` — so it's a snapshot, not a decision;
+`lockAndCheckReportRateLimit` is still what the POST endpoint uses to actually enforce.
+
+`upload-form.svelte` renders `data.rateLimitWarning` in an `Alert` above the drop zone **only when
+it's set**, non-blocking — the form, drop zone, and submit button all stay enabled regardless. No
+"N of 5 used this hour" counters for the other limits: a non-technical user has no use for four
+independent numbers (org/user × hourly/weekly) until one of them actually stops an upload, and a
+stale banner is never the only thing telling them — a submit that's actually rate-limited still
+answers with the identical sentence via the 429/rejection-view path above. Placement is above the
+drop zone, before any file is chosen, so someone already at a limit finds out before filling in up
+to 120 month fields.
 
 **Tests**
 - `upload.test.ts` (node, stubbed `fetch`): 201 yields the location; a 400 rejection body yields

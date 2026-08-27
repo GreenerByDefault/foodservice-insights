@@ -1,4 +1,4 @@
-/** Enforcing the hourly and weekly report limits.
+/** Enforcing the hourly and weekly report limits, and reading them for display.
  *
  * `@gbd/db`'s `lockReportRateLimit` and `countReportsSince` do the work of making the
  * count-then-insert this needs race-free; see that module's doc comment for why.
@@ -19,22 +19,17 @@ export type RateLimitScope = 'organization' | 'user';
 export type RateLimitWindow = 'hourly' | 'weekly';
 export type RateLimitExceeded = { scope: RateLimitScope; window: RateLimitWindow; limit: number };
 
-/** Whether `organizationId` or `userId` is at or over its hourly or weekly report limit.
- * `undefined` means neither is.
+/** Whether `organizationId` or `userId` is at or over its hourly or weekly report limit, from an
+ * unlocked read. `undefined` means neither is.
  *
- * Always locks first, so this is the only way to check the limit — there is no bare
- * `checkReportRateLimit` to call by mistake without the lock. That makes any one call, on its
- * own, race-free against every other call for the same organization or user. It does *not* make a
- * check-then-later-write race-free across two separate transactions: call this again, in the same
- * transaction as the write it's guarding, immediately before that write. See
- * `lockReportRateLimit`'s doc comment in `@gbd/db` for why.
+ * A snapshot, not a decision: nothing here is serialized against a concurrent insert, so two
+ * callers can each see "under the limit" a moment before both cross it. Fine for an advisory
+ * display; never fine for deciding whether to accept an upload — that's `lockAndCheckReportRateLimit`.
  */
-export async function lockAndCheckReportRateLimit(
+export async function checkReportRateLimit(
   database: DatabaseExecutor,
   { organizationId, userId }: { organizationId: OrganizationId; userId: UserId },
 ): Promise<RateLimitExceeded | undefined> {
-  await lockReportRateLimit(database, { organizationId, userId });
-
   const hourly = await countReportsSince(database, {
     organizationId,
     userId,
@@ -60,6 +55,21 @@ export async function lockAndCheckReportRateLimit(
   }
 
   return undefined;
+}
+
+/** Like `checkReportRateLimit`, but locked first — the only way to check the limit that's safe to
+ * act on, since there's no bare `checkReportRateLimit` call that also takes the lock. That makes
+ * any one call, on its own, race-free against every other call for the same organization or user.
+ * It does *not* make a check-then-later-write race-free across two separate transactions: call
+ * this again, in the same transaction as the write it's guarding, immediately before that write.
+ * See `lockReportRateLimit`'s doc comment in `@gbd/db` for why.
+ */
+export async function lockAndCheckReportRateLimit(
+  database: DatabaseExecutor,
+  { organizationId, userId }: { organizationId: OrganizationId; userId: UserId },
+): Promise<RateLimitExceeded | undefined> {
+  await lockReportRateLimit(database, { organizationId, userId });
+  return checkReportRateLimit(database, { organizationId, userId });
 }
 
 const WINDOW_PHRASE: Record<RateLimitWindow, string> = {
