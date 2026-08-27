@@ -1,8 +1,13 @@
 # Web e2e tests
 
 Two suites share this directory, separated by suffix and by Playwright project:
-`*.e2e.ts` asserts behaviour on the host browser, `*.screenshot.ts` captures pixels through a
-browser in Docker. See [`../playwright.config.ts`](../playwright.config.ts).
+
+| Suffix | Asserts | Runs in |
+| --- | --- | --- |
+| `*.e2e.ts` | behaviour | host browser |
+| `*.screenshot.ts` | pixels | browser in Docker |
+
+See [`../playwright.config.ts`](../playwright.config.ts).
 
 ## Layout
 
@@ -25,26 +30,25 @@ makes the shot names a global namespace, so prefix them with the feature the way
 
 ## Screenshots
 
-`__screenshots__/` is committed, and is a gallery as much as a regression check: GitHub renders
-an image swipe in the PR, an agent can read the PNGs, and the folder can be shown to a client.
-After an intentional visual change:
+`__screenshots__/` is our visual regression suite, and doubles as a gallery for humans and AI to
+see how the app looks.
+
+After an intentional visual change, update the committed PNGs:
 
 ```sh
 pnpm --filter @gbd/web run screenshots:update
 ```
 
-That is the command to reach for whatever Playwright's failure output suggests. It also runs
-`oxipng`, if you have it (`brew install oxipng`) — optional, and only about file size.
+Run that for whatever Playwright's failure output suggests — it's the fix regardless of what
+changed. It also runs `oxipng`, if you have it (`brew install oxipng`), to shrink file size.
 
-Keep the set curated. Every image is CI minutes and repository bytes forever, so capture what
-carries real visual risk rather than every route.
+Keep the set curated: every image is CI minutes and repository bytes forever, so capture routes
+that carry real visual risk, not every route.
 
-Assert something directly, rather than screenshot it, only when a screenshot could not show
-it — content silently cut off, or a defect at a viewport width nothing is captured at. That is
-what [`layout.e2e.ts`](layout.e2e.ts) is for, and why it should stay small.
-
-**Open:** every state worth capturing beyond the 404 page needs fixtures that pin their
-timestamps, or the images differ on every run. See `.claude/plans/visual-testing.md`.
+Screenshots can't show everything, though — a defect that's cut off, or one that only appears at
+an uncaptured viewport width, needs a direct assertion instead. For example, that's what
+[`layout.e2e.ts`](layout.e2e.ts) is for.
+Reach for assertions only when a screenshot genuinely can't see the problem.
 
 ## Pending
 

@@ -3,9 +3,7 @@ import { expect, type Page, test } from '@playwright/test';
 /** Compare `page` against the committed `name` in `e2e/__screenshots__`.
  *
  * Goes through here rather than calling `toHaveScreenshot` directly so that the container is an
- * invariant rather than a convention. With no `connectOptions`, Playwright silently launches the
- * host Chromium — which on a Mac writes macOS pixels into `__screenshots__` and looks like it
- * worked, then fails in CI with nothing pointing at the cause.
+ * invariant rather than a convention. That's necessary for cross-platform consistency.
  */
 export async function expectScreenshot(page: Page, name: string): Promise<void> {
   const { project } = test.info();
@@ -17,8 +15,5 @@ export async function expectScreenshot(page: Page, name: string): Promise<void> 
     );
   }
 
-  // `fullPage` is a per-call option only — Playwright ignores it in the config's
-  // `toHaveScreenshot` defaults, silently. Below the fold is as much of the design as above it,
-  // and this is a gallery as well as a regression check.
   await expect(page).toHaveScreenshot(name, { fullPage: true });
 }

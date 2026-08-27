@@ -1,6 +1,3 @@
 # Generated files. Marking them collapses their diffs on GitHub.
 packages/db/schema.sql linguist-generated=true
 packages/db/src/generated/** linguist-generated=true
-
-# Deliberately absent: apps/web/e2e/__screenshots__. They are generated, but the rendered image
-# diff GitHub shows on a PR is the main reason they are committed at all.
