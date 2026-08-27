@@ -1,7 +1,7 @@
 /** Create the phase-one placeholder identity. `TEST_DB=1` targets the test stack.
  *
- *   pnpm seed
- *   TEST_DB=1 pnpm seed
+ *   pnpm seed:identity
+ *   TEST_DB=1 pnpm seed:identity
  *
  * Safe to re-run, and necessary after `pnpm truncate`.
  */

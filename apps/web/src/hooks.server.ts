@@ -34,7 +34,7 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
     // still-valid token — a normal case — so replace this throw with `error(401, ...)`.
     throw new Error(
       `Identified user ${userId} has no row in the database. ` +
-        'If this is the phase-one placeholder, run `pnpm seed` (or `TEST_DB=1 pnpm seed`).',
+        'If this is the phase-one placeholder, run `pnpm seed:identity` (or `TEST_DB=1 pnpm seed:identity`).',
     );
   }
   return auth;
