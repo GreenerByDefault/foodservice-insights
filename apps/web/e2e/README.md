@@ -40,7 +40,7 @@ pnpm --filter @gbd/web run screenshots:update
 ```
 
 Run that for whatever Playwright's failure output suggests — it's the fix regardless of what
-changed. It also runs `oxipng`, if you have it (`brew install oxipng`), to shrink file size.
+changed. It also runs `oxipng` to shrink file size (`brew install oxipng` or `cargo install oxipng`).
 
 Keep the set curated: every image is CI minutes and repository bytes forever, so capture routes
 that carry real visual risk, not every route.

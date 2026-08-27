@@ -172,6 +172,24 @@ jobs:
       - uses: ./.github/actions/setup-supabase
       - run: pnpm exec turbo run test:screenshots "$TURBO_SCOPE"
 
+      # `screenshots:update` requires oxipng. To upgrade to a new version, go to
+      # https://github.com/oxipng/oxipng/releases to get the latest version and the corresponding
+      # sha256 checksum for the `aarch64-unknown-linux-gnu` artifact.
+      - name: Install oxipng
+        if: failure()
+        run: |
+          version=10.2.0
+          asset=oxipng-$version-aarch64-unknown-linux-gnu.tar.gz
+          sha256=97d168c6c0d1dbcb36e7438eb489804748a2ba40d94fe21aa7dab7372e9efe9b
+
+          workdir=$(mktemp -d)
+          curl -fsSL -o "$workdir/$asset" "https://github.com/oxipng/oxipng/releases/download/v$version/$asset"
+          echo "$sha256  $workdir/$asset" | sha256sum -c -
+
+          tar -xzf "$workdir/$asset" -C "$workdir"
+          install -m 755 "$workdir/oxipng-$version-aarch64-unknown-linux-gnu/oxipng" /usr/local/bin/oxipng
+          oxipng --version
+
       # Regenerating on failure makes the artifact a drop-in replacement for the committed
       # directory, which is the whole recovery path for a fork contributor: red check, download,
       # commit. `updateSnapshots: 'none'` keeps the run above from doing this silently.

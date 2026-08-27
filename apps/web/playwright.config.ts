@@ -86,9 +86,11 @@ export default defineConfig({
       'node --env-file-if-exists=../../.env.test start.js',
     env: {
       PORT: String(PORT),
-      // adapter-node rejects cross-site POSTs with 403 unless ORIGIN is set. Screenshots reach the
-      // app on the other hostname, so submitting a form from one would be rejected — keep them to
-      // navigation, or make this per-project.
+      // SvelteKit's CSRF check rejects a POST whose Origin header doesn't match this. It's set to
+      // BASE_URL, which is correct for `e2e` (host Chromium, hits BASE_URL directly) but NOT for
+      // `screenshots` (container browser, hits BASE_URL_FROM_CONTAINER) — a form submitted there
+      // gets a 403. GETs are unaffected; keep the screenshots project to navigation and seeded DB
+      // state, or give the two projects separate webServer origins if that stops being enough.
       ORIGIN: BASE_URL,
       TEST_DB: '1',
     },
