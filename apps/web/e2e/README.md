@@ -4,6 +4,25 @@ Two suites share this directory, separated by suffix and by Playwright project:
 `*.e2e.ts` asserts behaviour on the host browser, `*.screenshot.ts` captures pixels through a
 browser in Docker. See [`../playwright.config.ts`](../playwright.config.ts).
 
+## Layout
+
+The suffix decides which runner and browser a file gets, so directories are free to carry the
+other axis: **what part of the product a spec covers.**
+
+| | |
+| --- | --- |
+| `lib/` | Helpers a spec imports. No tests, no side effects at import. |
+| `setup/` | Getting the containerized browser up, and taking it down. Not tests of the app. |
+| `__screenshots__/` | The committed PNGs, flat. |
+| everything else | Specs, both suites. |
+
+**Specs stay flat until a feature has two of them, then that feature gets a folder** holding both
+its suites.
+
+`__screenshots__/` stays flat however the specs nest, because it is browsed as a gallery. That
+makes the shot names a global namespace, so prefix them with the feature the way a folder would:
+`reports-failed.png`, not `failed.png`.
+
 ## Screenshots
 
 `__screenshots__/` is committed, and is a gallery as much as a regression check: GitHub renders

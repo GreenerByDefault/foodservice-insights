@@ -232,7 +232,8 @@ within a week.
 Fixtures must write explicit fixed timestamps rather than relying on column defaults. Anything
 genuinely unpinnable gets `mask: [locator]` on the screenshot.
 
-Build a fixture layer producing named database states, then screenshot the report view in each:
+Build a fixture layer in `apps/web/e2e/fixtures/` producing named database states, then
+screenshot the report view in each:
 queued, running, succeeded, failed, canceled, rate-limited, plus an organization with no
 reports. Reuse the state definitions that `load-report.test.ts` already exercises so the two
 stay in agreement about what a state means.

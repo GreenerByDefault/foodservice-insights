@@ -1,5 +1,5 @@
 import { expect, test as setup } from '@playwright/test';
-import { BROWSER_IMAGE, describeBrowser, startBrowserServer } from './lib/browser-container';
+import { BROWSER_IMAGE, describeBrowser, startBrowserServer } from './browser-container';
 
 // A dependency of the `screenshots` project, so the behavioural e2e suite never pays for Docker.
 setup('the pinned browser container is serving', async () => {

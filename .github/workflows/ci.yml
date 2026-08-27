@@ -152,7 +152,7 @@ jobs:
           if-no-files-found: ignore
 
   # Split from ts-e2e, and on a different runner, because every screenshot is captured through a
-  # browser pinned to `linux/arm64` (see apps/web/e2e/lib/browser-container.ts). Running the job on
+  # browser pinned to `linux/arm64` (see apps/web/e2e/setup/browser-container.ts). Running the job on
   # arm means that browser runs natively rather than under emulation. ts-e2e stays on x86 because
   # it exercises server behaviour and x86 is what production runs.
   #

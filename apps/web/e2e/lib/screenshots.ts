@@ -13,7 +13,7 @@ export async function expectScreenshot(page: Page, name: string): Promise<void> 
     throw new Error(
       `Project "${project.name}" has no connectOptions.wsEndpoint, so this screenshot would be ` +
         'captured by the host browser instead of the pinned container. Run it under ' +
-        '`--project=screenshots`, and see e2e/lib/browser-container.ts for why that matters.',
+        '`--project=screenshots`, and see e2e/setup/browser-container.ts for why that matters.',
     );
   }
 

@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { defineConfig } from '@playwright/test';
-import { BROWSER_WS_ENDPOINT } from './e2e/lib/browser-container';
+import { BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
 
 const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -50,12 +50,12 @@ export default defineConfig({
     },
     {
       name: 'browser-container',
-      testMatch: 'browser-container.setup.ts',
+      testMatch: '**/browser-container.setup.ts',
       teardown: 'browser-container-stop',
     },
     {
       name: 'browser-container-stop',
-      testMatch: 'browser-container.teardown.ts',
+      testMatch: '**/browser-container.teardown.ts',
     },
     {
       name: 'screenshots',
