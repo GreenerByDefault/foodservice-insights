@@ -24,6 +24,20 @@ For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how
 fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — both record *rejected*
 alternatives, so check them before proposing a design change.
 
+## Claude Code plans
+
+`.claude/plans/` holds a plan per multi-step feature currently in flight — the design, the
+decisions behind it, and the PRs it breaks into. Each is named for its feature, so `ls` the
+directory before starting a change and read one only when its name covers what you were asked
+to do.
+
+A plan is where the work was headed, not a spec. Where the code has since moved on, the code
+wins — say so rather than following the plan into a design it already abandoned.
+
+Plans are deleted, not archived. `/plan-advance` folds each landed PR back into its plan, and
+the PR that lands the last one removes the file, so a plan here is always unfinished work.
+`/plan-adopt` brings a plan mode plan in from `~/.claude/plans`, using a name that will route correctly.
+
 ## Verifying a change
 
 Run the checks for the stack you changed, from the repo root, before saying a change works:

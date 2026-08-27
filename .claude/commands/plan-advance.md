@@ -1,7 +1,7 @@
 ---
 description: Fold a landed precursor PR back into its plan file, so the plan reads fresh for what's left
 argument-hint: "<plan-file-path> [merged-commit-sha]"
-allowed-tools: Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Read, Grep, Glob, Edit, Write
+allowed-tools: Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Bash(git rm *), Read, Grep, Glob, Edit, Write
 ---
 
 `$ARGUMENTS` is `<plan-file-path> [merged-commit-sha]`.
@@ -50,6 +50,20 @@ changelog, not the old plan with strikethrough. Concretely:
 6. **Update `## Verification`** if it named steps specific to the landed PR (e.g. a manual QA step
    for UI that PR built) — drop what's now covered by the merged PR's own tests, keep what still
    applies to what's left.
+
+## When that was the last PR
+
+If folding this PR in leaves no `## PR N` section behind, the feature is done and so is the
+plan. `git rm` the file in this same PR's diff rather than writing back a plan that is all
+`Context` and no remaining work.
+
+This is what lets plans live in the repo at all: the PR that finishes a feature is the PR that
+deletes its plan, so a plan on `main` always means unfinished work. Do not archive it and do not
+keep it as a record of what was built — the merged PRs are that record.
+
+The one case worth pausing on is a plan whose follow-ups section names work someone actually
+intends to do. Say so and ask. The answer is usually still to delete the plan and file those
+follow-ups where work is tracked, rather than keep a husk around to hold them.
 
 ## Report
 
