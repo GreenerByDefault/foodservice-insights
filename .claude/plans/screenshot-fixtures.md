@@ -1,10 +1,5 @@
 # Screenshot fixtures
 
-Delete [`visual-testing.md`](visual-testing.md) when this lands — its PR 1 and PR 2 are what this
-replaces, its infrastructure decisions have shipped and are recorded in code comments and
-[`apps/web/e2e/README.md`](../../apps/web/e2e/README.md), and its PR 3 (the contact sheet) folds
-into *Follow-ups* below.
-
 ## Context
 
 The screenshot machinery works end to end, and captures exactly one image: the 404 page. Every
