@@ -22,10 +22,27 @@ CI (`.github/workflows/ci.yml`) runs `ubuntu-latest` only. Developers are on mac
 constraint that shapes the whole design, because font rasterization differs between the two and
 a snapshot taken on one platform will not match the other.
 
-The layout-invariants half already exists: `apps/web/e2e/lib/layout.ts` exports
+The layout-invariants half exists: `apps/web/e2e/lib/layout.ts` exports
 `expectNoHorizontalOverflow(page)`, and `apps/web/e2e/layout.e2e.ts` runs it at the widths in
 `apps/web/e2e/lib/viewports.ts` (`mobile`/`tablet`/`desktop`) against every route reachable with
-today's seed data. What's left is the pixel-snapshot half below.
+today's seed data.
+
+The pixel-snapshot half exists too, for one screenshot: `apps/web/e2e/setup/browser-container.ts`
+starts and stops the pinned `mcr.microsoft.com/playwright:v1.62.1-noble` container (as Playwright
+`browser-container`/`browser-container-stop` setup/teardown projects, not `globalSetup`), the
+`screenshots` project in `apps/web/playwright.config.ts` points `connectOptions.wsEndpoint` at it,
+and `apps/web/e2e/not-found.screenshot.ts` captures `/no-such-page` through `expectScreenshot`
+(`apps/web/e2e/lib/screenshots.ts`), which throws if a spec runs outside that project instead of
+silently falling back to host Chromium. CI runs it as the `ts-screenshots` job on
+`ubuntu-24.04-arm`; `ts-e2e` stays on `ubuntu-latest` for the behavioural suite. What's left is
+extending that to deterministic report fixtures and curating the rest of the set.
+
+One constraint the container introduces, worth knowing before writing fixtures that submit forms:
+the `screenshots` project's `baseURL` is `http://host.docker.internal:4173`, not
+`http://localhost:4173`, so it doesn't match `webServer.env.ORIGIN` and a POST from that project
+gets a 403 from SvelteKit's CSRF check. GETs are unaffected. If a future fixture needs to drive
+state through a form rather than seeding the database directly, see the comment on `ORIGIN` in
+`apps/web/playwright.config.ts` for the options.
 
 ## Decisions
 
@@ -135,11 +152,14 @@ its environment:
   debugging.
 
 Both Chromiums must be Playwright 1.62.1: the host one via the `playwright` catalog pin in
-`pnpm-workspace.yaml`, the container one via the image tag. See the lockstep note in PR 1.
+`pnpm-workspace.yaml`, the container one via the image tag in
+`apps/web/e2e/setup/browser-container.ts`. The two are commented as a pair — bump both in the
+same commit, since a mismatch fails as a connection error inside `chromium.connect()`, a long way
+from the version pin that caused it.
 
 Everything else in the stack is free to vary, and does.
 
-| | Local (Apple Silicon) | CI — `screenshots` job | CI — `test:e2e` job |
+| | Local (Apple Silicon) | CI — `ts-screenshots` job | CI — `ts-e2e` job |
 | --- | --- | --- | --- |
 | Runner / host | macOS arm64 | `ubuntu-24.04-arm` | `ubuntu-latest` (x86) |
 | App server (`adapter-node`, :4173) | Host, macOS arm64 | Host, Linux arm64 | Host, Linux x86 |
@@ -158,64 +178,9 @@ The x86 row is the one that carries a real constraint, and it is a product const
 than a visual one: production is x86, so the job that exercises server behaviour has to be too.
 That job never touches the container.
 
-**Verify in PR 1, before anything is built on top of it:** that the whole e2e setup — the
-Supabase CLI stack, the app build, `migrate`, `seed` — comes up cleanly on the arm runner. Its
-images support arm64 and the build output is plain JS, but a native dependency without an arm
-prebuild would surface here, and it is much cheaper to find now than in PR 2.
-
 ---
 
-## PR 1 — Containerized browser, one screenshot
-
-The risky PR. Keep it to a single image so the cross-platform question is answered before any
-investment in fixtures.
-
-- Split `apps/web/playwright.config.ts` into two projects: `e2e` (`**/*.e2e.ts`, host Chromium,
-  unchanged behaviour) and `screenshots` (`**/*.screenshot.ts`, `use.connectOptions.wsEndpoint`
-  pointing at the container). The project boundary is what decides which browser a test gets,
-  so the `testMatch` patterns must not overlap — a screenshot picked up by the `e2e` project
-  would be captured on host Chromium.
-- Set `snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}'` — this drops Playwright's
-  platform and browser suffixes, so there is exactly one canonical file per shot and a stray
-  `-darwin` PNG cannot land.
-- Set `maxDiffPixels: 0`, `animations: 'disabled'`, `caret: 'hide'`, one viewport at 1280 with
-  `deviceScaleFactor: 1`.
-- **Make a non-container capture impossible.** If `connectOptions.wsEndpoint` is unset,
-  Playwright silently launches host Chromium — which on a Mac writes macOS pixels into
-  `__screenshots__/` and looks like it worked. The screenshots project must fail loudly on a
-  missing endpoint rather than falling back. This is the guard behind "every screenshot comes
-  from the official image"; without it that rule is a convention, not an invariant.
-- Container lifecycle via `globalSetup`, so `pnpm test` just works; no-op when the screenshots
-  project isn't selected. Run it with `--platform linux/arm64` and
-  `--add-host=host.docker.internal:host-gateway`, so `http://host.docker.internal:4173` is the
-  `baseURL` override on both macOS and Linux — same URL and same architecture everywhere, no
-  branching.
-- CI: a **separate `screenshots` job on `ubuntu-24.04-arm`**, running only the screenshots
-  project. Leave the existing `test:e2e` job on `ubuntu-latest` running only the `e2e` project
-  — that one has to stay x86 because it exercises the server. Both need the same build and
-  database setup; that duplication is the accepted cost of the split.
-- Confirm the Supabase CLI stack starts on the arm runner before building anything on top of
-  it.
-- Add `pnpm --filter @gbd/web run screenshots:update`, wrapping the container plus
-  `--update-snapshots`. This is the command humans and agents run after an intentional UI
-  change, so it needs to be documented in `apps/web/e2e/README.md`; Playwright's own failure
-  text will name the bare `playwright` command instead, which is the one discoverability hole.
-- In the `screenshots` job: `git diff --exit-code -- apps/web/e2e/__screenshots__`, an
-  `if: failure()` artifact upload of the regenerated PNGs, and an `if: failure()` annotation
-  printing the update command. A fork contributor's path is: red check, download artifact,
-  commit.
-- Run PNGs through `oxipng` in the update script.
-- One screenshot: `/sign-in`. Static, no database state, so a failure here is unambiguously the
-  container plumbing.
-
-**Version lockstep is load-bearing.** `connect()` requires the client and browser server to be
-the same Playwright version. The image tag must track `playwright: 1.62.1` in
-`pnpm-workspace.yaml`'s catalog, and the failure mode is a confusing connection error a long
-way from the cause — comment it at both sites.
-
----
-
-## PR 2 — Deterministic fixtures
+## PR 1 — Deterministic fixtures
 
 The substantive work, and the part most likely to sink the whole thing if done casually. Every
 `created_at DEFAULT now()` that surfaces in the UI as a date or a relative time makes the tree
@@ -226,7 +191,8 @@ within a week.
 Fixtures must write explicit fixed timestamps rather than relying on column defaults. Anything
 genuinely unpinnable gets `mask: [locator]` on the screenshot.
 
-Build a fixture layer producing named database states, then screenshot the report view in each:
+Build a fixture layer in `apps/web/e2e/fixtures/` producing named database states, then
+screenshot the report view in each:
 queued, running, succeeded, failed, canceled, rate-limited, plus an organization with no
 reports. Reuse the state definitions that `load-report.test.ts` already exercises so the two
 stay in agreement about what a state means.
@@ -240,7 +206,7 @@ each fixture produces the report state it claims, so a fixture that silently deg
 
 ---
 
-## PR 3 — Curate, and fold the invariants in
+## PR 2 — Curate, and fold the invariants in
 
 - Extend snapshots to the remaining states worth capturing. **Curate.** Screenshotting every
   route in every state is where this gets expensive in both CI minutes and permanent Git bytes.
@@ -255,7 +221,7 @@ each fixture produces the report state it claims, so a fixture that silently deg
 
 ---
 
-## PR 4 — Contact sheet (optional)
+## PR 3 — Contact sheet (optional)
 
 A generated `index.html` laying the PNGs out as a browsable sheet, for showing a client without
 handing them a GitHub folder. Skip unless someone actually asks; browsing the directory on
@@ -267,11 +233,7 @@ GitHub may be enough.
 
 `pnpm lint && pnpm check && pnpm test` from the repo root, per `AGENTS.md`.
 
-Beyond that, two things the test suite cannot tell you:
+Beyond that, one thing the test suite cannot tell you:
 
-- **The cross-platform claim, at PR 1.** Generate the snapshot on an Apple Silicon Mac, push,
-  and confirm the arm64 CI job's `git diff --exit-code` passes. This must be proven on one
-  image before PR 2 starts. If it fails, check first that both sides really ran the same image
-  tag at the same `--platform`.
-- **Determinism, at PR 2.** Run the screenshot suite twice in a row locally with no code change
+- **Determinism, at PR 1.** Run the screenshot suite twice in a row locally with no code change
   and confirm the tree stays clean. A timestamp leak will not show up in a single run.

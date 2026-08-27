@@ -11,8 +11,10 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "test:unit": "svelte-kit sync && TEST_DB=1 vitest run",
-    "test:e2e": "TEST_DB=1 playwright test",
-    "test": "pnpm run test:unit && pnpm run test:e2e"
+    "test:e2e": "TEST_DB=1 playwright test --project=e2e",
+    "test:screenshots": "TEST_DB=1 playwright test --project=screenshots",
+    "screenshots:update": "TEST_DB=1 playwright test --project=screenshots --update-snapshots && node scripts/optimize-screenshots.ts",
+    "test": "pnpm run test:unit && pnpm run test:e2e && pnpm run test:screenshots"
   },
   "dependencies": {
     "@gbd/core": "workspace:*",
