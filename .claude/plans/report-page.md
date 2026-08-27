@@ -42,6 +42,20 @@ notification email links to. Everything under it exists:
 - **`insertAnalysisAttempt` test fixture** ([`fixtures.ts`](packages/db/src/testing/fixtures.ts))
   now takes `claimedAt` (to backdate a claim on a non-terminal row, for stage-threshold tests) and
   `failureReason` (to exercise a specific `ANALYSIS_FAILURE_EXPLANATIONS` entry) overrides.
+- **Cancel, retry and delete already work.**
+  [`requestCancellation` / `cancelActiveAttempt`](apps/web/src/lib/server/reports/cancel.ts),
+  [`_retryReport`](<apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/[reportId=uuid]/retry/+server.ts>),
+  and [`_deleteReport`](<apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/[reportId=uuid]/+server.ts>)
+  are real endpoints, not stubs. They share
+  [`requireReportAccess`](apps/web/src/lib/server/reports/guards.ts) (the 404/403 ownership check),
+  [`recordReportAuditEvent`](apps/web/src/lib/server/reports/audit.ts), and
+  [`requireReportRouteContext`](apps/web/src/lib/server/reports/route-context.ts) (the
+  auth-plus-org-access prologue every `reports/[reportId]/*` route repeats). Retry inserts the next
+  attempt optimistically and lets `check_violation`/`unique_violation` become a 409 —
+  `analysis_attempt_new_attempt_only_after_failure` is the trigger that enforces it. Delete shares
+  `cancelActiveAttempt` with `POST .../cancel` and records `report.deleted` on top. So every viewing
+  PR below can build its real button — retry, cancel — in the same PR as the screen it belongs to;
+  see the Decisions section.
 
 ## What the database actually knows
 
@@ -284,13 +298,13 @@ A client-side *navigation* into this page can also arrive unreachable, with no e
 fall back on. That renders a short standalone notice, which is the one case the retained snapshot
 cannot cover.
 
-**Unverified, and the first thing PR 5 settles:** what SvelteKit does when `invalidate()`'s own
-`__data.json` request fails at the network level. If it replaces the page with the error boundary
-rather than rejecting the promise, `invalidate()` cannot be the polling mechanism and the fallback
-is a read endpoint plus a README amendment explaining why this one route breaks the
-`/api`-is-writes-only rule. **Do not design around a guess** — PR 5 opens with a Playwright test
-that aborts `**/*__data.json*` and asserts the timeline is still on screen, and that test stays
-in the suite afterwards.
+**Unverified, and the first thing the polling PR settles:** what SvelteKit does when
+`invalidate()`'s own `__data.json` request fails at the network level. If it replaces the page with
+the error boundary rather than rejecting the promise, `invalidate()` cannot be the polling
+mechanism and the fallback is a read endpoint plus a README amendment explaining why this one route
+breaks the `/api`-is-writes-only rule. **Do not design around a guess** — that PR opens with a
+Playwright test that aborts `**/*__data.json*` and asserts the timeline is still on screen, and
+that test stays in the suite afterwards.
 
 ### Charts render generically, from the key alone
 
@@ -326,36 +340,29 @@ the CSP has to allow that host or every chart breaks.
 `objectExists` call plus a signing call. Eight charts is eight of those on a page view.
 `loading="lazy"` spreads them out. Not worth optimising until it is measured.
 
-### Cancel and retry are the two things this page cannot finish on its own
+### Cancel and retry ship in the same PR as the screen they belong to
 
 `REQUIREMENTS.md` puts a cancel button on the waiting screen and a retry on the failure screen, and
-`FAILURE_EXPLANATIONS` already writes the sentence *"You can run it again without uploading it a
-second time"* for eight of the ten reasons — only `contract_violation` and `unusable_data` say to
-contact us instead. But all three endpoints are 501 stubs:
-[`cancel/+server.ts`](apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/[reportId=uuid]/cancel/+server.ts),
-[`retry/+server.ts`](apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/[reportId=uuid]/retry/+server.ts),
-and the `DELETE` in
-[`[reportId]/+server.ts`](apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/[reportId=uuid]/+server.ts).
+`FAILURE_EXPLANATIONS` writes the sentence *"You can run it again without uploading it a second
+time"* for eight of the ten failure reasons — the common case, not an edge one. Both endpoints
+already exist (see Context), so there is nothing forcing either button into a trailing PR: the
+retry button belongs in the failure-view PR, and cancel belongs right after the waiting view. See
+PR ordering below.
 
-So the four viewing PRs below ship a failure screen whose copy promises a button that does not
-exist yet — and, at eight reasons out of ten, that is the *common* case rather than an edge one.
-It is survivable only because no worker runs in dev or production yet, so nothing can reach
-`failed` outside a hand-written row. It becomes a real defect the moment one can. **Either PR 6
-follows PR 4 immediately, or PR 4 renders `whatHappened` and the contact line only** and leaves
-`followUp.text` out until the button exists. Shipping the promise without the button is the one
-option that is not available.
+Two decisions from the backend carry into the frontend:
 
-Retry is the smaller of the two and its endpoint's own doc comment already specifies it: insert the
-next attempt, let the triggers reject an illegal one, map `check_violation` and `unique_violation`
-to a 409. Cancel is bigger — a guarded `cancel_requested_at` update plus an audit event, sharing
-that update with the `DELETE` the reports list will use — so it is last.
-
-**Cancel does not delete.** `POST .../cancel` writes `cancel_requested_at` and nothing else; the
-`DELETE` adds the soft-delete on top of the same update. Two consequences for the screens above:
-`canceled` is reachable and needs its panel, and `stopping` needs its copy.
-
-*Rejected: retry after cancel.* The five-attempt cap is a budget for our failures; letting cancels
-spend it dead-ends a report at five with no way to run it. `REQUIREMENTS.md` § Canceling.
+- **Cancel does not delete.** `POST .../cancel` writes `cancel_requested_at` and nothing else; the
+  `DELETE` shares `cancelActiveAttempt` and adds the soft-delete on top of the same update. So
+  `canceled` is reachable on its own — via `POST .../cancel` — and needs its own panel; the delete
+  confirmation is a separate, bigger warning ("this report goes away"), not a rename of the cancel
+  dialog's copy.
+- **Retry after cancel is impossible, and enforced by the database, not the frontend.**
+  `analysis_attempt_new_attempt_only_after_failure` rejects a new attempt unless the latest one is
+  `failed` — a canceled or succeeded attempt is the end of the line for that report
+  (`REQUIREMENTS.md` § Canceling: the five-attempt cap is a budget for our failures, and letting
+  cancels spend it would dead-end a report with no way to run it). The failure view's retry button
+  never has to reason about a prior cancel; a `canceled` attempt is typed as its own screen and
+  never reaches the failure branch.
 
 ### What this does *not* touch
 
@@ -413,7 +420,7 @@ the right variant; and charts come back ordered by `chart_key`. Still to add, wi
 transient database error on a data request returns `reachable: false` while the same error on a
 document request throws.
 
-Cancel gets three of its own, the ordering rule being the page's one piece of real logic:
+Cancel's ordering rule — the page's one piece of real logic — is also already covered: a
 `cancel_requested_at` on a `pending` and on a `processing` row both give the canceled screen with
 `stoppedAt`; on a `succeeded` row it gives the success screen, files intact.
 
@@ -425,6 +432,10 @@ Not tested: that `Intl.RelativeTimeFormat` formats, that `/file/result/[id]` red
 own tests), that the DB constraints hold (`packages/db/tests/` owns those).
 
 ---
+
+Everything below is frontend only — cancel, retry and delete already work on the server (see
+Context). The retry button lands in the same PR as the failure screen it belongs to, and cancel
+lands right after the waiting view rather than at the end of the sequence.
 
 ## PR 1 — The waiting view
 
@@ -445,7 +456,27 @@ the warning rendered inline on the current step when present.
 `timeline.svelte.test.ts` for the step states, the `aria-current`, the ISO `datetime`, and the
 warning appearing only on the current step.
 
-## PR 2 — The success view
+## PR 2 — Cancel, and the canceled view
+
+`requestCancellation` already exists, so this PR is entirely presentation and wiring: the cancel
+button on the waiting view, its confirming dialog, a feature client in `$lib/reports/` calling
+`POST .../cancel`, and **`canceled-view.svelte`** — "You stopped this report", `<time>` on
+`stoppedAt`, the line saying it cannot be run again, and a delete button. `invalidate()` rather
+than `goto` on success, since the report is still here and the load's own re-run is what swaps the
+screen; a 409 (the attempt finished first) answers the same way, possibly onto a finished report —
+do not report a cancel that did not happen.
+
+The dialog's copy is the load-bearing part, and both halves are easy to leave out: stopping is
+final, and the report stays in the list.
+
+Placed right after PR 1 because it is the same screen's button, not because anything later depends
+on it — `canceled-view.svelte` has no dependency on the success or failure views and could land in
+either order relative to them.
+
+**Tests** — `canceled-view.svelte.test.ts` for the copy and the `<time>`; a feature-client test for
+the 409 case; component test for the dialog's confirm/cancel.
+
+## PR 3 — The success view
 
 **`result-view.svelte`** — "Finished 4 minutes ago", then the PDF and Excel buttons, the original
 file as a secondary link with its filename and `displaySize(byteSize)`, then the charts.
@@ -461,18 +492,23 @@ guarantees it, and `loadResultFiles` already asserts it via `requireConstraint` 
 fixture still uses); `result-view.svelte.test.ts` for the three hrefs, one figure per chart with
 the humanized caption, and no horizontal scroll at 375px.
 
-## PR 3 — The failure view
+## PR 4 — The failure view, with retry
 
 **`failure-view.svelte`** — `whatHappened` as the lead, `followUpText` under it, the contact
-`mailto:`, and "this was attempt 3" only when `attemptNumber > 1`. No live region: this is the
-page's content on arrival, not a change to something the user was reading. A retry button if PR 5
-has landed; see the decision above if it has not.
+`mailto:`, "this was attempt 3" only when `attemptNumber > 1`, and a real retry button —
+`_retryReport` already exists, so there is no reason to render the promise without it. No live
+region: this is the page's content on arrival, not a change to something the user was reading.
+
+A feature client in `$lib/reports/` calling `POST .../retry`, narrowing its 409 (someone already
+retried) into "refresh, don't retry again" rather than a second attempt at the same request.
 
 **Tests** — `failure-view.svelte.test.ts`: the copy renders, the contact link is a `mailto:`, the
-attempt count appears only above 1. The `failureReason` fixture override lets each test pick the
-`ANALYSIS_FAILURE_EXPLANATIONS` entry it wants without hand-writing the row.
+attempt count appears only above 1, the retry button is present only when `followUp.action ===
+'retry'`. The `failureReason` fixture override lets each test pick the
+`ANALYSIS_FAILURE_EXPLANATIONS` entry it wants without hand-writing the row. Plus the feature-client
+409 test.
 
-## PR 4 — Polling, and staying on screen when a poll fails
+## PR 5 — Polling, and staying on screen when a poll fails
 
 **Open with the spike**, as a Playwright test that aborts `**/*__data.json*` against the page as it
 already exists. What it reports decides whether the rest of this PR is `invalidate()` or a read
@@ -489,11 +525,12 @@ load and not the layout's auth lookup; the landed load doesn't call it yet. Catc
 **`+page.svelte`** — the timer, the failure counter, the `visibilitychange` listener, and
 `<ReportView {data} {connection} />`. Nothing else.
 
-**`report-view.svelte`** — the status switch, the retained snapshot, the reconnecting notice, the
-standalone notice for an unreachable client-side navigation, and one persistent
-`aria-live="polite"` region carrying the current headline. The region has to sit *outside* the
-switch: a live region that is unmounted along with the view it described announces nothing, so
-"Your report is ready" would never be spoken.
+**`report-view.svelte`** — the status switch over all five screens (waiting, success, failure,
+canceled all exist by now), the retained snapshot, the reconnecting notice, the standalone notice
+for an unreachable client-side navigation, and one persistent `aria-live="polite"` region carrying
+the current headline. The region has to sit *outside* the switch: a live region that is unmounted
+along with the view it described announces nothing, so "Your report is ready" would never be
+spoken.
 
 **Tests** — `polling.test.ts` for the schedule; `report-view.svelte.test.ts` for retention,
 the two notices, and the live region; the two e2e tests.
@@ -503,30 +540,6 @@ the two notices, and the live region; the two e2e tests.
 `event.isDataRequest` as the line between "a poll can keep the screen" and "there is no screen to
 keep". Plus the trap: `data` is replaced wholesale, so a page that must survive a failed reload
 holds its own copy.
-
-## PR 5 — Retry *(recommended, completes PR 3)*
-
-`POST .../reports/[reportId]/retry`, per the stub's own specification: insert the next attempt, do
-not check first, map `check_violation` and `unique_violation` to a 409. A feature client in
-`$lib/reports/` narrowing that 409 into its own outcome, and the button on the failure view. A 409
-means someone already retried, so the answer is to refresh, not to retry again.
-
-## PR 6 — Cancel *(completes REQUIREMENTS § Canceling)*
-
-`POST .../reports/[reportId]/cancel`, per its stub: a guarded `cancel_requested_at` update, an audit
-event, 409 on zero rows. `DELETE .../reports/[reportId]` shares that update and adds the
-soft-delete; the two endpoints land together so the shared helper has both callers from the start.
-
-On the page: the cancel button on the waiting view, its confirming dialog, and
-**`canceled-view.svelte`** — "You stopped this report", `<time>` on `stoppedAt`, the line saying it
-cannot be run again, and a delete button. `invalidate()` rather than `goto`, since the report is
-still here and the load's own re-run is what swaps the screen.
-
-The dialog's copy is the load-bearing part, and both halves are easy to leave out: stopping is
-final, and the report stays in the list.
-
-A 409 means the attempt finished first, so it also answers with `invalidate()` — possibly onto a
-finished report. Do not report a cancel that did not happen.
 
 ## Follow-ups this work identifies but does not do
 
