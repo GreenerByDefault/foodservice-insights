@@ -17,7 +17,8 @@ other axis: **what part of the product a spec covers.**
 | | |
 | --- | --- |
 | `lib/` | Helpers a spec imports. No tests, no side effects at import. |
-| `setup/` | Getting the containerized browser up, and taking it down. Not tests of the app. |
+| `fixtures/` | The report-state catalogue and the extended `test` that commits and cleans up a report. |
+| `setup/` | Getting the containerized browser up, the database reset, and taking the browser down. Not tests of the app. |
 | `__screenshots__/` | The committed PNGs, flat. |
 | everything else | Specs, both suites. |
 
@@ -49,6 +50,28 @@ Screenshots can't show everything, though — a defect that's cut off, or one th
 an uncaptured viewport width, needs a direct assertion instead. For example, that's what
 [`layout.e2e.ts`](layout.e2e.ts) is for.
 Reach for assertions only when a screenshot genuinely can't see the problem.
+
+## Database state
+
+Every fixture lives in the placeholder organization (`@gbd/db/seed`) — phase 1 has no second one.
+`e2e/fixtures/reports.ts` is the source of truth for what each state contains.
+
+A fixture report commits inside one `withTransaction`: two of `report`/`analysis_attempt`'s
+constraint triggers are deferred to `COMMIT`, so a report or a `succeeded` attempt written outside
+a transaction fails there instead of at the `INSERT`. Timings are offsets from one fixed anchor
+rather than absolute dates, so a future move to relative rendering only changes where the anchor
+comes from.
+
+The `database` Playwright project (`setup/database.setup.ts`) deletes every fixture report in the
+placeholder organization before either suite runs. Because it's a real barrier — it finishes
+before any spec starts — that delete can be unconditional, unlike the age-bounded sweep in
+`packages/db/src/testing/concurrency.ts`. It's also what recovers a run interrupted before its own
+per-test teardown ran.
+
+Screenshots and e2e share the catalogue, not its rows: every test mints its own report and deletes
+it when it ends, so a behavioural spec is free to mutate what it created. A `*.screenshot.ts` spec
+still can't POST, since the container browser's origin fails SvelteKit's CSRF check — fixtures
+exist so a screen can be reached anyway.
 
 ## Pending
 

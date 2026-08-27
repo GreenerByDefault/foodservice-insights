@@ -47,6 +47,12 @@ export default defineConfig({
       // rasterization, and would only pay a container hop and lose native `--headed` debugging.
       name: 'e2e',
       testMatch: '**/*.e2e.ts',
+      dependencies: ['database'],
+    },
+    {
+      // Resets the fixture reports before any spec runs. See e2e/setup/database.setup.ts.
+      name: 'database',
+      testMatch: '**/setup/database.setup.ts',
     },
     {
       name: 'browser-container',
@@ -60,7 +66,7 @@ export default defineConfig({
     {
       name: 'screenshots',
       testMatch: '**/*.screenshot.ts',
-      dependencies: ['browser-container'],
+      dependencies: ['browser-container', 'database'],
       use: {
         baseURL: BASE_URL_FROM_CONTAINER,
         connectOptions: { wsEndpoint: BROWSER_WS_ENDPOINT },

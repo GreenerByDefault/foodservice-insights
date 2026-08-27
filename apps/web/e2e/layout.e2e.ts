@@ -1,5 +1,7 @@
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
-import { expect, test } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { reportUrl } from './fixtures/reports.ts';
+import { test } from './fixtures/test.ts';
 import { expectNoHorizontalOverflow } from './lib/layout';
 import { VIEWPORT_WIDTHS } from './lib/viewports';
 
@@ -20,18 +22,32 @@ const ROUTES = [
   '/no-such-page',
 ];
 
+/** Resize-and-reread per width, on whatever `page` is currently showing. One navigation, then
+ * this — resizing is nearly free, a fresh navigation isn't. */
+async function checkNoOverflowAtEveryWidth(page: Page): Promise<void> {
+  for (const width of Object.values(VIEWPORT_WIDTHS)) {
+    await page.setViewportSize({ width, height: VIEWPORT_HEIGHT });
+    await expectNoHorizontalOverflow(page);
+  }
+}
+
 for (const route of ROUTES) {
   test(`${route} has no horizontal overflow at any viewport`, async ({ page }) => {
     await page.goto(route);
-
-    // One navigation, then resize-and-reread per width — resizing is nearly free, a fresh
-    // navigation isn't.
-    for (const width of Object.values(VIEWPORT_WIDTHS)) {
-      await page.setViewportSize({ width, height: VIEWPORT_HEIGHT });
-      await expectNoHorizontalOverflow(page);
-    }
+    await checkNoOverflowAtEveryWidth(page);
   });
 }
+
+test('the succeeded report screen has no horizontal overflow at any viewport', async ({
+  page,
+  reports,
+}) => {
+  // Not in ROUTES: it's the tallest report screen with the most links, so every other report
+  // state is strictly less content. `/reports/new` above already covers the route shape.
+  const reportId = await reports.create('succeeded');
+  await page.goto(reportUrl(reportId));
+  await checkNoOverflowAtEveryWidth(page);
+});
 
 test('expectNoHorizontalOverflow fails, and names the offending element, on a page that overflows', async ({
   page,
