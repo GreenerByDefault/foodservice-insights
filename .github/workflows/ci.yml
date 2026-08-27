@@ -175,21 +175,15 @@ jobs:
       # Regenerating on failure makes the artifact a drop-in replacement for the committed
       # directory, which is the whole recovery path for a fork contributor: red check, download,
       # commit. `updateSnapshots: 'none'` keeps the run above from doing this silently.
-      #
-      # `--last-failed` reruns only the tests that just failed rather than the whole project, so
-      # this doesn't double the job's cost — it costs proportional to what broke.
       - name: Regenerate the snapshots so they can be downloaded
         if: failure()
-        env:
-          TEST_DB: '1'
         run: |
           msg='Screenshots differ from the committed images. If the change was intended, run '
           msg+='`pnpm --filter @gbd/web run screenshots:update` and commit '
           msg+='apps/web/e2e/__screenshots__ — or download the `screenshots` artifact from this '
           msg+='run and commit that.'
           echo "::notice::$msg"
-          pnpm --filter @gbd/web exec playwright test --project=screenshots --last-failed --update-snapshots
-          pnpm --filter @gbd/web exec node scripts/optimize-screenshots.ts
+          pnpm --filter @gbd/web run screenshots:update
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
