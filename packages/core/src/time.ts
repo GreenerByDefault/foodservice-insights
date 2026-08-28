@@ -15,9 +15,12 @@ export function msAgo(ms: number): Date {
 const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
 /** `now - at`, in the coarsest unit (minutes, hours, or days) that keeps the count small —
- * "3 days ago" instead of "4,320 minutes ago". Stops at days rather than escalating further to
- * weeks or months: `Intl.RelativeTimeFormat` rounds those to an approximate bucket ("a month
- * ago" could be 27 days or 44), which is less precise than the day count it would replace.
+ * "3 days ago" instead of "4,320 minutes ago".
+ *
+ * Stops at days rather than escalating further to weeks or months: `Intl.RelativeTimeFormat`
+ * rounds those to an approximate bucket ("a month ago" could be 27 days or 44), which is less
+ * precise than the day count it would replace.
+ *
  * Callers needing finer precision than a minute should not use this. */
 export function formatElapsed(now: Date, at: Date): string {
   const ms = now.getTime() - at.getTime();
@@ -30,9 +33,8 @@ export function formatElapsed(now: Date, at: Date): string {
   return RELATIVE_TIME_FORMAT.format(-days, 'day');
 }
 
-/** UTC, and stated as such, so the value renders identically whether formatted during SSR or
- * after hydration in the browser — the two can run in different time zones, and a mismatch
- * between them is a hydration bug. */
+/** Fixed to UTC, and stated as such, so the formatted value is the same no matter which time
+ * zone the code that calls it happens to be running in. */
 const TIMESTAMP_FORMAT = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
   month: 'short',
@@ -43,9 +45,7 @@ const TIMESTAMP_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZoneName: 'short',
 });
 
-/** The exact moment, for a `title` attribute alongside {@link formatElapsed} — so hovering a
- * relative time like "3 days ago" reveals precisely when that was, without cluttering the
- * visible text with a parenthetical. */
+/** The exact moment, spelled out in full. */
 export function formatTimestamp(at: Date): string {
   return TIMESTAMP_FORMAT.format(at);
 }

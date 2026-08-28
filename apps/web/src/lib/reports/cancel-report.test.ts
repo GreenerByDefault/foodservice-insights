@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiUnreachableError } from '$lib/api/fetch';
+import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
 import { cancelReport } from './cancel-report.ts';
 
 function stubFetch(response: Response) {
@@ -33,7 +33,9 @@ describe('cancelReport', () => {
     stubFetch(new Response(JSON.stringify({ message: 'Not found' }), { status: 404 }));
 
     await expect(cancelReport('/api/orgs/org-1/reports/report-1/cancel')).rejects.toMatchObject({
+      constructor: ApiError,
       status: 404,
+      message: 'Not found',
     });
   });
 

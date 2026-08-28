@@ -77,6 +77,26 @@ describe('CancelButton', () => {
     await expect.poll(() => invalidate.mock.calls.length).toBe(1);
   });
 
+  test('while the request is in flight, the confirm button is disabled', async () => {
+    let resolveFetch!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
+    );
+    const screen = await render(CancelButton, {
+      reportId: REPORT_ID,
+      cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
+    });
+
+    await screen.getByRole('button', { name: 'Cancel report' }).click();
+    await screen.getByRole('button', { name: 'Yes, cancel report' }).click();
+
+    await expect.element(screen.getByRole('button', { name: 'Yes, cancel report' })).toBeDisabled();
+
+    resolveFetch(new Response(null, { status: 204 }));
+    await expect.poll(() => invalidate.mock.calls.length).toBe(1);
+  });
+
   test('an unreachable server keeps the dialog open and shows a retry message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const screen = await render(CancelButton, {
