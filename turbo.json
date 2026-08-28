@@ -61,6 +61,11 @@
       "cache": false,
       "outputs": ["playwright-report/**", "test-results/**"]
     },
+    "screenshots:update": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "outputs": ["playwright-report/**", "test-results/**"]
+    },
     "migrate": {
       "dependsOn": ["^build"],
       "cache": false
