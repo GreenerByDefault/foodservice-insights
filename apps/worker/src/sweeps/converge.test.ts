@@ -10,6 +10,7 @@ import {
   insertFixtureOrganization,
   insertInputFile,
   insertReport,
+  NOW,
   raceAgainstCommittedWrite,
   readAnalysisAttemptRow,
   withRollback,
@@ -53,7 +54,7 @@ async function processingAttempt(
     reportId: report.id,
     status: 'processing',
     workerId,
-    ...(options.cancelRequested ? { cancelRequestedAt: new Date() } : {}),
+    ...(options.cancelRequested ? { cancelRequestedAt: NOW } : {}),
   });
   await backdateAttemptTimeline(transaction, attempt.id, offsets);
   return { attemptId: attempt.id, reportId: report.id };
@@ -442,7 +443,7 @@ describe('cancelRequestedPendingAttempts', () => {
       const report = await insertReport(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
 
       const converged = await cancelRequestedPendingAttempts(transaction, {
@@ -473,7 +474,7 @@ describe('cancelRequestedPendingAttempts', () => {
         reportId: processingReport.id,
         status: 'processing',
         workerId: aWorkerId(),
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
 
       const terminalReport = await insertReport(transaction);
@@ -505,13 +506,13 @@ describe('cancelRequestedPendingAttempts', () => {
       const inScopeReport = await insertReport(transaction);
       const inScope = await insertAnalysisAttempt(transaction, {
         reportId: inScopeReport.id,
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
 
       const outOfScopeReport = await insertReport(transaction);
       const outOfScope = await insertAnalysisAttempt(transaction, {
         reportId: outOfScopeReport.id,
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
 
       const converged = await cancelRequestedPendingAttempts(transaction, {
@@ -544,7 +545,7 @@ describe('cancelRequestedPendingAttempts', () => {
         await insertInputFile(transaction, { reportId: report.id });
         const attempt = await insertAnalysisAttempt(transaction, {
           reportId: report.id,
-          cancelRequestedAt: new Date(),
+          cancelRequestedAt: NOW,
         });
         return { attemptId: attempt.id, reportId: report.id };
       },
@@ -581,7 +582,7 @@ describe('cancelRequestedPendingAttempts', () => {
       const report = await insertReport(transaction);
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
 
       await cancelRequestedPendingAttempts(transaction, { candidateReports: [report.id] });

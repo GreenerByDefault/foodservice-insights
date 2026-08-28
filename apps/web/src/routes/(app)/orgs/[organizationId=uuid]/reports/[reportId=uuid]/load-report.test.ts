@@ -1,10 +1,16 @@
-import type { DatabaseExecutor, OrganizationId, ReportId } from '@gbd/db';
+import {
+  type DatabaseExecutor,
+  type OrganizationId,
+  type ReportId,
+  requireConstraint,
+} from '@gbd/db';
 import {
   insertAnalysisAttempt,
   insertInputFile,
   insertOrganization,
   insertReport,
   insertResultFile,
+  NOW,
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
@@ -93,7 +99,7 @@ describe('a report the caller may see', () => {
       // usually arrives in — and it must be a 404, not the stopped screen.
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
       await transaction
         .updateTable('report')
@@ -292,12 +298,15 @@ describe('a cancel request', () => {
       await withRollback(database(), async (transaction) => {
         const { organization } = await insertOrganization(transaction);
         const report = await aReportWithInputFile(transaction, organization.id);
-        const stoppedAt = new Date();
-        await insertAnalysisAttempt(transaction, {
+        const attempt = await insertAnalysisAttempt(transaction, {
           reportId: report.id,
           status,
-          cancelRequestedAt: stoppedAt,
+          cancelRequestedAt: NOW,
         });
+        const stoppedAt = requireConstraint(
+          attempt.cancelRequestedAt,
+          'analysis_attempt_canceled_requires_request',
+        );
 
         const data = await _loadReport(transaction, {
           organizationId: organization.id,
@@ -319,7 +328,7 @@ describe('a cancel request', () => {
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'succeeded',
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
       const pdf = await insertResultFile(transaction, {
         analysisAttemptId: attempt.id,
@@ -357,7 +366,7 @@ describe('a cancel request', () => {
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'failed',
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
 
       const data = await _loadReport(transaction, {

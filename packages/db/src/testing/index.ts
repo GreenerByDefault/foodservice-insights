@@ -25,6 +25,7 @@ export {
   insertReport,
   insertReportWithAttempt,
   insertResultFile,
+  NOW,
   readAnalysisAttemptRow,
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';
