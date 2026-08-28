@@ -11,6 +11,7 @@ import {
   requireConstraint,
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
+import { sql } from 'kysely';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
@@ -70,6 +71,10 @@ export type ReportPageData = {
   report: { id: ReportId; name: string };
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
+  /** The database's clock, not the browser's — every duration on the page is `now - timestamp`
+   * against this, so it is immune to clock skew and never mismatches between server and client
+   * render (see `describeProgress`). */
+  now: Date;
 };
 
 type ReportRow = {
@@ -86,6 +91,7 @@ type ReportRow = {
   finishedAt: Date | null;
   cancelRequestedAt: Date | null;
   failureReason: AnalysisFailureReason | null;
+  now: Date;
 };
 
 /** Everything the report page shows, for one report in one organization.
@@ -119,6 +125,10 @@ export async function _loadReport(
       'analysisAttempt.finishedAt as finishedAt',
       'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
       'analysisAttempt.failureReason as failureReason',
+      // The database's clock, selected alongside the row rather than read separately, so the
+      // timeline's durations are `now - timestamp` against one consistent snapshot — see
+      // `ReportPageData.now`.
+      sql<Date>`now()`.as('now'),
     ])
     .where('report.id', '=', params.reportId)
     .where('report.organizationId', '=', params.organizationId)
@@ -137,6 +147,7 @@ export async function _loadReport(
       byteSize: row.inputFileByteSize,
     },
     attempt: await toAttempt(db, row, params.supportEmail),
+    now: row.now,
   };
 }
 

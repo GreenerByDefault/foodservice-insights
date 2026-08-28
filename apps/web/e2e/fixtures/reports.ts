@@ -6,9 +6,11 @@
  * `COMMIT`, not at `INSERT`. `withRollback` never reaches that failure because it never commits;
  * these fixtures do, so they don't get that pass.
  *
- * Timings are offsets from one `ANCHOR`, fixed well outside `HOURLY_REPORT_LIMIT`/
- * `WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never spends the placeholder
- * organization's rate-limit budget.
+ * `report.created_at` is always an offset from one `ANCHOR`, fixed well outside
+ * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
+ * spends the placeholder organization's rate-limit budget (that's what the limit counts against —
+ * see `countReportsSince`). The `pending` and `processing` states' *attempt* timestamps are the
+ * one exception, and are recent instead — see `recentlyBefore`.
  */
 
 import type { Database, ReportId } from '@gbd/db';
@@ -26,6 +28,18 @@ const ANCHOR = new Date('2026-01-15T09:00:00Z');
 
 function after(seconds: number): Date {
   return new Date(ANCHOR.getTime() + seconds * 1000);
+}
+
+/** `seconds` before the moment this is called — for the two waiting states, whose screen now
+ * renders relative durations (`describeProgress`, `formatElapsed`). Anchoring those to the fixed,
+ * far-past `ANCHOR` would render a duration that grows every time the suite runs, drifting a
+ * committed screenshot's pixels — see `.claude/plans/report-page.md`'s "Relative timestamps will
+ * make the screenshot fixtures drift" follow-up. The attempt's own timestamps drive that
+ * rendering; `report.created_at` stays on `ANCHOR` below, since that's what the rate limit counts
+ * against, and this must not spend the placeholder organization's budget.
+ */
+function recentlyBefore(seconds: number): Date {
+  return new Date(Date.now() - seconds * 1000);
 }
 
 export type ReportState =
@@ -55,7 +69,11 @@ async function buildPending(tx: Transaction<Database>): Promise<ReportId> {
     createdAt: ANCHOR,
   });
   await insertInputFile(tx, { reportId: report.id });
-  await insertAnalysisAttempt(tx, { reportId: report.id, status: 'pending', createdAt: ANCHOR });
+  await insertAnalysisAttempt(tx, {
+    reportId: report.id,
+    status: 'pending',
+    createdAt: recentlyBefore(5),
+  });
   return report.id;
 }
 
@@ -69,8 +87,8 @@ async function buildProcessing(tx: Transaction<Database>): Promise<ReportId> {
   await insertAnalysisAttempt(tx, {
     reportId: report.id,
     status: 'processing',
-    createdAt: ANCHOR,
-    claimedAt: after(40),
+    createdAt: recentlyBefore(90),
+    claimedAt: recentlyBefore(20),
   });
   return report.id;
 }
