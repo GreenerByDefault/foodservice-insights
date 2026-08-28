@@ -17,7 +17,8 @@ other axis: **what part of the product a spec covers.**
 | | |
 | --- | --- |
 | `lib/` | Helpers a spec imports. No tests, no side effects at import. |
-| `setup/` | Getting the containerized browser up, and taking it down. Not tests of the app. |
+| `fixtures/` | The report-state catalogue and the extended `test` that commits and cleans up a report. |
+| `setup/` | Getting the containerized browser up, the database reset, and taking the browser down. Not tests of the app. |
 | `__screenshots__/` | The committed PNGs, flat. |
 | everything else | Specs, both suites. |
 
@@ -49,6 +50,17 @@ Screenshots can't show everything, though — a defect that's cut off, or one th
 an uncaptured viewport width, needs a direct assertion instead. For example, that's what
 [`layout.e2e.ts`](layout.e2e.ts) is for.
 Reach for assertions only when a screenshot genuinely can't see the problem.
+
+## Database state
+
+Every fixture lives in the placeholder organization (`@gbd/db/seed`) — phase 1 has no second one.
+`e2e/fixtures/reports.ts` is the source of truth for what each state contains.
+
+The `database` Playwright project (`setup/database.setup.ts`) deletes every fixture report in the
+placeholder organization before either suite runs.
+
+Screenshots and e2e share the catalogue, not its rows: every test mints its own report and deletes
+it when it ends, so a behavioural spec is free to mutate what it created.
 
 ## Pending
 

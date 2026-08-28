@@ -222,6 +222,7 @@ Which to run when:
 
 - After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
 - For tests, `test:e2e` and `test:screenshots` truncate, migrate, and seed the test stack themselves.
+- To have something to look at on the report page — `pnpm seed:reports`.
 
 #### Add a database migration
 

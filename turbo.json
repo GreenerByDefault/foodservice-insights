@@ -69,6 +69,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "seed:reports": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "truncate": {
       "dependsOn": ["^build"],
       "cache": false
