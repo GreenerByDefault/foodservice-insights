@@ -24,8 +24,11 @@ import type { ResultFile } from '../generated/public/ResultFile.ts';
 import type ResultFileKind from '../generated/public/ResultFileKind.ts';
 import type { DatabaseExecutor } from '../schema.ts';
 
-/** Postgres's clock, not the process's, for any timestamp a fixture means as "now". */
-const NOW = sql<Date>`now()`;
+/** Postgres's clock, not the process's, for any timestamp a fixture means as "now". Pass this,
+ * not `new Date()`, to any override below that means "right now" — a `created_at` a caller left
+ * defaulted is also Postgres's `now()`, so a JS-clock value raced against it can land on either
+ * side of a check constraint under load. */
+export const NOW = sql<Date>`now()`;
 
 /** A 32-byte checksum, the only length `checksum_sha256` accepts. */
 export function aChecksum(): Buffer {
@@ -186,10 +189,11 @@ export async function insertAnalysisAttempt(
     /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
      * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
     finishedAt?: Date;
-    /** Defaults to `now()` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
+    /** Defaults to `NOW` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
      * forbids a canceled row with no request. Set explicitly for a `pending`/`processing` row a test
-     * wants to look like a cancel request has already landed on. */
-    cancelRequestedAt?: Date;
+     * wants to look like a cancel request has already landed on — pass `NOW` rather than `new Date()`
+     * unless the test needs a specific value. */
+    cancelRequestedAt?: Date | typeof NOW;
     /** Only meaningful for `status: 'failed'` — `analysis_attempt_failure_reason_iff_failed` requires
      * one there and forbids one everywhere else. Defaults to `'child_crashed'`, an arbitrary member of
      * `analysis_failure_reason`; set this to exercise a specific reason's copy. */

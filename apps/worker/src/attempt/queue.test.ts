@@ -16,6 +16,7 @@ import {
   insertInputFile,
   insertOrganization,
   insertReport,
+  NOW,
   readAnalysisAttemptRow,
   withCommittedFixture,
   withConcurrentTransactions,
@@ -363,7 +364,7 @@ describe('renewLease', () => {
         reportId: report.id,
         status: 'processing',
         workerId,
-        cancelRequestedAt: new Date(),
+        cancelRequestedAt: NOW,
       });
       // `insertAnalysisAttempt` sets `claimedAt`/`leaseRenewedAt` to real wall-clock `Date`s,
       // which land later than the frozen `now()` that `renewLease` is about to write with (the
