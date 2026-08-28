@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DAY_MS, formatElapsed, HOUR_MS, MINUTE_MS, msAgo, SECOND_MS, WEEK_MS } from './time.ts';
+import {
+  DAY_MS,
+  formatElapsed,
+  formatTimestamp,
+  HOUR_MS,
+  MINUTE_MS,
+  msAgo,
+  SECOND_MS,
+  WEEK_MS,
+} from './time.ts';
 
 const CREATED_AT = new Date('2026-01-15T10:00:00Z');
 
@@ -51,5 +60,43 @@ describe('formatElapsed', () => {
     expect(formatElapsed(new Date(CREATED_AT.getTime() + 3 * 60_000 + 30_000), CREATED_AT)).toBe(
       '3 minutes ago',
     );
+  });
+
+  it('just under an hour stays in minutes', () => {
+    expect(formatElapsed(new Date(CREATED_AT.getTime() + 59 * MINUTE_MS), CREATED_AT)).toBe(
+      '59 minutes ago',
+    );
+  });
+
+  it('an hour or more switches to hours', () => {
+    expect(formatElapsed(new Date(CREATED_AT.getTime() + HOUR_MS), CREATED_AT)).toBe('1 hour ago');
+    expect(
+      formatElapsed(new Date(CREATED_AT.getTime() + 5 * HOUR_MS + 30 * MINUTE_MS), CREATED_AT),
+    ).toBe('5 hours ago');
+  });
+
+  it('just under a day stays in hours', () => {
+    expect(formatElapsed(new Date(CREATED_AT.getTime() + 23 * HOUR_MS), CREATED_AT)).toBe(
+      '23 hours ago',
+    );
+  });
+
+  it('a day or more switches to days', () => {
+    expect(formatElapsed(new Date(CREATED_AT.getTime() + DAY_MS), CREATED_AT)).toBe('yesterday');
+    expect(formatElapsed(new Date(CREATED_AT.getTime() + 10 * DAY_MS), CREATED_AT)).toBe(
+      '10 days ago',
+    );
+  });
+
+  it('does not escalate to weeks or months, even far out', () => {
+    expect(formatElapsed(new Date(CREATED_AT.getTime() + 90 * DAY_MS), CREATED_AT)).toBe(
+      '90 days ago',
+    );
+  });
+});
+
+describe('formatTimestamp', () => {
+  it('formats the exact moment in UTC for a title attribute', () => {
+    expect(formatTimestamp(CREATED_AT)).toBe('Jan 15, 2026, 10:00 AM UTC');
   });
 });
