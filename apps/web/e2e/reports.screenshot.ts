@@ -8,7 +8,7 @@ test('a report waiting to start', async ({ page, reports }) => {
   const reportId = await reports.create('pending');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByRole('heading', { name: 'Waiting to start' })).toBeVisible();
+  await expect(page.getByText('Waiting to start')).toBeVisible();
   await expectScreenshot(page, 'reports-pending.png');
 });
 
@@ -16,9 +16,7 @@ test('a report being analyzed', async ({ page, reports }) => {
   const reportId = await reports.create('processing');
   await page.goto(reportUrl(reportId));
 
-  await expect(
-    page.getByRole('heading', { name: 'Reading your purchases and building your charts' }),
-  ).toBeVisible();
+  await expect(page.getByText('Reading your purchases and building your charts')).toBeVisible();
   await expectScreenshot(page, 'reports-processing.png');
 });
 

@@ -32,17 +32,21 @@ export type Step = {
    * and for the current one, which has no "finished" moment yet. */
   completedAt?: Date;
   current: boolean;
+  /** Set only on the current step: what this stage means right now, shown whether or not it has
+   * overrun. The timeline's own icon and bold title already say *which* step is current, so this
+   * is the only place that copy needs to live — a separate headline above the timeline would just
+   * repeat it. */
+  description?: string;
   /** Set only on the current step, once it has run longer than `REQUIREMENTS.md` § Performance
    * leads a user to expect. */
   warning?: string;
 };
 
 export type Progress = {
-  /** Names the current stage, for the headline above the timeline. */
+  /** Names the current stage. Not rendered directly by `waiting-view.svelte` — the timeline's
+   * current-step row already says this — but the eventual live region announcing a stage change
+   * (`.claude/plans/report-page.md`'s PR 5) needs one string to speak. */
   headline: string;
-  /** One line of standing copy about the current stage — what "waiting" or "analyzing" means
-   * right now, shown under the headline whether or not the stage has overrun. */
-  body: string;
   steps: Step[];
 };
 
@@ -77,6 +81,11 @@ export function describeProgress(attempt: WaitingAttempt, now: Date): Progress {
       title: 'Waiting to start',
       completedAt: analyzingStartedAt,
       current: attempt.status === 'pending',
+      description:
+        attempt.status === 'pending'
+          ? 'We run a few reports at a time, so yours starts as soon as there is room — usually ' +
+            'straight away.'
+          : undefined,
       warning:
         attempt.status === 'pending' &&
         now.getTime() - queuedStartedAt.getTime() >= QUEUE_WARNING_AFTER_MS
@@ -87,6 +96,8 @@ export function describeProgress(attempt: WaitingAttempt, now: Date): Progress {
       stage: 'analyzing',
       title: 'Reading your purchases and building your charts',
       current: attempt.status === 'processing',
+      description:
+        attempt.status === 'processing' ? 'This usually takes about five minutes.' : undefined,
       warning:
         attempt.status === 'processing' &&
         analyzingStartedAt !== undefined &&
@@ -99,22 +110,7 @@ export function describeProgress(attempt: WaitingAttempt, now: Date): Progress {
   const current = steps.find((step) => step.current);
   if (!current) throw new Error('unreachable: a waiting attempt always has a current step');
 
-  return { headline: current.title, body: bodyFor(current.stage), steps };
-}
-
-function bodyFor(stage: Stage): string {
-  switch (stage) {
-    case 'received':
-      // Never the current stage — `received` is always complete by the time this page loads.
-      return '';
-    case 'queued':
-      return (
-        'We run a few reports at a time, so yours starts as soon as there is room — usually ' +
-        'straight away.'
-      );
-    case 'analyzing':
-      return 'This usually takes about five minutes.';
-  }
+  return { headline: current.title, steps };
 }
 
 const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });

@@ -27,6 +27,9 @@ let { steps, now }: { steps: Step[]; now: Date } = $props();
             {formatElapsed(now, step.completedAt)}
           </time>
         {/if}
+        {#if step.description}
+          <p class="text-muted-foreground text-sm">{step.description}</p>
+        {/if}
         {#if step.warning}
           <p class="mt-1 text-sm text-amber-700 dark:text-amber-500">{step.warning}</p>
         {/if}

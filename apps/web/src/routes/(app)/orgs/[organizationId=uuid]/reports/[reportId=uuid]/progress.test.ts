@@ -33,12 +33,16 @@ describe('describeProgress', () => {
         title: 'Waiting to start',
         completedAt: undefined,
         current: true,
+        description:
+          'We run a few reports at a time, so yours starts as soon as there is room — usually ' +
+          'straight away.',
         warning: undefined,
       },
       {
         stage: 'analyzing',
         title: 'Reading your purchases and building your charts',
         current: false,
+        description: undefined,
         warning: undefined,
       },
     ]);
@@ -80,12 +84,14 @@ describe('describeProgress', () => {
         title: 'Waiting to start',
         completedAt: CLAIMED_AT,
         current: false,
+        description: undefined,
         warning: undefined,
       },
       {
         stage: 'analyzing',
         title: 'Reading your purchases and building your charts',
         current: true,
+        description: 'This usually takes about five minutes.',
         warning: undefined,
       },
     ]);
