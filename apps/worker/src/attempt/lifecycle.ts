@@ -363,36 +363,48 @@ export async function deliverVerdict(
  * a report of a few hundred KB, well under what the bookkeeping would cost to read. Uploads also
  * precede the write, so a verdict that never lands orphans the same way. Both are acceptable under
  * "no automated data cleanup" in REQUIREMENTS.md.
+ *
+ * Settled with `Promise.allSettled`, not `Promise.all`: a `Promise.all` returns as soon as the
+ * first upload rejects, leaving the others still in flight and unawaited — one can then land in
+ * the store well after this call has already parked or been converted, orphaning bytes nobody
+ * intended to write. Waiting for every outcome here is what keeps "no upload lands after we've
+ * moved on" true.
  */
 async function storeResultFiles(
   store: BlobStore,
   prepared: PreparedAttempt,
   pending: Extract<PendingVerdict, { stage: 'upload' }>,
 ): Promise<PendingVerdict> {
-  try {
-    const resultFiles = await Promise.all(
-      declaredResultFiles(pending.verdict.result).map((file) => {
-        const body = pending.contents.get(file.fileName);
-        if (body === undefined) {
-          // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
-          // declared file's bytes were read alongside it.
-          throw new Error(`settleAttempt: no bytes read for declared file ${file.fileName}`);
-        }
-        return uploadResultFile(store, prepared, file, body);
-      }),
+  const settled = await Promise.allSettled(
+    declaredResultFiles(pending.verdict.result).map((file) => {
+      const body = pending.contents.get(file.fileName);
+      if (body === undefined) {
+        // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
+        // declared file's bytes were read alongside it.
+        throw new Error(`settleAttempt: no bytes read for declared file ${file.fileName}`);
+      }
+      return uploadResultFile(store, prepared, file, body);
+    }),
+  );
+
+  const rejected = settled.find((result) => result.status === 'rejected');
+  if (rejected === undefined) {
+    const resultFiles = settled.map(
+      (result) => (result as PromiseFulfilledResult<ResultFileRecord>).value,
     );
     return { stage: 'record', verdict: { ...pending.verdict, resultFiles } };
-  } catch (error) {
-    // Only the store being unreachable parks. Anything else is a bug in this file — the missing
-    // bytes above — and parking it would retry a deterministic failure on every later tick.
-    if (!isBlobStoreError(error)) throw error;
-    console.error(
-      `Could not store the result files for attempt ${prepared.attemptId}; parking the verdict ` +
-        'for the next direct tick to retry',
-      { error },
-    );
-    return { ...pending, lastError: error };
   }
+
+  // Only the store being unreachable parks. Anything else is a bug in this file — the missing
+  // bytes above — and parking it would retry a deterministic failure on every later tick.
+  const error: unknown = rejected.reason;
+  if (!isBlobStoreError(error)) throw error;
+  console.error(
+    `Could not store the result files for attempt ${prepared.attemptId}; parking the verdict ` +
+      'for the next direct tick to retry',
+    { error },
+  );
+  return { ...pending, lastError: error };
 }
 
 async function uploadResultFile(
