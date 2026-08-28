@@ -3,6 +3,11 @@ import favicon from '$lib/assets/favicon.svg';
 import './layout.css';
 
 let { children } = $props();
+
+// A signal for e2e tests that event listeners are attached — see `apps/web/e2e/lib/hydration.ts`.
+$effect(() => {
+  document.body.dataset.hydrated = 'true';
+});
 </script>
 
 <!-- No chrome, deliberately: the pages above the `(app)` gate each carry their own, so that a
