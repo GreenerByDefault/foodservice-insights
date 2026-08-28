@@ -1,7 +1,7 @@
 # Whole-system end-to-end tests
 
 **This directory is intentionally empty.** It is a placeholder for the tier of tests that
-cannot exist yet.
+cannot exist until the Python library is ported.
 
 ## What will live here
 
