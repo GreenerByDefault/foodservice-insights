@@ -1,8 +1,8 @@
 <script lang="ts">
 import CanceledView from './canceled-view.svelte';
-import { isWaiting } from './progress.ts';
 import type { PageProps } from './$types';
-import WaitingView from './waiting-view.svelte';
+import { isWaiting } from './waiting/progress.ts';
+import WaitingView from './waiting/view.svelte';
 
 let { data }: PageProps = $props();
 </script>
