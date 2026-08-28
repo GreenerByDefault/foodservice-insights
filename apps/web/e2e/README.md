@@ -37,7 +37,7 @@ see how the app looks.
 After an intentional visual change, update the committed PNGs:
 
 ```sh
-pnpm --filter @gbd/web run screenshots:update
+pnpm turbo run screenshots:update --filter=@gbd/web
 ```
 
 Run that for whatever Playwright's failure output suggests — it's the fix regardless of what

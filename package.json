@@ -14,6 +14,7 @@
     "test:unit": "turbo run test:unit",
     "test:e2e": "turbo run test:e2e",
     "test:screenshots": "turbo run test:screenshots",
+    "screenshots:update": "turbo run screenshots:update",
     "test": "pnpm run test:unit && pnpm run test:e2e && pnpm run test:screenshots",
     "lint": "biome ci --error-on-warnings .",
     "fmt": "biome check --write .",

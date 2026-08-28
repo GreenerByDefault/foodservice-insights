@@ -171,7 +171,7 @@ which double as a gallery of the UI. After an intentional visual change, regener
 them:
 
 ```sh
-pnpm --filter @gbd/web run screenshots:update
+pnpm turbo run screenshots:update --filter=@gbd/web
 ```
 
 They are captured through a browser in Docker, so the images match between macOS and CI. See
