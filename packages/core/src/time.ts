@@ -14,10 +14,38 @@ export function msAgo(ms: number): Date {
 
 const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
-/** `now - at`, rounded to the minute — callers needing finer precision than a minute should not
- * use this. */
+/** `now - at`, in the coarsest unit (minutes, hours, or days) that keeps the count small —
+ * "3 days ago" instead of "4,320 minutes ago".
+ *
+ * Stops at days rather than escalating further to weeks or months: `Intl.RelativeTimeFormat`
+ * rounds those to an approximate bucket ("a month ago" could be 27 days or 44), which is less
+ * precise than the day count it would replace.
+ *
+ * Callers needing finer precision than a minute should not use this. */
 export function formatElapsed(now: Date, at: Date): string {
-  const minutes = Math.floor((now.getTime() - at.getTime()) / MINUTE_MS);
+  const ms = now.getTime() - at.getTime();
+  const minutes = Math.floor(ms / MINUTE_MS);
   if (minutes < 1) return 'less than a minute ago';
-  return RELATIVE_TIME_FORMAT.format(-minutes, 'minute');
+  if (minutes < 60) return RELATIVE_TIME_FORMAT.format(-minutes, 'minute');
+  const hours = Math.floor(ms / HOUR_MS);
+  if (hours < 24) return RELATIVE_TIME_FORMAT.format(-hours, 'hour');
+  const days = Math.floor(ms / DAY_MS);
+  return RELATIVE_TIME_FORMAT.format(-days, 'day');
+}
+
+/** Fixed to UTC, and stated as such, so the formatted value is the same no matter which time
+ * zone the code that calls it happens to be running in. */
+const TIMESTAMP_FORMAT = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'UTC',
+  timeZoneName: 'short',
+});
+
+/** The exact moment, spelled out in full. */
+export function formatTimestamp(at: Date): string {
+  return TIMESTAMP_FORMAT.format(at);
 }

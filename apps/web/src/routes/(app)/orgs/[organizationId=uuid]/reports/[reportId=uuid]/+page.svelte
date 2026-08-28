@@ -1,16 +1,17 @@
 <script lang="ts">
-import { isWaiting } from './progress.ts';
+import CanceledView from './canceled-view.svelte';
 import type { PageProps } from './$types';
-import WaitingView from './waiting-view.svelte';
+import { isWaiting } from './waiting/progress.ts';
+import WaitingView from './waiting/view.svelte';
 
 let { data }: PageProps = $props();
 </script>
 
-<!-- Deliberately undesigned past the waiting view: a switch over `data.attempt.status` rendering
-     plain text and plain links for the other four outcomes, so they are legible before each is
-     designed in a later PR. `data.attempt.status` is the screen rather than the column — the load
-     settles the cancel-versus-verdict ordering, so a cancel no worker has converged yet already
-     arrives here as `canceled`. -->
+<!-- Deliberately undesigned past the waiting and canceled views: a switch over
+     `data.attempt.status` rendering plain text and plain links for the two outcomes still
+     unbuilt, so they are legible before each is designed in a later PR. `data.attempt.status` is
+     the screen rather than the column — the load settles the cancel-versus-verdict ordering, so a
+     cancel no worker has converged yet already arrives here as `canceled`. -->
 <svelte:head>
   <title>{data.report.name}</title>
 </svelte:head>
@@ -18,7 +19,12 @@ let { data }: PageProps = $props();
 <h1 class="text-2xl font-semibold tracking-tight">{data.report.name}</h1>
 
 {#if isWaiting(data.attempt)}
-  <WaitingView attempt={data.attempt} now={data.now} />
+  <WaitingView
+    reportId={data.report.id}
+    attempt={data.attempt}
+    now={data.now}
+    cancelButtonHref={data.cancelButtonHref}
+  />
 {:else if data.attempt.status === 'succeeded'}
   <p class="text-muted-foreground">
     Finished
@@ -58,10 +64,9 @@ let { data }: PageProps = $props();
     </a>
   </p>
 {:else if data.attempt.status === 'canceled'}
-  <p class="text-muted-foreground">
-    You stopped this report
-    <time datetime={data.attempt.stoppedAt.toISOString()}
-      >{data.attempt.stoppedAt.toISOString()}</time
-    >. It cannot be run again.
-  </p>
+  <CanceledView
+    stoppedAt={data.attempt.stoppedAt}
+    now={data.now}
+    newReportHref={data.newReportHref}
+  />
 {/if}

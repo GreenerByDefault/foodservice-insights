@@ -1,8 +1,8 @@
 import { newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
-import { reportUrl } from './fixtures/reports.ts';
-import { test } from './fixtures/test.ts';
-import { expectScreenshot } from './lib/screenshots.ts';
+import { reportUrl } from '../fixtures/reports.ts';
+import { test } from '../fixtures/test.ts';
+import { expectScreenshot } from '../lib/screenshots.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {
   const reportId = await reports.create('pending');

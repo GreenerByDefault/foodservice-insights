@@ -45,6 +45,8 @@ rather than depending on a component library.
 **A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
 route needs it.
 
+**A view within a route gets its own subfolder once it's more than one file** — a single-file view stays flat.
+
 **Add a component with the shadcn-svelte CLI**, run from the repo root:
 
 ```sh

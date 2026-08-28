@@ -9,8 +9,8 @@
  * `report.created_at` is always an offset from one `ANCHOR`, fixed well outside
  * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
  * spends the placeholder organization's rate-limit budget (that's what the limit counts against —
- * see `countReportsSince`). The `pending` and `processing` states' *attempt* timestamps are the
- * one exception, and are recent instead — see `msAgo` (`@gbd/core`).
+ * see `countReportsSince`). The exceptions are the timestamps a screen renders relative to "now"
+ * rather than as an absolute date which are recent instead, via `msAgo` (`@gbd/core`).
  */
 
 import { msAgo } from '@gbd/core';
@@ -179,7 +179,7 @@ async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
     reportId: report.id,
     status: 'canceled',
     createdAt: ANCHOR,
-    cancelRequestedAt: after(50),
+    cancelRequestedAt: msAgo(50_000),
   });
   return report.id;
 }

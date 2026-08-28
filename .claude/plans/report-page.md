@@ -31,10 +31,25 @@ notification email links to. Everything under it exists:
 - **The load, the discriminated union and the plain per-status page have landed**
   ([`+page.server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/+page.server.ts),
   exporting `_loadReport`, `Attempt`, `ReportPageData`, `ResultFiles`, `FileLink`, `ChartLink` and
-  `FailureCopy`), and so has the waiting view — `ReportPageData.now` (`select now()`, alongside the
-  attempt row in the same query), `progress.ts`'s `describeProgress`/`formatElapsed`/`isWaiting`,
-  and `timeline.svelte` / `waiting-view.svelte`. One thing the load deliberately does not yet do,
-  left to the polling PR below: it does not call `depends()`.
+  `FailureCopy`), and so have the waiting and canceled views — `ReportPageData.now` (`select now()`,
+  alongside the attempt row in the same query), `waiting/progress.ts`'s
+  `describeProgress`/`isWaiting`, `waiting/timeline.svelte`, `waiting/view.svelte` and
+  `canceled-view.svelte`. The load also already calls `depends(reportDependencyKey(reportId))`, and
+  hands the page the URLs it needs as data — `cancelButtonHref`, `newReportHref` on
+  `ReportPageData` — rather than letting a component rebuild one out of `params`.
+- **The cancel button is the shape every later action copies.**
+  [`cancel-report.ts`](apps/web/src/lib/reports/cancel-report.ts) is the feature client: `apiCall`
+  plus one `catch` narrowing the endpoint's 409 into a `CancelOutcome` variant, per the README's
+  rule that a feature owns a parser knowing its own endpoint's statuses.
+  `waiting/cancel-button.svelte` is the wiring — a vendored `alert-dialog`, an `ActionState`
+  ([`ActionState.ts`](apps/web/src/lib/types/ActionState.ts)) driving the disabled confirm and the
+  inline error, and `invalidate(reportDependencyKey(reportId))` on success so the load's own re-run
+  is what swaps the screen. Retry below is those same four pieces against a different endpoint.
+- **`@gbd/core`'s [`time.ts`](packages/core/src/time.ts) owns both renderings of a moment.**
+  `formatElapsed(now, at)` escalates minutes → hours → days and deliberately stops there, because
+  `Intl.RelativeTimeFormat`'s weeks and months are approximate buckets and less precise than the day
+  count they would replace; `formatTimestamp(at)` is the exact moment, pinned to UTC and labelled as
+  such so it reads identically wherever it runs.
 - **A `succeeded` analysis_attempt is now guaranteed a `pdf` and an `xlsx` result_file row** —
   `analysis_attempt_succeeded_has_pdf` / `_has_xlsx`, a deferred trigger on `analysis_attempt`
   added the PR before this one landed. `loadResultFiles` already relies on it via
@@ -55,9 +70,9 @@ notification email links to. Everything under it exists:
   auth-plus-org-access prologue every `reports/[reportId]/*` route repeats). Retry inserts the next
   attempt optimistically and lets `check_violation`/`unique_violation` become a 409 —
   `analysis_attempt_new_attempt_only_after_failure` is the trigger that enforces it. Delete shares
-  `cancelActiveAttempt` with `POST .../cancel` and records `report.deleted` on top. So every viewing
-  PR below can build its real button — retry, cancel — in the same PR as the screen it belongs to;
-  see the Decisions section.
+  `cancelActiveAttempt` with `POST .../cancel` and records `report.deleted` on top. So the failure view
+  below builds its real retry button in the same PR as the screen it belongs to, exactly as cancel
+  shipped alongside the waiting view; see the Decisions section.
 
 ## What the database actually knows
 
@@ -206,8 +221,9 @@ Three problems dissolve at once:
 - **No ticker.** There is no `setInterval` re-rendering the elapsed time, because the poll already
   re-renders every ten seconds and nothing on screen is finer-grained than a minute.
 
-Timestamps render as `<time datetime={iso}>3 minutes ago</time>` — exact and machine-readable in
-the attribute, relative and zone-free in the text.
+Timestamps render as `<time datetime={iso} title={formatTimestamp(at)}>3 minutes ago</time>` —
+exact and machine-readable in the attribute, exact and legible in the tooltip, relative and
+zone-free in the text.
 
 **The `now` in the props is the load's `now`, not the browser's.** So between polls the elapsed
 times are stale by up to ten seconds. That is invisible at minute granularity, and the alternative
@@ -229,7 +245,7 @@ when a stage overruns. § Performance says a run "usually takes about 5 minutes,
 **Shipped without a separate headline above the timeline.** The current step's bold title and its
 own spinner icon (`motion-safe:animate-spin`, `aria-hidden`) already say what's happening, and a
 second copy of the same words above the list read as noise. `describeProgress` still returns
-`headline` on `Progress` — nothing on the waiting view reads it yet, but PR 4's live region will,
+`headline` on `Progress` — nothing on the waiting view reads it yet, but PR 3's live region will,
 since a region has to speak a stage change and there is otherwise no single string for it. Below
 the timeline, one standing line — **"You can close this page. We will email you when your report
 is ready."** That is true (§ User email), and it is the kindest sentence available on a screen
@@ -254,8 +270,9 @@ the timeline would have.
 
 `apps/web/README.md` already settles the mechanism: reads are `load` functions, `/api` holds only
 writes, and "waiting on a running report is `invalidate()` re-running the page's load". The load
-calls `depends()` with a key naming this report so the poll re-runs *this* load and not the
-layout's auth lookup, which `invalidateAll()` would.
+already calls `depends(reportDependencyKey(reportId))` — it landed with the cancel button, which
+needed exactly the same refresh — so a poll re-runs *this* load and not the layout's auth lookup,
+which `invalidateAll()` would.
 
 All the decisions live in one pure function, and the effect is plumbing:
 
@@ -346,22 +363,23 @@ the CSP has to allow that host or every chart breaks.
 `objectExists` call plus a signing call. Eight charts is eight of those on a page view.
 `loading="lazy"` spreads them out. Not worth optimising until it is measured.
 
-### Cancel and retry ship in the same PR as the screen they belong to
+### Retry ships in the same PR as the screen it belongs to
 
 `REQUIREMENTS.md` puts a cancel button on the waiting screen and a retry on the failure screen, and
 `FAILURE_EXPLANATIONS` writes the sentence *"You can run it again without uploading it a second
 time"* for eight of the ten failure reasons — the common case, not an edge one. Both endpoints
-already exist (see Context), so there is nothing forcing either button into a trailing PR: the
-retry button belongs in the failure-view PR, and cancel belongs right after the waiting view. See
-PR ordering below.
+already exist (see Context), so there was nothing forcing either button into a trailing PR. Cancel
+shipped with the waiting view that carries it; retry belongs in the failure-view PR below on the
+same reasoning.
 
 Two decisions from the backend carry into the frontend:
 
 - **Cancel does not delete.** `POST .../cancel` writes `cancel_requested_at` and nothing else; the
-  `DELETE` shares `cancelActiveAttempt` and adds the soft-delete on top of the same update. So
-  `canceled` is reachable on its own — via `POST .../cancel` — and needs its own panel; the delete
-  confirmation is a separate, bigger warning ("this report goes away"), not a rename of the cancel
-  dialog's copy.
+  `DELETE` shares `cancelActiveAttempt` and adds the soft-delete on top of the same update. That is
+  why `canceled` is reachable on its own and got its own panel — one that offers a link to upload a
+  new file, not a delete button. A delete confirmation is a separate, bigger warning ("this report
+  goes away"), not a rename of the cancel dialog's copy, and it wants a home on every screen rather
+  than only the stopped one (§ Follow-ups).
 - **Retry after cancel is impossible, and enforced by the database, not the frontend.**
   `analysis_attempt_new_attempt_only_after_failure` rejects a new attempt unless the latest one is
   `failed` — a canceled or succeeded attempt is the end of the line for that report
@@ -384,9 +402,10 @@ second consumer, not in anticipation of one.
 report page needs already exists. The overlaps are small and worth knowing about:
 
 - **`apps/web/README.md`.** Both plans add conventions, and both add them PR by PR. Different
-  sections mostly — this one writes `## Routes`; the upload plan writes `## Forms` and `## Errors` —
-  but the *route-local component* convention under `## UI components` is claimed by both. Whichever
-  lands first writes it; the other cites it.
+  sections mostly — this one extends `## Routes`; the upload plan writes `## Forms` and `## Errors`
+  — and the *route-local component* convention under `## UI components` is claimed by both. This
+  plan got there first: `## UI components` now also carries "a view within a route gets its own
+  subfolder once it's more than one file", which is why `waiting/` exists. The upload plan cites it.
 - **Manual verification needs a report to look at.** The upload form is the only thing that creates
   one from a browser. Until it lands, use a throwaway script or `psql` against the test stack, and
   `UPDATE analysis_attempt` to walk a report through the states by hand. Do **not** extend
@@ -430,40 +449,26 @@ Cancel's ordering rule — the page's one piece of real logic — is also alread
 `cancel_requested_at` on a `pending` and on a `processing` row both give the canceled screen with
 `stoppedAt`; on a `succeeded` row it gives the success screen, files intact.
 
-**e2e, Playwright (`*.e2e.ts`).** Two tests, for the two things nothing else can reach: a report
-flipped from `pending` to `succeeded` in the database while the page is open appears **without a
-reload**, and an aborted `__data.json` leaves the timeline on screen with a reconnecting notice.
+**e2e, Playwright (`*.e2e.ts`).** For what nothing else can reach. One is already there:
+`reports/cancel.e2e.ts` clicks through the real dialog to the real endpoint and lands on the
+canceled screen with no page reload, asserted by `watchPageLoads` (`e2e/lib/no-reload.ts`) counting
+the browser's `load` event, which `invalidate()` never fires. Two remain: a report flipped from
+`pending` to `succeeded` in the database while the page is open appears **without a reload** — the
+same helper — and an aborted `__data.json` leaves the timeline on screen with a reconnecting notice.
+
+**Screenshots (`*.screenshot.ts`).** `e2e/reports/reports.screenshot.ts` holds one per report
+screen. Each new view adds its own, and a change to a shipped screen shows up as a diff to review
+rather than as nothing at all.
 
 Not tested: that `Intl.RelativeTimeFormat` formats, that `/file/result/[id]` redirects (it has its
 own tests), that the DB constraints hold (`packages/db/tests/` owns those).
 
 ---
 
-Everything below is frontend only — cancel, retry and delete already work on the server (see
-Context). The retry button lands in the same PR as the failure screen it belongs to, and cancel
-lands right after the waiting view rather than at the end of the sequence.
+Everything below is frontend only — retry and delete already work on the server (see Context). The
+retry button lands in the same PR as the failure screen it belongs to.
 
-## PR 1 — Cancel, and the canceled view
-
-`requestCancellation` already exists, so this PR is entirely presentation and wiring: the cancel
-button on the waiting view, its confirming dialog, a feature client in `$lib/reports/` calling
-`POST .../cancel`, and **`canceled-view.svelte`** — "You stopped this report", `<time>` on
-`stoppedAt`, the line saying it cannot be run again, and a delete button. `invalidate()` rather
-than `goto` on success, since the report is still here and the load's own re-run is what swaps the
-screen; a 409 (the attempt finished first) answers the same way, possibly onto a finished report —
-do not report a cancel that did not happen.
-
-The dialog's copy is the load-bearing part, and both halves are easy to leave out: stopping is
-final, and the report stays in the list.
-
-Placed first because it is the waiting view's own button, not because anything later depends on
-it — `canceled-view.svelte` has no dependency on the success or failure views and could land in
-either order relative to them.
-
-**Tests** — `canceled-view.svelte.test.ts` for the copy and the `<time>`; a feature-client test for
-the 409 case; component test for the dialog's confirm/cancel.
-
-## PR 2 — The success view
+## PR 1 — The success view
 
 **`result-view.svelte`** — "Finished 4 minutes ago", then the PDF and Excel buttons, the original
 file as a secondary link with its filename and `displaySize(byteSize)`, then the charts.
@@ -479,7 +484,7 @@ guarantees it, and `loadResultFiles` already asserts it via `requireConstraint` 
 fixture still uses); `result-view.svelte.test.ts` for the three hrefs, one figure per chart with
 the humanized caption, and no horizontal scroll at 375px.
 
-## PR 3 — The failure view, with retry
+## PR 2 — The failure view, with retry
 
 **`failure-view.svelte`** — `whatHappened` as the lead, `followUpText` under it, the contact
 `mailto:`, "this was attempt 3" only when `attemptNumber > 1`, and a real retry button —
@@ -487,7 +492,10 @@ the humanized caption, and no horizontal scroll at 375px.
 region: this is the page's content on arrival, not a change to something the user was reading.
 
 A feature client in `$lib/reports/` calling `POST .../retry`, narrowing its 409 (someone already
-retried) into "refresh, don't retry again" rather than a second attempt at the same request.
+retried) into "refresh, don't retry again" rather than a second attempt at the same request —
+`cancel-report.ts` is the shape to follow, and the button follows `cancel-button.svelte`:
+`ActionState` for the in-flight and error states, `invalidate(reportDependencyKey(reportId))` on
+success. No confirming dialog; retry is not destructive.
 
 **Tests** — `failure-view.svelte.test.ts`: the copy renders, the contact link is a `mailto:`, the
 attempt count appears only above 1, the retry button is present only when `followUp.action ===
@@ -495,7 +503,7 @@ attempt count appears only above 1, the retry button is present only when `follo
 `ANALYSIS_FAILURE_EXPLANATIONS` entry it wants without hand-writing the row. Plus the feature-client
 409 test.
 
-## PR 4 — Polling, and staying on screen when a poll fails
+## PR 3 — Polling, and staying on screen when a poll fails
 
 **Open with the spike**, as a Playwright test that aborts `**/*__data.json*` against the page as it
 already exists. What it reports decides whether the rest of this PR is `invalidate()` or a read
@@ -504,10 +512,9 @@ endpoint.
 **`polling.ts`** — `nextPollDelayMs`, the interval, the cap, and the failures-before-notice
 threshold. Node-tested.
 
-**`+page.server.ts`** — call `depends()` with a key naming this report, so the poll re-runs this
-load and not the layout's auth lookup; the landed load doesn't call it yet. Catch
-`isTransientDatabaseError` inside the query callback and return `{ reachable: false }` when
-`event.isDataRequest`; let it through to `withDbErrorHandling` otherwise.
+**`+page.server.ts`** — `depends()` is already wired, so the only change here is the unreachable
+case: catch `isTransientDatabaseError` inside the query callback and return `{ reachable: false }`
+when `event.isDataRequest`; let it through to `withDbErrorHandling` otherwise.
 
 **`+page.svelte`** — the timer, the failure counter, the `visibilitychange` listener, and
 `<ReportView {data} {connection} />`. Nothing else.
@@ -522,8 +529,8 @@ spoken.
 **Tests** — `polling.test.ts` for the schedule; `report-view.svelte.test.ts` for retention,
 the two notices, and the live region; the two e2e tests.
 
-**README** — `## Routes`, the polling convention: `depends()` and `invalidate()` rather than
-`invalidateAll()`, stop when terminal, pause when hidden, back off on failure, and
+**README** — extend `## Routes` with the polling convention: `depends()` and `invalidate()` rather
+than `invalidateAll()`, stop when terminal, pause when hidden, back off on failure, and
 `event.isDataRequest` as the line between "a poll can keep the screen" and "there is no screen to
 keep". Plus the trap: `data` is replaced wholesale, so a page that must survive a failed reload
 holds its own copy.
@@ -536,6 +543,10 @@ holds its own copy.
 - **`insertResultFile`'s default `chartKey` is `'total-spend'`**
   ([`fixtures.ts`](packages/db/src/testing/fixtures.ts)), which `CHART_KEY_PATTERN` would reject.
   A one-character fix, but it is not this change's.
+- **Nothing deletes a report from the UI.** `DELETE .../reports/[reportId]` is a real, tested
+  endpoint, and the canceled panel was this plan's provisional home for a button, but it shipped
+  without one: delete wants a heavier confirmation than cancel's, and a home on every screen rather
+  than only the stopped one. A small self-contained PR once the screens exist.
 - **A CSP will need `img-src` for the storage origin.**
 - **Result metadata** — processing time, model, tokens, cost — has a home on this page and no
   design yet.
@@ -560,8 +571,6 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
    - `succeeded` with a PDF, an XLSX and three charts: all three download links work, the charts
      render inline rather than downloading, and each opens full size.
    - `failed` with `unusable_data`, then with `child_crashed`: different copy, contact versus retry.
-   - `processing` with `cancel_requested_at` set: the stopped panel, timed from the request. Then
-     converge it to `canceled` and confirm the screen does not change.
    - `succeeded` with `cancel_requested_at` set: the success screen, not the stopped panel.
    - Soft-delete the report: 404, with the organization's nav still in place.
 4. Keyboard-only through the success view, and a screen reader over the waiting view: the stage
