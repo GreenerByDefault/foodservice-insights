@@ -46,8 +46,7 @@ async function confirm() {
     <AlertDialogHeader>
       <AlertDialogTitle>Cancel this report?</AlertDialogTitle>
       <AlertDialogDescription>
-        Stopping is final — this report cannot be retried. To run this data again, you will need to
-        upload the file as a new report. The report itself stays in your list.
+        This can't be undone. If you want to run this data again, upload it as a new report.
       </AlertDialogDescription>
     </AlertDialogHeader>
     {#if actionState.status === 'error'}

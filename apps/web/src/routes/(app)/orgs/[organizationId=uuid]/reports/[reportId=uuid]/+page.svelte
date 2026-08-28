@@ -64,5 +64,9 @@ let { data }: PageProps = $props();
     </a>
   </p>
 {:else if data.attempt.status === 'canceled'}
-  <CanceledView stoppedAt={data.attempt.stoppedAt} now={data.now} />
+  <CanceledView
+    stoppedAt={data.attempt.stoppedAt}
+    now={data.now}
+    newReportHref={data.newReportHref}
+  />
 {/if}

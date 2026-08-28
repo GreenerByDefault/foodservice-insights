@@ -74,6 +74,7 @@ export type Attempt =
 export type ReportPageData = {
   report: { id: ReportId; name: string };
   cancelButtonHref: string;
+  newReportHref: string;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
   /** The database's clock, not the browser's — every duration on the page is `now - timestamp`
@@ -146,6 +147,7 @@ export async function _loadReport(
   return {
     report: { id: row.reportId, name: row.reportName },
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
+    newReportHref: `/orgs/${params.organizationId}/reports/new`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
       originalFilename: row.inputFileOriginalFilename,
