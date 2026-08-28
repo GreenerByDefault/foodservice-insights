@@ -73,5 +73,4 @@ sign-in lands.
 | --- | --- |
 | `POST orgs/:id/reports` (create) | `create-report.test.ts` |
 | `GET orgs/:id/reports/:id` (view) | `load-report.test.ts` |
-| `POST orgs/:id/reports/:id/cancel` | `cancel.test.ts` (calls `requestCancellation` directly, bypassing auth) |
 | `DELETE orgs/:id/reports/:id` | `delete-report.test.ts` |
