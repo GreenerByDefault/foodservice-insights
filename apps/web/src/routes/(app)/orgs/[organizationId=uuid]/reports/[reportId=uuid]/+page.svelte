@@ -1,5 +1,6 @@
 <script lang="ts">
 import CanceledView from './canceled-view.svelte';
+import FailureView from './failure-view.svelte';
 import type { PageProps } from './$types';
 import { isWaiting } from './waiting/progress.ts';
 import WaitingView from './waiting/view.svelte';
@@ -7,11 +8,6 @@ import WaitingView from './waiting/view.svelte';
 let { data }: PageProps = $props();
 </script>
 
-<!-- Deliberately undesigned past the waiting and canceled views: a switch over
-     `data.attempt.status` rendering plain text and plain links for the two outcomes still
-     unbuilt, so they are legible before each is designed in a later PR. `data.attempt.status` is
-     the screen rather than the column — the load settles the cancel-versus-verdict ordering, so a
-     cancel no worker has converged yet already arrives here as `canceled`. -->
 <svelte:head>
   <title>{data.report.name}</title>
 </svelte:head>
@@ -53,16 +49,12 @@ let { data }: PageProps = $props();
     </a>
   </p>
 {:else if data.attempt.status === 'failed'}
-  <p>{data.attempt.failure.whatHappened}</p>
-  <p class="text-muted-foreground">{data.attempt.failure.followUpText}</p>
-  {#if data.attempt.attemptNumber > 1}
-    <p class="text-muted-foreground">This was attempt {data.attempt.attemptNumber}.</p>
-  {/if}
-  <p>
-    <a class="underline hover:no-underline" href={data.attempt.failure.contactMailto}>
-      Contact us
-    </a>
-  </p>
+  <FailureView
+    reportId={data.report.id}
+    attemptNumber={data.attempt.attemptNumber}
+    failure={data.attempt.failure}
+    retryButtonHref={data.retryButtonHref}
+  />
 {:else if data.attempt.status === 'canceled'}
   <CanceledView
     stoppedAt={data.attempt.stoppedAt}

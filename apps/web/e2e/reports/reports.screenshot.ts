@@ -1,4 +1,4 @@
-import { newReportId } from '@gbd/db';
+import { MAX_ANALYSIS_ATTEMPTS, newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
@@ -54,12 +54,29 @@ test('a report that failed on its first attempt', async ({ page, reports }) => {
   await expectScreenshot(page, 'reports-failed.png');
 });
 
-test('a report that failed again on a later attempt', async ({ page, reports }) => {
-  const reportId = await reports.create('failed-later-attempt');
+test('a report that failed at the attempt cap, for a reason that would otherwise offer a retry', async ({
+  page,
+  reports,
+}) => {
+  const reportId = await reports.create('failed-at-retry-cap');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByText('This was attempt 3.')).toBeVisible();
-  await expectScreenshot(page, 'reports-failed-later-attempt.png');
+  await expect(
+    page.getByText(`You've used all ${MAX_ANALYSIS_ATTEMPTS} attempts for this report.`),
+  ).toBeVisible();
+  // The follow-up text already states the attempt count, so it shouldn't be repeated below it.
+  await expect(page.getByText(`This was attempt ${MAX_ANALYSIS_ATTEMPTS}.`)).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry' })).not.toBeVisible();
+  await expectScreenshot(page, 'reports-failed-at-retry-cap.png');
+});
+
+test('a report that failed on a retried attempt, below the cap', async ({ page, reports }) => {
+  const reportId = await reports.create('failed-retried');
+  await page.goto(reportUrl(reportId));
+
+  await expect(page.getByText('This was attempt 2.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+  await expectScreenshot(page, 'reports-failed-retried.png');
 });
 
 test('a report that was canceled', async ({ page, reports }) => {
