@@ -42,8 +42,6 @@ test('the succeeded report screen has no horizontal overflow at any viewport', a
   page,
   reports,
 }) => {
-  // Not in ROUTES: it's the tallest report screen with the most links, so every other report
-  // state is strictly less content. `/reports/new` above already covers the route shape.
   const reportId = await reports.create('succeeded');
   await page.goto(reportUrl(reportId));
   await checkNoOverflowAtEveryWidth(page);

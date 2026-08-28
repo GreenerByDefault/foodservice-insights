@@ -38,8 +38,7 @@ export type ReportState =
   | 'failed-later-attempt'
   | 'canceled';
 
-/** Snake_case, matching `CHART_KEY_PATTERN` (`apps/worker/src/contract/layout.ts`) — the default
- * `insertResultFile` gives a chart, `'total-spend'`, is hyphenated and would fail it. */
+/** Snake_case, matching `CHART_KEY_PATTERN` (`apps/worker/src/contract/layout.ts`). */
 const CHART_KEYS = [
   'total_spend',
   'avg_order_value',
@@ -117,9 +116,6 @@ async function buildFailed(tx: Transaction<Database>): Promise<ReportId> {
   return report.id;
 }
 
-/** Attempts 1 and 2 must both be `failed` before attempt 3 may exist at all —
- * `analysis_attempt_new_attempt_only_after_failure` locks the report and requires the latest
- * attempt to be `failed` with the new number exactly `latest + 1`. */
 async function buildFailedLaterAttempt(tx: Transaction<Database>): Promise<ReportId> {
   const report = await insertReport(tx, {
     organizationId: PLACEHOLDER_ORGANIZATION_ID,
@@ -127,6 +123,7 @@ async function buildFailedLaterAttempt(tx: Transaction<Database>): Promise<Repor
     createdAt: ANCHOR,
   });
   await insertInputFile(tx, { reportId: report.id });
+  // Attempts 1 and 2 must both be `failed` before attempt 3 may exist at all. */
   await insertAnalysisAttempt(tx, {
     reportId: report.id,
     attemptNumber: 1,
