@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { describeProgress, formatElapsed, isWaiting } from './progress.ts';
+import { describeProgress, isWaiting } from './progress.ts';
 
 const CREATED_AT = new Date('2026-01-15T10:00:00Z');
 const CLAIMED_AT = new Date('2026-01-15T10:03:00Z');
@@ -126,23 +126,5 @@ describe('describeProgress', () => {
     );
 
     expect(progress.steps[1]?.warning).toBeUndefined();
-  });
-});
-
-describe('formatElapsed', () => {
-  test('under a minute reads as "less than a minute ago"', () => {
-    expect(formatElapsed(new Date(CREATED_AT.getTime() + 59_000), CREATED_AT)).toBe(
-      'less than a minute ago',
-    );
-  });
-
-  test('exactly one minute', () => {
-    expect(formatElapsed(minutesAfter(CREATED_AT, 1), CREATED_AT)).toBe('1 minute ago');
-  });
-
-  test('several minutes, rounded down', () => {
-    expect(formatElapsed(new Date(CREATED_AT.getTime() + 3 * 60_000 + 30_000), CREATED_AT)).toBe(
-      '3 minutes ago',
-    );
   });
 });

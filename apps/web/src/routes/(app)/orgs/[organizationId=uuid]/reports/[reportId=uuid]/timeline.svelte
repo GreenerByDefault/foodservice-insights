@@ -2,7 +2,8 @@
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 import CircleIcon from '@lucide/svelte/icons/circle';
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-import { formatElapsed, type Step } from './progress.ts';
+import { formatElapsed } from '@gbd/core';
+import type { Step } from './progress.ts';
 
 let { steps, now }: { steps: Step[]; now: Date } = $props();
 </script>
