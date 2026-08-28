@@ -19,7 +19,12 @@ let { data }: PageProps = $props();
 <h1 class="text-2xl font-semibold tracking-tight">{data.report.name}</h1>
 
 {#if isWaiting(data.attempt)}
-  <WaitingView attempt={data.attempt} now={data.now} cancelButtonHref={data.cancelButtonHref} />
+  <WaitingView
+    reportId={data.report.id}
+    attempt={data.attempt}
+    now={data.now}
+    cancelButtonHref={data.cancelButtonHref}
+  />
 {:else if data.attempt.status === 'succeeded'}
   <p class="text-muted-foreground">
     Finished

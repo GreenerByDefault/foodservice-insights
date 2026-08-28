@@ -18,8 +18,8 @@ test('canceling a report from the waiting screen shows the canceled screen, with
   await page.goto(reportUrl(reportId));
   await ensureHydrated(page);
 
-  // A real navigation fires the browser's `load` event again; `invalidateAll()` re-running the
-  // load client-side does not. Counted from here, after the initial navigation's own `load`.
+  // A real navigation fires the browser's `load` event again; `invalidate()` re-running the load
+  // client-side does not. Counted from here, after the initial navigation's own `load`.
   let loadCount = 0;
   page.on('load', () => {
     loadCount++;

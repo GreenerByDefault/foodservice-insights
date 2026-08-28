@@ -1,13 +1,15 @@
 <script lang="ts">
+import type { ReportId } from '@gbd/db';
 import CancelButton from './cancel-button.svelte';
 import { describeProgress, type WaitingAttempt } from './progress.ts';
 import Timeline from './timeline.svelte';
 
 let {
+  reportId,
   attempt,
   now,
   cancelButtonHref,
-}: { attempt: WaitingAttempt; now: Date; cancelButtonHref: string } = $props();
+}: { reportId: ReportId; attempt: WaitingAttempt; now: Date; cancelButtonHref: string } = $props();
 
 let progress = $derived(describeProgress(attempt, now));
 </script>
@@ -19,5 +21,5 @@ let progress = $derived(describeProgress(attempt, now));
     You can close this page. We will email you when your report is ready.
   </p>
 
-  <CancelButton {cancelButtonHref} />
+  <CancelButton {reportId} {cancelButtonHref} />
 </div>

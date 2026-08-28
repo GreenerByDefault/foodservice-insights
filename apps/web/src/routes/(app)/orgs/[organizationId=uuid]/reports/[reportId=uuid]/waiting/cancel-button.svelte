@@ -1,5 +1,6 @@
 <script lang="ts">
-import { invalidateAll } from '$app/navigation';
+import type { ReportId } from '@gbd/db';
+import { invalidate } from '$app/navigation';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,9 +14,10 @@ import {
 } from '$lib/components/ui/alert-dialog';
 import { buttonVariants } from '$lib/components/ui/button';
 import { cancelReport } from '$lib/reports/cancel-report';
+import { reportDependencyKey } from '$lib/reports/report-dependency';
 import type { ActionState } from '$lib/types/ActionState';
 
-let { cancelButtonHref }: { cancelButtonHref: string } = $props();
+let { reportId, cancelButtonHref }: { reportId: ReportId; cancelButtonHref: string } = $props();
 
 let open = $state(false);
 let actionState = $state<ActionState>({ status: 'idle' });
@@ -28,10 +30,7 @@ async function confirm() {
     // Both outcomes close the dialog and refresh — see `CancelOutcome`.
     open = false;
 
-    // `depends()` isn't wired into this load yet (that lands with polling) — a targeted
-    // `invalidate()` would match nothing without it, so `invalidateAll()` is the correct, if
-    // broader, way to re-run this load for now.
-    await invalidateAll();
+    await invalidate(reportDependencyKey(reportId));
     actionState = { status: 'success' };
   } catch {
     actionState = { status: 'error', message: 'Could not cancel this report. Please try again.' };

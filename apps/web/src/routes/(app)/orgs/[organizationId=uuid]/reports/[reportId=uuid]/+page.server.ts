@@ -13,13 +13,17 @@ import {
 import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { reportDependencyKey } from '$lib/reports/report-dependency';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, depends }) => {
   const organizationId = params.organizationId as OrganizationId;
   const reportId = params.reportId as ReportId;
+
+  // This allows client actions to use `invalidate()` to reload the page.
+  depends(reportDependencyKey(reportId));
 
   return await withDbErrorHandling(
     () =>

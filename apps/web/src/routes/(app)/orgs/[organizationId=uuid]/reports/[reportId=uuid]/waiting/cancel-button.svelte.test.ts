@@ -1,9 +1,12 @@
+import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import CancelButton from './cancel-button.svelte';
 
-const { invalidateAll } = vi.hoisted(() => ({ invalidateAll: vi.fn() }));
-vi.mock('$app/navigation', () => ({ invalidateAll }));
+const { invalidate } = vi.hoisted(() => ({ invalidate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ invalidate }));
+
+const REPORT_ID = 'report-1' as ReportId;
 
 function stubFetch(response: Response) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
@@ -11,7 +14,7 @@ function stubFetch(response: Response) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  invalidateAll.mockClear();
+  invalidate.mockClear();
 });
 
 describe('CancelButton', () => {
@@ -19,6 +22,7 @@ describe('CancelButton', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const screen = await render(CancelButton, {
+      reportId: REPORT_ID,
       cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
@@ -33,12 +37,13 @@ describe('CancelButton', () => {
       .element(screen.getByRole('heading', { name: 'Cancel this report?' }))
       .not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(invalidateAll).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
-  test('confirming calls the endpoint, closes the dialog, and refreshes the load', async () => {
+  test('confirming calls the endpoint, closes the dialog, and refreshes just this report', async () => {
     stubFetch(new Response(null, { status: 204 }));
     const screen = await render(CancelButton, {
+      reportId: REPORT_ID,
       cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
@@ -48,7 +53,8 @@ describe('CancelButton', () => {
     await expect
       .element(screen.getByRole('heading', { name: 'Cancel this report?' }))
       .not.toBeInTheDocument();
-    await expect.poll(() => invalidateAll.mock.calls.length).toBe(1);
+    await expect.poll(() => invalidate.mock.calls.length).toBe(1);
+    expect(invalidate).toHaveBeenCalledWith(`report:${REPORT_ID}`);
   });
 
   test('a 409 — the attempt already finished — closes and refreshes rather than showing an error', async () => {
@@ -58,6 +64,7 @@ describe('CancelButton', () => {
       }),
     );
     const screen = await render(CancelButton, {
+      reportId: REPORT_ID,
       cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
@@ -67,12 +74,13 @@ describe('CancelButton', () => {
     await expect
       .element(screen.getByRole('heading', { name: 'Cancel this report?' }))
       .not.toBeInTheDocument();
-    await expect.poll(() => invalidateAll.mock.calls.length).toBe(1);
+    await expect.poll(() => invalidate.mock.calls.length).toBe(1);
   });
 
   test('an unreachable server keeps the dialog open and shows a retry message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const screen = await render(CancelButton, {
+      reportId: REPORT_ID,
       cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
@@ -82,6 +90,6 @@ describe('CancelButton', () => {
     await expect
       .element(screen.getByText('Could not cancel this report. Please try again.'))
       .toBeVisible();
-    expect(invalidateAll).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });
