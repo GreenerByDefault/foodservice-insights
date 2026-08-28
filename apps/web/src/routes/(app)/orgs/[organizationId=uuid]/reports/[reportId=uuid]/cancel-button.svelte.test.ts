@@ -19,7 +19,7 @@ describe('CancelButton', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const screen = await render(CancelButton, {
-      cancelHref: '/api/orgs/org-1/reports/report-1/cancel',
+      cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
     await screen.getByRole('button', { name: 'Cancel report' }).click();
@@ -39,7 +39,7 @@ describe('CancelButton', () => {
   test('confirming calls the endpoint, closes the dialog, and refreshes the load', async () => {
     stubFetch(new Response(null, { status: 204 }));
     const screen = await render(CancelButton, {
-      cancelHref: '/api/orgs/org-1/reports/report-1/cancel',
+      cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
     await screen.getByRole('button', { name: 'Cancel report' }).click();
@@ -58,7 +58,7 @@ describe('CancelButton', () => {
       }),
     );
     const screen = await render(CancelButton, {
-      cancelHref: '/api/orgs/org-1/reports/report-1/cancel',
+      cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
     await screen.getByRole('button', { name: 'Cancel report' }).click();
@@ -73,7 +73,7 @@ describe('CancelButton', () => {
   test('an unreachable server keeps the dialog open and shows a retry message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const screen = await render(CancelButton, {
-      cancelHref: '/api/orgs/org-1/reports/report-1/cancel',
+      cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
     });
 
     await screen.getByRole('button', { name: 'Cancel report' }).click();

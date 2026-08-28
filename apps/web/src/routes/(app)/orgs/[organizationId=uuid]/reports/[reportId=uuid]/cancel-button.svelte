@@ -13,28 +13,28 @@ import {
 } from '$lib/components/ui/alert-dialog';
 import { buttonVariants } from '$lib/components/ui/button';
 import { cancelReport } from '$lib/reports/cancel-report';
+import type { ActionState } from '$lib/types/ActionState';
 
-let { cancelHref }: { cancelHref: string } = $props();
+let { cancelButtonHref }: { cancelButtonHref: string } = $props();
 
 let open = $state(false);
-let pending = $state(false);
-let failed = $state(false);
+let actionState = $state<ActionState>({ status: 'idle' });
 
 async function confirm() {
-  pending = true;
-  failed = false;
+  actionState = { status: 'loading' };
   try {
+    await cancelReport(cancelButtonHref);
+
     // Both outcomes close the dialog and refresh — see `CancelOutcome`.
-    await cancelReport(cancelHref);
     open = false;
+
     // `depends()` isn't wired into this load yet (that lands with polling) — a targeted
     // `invalidate()` would match nothing without it, so `invalidateAll()` is the correct, if
     // broader, way to re-run this load for now.
     await invalidateAll();
+    actionState = { status: 'success' };
   } catch {
-    failed = true;
-  } finally {
-    pending = false;
+    actionState = { status: 'error', message: 'Could not cancel this report. Please try again.' };
   }
 }
 </script>
@@ -51,12 +51,18 @@ async function confirm() {
         upload the file as a new report. The report itself stays in your list.
       </AlertDialogDescription>
     </AlertDialogHeader>
-    {#if failed}
-      <p class="text-sm text-destructive">Could not cancel this report. Please try again.</p>
+    {#if actionState.status === 'error'}
+      <p class="text-sm text-destructive">{actionState.message}</p>
     {/if}
     <AlertDialogFooter>
-      <AlertDialogCancel disabled={pending}>Keep it running</AlertDialogCancel>
-      <AlertDialogAction variant="destructive" disabled={pending} onclick={confirm}>
+      <AlertDialogCancel disabled={actionState.status === 'loading'}>
+        Keep it running
+      </AlertDialogCancel>
+      <AlertDialogAction
+        variant="destructive"
+        disabled={actionState.status === 'loading'}
+        onclick={confirm}
+      >
         Yes, cancel report
       </AlertDialogAction>
     </AlertDialogFooter>

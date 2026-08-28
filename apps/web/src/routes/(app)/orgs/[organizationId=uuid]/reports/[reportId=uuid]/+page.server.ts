@@ -69,9 +69,7 @@ export type Attempt =
 
 export type ReportPageData = {
   report: { id: ReportId; name: string };
-  /** Where the cancel button posts. Precomputed here, like every other link on this page, so the
-   * view never has to know the API's route shape. */
-  cancelHref: string;
+  cancelButtonHref: string;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
   /** The database's clock, not the browser's — every duration on the page is `now - timestamp`
@@ -143,7 +141,7 @@ export async function _loadReport(
 
   return {
     report: { id: row.reportId, name: row.reportName },
-    cancelHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
+    cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
       originalFilename: row.inputFileOriginalFilename,

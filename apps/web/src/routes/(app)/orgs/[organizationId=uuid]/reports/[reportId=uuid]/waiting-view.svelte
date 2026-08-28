@@ -3,8 +3,11 @@ import CancelButton from './cancel-button.svelte';
 import { describeProgress, type WaitingAttempt } from './progress.ts';
 import Timeline from './timeline.svelte';
 
-let { attempt, now, cancelHref }: { attempt: WaitingAttempt; now: Date; cancelHref: string } =
-  $props();
+let {
+  attempt,
+  now,
+  cancelButtonHref,
+}: { attempt: WaitingAttempt; now: Date; cancelButtonHref: string } = $props();
 
 let progress = $derived(describeProgress(attempt, now));
 </script>
@@ -16,5 +19,5 @@ let progress = $derived(describeProgress(attempt, now));
     You can close this page. We will email you when your report is ready.
   </p>
 
-  <CancelButton {cancelHref} />
+  <CancelButton {cancelButtonHref} />
 </div>
