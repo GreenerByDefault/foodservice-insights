@@ -6,11 +6,14 @@
  * `COMMIT`, not at `INSERT`. `withRollback` never reaches that failure because it never commits;
  * these fixtures do, so they don't get that pass.
  *
- * Timings are offsets from one `ANCHOR`, fixed well outside `HOURLY_REPORT_LIMIT`/
- * `WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never spends the placeholder
- * organization's rate-limit budget.
+ * `report.created_at` is always an offset from one `ANCHOR`, fixed well outside
+ * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
+ * spends the placeholder organization's rate-limit budget (that's what the limit counts against —
+ * see `countReportsSince`). The `pending` and `processing` states' *attempt* timestamps are the
+ * one exception, and are recent instead — see `msAgo` (`@gbd/core`).
  */
 
+import { msAgo } from '@gbd/core';
 import type { Database, ReportId } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
@@ -21,6 +24,7 @@ import {
   insertResultFile,
 } from '@gbd/db/testing';
 import type { Kysely, Transaction } from 'kysely';
+import { ANALYSIS_WARNING_AFTER_MS, QUEUE_WARNING_AFTER_MS } from '../../src/lib/reports/limits.ts';
 
 const ANCHOR = new Date('2026-01-15T09:00:00Z');
 
@@ -30,7 +34,9 @@ function after(seconds: number): Date {
 
 export type ReportState =
   | 'pending'
+  | 'pending-delayed'
   | 'processing'
+  | 'processing-delayed'
   | 'succeeded'
   | 'failed'
   | 'failed-later-attempt'
@@ -48,31 +54,46 @@ const CHART_KEYS = [
   'waste_reduction',
 ];
 
-async function buildPending(tx: Transaction<Database>): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
-    name: 'Riverside Diner — March Produce',
-    createdAt: ANCHOR,
-  });
-  await insertInputFile(tx, { reportId: report.id });
-  await insertAnalysisAttempt(tx, { reportId: report.id, status: 'pending', createdAt: ANCHOR });
-  return report.id;
+function buildPending(
+  name: string,
+  queuedForMs: number,
+): (tx: Transaction<Database>) => Promise<ReportId> {
+  return async (tx) => {
+    const report = await insertReport(tx, {
+      organizationId: PLACEHOLDER_ORGANIZATION_ID,
+      name,
+      createdAt: ANCHOR,
+    });
+    await insertInputFile(tx, { reportId: report.id });
+    await insertAnalysisAttempt(tx, {
+      reportId: report.id,
+      status: 'pending',
+      createdAt: msAgo(queuedForMs),
+    });
+    return report.id;
+  };
 }
 
-async function buildProcessing(tx: Transaction<Database>): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
-    name: 'Harbor Bistro — February Proteins',
-    createdAt: ANCHOR,
-  });
-  await insertInputFile(tx, { reportId: report.id });
-  await insertAnalysisAttempt(tx, {
-    reportId: report.id,
-    status: 'processing',
-    createdAt: ANCHOR,
-    claimedAt: after(40),
-  });
-  return report.id;
+function buildProcessing(
+  name: string,
+  queuedForMs: number,
+  analyzingForMs: number,
+): (tx: Transaction<Database>) => Promise<ReportId> {
+  return async (tx) => {
+    const report = await insertReport(tx, {
+      organizationId: PLACEHOLDER_ORGANIZATION_ID,
+      name,
+      createdAt: ANCHOR,
+    });
+    await insertInputFile(tx, { reportId: report.id });
+    await insertAnalysisAttempt(tx, {
+      reportId: report.id,
+      status: 'processing',
+      createdAt: msAgo(queuedForMs + analyzingForMs),
+      claimedAt: msAgo(analyzingForMs),
+    });
+    return report.id;
+  };
 }
 
 async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
@@ -164,8 +185,17 @@ async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
 }
 
 const BUILDERS: Record<ReportState, (tx: Transaction<Database>) => Promise<ReportId>> = {
-  pending: buildPending,
-  processing: buildProcessing,
+  pending: buildPending('Riverside Diner — March Produce', 5_000),
+  'pending-delayed': buildPending(
+    'Maple Street Cafe — June Dry Goods',
+    QUEUE_WARNING_AFTER_MS + 30_000,
+  ),
+  processing: buildProcessing('Harbor Bistro — February Proteins', 70_000, 20_000),
+  'processing-delayed': buildProcessing(
+    'Cedar Point Kitchen — August Meats',
+    100_000,
+    ANALYSIS_WARNING_AFTER_MS + 100_000,
+  ),
   succeeded: buildSucceeded,
   failed: buildFailed,
   'failed-later-attempt': buildFailedLaterAttempt,

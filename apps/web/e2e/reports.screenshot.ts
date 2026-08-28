@@ -12,12 +12,28 @@ test('a report waiting to start', async ({ page, reports }) => {
   await expectScreenshot(page, 'reports-pending.png');
 });
 
+test('a report waiting to start, taking longer than usual', async ({ page, reports }) => {
+  const reportId = await reports.create('pending-delayed');
+  await page.goto(reportUrl(reportId));
+
+  await expect(page.getByText('It is busier than usual')).toBeVisible();
+  await expectScreenshot(page, 'reports-pending-delayed.png');
+});
+
 test('a report being analyzed', async ({ page, reports }) => {
   const reportId = await reports.create('processing');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByText('Analyzing')).toBeVisible();
+  await expect(page.getByText('Reading your purchases and building your charts')).toBeVisible();
   await expectScreenshot(page, 'reports-processing.png');
+});
+
+test('a report being analyzed, taking longer than usual', async ({ page, reports }) => {
+  const reportId = await reports.create('processing-delayed');
+  await page.goto(reportUrl(reportId));
+
+  await expect(page.getByText('This is taking longer than usual')).toBeVisible();
+  await expectScreenshot(page, 'reports-processing-delayed.png');
 });
 
 test('a report that succeeded', async ({ page, reports }) => {

@@ -277,7 +277,9 @@ Follow security best practices for web development.
 
 - The system handles roughly 3–5 concurrent requests. This number may be adjusted later.
 - A single request without queue time usually takes about 5 minutes, ranging from 2–15 minutes.
-  The slowness is almost entirely the AI tool.
+  The slowness is almost entirely the AI tool. The waiting screen's "running slower than usual"
+  warnings key off this range — see `QUEUE_WARNING_AFTER_MS` and `ANALYSIS_WARNING_AFTER_MS` in
+  [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
 - The web server is stateless, so horizontal scaling can be added later.
 - Workers can be scaled horizontally and vertically.
   - *Rejected for now: autoscaling.* It would have to key off queue depth rather than CPU

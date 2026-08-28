@@ -1,13 +1,14 @@
 <script lang="ts">
+import { isWaiting } from './progress.ts';
 import type { PageProps } from './$types';
+import WaitingView from './waiting-view.svelte';
 
 let { data }: PageProps = $props();
 </script>
 
-<!-- Deliberately undesigned: a switch over `data.attempt.status` rendering plain text and plain
-     links, so every one of the five outcomes is legible before any of them is designed. The
-     waiting view, the success view, the failure view, the stopped panel and polling each replace
-     one branch in a later PR. `data.attempt.status` is the screen rather than the column — the load
+<!-- Deliberately undesigned past the waiting view: a switch over `data.attempt.status` rendering
+     plain text and plain links for the other four outcomes, so they are legible before each is
+     designed in a later PR. `data.attempt.status` is the screen rather than the column — the load
      settles the cancel-versus-verdict ordering, so a cancel no worker has converged yet already
      arrives here as `canceled`. -->
 <svelte:head>
@@ -16,20 +17,8 @@ let { data }: PageProps = $props();
 
 <h1 class="text-2xl font-semibold tracking-tight">{data.report.name}</h1>
 
-{#if data.attempt.status === 'pending'}
-  <p class="text-muted-foreground">
-    Waiting to start. We checked your file
-    <time datetime={data.attempt.createdAt.toISOString()}
-      >{data.attempt.createdAt.toISOString()}</time
-    >.
-  </p>
-{:else if data.attempt.status === 'processing'}
-  <p class="text-muted-foreground">
-    Analyzing. Started
-    <time datetime={data.attempt.claimedAt.toISOString()}
-      >{data.attempt.claimedAt.toISOString()}</time
-    >.
-  </p>
+{#if isWaiting(data.attempt)}
+  <WaitingView attempt={data.attempt} now={data.now} />
 {:else if data.attempt.status === 'succeeded'}
   <p class="text-muted-foreground">
     Finished

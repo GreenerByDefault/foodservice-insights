@@ -31,8 +31,10 @@ notification email links to. Everything under it exists:
 - **The load, the discriminated union and the plain per-status page have landed**
   ([`+page.server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/+page.server.ts),
   exporting `_loadReport`, `Attempt`, `ReportPageData`, `ResultFiles`, `FileLink`, `ChartLink` and
-  `FailureCopy`). Two things it deliberately does not yet do, left to the PRs below: it does not
-  `select now()`, and it does not call `depends()`.
+  `FailureCopy`), and so has the waiting view — `ReportPageData.now` (`select now()`, alongside the
+  attempt row in the same query), `progress.ts`'s `describeProgress`/`formatElapsed`/`isWaiting`,
+  and `timeline.svelte` / `waiting-view.svelte`. One thing the load deliberately does not yet do,
+  left to the polling PR below: it does not call `depends()`.
 - **A `succeeded` analysis_attempt is now guaranteed a `pdf` and an `xlsx` result_file row** —
   `analysis_attempt_succeeded_has_pdf` / `_has_xlsx`, a deferred trigger on `analysis_attempt`
   added the PR before this one landed. `loadResultFiles` already relies on it via
@@ -224,10 +226,14 @@ when a stage overruns. § Performance says a run "usually takes about 5 minutes,
 | `queued` | "Waiting to start" | "We run a few reports at a time, so yours starts as soon as there is room — usually straight away." | 2 min | "It is busier than usual, so this is taking a while to start. Nothing has gone wrong, and there is nothing for you to do." |
 | `analyzing` | "Reading your purchases and building your charts" | "This usually takes about five minutes." | 15 min | "This is taking longer than usual. We are still working on it, and we will email you as soon as it is done." |
 
-Above the timeline: a headline naming the current stage, a spinner, and one standing line —
-**"You can close this page. We will email you when your report is ready."** That is true
-(§ User email), and it is the kindest sentence available on a screen someone might otherwise watch
-for a quarter of an hour.
+**Shipped without a separate headline above the timeline.** The current step's bold title and its
+own spinner icon (`motion-safe:animate-spin`, `aria-hidden`) already say what's happening, and a
+second copy of the same words above the list read as noise. `describeProgress` still returns
+`headline` on `Progress` — nothing on the waiting view reads it yet, but PR 4's live region will,
+since a region has to speak a stage change and there is otherwise no single string for it. Below
+the timeline, one standing line — **"You can close this page. We will email you when your report
+is ready."** That is true (§ User email), and it is the kindest sentence available on a screen
+someone might otherwise watch for a quarter of an hour.
 
 The thresholds are named constants in the page's own module, with comments citing
 `REQUIREMENTS.md` § Performance and [`config.ts`](apps/worker/src/config.ts). **Not imported from
@@ -437,26 +443,7 @@ Everything below is frontend only — cancel, retry and delete already work on t
 Context). The retry button lands in the same PR as the failure screen it belongs to, and cancel
 lands right after the waiting view rather than at the end of the sequence.
 
-## PR 1 — The waiting view
-
-**`+page.server.ts`** — extend `_loadReport`'s existing query to also `select now()`, and thread it
-into `ReportPageData` (it is not there yet — the landed load only selects the report, input file
-and latest attempt). `describeProgress` needs it, and it has to come from the database's clock, not
-the browser's — see the decision below.
-
-**`progress.ts`** — pure, node-tested: `describeProgress(attempt, now)`, the three stages, the
-thresholds with their citations, `formatElapsed(now, at)`, and `isWaiting(status)`.
-
-**`waiting-view.svelte`** and **`timeline.svelte`** — the headline, the spinner
-(`motion-safe:animate-spin`, `aria-hidden`), the "you can close this page" line, and an `<ol>` of
-steps with `aria-current="step"` on the current one, a `<time datetime>` on each completed one, and
-the warning rendered inline on the current step when present.
-
-**Tests** — `progress.test.ts` for every stage transition and both sides of each threshold;
-`timeline.svelte.test.ts` for the step states, the `aria-current`, the ISO `datetime`, and the
-warning appearing only on the current step.
-
-## PR 2 — Cancel, and the canceled view
+## PR 1 — Cancel, and the canceled view
 
 `requestCancellation` already exists, so this PR is entirely presentation and wiring: the cancel
 button on the waiting view, its confirming dialog, a feature client in `$lib/reports/` calling
@@ -469,14 +456,14 @@ do not report a cancel that did not happen.
 The dialog's copy is the load-bearing part, and both halves are easy to leave out: stopping is
 final, and the report stays in the list.
 
-Placed right after PR 1 because it is the same screen's button, not because anything later depends
-on it — `canceled-view.svelte` has no dependency on the success or failure views and could land in
+Placed first because it is the waiting view's own button, not because anything later depends on
+it — `canceled-view.svelte` has no dependency on the success or failure views and could land in
 either order relative to them.
 
 **Tests** — `canceled-view.svelte.test.ts` for the copy and the `<time>`; a feature-client test for
 the 409 case; component test for the dialog's confirm/cancel.
 
-## PR 3 — The success view
+## PR 2 — The success view
 
 **`result-view.svelte`** — "Finished 4 minutes ago", then the PDF and Excel buttons, the original
 file as a secondary link with its filename and `displaySize(byteSize)`, then the charts.
@@ -492,7 +479,7 @@ guarantees it, and `loadResultFiles` already asserts it via `requireConstraint` 
 fixture still uses); `result-view.svelte.test.ts` for the three hrefs, one figure per chart with
 the humanized caption, and no horizontal scroll at 375px.
 
-## PR 4 — The failure view, with retry
+## PR 3 — The failure view, with retry
 
 **`failure-view.svelte`** — `whatHappened` as the lead, `followUpText` under it, the contact
 `mailto:`, "this was attempt 3" only when `attemptNumber > 1`, and a real retry button —
@@ -508,7 +495,7 @@ attempt count appears only above 1, the retry button is present only when `follo
 `ANALYSIS_FAILURE_EXPLANATIONS` entry it wants without hand-writing the row. Plus the feature-client
 409 test.
 
-## PR 5 — Polling, and staying on screen when a poll fails
+## PR 4 — Polling, and staying on screen when a poll fails
 
 **Open with the spike**, as a Playwright test that aborts `**/*__data.json*` against the page as it
 already exists. What it reports decides whether the rest of this PR is `invalidate()` or a read
@@ -552,15 +539,12 @@ holds its own copy.
 - **A CSP will need `img-src` for the storage origin.**
 - **Result metadata** — processing time, model, tokens, cost — has a home on this page and no
   design yet.
-- **Making charts `<img>`s (PR 3) breaks `reports-succeeded.png`** (`e2e/reports.screenshot.ts`),
+- **Making charts `<img>`s (PR 2) breaks `reports-succeeded.png`** (`e2e/reports.screenshot.ts`),
   for two independent reasons: `redirectToSignedUrl` 404s a key with nothing behind it, so the
   fixture needs real bytes via `putObject`; and the signed URL points at `S3_ENDPOINT`
   (`127.0.0.1` in `.env.test`), which resolves to the screenshot browser's own container rather
   than the host. Fixing the second means signing against `host.docker.internal` or intercepting
   with `page.route()` — worth knowing before this PR is estimated.
-- **Relative timestamps will make the screenshot fixtures drift.** Once `describeProgress` (PR 1)
-  renders "3 minutes ago" instead of a raw ISO timestamp, `e2e/fixtures/reports.ts`'s fixed anchor
-  renders a number that changes over time. Fix: make the anchor `now()` at insert time.
 
 ## Verification
 
