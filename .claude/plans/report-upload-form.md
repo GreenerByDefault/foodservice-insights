@@ -602,6 +602,20 @@ and examples; an example is not double-quoted; a 20-problem rejection renders 20
 that text, so it is cheap if a user asks for it — but it is a second way to read the same thing, and
 nobody has asked.
 
+## Follow-ups this work identifies but does not do
+
+**Screenshot coverage.** Nothing here is captured yet — this route was still a stub when the
+screenshot fixtures landed. Once PR 2's form exists, the shots are: the empty form, the rate-limit
+warning, and the rejection view in both its shapes.
+
+- The rate-limit warning needs `HOURLY_REPORT_LIMIT` (5) reports inside the rolling hour, or
+  `WEEKLY_REPORT_LIMIT` (20) inside the week, in either the organization or the user scope — four
+  distinct sentences. `insertReport`'s `createdAt` is the only knob needed; the same backdating
+  that keeps `e2e/fixtures/reports.ts`'s fixtures *out* of the window puts these *in* it.
+- **The rejection view does not need a POST.** `inspectFile` runs the whole normalizer in the
+  browser, so `setInputFiles` reaches it with no request at all — the CSRF limitation that blocks
+  a screenshot spec from submitting the form does not block those shots.
+
 ## Verification
 
 The test stack must be running: `TEST_DB=1 scripts/supabase start`.

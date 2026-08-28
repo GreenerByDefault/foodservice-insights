@@ -6,11 +6,9 @@
  * `COMMIT`, not at `INSERT`. `withRollback` never reaches that failure because it never commits;
  * these fixtures do, so they don't get that pass.
  *
- * Timings are offsets from one `ANCHOR` rather than absolute dates, so that when the page starts
- * rendering relative durations instead of raw ISO timestamps, `ANCHOR` becomes `now()` at insert
- * time and nothing else about these fixtures has to change. `ANCHOR` is also fixed well outside
- * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
- * spends the placeholder organization's rate-limit budget.
+ * Timings are offsets from one `ANCHOR`, fixed well outside `HOURLY_REPORT_LIMIT`/
+ * `WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never spends the placeholder
+ * organization's rate-limit budget.
  */
 
 import type { Database, ReportId } from '@gbd/db';
@@ -123,7 +121,7 @@ async function buildFailedLaterAttempt(tx: Transaction<Database>): Promise<Repor
     createdAt: ANCHOR,
   });
   await insertInputFile(tx, { reportId: report.id });
-  // Attempts 1 and 2 must both be `failed` before attempt 3 may exist at all. */
+  // Attempts 1 and 2 must both be `failed` before attempt 3 may exist at all.
   await insertAnalysisAttempt(tx, {
     reportId: report.id,
     attemptNumber: 1,

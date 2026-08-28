@@ -552,6 +552,15 @@ holds its own copy.
 - **A CSP will need `img-src` for the storage origin.**
 - **Result metadata** — processing time, model, tokens, cost — has a home on this page and no
   design yet.
+- **Making charts `<img>`s (PR 3) breaks `reports-succeeded.png`** (`e2e/reports.screenshot.ts`),
+  for two independent reasons: `redirectToSignedUrl` 404s a key with nothing behind it, so the
+  fixture needs real bytes via `putObject`; and the signed URL points at `S3_ENDPOINT`
+  (`127.0.0.1` in `.env.test`), which resolves to the screenshot browser's own container rather
+  than the host. Fixing the second means signing against `host.docker.internal` or intercepting
+  with `page.route()` — worth knowing before this PR is estimated.
+- **Relative timestamps will make the screenshot fixtures drift.** Once `describeProgress` (PR 1)
+  renders "3 minutes ago" instead of a raw ISO timestamp, `e2e/fixtures/reports.ts`'s fixed anchor
+  renders a number that changes over time. Fix: make the anchor `now()` at insert time.
 
 ## Verification
 
