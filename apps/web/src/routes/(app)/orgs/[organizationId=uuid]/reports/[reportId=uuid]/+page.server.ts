@@ -125,9 +125,8 @@ export async function _loadReport(
       'analysisAttempt.finishedAt as finishedAt',
       'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
       'analysisAttempt.failureReason as failureReason',
-      // The database's clock, selected alongside the row rather than read separately, so the
-      // timeline's durations are `now - timestamp` against one consistent snapshot — see
-      // `ReportPageData.now`.
+      // Selected alongside the row rather than as a separate query, so it's one consistent
+      // snapshot — see `ReportPageData.now`.
       sql<Date>`now()`.as('now'),
     ])
     .where('report.id', '=', params.reportId)

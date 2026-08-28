@@ -34,9 +34,7 @@ function after(seconds: number): Date {
  * renders relative durations (`describeProgress`, `formatElapsed`). Anchoring those to the fixed,
  * far-past `ANCHOR` would render a duration that grows every time the suite runs, drifting a
  * committed screenshot's pixels — see `.claude/plans/report-page.md`'s "Relative timestamps will
- * make the screenshot fixtures drift" follow-up. The attempt's own timestamps drive that
- * rendering; `report.created_at` stays on `ANCHOR` below, since that's what the rate limit counts
- * against, and this must not spend the placeholder organization's budget.
+ * make the screenshot fixtures drift" follow-up.
  */
 function recentlyBefore(seconds: number): Date {
   return new Date(Date.now() - seconds * 1000);

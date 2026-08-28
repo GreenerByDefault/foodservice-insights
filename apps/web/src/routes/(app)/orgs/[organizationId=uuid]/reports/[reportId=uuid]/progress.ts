@@ -33,9 +33,7 @@ export type Step = {
   completedAt?: Date;
   current: boolean;
   /** Set only on the current step: what this stage means right now, shown whether or not it has
-   * overrun. The timeline's own icon and bold title already say *which* step is current, so this
-   * is the only place that copy needs to live — a separate headline above the timeline would just
-   * repeat it. */
+   * overrun. */
   description?: string;
   /** Set only on the current step, once it has run longer than `REQUIREMENTS.md` § Performance
    * leads a user to expect. */
