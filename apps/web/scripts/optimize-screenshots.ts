@@ -11,9 +11,15 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-const SCREENSHOTS_DIR = fileURLToPath(new URL('../e2e/__screenshots__/', import.meta.url));
+export const SCREENSHOTS_DIR = fileURLToPath(new URL('../e2e/__screenshots__/', import.meta.url));
 
 const run = promisify(execFile);
+
+/** True if a run added or changed a committed screenshot, per git's own view of the tree. */
+export async function wroteScreenshots(): Promise<boolean> {
+  const { stdout } = await run('git', ['status', '--porcelain', '--', SCREENSHOTS_DIR]);
+  return stdout.trim().length > 0;
+}
 
 export async function optimizeScreenshots(): Promise<void> {
   try {
