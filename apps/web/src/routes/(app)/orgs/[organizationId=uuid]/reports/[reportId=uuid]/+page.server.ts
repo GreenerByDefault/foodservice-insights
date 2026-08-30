@@ -14,17 +14,13 @@ import {
 import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
-import { reportDependencyKey } from '$lib/reports/report-dependency';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, depends }) => {
+export const load: PageServerLoad = async ({ params }) => {
   const organizationId = params.organizationId as OrganizationId;
   const reportId = params.reportId as ReportId;
-
-  // This allows client actions to use `invalidate()` to reload the page.
-  depends(reportDependencyKey(reportId));
 
   return await withDbErrorHandling(
     () =>
@@ -78,6 +74,7 @@ export type ReportPageData = {
   cancelButtonHref: string;
   retryButtonHref: string;
   newReportHref: string;
+  pollHref: string;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
   /** The database's clock, not the browser's — every duration on the page is `now - timestamp`
@@ -152,6 +149,7 @@ export async function _loadReport(
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
     retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
     newReportHref: `/orgs/${params.organizationId}/reports/new`,
+    pollHref: `/orgs/${params.organizationId}/reports/${row.reportId}/poll`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
       originalFilename: row.inputFileOriginalFilename,

@@ -10,8 +10,16 @@ organization the request acts on, and every query below it filters on that organ
 
 **Reads are `load` functions; `/api` holds only writes.** A page's data comes from its own
 `+page.server.ts` querying the database, never from `fetch`ing an endpoint of ours — so no `GET`
-belongs under `/api`. Waiting on a running report is `invalidate()` re-running the page's load. A
-layout does not guard a `+server.ts`, so each endpoint calls the guards itself.
+belongs under `/api`. A layout does not guard a `+server.ts`, so each endpoint calls the guards
+itself.
+
+**Pages that poll use both `load` and a periodic fetch.** Re-running `load` on a timer would mean calling
+`invalidate()`, and that request would fall back to a full-page navigation when it fails at the
+network level, which breaks the page outright if the connection is what's down. Instead, after its initial `load()`, a polling page
+then fetches with its own colocated `+server.ts`.
+The page calls that same endpoint directly for every refresh — the timed
+poll, and any write like cancel or retry — so a flaky connection can never undo what the user
+just did.
 
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.

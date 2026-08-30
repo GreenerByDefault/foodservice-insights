@@ -15,19 +15,19 @@ export const FAILURES_BEFORE_NOTICE = 2;
 
 /** How long to wait before polling again, or `undefined` to stop.
  *
- * - `settled`: a terminal report will not change again without a user action, so there is
+ * - `reportSettled`: a terminal report will not change again without a user action, so there is
  *   nothing left to poll for.
- * - `hidden`: a backgrounded tab stops polling too. The caller polls immediately instead on
- *   `visibilitychange` back to visible, rather than waiting out whatever delay was pending.
+ * - `documentHidden`: a backgrounded tab stops polling too. The caller polls immediately instead
+ *   on `visibilitychange` back to visible, rather than waiting out whatever delay was pending.
  * - `consecutiveFailures`: each one doubles the wait — 10s, 20s, 40s, capped at 60s — so a real
  *   outage doesn't keep hammering the server every ten seconds.
  */
 export function nextPollDelayMs(state: {
-  settled: boolean;
-  hidden: boolean;
+  reportSettled: boolean;
+  documentHidden: boolean;
   consecutiveFailures: number;
 }): number | undefined {
-  if (state.settled || state.hidden) return undefined;
+  if (state.reportSettled || state.documentHidden) return undefined;
   if (state.consecutiveFailures === 0) return BASE_POLL_INTERVAL_MS;
   return Math.min(BASE_POLL_INTERVAL_MS * 2 ** state.consecutiveFailures, BACKOFF_CAP_MS);
 }

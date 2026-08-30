@@ -2,6 +2,8 @@ import { MAX_ANALYSIS_ATTEMPTS, newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
+import { advanceThroughPollFailures, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
+import { ensureHydrated } from '../lib/hydration.ts';
 import { expectScreenshot } from '../lib/screenshots.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {
@@ -87,6 +89,26 @@ test('a report that was canceled', async ({ page, reports }) => {
 
   await expect(page.getByText('You stopped this report')).toBeVisible();
   await expectScreenshot(page, 'reports-canceled.png');
+});
+
+test('a report whose poll cannot reach the server', async ({ page, reports }) => {
+  // Installed before navigation so it is in place before the page's own timer is armed on mount.
+  await page.clock.install();
+
+  const reportId = await reports.create('pending');
+  await page.goto(reportUrl(reportId));
+  await ensureHydrated(page);
+
+  await page.route('**/poll', (route) => route.abort());
+
+  // Two consecutive failures: the base interval, then double it — see `nextPollDelayMs`.
+  await advanceThroughPollFailures(page, '/poll', [
+    REPORT_POLL_INTERVAL_MS,
+    REPORT_POLL_INTERVAL_MS * 2,
+  ]);
+
+  await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
+  await expectScreenshot(page, 'reports-reconnecting.png');
 });
 
 test('a report that does not exist', async ({ page }) => {

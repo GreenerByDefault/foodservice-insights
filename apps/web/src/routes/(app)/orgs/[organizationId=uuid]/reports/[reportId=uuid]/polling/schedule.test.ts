@@ -1,20 +1,20 @@
 import { describe, expect, test } from 'vitest';
 import { BASE_POLL_INTERVAL_MS, nextPollDelayMs } from './schedule.ts';
 
-const NOT_SETTLED = { settled: false, hidden: false, consecutiveFailures: 0 };
+const NOT_SETTLED = { reportSettled: false, documentHidden: false, consecutiveFailures: 0 };
 
 describe('nextPollDelayMs', () => {
   test('stops when the report has settled, regardless of visibility or failures', () => {
-    expect(nextPollDelayMs({ ...NOT_SETTLED, settled: true })).toBeUndefined();
+    expect(nextPollDelayMs({ ...NOT_SETTLED, reportSettled: true })).toBeUndefined();
     expect(
-      nextPollDelayMs({ settled: true, hidden: false, consecutiveFailures: 3 }),
+      nextPollDelayMs({ reportSettled: true, documentHidden: false, consecutiveFailures: 3 }),
     ).toBeUndefined();
   });
 
   test('stops while the tab is hidden, even mid-backoff', () => {
-    expect(nextPollDelayMs({ ...NOT_SETTLED, hidden: true })).toBeUndefined();
+    expect(nextPollDelayMs({ ...NOT_SETTLED, documentHidden: true })).toBeUndefined();
     expect(
-      nextPollDelayMs({ settled: false, hidden: true, consecutiveFailures: 2 }),
+      nextPollDelayMs({ reportSettled: false, documentHidden: true, consecutiveFailures: 2 }),
     ).toBeUndefined();
   });
 
