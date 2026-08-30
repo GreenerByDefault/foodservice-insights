@@ -13,21 +13,13 @@ organization the request acts on, and every query below it filters on that organ
 belongs under `/api`. A layout does not guard a `+server.ts`, so each endpoint calls the guards
 itself.
 
-**The one exception is a page that has to survive a broken connection.**
-`invalidate()` looks like the obvious way to re-run a page's `load` — until its own data request
-fails at the network level: SvelteKit falls back to a full-page navigation, which is a reload we
-don't want, and outright breaks the page if the connection is the thing that's down. A plain
-`fetch`, by contrast, genuinely rejects. So a route that must survive that has a `+server.ts`
-colocated with its `+page.server.ts` (not under `/api` — it isn't a write, it's the one kind of
-read `load` can't do), and the page fetches it directly. See `reports/[reportId]/poll/+server.ts`
-and `reports/[reportId]/polling/schedule.ts`; `reports/reconnect.e2e.ts` (in `e2e/`) is what proves
-the fallback works.
-
-**Such a page uses that endpoint for every refresh, not just the timed one.** A write that changes
-what the page shows — cancel, retry — asks the page to fetch again rather than calling
-`invalidate()`. Mixing the two would leave the destructive path in exactly the case the endpoint
-exists for (a successful `POST` over a flaky connection, followed by an `invalidate()` that takes
-the page down), and would give the page's state two writers instead of one.
+**Pages that poll use both `load` and a periodic fetch.** Re-running `load` on a timer would mean calling
+`invalidate()`, and that request would fall back to a full-page navigation when it fails at the
+network level, which breaks the page outright if the connection is what's down. Instead, after its initial `load()`, a polling page
+then fetches with its own colocated `+server.ts`.
+The page calls that same endpoint directly for every refresh — the timed
+poll, and any write like cancel or retry — so a flaky connection can never undo what the user
+just did.
 
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
