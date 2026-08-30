@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { ReportPageData } from '../+page.server.ts';
 import { retryableFailure } from '../testing/fixtures.ts';
+import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
 import ReportView from './view.svelte';
 
 const REPORT_ID = 'report-1' as ReportId;
@@ -66,6 +67,7 @@ async function triggerImmediatePoll(): Promise<void> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   Object.defineProperty(document, 'hidden', { value: false, configurable: true });
 });
 
@@ -166,6 +168,31 @@ describe('ReportView', () => {
     await expect
       .element(screen.getByText('Having trouble reaching the server', { exact: false }))
       .toBeVisible();
+  });
+
+  test('navigating to a running report resumes polling on its own schedule, even though the previous report was settled', async () => {
+    // The `settled`/`hidden` effect stops the timer once a report is settled — and, unlike a
+    // retry, a navigation between reports never calls `poll` itself to re-arm it. This is the one
+    // path that has to notice the swap on its own, so it needs the real schedule (fake timers)
+    // rather than the `visibilitychange` shortcut the other tests use.
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(succeededWireBody()));
+    vi.stubGlobal('fetch', fetchMock);
+    const screen = await render(ReportView, {
+      data: {
+        ...BASE,
+        attempt: { status: 'canceled', stoppedAt: new Date('2026-01-15T10:02:00Z') },
+      },
+    });
+    await expect
+      .element(screen.getByText('You stopped this report', { exact: false }))
+      .toBeVisible();
+
+    await screen.rerender({ data: pendingData() });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(BASE_POLL_INTERVAL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('a poll success updates the screen in place, and clears a prior reconnecting notice', async () => {
