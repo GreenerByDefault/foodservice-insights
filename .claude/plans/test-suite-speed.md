@@ -57,45 +57,62 @@ The tempting change is to tell agents to right-size test validation to the chang
 - "Right-size it" reads as a licence to skip. Once it is in AGENTS.md, "I only changed a
   comment" becomes defensible, and the agentic loop that makes agents useful here is lost.
 
-What replaces it is a loop-versus-gate distinction, which needs no judgement call, plus running
-the gate in the background. See PR 1.
+What replaces that is a loop-versus-gate distinction, which needs no judgement call, plus
+running the gate in the background — both landed in
+[`.claude/rules/typescript.md`](../rules/typescript.md) rather than AGENTS.md, since the
+loop-vs-gate rule is specific to the TypeScript stack's tooling (`pnpm`, vitest, Playwright) and
+AGENTS.md's § Verifying a change is shared with Python, which has no equivalent scoped-file
+invocation. `pnpm lint && pnpm check && pnpm test` stays the gate before claiming a change works,
+verbatim, unchanged by any of this.
 
 Test *flakes* were PR 5 of this plan and now live in
 [`test-suite-flakes.md`](test-suite-flakes.md). They are the larger agent-wall-clock cost — with
 `retries: 0`, one flake costs a full re-run, more than every caching win here combined — but they
 are a correctness problem, not a speed one, and nothing in this plan depends on them.
 
-## PR 1 — AGENTS.md: separate the iteration loop from the gate
+Two follow-ups from the original caching work are worth doing and are scoped below as PR 1 and
+PR 2. The others considered — a Stop hook running the full suite, and pruning Turbo's local
+cache — were dropped: the Stop hook is a real option but a bigger behavioral change than this
+plan's scope, and the cache is a disk question, not a speed one.
 
-Keep `pnpm lint && pnpm check && pnpm test` as the definition of done, verbatim. Add two things
-to § Verifying a change:
+## PR 1 — one Playwright invocation for local runs
 
-- **During iteration**, scope to the package under change: `pnpm --filter @gbd/<pkg> test:unit`.
-  The full command stays the gate before claiming a change works. This is a loop-versus-gate
-  rule, not a judgement about what a change can affect.
-- **Run the gate in the background.** Claude Code's Bash tool takes `run_in_background: true` and
-  notifies on completion, so the suite runs while the agent re-reads its own diff, runs
-  `/prune-comments`, and drafts the PR body. This recovers most of the wall clock at no cost to
-  rigor and is currently unused.
+`test:e2e` and `test:screenshots` each boot the app separately — truncate + migrate + seed +
+adapter-node, twice per `pnpm test`. They're already two projects (`e2e`, `screenshots`) in one
+`apps/web/playwright.config.ts`, so `playwright test --project=e2e --project=screenshots` boots
+the app once and runs both.
 
-Leave "Report what you actually ran" exactly as it is — it is what keeps the scoped loop honest.
+This must stay a local convenience script, not replace the two `turbo.json` tasks: CI
+deliberately splits them across runners — `ts-e2e` on `ubuntu-latest` (x86, matching
+production), `ts-screenshots` on `ubuntu-24.04-arm` (arm64, so the pinned screenshot browser
+container runs native rather than emulated; see the comment above `ts-screenshots` in
+`.github/workflows/ci.yml`). Collapsing them there would put screenshots back under emulation or
+e2e on the wrong architecture.
 
-## Follow-ups this work identifies but does not do
+- Add a script (e.g. `apps/web/package.json`'s `test:local` or similar — name TBD at
+  implementation) that runs `playwright test --project=e2e --project=screenshots` directly,
+  bypassing Turbo's two-task split.
+- It needs both tasks' env: `TEST_DB=1`, and the `browser-container` project's setup that
+  `screenshots` depends on.
+- Leave `turbo.json`'s `test:e2e` and `test:screenshots` and the root `test` script untouched —
+  this is an addition, not a replacement, since CI and `pnpm test` still need the two-task split.
 
-- **One Playwright invocation for both projects.** `test:e2e` and `test:screenshots` boot the app
-  separately; they are already two projects in one config, so `playwright test --project=e2e
-  --project=screenshots` would boot once. This must stay a local convenience script and not
-  replace the two tasks, because CI deliberately splits them across x86 and arm64 runners (see
-  the comment on `ts-screenshots` in `.github/workflows/ci.yml`).
-- **A Stop hook running the full suite**, blocking the turn from ending on failure. Takes
-  verification off the per-edit critical path entirely and makes it unskippable — strictly
-  stronger than the prose in PR 1. Downside is that it fires on every turn end, including turns
-  where the user only asked a question. Worth revisiting now that caching makes the suite cheap.
-- **Turbo's local cache is unpruned** — 450MB across 10,365 entries in `.turbo/cache`. A disk
-  question, not a speed one, but nothing currently trims it.
-- **The `client` project's ~22s of Chromium and Vite startup** for 43 component tests. No fix
-  that keeps the real-browser property the tier deliberately buys, so this is the floor unless
-  the tier itself is revisited.
+## PR 2 — investigate the `client` vitest project's startup cost
+
+The `client` project (`apps/web/vite.config.ts`, `test.projects[].test.name === 'client'`) is
+~34s wall standalone against 12.4s of reported test duration for 43 component tests; the gap is
+Chromium + Vite startup via `@vitest/browser-playwright`. Filed as an open question rather than a
+committed change, because the fix (if any) isn't yet known — this PR is to spend time finding
+out, not to implement a specific idea:
+
+- Confirm where the ~22s actually goes — Chromium launch, Vite dev-server cold start, or
+  per-file overhead multiplied by however vitest shards `client` — before assuming which one to
+  attack.
+- A fix must keep the real-browser property the tier deliberately buys (that's why `client`
+  exists instead of jsdom); anything that swaps in a fake DOM to save time is out of scope and
+  was already rejected implicitly by this tier's existence.
+- If nothing pans out, close this out as "the floor for this tier" rather than leaving it open
+  indefinitely.
 
 ## Verification
 
@@ -104,3 +121,6 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 1. From the repo root: `pnpm lint && pnpm check && pnpm test`.
 2. Re-time each stage and confirm the numbers moved as the PR claimed — the table in Context is
    the baseline to beat, on the same machine.
+3. For PR 1: time the new local script against the current `pnpm test:e2e && pnpm test:screenshots`
+   and confirm one app boot instead of two; run `ts-e2e` and `ts-screenshots` in CI unchanged and
+   confirm both still pass on their respective runners.
