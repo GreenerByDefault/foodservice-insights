@@ -32,7 +32,6 @@ describe('ResultView', () => {
     await expect
       .element(screen.getByRole('link', { name: INPUT_FILE.originalFilename }))
       .toHaveAttribute('href', INPUT_FILE.href);
-    await expect.element(screen.getByText('(12 KB)')).toBeVisible();
     await expect.element(screen.getByText('Uploaded file:')).toBeVisible();
   });
 });

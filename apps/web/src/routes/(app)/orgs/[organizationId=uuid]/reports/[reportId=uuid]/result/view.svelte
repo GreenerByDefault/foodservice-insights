@@ -1,11 +1,9 @@
 <script lang="ts">
 import CircleCheckBigIcon from '@lucide/svelte/icons/circle-check-big';
-import FileIcon from '@lucide/svelte/icons/file';
 import FileSpreadsheetIcon from '@lucide/svelte/icons/file-spreadsheet';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import { formatElapsed, formatTimestamp } from '@gbd/core';
 import { Button } from '$lib/components/ui/button/index.js';
-import { displaySize } from '$lib/components/ui/file-drop-zone/index.js';
 import type { ResultFiles } from '../+page.server.ts';
 
 interface Props {
@@ -40,12 +38,11 @@ let { finishedAt, now, files, inputFile }: Props = $props();
     </Button>
   </div>
 
-  <div class="flex items-center gap-2 text-sm text-muted-foreground">
-    <FileIcon class="size-4 shrink-0" aria-hidden="true" />
+  <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
     <span>Uploaded file:</span>
-    <a class="underline hover:no-underline" href={inputFile.href}>
+    <a class="inline-flex items-center gap-1.5 underline hover:no-underline" href={inputFile.href}>
+      <FileSpreadsheetIcon class="size-4 shrink-0" aria-hidden="true" />
       {inputFile.originalFilename}
     </a>
-    <span>({displaySize(inputFile.byteSize)})</span>
   </div>
 </div>
