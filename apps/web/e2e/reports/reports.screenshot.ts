@@ -87,7 +87,7 @@ test('a report that was canceled', async ({ page, reports }) => {
   const reportId = await reports.create('canceled');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByText('You stopped this report')).toBeVisible();
+  await expect(page.getByText('Someone stopped this report')).toBeVisible();
   await expectScreenshot(page, 'reports-canceled.png');
 });
 

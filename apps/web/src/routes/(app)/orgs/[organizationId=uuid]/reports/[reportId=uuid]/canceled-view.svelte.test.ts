@@ -19,7 +19,7 @@ describe('CanceledView', () => {
     });
 
     await expect
-      .element(screen.getByText('You stopped this report', { exact: false }))
+      .element(screen.getByText('Someone stopped this report', { exact: false }))
       .toBeVisible();
     await expect
       .element(screen.getByRole('link', { name: 'Upload a file' }))

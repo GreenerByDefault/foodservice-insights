@@ -18,7 +18,7 @@ let { stoppedAt, now, newReportHref, deleteButtonHref, organizationHref }: Props
   <div class="flex gap-3">
     <CircleStopIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     <p class="text-muted-foreground">
-      You stopped this report
+      Someone stopped this report
       <time datetime={stoppedAt.toISOString()} title={formatTimestamp(stoppedAt)}
         >{formatElapsed(now, stoppedAt)}</time
       >.
