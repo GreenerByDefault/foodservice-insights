@@ -1,20 +1,28 @@
 ---
 description: Fold a landed precursor PR back into its plan file, so the plan reads fresh for what's left
 argument-hint: "<plan-file-path> [merged-commit-sha]"
-allowed-tools: Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Bash(git rm *), Read, Grep, Glob, Edit, Write
+# merged-commit-sha is only for the rare case of folding in a precursor PR that's already
+# squash-merged to origin/main. Normally omit it and this runs against the current branch
+# (committed and uncommitted changes alike) relative to origin/main.
+allowed-tools: Bash(git fetch *), Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Bash(git rm *), Read, Grep, Glob, Edit, Write
 ---
 
 `$ARGUMENTS` is `<plan-file-path> [merged-commit-sha]`.
 
 ## Scope the diff
 
-- `merged-commit-sha` given → the precursor already squash-merged to `main`. Diff is
+- `merged-commit-sha` given → that precursor already squash-merged to `origin/main`. Diff is
   `git show <sha>` (plus `git show --stat <sha>` for the file list).
-- Omitted → still on the unmerged branch, queued to merge. Diff is
-  `git diff $(git merge-base main HEAD)...HEAD`.
+- Omitted (the common case) → the current branch relative to `origin/main`, whatever state it's
+  in: landed commits, staged changes, unstaged changes, or any mix. Run `git fetch origin main`
+  first — the local `main` is often behind, and diffing against a stale merge-base can make an
+  already-landed change look unlanded. Diff is `git diff $(git merge-base origin/main HEAD)` (no
+  `...HEAD` — that would drop anything not yet committed). Run `git status` too, so you know
+  whether you're looking at a clean branch, a dirty one, or a mix, and say so in the report.
 
-Read the full diff, not just the stat — the follow-up commits are where a rename, a signature
-change, or a reversed decision actually happened, and the stat won't show you that.
+Read the full diff, not just the stat — a follow-up commit or an uncommitted edit is where a
+rename, a signature change, or a reversed decision actually happened, and the stat won't show
+you that.
 
 ## Find the seam
 
