@@ -5,6 +5,7 @@ import {
   type AnalysisFailureReason,
   type DatabaseExecutor,
   type InputFileId,
+  MAX_ANALYSIS_ATTEMPTS,
   type OrganizationId,
   type ReportId,
   type ResultFileId,
@@ -50,6 +51,7 @@ export type FailureCopy = {
   whatHappened: string;
   followUpText: string;
   canRetry: boolean;
+  attemptsExhausted: boolean;
   contactMailto: string;
 };
 
@@ -74,6 +76,7 @@ export type Attempt =
 export type ReportPageData = {
   report: { id: ReportId; name: string };
   cancelButtonHref: string;
+  retryButtonHref: string;
   newReportHref: string;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
@@ -147,6 +150,7 @@ export async function _loadReport(
   return {
     report: { id: row.reportId, name: row.reportName },
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
+    retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
     newReportHref: `/orgs/${params.organizationId}/reports/new`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
@@ -214,6 +218,7 @@ async function toAttempt(
         attemptNumber: row.attemptNumber,
         failure: toFailureCopy(
           requireConstraint(row.failureReason, 'analysis_attempt_failure_reason_iff_failed'),
+          row.attemptNumber,
           supportEmail,
         ),
       };
@@ -270,12 +275,21 @@ function resultFileHref(id: ResultFileId): string {
   return `/file/result/${id}`;
 }
 
-function toFailureCopy(reason: AnalysisFailureReason, supportEmail: string): FailureCopy {
+function toFailureCopy(
+  reason: AnalysisFailureReason,
+  attemptNumber: number,
+  supportEmail: string,
+): FailureCopy {
   const explanation = ANALYSIS_FAILURE_EXPLANATIONS[reason];
+  const cappedOutOfRetry =
+    explanation.followUp.action === 'retry' && attemptNumber >= MAX_ANALYSIS_ATTEMPTS;
   return {
     whatHappened: explanation.whatHappened,
-    followUpText: explanation.followUp.text,
-    canRetry: explanation.followUp.action === 'retry',
+    followUpText: cappedOutOfRetry
+      ? `You've used all ${MAX_ANALYSIS_ATTEMPTS} attempts for this report. Contact us and we can help figure out what to change.`
+      : explanation.followUp.text,
+    canRetry: explanation.followUp.action === 'retry' && !cappedOutOfRetry,
+    attemptsExhausted: cappedOutOfRetry,
     contactMailto: `mailto:${supportEmail}`,
   };
 }

@@ -1,5 +1,6 @@
 import {
   type DatabaseExecutor,
+  MAX_ANALYSIS_ATTEMPTS,
   type OrganizationId,
   type ReportId,
   requireConstraint,
@@ -213,6 +214,56 @@ describe('each status narrows to the right variant', () => {
           followUpText:
             'This was not a problem with your file. You can run it again without uploading it a second time, or contact us if it keeps happening.',
           canRetry: true,
+          attemptsExhausted: false,
+          contactMailto: `mailto:${SUPPORT_EMAIL}`,
+        },
+      });
+    });
+  });
+
+  test('failed at the attempt cap: retry copy is suppressed even for a reason whose own follow-up is retry', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id);
+      // Every earlier attempt must itself be `failed` — see
+      // analysis_attempt_new_attempt_only_after_failure — so this is the only shape a
+      // report at the cap can be in.
+      for (let attemptNumber = 1; attemptNumber < MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
+        await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          attemptNumber,
+          status: 'failed',
+        });
+      }
+      const lastAttempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: MAX_ANALYSIS_ATTEMPTS,
+        status: 'failed',
+        // child_crashed's own follow-up is `retry` — the cap has to override it regardless of reason.
+        failureReason: 'child_crashed',
+      });
+      // Read back rather than asserting a literal: every attempt here defaults to NOW (the
+      // transaction's own now()), so this is whatever that resolved to.
+      const finishedAt = requireConstraint(
+        lastAttempt.finishedAt,
+        'analysis_attempt_finished_at_iff_terminal',
+      );
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.attempt).toEqual({
+        status: 'failed',
+        finishedAt,
+        attemptNumber: MAX_ANALYSIS_ATTEMPTS,
+        failure: {
+          whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+          followUpText: `You've used all ${MAX_ANALYSIS_ATTEMPTS} attempts for this report. Contact us and we can help figure out what to change.`,
+          canRetry: false,
+          attemptsExhausted: true,
           contactMailto: `mailto:${SUPPORT_EMAIL}`,
         },
       });

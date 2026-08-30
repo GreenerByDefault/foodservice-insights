@@ -14,8 +14,8 @@
  */
 
 import { msAgo } from '@gbd/core';
-import type { Database, ReportId } from '@gbd/db';
-import { withTransaction } from '@gbd/db';
+import type { AnalysisFailureReason, Database, ReportId } from '@gbd/db';
+import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import {
   insertAnalysisAttempt,
@@ -39,7 +39,8 @@ export type ReportState =
   | 'processing-delayed'
   | 'succeeded'
   | 'failed'
-  | 'failed-later-attempt'
+  | 'failed-retried'
+  | 'failed-at-retry-cap'
   | 'canceled';
 
 /** Snake_case, matching `CHART_KEY_PATTERN` (`apps/worker/src/contract/layout.ts`). */
@@ -54,23 +55,33 @@ const CHART_KEYS = [
   'waste_reduction',
 ];
 
+/** Every fixture report is created the same way: one report, one input file, backdated to
+ * `ANCHOR` (see the file header). */
+async function insertReportWithInputFile(
+  tx: Transaction<Database>,
+  name: string,
+): Promise<ReportId> {
+  const report = await insertReport(tx, {
+    organizationId: PLACEHOLDER_ORGANIZATION_ID,
+    name,
+    createdAt: ANCHOR,
+  });
+  await insertInputFile(tx, { reportId: report.id });
+  return report.id;
+}
+
 function buildPending(
   name: string,
   queuedForMs: number,
 ): (tx: Transaction<Database>) => Promise<ReportId> {
   return async (tx) => {
-    const report = await insertReport(tx, {
-      organizationId: PLACEHOLDER_ORGANIZATION_ID,
-      name,
-      createdAt: ANCHOR,
-    });
-    await insertInputFile(tx, { reportId: report.id });
+    const reportId = await insertReportWithInputFile(tx, name);
     await insertAnalysisAttempt(tx, {
-      reportId: report.id,
+      reportId,
       status: 'pending',
       createdAt: msAgo(queuedForMs),
     });
-    return report.id;
+    return reportId;
   };
 }
 
@@ -80,31 +91,21 @@ function buildProcessing(
   analyzingForMs: number,
 ): (tx: Transaction<Database>) => Promise<ReportId> {
   return async (tx) => {
-    const report = await insertReport(tx, {
-      organizationId: PLACEHOLDER_ORGANIZATION_ID,
-      name,
-      createdAt: ANCHOR,
-    });
-    await insertInputFile(tx, { reportId: report.id });
+    const reportId = await insertReportWithInputFile(tx, name);
     await insertAnalysisAttempt(tx, {
-      reportId: report.id,
+      reportId,
       status: 'processing',
       createdAt: msAgo(queuedForMs + analyzingForMs),
       claimedAt: msAgo(analyzingForMs),
     });
-    return report.id;
+    return reportId;
   };
 }
 
 async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
-    name: 'Lakeside Grill — Q1 Procurement',
-    createdAt: ANCHOR,
-  });
-  await insertInputFile(tx, { reportId: report.id });
+  const reportId = await insertReportWithInputFile(tx, 'Lakeside Grill — Q1 Procurement');
   const attempt = await insertAnalysisAttempt(tx, {
-    reportId: report.id,
+    reportId,
     status: 'succeeded',
     createdAt: ANCHOR,
     claimedAt: after(30),
@@ -115,73 +116,73 @@ async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
   for (const chartKey of CHART_KEYS) {
     await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'chart', chartKey });
   }
-  return report.id;
+  return reportId;
+}
+
+/** `totalAttempts` failed attempts an hour apart, the last carrying `failureReason` — the
+ * earlier ones don't need one, since only the latest attempt's reason drives the page's copy.
+ */
+async function insertFailedAttempts(
+  tx: Transaction<Database>,
+  reportId: ReportId,
+  totalAttempts: number,
+  failureReason: AnalysisFailureReason,
+): Promise<void> {
+  // Every earlier attempt must itself be `failed` before the next may exist at all.
+  for (let attemptNumber = 1; attemptNumber < totalAttempts; attemptNumber++) {
+    await insertAnalysisAttempt(tx, {
+      reportId,
+      attemptNumber,
+      status: 'failed',
+      createdAt: after(3_600 * attemptNumber),
+      finishedAt: after(3_600 * attemptNumber + 90),
+    });
+  }
+  await insertAnalysisAttempt(tx, {
+    reportId,
+    attemptNumber: totalAttempts,
+    status: 'failed',
+    createdAt: after(3_600 * totalAttempts),
+    finishedAt: after(3_600 * totalAttempts + 90),
+    failureReason,
+  });
 }
 
 async function buildFailed(tx: Transaction<Database>): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
-    name: 'Uptown Deli — January Dairy',
-    createdAt: ANCHOR,
-  });
-  await insertInputFile(tx, { reportId: report.id });
+  const reportId = await insertReportWithInputFile(tx, 'Uptown Deli — January Dairy');
   await insertAnalysisAttempt(tx, {
-    reportId: report.id,
+    reportId,
     status: 'failed',
     createdAt: ANCHOR,
     finishedAt: after(90),
     failureReason: 'child_crashed',
   });
-  return report.id;
+  return reportId;
 }
 
-async function buildFailedLaterAttempt(tx: Transaction<Database>): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
-    name: 'Sunset Cafe — April Beverages',
-    createdAt: ANCHOR,
-  });
-  await insertInputFile(tx, { reportId: report.id });
-  // Attempts 1 and 2 must both be `failed` before attempt 3 may exist at all.
-  await insertAnalysisAttempt(tx, {
-    reportId: report.id,
-    attemptNumber: 1,
-    status: 'failed',
-    createdAt: ANCHOR,
-    finishedAt: after(90),
-  });
-  await insertAnalysisAttempt(tx, {
-    reportId: report.id,
-    attemptNumber: 2,
-    status: 'failed',
-    createdAt: after(3_600),
-    finishedAt: after(3_690),
-  });
-  await insertAnalysisAttempt(tx, {
-    reportId: report.id,
-    attemptNumber: 3,
-    status: 'failed',
-    createdAt: after(7_200),
-    finishedAt: after(7_290),
-    failureReason: 'unusable_data',
-  });
-  return report.id;
+/** A second attempt has already failed, but there's still room to retry again. */
+async function buildFailedRetried(tx: Transaction<Database>): Promise<ReportId> {
+  const reportId = await insertReportWithInputFile(tx, 'Bayview Tavern — March Seafood');
+  await insertFailedAttempts(tx, reportId, 2, 'child_crashed');
+  return reportId;
+}
+
+/** At `MAX_ANALYSIS_ATTEMPTS`, with a reason whose own follow-up would otherwise say "retry". */
+async function buildFailedAtRetryCap(tx: Transaction<Database>): Promise<ReportId> {
+  const reportId = await insertReportWithInputFile(tx, 'Sunset Cafe — April Beverages');
+  await insertFailedAttempts(tx, reportId, MAX_ANALYSIS_ATTEMPTS, 'child_crashed');
+  return reportId;
 }
 
 async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
-    name: 'Downtown Catering — May Seafood',
-    createdAt: ANCHOR,
-  });
-  await insertInputFile(tx, { reportId: report.id });
+  const reportId = await insertReportWithInputFile(tx, 'Downtown Catering — May Seafood');
   await insertAnalysisAttempt(tx, {
-    reportId: report.id,
+    reportId,
     status: 'canceled',
     createdAt: ANCHOR,
     cancelRequestedAt: msAgo(50_000),
   });
-  return report.id;
+  return reportId;
 }
 
 const BUILDERS: Record<ReportState, (tx: Transaction<Database>) => Promise<ReportId>> = {
@@ -198,7 +199,8 @@ const BUILDERS: Record<ReportState, (tx: Transaction<Database>) => Promise<Repor
   ),
   succeeded: buildSucceeded,
   failed: buildFailed,
-  'failed-later-attempt': buildFailedLaterAttempt,
+  'failed-retried': buildFailedRetried,
+  'failed-at-retry-cap': buildFailedAtRetryCap,
   canceled: buildCanceled,
 };
 
