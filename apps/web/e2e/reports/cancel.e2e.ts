@@ -24,6 +24,6 @@ test('canceling a report from the waiting screen shows the canceled screen, with
   await page.getByRole('button', { name: 'Cancel report' }).click();
   await page.getByRole('button', { name: 'Yes, cancel report' }).click();
 
-  await expect(page.getByText('You stopped this report')).toBeVisible();
+  await expect(page.getByText('Someone stopped this report')).toBeVisible();
   expect(loads.count).toBe(0);
 });

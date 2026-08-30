@@ -154,7 +154,7 @@ describe('ReportView', () => {
       const screen = await render(ReportView, { data });
 
       await expect
-        .element(screen.getByText('You stopped this report', { exact: false }))
+        .element(screen.getByText('Someone stopped this report', { exact: false }))
         .toBeVisible();
       await expect.poll(() => liveRegionText(screen)).toBe('This report was stopped');
     });
@@ -194,7 +194,7 @@ describe('ReportView', () => {
         },
       });
       await expect
-        .element(screen.getByText('You stopped this report', { exact: false }))
+        .element(screen.getByText('Someone stopped this report', { exact: false }))
         .toBeVisible();
 
       await screen.rerender({ data: pendingData() });
