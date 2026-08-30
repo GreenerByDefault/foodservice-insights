@@ -2,9 +2,8 @@ import { MAX_ANALYSIS_ATTEMPTS, newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advanceThroughPollFailures } from '../lib/fake-poll.ts';
+import { advanceThroughPollFailures, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
-import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 import { expectScreenshot } from '../lib/screenshots.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {
@@ -104,8 +103,8 @@ test('a report whose poll cannot reach the server', async ({ page, reports }) =>
 
   // Two consecutive failures: the base interval, then double it — see `nextPollDelayMs`.
   await advanceThroughPollFailures(page, '/poll', [
-    BASE_POLL_INTERVAL_MS,
-    BASE_POLL_INTERVAL_MS * 2,
+    REPORT_POLL_INTERVAL_MS,
+    REPORT_POLL_INTERVAL_MS * 2,
   ]);
 
   await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();

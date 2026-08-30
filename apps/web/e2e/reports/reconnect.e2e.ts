@@ -10,10 +10,9 @@
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advanceThroughPollFailures } from '../lib/fake-poll.ts';
+import { advanceThroughPollFailures, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 
 test('an unreachable poll leaves the timeline up and shows a reconnecting notice, never a reload', async ({
   page,
@@ -31,8 +30,8 @@ test('an unreachable poll leaves the timeline up and shows a reconnecting notice
 
   // Two consecutive failures: the base interval, then double it — see `nextPollDelayMs`.
   await advanceThroughPollFailures(page, '/poll', [
-    BASE_POLL_INTERVAL_MS,
-    BASE_POLL_INTERVAL_MS * 2,
+    REPORT_POLL_INTERVAL_MS,
+    REPORT_POLL_INTERVAL_MS * 2,
   ]);
 
   await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();

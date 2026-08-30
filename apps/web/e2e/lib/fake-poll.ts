@@ -10,6 +10,8 @@
 
 import { expect, type Page } from '@playwright/test';
 
+export { BASE_POLL_INTERVAL_MS as REPORT_POLL_INTERVAL_MS } from '../../src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/polling/schedule.ts';
+
 /** Fires the page's next scheduled poll.
  *
  * The real `fetch` that timer kicks off still needs real time to settle, which the assertion made
@@ -29,7 +31,7 @@ export async function advancePoll(page: Page, delayMs: number): Promise<void> {
  * reschedule and land the second one before the first failure has been recorded.
  *
  * `urlPattern` matches the poll request's URL with a plain substring check. `delaysMs` is every
- * step of the backoff schedule, in order — e.g. `[BASE_POLL_INTERVAL_MS, BASE_POLL_INTERVAL_MS *
+ * step of the backoff schedule, in order — e.g. `[REPORT_POLL_INTERVAL_MS, REPORT_POLL_INTERVAL_MS *
  * 2]` for two consecutive failures.
  */
 export async function advanceThroughPollFailures(

@@ -1,7 +1,6 @@
 /** The one thing no other layer can check: a real click hitting the real `POST .../retry`
  * route, converging on the waiting screen without a page reload, and the poll the settled failure
- * screen had stopped picking back up — and, for the attempt cap, that the assembled page (not just
- * `_loadReport` in isolation) actually withholds the button.
+ * screen had stopped picking back up.
  *
  * Everything else about retrying — the feature client's status handling, the failure copy, the
  * cap arithmetic — is unit- and component-tested already.
@@ -13,10 +12,9 @@ import { expect } from '@playwright/test';
 import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advancePoll } from '../lib/fake-poll.ts';
+import { advancePoll, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 
 test('retrying a failed report shows the waiting screen and resumes polling, without a reload', async ({
   page,
@@ -56,7 +54,7 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
       .execute();
   });
 
-  await advancePoll(page, BASE_POLL_INTERVAL_MS);
+  await advancePoll(page, REPORT_POLL_INTERVAL_MS);
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   expect(loads.count).toBe(0);
 });

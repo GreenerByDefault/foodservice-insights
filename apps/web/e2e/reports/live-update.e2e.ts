@@ -1,6 +1,6 @@
 /** The one thing no other layer can check: a real poll, hitting the real read endpoint, updating
  * the screen with no page reload.
- * 
+ *
  * Everything about the schedule itself is covered by `polling/schedule.test.ts`, and everything
  * about the screens themselves by their own component tests.
  */
@@ -11,10 +11,9 @@ import { expect } from '@playwright/test';
 import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advancePoll } from '../lib/fake-poll.ts';
+import { advancePoll, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 
 test('a report that finishes while the page is open updates in place, without a reload', async ({
   page,
@@ -46,7 +45,7 @@ test('a report that finishes while the page is open updates in place, without a 
       .execute();
   });
 
-  await advancePoll(page, BASE_POLL_INTERVAL_MS);
+  await advancePoll(page, REPORT_POLL_INTERVAL_MS);
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   expect(loads.count).toBe(0);
 });
