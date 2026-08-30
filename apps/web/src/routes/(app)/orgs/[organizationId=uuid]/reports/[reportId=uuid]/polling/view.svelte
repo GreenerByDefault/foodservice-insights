@@ -18,7 +18,7 @@ let { data }: { data: ReportPageData } = $props();
  *
  * The reset matters because SvelteKit reuses this component across `[reportId]` — navigating from
  * one report to another changes `data` without remounting, and a plain `$state` copy would keep
- * showing the report the user just left. Nothing else replaces `data` anymore: this page is the
+ * showing the report the user just left. Nothing else replaces `data`: this page is the
  * only writer of its own state, and it writes through `poll` (see `../poll/+server.ts` for why
  * `invalidate()` is not used here).
  *
@@ -27,10 +27,10 @@ let { data }: { data: ReportPageData } = $props();
 let current = $derived(data);
 
 let consecutiveFailures = $state(0);
-let hidden = $state(false);
+let documentHidden = $state(false);
 
-let settled = $derived(!isWaiting(current.attempt));
-let connection = $derived<'ok' | 'retrying'>(
+let reportSettled = $derived(!isWaiting(current.attempt));
+let connectionStatus = $derived<'ok' | 'retrying'>(
   consecutiveFailures >= FAILURES_BEFORE_NOTICE ? 'retrying' : 'ok',
 );
 let headline = $derived(screenHeadline(current));
@@ -39,7 +39,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 
 function scheduleNext(): void {
   clearTimeout(timer);
-  const delayMs = nextPollDelayMs({ settled, hidden, consecutiveFailures });
+  const delayMs = nextPollDelayMs({ reportSettled, documentHidden, consecutiveFailures });
   timer = delayMs === undefined ? undefined : setTimeout(poll, delayMs);
 }
 
@@ -54,31 +54,30 @@ async function poll(): Promise<void> {
   }
 }
 
-/** Starts and stops the loop above, which cannot do either for itself: each poll arms the next
- * one, so the chain keeps going once it is going, but nothing in it notices a report that becomes
- * pollable again from a standstill — a retry turning a settled report back into a waiting one, or
- * a navigation from a finished report to a running one.
- *
- * `untrack` keeps the dependencies to exactly the two conditions in the guard. `scheduleNext` also
- * reads `consecutiveFailures`, and re-running this on every failed poll would only fight the
- * backoff the chain is already applying. */
+/** Starts and stops the loop above, which cannot do either for itself. Each poll arms the next
+ * one, so the chain keeps going once it is going. But nothing in it notices a report that
+ * becomes pollable again from a standstill — a retry turning a settled report back into a
+ * waiting one, or a navigation from a finished report to a running one. */
 $effect(() => {
-  if (settled || hidden) {
+  if (reportSettled || documentHidden) {
     clearTimeout(timer);
     timer = undefined;
     return;
   }
+  // untrack keeps the dependencies to exactly the two conditions above. scheduleNext also reads
+  // consecutiveFailures, and re-running this on every failed poll would fight the backoff the
+  // chain is already applying.
   untrack(scheduleNext);
 });
 
 function onVisibilityChange(): void {
-  hidden = document.hidden;
+  documentHidden = document.hidden;
   // Catch up right away rather than waiting out the delay the effect above is arming.
-  if (!hidden && !settled) poll();
+  if (!documentHidden && !reportSettled) poll();
 }
 
 onMount(() => {
-  hidden = document.hidden;
+  documentHidden = document.hidden;
   document.addEventListener('visibilitychange', onVisibilityChange);
 
   return () => {
@@ -112,7 +111,7 @@ function screenHeadline(report: ReportPageData): string {
 <!-- Outside the switch on purpose so that it is not unmounted when the view changes. -->
 <div aria-live="polite" class="sr-only">{headline}</div>
 
-{#if connection === 'retrying'}
+{#if connectionStatus === 'retrying'}
   <Alert>
     <WifiOffIcon />
     <AlertTitle>Reconnecting…</AlertTitle>
