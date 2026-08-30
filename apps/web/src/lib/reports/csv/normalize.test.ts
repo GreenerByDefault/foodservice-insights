@@ -1,22 +1,27 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_DATA_ROWS, MAX_FREE_TEXT_LENGTH } from '../limits.ts';
+import { MAX_FREE_TEXT_LENGTH } from '../limits.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
 import { type CsvNormalization, normalizeCsv } from './normalize.ts';
 
 const HEADER = 'product,date,weight';
 
-function normalizeText(text: string, now?: Date): CsvNormalization {
-  return normalizeCsv(new TextEncoder().encode(text), now ? { now } : {});
+type NormalizeOptions = { now?: Date; maxDataRows?: number };
+
+function normalizeText(text: string, options: NormalizeOptions = {}): CsvNormalization {
+  return normalizeCsv(new TextEncoder().encode(text), options);
 }
 
-function accepted(text: string, now?: Date): { text: string; months: readonly string[] } {
-  const outcome = normalizeText(text, now);
+function accepted(
+  text: string,
+  options?: NormalizeOptions,
+): { text: string; months: readonly string[] } {
+  const outcome = normalizeText(text, options);
   if (!outcome.ok) throw new Error(`expected acceptance, got: ${outcome.rejection.summary}`);
   return { text: new TextDecoder().decode(outcome.normalized), months: outcome.months };
 }
 
-function rejected(text: string, now?: Date): RejectedUploadRecord {
-  const outcome = normalizeText(text, now);
+function rejected(text: string, options?: NormalizeOptions): RejectedUploadRecord {
+  const outcome = normalizeText(text, options);
   if (outcome.ok) throw new Error('expected a rejection');
   return outcome.rejection;
 }
@@ -73,8 +78,10 @@ describe('normalizeCsv', () => {
     const soon = `${HEADER}\nbeef,2026-02-10,1`;
     const farOff = `${HEADER}\nbeef,2026-06-01,1`;
 
-    expect(accepted(soon, now).months).toEqual(['2026-02']);
-    expect(ruleNames(rejected(farOff, now))).toEqual(['The date is more than 30 days from now']);
+    expect(accepted(soon, { now }).months).toEqual(['2026-02']);
+    expect(ruleNames(rejected(farOff, { now }))).toEqual([
+      'The date is more than 30 days from now',
+    ]);
   });
 
   describe('refuses a file before reading a row', () => {
@@ -87,22 +94,29 @@ describe('normalizeCsv', () => {
       expect(rejected(text).reason).toBe(reason);
     });
 
-    test('refuses more rows than we will read', () => {
-      const rows = new Array(MAX_DATA_ROWS + 1).fill('beef,2026-01-05,1');
+    // A small cap avoids materializing a 500,000-row CSV.
+    const SMALL_CAP = 5;
 
-      expect(withoutRejectionDetail(rejected([HEADER, ...rows].join('\n')))).toEqual({
+    test('refuses more rows than we will read', () => {
+      const rows = new Array(SMALL_CAP + 1).fill('beef,2026-01-05,1');
+
+      expect(
+        withoutRejectionDetail(rejected([HEADER, ...rows].join('\n'), { maxDataRows: SMALL_CAP })),
+      ).toEqual({
         reason: 'too_large',
-        summary: 'That file has more than 500,000 rows.',
+        summary: 'That file has more than 5 rows.',
       });
     });
 
     test('refuses on the row count alone, discarding row problems found before the cap', () => {
-      const rows = new Array(MAX_DATA_ROWS + 1).fill('beef,2026-01-05,1');
+      const rows = new Array(SMALL_CAP + 1).fill('beef,2026-01-05,1');
       rows[0] = ',2026-01-05,1'; // an empty product, well within the cap
 
-      expect(withoutRejectionDetail(rejected([HEADER, ...rows].join('\n')))).toEqual({
+      expect(
+        withoutRejectionDetail(rejected([HEADER, ...rows].join('\n'), { maxDataRows: SMALL_CAP })),
+      ).toEqual({
         reason: 'too_large',
-        summary: 'That file has more than 500,000 rows.',
+        summary: 'That file has more than 5 rows.',
       });
     });
   });
