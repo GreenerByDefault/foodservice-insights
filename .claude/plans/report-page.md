@@ -417,7 +417,7 @@ the two notices, and the live region; the two e2e tests.
 than `invalidateAll()`, stop when terminal, pause when hidden, back off on failure, and
 `event.isDataRequest` as the line between "a poll can keep the screen" and "there is no screen to
 keep". Plus the trap: `data` is replaced wholesale, so a page that must survive a failed reload
-holds its own copy.
+holds its own copy. [Feedback, I'm highly skeptical it's worth documenting this because I don't think other parts of the app will do polling.]
 
 ## Follow-ups this work identifies but does not do
 
