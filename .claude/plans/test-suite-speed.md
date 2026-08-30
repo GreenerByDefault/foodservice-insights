@@ -64,6 +64,11 @@ Test *flakes* were PR 5 of this plan and now live in
 `retries: 0`, one flake costs a full re-run, more than every caching win here combined — but they
 are a correctness problem, not a speed one, and nothing in this plan depends on them.
 
+Test *flakes* were PR 5 of this plan and now live in
+[`test-suite-flakes.md`](test-suite-flakes.md). They are the larger agent-wall-clock cost — with
+`retries: 0`, one flake costs a full re-run, more than every caching win here combined — but they
+are a correctness problem, not a speed one, and nothing in this plan depends on them.
+
 ## PR 1 — Exclude Markdown from `check` and `test:unit` inputs
 
 In `turbo.json`, give both tasks the same `inputs` treatment `build` already has:
