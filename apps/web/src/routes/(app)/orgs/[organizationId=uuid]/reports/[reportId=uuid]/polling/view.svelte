@@ -1,5 +1,7 @@
 <script lang="ts">
+import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import { onMount, untrack } from 'svelte';
+import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert/index.js';
 import type { ReportPageData } from '../+page.server.ts';
 import CanceledView from '../canceled-view.svelte';
 import FailureView from '../failure-view.svelte';
@@ -111,10 +113,14 @@ function screenHeadline(report: ReportPageData): string {
 <div aria-live="polite" class="sr-only">{headline}</div>
 
 {#if connection === 'retrying'}
-  <p class="text-sm text-muted-foreground" role="status">
-    Having trouble reaching the server. Your report is safe — this page will catch up once we
-    reconnect.
-  </p>
+  <Alert>
+    <WifiOffIcon />
+    <AlertTitle>Reconnecting…</AlertTitle>
+    <AlertDescription>
+      Having trouble reaching the server. Your report is safe — this page will catch up once we
+      reconnect.
+    </AlertDescription>
+  </Alert>
 {/if}
 
 {#if isWaiting(current.attempt)}
