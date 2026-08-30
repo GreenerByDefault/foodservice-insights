@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ResultFiles } from './+page.server.ts';
+import type { ResultFiles } from '../+page.server.ts';
 
 let {
   finishedAt,

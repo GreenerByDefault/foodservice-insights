@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import ResultView from './result-view.svelte';
+import ResultView from './view.svelte';
 
 const FINISHED_AT = new Date('2026-01-15T10:10:00Z');
 const CHART = {

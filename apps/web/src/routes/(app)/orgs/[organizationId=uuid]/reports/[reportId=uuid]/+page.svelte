@@ -1,7 +1,7 @@
 <script lang="ts">
 import CanceledView from './canceled-view.svelte';
 import FailureView from './failure-view.svelte';
-import ResultView from './result-view.svelte';
+import ResultView from './result/view.svelte';
 import type { PageProps } from './$types';
 import { isWaiting } from './waiting/progress.ts';
 import WaitingView from './waiting/view.svelte';
