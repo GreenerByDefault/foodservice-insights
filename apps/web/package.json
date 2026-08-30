@@ -14,7 +14,7 @@
     "test:unit": "svelte-kit sync && TEST_DB=1 vitest run",
     "test:e2e": "TEST_DB=1 playwright test --project=e2e",
     "test:screenshots": "TEST_DB=1 playwright test --project=screenshots",
-    "screenshots:update": "TEST_DB=1 playwright test --project=screenshots --update-snapshots && node scripts/optimize-screenshots.ts",
+    "screenshots:update": "TEST_DB=1 playwright test --project=screenshots --update-snapshots",
     "test": "pnpm run test:unit && pnpm run test:e2e && pnpm run test:screenshots"
   },
   "dependencies": {
