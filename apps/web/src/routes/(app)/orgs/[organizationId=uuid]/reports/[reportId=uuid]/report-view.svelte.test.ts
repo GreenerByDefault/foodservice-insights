@@ -1,10 +1,10 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { ReportPageData } from '../+page.server.ts';
-import { retryableFailure } from '../testing/fixtures.ts';
-import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
-import ReportView from './view.svelte';
+import type { ReportPageData } from './+page.server.ts';
+import { BASE_POLL_INTERVAL_MS } from './polling/schedule.ts';
+import ReportView from './report-view.svelte';
+import { retryableFailure } from './testing/fixtures.ts';
 
 const REPORT_ID = 'report-1' as ReportId;
 const POLL_HREF = `/orgs/org-1/reports/${REPORT_ID}/poll`;
@@ -18,9 +18,8 @@ const BASE = {
   },
   cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
   retryButtonHref: '/api/orgs/org-1/reports/report-1/retry',
-  deleteButtonHref: '/api/orgs/org-1/reports/report-1',
+  deleteAction: { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' },
   newReportHref: '/orgs/org-1/reports/new',
-  organizationHref: '/orgs/org-1',
   pollHref: POLL_HREF,
   inputFile: {
     href: '/file/input/1',
