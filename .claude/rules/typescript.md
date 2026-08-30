@@ -11,35 +11,49 @@ paths:
   - "tsconfig.base.json"
 ---
 
-# TypeScript and Svelte
+# TypeScript
 
 The universal rules in [`AGENTS.md`](../../AGENTS.md) apply here too — development
 principles, the documentation rules, PR sizing. This file is only what is specific to
 TypeScript. [`README.md`](../../README.md) covers what to run.
 
-Verify a change with `pnpm lint && pnpm check && pnpm test`.
+## Verifying a change
 
-- **Svelte 5 runes only.** Never `export let` or `<slot>`. Most Svelte code in training
-  data is Svelte 4, so check the Svelte MCP server rather than recalling an API.
+Verify a change with `pnpm lint && pnpm check && pnpm test` — that stays the gate before
+claiming a change works, verbatim, no matter how narrow the change was.
+
+**While iterating, run only the test file(s) you're actively working on**, not the full
+suite — a loop-versus-gate distinction, not a judgement call about blast radius:
+
+- vitest: `pnpm --filter @gbd/<pkg> test:unit -- path/to/thing.test.ts`
+- Playwright (`test:e2e` or `test:screenshots`):
+  `pnpm --filter @gbd/web test:e2e -- path/to/thing.e2e.ts`
+
+Scoping to a package (`pnpm --filter @gbd/<pkg> test:unit`, no path) is the fallback when a
+change touches several files in one package and there's no single file to target.
+
+**Run the gate in the background** (`run_in_background: true` on the Bash tool) once the
+change is ready, rather than blocking on it — Claude Code notifies on completion, so the wait
+overlaps with re-reading the diff, `/prune-comments`, and drafting the PR body instead of
+costing wall clock on top of it.
+
+## General TypeScript
+
 - **Use `async`/`await`**, not raw promise chains.
 - **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
   of a package and never a tsconfig path alias.
-- **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`.
 - **`@gbd/*` packages are consumed as compiled JS, from `dist/`.** So a package you edit has
   to be rebuilt before another package sees the change; `pnpm dev` runs `tsc --watch` per
   package to keep that automatic, and every other Turbo task depends on `^build`. Each
   package owns its own runtime dependencies — declare them where they are imported, and
   nowhere else.
-- **Add a `@gbd/*` package to `apps/web` as a `dependency`, not a `devDependency`,** if
-  server code imports it. `apps/web/vite.config.ts` derives the list of packages to leave
-  unbundled from `dependencies`, because those are the ones installed next to the built
-  server. Getting this wrong silently bundles the package instead of failing.
 - **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
   misnamed test is either skipped or picked up by the wrong runner. See the table in
   [`README.md`](../../README.md).
-- **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
 
 ## Database
+
+Applies to `packages/db` and every app or package that imports it (`apps/web`, `apps/worker`).
 
 - **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, `migrate` and `truncate`,
   Kanel, and vitest. Without it, you are pointed at the dev database and blob store. The
@@ -54,20 +68,7 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   with every constraint, index, and trigger; `packages/db/src/generated/` is what you can query in TypeScript.
   [`packages/db/README.md`](../../packages/db/README.md) covers the model and which file answers what.
 - **Query helpers take `db: DatabaseExecutor` as their first parameter**, so tests can pass a
-  rolled-back transaction where the app passes its long-lived handle. For route handlers, put
-  the logic in an exported `_`-prefixed function that takes one — SvelteKit permits those
-  alongside `GET`/`POST` — and have the handler call it with `database()`. Call `database()`
-  inside the handler, never at module scope. Name that function's test file without a `+`
-  prefix (e.g. `check-health.test.ts`, not `+server.test.ts`) — SvelteKit reserves `+` names,
-  and the build fails on one it doesn't recognize.
-- **Route handlers wrap DB calls in `withDbErrorHandling`** (`apps/web/src/lib/server/db.ts`),
-  so a failure is logged with context instead of leaking to the client. It splits three ways —
-  a statement we could not complete is a 503, one Postgres refused is a 500, anything else is
-  rethrown — and the status is not the caller's to pass in.
-- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** Answer it
-  with `error()` there; an `HttpError` is no kind of database failure, so it passes back out
-  untouched. Checking for the condition beforehand instead duplicates the constraint and still
-  races.
+  rolled-back transaction where the app passes its long-lived handle.
 - **Classify a database failure with `isTransientDatabaseError` or `isPermanentDatabaseError`, never
   `instanceof DatabaseError`** — an outage never arrives as one. See
   [`packages/db/README.md`](../../packages/db/README.md#using-it).
@@ -78,10 +79,8 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
 
 ## Blob store
 
-- **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
-  (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
-  unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
-  ever means we could not reach the store, so retrying helps.
+Applies to `packages/storage` and every app or package that imports it.
+
 - **Classify a blob store failure with `isBlobStoreError`, never by an SDK error shape.** Everything
   `@gbd/storage` fails with is a `BlobStoreError`, because a reply from the service and a timed-out
   socket look nothing alike and only the package knows both.
@@ -94,16 +93,45 @@ Verify a change with `pnpm lint && pnpm check && pnpm test`.
   Playwright entries are pinned exactly, not with `^`, because those families declare
   exact peer ranges on each other and `strictPeerDependencies` is on — a range there
   breaks `pnpm install`.
-- **`svelte-kit sync` is inlined into the `check` and `test:unit` scripts** because it has
-  to run before typechecking or testing. It looks redundant; it isn't. Don't delete it and
-  rely on `prepare`, which pnpm runs only for some invocations.
 - **Quote parentheses in shell commands.** Route groups mean paths like
   `'src/routes/(app)'` need quoting or the shell mangles them.
 - **`lint` and `fmt` exist only at the root** — Biome runs repo-wide, so there is no per-package
   lint. Every package has `test`, `check`, and `build`; scope one with
   `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
 
-## Svelte MCP server
+## Svelte and SvelteKit (`apps/web` only)
+
+- **Svelte 5 runes only.** Never `export let` or `<slot>`. Most Svelte code in training
+  data is Svelte 4, so check the Svelte MCP server rather than recalling an API.
+- **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`.
+- **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
+- **`svelte-kit sync` is inlined into the `check` and `test:unit` scripts** because it has
+  to run before typechecking or testing. It looks redundant; it isn't. Don't delete it and
+  rely on `prepare`, which pnpm runs only for some invocations.
+- **Add a `@gbd/*` package to `apps/web` as a `dependency`, not a `devDependency`,** if
+  server code imports it. `apps/web/vite.config.ts` derives the list of packages to leave
+  unbundled from `dependencies`, because those are the ones installed next to the built
+  server. Getting this wrong silently bundles the package instead of failing.
+- **For route handlers, put the logic in an exported `_`-prefixed function** that takes a
+  `db: DatabaseExecutor` — SvelteKit permits those alongside `GET`/`POST` — and have the
+  handler call it with `database()`. Call `database()` inside the handler, never at module
+  scope. Name that function's test file without a `+` prefix (e.g. `check-health.test.ts`,
+  not `+server.test.ts`) — SvelteKit reserves `+` names, and the build fails on one it
+  doesn't recognize.
+- **Route handlers wrap DB calls in `withDbErrorHandling`** (`apps/web/src/lib/server/db.ts`),
+  so a failure is logged with context instead of leaking to the client. It splits three ways —
+  a statement we could not complete is a 503, one Postgres refused is a 500, anything else is
+  rethrown — and the status is not the caller's to pass in.
+- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** Answer it
+  with `error()` there; an `HttpError` is no kind of database failure, so it passes back out
+  untouched. Checking for the condition beforehand instead duplicates the constraint and still
+  races.
+- **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
+  (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
+  unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
+  ever means we could not reach the store, so retrying helps.
+
+## Svelte MCP server (`apps/web` only)
 
 You have access to the Svelte MCP server, which carries the full Svelte 5 and SvelteKit
 documentation. Use it rather than recalling API details.
