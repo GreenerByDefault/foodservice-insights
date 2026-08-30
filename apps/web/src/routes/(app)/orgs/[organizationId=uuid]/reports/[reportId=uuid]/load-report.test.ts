@@ -4,9 +4,11 @@ import {
   type OrganizationId,
   type ReportId,
   requireConstraint,
+  type UserId,
 } from '@gbd/db';
 import {
   insertAnalysisAttempt,
+  insertAppUser,
   insertInputFile,
   insertOrganization,
   insertReport,
@@ -21,8 +23,12 @@ import { _loadReport } from './+page.server.ts';
 
 const SUPPORT_EMAIL = 'support@foodservice-insights.test';
 
-async function aReportWithInputFile(transaction: DatabaseExecutor, organizationId: OrganizationId) {
-  const report = await insertReport(transaction, { organizationId });
+async function aReportWithInputFile(
+  transaction: DatabaseExecutor,
+  organizationId: OrganizationId,
+  overrides: { siteName?: string; createdByUserId?: UserId | null } = {},
+) {
+  const report = await insertReport(transaction, { organizationId, ...overrides });
   await insertInputFile(transaction, { reportId: report.id });
   return report;
 }
@@ -136,6 +142,85 @@ describe('a report the caller may see', () => {
           }),
         ),
       ).resolves.toEqual({ status: 500 });
+    });
+  });
+});
+
+describe('report.siteName', () => {
+  test('is passed through when set', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id, {
+        siteName: 'Riverside Diner',
+      });
+      await insertAnalysisAttempt(transaction, { reportId: report.id });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.report.siteName).toBe('Riverside Diner');
+    });
+  });
+});
+
+describe('report.creator', () => {
+  test('carries the display name of a named creator', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const user = await insertAppUser(transaction, { displayName: 'Dana Cook' });
+      const report = await aReportWithInputFile(transaction, organization.id, {
+        createdByUserId: user.id,
+      });
+      await insertAnalysisAttempt(transaction, { reportId: report.id });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.report.creator).toEqual({ displayName: 'Dana Cook', email: expect.any(String) });
+    });
+  });
+
+  test('falls back to email when the creator has no display name', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const user = await insertAppUser(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id, {
+        createdByUserId: user.id,
+      });
+      await insertAnalysisAttempt(transaction, { reportId: report.id });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.report.creator?.displayName).toBeNull();
+      expect(data.report.creator?.email).toMatch(/@example\.test$/);
+    });
+  });
+
+  test('is null when created_by_user_id is null (a deleted user)', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id, {
+        createdByUserId: null,
+      });
+      await insertAnalysisAttempt(transaction, { reportId: report.id });
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.report.creator).toBeNull();
     });
   });
 });

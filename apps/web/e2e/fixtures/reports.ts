@@ -14,11 +14,12 @@
  */
 
 import { msAgo } from '@gbd/core';
-import type { AnalysisFailureReason, Database, ReportId } from '@gbd/db';
+import type { AnalysisFailureReason, Database, ReportId, UserId } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import {
   insertAnalysisAttempt,
+  insertAppUser,
   insertInputFile,
   insertReport,
   insertResultFile,
@@ -44,15 +45,23 @@ export type ReportState =
   | 'canceled';
 
 /** Every fixture report is created the same way: one report, one input file, backdated to
- * `ANCHOR` (see the file header). */
+ * `ANCHOR` (see the file header).
+ *
+ * `siteName` and `createdByUserId` default to null, the shape most states don't care about: no
+ * site, and the heading's "a deleted user" branch. `buildSucceeded` and `buildFailed` pass one so
+ * the heading's other branches get exercised too, without a screenshot dedicated to each.
+ */
 async function insertReportWithInputFile(
   tx: Transaction<Database>,
   name: string,
+  overrides: { siteName?: string; createdByUserId?: UserId } = {},
 ): Promise<ReportId> {
   const report = await insertReport(tx, {
     organizationId: PLACEHOLDER_ORGANIZATION_ID,
     name,
     createdAt: ANCHOR,
+    siteName: overrides.siteName ?? null,
+    createdByUserId: overrides.createdByUserId ?? null,
   });
   await insertInputFile(tx, { reportId: report.id });
   return report.id;
@@ -91,7 +100,12 @@ function buildProcessing(
 }
 
 async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'Lakeside Grill — Q1 Procurement');
+  // The screen most likely to be shown off, so it's the one that carries the full heading.
+  const creator = await insertAppUser(tx, { displayName: 'Dana Cook' });
+  const reportId = await insertReportWithInputFile(tx, 'Q1 Procurement', {
+    siteName: 'Lakeside Grill',
+    createdByUserId: creator.id,
+  });
   const attempt = await insertAnalysisAttempt(tx, {
     reportId,
     status: 'succeeded',
@@ -134,7 +148,12 @@ async function insertFailedAttempts(
 }
 
 async function buildFailed(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'Uptown Deli — January Dairy');
+  // A creator with no display name, so the heading's email-fallback branch gets exercised. A
+  // fixed email, not the default random one — this fixture renders into a committed screenshot.
+  const creator = await insertAppUser(tx, { email: 'jordan@example.test' });
+  const reportId = await insertReportWithInputFile(tx, 'January Dairy', {
+    createdByUserId: creator.id,
+  });
   await insertAnalysisAttempt(tx, {
     reportId,
     status: 'failed',
@@ -147,20 +166,20 @@ async function buildFailed(tx: Transaction<Database>): Promise<ReportId> {
 
 /** A second attempt has already failed, but there's still room to retry again. */
 async function buildFailedRetried(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'Bayview Tavern — March Seafood');
+  const reportId = await insertReportWithInputFile(tx, 'March Seafood');
   await insertFailedAttempts(tx, reportId, 2, 'child_crashed');
   return reportId;
 }
 
 /** At `MAX_ANALYSIS_ATTEMPTS`, with a reason whose own follow-up would otherwise say "retry". */
 async function buildFailedAtRetryCap(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'Sunset Cafe — April Beverages');
+  const reportId = await insertReportWithInputFile(tx, 'April Beverages');
   await insertFailedAttempts(tx, reportId, MAX_ANALYSIS_ATTEMPTS, 'child_crashed');
   return reportId;
 }
 
 async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'Downtown Catering — May Seafood');
+  const reportId = await insertReportWithInputFile(tx, 'May Seafood');
   await insertAnalysisAttempt(tx, {
     reportId,
     status: 'canceled',
@@ -171,14 +190,11 @@ async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
 }
 
 const BUILDERS: Record<ReportState, (tx: Transaction<Database>) => Promise<ReportId>> = {
-  pending: buildPending('Riverside Diner — March Produce', 5_000),
-  'pending-delayed': buildPending(
-    'Maple Street Cafe — June Dry Goods',
-    QUEUE_WARNING_AFTER_MS + 30_000,
-  ),
-  processing: buildProcessing('Harbor Bistro — February Proteins', 70_000, 20_000),
+  pending: buildPending('March Produce', 5_000),
+  'pending-delayed': buildPending('June Dry Goods', QUEUE_WARNING_AFTER_MS + 30_000),
+  processing: buildProcessing('February Proteins', 70_000, 20_000),
   'processing-delayed': buildProcessing(
-    'Cedar Point Kitchen — August Meats',
+    'August Meats',
     100_000,
     ANALYSIS_WARNING_AFTER_MS + 100_000,
   ),

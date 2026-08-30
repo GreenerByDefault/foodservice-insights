@@ -37,13 +37,13 @@ export function aChecksum(): Buffer {
 
 export async function insertAppUser(
   database: DatabaseExecutor,
-  overrides: { displayName?: string; isSuperadmin?: boolean } = {},
+  overrides: { displayName?: string; isSuperadmin?: boolean; email?: string } = {},
 ): Promise<AppUser> {
   const { id } = await database
     .insertInto('auth.users')
     .values({
       id: crypto.randomUUID() as AppUser['id'],
-      email: `${crypto.randomUUID()}@example.test`,
+      email: overrides.email ?? `${crypto.randomUUID()}@example.test`,
     })
     .returning('id')
     .executeTakeFirstOrThrow();

@@ -68,7 +68,13 @@ export type Attempt =
   | { status: 'canceled'; stoppedAt: Date };
 
 export type ReportPageData = {
-  report: { id: ReportId; name: string };
+  report: {
+    id: ReportId;
+    name: string;
+    siteName: string | null;
+    /** Null when `created_by_user_id` is null — the creating user's account was deleted. */
+    creator: { displayName: string | null; email: string } | null;
+  };
   cancelButtonHref: string;
   retryButtonHref: string;
   newReportHref: string;
@@ -84,6 +90,11 @@ export type ReportPageData = {
 type ReportRow = {
   reportId: ReportId;
   reportName: string;
+  siteName: string | null;
+  creatorDisplayName: string | null;
+  /** Null exactly when there is no joined user — email is guaranteed for any real one (see
+   * `authorization.ts`), so this is how a deleted creator is told apart from a present one. */
+  creatorEmail: string | null;
   inputFileId: InputFileId;
   inputFileOriginalFilename: string;
   inputFileByteSize: number;
@@ -115,9 +126,16 @@ export async function _loadReport(
     .selectFrom('report')
     .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
     .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
+    // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL` (schema.sql), and a
+    // report outlives the account that submitted it (see api/account/+server.ts).
+    .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
+    .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
     .select([
       'report.id as reportId',
       'report.name as reportName',
+      'report.siteName as siteName',
+      'appUser.displayName as creatorDisplayName',
+      'auth.users.email as creatorEmail',
       'inputFile.id as inputFileId',
       'inputFile.originalFilename as inputFileOriginalFilename',
       'inputFile.byteSize as inputFileByteSize',
@@ -143,7 +161,14 @@ export async function _loadReport(
   if (!row) return await failNotFoundOrBug(db, params);
 
   return {
-    report: { id: row.reportId, name: row.reportName },
+    report: {
+      id: row.reportId,
+      name: row.reportName,
+      siteName: row.siteName,
+      creator: row.creatorEmail
+        ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
+        : null,
+    },
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
     retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
     newReportHref: `/orgs/${params.organizationId}/reports/new`,

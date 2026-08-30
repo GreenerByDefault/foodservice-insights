@@ -9,6 +9,7 @@ import ResultView from '../result/view.svelte';
 import { describeProgress, isWaiting } from '../waiting/progress.ts';
 import WaitingView from '../waiting/view.svelte';
 import { pollReport } from './poll-report.ts';
+import ReportHeading from './report-heading.svelte';
 import { FAILURES_BEFORE_NOTICE, nextPollDelayMs } from './schedule.ts';
 
 let { data }: { data: ReportPageData } = $props();
@@ -106,7 +107,11 @@ function screenHeadline(report: ReportPageData): string {
   <title>{current.report.name}</title>
 </svelte:head>
 
-<h1 class="text-2xl font-semibold tracking-tight">{current.report.name}</h1>
+<ReportHeading
+  name={current.report.name}
+  siteName={current.report.siteName}
+  creator={current.report.creator}
+/>
 
 <!-- Outside the switch on purpose so that it is not unmounted when the view changes. -->
 <div aria-live="polite" class="sr-only">{headline}</div>
