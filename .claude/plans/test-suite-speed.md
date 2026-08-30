@@ -1,4 +1,4 @@
-# Test suite speed and flakes
+# Test suite speed
 
 ## Context
 
@@ -61,6 +61,11 @@ The tempting change is to tell agents to right-size test validation to the chang
 What replaces it is a loop-versus-gate distinction, which needs no judgement call, plus running
 the gate in the background. See PR 4.
 
+Test *flakes* were PR 5 of this plan and now live in
+[`test-suite-flakes.md`](test-suite-flakes.md). They are the larger agent-wall-clock cost — with
+`retries: 0`, one flake costs a full re-run, more than every caching win here combined — but they
+are a correctness problem, not a speed one, and nothing in this plan depends on them.
+
 ## PR 1 — Exclude Markdown from `check` and `test:unit` inputs
 
 In `turbo.json`, give both tasks the same `inputs` treatment `build` already has:
@@ -121,35 +126,6 @@ to § Verifying a change:
   rigor and is currently unused.
 
 Leave "Report what you actually ran" exactly as it is — it is what keeps the scoped loop honest.
-
-## PR 5 — The e2e flakes
-
-Independently pickup-able; nothing above depends on it. Worth doing first if the goal is agent
-wall-clock, because with `retries: 0` a single flake costs an agent more minutes than every
-caching win here combined.
-
-Observed on `main` @ 7e299ac, clean tree. The first `pnpm test:e2e` of the session — run
-immediately after `pnpm test:unit`, which is the ordering `pnpm test` always uses — failed 5 of
-25 in 1m6s:
-
-- `e2e/layout.e2e.ts:36` — `/ has no horizontal overflow at any viewport`
-- `e2e/layout.e2e.ts:36` — `/sign-in has no horizontal overflow at any viewport`
-- `e2e/reports/cancel.e2e.ts:14` — canceling from the waiting screen
-- `e2e/reports/retry.e2e.ts:19` — retrying a failed report
-- `e2e/reports/retry.e2e.ts:62` — a report at the attempt cap has no retry button
-
-An immediate standalone rerun passed 25/25 in 41.3s. Nothing was listening on 4173 beforehand, so
-`reuseExistingServer` had no stale server to reuse.
-
-The 1m6s-versus-41.3s gap alongside the failures points at contention or leftover state rather
-than a logic bug. First suspect is the preceding `test:unit` run against the same test Supabase
-stack: `apps/web/e2e/setup/database.setup.ts` clears fixture reports as a barrier before either
-suite starts, but nothing makes `test:unit`'s blob-store and database work quiesce first.
-`layout.e2e.ts` already carries a comment about fixture collision between concurrent specs, so
-shared fixture state is the thing to read first.
-
-Not yet reproduced deliberately. Reproduce before fixing — `pnpm test:unit && pnpm test:e2e` in a
-loop — because a fix for the wrong cause here is indistinguishable from the flake going quiet.
 
 ## Follow-ups this work identifies but does not do
 
