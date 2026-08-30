@@ -1,8 +1,13 @@
 <script lang="ts">
+import type { Snippet } from 'svelte';
 import favicon from '$lib/assets/favicon.svg';
 import './layout.css';
 
-let { children } = $props();
+interface Props {
+  children: Snippet;
+}
+
+let { children }: Props = $props();
 
 // A signal for e2e tests that event listeners are attached — see `apps/web/e2e/lib/hydration.ts`.
 $effect(() => {

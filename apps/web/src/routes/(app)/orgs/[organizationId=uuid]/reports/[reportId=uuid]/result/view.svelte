@@ -1,15 +1,13 @@
 <script lang="ts">
 import type { ResultFiles } from '../+page.server.ts';
 
-let {
-  finishedAt,
-  files,
-  inputFile,
-}: {
+interface Props {
   finishedAt: Date;
   files: ResultFiles;
   inputFile: { href: string; originalFilename: string };
-} = $props();
+}
+
+let { finishedAt, files, inputFile }: Props = $props();
 </script>
 
 <p class="text-muted-foreground">

@@ -1,24 +1,18 @@
 <script lang="ts">
-import type { ReportId } from '@gbd/db';
 import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-import { invalidate } from '$app/navigation';
 import { Button } from '$lib/components/ui/button';
 import { retryReport } from '$lib/reports/retry-report';
-import { reportDependencyKey } from '$lib/reports/report-dependency';
 import type { ActionState } from '$lib/types/ActionState';
 import type { FailureCopy } from './+page.server.ts';
 
-let {
-  reportId,
-  attemptNumber,
-  failure,
-  retryButtonHref,
-}: {
-  reportId: ReportId;
+interface Props {
   attemptNumber: number;
   failure: FailureCopy;
   retryButtonHref: string;
-} = $props();
+  onReportChanged: () => Promise<void>;
+}
+
+let { attemptNumber, failure, retryButtonHref, onReportChanged }: Props = $props();
 
 let actionState = $state<ActionState>({ status: 'idle' });
 
@@ -27,9 +21,9 @@ async function retry() {
   try {
     await retryReport(retryButtonHref);
 
-    // Both outcomes mean a new attempt exists (or one already did). The invalidate reloads
-    // the page to show the new attempt.
-    await invalidate(reportDependencyKey(reportId));
+    // Both outcomes mean a new attempt exists (or one already did), so refresh either way. The
+    // refresh cannot fail the retry — see the same note in `waiting/cancel-button.svelte`.
+    await onReportChanged();
     actionState = { status: 'success' };
   } catch {
     actionState = { status: 'error', message: 'Could not retry this report. Please try again.' };

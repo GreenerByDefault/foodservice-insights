@@ -5,7 +5,12 @@ import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 import { formatElapsed, formatTimestamp } from '@gbd/core';
 import type { Step } from './progress.ts';
 
-let { steps, now }: { steps: Step[]; now: Date } = $props();
+interface Props {
+  steps: Step[];
+  now: Date;
+}
+
+let { steps, now }: Props = $props();
 </script>
 
 <ol class="space-y-4">
