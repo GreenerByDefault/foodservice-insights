@@ -567,11 +567,6 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addColumn('failure_reason', sql`analysis_failure_reason`)
     .addColumn('failure_detail', 'text')
     .addColumn('reaped_by_worker_id', 'text')
-    .addColumn('ai_model', 'text')
-    .addColumn('ai_input_tokens', 'integer')
-    .addColumn('ai_output_tokens', 'integer')
-    .addColumn('ai_cost_usd', 'numeric(10, 4)')
-    .addColumn('ai_metadata', 'jsonb')
     .addColumn('result_metadata', 'jsonb')
     .addColumn('notification_email_sent_at', 'timestamptz')
     .addColumn('notification_claimed_at', 'timestamptz')
@@ -670,17 +665,11 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'analysis_attempt_canceled_requires_request',
       sql`status <> 'canceled' OR cancel_requested_at IS NOT NULL`,
     )
-    .addCheckConstraint('analysis_attempt_ai_input_tokens_non_negative', sql`ai_input_tokens >= 0`)
-    .addCheckConstraint(
-      'analysis_attempt_ai_output_tokens_non_negative',
-      sql`ai_output_tokens >= 0`,
-    )
-    .addCheckConstraint('analysis_attempt_ai_cost_usd_non_negative', sql`ai_cost_usd >= 0`)
     .execute();
 
   await sql`
     COMMENT ON TABLE analysis_attempt IS
-      'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at, failure_reason and the ai_* columns in one UPDATE.'
+      'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at and failure_reason in one UPDATE.'
   `.execute(database);
 
   await sql`

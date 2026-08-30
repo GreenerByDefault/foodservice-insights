@@ -342,24 +342,6 @@ describe('analysis_attempt column invariants', () => {
       patch: () => ({ cancelRequestedAt: LONG_AGO }),
       constraint: 'analysis_attempt_cancel_requested_at_after_created_at',
     },
-    {
-      description: 'negative input tokens',
-      from: 'processing' as const,
-      patch: () => ({ aiInputTokens: -1 }),
-      constraint: 'analysis_attempt_ai_input_tokens_non_negative',
-    },
-    {
-      description: 'negative output tokens',
-      from: 'processing' as const,
-      patch: () => ({ aiOutputTokens: -1 }),
-      constraint: 'analysis_attempt_ai_output_tokens_non_negative',
-    },
-    {
-      description: 'a negative cost',
-      from: 'processing' as const,
-      patch: () => ({ aiCostUsd: '-1.0000' }),
-      constraint: 'analysis_attempt_ai_cost_usd_non_negative',
-    },
   ])('rejects $description', async ({ from, patch, constraint }) => {
     const update = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: from });

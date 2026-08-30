@@ -1,12 +1,9 @@
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from gbd_foodservice_insights.analysis import AiUsage, AnalysisOutcome
+from gbd_foodservice_insights.analysis import AnalysisOutcome
 from worker_child.artifacts import place_result_files
 from worker_child.contract import ContractError, layout
-
-ZERO_USAGE = AiUsage(model="m", input_tokens=0, output_tokens=0, cost_usd=Decimal("0"), metadata={})
 
 
 @pytest.fixture
@@ -21,7 +18,7 @@ def outcome_with(output_directory: Path) -> AnalysisOutcome:
     xlsx = output_directory / "some-workbook-name.xlsx"
     pdf.write_bytes(b"%PDF-stub")
     xlsx.write_bytes(b"PKstub")
-    return AnalysisOutcome(pdf=pdf, xlsx=xlsx, ai=ZERO_USAGE, metadata={})
+    return AnalysisOutcome(pdf=pdf, xlsx=xlsx, metadata={})
 
 
 def test_renames_declared_files_to_contract_names(tmp_path: Path, output_directory: Path) -> None:

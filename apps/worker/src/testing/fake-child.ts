@@ -31,7 +31,6 @@ export type FakeChildStep =
   | {
       step: 'result';
       withoutFiles?: readonly string[];
-      ai?: Partial<FakeChildAi>;
       resultMetadata?: Record<string, unknown>;
     }
   | { step: 'failure'; reason: string; detail: string; traceback?: string | null }
@@ -56,14 +55,6 @@ export type FakeChildStep =
    * stderr, an exit code, and no document written. */
   | { step: 'crash'; message: string };
 
-type FakeChildAi = {
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: string;
-  metadata: Record<string, unknown>;
-};
-
 /** What the `dump*` steps write, and where `spawnGrandchild` records its pid. All beneath `work/`,
  * which is the child's scratch and so cannot collide with anything the contract defines. */
 export const FAKE_CHILD_FILES = {
@@ -72,14 +63,6 @@ export const FAKE_CHILD_FILES = {
   environment: 'environment.json',
   grandchildPid: 'grandchild.pid',
 } as const;
-
-const DEFAULT_AI: FakeChildAi = {
-  model: 'fake-model',
-  inputTokens: 1_000,
-  outputTokens: 200,
-  costUsd: '1.2345',
-  metadata: {},
-};
 
 const SENTINEL_POLL_INTERVAL_MS = 5;
 
@@ -225,7 +208,6 @@ async function writeResult(
       // The real child reads this out of `run.json`; taking it from the directory name keeps a
       // scenario from having to know the attempt id.
       analysisAttemptId: basename(runDirectory),
-      ai: { ...DEFAULT_AI, ...step.ai },
       resultMetadata: step.resultMetadata ?? {},
     }),
   );

@@ -62,7 +62,6 @@ async function processingAttempt(
 
 const A_MINIMAL_RESULT = {
   analysisAttemptId: crypto.randomUUID(),
-  ai: { model: 'gemini-3-pro', inputTokens: 1, outputTokens: 1, costUsd: '0.0001', metadata: {} },
   resultMetadata: {},
 };
 

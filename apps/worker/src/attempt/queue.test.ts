@@ -108,13 +108,6 @@ function renewedSince(attempt: { leaseRenewedAt: Date | null }): number {
 
 const A_RESULT: ChildResult = {
   analysisAttemptId: crypto.randomUUID(),
-  ai: {
-    model: 'gemini-3-pro',
-    inputTokens: 41_000,
-    outputTokens: 2_500,
-    costUsd: '12.3400',
-    metadata: { promptVersion: 7 },
-  },
   resultMetadata: { rows: 1_234 },
 };
 
@@ -433,11 +426,6 @@ describe('finishing', () => {
     expect(finished.attempt).toMatchObject({
       status: 'succeeded',
       failureReason: null,
-      aiModel: A_RESULT.ai.model,
-      aiInputTokens: A_RESULT.ai.inputTokens,
-      aiOutputTokens: A_RESULT.ai.outputTokens,
-      aiCostUsd: A_RESULT.ai.costUsd,
-      aiMetadata: A_RESULT.ai.metadata,
       resultMetadata: A_RESULT.resultMetadata,
     });
     expect(finished.attempt.finishedAt).toBeInstanceOf(Date);

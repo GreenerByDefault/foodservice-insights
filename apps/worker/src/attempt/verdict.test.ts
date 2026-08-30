@@ -9,13 +9,6 @@ const NOT_READ: DocumentRead = { kind: 'not-read' };
 
 const A_RESULT: Extract<DocumentRead, { kind: 'result' }>['result'] = {
   analysisAttemptId: '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f',
-  ai: {
-    model: 'gemini-3-pro',
-    inputTokens: 100,
-    outputTokens: 20,
-    costUsd: '1.2345',
-    metadata: {},
-  },
   resultMetadata: {},
 };
 

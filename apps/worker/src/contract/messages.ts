@@ -16,8 +16,6 @@ export class ContractError extends Error {
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// `ai_cost_usd` is `numeric(10,4)`; float64 can't round-trip it, so it crosses as a string.
-const COST_USD_PATTERN = /^\d{1,6}\.\d{4}$/;
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(0));
@@ -47,13 +45,6 @@ const ProgressSchema = v.strictObject({
 
 const ChildResultSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
-  ai: v.strictObject({
-    model: nonEmptyString,
-    inputTokens: wholeNumber,
-    outputTokens: wholeNumber,
-    costUsd: v.pipe(v.string(), v.regex(COST_USD_PATTERN)),
-    metadata: opaqueObject,
-  }),
   resultMetadata: opaqueObject,
 });
 

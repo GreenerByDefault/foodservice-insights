@@ -217,20 +217,13 @@ export async function markAttemptSucceeded(
   workerId: string,
   outcome: { result: ChildResult; resultFiles: readonly ResultFileRecord[] },
 ): Promise<boolean> {
-  const { ai, resultMetadata } = outcome.result;
+  const { resultMetadata } = outcome.result;
 
   return await withTransaction(db, async (transaction) => {
     // The guarded update goes first so that losing the race writes nothing at all: `result_file`
     // rows for an attempt whose verdict is someone else's would be results nothing points at.
     const won = await markIfStillOwned(transaction, attemptId, workerId, {
       status: 'succeeded',
-      aiModel: ai.model,
-      aiInputTokens: ai.inputTokens,
-      aiOutputTokens: ai.outputTokens,
-      // Stays the string the child sent, all the way to the column: `ai_cost_usd` is
-      // `numeric(10,4)`, which float64 cannot round-trip.
-      aiCostUsd: ai.costUsd,
-      aiMetadata: ai.metadata,
       resultMetadata,
     });
     if (!won) return false;

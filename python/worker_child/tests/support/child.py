@@ -19,7 +19,6 @@ import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +61,6 @@ PROGRESS_CALLS = 2
 @dataclass(frozen=True)
 class Scenario:
     without_files: frozenset[str] = field(default_factory=frozenset)
-    cost_usd: Decimal = Decimal("0.5")
     raises: type[Exception] | None = None
     hang: bool = False
     spawn_grandchild: bool = False
@@ -72,7 +70,6 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
     raises_name = data.get("raises")
     return Scenario(
         without_files=frozenset(data.get("withoutFiles", ())),
-        cost_usd=Decimal(str(data["costUsd"])) if "costUsd" in data else Decimal("0.5"),
         raises=RAISES_BY_NAME[raises_name] if raises_name is not None else None,
         hang=data.get("hang", False),
         spawn_grandchild=data.get("spawnGrandchild", False),
@@ -99,7 +96,6 @@ def build_analyze(scenario: Scenario) -> Analyze:
             request,
             write_pdf=layout.PDF_FILE_NAME not in scenario.without_files,
             write_xlsx=layout.XLSX_FILE_NAME not in scenario.without_files,
-            cost_usd=scenario.cost_usd,
             progress_calls=0,  # already reported above
         )
 

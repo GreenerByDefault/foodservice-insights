@@ -1,4 +1,3 @@
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -51,11 +50,6 @@ def test_stub_analysis_reports_progress_the_requested_number_of_times(tmp_path: 
     stub_analysis(_request(tmp_path), report_progress=count, progress_calls=3)
 
     assert calls == 3
-
-
-def test_stub_analysis_can_report_a_cost(tmp_path: Path) -> None:
-    outcome = stub_analysis(_request(tmp_path), cost_usd=Decimal("1234.5678"))
-    assert outcome.ai.cost_usd == Decimal("1234.5678")
 
 
 @pytest.mark.parametrize("error", [UpstreamApiError, UnusableDataError])

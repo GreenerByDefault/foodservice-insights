@@ -1,24 +1,26 @@
 """The seam between `worker_child` and the analysis library. It takes a CSV and a form's
-answers, and returns either a report with its cost, or one of three failure reasons.
+answers, and returns either a report, or one of three failure reasons.
 
-Three properties keep this seam agnostic and are worth preserving as the library is ported in:
+Two properties keep this seam agnostic and are worth preserving as the library is ported in:
 
 1. **The library never sees the run directory, the contract's documents, or exit codes.** It is
    handed a CSV, a scratch directory, an output directory, and the form's answers.
 2. **`report_progress` is a plain no-argument callable with a no-op default**, so notebooks and
    the lab are unaffected. It carries no payload; the child's only use of it is to bump
    `sequence`.
-3. **AI usage is the library's to report**.
 
 **Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
 materializes it into the run directory per run, and the child reports new values back through the
 contract. `AnalysisRequest` is where the cache will arrive. Until then the library's cache is
 read-only.
+
+**Open:** AI usage (model, tokens, cost) is dropped from this seam for now — REQUIREMENTS.md
+§ Persistence. It needs to come back once the library is ported and its actual output shape is
+known.
 """
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
@@ -42,19 +44,9 @@ class AnalysisRequest:
 
 
 @dataclass(frozen=True)
-class AiUsage:
-    model: str  # the model that did most of the work
-    input_tokens: int
-    output_tokens: int
-    cost_usd: Decimal
-    metadata: Mapping[str, Any]  # per-model breakdown, request counts, cache hit rate
-
-
-@dataclass(frozen=True)
 class AnalysisOutcome:
     pdf: Path
     xlsx: Path
-    ai: AiUsage
     metadata: Mapping[str, Any]  # rows in, rows categorized, products uncategorized, ...
 
 
