@@ -1,10 +1,8 @@
 from collections.abc import Mapping
-from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
 
 from gbd_foodservice_insights.analysis import (
-    AiUsage,
     AnalysisError,
     AnalysisOutcome,
     AnalysisRequest,
@@ -27,11 +25,6 @@ def stub_analysis(
     report_progress: ReportProgress = _ignore,
     write_pdf: bool = True,
     write_xlsx: bool = True,
-    ai_model: str = "gpt-4.1-mini",
-    input_tokens: int = 1_000,
-    output_tokens: int = 500,
-    cost_usd: Decimal = Decimal("0.5"),
-    ai_metadata: Mapping[str, Any] = MappingProxyType({}),
     result_metadata: Mapping[str, Any] = MappingProxyType({}),
     progress_calls: int = 2,
     raises: type[AnalysisError] | None = None,
@@ -62,12 +55,5 @@ def stub_analysis(
     return AnalysisOutcome(
         pdf=pdf,
         xlsx=xlsx,
-        ai=AiUsage(
-            model=ai_model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cost_usd=cost_usd,
-            metadata=ai_metadata,
-        ),
         metadata=result_metadata,
     )

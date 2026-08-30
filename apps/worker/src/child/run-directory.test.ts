@@ -31,13 +31,6 @@ const MANIFEST = buildRunManifest({
 
 const RESULT = {
   analysisAttemptId: ATTEMPT_ID,
-  ai: {
-    model: 'gemini-2.5-pro',
-    inputTokens: 12_000,
-    outputTokens: 900,
-    costUsd: '1.2345',
-    metadata: {},
-  },
   resultMetadata: {},
 };
 

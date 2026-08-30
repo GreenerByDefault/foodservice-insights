@@ -4,7 +4,6 @@ and every failure reason `run()` maps get covered case by case."""
 
 import json
 import shutil
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -31,13 +30,6 @@ def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: 
     assert exit_code == names.EXIT_WROTE_RESULT
     assert read_json(run_directory / layout.RESULT) == {
         "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
-        "ai": {
-            "model": "gpt-4.1-mini",
-            "inputTokens": 1_000,
-            "outputTokens": 500,
-            "costUsd": "0.5000",
-            "metadata": {},
-        },
         "resultMetadata": {},
     }
     assert not (run_directory / layout.FAILURE).exists()
@@ -148,16 +140,6 @@ def test_declaring_a_file_the_library_never_wrote_is_a_contract_violation(
     assert exit_code == names.EXIT_WROTE_FAILURE
     assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
     assert not (run_directory / layout.RESULT).exists()
-
-
-def test_a_cost_outside_the_contracts_range_is_a_contract_violation(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress):
-        return stub_analysis(request, report_progress=report_progress, cost_usd=Decimal("1000000"))
-
-    exit_code = run(run_directory, analyze=analyze)
-
-    assert exit_code == names.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
 
 
 def test_when_failure_json_itself_cannot_be_written_the_exception_propagates(

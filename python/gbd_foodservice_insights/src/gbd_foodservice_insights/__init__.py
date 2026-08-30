@@ -5,7 +5,6 @@ A scaffold today — see `analysis.py` for the seam `worker_child` calls against
 """
 
 from gbd_foodservice_insights.analysis import (
-    AiUsage,
     AnalysisError,
     AnalysisOutcome,
     AnalysisRequest,
@@ -19,7 +18,6 @@ from gbd_foodservice_insights.analysis import (
 )
 
 __all__ = [
-    "AiUsage",
     "AnalysisError",
     "AnalysisOutcome",
     "AnalysisRequest",

@@ -88,13 +88,7 @@ describe('a successful attempt, end to end', () => {
       expect(existsSync(prepared.runDirectory)).toBe(false);
 
       const attempt = await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId);
-      expect(attempt).toMatchObject({
-        status: 'succeeded',
-        aiModel: 'fake-model',
-        aiInputTokens: 1_000,
-        aiOutputTokens: 200,
-        aiCostUsd: '1.2345',
-      });
+      expect(attempt.status).toBe('succeeded');
       expect(attempt.finishedAt).toBeInstanceOf(Date);
 
       const resultFiles = await readResultFiles(fixture.attemptId);

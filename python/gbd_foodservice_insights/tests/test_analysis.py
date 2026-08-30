@@ -1,8 +1,7 @@
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from gbd_foodservice_insights.analysis import AiUsage, AnalysisRequest, analyze
+from gbd_foodservice_insights.analysis import AnalysisRequest, analyze
 
 
 def _request(tmp_path: Path) -> AnalysisRequest:
@@ -22,14 +21,3 @@ def _request(tmp_path: Path) -> AnalysisRequest:
 def test_analyze_raises_not_implemented(tmp_path: Path) -> None:
     with pytest.raises(NotImplementedError):
         analyze(_request(tmp_path))
-
-
-def test_ai_usage_cost_is_a_decimal() -> None:
-    usage = AiUsage(
-        model="gpt-4.1-mini",
-        input_tokens=1,
-        output_tokens=1,
-        cost_usd=Decimal("0.0001"),
-        metadata={},
-    )
-    assert usage.cost_usd == Decimal("0.0001")

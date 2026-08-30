@@ -9,7 +9,7 @@ export type AnalysisAttemptId = string & { __brand: 'public.analysis_attempt' };
 
 /**
  * Represents the table public.analysis_attempt
- * The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at, failure_reason and the ai_* columns in one UPDATE.
+ * The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at and failure_reason in one UPDATE.
  */
 export default interface AnalysisAttemptTable {
   id: ColumnType<AnalysisAttemptId, AnalysisAttemptId | undefined, AnalysisAttemptId>;
@@ -45,16 +45,6 @@ export default interface AnalysisAttemptTable {
   failureDetail: ColumnType<string | null, string | null, string | null>;
 
   reapedByWorkerId: ColumnType<string | null, string | null, string | null>;
-
-  aiModel: ColumnType<string | null, string | null, string | null>;
-
-  aiInputTokens: ColumnType<number | null, number | null, number | null>;
-
-  aiOutputTokens: ColumnType<number | null, number | null, number | null>;
-
-  aiCostUsd: ColumnType<string | null, string | null, string | null>;
-
-  aiMetadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 
   resultMetadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 

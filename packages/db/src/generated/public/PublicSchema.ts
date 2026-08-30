@@ -18,11 +18,11 @@ export default interface PublicSchema {
 
   report: ReportTable;
 
+  analysisAttempt: AnalysisAttemptTable;
+
   organizationMember: OrganizationMemberTable;
 
   resultFile: ResultFileTable;
-
-  analysisAttempt: AnalysisAttemptTable;
 
   organizationInvite: OrganizationInviteTable;
 

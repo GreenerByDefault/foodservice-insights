@@ -1,5 +1,4 @@
 import json
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -12,7 +11,6 @@ from support.contract_fixtures import (
 )
 from worker_child.contract import ContractError, layout
 from worker_child.contract.messages import (
-    AiUsage,
     failure_payload,
     parse_run_manifest,
     progress_payload,
@@ -94,18 +92,10 @@ def test_progress_payload_is_the_fixture() -> None:
 def test_result_payload_is_the_fixture() -> None:
     payload = result_payload(
         analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
-        ai=AiUsage(
-            model="gemini-2.5-pro",
-            input_tokens=918342,
-            output_tokens=41207,
-            cost_usd=Decimal("2.4713"),
-            metadata={"providerRequests": 41, "promptCacheHitRate": 0.62},
-        ),
         result_metadata={"rowsIn": 4821, "rowsCategorized": 4790, "productsUncategorized": 31},
     )
 
     assert payload == load("valid", "result.json")
-    assert payload["ai"]["costUsd"] == "2.4713"
 
 
 def test_failure_payload_is_the_fixture() -> None:
@@ -124,23 +114,6 @@ def test_failure_payload_is_the_fixture() -> None:
 def test_refuses_to_write_a_reason_only_the_parent_may_claim() -> None:
     with pytest.raises(ContractError):
         failure_payload(reason="hung", detail="whatever")  # ty: ignore[invalid-argument-type]
-
-
-def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
-    # `ai_cost_usd` is `numeric(10,4)`, enforced by the parent as `^\d{1,6}\.\d{4}$`; a cost at or
-    # above 1,000,000 would be rejected as a contract_violation after a full, paid-for run.
-    with pytest.raises(ContractError):
-        result_payload(
-            analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
-            ai=AiUsage(
-                model="gemini-2.5-pro",
-                input_tokens=1,
-                output_tokens=1,
-                cost_usd=Decimal("1000000.0000"),
-                metadata={},
-            ),
-            result_metadata={},
-        )
 
 
 # ---------------------------------------------------------------------------------------

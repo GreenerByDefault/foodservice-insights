@@ -57,9 +57,13 @@ The input file and result files are stored in a blob store, with associated meta
 database.
 
 - **Input metadata:** uploader, name, upload time, file size.
-- **Result metadata:** file size, processing time, and AI metadata (number of tokens, model).
+- **Result metadata:** file size and processing time.
   - **Open:** the full result metadata shape depends on the JSON output from the AI library,
     which still needs to be reviewed.
+  - **Open:** AI usage (model, tokens, cost) was tracked here too, but was dropped for now —
+    its shape depended on the not-yet-ported analysis library and unsettled alignment with GBD
+    on what to track. See the git history for `analysis_attempt`'s `ai_*` columns
+    (`packages/db/migrations/001_initial_schema.ts`) to bring it back once both are resolved.
 - Input and result files are accessible to anyone with the link. The app only shows links to
   people with access, and links are hard to guess.
   - *Rejected: presigned URLs that expire after n minutes.* They add complexity and worsen UX —

@@ -546,19 +546,11 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "failure_reason" "public"."analysis_failure_reason",
     "failure_detail" "text",
     "reaped_by_worker_id" "text",
-    "ai_model" "text",
-    "ai_input_tokens" integer,
-    "ai_output_tokens" integer,
-    "ai_cost_usd" numeric(10,4),
-    "ai_metadata" "jsonb",
     "result_metadata" "jsonb",
     "notification_email_sent_at" timestamp with time zone,
     "notification_claimed_at" timestamp with time zone,
     "notification_claimed_by_worker_id" "text",
     "notification_attempts" integer DEFAULT 0 NOT NULL,
-    CONSTRAINT "analysis_attempt_ai_cost_usd_non_negative" CHECK (("ai_cost_usd" >= (0)::numeric)),
-    CONSTRAINT "analysis_attempt_ai_input_tokens_non_negative" CHECK (("ai_input_tokens" >= 0)),
-    CONSTRAINT "analysis_attempt_ai_output_tokens_non_negative" CHECK (("ai_output_tokens" >= 0)),
     CONSTRAINT "analysis_attempt_attempt_number_range" CHECK ((("attempt_number" >= 1) AND ("attempt_number" <= 5))),
     CONSTRAINT "analysis_attempt_cancel_requested_at_after_created_at" CHECK ((("cancel_requested_at" IS NULL) OR ("cancel_requested_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_canceled_is_not_notified" CHECK ((("notification_claimed_at" IS NULL) OR ("status" <> 'canceled'::"public"."analysis_attempt_status"))),
@@ -587,7 +579,7 @@ ALTER TABLE "public"."analysis_attempt" OWNER TO "postgres";
 -- Name: TABLE "analysis_attempt"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE "public"."analysis_attempt" IS 'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at, failure_reason and the ai_* columns in one UPDATE.';
+COMMENT ON TABLE "public"."analysis_attempt" IS 'The queue and state machine between the web app and the workers. Checks cannot be deferred, so a transition to a terminal status must set status, finished_at and failure_reason in one UPDATE.';
 
 
 --

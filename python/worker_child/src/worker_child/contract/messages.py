@@ -4,7 +4,6 @@ other three as payload dicts."""
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -23,11 +22,6 @@ from worker_child.contract.names import (
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
-# The parent stores `ai_cost_usd` as `numeric(10,4)` and enforces it with `^\d{1,6}\.\d{4}$`, so
-# anything at or above 1,000,000 is a contract violation the parent would reject after a full,
-# fully-paid-for run.
-MAXIMUM_COST_USD = Decimal("1000000")
-
 
 @dataclass(frozen=True)
 class ReportInputs:
@@ -42,16 +36,6 @@ class ReportInputs:
 class RunManifest:
     analysis_attempt_id: str
     report: ReportInputs
-
-
-@dataclass(frozen=True)
-class AiUsage:
-    model: str
-    input_tokens: int
-    output_tokens: int
-    # `ai_cost_usd` is `numeric(10,4)`; a float would lose precision crossing to JSON.
-    cost_usd: Decimal
-    metadata: Mapping[str, Any]
 
 
 def read_run_manifest(run_directory: Path) -> RunManifest:
@@ -93,22 +77,12 @@ def progress_payload(sequence: int) -> dict[str, Any]:
 def result_payload(
     *,
     analysis_attempt_id: str,
-    ai: AiUsage,
     result_metadata: Mapping[str, Any],
 ) -> dict[str, Any]:
     _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
-    _require(ai.input_tokens >= 0 and ai.output_tokens >= 0, "token counts must not be negative")
-    _require(0 <= ai.cost_usd < MAXIMUM_COST_USD, f"cost must be within [0, {MAXIMUM_COST_USD})")
 
     return {
         "analysisAttemptId": analysis_attempt_id,
-        "ai": {
-            "model": ai.model,
-            "inputTokens": ai.input_tokens,
-            "outputTokens": ai.output_tokens,
-            "costUsd": f"{ai.cost_usd:.4f}",
-            "metadata": _opaque(ai.metadata, "ai.metadata"),
-        },
         "resultMetadata": _opaque(result_metadata, "resultMetadata"),
     }
 
