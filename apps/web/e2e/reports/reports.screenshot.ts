@@ -2,8 +2,10 @@ import { MAX_ANALYSIS_ATTEMPTS, newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
+import { advanceThroughPollFailures } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { expectScreenshot } from '../lib/screenshots.ts';
+import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {
   const reportId = await reports.create('pending');
@@ -91,17 +93,24 @@ test('a report that was canceled', async ({ page, reports }) => {
 });
 
 test('a report whose poll cannot reach the server', async ({ page, reports }) => {
-  // Two consecutive failures at 10s then 20s — see `polling/schedule.ts` — plus margin.
-  test.setTimeout(60_000);
+  // Installed before navigation so it is in place before the page's own timer is armed on mount.
+  await page.clock.install();
 
   const reportId = await reports.create('pending');
   await page.goto(reportUrl(reportId));
   await ensureHydrated(page);
 
   await page.route('**/poll', (route) => route.abort());
-  await expect(page.getByText('Having trouble reaching the server', { exact: false })).toBeVisible({
-    timeout: 45_000,
-  });
+
+  // Two consecutive failures: the base interval, then double it — see `nextPollDelayMs`.
+  await advanceThroughPollFailures(page, '/poll', [
+    BASE_POLL_INTERVAL_MS,
+    BASE_POLL_INTERVAL_MS * 2,
+  ]);
+
+  await expect(
+    page.getByText('Having trouble reaching the server', { exact: false }),
+  ).toBeVisible();
   await expectScreenshot(page, 'reports-reconnecting.png');
 });
 

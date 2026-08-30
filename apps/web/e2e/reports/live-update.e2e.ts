@@ -10,16 +10,18 @@ import { expect } from '@playwright/test';
 import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
+import { advancePoll } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
+import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
 
 test('a report that finishes while the page is open updates in place, without a reload', async ({
   page,
   reports,
   db,
 }) => {
-  // The poll only runs every ten seconds — see `polling/schedule.ts` — plus the worker's own margin.
-  test.setTimeout(60_000);
+  // Installed before navigation so it is in place before the page's own timer is armed on mount.
+  await page.clock.install();
 
   const reportId = await reports.create('pending');
   await page.goto(reportUrl(reportId));
@@ -46,6 +48,7 @@ test('a report that finishes while the page is open updates in place, without a 
       .execute();
   });
 
-  await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible({ timeout: 45_000 });
+  await advancePoll(page, BASE_POLL_INTERVAL_MS);
+  await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   expect(loads.count).toBe(0);
 });

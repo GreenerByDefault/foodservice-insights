@@ -13,16 +13,18 @@ import { expect } from '@playwright/test';
 import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
+import { advancePoll } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
+import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
 
 test('retrying a failed report shows the waiting screen and resumes polling, without a reload', async ({
   page,
   reports,
   db,
 }) => {
-  // The retry has to be followed by a real poll interval — see `polling/schedule.ts`.
-  test.setTimeout(60_000);
+  // Installed before navigation so it is in place before the retry re-arms the page's timer.
+  await page.clock.install();
 
   const reportId = await reports.create('failed');
   await page.goto(reportUrl(reportId));
@@ -56,7 +58,8 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
       .execute();
   });
 
-  await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible({ timeout: 45_000 });
+  await advancePoll(page, BASE_POLL_INTERVAL_MS);
+  await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   expect(loads.count).toBe(0);
 });
 
