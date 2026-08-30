@@ -1,38 +1,16 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { FailureCopy } from './+page.server.ts';
 import FailureView from './failure-view.svelte';
+import { atRetryCapFailure, notRetryableFailure, retryableFailure } from './testing/fixtures.ts';
 
 /** Stands in for the polling view's `poll`, which is what the retry button asks for a refresh. */
 const onReportChanged = vi.fn(() => Promise.resolve());
 
 const RETRY_HREF = '/api/orgs/org-1/reports/report-1/retry';
 
-const RETRYABLE: FailureCopy = {
-  whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-  followUpText: 'You can run it again without uploading it a second time.',
-  canRetry: true,
-  attemptsExhausted: false,
-  contactMailto: 'mailto:support@example.com',
-};
-
-const NOT_RETRYABLE: FailureCopy = {
-  whatHappened: 'We could not make a usable report from this file.',
-  followUpText:
-    'Retrying is unlikely to help. Contact us and we can help figure out what to change.',
-  canRetry: false,
-  attemptsExhausted: false,
-  contactMailto: 'mailto:support@example.com',
-};
-
-const AT_RETRY_CAP: FailureCopy = {
-  whatHappened: 'Something on our end interrupted the analysis before it could finish.',
-  followUpText:
-    "You've used all 5 attempts for this report. Contact us and we can help figure out what to change.",
-  canRetry: false,
-  attemptsExhausted: true,
-  contactMailto: 'mailto:support@example.com',
-};
+const RETRYABLE = retryableFailure();
+const NOT_RETRYABLE = notRetryableFailure();
+const AT_RETRY_CAP = atRetryCapFailure();
 
 function stubFetch(response: Response) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));

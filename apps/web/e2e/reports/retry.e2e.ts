@@ -24,7 +24,7 @@ test('retrying a failed report shows the waiting screen, without a reload', asyn
 
   await page.getByRole('button', { name: 'Retry' }).click();
 
-  await expect(page.getByText('Waiting to start')).toBeVisible();
+  await expect(page.locator('[aria-current="step"]')).toContainText('Waiting to start');
   expect(loads.count).toBe(0);
 });
 
