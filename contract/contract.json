@@ -30,11 +30,7 @@
   },
   "resultFiles": {
     "pdf": "report.pdf",
-    "xlsx": "report.xlsx",
-    "chartExample": {
-      "chartKey": "emissions_by_month",
-      "fileName": "chart-emissions_by_month.png"
-    }
+    "xlsx": "report.xlsx"
   },
   "reportEnums": {
     "countsBasis": ["people", "meals"],

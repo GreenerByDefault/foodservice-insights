@@ -39,12 +39,10 @@ def test_agrees_on_the_input_csv() -> None:
 
 
 def test_agrees_on_the_result_file_names() -> None:
-    result_files = CONTRACT["resultFiles"]
-    assert result_files["pdf"] == layout.PDF_FILE_NAME
-    assert result_files["xlsx"] == layout.XLSX_FILE_NAME
-
-    example = result_files["chartExample"]
-    assert layout.chart_file_name(example["chartKey"]) == example["fileName"]
+    assert CONTRACT["resultFiles"] == {
+        "pdf": layout.PDF_FILE_NAME,
+        "xlsx": layout.XLSX_FILE_NAME,
+    }
 
 
 def test_agrees_on_the_report_enums() -> None:

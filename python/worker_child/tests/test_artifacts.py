@@ -16,18 +16,12 @@ def output_directory(tmp_path: Path) -> Path:
     return directory
 
 
-def outcome_with(
-    output_directory: Path, *, charts: dict[str, Path] | None = None
-) -> AnalysisOutcome:
+def outcome_with(output_directory: Path) -> AnalysisOutcome:
     pdf = output_directory / "some-report-name.pdf"
     xlsx = output_directory / "some-workbook-name.xlsx"
     pdf.write_bytes(b"%PDF-stub")
     xlsx.write_bytes(b"PKstub")
-    if charts is None:
-        chart_path = output_directory / "chart.png"
-        chart_path.write_bytes(b"\x89PNGstub")
-        charts = {"category_breakdown": chart_path}
-    return AnalysisOutcome(pdf=pdf, xlsx=xlsx, charts=charts, ai=ZERO_USAGE, metadata={})
+    return AnalysisOutcome(pdf=pdf, xlsx=xlsx, ai=ZERO_USAGE, metadata={})
 
 
 def test_renames_declared_files_to_contract_names(tmp_path: Path, output_directory: Path) -> None:
@@ -37,7 +31,6 @@ def test_renames_declared_files_to_contract_names(tmp_path: Path, output_directo
 
     assert (output_directory / layout.PDF_FILE_NAME).read_bytes() == b"%PDF-stub"
     assert (output_directory / layout.XLSX_FILE_NAME).read_bytes() == b"PKstub"
-    assert (output_directory / layout.chart_file_name("category_breakdown")).is_file()
 
 
 def test_leaves_no_file_behind_under_the_librarys_own_name(
@@ -56,25 +49,6 @@ def test_raises_when_the_pdf_was_declared_but_never_written(
 ) -> None:
     outcome = outcome_with(output_directory)
     outcome.pdf.unlink()
-
-    with pytest.raises(ContractError):
-        place_result_files(tmp_path, outcome)
-
-
-def test_raises_when_a_chart_was_declared_but_never_written(
-    tmp_path: Path, output_directory: Path
-) -> None:
-    missing = output_directory / "missing.png"
-    outcome = outcome_with(output_directory, charts={"missing_chart": missing})
-
-    with pytest.raises(ContractError):
-        place_result_files(tmp_path, outcome)
-
-
-def test_rejects_a_chart_key_that_is_not_snake_case(tmp_path: Path, output_directory: Path) -> None:
-    chart_path = output_directory / "chart.png"
-    chart_path.write_bytes(b"\x89PNGstub")
-    outcome = outcome_with(output_directory, charts={"Not Snake": chart_path})
 
     with pytest.raises(ContractError):
         place_result_files(tmp_path, outcome)

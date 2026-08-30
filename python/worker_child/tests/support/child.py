@@ -31,7 +31,7 @@ from gbd_foodservice_insights.analysis import (
     UnusableDataError,
     UpstreamApiError,
 )
-from gbd_foodservice_insights.testing import DEFAULT_CHART_KEYS, stub_analysis
+from gbd_foodservice_insights.testing import stub_analysis
 from worker_child.contract import layout
 from worker_child.run import Analyze, run
 from worker_child.writer import write_atomically
@@ -61,7 +61,6 @@ PROGRESS_CALLS = 2
 
 @dataclass(frozen=True)
 class Scenario:
-    charts: tuple[str, ...] = DEFAULT_CHART_KEYS
     without_files: frozenset[str] = field(default_factory=frozenset)
     cost_usd: Decimal = Decimal("0.5")
     raises: type[Exception] | None = None
@@ -72,7 +71,6 @@ class Scenario:
 def parse_scenario(data: Mapping[str, Any]) -> Scenario:
     raises_name = data.get("raises")
     return Scenario(
-        charts=tuple(data.get("charts", DEFAULT_CHART_KEYS)),
         without_files=frozenset(data.get("withoutFiles", ())),
         cost_usd=Decimal(str(data["costUsd"])) if "costUsd" in data else Decimal("0.5"),
         raises=RAISES_BY_NAME[raises_name] if raises_name is not None else None,
@@ -99,14 +97,8 @@ def build_analyze(scenario: Scenario) -> Analyze:
 
         return stub_analysis(
             request,
-            chart_keys=scenario.charts,
             write_pdf=layout.PDF_FILE_NAME not in scenario.without_files,
             write_xlsx=layout.XLSX_FILE_NAME not in scenario.without_files,
-            charts_to_write=[
-                key
-                for key in scenario.charts
-                if layout.chart_file_name(key) not in scenario.without_files
-            ],
             cost_usd=scenario.cost_usd,
             progress_calls=0,  # already reported above
         )

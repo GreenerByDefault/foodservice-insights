@@ -31,7 +31,6 @@ const MANIFEST = buildRunManifest({
 
 const RESULT = {
   analysisAttemptId: ATTEMPT_ID,
-  charts: ['emissions_by_month'],
   ai: {
     model: 'gemini-2.5-pro',
     inputTokens: 12_000,
@@ -128,17 +127,13 @@ describe('readResultFiles', () => {
   test('partitions named files into missing and present, reading bytes back exactly', async () => {
     await withTemporaryRunRoot(async (runRoot) => {
       const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
-      // Arbitrary bytes, not necessarily valid UTF-8, the same way a chart PNG would arrive.
+      // Arbitrary bytes, not necessarily valid UTF-8, the same way a report file could arrive.
       const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
       await writeFile(resultFilePath(runDirectory, 'report.pdf'), body);
 
-      const read = await readResultFiles(runDirectory, [
-        'report.pdf',
-        'report.xlsx',
-        'chart-total_spend.png',
-      ]);
+      const read = await readResultFiles(runDirectory, ['report.pdf', 'report.xlsx']);
 
-      expect(read.missing).toEqual(['report.xlsx', 'chart-total_spend.png']);
+      expect(read.missing).toEqual(['report.xlsx']);
       expect([...read.contents].map(([name, bytes]) => [name, new Uint8Array(bytes)])).toEqual([
         ['report.pdf', body],
       ]);

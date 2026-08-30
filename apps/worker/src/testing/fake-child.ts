@@ -19,7 +19,6 @@ import { basename, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ChildCommand } from '../child/spawn.ts';
 import {
-  chartFileName,
   RESULT_FILE_NAMES,
   type RunDirectoryEntry,
   resultFilePath,
@@ -28,11 +27,9 @@ import {
 
 export type FakeChildStep =
   | { step: 'progress'; sequence: number }
-  /** Write `result.json` and the files it declares. `withoutFiles` names ones to leave out, and an
-   * invalid entry in `charts` is how to produce a `result.json` the parent must reject. */
+  /** Write `result.json` and the files it declares. `withoutFiles` names ones to leave out. */
   | {
       step: 'result';
-      charts?: readonly string[];
       withoutFiles?: readonly string[];
       ai?: Partial<FakeChildAi>;
       resultMetadata?: Record<string, unknown>;
@@ -216,11 +213,7 @@ async function writeResult(
   step: Extract<FakeChildStep, { step: 'result' }>,
   runDirectory: string,
 ): Promise<void> {
-  const charts = step.charts ?? ['emissions_by_month'];
-  const declared = [
-    ...Object.values(RESULT_FILE_NAMES),
-    ...charts.map((chartKey) => chartFileName(chartKey)),
-  ];
+  const declared = Object.values(RESULT_FILE_NAMES);
 
   for (const fileName of declared.filter((name) => !(step.withoutFiles ?? []).includes(name))) {
     await writeAtomically(resultFilePath(runDirectory, fileName), fakeResultFileContents(fileName));
@@ -232,7 +225,6 @@ async function writeResult(
       // The real child reads this out of `run.json`; taking it from the directory name keeps a
       // scenario from having to know the attempt id.
       analysisAttemptId: basename(runDirectory),
-      charts,
       ai: { ...DEFAULT_AI, ...step.ai },
       resultMetadata: step.resultMetadata ?? {},
     }),

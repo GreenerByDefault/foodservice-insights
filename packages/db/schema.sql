@@ -148,8 +148,7 @@ ALTER TYPE "public"."rejected_upload_reason" OWNER TO "postgres";
 
 CREATE TYPE "public"."result_file_kind" AS ENUM (
     'pdf',
-    'xlsx',
-    'chart'
+    'xlsx'
 );
 
 
@@ -868,14 +867,12 @@ CREATE TABLE IF NOT EXISTS "public"."result_file" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "analysis_attempt_id" "uuid" NOT NULL,
     "kind" "public"."result_file_kind" NOT NULL,
-    "chart_key" "text",
     "storage_key" "text" NOT NULL,
     "byte_size" integer NOT NULL,
     "content_type" "text" NOT NULL,
     "checksum_sha256" "bytea" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     CONSTRAINT "result_file_byte_size_positive" CHECK (("byte_size" > 0)),
-    CONSTRAINT "result_file_chart_key_iff_chart" CHECK ((("kind" = 'chart'::"public"."result_file_kind") = ("chart_key" IS NOT NULL))),
     CONSTRAINT "result_file_checksum_sha256_length" CHECK (("octet_length"("checksum_sha256") = 32))
 );
 
@@ -1134,13 +1131,6 @@ CREATE INDEX "report_organization_id_created_at" ON "public"."report" USING "btr
 --
 
 CREATE INDEX "result_file_analysis_attempt_id" ON "public"."result_file" USING "btree" ("analysis_attempt_id");
-
-
---
--- Name: result_file_one_chart_key_per_attempt; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE UNIQUE INDEX "result_file_one_chart_key_per_attempt" ON "public"."result_file" USING "btree" ("analysis_attempt_id", "chart_key") WHERE ("kind" = 'chart'::"public"."result_file_kind");
 
 
 --

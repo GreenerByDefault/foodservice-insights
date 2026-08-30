@@ -139,12 +139,12 @@ describe('putResultFile', () => {
       };
 
       const stored = await Promise.all(
-        (['pdf', 'xlsx', 'chart'] as const).map(async (kind) =>
+        (['pdf', 'xlsx'] as const).map(async (kind) =>
           putResultFile(BLOB_STORE, { ...location, resultFileId: newResultFileId(), kind }, PDF),
         ),
       );
 
-      expect(new Set(stored.map(({ storageKey }) => storageKey)).size).toBe(3);
+      expect(new Set(stored.map(({ storageKey }) => storageKey)).size).toBe(2);
     });
   });
 
@@ -157,7 +157,7 @@ describe('putResultFile', () => {
       };
 
       const stored = await Promise.all(
-        (['pdf', 'xlsx', 'chart'] as const).map(async (kind) =>
+        (['pdf', 'xlsx'] as const).map(async (kind) =>
           putResultFile(BLOB_STORE, { ...location, resultFileId: newResultFileId(), kind }, PDF),
         ),
       );
@@ -165,7 +165,6 @@ describe('putResultFile', () => {
       expect(stored.map(({ contentType }) => contentType)).toEqual([
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'image/png',
       ]);
 
       for (const { storageKey, contentType } of stored) {

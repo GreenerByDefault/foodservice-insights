@@ -543,7 +543,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       'unusable_data',
     ])
     .execute();
-  await database.schema.createType('result_file_kind').asEnum(['pdf', 'xlsx', 'chart']).execute();
+  await database.schema.createType('result_file_kind').asEnum(['pdf', 'xlsx']).execute();
 
   // --- analysis_attempt -----------------------------------------------------
 
@@ -911,16 +911,11 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
       column.notNull().references('analysis_attempt.id').onDelete('cascade'),
     )
     .addColumn('kind', sql`result_file_kind`, (column) => column.notNull())
-    .addColumn('chart_key', 'text')
     .addColumn('storage_key', 'text', (column) => column.notNull().unique())
     .addColumn('byte_size', 'integer', (column) => column.notNull())
     .addColumn('content_type', 'text', (column) => column.notNull())
     .addColumn('checksum_sha256', 'bytea', (column) => column.notNull())
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
-    .addCheckConstraint(
-      'result_file_chart_key_iff_chart',
-      sql`(kind = 'chart') = (chart_key IS NOT NULL)`,
-    )
     .addCheckConstraint('result_file_byte_size_positive', sql`byte_size > 0`)
     .addCheckConstraint(
       'result_file_checksum_sha256_length',
@@ -928,7 +923,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     )
     .execute();
 
-  // One PDF and one XLSX per attempt; charts are distinguished by their key.
+  // One PDF and one XLSX per attempt.
   await database.schema
     .createIndex('result_file_one_pdf_per_attempt')
     .on('result_file')
@@ -943,14 +938,6 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .column('analysis_attempt_id')
     .unique()
     .where(sql`kind`, '=', sql`'xlsx'`)
-    .execute();
-
-  await database.schema
-    .createIndex('result_file_one_chart_key_per_attempt')
-    .on('result_file')
-    .columns(['analysis_attempt_id', 'chart_key'])
-    .unique()
-    .where(sql`kind`, '=', sql`'chart'`)
     .execute();
 
   // The partial indexes above cannot serve the foreign key, which has to reach every row.

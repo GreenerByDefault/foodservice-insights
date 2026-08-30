@@ -8,12 +8,7 @@ from gbd_foodservice_insights.analysis import (
     UnusableDataError,
     UpstreamApiError,
 )
-from gbd_foodservice_insights.testing import (
-    PDF_MAGIC_BYTES,
-    PNG_MAGIC_BYTES,
-    XLSX_MAGIC_BYTES,
-    stub_analysis,
-)
+from gbd_foodservice_insights.testing import PDF_MAGIC_BYTES, XLSX_MAGIC_BYTES, stub_analysis
 
 
 def _request(tmp_path: Path) -> AnalysisRequest:
@@ -31,12 +26,9 @@ def _request(tmp_path: Path) -> AnalysisRequest:
 
 
 def test_stub_analysis_writes_exactly_what_it_declares(tmp_path: Path) -> None:
-    outcome = stub_analysis(_request(tmp_path), chart_keys=("summary", "detail"))
+    outcome = stub_analysis(_request(tmp_path))
     assert outcome.pdf.read_bytes() == PDF_MAGIC_BYTES
     assert outcome.xlsx.read_bytes() == XLSX_MAGIC_BYTES
-    assert set(outcome.charts) == {"summary", "detail"}
-    for path in outcome.charts.values():
-        assert path.read_bytes() == PNG_MAGIC_BYTES
 
 
 def test_stub_analysis_can_omit_the_pdf(tmp_path: Path) -> None:
@@ -47,11 +39,6 @@ def test_stub_analysis_can_omit_the_pdf(tmp_path: Path) -> None:
 def test_stub_analysis_can_omit_the_xlsx(tmp_path: Path) -> None:
     outcome = stub_analysis(_request(tmp_path), write_xlsx=False)
     assert not outcome.xlsx.exists()
-
-
-def test_stub_analysis_can_declare_a_chart_it_never_writes(tmp_path: Path) -> None:
-    outcome = stub_analysis(_request(tmp_path), chart_keys=("summary",), charts_to_write=())
-    assert not outcome.charts["summary"].exists()
 
 
 def test_stub_analysis_reports_progress_the_requested_number_of_times(tmp_path: Path) -> None:

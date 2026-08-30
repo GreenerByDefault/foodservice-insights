@@ -31,10 +31,7 @@ export async function _downloadResultFile(
 
   if (!file) error(404, { message: 'That file is not available.' });
 
-  const downloadFilename =
-    file.kind === 'chart'
-      ? undefined
-      : `${file.name ?? 'report'}.${RESULT_FILE_FORMATS[file.kind].extension}`;
+  const downloadFilename = `${file.name ?? 'report'}.${RESULT_FILE_FORMATS[file.kind].extension}`;
 
   return await redirectToSignedUrl(store, file.storageKey, downloadFilename);
 }

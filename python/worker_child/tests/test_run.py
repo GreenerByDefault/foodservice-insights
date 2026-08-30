@@ -31,7 +31,6 @@ def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: 
     assert exit_code == names.EXIT_WROTE_RESULT
     assert read_json(run_directory / layout.RESULT) == {
         "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
-        "charts": ["category_breakdown"],
         "ai": {
             "model": "gpt-4.1-mini",
             "inputTokens": 1_000,
@@ -50,7 +49,6 @@ def test_places_result_files_under_contract_names(run_directory: Path) -> None:
     files_directory = run_directory / layout.RESULT_FILES_DIRECTORY
     assert (files_directory / layout.PDF_FILE_NAME).read_bytes().startswith(b"%PDF")
     assert (files_directory / layout.XLSX_FILE_NAME).is_file()
-    assert (files_directory / layout.chart_file_name("category_breakdown")).is_file()
 
 
 def test_reports_progress_once_per_report_progress_call(run_directory: Path) -> None:
@@ -155,16 +153,6 @@ def test_declaring_a_file_the_library_never_wrote_is_a_contract_violation(
 def test_a_cost_outside_the_contracts_range_is_a_contract_violation(run_directory: Path) -> None:
     def analyze(request: AnalysisRequest, *, report_progress):
         return stub_analysis(request, report_progress=report_progress, cost_usd=Decimal("1000000"))
-
-    exit_code = run(run_directory, analyze=analyze)
-
-    assert exit_code == names.EXIT_WROTE_FAILURE
-    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
-
-
-def test_a_chart_key_that_is_not_snake_case_is_a_contract_violation(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress):
-        return stub_analysis(request, report_progress=report_progress, chart_keys=("Not Snake",))
 
     exit_code = run(run_directory, analyze=analyze)
 

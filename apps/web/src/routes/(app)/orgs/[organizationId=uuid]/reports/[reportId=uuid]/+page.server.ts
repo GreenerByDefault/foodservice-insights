@@ -34,12 +34,10 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export type FileLink = { href: string };
-export type ChartLink = { href: string; chartKey: string };
 
 export type ResultFiles = {
   pdf: FileLink;
   xlsx: FileLink;
-  charts: ChartLink[];
 };
 
 /** What we ask the user to do next, and what to say about it. */
@@ -237,10 +235,8 @@ async function loadResultFiles(
 ): Promise<ResultFiles> {
   const files = await db
     .selectFrom('resultFile')
-    .select(['id', 'kind', 'chartKey'])
+    .select(['id', 'kind'])
     .where('analysisAttemptId', '=', attemptId)
-    // Ensure a consistent order.
-    .orderBy('chartKey')
     .execute();
 
   return {
@@ -256,12 +252,6 @@ async function loadResultFiles(
         'analysis_attempt_succeeded_has_xlsx',
       ),
     ),
-    charts: files
-      .filter((file) => file.kind === 'chart')
-      .map((file) => ({
-        href: resultFileHref(file.id),
-        chartKey: requireConstraint(file.chartKey, 'result_file_chart_key_iff_chart'),
-      })),
   };
 }
 

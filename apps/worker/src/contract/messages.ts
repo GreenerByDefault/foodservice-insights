@@ -5,7 +5,6 @@
 
 import type { AnalysisAttemptId, CountsBasis, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
-import { CHART_KEY_PATTERN } from './layout.ts';
 import { CHILD_FAILURE_REASONS, COUNTS_BASES, UNIT_SYSTEMS } from './names.ts';
 
 export class ContractError extends Error {
@@ -48,14 +47,6 @@ const ProgressSchema = v.strictObject({
 
 const ChildResultSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
-  // Chart keys, not paths — `layout.ts` derives the filename.
-  charts: v.pipe(
-    v.array(v.pipe(v.string(), v.regex(CHART_KEY_PATTERN))),
-    v.checkItems(
-      (chartKey, index, charts) => charts.indexOf(chartKey) === index,
-      'chart keys must be unique',
-    ),
-  ),
   ai: v.strictObject({
     model: nonEmptyString,
     inputTokens: wholeNumber,

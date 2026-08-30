@@ -9,7 +9,6 @@ const NOT_READ: DocumentRead = { kind: 'not-read' };
 
 const A_RESULT: Extract<DocumentRead, { kind: 'result' }>['result'] = {
   analysisAttemptId: '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f',
-  charts: ['total_spend'],
   ai: {
     model: 'gemini-3-pro',
     inputTokens: 100,
@@ -201,13 +200,13 @@ describe('classifyVerdict', () => {
       const read: DocumentRead = {
         kind: 'result',
         result: A_RESULT,
-        missingResultFiles: ['report.pdf', 'chart-total_spend.png'],
+        missingResultFiles: ['report.pdf', 'report.xlsx'],
       };
       const verdict = classifyVerdict(anEnding({ outcome: EXITED_0, read }));
       expect(verdict).toEqual({
         kind: 'failed',
         reason: 'contract_violation',
-        detail: 'result.json declared file(s) never written: report.pdf, chart-total_spend.png',
+        detail: 'result.json declared file(s) never written: report.pdf, report.xlsx',
       });
     });
 

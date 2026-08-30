@@ -878,15 +878,13 @@ describe('result_file', () => {
   async function aResultFile(
     transaction: Transaction,
     attemptId: AnalysisAttempt['id'],
-    kind: 'pdf' | 'xlsx' | 'chart',
-    chartKey: string | null = null,
+    kind: 'pdf' | 'xlsx',
   ) {
     return await transaction
       .insertInto('resultFile')
       .values({
         analysisAttemptId: attemptId,
         kind,
-        chartKey,
         storageKey: `org/test/${crypto.randomUUID()}.${kind}`,
         byteSize: 2048,
         contentType: 'application/octet-stream',
@@ -898,21 +896,6 @@ describe('result_file', () => {
   async function aSucceededAttempt(transaction: Transaction, reportId?: Report['id']) {
     return await insertAnalysisAttempt(transaction, { reportId, status: 'succeeded' });
   }
-
-  test.each([
-    ['a chart without a key', 'chart' as const, null],
-    ['a PDF with a chart key', 'pdf' as const, 'emissions-by-month'],
-  ])('rejects %s', async (_description, kind, chartKey) => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, kind, chartKey);
-    });
-
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'result_file_chart_key_iff_chart',
-    });
-  });
 
   test('rejects an empty file', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
@@ -946,33 +929,6 @@ describe('result_file', () => {
     await expect(insert).rejects.toMatchObject({
       code: POSTGRES_CODE_UNIQUE_VIOLATION,
       constraint: `result_file_one_${kind}_per_attempt`,
-    });
-  });
-
-  test('allows many charts per attempt, but not a repeated chart key', async () => {
-    const count = await withRollback(DATABASE, async (transaction) => {
-      const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, 'chart', 'emissions-by-month');
-      await aResultFile(transaction, attempt.id, 'chart', 'emissions-by-category');
-
-      const charts = await transaction
-        .selectFrom('resultFile')
-        .select('chartKey')
-        .where('analysisAttemptId', '=', attempt.id)
-        .execute();
-      return charts.length;
-    });
-    expect(count).toBe(2);
-
-    const duplicate = withRollback(DATABASE, async (transaction) => {
-      const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, 'chart', 'emissions-by-month');
-      await aResultFile(transaction, attempt.id, 'chart', 'emissions-by-month');
-    });
-
-    await expect(duplicate).rejects.toMatchObject({
-      code: POSTGRES_CODE_UNIQUE_VIOLATION,
-      constraint: 'result_file_one_chart_key_per_attempt',
     });
   });
 

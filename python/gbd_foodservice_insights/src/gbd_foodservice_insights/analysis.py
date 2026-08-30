@@ -1,15 +1,14 @@
 """The seam between `worker_child` and the analysis library. It takes a CSV and a form's
 answers, and returns either a report with its cost, or one of three failure reasons.
 
-Four properties keep this seam agnostic and are worth preserving as the library is ported in:
+Three properties keep this seam agnostic and are worth preserving as the library is ported in:
 
 1. **The library never sees the run directory, the contract's documents, or exit codes.** It is
    handed a CSV, a scratch directory, an output directory, and the form's answers.
 2. **`report_progress` is a plain no-argument callable with a no-op default**, so notebooks and
    the lab are unaffected. It carries no payload; the child's only use of it is to bump
    `sequence`.
-3. **The library names its own charts**; the wrapper maps keys to contract filenames.
-4. **AI usage is the library's to report**.
+3. **AI usage is the library's to report**.
 
 **Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
 materializes it into the run directory per run, and the child reports new values back through the
@@ -33,7 +32,7 @@ UnitSystem = Literal["lb", "kg"]
 class AnalysisRequest:
     run_id: str  # opaque; log correlation only
     input_csv: Path  # product,date,weight — UTF-8, ISO dates, plain numbers
-    output_directory: Path  # where to write the pdf, xlsx, and charts
+    output_directory: Path  # where to write the pdf and xlsx
     work_directory: Path  # scratch; discarded after the run
     report_name: str | None
     site_name: str | None
@@ -55,7 +54,6 @@ class AiUsage:
 class AnalysisOutcome:
     pdf: Path
     xlsx: Path
-    charts: Mapping[str, Path]  # stable snake_case key -> file in output_directory
     ai: AiUsage
     metadata: Mapping[str, Any]  # rows in, rows categorized, products uncategorized, ...
 

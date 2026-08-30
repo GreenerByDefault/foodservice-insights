@@ -14,9 +14,9 @@
  *
  * 1. **Everything an organization owns is under one prefix**, so deleting an organization's files
  *    is a single `deletePrefix`.
- * 2. **A segment is an id or a fixed name, never anything a user typed** — filenames, report names
- *    and chart keys stay in the database. So a key needs no escaping, and branded ids mean it
- *    needs no validation: an `OrganizationId` cannot have come from a request body.
+ * 2. **A segment is an id or a fixed name, never anything a user typed** — filenames and report
+ *    names stay in the database. So a key needs no escaping, and branded ids mean it needs no
+ *    validation: an `OrganizationId` cannot have come from a request body.
  */
 
 import type {
@@ -41,8 +41,6 @@ export const OPAQUE_CSV_CONTENT_TYPE = 'application/octet-stream';
  *
  * Keyed by the database's own `result_file_kind`, so the `kind` written to `result_file` and the
  * extension its key ends in come from one entry.
- *
- * **Open:** charts are PNG until the AI library's output has been reviewed.
  */
 export const RESULT_FILE_FORMATS = {
   pdf: { extension: 'pdf', contentType: 'application/pdf' },
@@ -50,7 +48,6 @@ export const RESULT_FILE_FORMATS = {
     extension: 'xlsx',
     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   },
-  chart: { extension: 'png', contentType: 'image/png' },
 } as const satisfies Record<ResultFileKind, { extension: string; contentType: string }>;
 
 /** The trailing slash is load-bearing: `deletePrefix` matches the string, not path segments, so

@@ -43,18 +43,6 @@ export type ReportState =
   | 'failed-at-retry-cap'
   | 'canceled';
 
-/** Snake_case, matching `CHART_KEY_PATTERN` (`apps/worker/src/contract/layout.ts`). */
-const CHART_KEYS = [
-  'total_spend',
-  'avg_order_value',
-  'top_products',
-  'spend_by_month',
-  'spend_by_site',
-  'order_frequency',
-  'category_breakdown',
-  'waste_reduction',
-];
-
 /** Every fixture report is created the same way: one report, one input file, backdated to
  * `ANCHOR` (see the file header). */
 async function insertReportWithInputFile(
@@ -113,9 +101,6 @@ async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
   });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-  for (const chartKey of CHART_KEYS) {
-    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'chart', chartKey });
-  }
   return reportId;
 }
 
