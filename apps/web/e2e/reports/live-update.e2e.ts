@@ -13,7 +13,7 @@ import { test } from '../fixtures/test.ts';
 import { advancePoll } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
+import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 
 test('a report that finishes while the page is open updates in place, without a reload', async ({
   page,

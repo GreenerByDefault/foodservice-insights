@@ -4,8 +4,8 @@ import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { advanceThroughPollFailures } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
+import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 import { expectScreenshot } from '../lib/screenshots.ts';
-import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {
   const reportId = await reports.create('pending');

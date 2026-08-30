@@ -16,7 +16,7 @@ import { test } from '../fixtures/test.ts';
 import { advancePoll } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
+import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 
 test('retrying a failed report shows the waiting screen and resumes polling, without a reload', async ({
   page,

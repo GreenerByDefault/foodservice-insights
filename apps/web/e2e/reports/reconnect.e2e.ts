@@ -13,7 +13,7 @@ import { test } from '../fixtures/test.ts';
 import { advanceThroughPollFailures } from '../lib/fake-poll.ts';
 import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { BASE_POLL_INTERVAL_MS } from './schedule.ts';
+import { BASE_POLL_INTERVAL_MS } from '../lib/schedule.ts';
 
 test('an unreachable poll leaves the timeline up and shows a reconnecting notice, never a reload', async ({
   page,
