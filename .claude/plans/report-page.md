@@ -46,9 +46,12 @@ screen and live polling remain.
   narrowing the endpoint's 409 into an outcome variant, per the README's rule that a feature owns a
   parser knowing its own endpoint's statuses. `waiting/cancel-button.svelte` and `failure-view.svelte`
   are the wiring — an `ActionState` ([`ActionState.ts`](apps/web/src/lib/types/ActionState.ts))
-  driving the disabled/error state, and `invalidate(reportDependencyKey(reportId))` on success so the
-  load's own re-run is what swaps the screen. Delete (`DELETE .../reports/[reportId]`) is a real
-  endpoint too, but has no frontend yet (see Follow-ups).
+  driving the disabled/error state, and an `onReportChanged: () => Promise<void>` prop called on
+  success. `+page.svelte` wires it to `invalidate(reportDependencyKey(reportId))` today, so the
+  load's own re-run is what swaps the screen — that wire is what PR 3 (below) moves from
+  `invalidate` to `poll` without the buttons themselves changing. Delete
+  (`DELETE .../reports/[reportId]`) is a real endpoint too, but has no frontend yet (see
+  Follow-ups).
 - **`@gbd/core`'s [`time.ts`](packages/core/src/time.ts) owns both renderings of a moment.**
   `formatElapsed(now, at)` escalates minutes → hours → days and deliberately stops there, because
   `Intl.RelativeTimeFormat`'s weeks and months are approximate buckets and less precise than the day
@@ -387,7 +390,7 @@ guarantees it, and `loadResultFiles` already asserts it via `requireConstraint` 
 fixture still uses); `result-view.svelte.test.ts` for the three hrefs, one figure per chart with
 the humanized caption, and no horizontal scroll at 375px.
 
-## PR 2, 3, 4 — Polling, split for review
+## PR 2, 3 — Polling, split for review
 
 The spike this plan called for already ran: `invalidate()`'s own request falls back to a full-page
 navigation when it can't reach the server, which is a reload on the one screen that most needs to
@@ -395,19 +398,16 @@ survive an outage. So the mechanism is a colocated `+server.ts` the page `fetch`
 `invalidate()` — `apps/web/README.md`'s "Reads are `load` functions" section documents why, and
 that section's wording is no longer aspirational; treat it as settled.
 
-The full change already exists on branch `polling`, built as one PR. It splits cleanly into three,
-each reviewable without holding the next one's design in mind:
+The full change already exists on branch `polling`, built as one PR. It splits cleanly into two
+remaining PRs, each reviewable without holding the next one's design in mind. Landed already:
+`cancel-button.svelte` and `failure-view.svelte` take an `onReportChanged: () => Promise<void>`
+prop instead of `reportId` + calling `invalidate()` directly — `+page.svelte` wires it to
+`() => invalidate(reportDependencyKey(data.report.id))`, so behavior is unchanged and only the seam
+moved. `polling/schedule.ts` (`nextPollDelayMs`, `BASE_POLL_INTERVAL_MS`, `FAILURES_BEFORE_NOTICE`)
+landed alongside it, unused — pure and already Node-tested in `schedule.test.ts`. This is what lets
+PR 3 swap that one wire from `invalidate` to `poll` without touching the buttons.
 
-**PR 2 — Cancel/retry take a callback, not `reportId` + `invalidate()`.** `cancel-button.svelte`
-and `failure-view.svelte` currently call `invalidate(reportDependencyKey(reportId))` on success.
-Change their prop to `onReportChanged: () => Promise<void>`, and wire it at the call site to
-`() => invalidate(reportDependencyKey(reportId))` — behavior is identical, only the seam moves.
-This is what lets PR 4 later swap that one wire from `invalidate` to `poll` without touching the
-buttons. Alongside it, land `polling/schedule.ts` unused: `nextPollDelayMs`, the interval, the cap,
-the failures-before-notice threshold, all pure and already Node-tested on the branch. Reviewing the
-backoff policy doesn't need the timer/effect code that consumes it.
-
-**PR 3 — Move the switch into `polling/view.svelte`, still on `invalidate()`.** Pull the
+**PR 2 — Move the switch into `polling/view.svelte`, still on `invalidate()`.** Pull the
 status-switch body out of `+page.svelte` into a new `polling/view.svelte` taking `data` and
 rendering it exactly as `+page.svelte` does today — a pure file move, not yet a behavior change.
 Two additions ride along because they don't depend on polling actually existing:
@@ -415,7 +415,7 @@ Two additions ride along because they don't depend on polling actually existing:
 - **The live region.** One persistent `aria-live="polite"` region outside the switch, carrying a
   `screenHeadline(data)` string. It has to sit outside the switch now, before there's a timer to
   make it matter: a live region unmounted along with the view it described announces nothing, so
-  waiting for PR 4 to add it would mean adding it and the switch's unmount behavior at the same
+  waiting for PR 3 to add it would mean adding it and the switch's unmount behavior at the same
   time.
 - Wire `onReportChanged` through to `WaitingView`/`FailureView` as `() =>
   invalidate(reportDependencyKey(data.report.id))` here instead of in `+page.svelte`, since this
@@ -423,16 +423,15 @@ Two additions ride along because they don't depend on polling actually existing:
 
 No `connection`/retrying notice yet — that prop doesn't exist until there's a poll that can fail.
 
-**PR 4 — The poll itself.** `poll/+server.ts`, `polling/poll-report.ts`, the `$derived` writable
+**PR 3 — The poll itself.** `poll/+server.ts`, `polling/poll-report.ts`, the `$derived` writable
 `current`, the effect that schedules/cancels the timer, `visibilitychange` handling, the
 reconnecting notice, and swapping `onReportChanged`'s wiring from `invalidate` to `poll`. Also:
 delete `report-dependency.ts` and the `depends()` call in `+page.server.ts` (nothing calls
 `invalidate()` after this lands), and extend `apps/web/README.md` with the poll-endpoint exception
 to "reads are `load` functions."
 
-**Tests** — PR 2: `schedule.test.ts`, plus the cancel/retry component tests updated for the new
-prop. PR 3: a `polling/view.svelte.test.ts` covering the moved switch and the live region's text
-per status. PR 4: `poll-report.test.ts`, the reconnecting-notice and retention cases in
+**Tests** — PR 2: a `polling/view.svelte.test.ts` covering the moved switch and the live region's
+text per status. PR 3: `poll-report.test.ts`, the reconnecting-notice and retention cases in
 `polling/view.svelte.test.ts`, and the two e2e tests (`live-update.e2e.ts`, `reconnect.e2e.ts`).
 
 ## Follow-ups this work identifies but does not do

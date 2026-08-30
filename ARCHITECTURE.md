@@ -84,7 +84,8 @@ design.
 
 ## Client ↔ server
 
-The client polls the server roughly every 10 seconds.
+The client polls the server on the interval set by `BASE_POLL_INTERVAL_MS` in
+[`apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/polling/schedule.ts`](apps/web/src/routes/(app)/orgs/%5BorganizationId=uuid%5D/reports/%5BreportId=uuid%5D/polling/schedule.ts).
 
 - *Rejected: WebSockets or Server-Sent Events.* Both are dramatically more complex, and both
   require holding a connection open for the entire processing lifecycle. Keeping connections
