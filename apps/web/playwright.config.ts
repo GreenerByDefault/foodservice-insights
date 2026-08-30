@@ -67,6 +67,7 @@ export default defineConfig({
       name: 'screenshots',
       testMatch: '**/*.screenshot.ts',
       dependencies: ['browser-container', 'database'],
+      teardown: 'screenshots-optimize',
       use: {
         baseURL: BASE_URL_FROM_CONTAINER,
         connectOptions: { wsEndpoint: BROWSER_WS_ENDPOINT },
@@ -75,6 +76,11 @@ export default defineConfig({
         viewport: { width: 1280, height: 800 },
         deviceScaleFactor: 1,
       },
+    },
+    {
+      // Re-compresses any snapshot the run wrote. See optimize-screenshots.teardown.ts.
+      name: 'screenshots-optimize',
+      testMatch: '**/optimize-screenshots.teardown.ts',
     },
   ],
 
