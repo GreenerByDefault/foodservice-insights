@@ -51,8 +51,6 @@ export type FailureCopy = {
   whatHappened: string;
   followUpText: string;
   canRetry: boolean;
-  /** The cap follow-up text already states the attempt count, so the page shouldn't repeat it
-   * as "This was attempt N." underneath. */
   attemptsExhausted: boolean;
   contactMailto: string;
 };

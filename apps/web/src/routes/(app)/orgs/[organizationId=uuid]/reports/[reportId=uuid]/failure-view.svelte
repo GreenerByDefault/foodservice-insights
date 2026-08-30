@@ -27,8 +27,8 @@ async function retry() {
   try {
     await retryReport(retryButtonHref);
 
-    // Both outcomes mean a new attempt exists (or one already did) — the load's own re-run is
-    // what shows it, same as cancel.
+    // Both outcomes mean a new attempt exists (or one already did). The invalidate reloads
+    // the page to show the new attempt.
     await invalidate(reportDependencyKey(reportId));
     actionState = { status: 'success' };
   } catch {
