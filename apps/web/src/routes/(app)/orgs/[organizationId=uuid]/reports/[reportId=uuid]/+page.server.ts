@@ -77,7 +77,10 @@ export type ReportPageData = {
   };
   cancelButtonHref: string;
   retryButtonHref: string;
+  deleteButtonHref: string;
   newReportHref: string;
+  /** Where the delete button sends the user, since this page 404s once the report is gone. */
+  organizationHref: string;
   pollHref: string;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
@@ -171,7 +174,9 @@ export async function _loadReport(
     },
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
     retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
+    deleteButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}`,
     newReportHref: `/orgs/${params.organizationId}/reports/new`,
+    organizationHref: `/orgs/${params.organizationId}`,
     pollHref: `/orgs/${params.organizationId}/reports/${row.reportId}/poll`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,

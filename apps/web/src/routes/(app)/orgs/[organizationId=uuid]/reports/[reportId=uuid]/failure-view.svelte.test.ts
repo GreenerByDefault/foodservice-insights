@@ -7,6 +7,8 @@ import { atRetryCapFailure, notRetryableFailure, retryableFailure } from './test
 const onReportChanged = vi.fn(() => Promise.resolve());
 
 const RETRY_HREF = '/api/orgs/org-1/reports/report-1/retry';
+const DELETE_BUTTON_HREF = '/api/orgs/org-1/reports/report-1';
+const ORGANIZATION_HREF = '/orgs/org-1';
 
 const RETRYABLE = retryableFailure();
 const NOT_RETRYABLE = notRetryableFailure();
@@ -27,6 +29,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
 
@@ -42,6 +46,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
     await expect
@@ -52,6 +58,8 @@ describe('FailureView', () => {
       attemptNumber: 3,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
     await expect.element(thirdAttempt.getByText('This was attempt 3.')).toBeVisible();
@@ -62,6 +70,8 @@ describe('FailureView', () => {
       attemptNumber: 5,
       failure: AT_RETRY_CAP,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
 
@@ -76,6 +86,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
     await expect.element(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
@@ -86,6 +98,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: NOT_RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
     await expect.element(screen.getByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
@@ -97,6 +111,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
 
@@ -115,6 +131,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
 
@@ -136,6 +154,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
 
@@ -152,6 +172,8 @@ describe('FailureView', () => {
       attemptNumber: 1,
       failure: RETRYABLE,
       retryButtonHref: RETRY_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
       onReportChanged,
     });
 

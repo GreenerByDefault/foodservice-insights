@@ -13,6 +13,8 @@ const INPUT_FILE = {
   originalFilename: 'orders.csv',
   byteSize: 12_000,
 };
+const DELETE_BUTTON_HREF = '/api/orgs/org-1/reports/report-1';
+const ORGANIZATION_HREF = '/orgs/org-1';
 
 describe('ResultView', () => {
   test('links to the pdf, the excel file, and the original file', async () => {
@@ -21,6 +23,8 @@ describe('ResultView', () => {
       now: NOW,
       files: FILES,
       inputFile: INPUT_FILE,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
     });
 
     await expect

@@ -18,7 +18,9 @@ const BASE = {
   },
   cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
   retryButtonHref: '/api/orgs/org-1/reports/report-1/retry',
+  deleteButtonHref: '/api/orgs/org-1/reports/report-1',
   newReportHref: '/orgs/org-1/reports/new',
+  organizationHref: '/orgs/org-1',
   pollHref: POLL_HREF,
   inputFile: {
     href: '/file/input/1',

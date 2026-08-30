@@ -5,6 +5,8 @@ import CanceledView from './canceled-view.svelte';
 const NOW = new Date('2026-01-15T10:10:00Z');
 const STOPPED_AT = new Date('2026-01-15T10:07:00Z');
 const NEW_REPORT_HREF = '/orgs/00000000-0000-0000-0000-000000000000/reports/new';
+const DELETE_BUTTON_HREF = '/api/orgs/org-1/reports/report-1';
+const ORGANIZATION_HREF = '/orgs/org-1';
 
 describe('CanceledView', () => {
   test('says the report was stopped and links to start a new one', async () => {
@@ -12,6 +14,8 @@ describe('CanceledView', () => {
       stoppedAt: STOPPED_AT,
       now: NOW,
       newReportHref: NEW_REPORT_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
     });
 
     await expect
@@ -27,6 +31,8 @@ describe('CanceledView', () => {
       stoppedAt: STOPPED_AT,
       now: NOW,
       newReportHref: NEW_REPORT_HREF,
+      deleteButtonHref: DELETE_BUTTON_HREF,
+      organizationHref: ORGANIZATION_HREF,
     });
 
     const time = screen.container.querySelector('time');

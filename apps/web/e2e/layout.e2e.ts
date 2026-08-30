@@ -1,5 +1,6 @@
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import { expect, type Page } from '@playwright/test';
+import type { ReportState } from './fixtures/reports.ts';
 import { reportUrl } from './fixtures/reports.ts';
 import { test } from './fixtures/test.ts';
 import { expectNoHorizontalOverflow } from './lib/layout';
@@ -38,14 +39,23 @@ for (const route of ROUTES) {
   });
 }
 
-test('the succeeded report screen has no horizontal overflow at any viewport', async ({
-  page,
-  reports,
-}) => {
-  const reportId = await reports.create('succeeded');
-  await page.goto(reportUrl(reportId));
-  await checkNoOverflowAtEveryWidth(page);
-});
+// Each of these terminal states has its own action row (download links, retry/contact/delete,
+// or just delete) — the one place per screen most likely to wrap awkwardly and overflow.
+// 'failed-retried' stands in for the failure screen instead of 'failed': the latter's fixture
+// pins a fixed creator email for a committed screenshot, which collides with retry.e2e.ts's own
+// 'failed' fixture when both run concurrently.
+const TERMINAL_STATES: ReportState[] = ['succeeded', 'failed-retried', 'canceled'];
+
+for (const state of TERMINAL_STATES) {
+  test(`the ${state} report screen has no horizontal overflow at any viewport`, async ({
+    page,
+    reports,
+  }) => {
+    const reportId = await reports.create(state);
+    await page.goto(reportUrl(reportId));
+    await checkNoOverflowAtEveryWidth(page);
+  });
+}
 
 test('expectNoHorizontalOverflow fails, and names the offending element, on a page that overflows', async ({
   page,
