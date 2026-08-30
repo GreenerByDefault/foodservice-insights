@@ -8,7 +8,7 @@ test('a report waiting to start', async ({ page, reports }) => {
   const reportId = await reports.create('pending');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByText('Waiting to start')).toBeVisible();
+  await expect(page.locator('[aria-current="step"]')).toContainText('Waiting to start');
   await expectScreenshot(page, 'reports-pending.png');
 });
 
@@ -24,7 +24,9 @@ test('a report being analyzed', async ({ page, reports }) => {
   const reportId = await reports.create('processing');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByText('Reading your purchases and building your charts')).toBeVisible();
+  await expect(page.locator('[aria-current="step"]')).toContainText(
+    'Reading your purchases and building your charts',
+  );
   await expectScreenshot(page, 'reports-processing.png');
 });
 
