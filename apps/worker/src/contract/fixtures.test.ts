@@ -87,7 +87,6 @@ describe('valid fixtures', () => {
   test('result.json parses into the values the parent writes to the database', () => {
     const result = parseResult(read('valid', 'result.json'));
 
-    expect(result.charts).toEqual(['emissions_by_month', 'emissions_by_category', 'top_products']);
     expect(result.ai.model).toBe('gemini-2.5-pro');
     expect(result.ai.inputTokens).toBe(918342);
     expect(result.ai.costUsd).toBe('2.4713');

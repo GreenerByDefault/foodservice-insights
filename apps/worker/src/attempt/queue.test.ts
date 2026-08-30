@@ -108,7 +108,6 @@ function renewedSince(attempt: { leaseRenewedAt: Date | null }): number {
 
 const A_RESULT: ChildResult = {
   analysisAttemptId: crypto.randomUUID(),
-  charts: ['total_spend'],
   ai: {
     model: 'gemini-3-pro',
     inputTokens: 41_000,
@@ -408,7 +407,7 @@ describe('finishing', () => {
     // terminal transition is a single UPDATE: a second statement touching the same row after it
     // reached `succeeded` would be rejected by the trigger.
     const workerId = aWorkerId();
-    const resultFiles = [aResultFile(), aResultFile('xlsx'), aResultFile('chart', 'total_spend')];
+    const resultFiles = [aResultFile(), aResultFile('xlsx')];
 
     const finished = await withRollback(WORKER_DATABASE, async (transaction) => {
       const attemptId = await claimedAttempt(transaction, workerId);
@@ -423,7 +422,7 @@ describe('finishing', () => {
         attempt: await readAnalysisAttemptRow(transaction, attemptId),
         files: await transaction
           .selectFrom('resultFile')
-          .select(['kind', 'chartKey', 'storageKey'])
+          .select(['kind', 'storageKey'])
           .where('analysisAttemptId', '=', attemptId)
           .orderBy('kind')
           .execute(),
@@ -445,7 +444,6 @@ describe('finishing', () => {
     expect(finished.files.map((file) => file.storageKey).sort()).toEqual(
       resultFiles.map((file) => file.storageKey).sort(),
     );
-    expect(finished.files.find((file) => file.kind === 'chart')?.chartKey).toBe('total_spend');
   });
 
   test('records a failure with its reason and detail', async () => {
@@ -454,7 +452,7 @@ describe('finishing', () => {
       const attemptId = await claimedAttempt(transaction, workerId);
       const won = await markAttemptFailed(transaction, attemptId, workerId, {
         reason: 'contract_violation',
-        detail: 'result.json: charts.0: invalid chart key',
+        detail: 'result.json: unknown field',
       });
       return { won, row: await readAnalysisAttemptRow(transaction, attemptId) };
     });
@@ -463,7 +461,7 @@ describe('finishing', () => {
     expect(attempt.row).toMatchObject({
       status: 'failed',
       failureReason: 'contract_violation',
-      failureDetail: 'result.json: charts.0: invalid chart key',
+      failureDetail: 'result.json: unknown field',
     });
   });
 

@@ -13,8 +13,6 @@ export default interface ResultFileTable {
 
   kind: ColumnType<ResultFileKind, ResultFileKind, ResultFileKind>;
 
-  chartKey: ColumnType<string | null, string | null, string | null>;
-
   storageKey: ColumnType<string, string, string>;
 
   byteSize: ColumnType<number, number, number>;

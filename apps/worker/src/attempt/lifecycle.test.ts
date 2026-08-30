@@ -12,7 +12,7 @@ import { deletePrefix, getObject, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
 import { describe, expect, test } from 'vitest';
-import { chartFileName, RESULT_FILE_NAMES, resultFilePath } from '../contract/layout.ts';
+import { RESULT_FILE_NAMES, resultFilePath } from '../contract/layout.ts';
 import { WORKER_DATABASE } from '../db.ts';
 import type { AttemptFixture } from '../testing/attempt-fixture.ts';
 import { withAttemptFixture } from '../testing/attempt-fixture.ts';
@@ -62,10 +62,8 @@ async function readResultFiles(attemptId: AttemptFixture['attemptId']) {
     .execute();
 }
 
-function fileNameFor(row: { kind: string; chartKey: string | null }): string {
-  return row.kind === 'chart'
-    ? chartFileName(row.chartKey as string)
-    : RESULT_FILE_NAMES[row.kind as 'pdf' | 'xlsx'];
+function fileNameFor(row: { kind: 'pdf' | 'xlsx' }): string {
+  return RESULT_FILE_NAMES[row.kind];
 }
 
 describe('a successful attempt, end to end', () => {
@@ -74,7 +72,7 @@ describe('a successful attempt, end to end', () => {
     await withAttemptFixture(workerId, async (fixture) => {
       const steps: FakeChildStep[] = [
         { step: 'progress', sequence: 1 },
-        { step: 'result', charts: ['total_spend'] },
+        { step: 'result' },
         { step: 'exit', code: 0 },
       ];
 
@@ -100,13 +98,12 @@ describe('a successful attempt, end to end', () => {
       expect(attempt.finishedAt).toBeInstanceOf(Date);
 
       const resultFiles = await readResultFiles(fixture.attemptId);
-      expect(resultFiles).toHaveLength(3);
+      expect(resultFiles).toHaveLength(2);
       for (const row of resultFiles) {
         const fileName = fileNameFor(row);
         const body = await getObject(BLOB_STORE, row.storageKey);
         expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
       }
-      expect(resultFiles.find((row) => row.kind === 'chart')?.chartKey).toBe('total_spend');
     });
   });
 });
@@ -149,7 +146,7 @@ async function expectParkThenResume(
     'succeeded',
   );
   const resultFiles = await readResultFiles(fixture.attemptId);
-  expect(resultFiles).toHaveLength(3);
+  expect(resultFiles).toHaveLength(2);
   for (const row of resultFiles) {
     const body = await getObject(BLOB_STORE, row.storageKey);
     expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileNameFor(row)));
@@ -162,10 +159,7 @@ describe('a blob store that cannot be reached', () => {
     const breakable = await breakableBlobStore();
     try {
       await withAttemptFixture(workerId, async (fixture) => {
-        const steps: FakeChildStep[] = [
-          { step: 'result', charts: ['total_spend'] },
-          { step: 'exit', code: 0 },
-        ];
+        const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
         const working = dependencies(fixture, workerId, steps);
         const withBreakableStore = { ...working, store: breakable.service };
 
@@ -221,10 +215,7 @@ describe('a database that cannot be reached', () => {
     const breakable = await breakableDatabase();
     try {
       await withAttemptFixture(workerId, async (fixture) => {
-        const steps: FakeChildStep[] = [
-          { step: 'result', charts: ['total_spend'] },
-          { step: 'exit', code: 0 },
-        ];
+        const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
         const working = dependencies(fixture, workerId, steps);
         const withBreakableDb = { ...working, db: breakable.service };
 
@@ -279,11 +270,11 @@ describe('failure rows', () => {
     };
   }
 
-  test('a declared chart file missing writes no result_file rows and no objects', async () => {
+  test('a declared file missing writes no result_file rows and no objects', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
       const steps: FakeChildStep[] = [
-        { step: 'result', charts: ['total_spend'], withoutFiles: ['chart-total_spend.png'] },
+        { step: 'result', withoutFiles: ['report.xlsx'] },
         { step: 'exit', code: 0 },
       ];
 
@@ -293,7 +284,7 @@ describe('failure rows', () => {
       expect(existsSync(prepared.runDirectory)).toBe(false);
       const attempt = await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId);
       expect(attempt).toMatchObject({ status: 'failed', failureReason: 'contract_violation' });
-      expect(attempt.failureDetail).toContain('chart-total_spend.png');
+      expect(attempt.failureDetail).toContain('report.xlsx');
       expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
     });
   });
@@ -585,10 +576,7 @@ describe('losing the race to record a verdict', () => {
   test('a writer that finished the attempt first leaves settleAttempt lost, not recorded', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [
-        { step: 'result', charts: ['total_spend'] },
-        { step: 'exit', code: 0 },
-      ];
+      const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
 
       const prepared = await startAttempt(
         dependencies(fixture, workerId, steps),

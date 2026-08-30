@@ -54,7 +54,6 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     # Validate the shape of `outcome` before touching the filesystem.
     payload = result_payload(
         analysis_attempt_id=manifest.analysis_attempt_id,
-        charts=list(outcome.charts),
         ai=ContractAiUsage(
             model=outcome.ai.model,
             input_tokens=outcome.ai.input_tokens,

@@ -11,17 +11,14 @@ export function aWorkerId(): string {
 
 /** Stands in for what `putResultFile` returns, down to taking its extension and content type from
  * the same map the upload would. */
-export function aResultFile(
-  kind: ResultFileKind = 'pdf',
-  chartKey = 'total_spend',
-): ResultFileRecord {
+export function aResultFile(kind: ResultFileKind = 'pdf'): ResultFileRecord {
   const { extension, contentType } = RESULT_FILE_FORMATS[kind];
-  const stored = {
+  return {
     id: newResultFileId(),
+    kind,
     storageKey: `org/test/${crypto.randomUUID()}.${extension}`,
     byteSize: 2_048,
     contentType,
     checksumSha256: aChecksum(),
   };
-  return kind === 'chart' ? { ...stored, kind, chartKey } : { ...stored, kind };
 }

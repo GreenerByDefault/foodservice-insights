@@ -39,7 +39,6 @@ function succeededWireBody() {
       files: {
         pdf: { href: '/file/result/1' },
         xlsx: { href: '/file/result/2' },
-        charts: [],
       },
     },
   };
@@ -112,7 +111,7 @@ describe('ReportView', () => {
           createdAt: new Date('2026-01-15T10:00:00Z'),
           claimedAt: new Date('2026-01-15T10:01:00Z'),
           finishedAt: new Date('2026-01-15T10:04:00Z'),
-          files: { pdf: { href: '/file/result/1' }, xlsx: { href: '/file/result/2' }, charts: [] },
+          files: { pdf: { href: '/file/result/1' }, xlsx: { href: '/file/result/2' } },
         },
       };
       const screen = await render(ReportView, { data });

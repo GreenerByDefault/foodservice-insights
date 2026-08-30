@@ -94,7 +94,6 @@ def test_progress_payload_is_the_fixture() -> None:
 def test_result_payload_is_the_fixture() -> None:
     payload = result_payload(
         analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
-        charts=["emissions_by_month", "emissions_by_category", "top_products"],
         ai=AiUsage(
             model="gemini-2.5-pro",
             input_tokens=918342,
@@ -133,28 +132,11 @@ def test_refuses_to_write_a_cost_the_parent_cannot_store() -> None:
     with pytest.raises(ContractError):
         result_payload(
             analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
-            charts=[],
             ai=AiUsage(
                 model="gemini-2.5-pro",
                 input_tokens=1,
                 output_tokens=1,
                 cost_usd=Decimal("1000000.0000"),
-                metadata={},
-            ),
-            result_metadata={},
-        )
-
-
-def test_refuses_to_write_duplicate_chart_keys() -> None:
-    with pytest.raises(ContractError):
-        result_payload(
-            analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
-            charts=["emissions_by_month", "emissions_by_month"],
-            ai=AiUsage(
-                model="gemini-2.5-pro",
-                input_tokens=1,
-                output_tokens=1,
-                cost_usd=Decimal("0.0001"),
                 metadata={},
             ),
             result_metadata={},

@@ -198,7 +198,8 @@ export async function renewLease(
 export type ResultFileRecord = StoredFile & {
   /** Minted by the caller, because the storage key is built from it before the upload. */
   id: ResultFileId;
-} & ({ kind: 'chart'; chartKey: string } | { kind: Exclude<ResultFileKind, 'chart'> });
+  kind: ResultFileKind;
+};
 
 /** Record a successful attempt and the files it produced. Returns whether we still owned it.
  *
@@ -241,7 +242,6 @@ export async function markAttemptSucceeded(
           outcome.resultFiles.map((file) => ({
             ...file,
             analysisAttemptId: attemptId,
-            chartKey: file.kind === 'chart' ? file.chartKey : null,
           })),
         )
         .execute();

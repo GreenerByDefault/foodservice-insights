@@ -4,13 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@gbd/core/env';
 import { describe, expect, test } from 'vitest';
-import {
-  CHART_KEY_PATTERN,
-  chartFileName,
-  DIRECTORIES_CREATED_BY_PARENT,
-  RESULT_FILE_NAMES,
-  RUN_DIRECTORY,
-} from './layout.ts';
+import { DIRECTORIES_CREATED_BY_PARENT, RESULT_FILE_NAMES, RUN_DIRECTORY } from './layout.ts';
 import {
   COUNTS_BASES,
   EXIT_CODES,
@@ -35,10 +29,7 @@ describe('contract/contract.json', () => {
   });
 
   test('agrees on the result file names', () => {
-    const { chartExample, ...fixedNames } = contract.resultFiles;
-    expect(fixedNames).toEqual(RESULT_FILE_NAMES);
-    expect(chartFileName(chartExample.chartKey)).toBe(chartExample.fileName);
-    expect(chartExample.chartKey).toMatch(CHART_KEY_PATTERN);
+    expect(contract.resultFiles).toEqual(RESULT_FILE_NAMES);
   });
 
   test('agrees on the report enums the manifest carries', () => {

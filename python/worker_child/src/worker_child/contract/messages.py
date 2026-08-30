@@ -2,7 +2,7 @@
 other three as payload dicts."""
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -10,7 +10,7 @@ from typing import Any
 
 from worker_child.contract import ContractError
 from worker_child.contract.fields import parse_object
-from worker_child.contract.layout import MANIFEST, require_chart_key
+from worker_child.contract.layout import MANIFEST
 from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
@@ -93,20 +93,15 @@ def progress_payload(sequence: int) -> dict[str, Any]:
 def result_payload(
     *,
     analysis_attempt_id: str,
-    charts: Sequence[str],
     ai: AiUsage,
     result_metadata: Mapping[str, Any],
 ) -> dict[str, Any]:
     _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
-    for chart_key in charts:
-        require_chart_key(chart_key)
-    _require(len(set(charts)) == len(charts), "chart keys must be unique")
     _require(ai.input_tokens >= 0 and ai.output_tokens >= 0, "token counts must not be negative")
     _require(0 <= ai.cost_usd < MAXIMUM_COST_USD, f"cost must be within [0, {MAXIMUM_COST_USD})")
 
     return {
         "analysisAttemptId": analysis_attempt_id,
-        "charts": list(charts),
         "ai": {
             "model": ai.model,
             "inputTokens": ai.input_tokens,

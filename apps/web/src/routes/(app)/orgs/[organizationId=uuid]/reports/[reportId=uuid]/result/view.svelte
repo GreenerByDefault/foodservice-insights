@@ -21,11 +21,6 @@ let { finishedAt, files, inputFile }: Props = $props();
   <li>
     <a class="underline hover:no-underline" href={files.xlsx.href}> Download Excel </a>
   </li>
-  {#each files.charts as chart (chart.href)}
-    <li>
-      <a class="underline hover:no-underline" href={chart.href}>{chart.chartKey}</a>
-    </li>
-  {/each}
 </ul>
 <p>
   <a class="underline hover:no-underline" href={inputFile.href}>

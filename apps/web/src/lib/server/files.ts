@@ -17,8 +17,8 @@ export const SIGNED_URL_TTL_SECONDS = 60;
 
 /** Redirect to a short-lived URL for `storageKey`, or 404 if the object is not there.
  *
- * Leave `downloadFilename` unset for something meant to render inline, like a chart — see
- * `SignedUrlOptions` in `@gbd/storage`.
+ * Leave `downloadFilename` unset for something meant to render inline — see `SignedUrlOptions`
+ * in `@gbd/storage`.
  */
 export async function redirectToSignedUrl(
   store: BlobStore,

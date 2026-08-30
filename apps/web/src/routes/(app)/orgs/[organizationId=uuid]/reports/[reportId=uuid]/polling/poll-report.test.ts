@@ -73,7 +73,6 @@ describe('pollReport', () => {
     const files = {
       pdf: { href: '/file/result/1' },
       xlsx: { href: '/file/result/2' },
-      charts: [{ href: '/file/result/3', chartKey: 'total_spend' }],
     };
     stubFetch(
       jsonResponse({

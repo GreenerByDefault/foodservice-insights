@@ -307,7 +307,6 @@ describe('each status narrows to the right variant', () => {
         files: {
           pdf: { href: `/file/result/${pdf.id}` },
           xlsx: { href: `/file/result/${xlsx.id}` },
-          charts: [],
         },
       });
     });
@@ -404,7 +403,6 @@ describe('a cancel request', () => {
         files: {
           pdf: { href: `/file/result/${pdf.id}` },
           xlsx: { href: `/file/result/${xlsx.id}` },
-          charts: [],
         },
       });
     });
@@ -428,48 +426,5 @@ describe('a cancel request', () => {
 
       expect(data.attempt.status).toBe('failed');
     });
-  });
-});
-
-test('charts come back ordered by chart_key, not insertion order', async () => {
-  await withRollback(database(), async (transaction) => {
-    const { organization } = await insertOrganization(transaction);
-    const report = await aReportWithInputFile(transaction, organization.id);
-    const attempt = await insertAnalysisAttempt(transaction, {
-      reportId: report.id,
-      status: 'succeeded',
-    });
-    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
-    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-    // Inserted out of alphabetical order on purpose.
-    const totalSpend = await insertResultFile(transaction, {
-      analysisAttemptId: attempt.id,
-      kind: 'chart',
-      chartKey: 'total_spend',
-    });
-    const avgOrder = await insertResultFile(transaction, {
-      analysisAttemptId: attempt.id,
-      kind: 'chart',
-      chartKey: 'avg_order',
-    });
-    const topProducts = await insertResultFile(transaction, {
-      analysisAttemptId: attempt.id,
-      kind: 'chart',
-      chartKey: 'top_products',
-    });
-
-    const data = await _loadReport(transaction, {
-      organizationId: organization.id,
-      reportId: report.id,
-      supportEmail: SUPPORT_EMAIL,
-    });
-
-    expect(data.attempt.status).toBe('succeeded');
-    if (data.attempt.status !== 'succeeded') throw new Error('unreachable');
-    expect(data.attempt.files.charts).toEqual([
-      { href: `/file/result/${avgOrder.id}`, chartKey: 'avg_order' },
-      { href: `/file/result/${topProducts.id}`, chartKey: 'top_products' },
-      { href: `/file/result/${totalSpend.id}`, chartKey: 'total_spend' },
-    ]);
   });
 });

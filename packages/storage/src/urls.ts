@@ -7,7 +7,7 @@ export type SignedUrlOptions = {
   expiresInSeconds: number;
 
   /** Set this to make the URL a download, saved under this name rather than the key's UUID.
-   * Leave it unset for something meant to display inline, like a chart image.
+   * Leave it unset for something meant to display inline.
    */
   downloadFilename?: string;
 };

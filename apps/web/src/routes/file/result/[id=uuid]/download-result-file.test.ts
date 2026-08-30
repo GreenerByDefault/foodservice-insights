@@ -9,48 +9,6 @@ import { _downloadResultFile } from './+server.ts';
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7 fake');
 
 describe('_downloadResultFile', () => {
-  test('a chart redirects to a URL with no content-disposition, so it renders inline', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId }) => {
-      const report = await insertReport(transaction, { organizationId });
-      const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
-      const resultFileId = newResultFileId();
-      const stored = await putResultFile(
-        store,
-        {
-          organizationId,
-          reportId: report.id,
-          analysisAttemptId: attempt.id,
-          resultFileId,
-          kind: 'chart',
-        },
-        PDF_BYTES,
-      );
-      await transaction
-        .insertInto('resultFile')
-        .values({
-          id: resultFileId,
-          analysisAttemptId: attempt.id,
-          kind: 'chart',
-          chartKey: 'total-spend',
-          storageKey: stored.storageKey,
-          byteSize: stored.byteSize,
-          contentType: stored.contentType,
-          checksumSha256: stored.checksumSha256,
-        })
-        .execute();
-
-      const response = await _downloadResultFile(transaction, store, resultFileId);
-
-      expect(response.status).toBe(302);
-      expect(response.headers.get('cache-control')).toBe('no-store');
-
-      const location = response.headers.get('location') ?? '';
-      const download = await fetch(location);
-      expect(download.ok).toBe(true);
-      expect(download.headers.get('content-disposition')).toBeNull();
-    });
-  });
-
   test('a PDF redirects to a URL that downloads under a name built from the report', async () => {
     await withFileFixtures(async ({ transaction, store, organizationId }) => {
       const report = await insertReport(transaction, { organizationId, name: 'Q1 procurement' });
@@ -81,6 +39,9 @@ describe('_downloadResultFile', () => {
         .execute();
 
       const response = await _downloadResultFile(transaction, store, resultFileId);
+      expect(response.status).toBe(302);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+
       const location = response.headers.get('location') ?? '';
       const download = await fetch(location);
 

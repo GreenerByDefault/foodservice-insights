@@ -414,7 +414,7 @@ describe('parked verdicts', () => {
             () => statusIs(attemptId, 'succeeded'),
             'the parked verdict lands',
           );
-          expect(await resultFileRows(attemptId)).toHaveLength(3);
+          expect(await resultFileRows(attemptId)).toHaveLength(2);
         },
       );
     });
@@ -445,7 +445,7 @@ describe('parked verdicts', () => {
           );
 
           const files = await resultFileRows(attemptId);
-          expect(files).toHaveLength(3);
+          expect(files).toHaveLength(2);
           expect(await uploadedKeys(fixture)).toHaveLength(files.length);
         },
       );
@@ -658,7 +658,7 @@ describe('draining', () => {
           expect(row.finishedAt).toBeNull();
           // The store was healthy throughout, so the files did land — which is what makes this a
           // `record` park rather than the `upload` one the test above covers.
-          expect(await uploadedKeys(fixture)).toHaveLength(3);
+          expect(await uploadedKeys(fixture)).toHaveLength(2);
           expect(await resultFileRows(attemptId)).toHaveLength(0);
         },
       );

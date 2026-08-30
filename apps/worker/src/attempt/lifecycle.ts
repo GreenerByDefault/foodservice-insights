@@ -25,8 +25,8 @@ import {
 } from '../child/run-directory.ts';
 import { type ChildOutcome, type RunningChild, spawnChild } from '../child/spawn.ts';
 import type { WorkerConfig } from '../config.ts';
-import { chartFileName, RESULT_FILE_NAMES } from '../contract/layout.ts';
-import { buildRunManifest, type ChildResult } from '../contract/messages.ts';
+import { RESULT_FILE_NAMES } from '../contract/layout.ts';
+import { buildRunManifest } from '../contract/messages.ts';
 import { classifyAttemptFailure } from '../failures.ts';
 import { retryOnTransientDbError } from '../retry.ts';
 import {
@@ -147,22 +147,13 @@ function requireInputFileIntact(
 // Reading how the child ended
 // -------------------------------------------------------------
 
-type DeclaredResultFile = { fileName: string } & (
-  | { kind: 'chart'; chartKey: string }
-  | { kind: Exclude<ResultFileKind, 'chart'> }
-);
+type DeclaredResultFile = { kind: ResultFileKind; fileName: string };
 
-function declaredResultFiles(result: ChildResult): DeclaredResultFile[] {
-  const fixed = Object.entries(RESULT_FILE_NAMES).map(([kind, fileName]) => ({
-    kind: kind as Exclude<ResultFileKind, 'chart'>,
+function declaredResultFiles(): DeclaredResultFile[] {
+  return Object.entries(RESULT_FILE_NAMES).map(([kind, fileName]) => ({
+    kind: kind as ResultFileKind,
     fileName,
   }));
-  const charts = result.charts.map((chartKey) => ({
-    kind: 'chart' as const,
-    chartKey,
-    fileName: chartFileName(chartKey),
-  }));
-  return [...fixed, ...charts];
 }
 
 /** `readChildEnding`'s result, carrying the bytes a `succeeded` verdict will upload alongside the
@@ -195,7 +186,7 @@ export async function readChildEnding(
       if (result === undefined) return notRead;
       const { missing, contents } = await readResultFiles(
         prepared.runDirectory,
-        declaredResultFiles(result).map((file) => file.fileName),
+        declaredResultFiles().map((file) => file.fileName),
       );
       return {
         outcome,
@@ -376,7 +367,7 @@ async function storeResultFiles(
   pending: Extract<PendingVerdict, { stage: 'upload' }>,
 ): Promise<PendingVerdict> {
   const settled = await Promise.allSettled(
-    declaredResultFiles(pending.verdict.result).map((file) => {
+    declaredResultFiles().map((file) => {
       const body = pending.contents.get(file.fileName);
       if (body === undefined) {
         // classifyVerdict only reaches `succeeded` when `missingResultFiles` is empty, so every
@@ -425,9 +416,7 @@ async function uploadResultFile(
     },
     body,
   );
-  return file.kind === 'chart'
-    ? { ...stored, id, kind: 'chart', chartKey: file.chartKey }
-    : { ...stored, id, kind: file.kind };
+  return { ...stored, id, kind: file.kind };
 }
 
 // -------------------------------------------------------------
