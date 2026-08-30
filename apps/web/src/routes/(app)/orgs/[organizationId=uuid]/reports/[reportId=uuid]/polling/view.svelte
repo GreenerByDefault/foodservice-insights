@@ -131,6 +131,7 @@ function screenHeadline(report: ReportPageData): string {
 {:else if current.attempt.status === 'succeeded'}
   <ResultView
     finishedAt={current.attempt.finishedAt}
+    now={current.now}
     files={current.attempt.files}
     inputFile={current.inputFile}
   />
