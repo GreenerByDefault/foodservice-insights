@@ -1,4 +1,6 @@
 <script lang="ts">
+import { invalidate } from '$app/navigation';
+import { reportDependencyKey } from '$lib/reports/report-dependency';
 import CanceledView from './canceled-view.svelte';
 import FailureView from './failure-view.svelte';
 import ResultView from './result/view.svelte';
@@ -7,6 +9,10 @@ import { isWaiting } from './waiting/progress.ts';
 import WaitingView from './waiting/view.svelte';
 
 let { data }: PageProps = $props();
+
+async function onReportChanged(): Promise<void> {
+  await invalidate(reportDependencyKey(data.report.id));
+}
 </script>
 
 <svelte:head>
@@ -17,10 +23,10 @@ let { data }: PageProps = $props();
 
 {#if isWaiting(data.attempt)}
   <WaitingView
-    reportId={data.report.id}
     attempt={data.attempt}
     now={data.now}
     cancelButtonHref={data.cancelButtonHref}
+    {onReportChanged}
   />
 {:else if data.attempt.status === 'succeeded'}
   <ResultView
@@ -30,10 +36,10 @@ let { data }: PageProps = $props();
   />
 {:else if data.attempt.status === 'failed'}
   <FailureView
-    reportId={data.report.id}
     attemptNumber={data.attempt.attemptNumber}
     failure={data.attempt.failure}
     retryButtonHref={data.retryButtonHref}
+    {onReportChanged}
   />
 {:else if data.attempt.status === 'canceled'}
   <CanceledView

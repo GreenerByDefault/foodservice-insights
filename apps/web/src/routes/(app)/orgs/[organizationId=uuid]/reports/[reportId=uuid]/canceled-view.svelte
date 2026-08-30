@@ -2,8 +2,13 @@
 import CircleStopIcon from '@lucide/svelte/icons/circle-stop';
 import { formatElapsed, formatTimestamp } from '@gbd/core';
 
-let { stoppedAt, now, newReportHref }: { stoppedAt: Date; now: Date; newReportHref: string } =
-  $props();
+interface Props {
+  stoppedAt: Date;
+  now: Date;
+  newReportHref: string;
+}
+
+let { stoppedAt, now, newReportHref }: Props = $props();
 </script>
 
 <div class="flex gap-3">

@@ -1,6 +1,4 @@
 <script lang="ts">
-import type { ReportId } from '@gbd/db';
-import { invalidate } from '$app/navigation';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,10 +12,14 @@ import {
 } from '$lib/components/ui/alert-dialog';
 import { buttonVariants } from '$lib/components/ui/button';
 import { cancelReport } from '$lib/reports/cancel-report';
-import { reportDependencyKey } from '$lib/reports/report-dependency';
 import type { ActionState } from '$lib/types/ActionState';
 
-let { reportId, cancelButtonHref }: { reportId: ReportId; cancelButtonHref: string } = $props();
+interface Props {
+  cancelButtonHref: string;
+  onReportChanged: () => Promise<void>;
+}
+
+let { cancelButtonHref, onReportChanged }: Props = $props();
 
 let open = $state(false);
 let actionState = $state<ActionState>({ status: 'idle' });
@@ -30,7 +32,10 @@ async function confirm() {
     // Both outcomes close the dialog and refresh — see `CancelOutcome`.
     open = false;
 
-    await invalidate(reportDependencyKey(reportId));
+    // The refresh cannot fail the cancel: the request already succeeded, and a refresh that
+    // can't reach the server leaves the page on its last known state under its own reconnecting
+    // notice. So `catch` below reports only what `cancelReport` threw.
+    await onReportChanged();
     actionState = { status: 'success' };
   } catch {
     actionState = { status: 'error', message: 'Could not cancel this report. Please try again.' };
