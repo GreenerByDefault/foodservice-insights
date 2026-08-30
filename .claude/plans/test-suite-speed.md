@@ -34,8 +34,6 @@ Where the remaining time goes, all measured rather than inferred:
 
 - **e2e and screenshots each boot the app separately** — truncate + migrate + seed +
   adapter-node, twice per `pnpm test`.
-- **8.4s of the 11s server unit project is two tests** in
-  `apps/web/src/lib/reports/csv/normalize.test.ts`, each materializing a 500,001-row CSV string.
 - The `client` project is ~34s wall standalone against 12.4s of reported test duration; the gap
   is Chromium + Vite startup for 43 component tests. No cheap fix that keeps the real browser.
 - **A README edit invalidates `test:unit`** — confirmed by a hash flip from `HIT` to `MISS`.
@@ -59,7 +57,7 @@ The tempting change is to tell agents to right-size test validation to the chang
   comment" becomes defensible, and the agentic loop that makes agents useful here is lost.
 
 What replaces it is a loop-versus-gate distinction, which needs no judgement call, plus running
-the gate in the background. See PR 4.
+the gate in the background. See PR 3.
 
 Test *flakes* were PR 5 of this plan and now live in
 [`test-suite-flakes.md`](test-suite-flakes.md). They are the larger agent-wall-clock cost — with
@@ -102,17 +100,7 @@ If full caching turns out to be too loose, the fallback is running `--affected` 
 as CI already does via `TURBO_SCOPE`. That is strictly weaker — it depends on git state — so
 prefer caching and keep this in reserve.
 
-## PR 3 — Stop building 500k-row CSVs in two unit tests
-
-`apps/web/src/lib/reports/csv/normalize.test.ts:90` and `:99` each fill an array of
-`MAX_DATA_ROWS + 1` rows and join it, costing 4.8s and 3.5s — 8.4s of an 11s project.
-
-Make the row cap injectable through `normalizeCsv`'s options so those two tests pass a small cap,
-and add one test asserting the production default is wired to `MAX_DATA_ROWS`. Same assertions,
-same branches covered, ~8s cheaper. This is a test-cost change, not a rigor change; if the
-injectable cap cannot be made to read cleanly, leave the tests alone and say so.
-
-## PR 4 — AGENTS.md: separate the iteration loop from the gate
+## PR 3 — AGENTS.md: separate the iteration loop from the gate
 
 Keep `pnpm lint && pnpm check && pnpm test` as the definition of done, verbatim. Add two things
 to § Verifying a change:
@@ -136,7 +124,7 @@ Leave "Report what you actually ran" exactly as it is — it is what keeps the s
   the comment on `ts-screenshots` in `.github/workflows/ci.yml`).
 - **A Stop hook running the full suite**, blocking the turn from ending on failure. Takes
   verification off the per-edit critical path entirely and makes it unskippable — strictly
-  stronger than the prose in PR 4. Downside is that it fires on every turn end, including turns
+  stronger than the prose in PR 3. Downside is that it fires on every turn end, including turns
   where the user only asked a question. Worth revisiting after PR 2 makes the suite cheap.
 - **Turbo's local cache is unpruned** — 450MB across 10,365 entries in `.turbo/cache`. A disk
   question, not a speed one, but nothing currently trims it.
