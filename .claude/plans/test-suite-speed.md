@@ -36,9 +36,6 @@ Where the remaining time goes, all measured rather than inferred:
   adapter-node, twice per `pnpm test`.
 - The `client` project is ~34s wall standalone against 12.4s of reported test duration; the gap
   is Chromium + Vite startup for 43 component tests. No cheap fix that keeps the real browser.
-- **A README edit invalidates `test:unit`** — confirmed by a hash flip from `HIT` to `MISS`.
-  `build` excludes `**/*.md`; `check` and `test:unit` do not. `.github/filters.yml` already
-  excludes `*.md` and `.claude/**` from the `ts` filter, so CI and Turbo disagree.
 - **The Turbo daemon is a dead end — do not recommend it.** It is not running and does not
   auto-start, which looks like a missed optimization and is not one: `turbo.json`'s schema marks
   the `daemon` option deprecated, "no longer used for `turbo run`", and slated for removal in
@@ -57,26 +54,14 @@ The tempting change is to tell agents to right-size test validation to the chang
   comment" becomes defensible, and the agentic loop that makes agents useful here is lost.
 
 What replaces it is a loop-versus-gate distinction, which needs no judgement call, plus running
-the gate in the background. See PR 3.
+the gate in the background. See PR 2.
 
 Test *flakes* were PR 5 of this plan and now live in
 [`test-suite-flakes.md`](test-suite-flakes.md). They are the larger agent-wall-clock cost — with
 `retries: 0`, one flake costs a full re-run, more than every caching win here combined — but they
 are a correctness problem, not a speed one, and nothing in this plan depends on them.
 
-## PR 1 — Exclude Markdown from `check` and `test:unit` inputs
-
-In `turbo.json`, give both tasks the same `inputs` treatment `build` already has:
-
-```json
-"inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
-```
-
-Editing a package README stops invalidating that package's typecheck and unit tests. Verify the
-same way this was found: `turbo run test:unit --dry=json` before and after appending a line to
-`apps/web/README.md`, and check the hash no longer moves.
-
-## PR 2 — Make `test:e2e` and `test:screenshots` cacheable
+## PR 1 — Make `test:e2e` and `test:screenshots` cacheable
 
 The one that matters: −67s whenever a change provably cannot reach them.
 
@@ -100,7 +85,7 @@ If full caching turns out to be too loose, the fallback is running `--affected` 
 as CI already does via `TURBO_SCOPE`. That is strictly weaker — it depends on git state — so
 prefer caching and keep this in reserve.
 
-## PR 3 — AGENTS.md: separate the iteration loop from the gate
+## PR 2 — AGENTS.md: separate the iteration loop from the gate
 
 Keep `pnpm lint && pnpm check && pnpm test` as the definition of done, verbatim. Add two things
 to § Verifying a change:
@@ -124,8 +109,8 @@ Leave "Report what you actually ran" exactly as it is — it is what keeps the s
   the comment on `ts-screenshots` in `.github/workflows/ci.yml`).
 - **A Stop hook running the full suite**, blocking the turn from ending on failure. Takes
   verification off the per-edit critical path entirely and makes it unskippable — strictly
-  stronger than the prose in PR 3. Downside is that it fires on every turn end, including turns
-  where the user only asked a question. Worth revisiting after PR 2 makes the suite cheap.
+  stronger than the prose in PR 2. Downside is that it fires on every turn end, including turns
+  where the user only asked a question. Worth revisiting after PR 1 makes the suite cheap.
 - **Turbo's local cache is unpruned** — 450MB across 10,365 entries in `.turbo/cache`. A disk
   question, not a speed one, but nothing currently trims it.
 - **The `client` project's ~22s of Chromium and Vite startup** for 43 component tests. No fix
@@ -139,6 +124,6 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 1. From the repo root: `pnpm lint && pnpm check && pnpm test`.
 2. Re-time each stage and confirm the numbers moved as the PR claimed — the table in Context is
    the baseline to beat, on the same machine.
-3. For PR 2 specifically, confirm both a hit and a miss: run `pnpm test` twice unchanged (second
+3. For PR 1 specifically, confirm both a hit and a miss: run `pnpm test` twice unchanged (second
    should be near-instant), then touch a file under `apps/web/src/` and confirm e2e and
    screenshots run again.

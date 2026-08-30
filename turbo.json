@@ -45,10 +45,12 @@
     },
     "check": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
     "test:unit": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
     "test:e2e": {
