@@ -5,26 +5,19 @@ import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 import { Button } from '$lib/components/ui/button';
 import { retryReport } from '$lib/reports/retry-report';
 import type { ActionState } from '$lib/types/ActionState';
-import type { FailureCopy } from './+page.server.ts';
+import type { DeleteAction, FailureCopy } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
+import StatusLine from './status-line.svelte';
 
 interface Props {
   attemptNumber: number;
   failure: FailureCopy;
   retryButtonHref: string;
-  deleteButtonHref: string;
-  organizationHref: string;
+  deleteAction: DeleteAction;
   onReportChanged: () => Promise<void>;
 }
 
-let {
-  attemptNumber,
-  failure,
-  retryButtonHref,
-  deleteButtonHref,
-  organizationHref,
-  onReportChanged,
-}: Props = $props();
+let { attemptNumber, failure, retryButtonHref, deleteAction, onReportChanged }: Props = $props();
 
 let actionState = $state<ActionState>({ status: 'idle' });
 
@@ -44,8 +37,7 @@ async function retry() {
 </script>
 
 <div class="space-y-4">
-  <div class="flex gap-3">
-    <CircleAlertIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+  <StatusLine icon={CircleAlertIcon}>
     <div class="space-y-1">
       <p class="font-medium">{failure.whatHappened}</p>
       <p class="text-muted-foreground text-sm">{failure.followUpText}</p>
@@ -53,7 +45,7 @@ async function retry() {
         <p class="text-muted-foreground text-sm">This was attempt {attemptNumber}.</p>
       {/if}
     </div>
-  </div>
+  </StatusLine>
 
   {#if actionState.status === 'error'}
     <p class="text-sm text-destructive">{actionState.message}</p>
@@ -70,6 +62,6 @@ async function retry() {
       <MailIcon aria-hidden="true" />
       Contact us
     </Button>
-    <DeleteButton {deleteButtonHref} {organizationHref} />
+    <DeleteButton action={deleteAction} />
   </div>
 </div>

@@ -1,16 +1,16 @@
 <script lang="ts">
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import { onMount, untrack } from 'svelte';
-import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert/index.js';
-import type { ReportPageData } from '../+page.server.ts';
-import CanceledView from '../canceled-view.svelte';
-import FailureView from '../failure-view.svelte';
-import ResultView from '../result/view.svelte';
-import { describeProgress, isWaiting } from '../waiting/progress.ts';
-import WaitingView from '../waiting/view.svelte';
-import { pollReport } from './poll-report.ts';
+import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+import type { ReportPageData } from './+page.server.ts';
+import CanceledView from './canceled-view.svelte';
+import FailureView from './failure-view.svelte';
+import { pollReport } from './polling/poll-report.ts';
+import { FAILURES_BEFORE_NOTICE, nextPollDelayMs } from './polling/schedule.ts';
 import ReportHeading from './report-heading.svelte';
-import { FAILURES_BEFORE_NOTICE, nextPollDelayMs } from './schedule.ts';
+import ResultView from './result-view.svelte';
+import { describeProgress, isWaiting } from './waiting/progress.ts';
+import WaitingView from './waiting/view.svelte';
 
 let { data }: { data: ReportPageData } = $props();
 
@@ -20,7 +20,7 @@ let { data }: { data: ReportPageData } = $props();
  * The reset matters because SvelteKit reuses this component across `[reportId]` — navigating from
  * one report to another changes `data` without remounting, and a plain `$state` copy would keep
  * showing the report the user just left. Nothing else replaces `data`: this page is the
- * only writer of its own state, and it writes through `poll` (see `../poll/+server.ts` for why
+ * only writer of its own state, and it writes through `poll` (see `./poll/+server.ts` for why
  * `invalidate()` is not used here).
  *
  * A failed poll never touches `current`, so "keep the last known state on screen through an
@@ -139,16 +139,14 @@ function screenHeadline(report: ReportPageData): string {
     now={current.now}
     files={current.attempt.files}
     inputFile={current.inputFile}
-    deleteButtonHref={current.deleteButtonHref}
-    organizationHref={current.organizationHref}
+    deleteAction={current.deleteAction}
   />
 {:else if current.attempt.status === 'failed'}
   <FailureView
     attemptNumber={current.attempt.attemptNumber}
     failure={current.attempt.failure}
     retryButtonHref={current.retryButtonHref}
-    deleteButtonHref={current.deleteButtonHref}
-    organizationHref={current.organizationHref}
+    deleteAction={current.deleteAction}
     onReportChanged={poll}
   />
 {:else if current.attempt.status === 'canceled'}
@@ -156,7 +154,6 @@ function screenHeadline(report: ReportPageData): string {
     stoppedAt={current.attempt.stoppedAt}
     now={current.now}
     newReportHref={current.newReportHref}
-    deleteButtonHref={current.deleteButtonHref}
-    organizationHref={current.organizationHref}
+    deleteAction={current.deleteAction}
   />
 {/if}

@@ -13,13 +13,11 @@ organization the request acts on, and every query below it filters on that organ
 belongs under `/api`. A layout does not guard a `+server.ts`, so each endpoint calls the guards
 itself.
 
-**Pages that poll use both `load` and a periodic fetch.** Re-running `load` on a timer would mean calling
-`invalidate()`, and that request would fall back to a full-page navigation when it fails at the
-network level, which breaks the page outright if the connection is what's down. Instead, after its initial `load()`, a polling page
-then fetches with its own colocated `+server.ts`.
-The page calls that same endpoint directly for every refresh — the timed
-poll, and any write like cancel or retry — so a flaky connection can never undo what the user
-just did.
+**Pages that poll use both `load` and a periodic fetch**, against their own colocated
+`+server.ts` rather than `invalidate()`. Every refresh goes through that one endpoint — the timed
+poll, and any write like cancel or retry — so a flaky connection can never undo what the user just
+did. *Rejected: `invalidate()`, because its request falls back to a full-page navigation when the
+network is what failed.* The reasoning is in `reports/[reportId]/poll/+server.ts`.
 
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
@@ -40,9 +38,12 @@ what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what 
 
 **A component calls `src/lib/api/fetch.ts`, never `fetch` itself.** Its helper
 `apiCall` throws `ApiError` on a non-2xx response — a status, a message for a log, and `jsonBody`
-parsed if the body was JSON. If no response every arrived, it throws `ApiUnreachableError`.
+parsed if the body was JSON. If no response ever arrived, it throws `ApiUnreachableError`.
 
-**A feature owns a parser that knows its own endpoint's statuses and bodies.** Many only need `ApiError.status` — a 400 means one thing, a 409 another. One that returns a structured body, like `parseUploadRejection` in `src/lib/reports/rejection.ts`, narrows `ApiError.jsonBody` into a typed outcome.
+**A feature owns a parser that knows its own endpoint's statuses and bodies.** Many only need
+`ApiError.status` — a 400 means one thing, a 409 another. One that returns a structured body, like
+`parseUploadRejection` in `src/lib/reports/rejection.ts`, narrows `ApiError.jsonBody` into a typed
+outcome.
 
 ## UI components
 
@@ -53,7 +54,8 @@ rather than depending on a component library.
 **A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
 route needs it.
 
-**A view within a route gets its own subfolder once it's more than one file** — a single-file view stays flat.
+**A view within a route gets its own subfolder once it's more than one file** — a single-file
+view stays flat, and a component two views share sits beside them at the route root.
 
 **Add a component with the shadcn-svelte CLI**, run from the repo root:
 
@@ -67,7 +69,8 @@ into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 
 
 ## Forms
 
-**A form's own schema lives with its feature**. What is not specific to one form lives in `src/lib/forms/`.
+**A form's own schema lives with its feature**. What is not specific to one form lives in
+`src/lib/forms/`.
 
 ## Errors
 

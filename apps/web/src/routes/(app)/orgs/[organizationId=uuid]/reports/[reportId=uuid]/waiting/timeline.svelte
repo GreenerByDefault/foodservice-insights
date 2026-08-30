@@ -2,7 +2,7 @@
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 import CircleIcon from '@lucide/svelte/icons/circle';
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-import { formatElapsed, formatTimestamp } from '@gbd/core';
+import RelativeTime from '../relative-time.svelte';
 import type { Step } from './progress.ts';
 
 interface Props {
@@ -29,13 +29,7 @@ let { steps, now }: Props = $props();
       <div>
         <p class={step.current ? 'font-medium' : 'text-muted-foreground'}>{step.title}</p>
         {#if step.completedAt}
-          <time
-            datetime={step.completedAt.toISOString()}
-            title={formatTimestamp(step.completedAt)}
-            class="text-xs text-muted-foreground"
-          >
-            {formatElapsed(now, step.completedAt)}
-          </time>
+          <RelativeTime at={step.completedAt} {now} class="text-xs text-muted-foreground" />
         {/if}
         {#if step.description}
           <p class="text-muted-foreground text-sm">{step.description}</p>

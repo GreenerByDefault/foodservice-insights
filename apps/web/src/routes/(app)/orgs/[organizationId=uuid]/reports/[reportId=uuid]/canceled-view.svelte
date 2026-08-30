@@ -1,31 +1,28 @@
 <script lang="ts">
 import CircleStopIcon from '@lucide/svelte/icons/circle-stop';
-import { formatElapsed, formatTimestamp } from '@gbd/core';
+import type { DeleteAction } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
+import RelativeTime from './relative-time.svelte';
+import StatusLine from './status-line.svelte';
 
 interface Props {
   stoppedAt: Date;
   now: Date;
   newReportHref: string;
-  deleteButtonHref: string;
-  organizationHref: string;
+  deleteAction: DeleteAction;
 }
 
-let { stoppedAt, now, newReportHref, deleteButtonHref, organizationHref }: Props = $props();
+let { stoppedAt, now, newReportHref, deleteAction }: Props = $props();
 </script>
 
 <div class="space-y-4">
-  <div class="flex gap-3">
-    <CircleStopIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+  <StatusLine icon={CircleStopIcon}>
     <p class="text-muted-foreground">
-      Someone stopped this report
-      <time datetime={stoppedAt.toISOString()} title={formatTimestamp(stoppedAt)}
-        >{formatElapsed(now, stoppedAt)}</time
-      >.
+      Someone stopped this report <RelativeTime at={stoppedAt} {now} />.
       <a class="underline hover:no-underline" href={newReportHref}>Upload a file</a>
       to start a new one.
     </p>
-  </div>
+  </StatusLine>
 
-  <DeleteButton {deleteButtonHref} {organizationHref} />
+  <DeleteButton action={deleteAction} />
 </div>

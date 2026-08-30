@@ -15,14 +15,9 @@ import {
 import { buttonVariants } from '$lib/components/ui/button';
 import { deleteReport } from '$lib/reports/delete-report';
 import type { ActionState } from '$lib/types/ActionState';
+import type { DeleteAction } from './+page.server.ts';
 
-interface Props {
-  deleteButtonHref: string;
-  /** Where to send the user once the report is gone — this page 404s afterward. */
-  organizationHref: string;
-}
-
-let { deleteButtonHref, organizationHref }: Props = $props();
+let { action }: { action: DeleteAction } = $props();
 
 let open = $state(false);
 let actionState = $state<ActionState>({ status: 'idle' });
@@ -30,8 +25,8 @@ let actionState = $state<ActionState>({ status: 'idle' });
 async function confirm() {
   actionState = { status: 'loading' };
   try {
-    await deleteReport(deleteButtonHref);
-    await goto(organizationHref);
+    await deleteReport(action.href);
+    await goto(action.afterHref);
   } catch {
     actionState = { status: 'error', message: 'Could not delete this report. Please try again.' };
   }

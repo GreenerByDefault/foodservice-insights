@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import ResultView from './view.svelte';
+import ResultView from './result-view.svelte';
 
 const NOW = new Date('2026-01-15T10:14:00Z');
 const FINISHED_AT = new Date('2026-01-15T10:10:00Z');
@@ -13,8 +13,7 @@ const INPUT_FILE = {
   originalFilename: 'orders.csv',
   byteSize: 12_000,
 };
-const DELETE_BUTTON_HREF = '/api/orgs/org-1/reports/report-1';
-const ORGANIZATION_HREF = '/orgs/org-1';
+const DELETE_ACTION = { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' };
 
 describe('ResultView', () => {
   test('links to the pdf, the excel file, and the original file', async () => {
@@ -23,8 +22,7 @@ describe('ResultView', () => {
       now: NOW,
       files: FILES,
       inputFile: INPUT_FILE,
-      deleteButtonHref: DELETE_BUTTON_HREF,
-      organizationHref: ORGANIZATION_HREF,
+      deleteAction: DELETE_ACTION,
     });
 
     await expect

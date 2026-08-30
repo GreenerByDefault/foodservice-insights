@@ -35,6 +35,10 @@ export const load: PageServerLoad = async ({ params }) => {
 
 export type FileLink = { href: string };
 
+/** The delete button's two halves. `afterHref` is where the user lands once the report is gone,
+ * since this page 404s the moment it is. */
+export type DeleteAction = { href: string; afterHref: string };
+
 export type ResultFiles = {
   pdf: FileLink;
   xlsx: FileLink;
@@ -77,10 +81,8 @@ export type ReportPageData = {
   };
   cancelButtonHref: string;
   retryButtonHref: string;
-  deleteButtonHref: string;
   newReportHref: string;
-  /** Where the delete button sends the user, since this page 404s once the report is gone. */
-  organizationHref: string;
+  deleteAction: DeleteAction;
   pollHref: string;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
@@ -174,9 +176,11 @@ export async function _loadReport(
     },
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
     retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
-    deleteButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}`,
     newReportHref: `/orgs/${params.organizationId}/reports/new`,
-    organizationHref: `/orgs/${params.organizationId}`,
+    deleteAction: {
+      href: `/api/orgs/${params.organizationId}/reports/${row.reportId}`,
+      afterHref: `/orgs/${params.organizationId}`,
+    },
     pollHref: `/orgs/${params.organizationId}/reports/${row.reportId}/poll`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
