@@ -46,8 +46,6 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
     .orderBy('attemptNumber', 'desc')
     .executeTakeFirstOrThrow();
 
-  // Deferred constraints check at commit, so the result files go in with the status flip — see
-  // `live-update.e2e.ts`.
   await withTransaction(db, async (transaction) => {
     await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
     await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });

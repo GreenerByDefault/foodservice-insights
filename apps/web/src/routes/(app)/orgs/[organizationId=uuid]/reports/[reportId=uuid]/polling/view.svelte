@@ -117,8 +117,7 @@ function screenHeadline(report: ReportPageData): string {
     <WifiOffIcon />
     <AlertTitle>Reconnecting…</AlertTitle>
     <AlertDescription>
-      Having trouble reaching the server. Your report is safe — this page will catch up once we
-      reconnect.
+      We lost the connection, but your report is safe — this page will catch up automatically.
     </AlertDescription>
   </Alert>
 {/if}

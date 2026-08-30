@@ -161,12 +161,12 @@ describe('ReportView', () => {
       .element(screen.getByText('You can close this page', { exact: false }))
       .toBeVisible();
     await expect
-      .element(screen.getByText('Having trouble reaching the server', { exact: false }))
+      .element(screen.getByText('We lost the connection', { exact: false }))
       .not.toBeInTheDocument();
 
     await triggerImmediatePoll();
     await expect
-      .element(screen.getByText('Having trouble reaching the server', { exact: false }))
+      .element(screen.getByText('We lost the connection', { exact: false }))
       .toBeVisible();
   });
 
@@ -207,13 +207,13 @@ describe('ReportView', () => {
     await triggerImmediatePoll();
     await triggerImmediatePoll();
     await expect
-      .element(screen.getByText('Having trouble reaching the server', { exact: false }))
+      .element(screen.getByText('We lost the connection', { exact: false }))
       .toBeVisible();
 
     await triggerImmediatePoll();
     await expect.element(screen.getByRole('link', { name: 'Download PDF' })).toBeVisible();
     await expect
-      .element(screen.getByText('Having trouble reaching the server', { exact: false }))
+      .element(screen.getByText('We lost the connection', { exact: false }))
       .not.toBeInTheDocument();
   });
 });

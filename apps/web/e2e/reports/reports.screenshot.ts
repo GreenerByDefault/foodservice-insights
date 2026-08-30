@@ -108,9 +108,7 @@ test('a report whose poll cannot reach the server', async ({ page, reports }) =>
     BASE_POLL_INTERVAL_MS * 2,
   ]);
 
-  await expect(
-    page.getByText('Having trouble reaching the server', { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
   await expectScreenshot(page, 'reports-reconnecting.png');
 });
 

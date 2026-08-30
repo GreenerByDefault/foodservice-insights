@@ -35,9 +35,7 @@ test('an unreachable poll leaves the timeline up and shows a reconnecting notice
     BASE_POLL_INTERVAL_MS * 2,
   ]);
 
-  await expect(
-    page.getByText('Having trouble reaching the server', { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
   await expect(page.getByText('You can close this page', { exact: false })).toBeVisible();
   expect(loads.count).toBe(0);
 });

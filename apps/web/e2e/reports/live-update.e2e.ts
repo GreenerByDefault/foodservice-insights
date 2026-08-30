@@ -1,7 +1,8 @@
 /** The one thing no other layer can check: a real poll, hitting the real read endpoint, updating
- * the screen with no page reload — everything about the schedule itself is covered by
- * `polling/schedule.test.ts`, and everything about the screens themselves by their own component
- * tests.
+ * the screen with no page reload.
+ * 
+ * Everything about the schedule itself is covered by `polling/schedule.test.ts`, and everything
+ * about the screens themselves by their own component tests.
  */
 
 import { withTransaction } from '@gbd/db';
@@ -35,9 +36,6 @@ test('a report that finishes while the page is open updates in place, without a 
     .where('reportId', '=', reportId)
     .executeTakeFirstOrThrow();
 
-  // A succeeded row is only ever valid with its pdf and xlsx already present — the deferred
-  // constraints `analysis_attempt_succeeded_has_pdf`/`_has_xlsx` check at commit, not at the
-  // `UPDATE` itself — so both go in in the same transaction as the status flip.
   await withTransaction(db, async (transaction) => {
     await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
     await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
