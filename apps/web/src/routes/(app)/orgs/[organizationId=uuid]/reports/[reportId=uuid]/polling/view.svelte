@@ -139,12 +139,16 @@ function screenHeadline(report: ReportPageData): string {
     now={current.now}
     files={current.attempt.files}
     inputFile={current.inputFile}
+    deleteButtonHref={current.deleteButtonHref}
+    organizationHref={current.organizationHref}
   />
 {:else if current.attempt.status === 'failed'}
   <FailureView
     attemptNumber={current.attempt.attemptNumber}
     failure={current.attempt.failure}
     retryButtonHref={current.retryButtonHref}
+    deleteButtonHref={current.deleteButtonHref}
+    organizationHref={current.organizationHref}
     onReportChanged={poll}
   />
 {:else if current.attempt.status === 'canceled'}
@@ -152,5 +156,7 @@ function screenHeadline(report: ReportPageData): string {
     stoppedAt={current.attempt.stoppedAt}
     now={current.now}
     newReportHref={current.newReportHref}
+    deleteButtonHref={current.deleteButtonHref}
+    organizationHref={current.organizationHref}
   />
 {/if}

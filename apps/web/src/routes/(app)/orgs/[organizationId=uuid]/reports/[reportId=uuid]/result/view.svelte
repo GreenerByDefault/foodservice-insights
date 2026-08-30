@@ -5,15 +5,18 @@ import FileTextIcon from '@lucide/svelte/icons/file-text';
 import { formatElapsed, formatTimestamp } from '@gbd/core';
 import { Button } from '$lib/components/ui/button/index.js';
 import type { ResultFiles } from '../+page.server.ts';
+import DeleteButton from '../delete-button.svelte';
 
 interface Props {
   finishedAt: Date;
   now: Date;
   files: ResultFiles;
   inputFile: { href: string; originalFilename: string; byteSize: number };
+  deleteButtonHref: string;
+  organizationHref: string;
 }
 
-let { finishedAt, now, files, inputFile }: Props = $props();
+let { finishedAt, now, files, inputFile, deleteButtonHref, organizationHref }: Props = $props();
 </script>
 
 <div class="space-y-6">
@@ -36,6 +39,7 @@ let { finishedAt, now, files, inputFile }: Props = $props();
       <FileSpreadsheetIcon aria-hidden="true" />
       Download Excel
     </Button>
+    <DeleteButton {deleteButtonHref} {organizationHref} />
   </div>
 
   <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
