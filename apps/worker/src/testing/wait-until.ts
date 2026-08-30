@@ -2,9 +2,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const POLL_INTERVAL_MS = 5;
 
-/** Comfortably under vitest's 5s per-test timeout, so a failure is reported here — naming what was
- * being waited for — rather than as an anonymous timeout on the test. */
-const DEFAULT_TIMEOUT_MS = 4_000;
+/** Comfortably under vitest's 30s per-test timeout (`testTimeout` in `vitest.config.ts`, raised
+ * for Supabase Storage contention), so a failure is reported here — naming what was being waited
+ * for — rather than as an anonymous timeout on the test. */
+const DEFAULT_TIMEOUT_MS = 20_000;
 
 /** Waits for a condition by polling, instead of sleeping for a duration and hoping it was long
  * enough.
