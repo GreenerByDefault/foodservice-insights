@@ -5,7 +5,7 @@
  * anything Node-only.
  */
 
-import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';
+import { MAX_COLUMNS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';
 import type { RejectedUploadRecord } from '../../rejection.ts';
 import type {
   CsvParseError,
@@ -24,7 +24,7 @@ export type UnreadableFile =
   | { kind: 'layout'; fault: LayoutFault }
   | { kind: 'parse'; error: CsvParseError }
   | { kind: 'no-data-rows' }
-  | { kind: 'too-many-rows' };
+  | { kind: 'too-many-rows'; limit: number };
 
 export function describeUnreadableFile(file: UnreadableFile): RejectedUploadRecord {
   switch (file.kind) {
@@ -47,7 +47,7 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
     case 'too-many-rows':
       return {
         reason: 'too_large',
-        summary: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
+        summary: `That file has more than ${groupDigits(file.limit)} rows.`,
       };
   }
 }

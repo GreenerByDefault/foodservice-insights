@@ -157,7 +157,7 @@ describe('describeUnreadableFile', () => {
   });
 
   test('too many rows, with thousands grouped', () => {
-    expect(describeUnreadableFile({ kind: 'too-many-rows' })).toEqual({
+    expect(describeUnreadableFile({ kind: 'too-many-rows', limit: MAX_DATA_ROWS })).toEqual({
       reason: 'too_large',
       summary: `That file has more than ${groupDigits(MAX_DATA_ROWS)} rows.`,
     });

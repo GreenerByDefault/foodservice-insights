@@ -49,14 +49,22 @@ export type CsvNormalization =
   | { ok: true; normalized: Uint8Array; months: MonthsFromFile }
   | { ok: false; rejection: RejectedUploadRecord };
 
-export function normalizeCsv(bytes: Uint8Array, options: { now?: Date } = {}): CsvNormalization {
+export function normalizeCsv(
+  bytes: Uint8Array,
+  options: { now?: Date; maxDataRows?: number } = {},
+): CsvNormalization {
   const decoded = decodeCsv(bytes);
   if (!decoded.ok) return unreadable({ kind: 'decode', fault: decoded.fault });
 
   const decision = readLayout(decoded.text);
   if (!decision.ok) return unreadable({ kind: 'layout', fault: decision.fault });
 
-  return readRows(decoded.text, decision.layout, dateBoundsAt(options.now ?? new Date()));
+  return readRows(
+    decoded.text,
+    decision.layout,
+    dateBoundsAt(options.now ?? new Date()),
+    options.maxDataRows ?? MAX_DATA_ROWS,
+  );
 }
 
 /** A row every rule has accepted, still holding a date the column has not been read for yet. */
@@ -72,9 +80,14 @@ type PendingRow = {
 
 type MutableDateExamples = Map<DateOrder | 'ambiguous', DateExample>;
 
-function readRows(text: string, layout: Layout, bounds: DateBounds): CsvNormalization {
+function readRows(
+  text: string,
+  layout: Layout,
+  bounds: DateBounds,
+  maxDataRows: number,
+): CsvNormalization {
   const log = newFindingLog();
-  // Up to `MAX_DATA_ROWS`, live from the first row until the whole date column has been read,
+  // Up to `maxDataRows`, live from the first row until the whole date column has been read,
   // because day-first or month-first is a column-wide decision. Anything derived from this should
   // fold or stream rather than `.map` into a second array of the same size.
   const rows: PendingRow[] = [];
@@ -90,7 +103,9 @@ function readRows(text: string, layout: Layout, bounds: DateBounds): CsvNormaliz
       if (record.line <= layout.headerLine) continue;
 
       noteRowRead(log);
-      if (log.rowsRead > MAX_DATA_ROWS) return unreadable({ kind: 'too-many-rows' });
+      if (log.rowsRead > maxDataRows) {
+        return unreadable({ kind: 'too-many-rows', limit: maxDataRows });
+      }
 
       const row = readRow(record, layout, bounds, log);
       if (!row) continue;
