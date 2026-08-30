@@ -10,7 +10,12 @@ const REPORT_ID = 'report-1' as ReportId;
 const POLL_HREF = `/orgs/org-1/reports/${REPORT_ID}/poll`;
 
 const BASE = {
-  report: { id: REPORT_ID, name: 'Riverside Diner' },
+  report: {
+    id: REPORT_ID,
+    name: 'Riverside Diner',
+    siteName: null,
+    creator: { displayName: 'Dana Cook', email: 'dana@example.test' },
+  },
   cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
   retryButtonHref: '/api/orgs/org-1/reports/report-1/retry',
   newReportHref: '/orgs/org-1/reports/new',
