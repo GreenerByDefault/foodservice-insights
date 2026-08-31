@@ -45,6 +45,7 @@ test('a report that succeeded', async ({ page, reports }) => {
   await page.goto(reportUrl(reportId));
 
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
+  await expect(page.getByText('Finished 3 hours ago.')).toBeVisible();
   await expectScreenshot(page, 'reports-succeeded.png');
 });
 
@@ -87,7 +88,7 @@ test('a report that was canceled', async ({ page, reports }) => {
   const reportId = await reports.create('canceled');
   await page.goto(reportUrl(reportId));
 
-  await expect(page.getByText('Someone stopped this report')).toBeVisible();
+  await expect(page.getByText('Someone stopped this report 2 hours ago.')).toBeVisible();
   await expectScreenshot(page, 'reports-canceled.png');
 });
 

@@ -13,7 +13,7 @@
  * rather than as an absolute date which are recent instead, via `msAgo` (`@gbd/core`).
  */
 
-import { msAgo } from '@gbd/core';
+import { HOUR_MS, msAgo, SECOND_MS } from '@gbd/core';
 import type { AnalysisFailureReason, Database, ReportId, UserId } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
@@ -106,12 +106,13 @@ async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
     siteName: 'Lakeside Grill',
     createdByUserId: creator.id,
   });
+  const finishedMsAgo = 3 * HOUR_MS;
   const attempt = await insertAnalysisAttempt(tx, {
     reportId,
     status: 'succeeded',
-    createdAt: ANCHOR,
-    claimedAt: after(30),
-    finishedAt: after(210),
+    createdAt: msAgo(finishedMsAgo + 210 * SECOND_MS),
+    claimedAt: msAgo(finishedMsAgo + 180 * SECOND_MS),
+    finishedAt: msAgo(finishedMsAgo),
   });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
@@ -180,11 +181,12 @@ async function buildFailedAtRetryCap(tx: Transaction<Database>): Promise<ReportI
 
 async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
   const reportId = await insertReportWithInputFile(tx, 'May Seafood');
+  const stoppedMsAgo = 2 * HOUR_MS;
   await insertAnalysisAttempt(tx, {
     reportId,
     status: 'canceled',
-    createdAt: ANCHOR,
-    cancelRequestedAt: msAgo(50_000),
+    createdAt: msAgo(stoppedMsAgo + 45 * SECOND_MS),
+    cancelRequestedAt: msAgo(stoppedMsAgo),
   });
   return reportId;
 }
