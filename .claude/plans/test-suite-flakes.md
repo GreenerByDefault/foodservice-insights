@@ -130,8 +130,13 @@ A fix aimed at the wrong cause is indistinguishable from the flake going quiet o
 sightings 1 and 2 went green on the very next run. So nothing here gets fixed until it can be
 made to fail on demand.
 
-Sighting 3 may have removed the need for a harness to get there: two consecutive `pnpm test` runs
-failed, which is a rate you can watch directly. Check whether that still holds before building one.
+Sighting 3 answers the open question the last revision of this section left standing: no harness
+is being built. Three of four consecutive `pnpm test` runs failing is dense enough to watch by
+hand, and Lead 0 — now the strongest lead — was found by directly timing
+`chromium.launch()`/`close()`, not by looping the suite and counting pass/fail; a generic repro
+harness would not have produced it. See PR 1.
+
+If a lead ever needs a rate rather than a yes/no, these are the loops to run by hand:
 
 - For the cross-tier theory: `pnpm test:unit && pnpm test:e2e` in a loop.
 - For the unit-tier flake: the `client` project alone in a loop, which sighting 2 shows is enough
@@ -140,23 +145,28 @@ failed, which is a rate you can watch directly. Check whether that still holds b
 Record the observed failure rate. A flake that reproduces at 1-in-20 needs a different fix strategy
 than one that reproduces at 1-in-3.
 
-## PR 1 — A repro harness
+## PR 1 — Skipped: no repro harness
 
-A script that runs a chosen sequence N times and reports the failure rate and per-run wall time,
-so the next session does not re-derive it by hand and so PR 2 and PR 3 have a before/after number.
-Should cover both loops named above.
+Considered and rejected. A generic "run `pnpm test` N times, report the rate" tool answers a
+question sighting 3 already answered by hand — 3 of 4 runs failing is dense enough to watch
+directly — and would not have found Lead 0, which came from targeted instrumentation of
+Chromium's own launch/close behavior, not from counting suite-level pass/fail. Building it now
+would be tooling in search of a use, not tooling a lead is waiting on.
 
-Keep it a local script, not a CI job — this exists to be run deliberately while chasing a cause.
+Revisit only if reproduction gets rare again (see "Reproduce before fixing" above) — a harness
+earns its cost when a human can no longer watch the rate directly, which isn't true right now.
 
 ## PR 2 — Isolate the shared state the tiers contend on
 
-Conditional on PR 1 producing a reproduction. Depending on what it shows, the candidates are:
-making `test:unit` wait for its database and blob-store work to settle before `test:e2e` starts,
-giving the tiers separate stacks, or giving concurrent specs non-colliding fixtures rather than one
-shared placeholder organization.
+Conditional on Lead 0 above not fully explaining the failures — if Chromium's own exit stall
+accounts for the timeouts, a shared-state fix here would be treating a symptom leads 1 and 2 merely
+correlate with. Depending on what the Lead 0 investigation shows, the candidates are: making
+`test:unit` wait for its database and blob-store work to settle before `test:e2e` starts, giving
+the tiers separate stacks, or giving concurrent specs non-colliding fixtures rather than one shared
+placeholder organization.
 
-Pick the fix the reproduction actually points at, and re-run the harness to show the rate moved.
-Do not fix all three speculatively.
+Pick the fix the evidence actually points at, and reproduce by hand (sighting 3's `pnpm test` loop)
+to show the rate moved. Do not fix all three speculatively.
 
 ## PR 3 — Trace the `derived_inert` warning
 
@@ -170,7 +180,8 @@ benign.
 from failing the gate, and Playwright marks retried passes as flaky rather than hiding them. But it
 also doubles the cost of a genuine failure and removes the pressure that produced this plan. Worth
 deciding explicitly rather than drifting into either answer — and if it goes in, it should go in
-*after* PR 1, so the harness can still measure the underlying rate.
+*after* Lead 0 is understood, since a stopgap now would mask the rate that's still the evidence in
+play.
 
 ## Follow-ups this work identifies but does not do
 
@@ -183,8 +194,8 @@ deciding explicitly rather than drifting into either answer — and if it goes i
 The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 
 1. From the repo root: `pnpm lint && pnpm check && pnpm test`.
-2. Run the PR 1 harness enough times to state a failure rate with a straight face, before and after
-   whatever PR 2 changes. A single green `pnpm test` is not evidence — every sighting so far was
-   followed by one.
+2. Run the by-hand loop (see "Reproduce before fixing" above) enough times to state a failure rate
+   with a straight face, before and after whatever PR 2 changes. A single green `pnpm test` is not
+   evidence — every sighting so far was followed by one.
 3. Say plainly if the flake could not be reproduced. "Could not reproduce" is a real and useful
    result here; a silent fix is not.
