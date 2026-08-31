@@ -33,6 +33,13 @@ import { manualClock } from './clock.ts';
 import { type FakeChildStep, fakeChildCommand, releaseFakeChild } from './fake-child.ts';
 import { waitUntil } from './wait-until.ts';
 
+/** Two waits, so a test still gets production's three attempts — but of no wall clock.
+ *
+ * These are real `setTimeout` sleeps that no manual clock reaches, so at the production 250ms + 2s
+ * the few tests that break the database were over half of this suite's runtime.
+ */
+export const TEST_TRANSIENT_RETRY_WAITS_MS: readonly number[] = [1, 2];
+
 /** Fast wherever a real timer is involved, generous wherever the manual clock is what moves. */
 export const TEST_CONFIG: WorkerDefaultableFields = {
   maxConcurrentAttempts: 2,
@@ -46,6 +53,7 @@ export const TEST_CONFIG: WorkerDefaultableFields = {
   claimedCeilingMs: 10 * MINUTE_MS,
   reapIntervalMs: 50,
   uploadRetryBudgetMs: 5 * SECOND_MS,
+  transientRetryWaitsMs: TEST_TRANSIENT_RETRY_WAITS_MS,
   notifyIntervalMs: 50,
 };
 

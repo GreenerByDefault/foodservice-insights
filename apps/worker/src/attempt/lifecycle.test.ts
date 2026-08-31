@@ -22,6 +22,7 @@ import {
   fakeChildCommand,
   fakeResultFileContents,
 } from '../testing/fake-child.ts';
+import { TEST_TRANSIENT_RETRY_WAITS_MS } from '../testing/worker-harness.ts';
 import {
   type AttemptDependencies,
   CorruptInputFileError,
@@ -51,6 +52,7 @@ function dependencies(
     runRoot: fixture.runRoot,
     childCommand: fakeChildCommand(steps),
     killGraceMs: 2_000,
+    transientRetryWaitsMs: TEST_TRANSIENT_RETRY_WAITS_MS,
   };
 }
 
@@ -405,6 +407,7 @@ describe('failure rows', () => {
         runRoot: fixture.runRoot,
         childCommand: { executable: `${fixture.runRoot}/not-a-program`, leadingArguments: [] },
         killGraceMs: 2_000,
+        transientRetryWaitsMs: TEST_TRANSIENT_RETRY_WAITS_MS,
       };
 
       const prepared = await startAttempt(badDependencies, fixture.attemptId);
