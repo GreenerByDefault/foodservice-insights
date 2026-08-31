@@ -48,33 +48,46 @@ const READY_TIMEOUT_MS = 600_000;
 const POLL_INTERVAL_MS = 250;
 
 export async function startBrowserServer(): Promise<void> {
-  // A run killed mid-flight leaves the container behind despite `--rm`; reclaim the name and the
-  // port rather than failing on them.
+  // The container is stateless, so reuse one already serving the pinned image rather than racing a
+  // concurrent `screenshots` run to kill and restart it.
+  if ((await isRunningCurrentImage()) && (await isServing())) return;
+
+  // Otherwise — absent, unhealthy, or serving a stale image tag — reclaim the name and the port
+  // rather than failing on them. This is also the path a run killed mid-flight takes, since that
+  // leaves the container behind despite `--rm`.
   await stopBrowserServer();
 
-  await run('docker', [
-    'run',
-    '--detach',
-    '--rm',
-    `--name=${CONTAINER_NAME}`,
-    `--platform=${BROWSER_PLATFORM}`,
-    // Chromium's default 64MB /dev/shm in a container is small enough to crash tabs.
-    '--ipc=host',
-    // Reaps the zombie processes Chromium leaves behind over a long run.
-    '--init',
-    '--user=pwuser',
-    '--workdir=/home/pwuser',
-    // Gives the container one hostname for "the machine running the app server" that resolves on
-    // both macOS and Linux, so `baseURL` needs no per-platform branch.
-    '--add-host=host.docker.internal:host-gateway',
-    // Loopback-only: this socket drives a browser, and nothing outside this machine should.
-    `--publish=127.0.0.1:${HOST_PORT}:${SERVER_PORT}`,
-    '--entrypoint=/bin/sh',
-    BROWSER_IMAGE,
-    '-c',
-    `npx -y playwright-core@${IMAGE_PLAYWRIGHT_VERSION} run-server ` +
-      `--port ${SERVER_PORT} --host 0.0.0.0`,
-  ]);
+  try {
+    await run('docker', [
+      'run',
+      '--detach',
+      '--rm',
+      `--name=${CONTAINER_NAME}`,
+      `--platform=${BROWSER_PLATFORM}`,
+      // Chromium's default 64MB /dev/shm in a container is small enough to crash tabs.
+      '--ipc=host',
+      // Reaps the zombie processes Chromium leaves behind over a long run.
+      '--init',
+      '--user=pwuser',
+      '--workdir=/home/pwuser',
+      // Gives the container one hostname for "the machine running the app server" that resolves
+      // on both macOS and Linux, so `baseURL` needs no per-platform branch.
+      '--add-host=host.docker.internal:host-gateway',
+      // Loopback-only: this socket drives a browser, and nothing outside this machine should.
+      `--publish=127.0.0.1:${HOST_PORT}:${SERVER_PORT}`,
+      '--entrypoint=/bin/sh',
+      BROWSER_IMAGE,
+      '-c',
+      `npx -y playwright-core@${IMAGE_PLAYWRIGHT_VERSION} run-server ` +
+        `--port ${SERVER_PORT} --host 0.0.0.0`,
+    ]);
+  } catch (cause) {
+    // The check above and this `run` aren't atomic, so two runs can both see the container gone
+    // and race here; the loser's `docker run` fails on the name the winner just claimed. Treat
+    // that as a signal to wait on the winner's container, not as a real failure.
+    const stderr = cause instanceof Error && 'stderr' in cause ? String(cause.stderr) : '';
+    if (!stderr.includes('is already in use')) throw cause;
+  }
 
   await waitUntilServing();
 }
@@ -105,6 +118,15 @@ export async function describeBrowser(): Promise<string> {
   } finally {
     await browser.close();
   }
+}
+
+async function isRunningCurrentImage(): Promise<boolean> {
+  const { stdout } = await run('docker', [
+    'inspect',
+    '--format={{.State.Running}} {{.Config.Image}}',
+    CONTAINER_NAME,
+  ]).catch(() => ({ stdout: '' }));
+  return stdout.trim() === `true ${BROWSER_IMAGE}`;
 }
 
 async function waitUntilServing(): Promise<void> {

@@ -37,6 +37,10 @@ makes the shot names a global namespace, so prefix them with the feature the way
 `__screenshots__/` is our visual regression suite, and doubles as a gallery for humans and AI to
 see how the app looks.
 
+The containerized browser stays running between local runs, so repeat `test:screenshots` runs
+skip its ~2s startup and concurrent runs don't fight over tearing it down. Optionally,
+can run `pnpm test:browser:stop` to free the memory when you're done.
+
 After an intentional visual change, update the committed PNGs:
 
 ```sh

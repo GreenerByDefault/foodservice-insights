@@ -49,18 +49,12 @@ Two things this investigation established that change the shape of the fix:
 | Blob bucket `files` | yes | a bucket per run, `files-<runId>` |
 | Mailpit @ 65324 | yes, but e2e never reads it | nothing — just stop calling `clearMailbox` |
 | App server on port 4173, `reuseExistingServer: true` | yes (bound to one db at boot) | a free port per run, no reuse |
-| Browser container `gbd-web-screenshot-browser` | **no** — it is a stateless browser server | stop killing it; share it |
 | `WORKER_RUN_ROOT` | not reached by the web e2e tier | nothing |
 
 The `reuseExistingServer` line is worth calling out on its own: today a run in worktree B silently
 reuses a server *built from worktree A's code* if one is listening on 4173, and skips the
 truncate/migrate/seed chain while doing it. That is a correctness bug independent of the flake, and
 a per-run port removes it.
-
-The browser container is the second cross-session bug, and it is not in the existing plan:
-`startBrowserServer` opens with `docker rm --force` and the teardown project closes with the same
-([browser-container.ts](apps/web/e2e/setup/browser-container.ts)), so two concurrent `screenshots`
-runs kill each other's browser mid-run.
 
 ## Design
 
@@ -163,11 +157,6 @@ instead.
   `dependencies: ['database']` on `e2e` and `screenshots`. A fresh database has no fixture reports
   to clear. `clearReportFixtures` stays exported for
   [scripts/seed-reports.ts](apps/web/scripts/seed-reports.ts).
-- **Browser container: share it.** `startBrowserServer` reuses a container that is already serving
-  *from the current image*, and only `docker rm --force`s when it is absent, unhealthy, or running
-  the wrong image tag. The teardown project stops it only under `CI`; locally it is left running
-  and `pnpm test:browser:stop` stops it by hand. Per-run containers were rejected: this is a
-  16GB machine that already swaps, and the container holds no run state.
 - **`.env.test` is unchanged.** It stays the default for the vitest tiers and for manual scripts;
   the wrapper overrides two of its values for the Playwright run only.
 - **`pnpm truncate` survives as a manual command.** Nothing automatic ever calls it again.
@@ -210,16 +199,11 @@ behaves identically after it.
 - Delete `apps/web/e2e/setup/database.setup.ts`.
 - Docs (load the `writing-docs` skill): `.claude/rules/typescript.md` still says "`pnpm test` is
   deliberately serial because `test:e2e` truncates the DB" — that reason is now gone. State that it
-  stays serial for machine load alone, which sets PR 5 up.
+  stays serial for machine load alone, which sets PR 4 up.
   `supabase-test/supabase/config.toml`'s header says the suites "assume they can truncate it at
   will" — no longer true. Add `pnpm test:db:clean` to [README.md](README.md)'s command table.
 
-**PR 4 — Stop concurrent screenshot runs from killing each other's browser.** Independent of 1–3;
-can land in any order.
-- [browser-container.ts](apps/web/e2e/setup/browser-container.ts): reuse-if-serving-and-current,
-  reclaim otherwise; stop only under `CI`; a `test:browser:stop` script.
-
-**PR 5 — Experiment: does `pnpm test` still need to be serial?** Depends on PR 3. This is an
+**PR 4 — Experiment: does `pnpm test` still need to be serial?** Depends on PR 3. This is an
 experiment with a measurement gate, not a foregone change — it lands only if the numbers say so.
 - `pnpm test` is `pnpm run test:unit && pnpm run test:playwright`, and the only stated reason for
   the `&&` was the truncate. With per-run databases the tiers no longer conflict, so the question
@@ -253,7 +237,7 @@ experiment with a measurement gate, not a foregone change — it lands only if t
 
 The test stack must be running: `TEST_DB=1 scripts/supabase start`. Check `pgrep -x yes` and
 `uptime` before trusting any timing. An earlier investigation's strongest lead turned out to be
-nothing but background load its own session had left running; see PR 5 for the details.
+nothing but background load its own session had left running; see PR 4 for the details.
 
 1. `pnpm lint && pnpm check && pnpm test` from the repo root.
 2. **The deterministic repro must stop failing.** Start `TEST_DB=1 pnpm --filter @gbd/web run
@@ -262,8 +246,8 @@ nothing but background load its own session had left running; see PR 5 for the d
    `postgres`, which the run is no longer using. This is a yes/no, not a rate.
 3. **Two full suites at once.** `pnpm test` in this worktree and in another, started together, both
    green. Then two at once *in the same worktree*, which is the case the existing plan does not
-   cover. Include `--project=screenshots` in at least one pair, so PR 4's container sharing is
-   exercised.
+   cover. Include `--project=screenshots` in at least one pair, since concurrent screenshot runs
+   now share one browser container instead of racing to kill and restart it.
 4. `psql -c "\l"` afterwards: no `fsi_test_run_%` databases left, one `fsi_test_tmpl_%` per distinct
    migration set. `aws s3 ls`-equivalent: no leftover `files-*` buckets.
 5. Confirm the committed PNGs are byte-identical — `git status` clean under
