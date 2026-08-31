@@ -2,17 +2,7 @@
  *
  * Blob store objects are the other thing besides the database that a `pnpm test:e2e` run writes,
  * and two runs sharing one bucket (`files`, the default from `.env.test`) can collide on the same
- * keys the way two runs sharing one database collide on the same rows — see
- * `.claude/plans/test-run-isolation.md`. `S3_BUCKET=files-<runId>` per run sidesteps it.
- *
- * **Spiked, not assumed**: Supabase Storage's S3 API accepts `DeleteBucket` — confirmed
- * empirically against the running test stack: it succeeds on an empty bucket and fails with
- * `ResourceNotEmpty` on one that isn't, exactly like real S3. That's what lets `deleteRunBucket`
- * actually remove the bucket rather than fall back to a key prefix within a shared one.
- *
- * A run bucket needs no client of its own — an `S3Client` isn't bucket-scoped, only each request
- * names one — so `createRunBucket` returns a `BlobStore` that reuses the caller's client and only
- * swaps in the run bucket's name.
+ * keys the way two runs sharing one database collide on the same rows.
  */
 
 import { DeleteBucketCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
@@ -36,11 +26,8 @@ export interface RunBucket {
   readonly store: BlobStore;
 }
 
-/** Create a bucket scoped to one run, and return a store pointed at it.
- *
- * `store` supplies the client and the request-deadline configuration; only its `bucket` is
- * replaced. Safe to call concurrently with another run doing the same — each generates its own
- * name.
+/** Create a bucket scoped to one run, and return a store pointed at it. Safe to call
+ * concurrently with another run doing the same — each generates its own name.
  */
 export async function createRunBucket(store: BlobStore): Promise<RunBucket> {
   const name = runBucketName();
@@ -58,8 +45,8 @@ function runBucketName(): string {
  * Checks existence first rather than letting the empty-then-delete calls fail into that case:
  * `ListObjectsV2` against a missing bucket answers `NoSuchBucket`, a name `isNotFoundError`
  * doesn't recognise — it exists for a missing *key*, which Supabase Storage reports
- * indistinguishably from a missing bucket (see `errors.ts`), not for a missing bucket found by
- * name up front like this.
+ * indistinguishably from a missing bucket (see `packages/storage/src/errors.ts`), not for a
+ * missing bucket found by name up front like this.
  */
 export async function deleteRunBucket(store: BlobStore): Promise<void> {
   if (!(await bucketExists(store))) return;
