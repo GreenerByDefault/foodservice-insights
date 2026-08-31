@@ -9,7 +9,8 @@ For how the database fits into the wider system, see [`ARCHITECTURE.md`](../../A
 
 | Question | File |
 | --- | --- |
-| What exists right now, constraints and all? | [`schema.sql`](schema.sql) (generated file) |
+| What exists right now, constraints and all? | [`public-schema.sql`](public-schema.sql) (generated file) |
+| What does GoTrue's own schema look like? | [`auth-schema.sql`](auth-schema.sql) (generated file) |
 | What can I query, and with what types? | [`src/generated/`](src/generated/) |
 | What does the database reject? | [`tests/`](tests/) |
 | How did it get this way? | [`migrations/`](migrations/) |

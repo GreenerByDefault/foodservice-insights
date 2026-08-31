@@ -29,5 +29,14 @@ export {
   readAnalysisAttemptRow,
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';
+export type { RunDatabase } from './run-database.ts';
+export {
+  createRunDatabase,
+  dropRunDatabase,
+  ensureTemplateDatabase,
+  sweepStaleRunDatabases,
+  sweepStaleTemplateBuilds,
+  templateFingerprint,
+} from './run-database.ts';
 export { withRollback } from './transactions.ts';
 export { unreachableDatabase } from './unreachable.ts';

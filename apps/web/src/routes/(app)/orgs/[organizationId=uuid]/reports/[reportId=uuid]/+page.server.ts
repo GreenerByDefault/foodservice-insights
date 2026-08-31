@@ -131,7 +131,7 @@ export async function _loadReport(
     .selectFrom('report')
     .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
     .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
-    // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL` (schema.sql), and a
+    // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL` (public-schema.sql), and a
     // report outlives the account that submitted it (see api/account/+server.ts).
     .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
     .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
