@@ -43,6 +43,11 @@ Three failures on an otherwise-idle machine, all in the `client` project, all wh
 tier rather than changing it. **Three of four consecutive `pnpm test` runs failed**, which makes
 this the first sighting dense enough to chase without a harness.
 
+> **Correction (2026-08-30).** The machine was not idle. This session left 12 `yes` processes
+> running on all 8 cores, and they were still running six hours later. Every number below — the
+> timings, the concurrency table, and the Lead 0 measurements they fed — was taken under that
+> load. See lead 0.
+
 - Roughly 25 consecutive `client`-only runs produced one failure, of 1 file in 11. The file's
   name was not captured.
 - `pnpm test`: `failure-view.svelte.test.ts:138` — *while the request is in flight, the retry
@@ -90,33 +95,63 @@ contention is for something more specific.
 
 ### Leads, strongest first
 
-0. **Chromium itself stalls on this machine, for tens of seconds at a time.** Measured
-   independently while timing the `client` tier: `chrome-headless-shell` takes anywhere from 1.5s
-   to Playwright's 30s force-kill cap to exit after `Browser.close`, with every thread idle in
-   `mach_msg` — and a bare `chromium.launch()` then `close()`, no page ever loaded, reproduces the
-   same distribution. That exit wait cannot itself explain any of the failures, because it happens
-   after the results are printed. What makes it a lead is that it is the *same signature* in the
-   same binary: seconds-long idle stalls, no work being done. If one cause produces both, every
-   symptom here follows — the timeouts, the 100s test file, the e2e "element never appeared", the
-   variance — and no amount of test-side isolation will touch it. Cheap first checks: does the
-   rate change on a different Chromium version, or on CI's Linux runners? A flake that is
-   local-macOS-only is a very different problem from one that ships.
-   *Rejected as a fix: nothing in the tests' control moves it — `browser.isolate`, file count,
-   `--disable-gpu`, `--no-zygote`, `--in-process-gpu` and the full `chromium` channel were all
-   measured and none changed the distribution.*
+0. ~~**Chromium itself stalls on this machine, for tens of seconds at a time.**~~ **Refuted
+   2026-08-30.** The stall is real but it was not Chromium's: the machine was pegged by **12
+   orphaned `yes` processes**, started 15:40 on 2026-08-30 and still running six hours later —
+   spawned by sighting 3's own session to test whether CPU starvation could stall the browser, and
+   never cleaned up. Every Lead 0 measurement was taken under that load.
 
-1. **The shared test Supabase stack, with nothing making one tier quiesce before the next.**
-   `apps/web/e2e/setup/database.setup.ts` clears fixture reports as a barrier before either
-   Playwright project starts, and the `webServer` command runs `truncate && migrate &&
-   seed:identity` ahead of that. Both guarantee a clean *start*; neither makes the preceding
-   `test:unit` run's database and blob-store work finish first.
-2. **`fullyParallel: true` against one shared fixture organization.** `e2e/layout.e2e.ts:43` already
-   documents a live instance of this — it uses the `failed-retried` state rather than `failed`
-   precisely because `failed`'s fixture "pins a fixed creator email for a committed screenshot,
-   which collides with retry.e2e.ts's own 'failed' fixture when both run concurrently." One such
-   collision is documented and worked around; the barrier does nothing about collisions *during* a
-   run.
-3. **The `derived_inert` warning — unverified, but cheap to check.** Every client unit
+   With the load gone and *nothing else changed*, `chromium.launch()` / `close()` over 12
+   iterations:
+
+   | Condition | close median | close max |
+   | --- | --- | --- |
+   | 12 `yes` processes running | 2,295ms | 22,258ms |
+   | same, `renice +20` | 5,566ms | 9,697ms |
+   | quiet machine | **31ms** | **83ms** |
+
+   Chromium's exit is ~31ms. The "1.5s to the 30s force-kill cap" distribution was the load
+   generator. Corroborating detail gathered before the load was lifted: during an 18s stall the
+   process accrued **zero user CPU** while marked runnable, and `sample` returned an **empty call
+   graph** — it had no threads left to sample. That is a process starved of CPU in its exit path,
+   not one blocked on IPC, which is why no Chromium flag moved it. Build 1228 and build 1234
+   stalled identically under the load and neither stalls without it, so the version question is
+   moot. Memory pressure is *not* the cause either: swap was still at 7.3GB of 8GB during the
+   31ms measurements.
+
+   The consequence is wider than one lead: **sighting 3's "otherwise-idle machine" was not idle**,
+   so its client-tier timeouts (`failure-view.svelte.test.ts:138`,
+   `waiting/cancel-button.svelte.test.ts:20`) are explained by the same starvation — including the
+   42,700ms overrun of a 15,000ms timeout, which is what a stalled tester page looks like. Its
+   concurrency table measured how much CPU each configuration wanted while 12 hogs held all 8
+   cores, not anything about the tiers.
+
+   *Before trusting any timing measurement here, check `pgrep -x yes` and `uptime`.*
+
+1. **The single test Supabase stack is shared across every git worktree — confirmed, and
+   reproducible on demand.** `.env.test` hardcodes `DB_CONNECTION_STRING=…@127.0.0.1:65322`, and
+   `scripts/supabase` brings up one Docker project from `supabase-test/`. There are currently
+   **four worktrees** (`foodservice-insights`, `.upload-form`, `.view-report`, `.visual-testing`),
+   each with its own session, and all four resolve to that one database. The Playwright
+   `webServer` command runs `truncate && migrate && seed:identity` for *its* run; any other
+   worktree starting its suite runs the same `truncate` and deletes the rows out from under a run
+   already in flight.
+
+   Observed in a real run (1 of 4 uncached `pnpm test` runs on the now-quiet machine): the log
+   shows `seed:identity: seeded the placeholder user`, then `Listening on http://0.0.0.0:4173`,
+   then every request failing with `Identified user 00000000-…-000000000001 has no row in the
+   database`. 11 specs failed on HTTP 500s. Nothing in that run truncated after seeding.
+
+   Reproduced deliberately: start `test:e2e` in one worktree, run
+   `TEST_DB=1 pnpm --filter @gbd/db run truncate` from another the moment the first test starts →
+   **9 failed**, among them `retry.e2e.ts:19` and `layout.e2e.ts:50` — the specs sightings 1 and 2
+   both named. Timing matters: fire the truncate during boot instead and the run passes, which is
+   why this is intermittent rather than constant.
+
+   This subsumes the old leads 1 and 2. The contention is *between worktrees*, not between the
+   tiers of one run, so a barrier inside a single `pnpm test` would not have touched it.
+
+2. **The `derived_inert` warning — unverified, but cheap to check.** Every client unit
    run logs `[svelte] derived_inert — Reading a derived belonging to a now-destroyed effect may
    result in stale values`. Nothing has traced it to a component. It is worth doing, because a
    stale value read off a destroyed effect is exactly the shape of "the expected text never
@@ -126,24 +161,23 @@ contention is for something more specific.
 
 ### Reproduce before fixing
 
-A fix aimed at the wrong cause is indistinguishable from the flake going quiet on its own, and
-sightings 1 and 2 went green on the very next run. So nothing here gets fixed until it can be
-made to fail on demand.
+**Both halves now reproduce, and one is deterministic.**
 
-Sighting 3 answers the open question the last revision of this section left standing: no harness
-is being built. Three of four consecutive `pnpm test` runs failing is dense enough to watch by
-hand, and Lead 0 — now the strongest lead — was found by directly timing
-`chromium.launch()`/`close()`, not by looping the suite and counting pass/fail; a generic repro
-harness would not have produced it. See PR 1.
+The e2e half fires on demand (lead 1). In one worktree, start `TEST_DB=1 pnpm --filter @gbd/web
+run test:e2e`; the moment its first test reports, run `TEST_DB=1 pnpm --filter @gbd/db run
+truncate` from a *different* worktree. That produced **9 failures**, including `retry.e2e.ts:19`
+and `layout.e2e.ts:50`. Fire the truncate earlier, during webServer boot, and the run passes —
+the window is the test phase only, which is the whole reason this presents as a flake.
 
-If a lead ever needs a rate rather than a yes/no, these are the loops to run by hand:
+The unit half no longer reproduces once the machine is quiet, consistent with lead 0 being the
+whole of it. Four uncached `pnpm test` runs on the quiet machine: **one failure, and it was the
+e2e/database one** (11 specs, all HTTP 500 on `Identified user … has no row in the database`),
+not a client-tier timeout. Suite wall clock also fell from ~97s to 46-70s.
 
-- For the cross-tier theory: `pnpm test:unit && pnpm test:e2e` in a loop.
-- For the unit-tier flake: the `client` project alone in a loop, which sighting 2 shows is enough
-  and which is far cheaper per iteration.
-
-Record the observed failure rate. A flake that reproduces at 1-in-20 needs a different fix strategy
-than one that reproduces at 1-in-3.
+CI is the control and it is clean: no instance of either signature across ~100 Linux runs. The
+two real failures there were an already-fixed Supabase Storage flake and an unrelated Python one.
+So this is local-macOS-only and, on current evidence, entirely about how this machine is being
+shared.
 
 ## PR 1 — Skipped: no repro harness
 
@@ -153,20 +187,42 @@ directly — and would not have found Lead 0, which came from targeted instrumen
 Chromium's own launch/close behavior, not from counting suite-level pass/fail. Building it now
 would be tooling in search of a use, not tooling a lead is waiting on.
 
-Revisit only if reproduction gets rare again (see "Reproduce before fixing" above) — a harness
-earns its cost when a human can no longer watch the rate directly, which isn't true right now.
+Still the right call, though not for the reason given: Lead 0 turned out to be an artifact of the
+very instrumentation that session left running, and the cause that survived (lead 1) reproduces
+deterministically. A pass/fail counter would have found neither.
 
-## PR 2 — Isolate the shared state the tiers contend on
+## PR 2 — Give each worktree its own test data
 
-Conditional on Lead 0 above not fully explaining the failures — if Chromium's own exit stall
-accounts for the timeouts, a shared-state fix here would be treating a symptom leads 1 and 2 merely
-correlate with. Depending on what the Lead 0 investigation shows, the candidates are: making
-`test:unit` wait for its database and blob-store work to settle before `test:e2e` starts, giving
-the tiers separate stacks, or giving concurrent specs non-colliding fixtures rather than one shared
-placeholder organization.
+**Confirmed by the author:** they were running `pnpm test` in another worktree and stopped it
+mid-run, and they *frequently run several Claude Code sessions at once*. That is the workflow this
+repo has to support, not an accident to be avoided — so "don't run two suites at once" is not an
+acceptable answer, and neither is anything that only orders the tiers *within* one run.
 
-Pick the fix the evidence actually points at, and reproduce by hand (sighting 3's `pnpm test` loop)
-to show the rate moved. Do not fix all three speculatively.
+The contended state is everything the Playwright `webServer` command resets: `pnpm -r run
+truncate` empties 32 Postgres tables, the mailbox, and the blob store (60 objects in the observed
+run), and `seed:identity` recreates the placeholder user every other worktree's server is
+authenticating as. All of it is addressed by one hardcoded line — `.env.test`'s
+`DB_CONNECTION_STRING=…@127.0.0.1:65322/postgres`.
+
+Options, cheapest first:
+
+1. **A machine-wide lock around the suite.** A lockfile every `test:playwright` acquires, so a
+   second worktree's run waits rather than interleaves. Simplest thing that works, no schema or
+   infrastructure change, and honest about the fact that this 8-core machine cannot usefully run
+   two suites at once anyway. Cost: a session blocks for the length of another's suite, with no
+   signal about why unless the wait prints one.
+2. **A per-worktree database inside the one Postgres** (recommended for the real fix). Derive the
+   database name from the worktree path — `postgres` becomes e.g. `fsi_test_<short-hash>` — and
+   give the blob store a matching per-worktree bucket or key prefix, since `packages/storage`'s
+   truncate is just as destructive. Real isolation, one Docker stack, and concurrent sessions stop
+   interfering entirely. Cost: `migrate` must create the database on demand, and stale databases
+   accumulate as worktrees come and go.
+3. ~~A per-worktree Supabase stack.~~ Rejected: the test stack is 14 containers and the machine
+   already runs two stacks against 16GB of RAM with 7GB swapped. Multiplying that by the number
+   of live worktrees would make the memory problem worse than the flake.
+
+Reproduce with the deterministic recipe in "Reproduce before fixing" — it must stop failing after
+the change, and that is a yes/no, not a rate.
 
 ## PR 3 — Trace the `derived_inert` warning
 
@@ -176,26 +232,32 @@ run whether or not it turns out to be the flake. Find the component it comes fro
 teardown warning, and either fix it or suppress it at the source with a comment saying why it is
 benign.
 
-**Open:** whether to set `retries: 1` in `playwright.config.ts` as a stopgap. It would stop flakes
-from failing the gate, and Playwright marks retried passes as flaky rather than hiding them. But it
-also doubles the cost of a genuine failure and removes the pressure that produced this plan. Worth
-deciding explicitly rather than drifting into either answer — and if it goes in, it should go in
-*after* Lead 0 is understood, since a stopgap now would mask the rate that's still the evidence in
-play.
+**Decided: no `retries: 1`.** The stopgap was being held until Lead 0 was understood; it now is.
+Neither surviving cause is the kind of flake a retry is for. A run whose database was truncated by
+another session does not deserve a second attempt — it deserves isolation — and a retry would
+convert a loud, diagnosable wipe into a quiet "flaky" label. Revisit only if a genuinely
+nondeterministic failure shows up that isn't explained by PR 2 or by machine load.
 
 ## Follow-ups this work identifies but does not do
 
-- **The `test:unit` → `test:e2e` ordering is implicit.** `pnpm test` always runs them in that order
-  and lead 1 depends on it, but nothing declares or enforces it. If the fix turns out to depend on
-  ordering, that dependency should become explicit in `turbo.json` rather than emergent.
+- **The `test:unit` → `test:e2e` ordering is implicit.** `pnpm test` always runs them in that
+  order, but nothing declares or enforces it. No longer load-bearing for any lead — the contention
+  turned out to be between worktrees, not between tiers — so this is now tidiness rather than a
+  dependency of the fix.
+- **Nothing cleans up a session's own load generators.** Sighting 3's `yes` processes outlived
+  their experiment by six hours and invalidated every measurement taken afterwards, including this
+  plan's former strongest lead. Whatever spawns background load for a measurement should kill it
+  in the same breath.
 
 ## Verification
 
 The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 
 1. From the repo root: `pnpm lint && pnpm check && pnpm test`.
-2. Run the by-hand loop (see "Reproduce before fixing" above) enough times to state a failure rate
-   with a straight face, before and after whatever PR 2 changes. A single green `pnpm test` is not
-   evidence — every sighting so far was followed by one.
-3. Say plainly if the flake could not be reproduced. "Could not reproduce" is a real and useful
+2. Run the cross-worktree recipe in "Reproduce before fixing" before and after PR 2. It fails
+   deterministically today, so this is a yes/no rather than a rate, and a single green `pnpm test`
+   proves nothing — every sighting so far was followed by one.
+3. Check `pgrep -x yes` and `uptime` first. Any timing taken on a loaded machine is worthless, as
+   lead 0 shows.
+4. Say plainly if the flake could not be reproduced. "Could not reproduce" is a real and useful
    result here; a silent fix is not.
