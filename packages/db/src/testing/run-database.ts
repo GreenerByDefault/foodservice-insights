@@ -20,11 +20,9 @@
  * retries once.
  *
  * **Cleanup.** `dropRunDatabase` is the normal path, called from the run wrapper's `finally`.
- * `sweepStaleRunDatabases` is the backstop for a hard kill: a run database's name encodes the
- * epoch it was created, so a sweep can drop anything old enough that no still-running test could
- * own it — mirroring `sweepStaleFixtures` in `concurrency.ts`, which solves exactly this problem
- * for fixture rows. Templates are never swept: another worktree's branch may be the only thing
- * still using one.
+ * `sweepStaleRunDatabases` is the backstop for a hard kill — see its doc comment for the staleness
+ * rule. Templates are never swept: another worktree's branch may be the only thing still using
+ * one.
  *
  * **Privilege.** Every function here takes the app's ordinary connection string — the same
  * `DB_CONNECTION_STRING` the app itself uses — but none of them connect with it. Restoring
@@ -55,10 +53,10 @@ const SUPERUSER_NAME = 'supabase_admin';
 const SUPERUSER_PASSWORD = 'postgres';
 
 /** A fixed, arbitrary key for the advisory lock `ensureTemplateDatabase` holds while it checks
- * for and, if needed, builds the template. Fixed rather than derived from the template name
- * because the whole point is to serialise *before* the fingerprint decides which name is in
- * play — two callers computing different fingerprints from a schema change mid-flight should
- * still not build at the same time.
+ * for and, if needed, builds the template. Fixed rather than derived from the template name: the
+ * whole point is to serialise *before* the fingerprint decides which name is in play. Two callers
+ * computing different fingerprints from a schema change mid-flight should still not build at the
+ * same time.
  */
 const TEMPLATE_LOCK_KEY = 847_362_910_147n;
 
@@ -95,9 +93,9 @@ export async function templateFingerprint(): Promise<string> {
   return hash.digest('hex').slice(0, 12);
 }
 
-/** A generated database name is always one of ours to operate on — this is what lets
- * `dropRunDatabase` and the sweep interpolate a name into DDL, which cannot take a bound
- * parameter, without treating an arbitrary string as safe to do that with. */
+/** Throws unless `name` matches the pattern this module generates. `dropRunDatabase` and the
+ * sweep rely on that guarantee to interpolate `name` straight into DDL, which can't take a bound
+ * parameter — this is what makes doing that safe. */
 function assertOwnedName(name: string): void {
   if (!/^fsi_test_(tmpl|run)_[a-z0-9_]+$/.test(name)) {
     throw new Error(`run-database: "${name}" is not a name this module generated or owns`);
@@ -110,9 +108,10 @@ function appOwner(connectionString: string): string {
   return decodeURIComponent(new URL(connectionString).username);
 }
 
-/** Swap in the local Supabase CLI's superuser, pointed at `postgres` — the database nothing but
- * Supabase's own services holds a connection to, and so the only safe target for a maintenance
- * connection (see `ensureTemplateDatabase`'s doc comment on `CREATE DATABASE ... TEMPLATE`). */
+/** Swap in the local Supabase CLI's superuser, pointed at `postgres`. That's the only database
+ * nothing but Supabase's own services holds a connection to, so it's the only safe target for a
+ * maintenance connection (see `ensureTemplateDatabase`'s doc comment on `CREATE DATABASE ...
+ * TEMPLATE`). */
 function superuserConnectionString(connectionString: string): string {
   const url = new URL(connectionString);
   url.username = SUPERUSER_NAME;
@@ -166,8 +165,9 @@ async function buildTemplateDatabase(
   name: string,
   owner: string,
 ): Promise<void> {
-  // Not a transaction block: `CREATE DATABASE` refuses to run inside one, and this is a single
-  // statement sent over the simple query protocol, so there is no implicit one to escape.
+  // Not a transaction block: `CREATE DATABASE` refuses to run inside one. It doesn't need to be
+  // one either — this is a single statement sent over the simple query protocol, so there's no
+  // implicit transaction to escape.
   await maintenance.query(`CREATE DATABASE "${name}" TEMPLATE template0 OWNER "${owner}"`);
 
   const templateConnectionString = withDatabaseName(
@@ -177,16 +177,16 @@ async function buildTemplateDatabase(
   const template = new Client({ connectionString: templateConnectionString });
   await template.connect();
   try {
-    // A single multi-statement string, sent over the simple query protocol (no parameters), which
-    // is the only one of the two Postgres wire protocols that allows more than one statement per
-    // call — this file is thousands of lines of `CREATE`/`ALTER`/`COMMENT`.
+    // Sent as a single multi-statement string over the simple query protocol (no parameters) —
+    // the only one of Postgres's two wire protocols that allows more than one statement per call.
+    // `auth-schema.sql` needs that: it's thousands of lines of `CREATE`/`ALTER`/`COMMENT`.
     await template.query(await readFile(authSchemaPath(), 'utf8'));
   } finally {
     await template.end();
   }
 
-  // Migrations run as the app's own role — `owner` above is what makes that able to create
-  // anything in `public` at all — not as the superuser used to build everything before this.
+  // Migrations run as the app's own role, not the superuser used for everything above — `owner`
+  // is what makes that role able to create anything in `public` at all.
   const appTemplateConnectionString = withDatabaseName(connectionString, name);
   const templateDatabase = initializeDatabase({ connectionString: appTemplateConnectionString });
   try {
@@ -268,11 +268,11 @@ export async function dropRunDatabase(connectionString: string, name: string): P
 /** Drop every run database old enough that no still-running test could own it, and report which
  * ones it dropped.
  *
- * Gated on both age *and* having no rows in `pg_stat_activity`, deliberately not on age alone: a
+ * Gated on both age *and* having no rows in `pg_stat_activity`, deliberately not on age alone. A
  * run killed mid-test can leave its database old enough to sweep while a retry or a slow teardown
- * is still connected to it, and dropping out from under that would break the very run this is
- * meant to protect. Mirrors `sweepStaleFixtures` in `concurrency.ts`, which applies the same idea
- * — an age bound that a live user always overrides — to fixture rows instead of databases.
+ * is still connected to it; dropping out from under that would break the very run this is meant
+ * to protect. Mirrors `sweepStaleFixtures` in `concurrency.ts`, which applies the same idea — an
+ * age bound that a live user always overrides — to fixture rows instead of databases.
  */
 export async function sweepStaleRunDatabases(connectionString: string): Promise<string[]> {
   const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });

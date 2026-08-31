@@ -24,11 +24,11 @@ const dump = execFileSync(
 const lines = dump.split('\n').filter((line) => !/^-- \\(un)?restrict /.test(line));
 
 // `pg_dump --schema auth` groups a trigger with the table it's defined on, not with the schema
-// that owns the function it calls — so it also picks up `on_auth_user_created`, which is ours,
-// not GoTrue's: `001_initial_schema.ts` attaches it to `auth.users` to mirror new signups into
-// `public.app_user`. Restoring it here would call a function that doesn't exist yet, since
-// migrations run after this file does; stripping it leaves migration 001 to create the identical
-// trigger once its function exists.
+// that owns the function it calls. That means it also picks up `on_auth_user_created`, which is
+// ours, not GoTrue's — `001_initial_schema.ts` attaches it to `auth.users` to mirror new signups
+// into `public.app_user`. Restoring it here would call a function that doesn't exist yet, since
+// migrations run after this file does. Stripping it just leaves migration 001 to create the
+// identical trigger once its function exists.
 const withoutAppOwnedTriggers = lines
   .join('\n')
   .replace(
