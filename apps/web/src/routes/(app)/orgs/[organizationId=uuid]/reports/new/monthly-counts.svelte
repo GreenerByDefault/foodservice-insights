@@ -26,11 +26,15 @@ const showYearHeadings = $derived(groups.length > 1);
 const missing = $derived(missingMonthCount(counts, months));
 // `MAX_MONTHS` is 120, so a single column still has to be usable for a decade of history.
 const gridClass = $derived(months.length <= 6 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2');
+const progressId = 'monthly-counts-progress';
 </script>
 
-<Field.Set>
+<Field.Set aria-describedby={progressId}>
   <Field.Legend>{legend}</Field.Legend>
-  <Field.Description>{missing} of {months.length} months still need a count</Field.Description>
+  <Field.Description id={progressId} aria-live="polite">
+    {missing}
+    of {months.length} months still need a count
+  </Field.Description>
 
   {#each groups as group (group.year)}
     {#if showYearHeadings}
@@ -46,6 +50,7 @@ const gridClass = $derived(months.length <= 6 ? 'grid-cols-1' : 'grid-cols-1 sm:
             min="0"
             step="1"
             inputmode="numeric"
+            autocomplete="off"
             required
             bind:value={counts[month]}
           />
