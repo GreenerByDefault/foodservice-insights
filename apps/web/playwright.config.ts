@@ -2,7 +2,19 @@
 import { defineConfig } from '@playwright/test';
 import { BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
 
-const PORT = 4173;
+// Set by `apps/web/scripts/test-run.ts`, which every `pnpm test:e2e`/`test:screenshots`/
+// `test:playwright`/`screenshots:update` script routes through. A bare `playwright test` would
+// otherwise silently fall back to a fixed port and the shared database, reintroducing the
+// concurrent-run flake `test-run.ts` exists to fix — see `.claude/plans/test-run-isolation.md`.
+// The precedent for this style is `expectScreenshot`'s guard in `e2e/lib/screenshots.ts`.
+if (!process.env.TEST_RUN_ID) {
+  throw new Error(
+    'TEST_RUN_ID is not set. Run tests through `pnpm test:e2e`, `pnpm test:screenshots`, ' +
+      '`pnpm test:playwright`, or `pnpm screenshots:update` — never `playwright test` directly.',
+  );
+}
+
+const PORT = Number(process.env.PLAYWRIGHT_PORT);
 const BASE_URL = `http://localhost:${PORT}`;
 /** The same app server, addressed from inside the browser container. The alias is set up by
  * `--add-host=host.docker.internal:host-gateway`, which resolves on both macOS and Linux — so
@@ -47,12 +59,6 @@ export default defineConfig({
       // rasterization, and would only pay a container hop and lose native `--headed` debugging.
       name: 'e2e',
       testMatch: '**/*.e2e.ts',
-      dependencies: ['database'],
-    },
-    {
-      // Resets the fixture reports before any spec runs. See e2e/setup/database.setup.ts.
-      name: 'database',
-      testMatch: '**/setup/database.setup.ts',
     },
     {
       name: 'browser-container',
@@ -66,7 +72,7 @@ export default defineConfig({
     {
       name: 'screenshots',
       testMatch: '**/*.screenshot.ts',
-      dependencies: ['browser-container', 'database'],
+      dependencies: ['browser-container'],
       teardown: 'screenshots-optimize',
       use: {
         baseURL: BASE_URL_FROM_CONTAINER,
@@ -88,14 +94,11 @@ export default defineConfig({
     // Runs the real adapter-node output, not `vite preview`, so e2e exercises the
     // deployed artifact. `turbo run test:e2e` depends on `build` running first.
     //
-    // These tests commit, so we first clear both the database and the blob store, then bring
-    // them up to date with the code. We use `pnpm -r`, rather than the `turbo run` the root scripts
-    // use, because Turbo is already running this task.
-    //
-    // Seeding is only temporary until we add full auth. We should remove it afterwards.
-    command:
-      'pnpm -r run truncate && pnpm -r run migrate && pnpm -r run seed:identity && ' +
-      'node --env-file-if-exists=../../.env.test start.js',
+    // No truncate/migrate/seed chain: `test-run.ts` already handed this process a database
+    // cloned from a pre-migrated template and seeded with the placeholder identity, addressed by
+    // the `DB_CONNECTION_STRING` already in this process's environment (Node's `--env-file`
+    // lets the environment win over the file, so `.env.test`'s value never overrides it).
+    command: 'node --env-file-if-exists=../../.env.test start.js',
     env: {
       PORT: String(PORT),
       // SvelteKit's CSRF check rejects a POST whose Origin header doesn't match this. It's set to
@@ -108,7 +111,10 @@ export default defineConfig({
     },
     // `url` waits for a 2xx response; `port` only waits for a listening socket.
     url: `${BASE_URL}/health`,
-    reuseExistingServer: !process.env.CI,
+    // Every run gets its own port and its own database — reusing a listener here would mean
+    // reusing whatever process (and whichever worktree's code, and whichever run's database) is
+    // already bound to it, silently skipping the very isolation `test-run.ts` exists to provide.
+    reuseExistingServer: false,
     stdout: 'pipe',
     stderr: 'pipe',
     timeout: 60_000,
