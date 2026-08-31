@@ -42,8 +42,8 @@ for (const route of ROUTES) {
 // Each of these terminal states has its own action row (download links, retry/contact/delete,
 // or just delete) — the one place per screen most likely to wrap awkwardly and overflow.
 // 'failed-retried' stands in for the failure screen instead of 'failed': the latter's fixture
-// pins a fixed creator email for a committed screenshot, which collides with retry.e2e.ts's own
-// 'failed' fixture when both run concurrently.
+// pins a fixed creator email for reports.screenshot.ts's committed screenshot, which collides
+// with a concurrent second use of 'failed' anywhere else. See retry.e2e.ts's identical trade-off.
 const TERMINAL_STATES: ReportState[] = ['succeeded', 'failed-retried', 'canceled'];
 
 for (const state of TERMINAL_STATES) {

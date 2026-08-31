@@ -30,7 +30,9 @@ suite — a loop-versus-gate distinction, not a judgement call about blast radiu
   `pnpm --filter @gbd/web test:e2e -- path/to/thing.e2e.ts`
 
 Scoping to a package (`pnpm --filter @gbd/<pkg> test:unit`, no path) is the fallback when a
-change touches several files in one package and there's no single file to target.
+change touches several files in one package and there's no single file to target. For Playwright,
+that fallback is `pnpm test:playwright` — `test:e2e` and `test:screenshots` together, one app
+boot, and what `pnpm test` itself runs.
 
 **Run the gate in the background** (`run_in_background: true` on the Bash tool) once the
 change is ready, rather than blocking on it — Claude Code notifies on completion, so the wait

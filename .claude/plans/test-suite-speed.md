@@ -37,7 +37,8 @@ run against committed images, not just CI.
 Where the remaining time goes, all measured rather than inferred:
 
 - **e2e and screenshots each boot the app separately** — truncate + migrate + seed +
-  adapter-node, twice per `pnpm test`.
+  adapter-node, twice per `pnpm test`. Fixed: `pnpm test` now runs the Turbo-cached
+  `test:playwright` task, which boots the app once for both.
 - The `client` project is ~34s wall standalone against 12.4s of reported test duration; the gap
   is Chromium + Vite startup for 43 component tests. No cheap fix that keeps the real browser.
 - **The Turbo daemon is a dead end — do not recommend it.** It is not running and does not
@@ -70,34 +71,12 @@ Test *flakes* were PR 5 of this plan and now live in
 `retries: 0`, one flake costs a full re-run, more than every caching win here combined — but they
 are a correctness problem, not a speed one, and nothing in this plan depends on them.
 
-Two follow-ups from the original caching work are worth doing and are scoped below as PR 1 and
-PR 2. The others considered — a Stop hook running the full suite, and pruning Turbo's local
-cache — were dropped: the Stop hook is a real option but a bigger behavioral change than this
-plan's scope, and the cache is a disk question, not a speed one.
+One follow-up from the original caching work is worth doing and is scoped below as PR 1. Others
+considered — a Stop hook running the full suite, and pruning Turbo's local cache — were dropped:
+the Stop hook is a real option but a bigger behavioral change than this plan's scope, and the
+cache is a disk question, not a speed one.
 
-## PR 1 — one Playwright invocation for local runs
-
-`test:e2e` and `test:screenshots` each boot the app separately — truncate + migrate + seed +
-adapter-node, twice per `pnpm test`. They're already two projects (`e2e`, `screenshots`) in one
-`apps/web/playwright.config.ts`, so `playwright test --project=e2e --project=screenshots` boots
-the app once and runs both.
-
-This must stay a local convenience script, not replace the two `turbo.json` tasks: CI
-deliberately splits them across runners — `ts-e2e` on `ubuntu-latest` (x86, matching
-production), `ts-screenshots` on `ubuntu-24.04-arm` (arm64, so the pinned screenshot browser
-container runs native rather than emulated; see the comment above `ts-screenshots` in
-`.github/workflows/ci.yml`). Collapsing them there would put screenshots back under emulation or
-e2e on the wrong architecture.
-
-- Add a script (e.g. `apps/web/package.json`'s `test:local` or similar — name TBD at
-  implementation) that runs `playwright test --project=e2e --project=screenshots` directly,
-  bypassing Turbo's two-task split.
-- It needs both tasks' env: `TEST_DB=1`, and the `browser-container` project's setup that
-  `screenshots` depends on.
-- Leave `turbo.json`'s `test:e2e` and `test:screenshots` and the root `test` script untouched —
-  this is an addition, not a replacement, since CI and `pnpm test` still need the two-task split.
-
-## PR 2 — investigate the `client` vitest project's startup cost
+## PR 1 — investigate the `client` vitest project's startup cost
 
 The `client` project (`apps/web/vite.config.ts`, `test.projects[].test.name === 'client'`) is
 ~34s wall standalone against 12.4s of reported test duration for 43 component tests; the gap is
@@ -121,6 +100,3 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 1. From the repo root: `pnpm lint && pnpm check && pnpm test`.
 2. Re-time each stage and confirm the numbers moved as the PR claimed — the table in Context is
    the baseline to beat, on the same machine.
-3. For PR 1: time the new local script against the current `pnpm test:e2e && pnpm test:screenshots`
-   and confirm one app boot instead of two; run `ts-e2e` and `ts-screenshots` in CI unchanged and
-   confirm both still pass on their respective runners.
