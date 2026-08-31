@@ -16,6 +16,7 @@
     "test:screenshots": "TEST_DB=1 playwright test --project=screenshots",
     "test:playwright": "TEST_DB=1 playwright test --project=e2e --project=screenshots",
     "screenshots:update": "TEST_DB=1 playwright test --project=screenshots --update-snapshots",
+    "test:browser:stop": "node scripts/stop-browser.ts",
     "test": "pnpm run test:unit && pnpm run test:playwright"
   },
   "dependencies": {
