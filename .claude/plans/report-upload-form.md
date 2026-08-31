@@ -3,59 +3,74 @@
 ## Context
 
 [`reports/new/+page.svelte`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/new/+page.svelte)
-is a stub, and it is the only thing left between a user and a report. Everything under it exists:
+is still a stub, and it is the only thing left between a user and a report. Everything under it
+exists, and much more of the surrounding app exists than when this plan was first drafted.
+
+### The server side, complete
 
 - `POST /api/orgs/[organizationId]/reports` accepts the upload, records a rejection, and answers
-  201 with a `location` header, 400 with `userFacingRejection(...)` for a bad submission, or (added
-  to `main` after this plan was first drafted) 429 with the same `userFacingRejection(...)` shape
-  when [`lockAndCheckReportRateLimit`](apps/web/src/lib/server/reports/rate-limit.ts) finds the
-  organization or user over `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`. The client work below
-  already accounts for this — see the rate-limiting notes under *Shape A*, the API client decision,
-  and PR 1.
-- [`metadata.ts`](apps/web/src/lib/reports/metadata.ts) names the fields and validates them;
+  201 with a `location` header, 400 with `userFacingRejection(...)` for a bad submission, or 429
+  with the same `userFacingRejection(...)` shape when
+  [`lockAndCheckReportRateLimit`](apps/web/src/lib/server/reports/rate-limit.ts) finds the
+  organization or user over `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`.
+- [`metadata.ts`](apps/web/src/lib/reports/metadata.ts) owns the `FIELD` map and the schemas;
   [`rejection.ts`](apps/web/src/lib/reports/rejection.ts) defines what a refusal looks like on the
   wire. [`monthsWithoutCounts`](apps/web/src/lib/reports/monthly-coverage.ts) refuses a submission
   whose counts miss a month the file has orders in.
+- [`+page.server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/new/+page.server.ts)
+  is no longer a stub. `_loadRateLimitWarning(db, { organizationId, userId })` returns
+  `{ rateLimitWarning: string | undefined }` — `undefined` in the common case, or the one sentence
+  `describeRateLimitExceeded` produces for whichever scope/window is exceeded first. It is an
+  unlocked read (`checkReportRateLimit`), so it is a snapshot, not a decision;
+  `lockAndCheckReportRateLimit` is still what the POST endpoint uses to enforce.
+
+### The browser side, ready and unused
+
 - [`normalizeCsv`](apps/web/src/lib/reports/csv/normalize.ts) turns bytes into either the
   normalized CSV plus `months: MonthsFromFile` — the sorted, deduplicated, never-empty `YYYY-MM`
-  months the file covers, a type alias declared in [`metadata.ts`](apps/web/src/lib/reports/metadata.ts)
-  — or a `RejectedUploadRecord`. Every file in `csv/` is written to run in the browser as well as
-  the server.
-- [`inspect-file.ts`](apps/web/src/lib/reports/inspect-file.ts)'s `inspectFile(file: File):
-  Promise<FileInspection>` is the browser's entry point: it runs the same size check, the same
-  empty check, and the same `normalizeCsv` the server runs, discarding the normalized bytes (the
-  server always redoes this from the original upload). `FileInspection` is `{ ok: true; months:
-  MonthsFromFile } | { ok: false; rejection: RejectedUploadRecord }`. `describeUnreadableFile` in
-  [`csv/describe/file.ts`](apps/web/src/lib/reports/csv/describe/file.ts) owns the copy for both
-  new `UnreadableFile` kinds it produces, `too-large` and `empty`, and `submission.ts` calls the
-  same function server-side so neither path hand-builds the sentence.
+  months the file covers — or a `RejectedUploadRecord`. Every file in `csv/` runs in the browser as
+  well as the server.
+- [`inspectFile(file)`](apps/web/src/lib/reports/inspect-file.ts) is the browser's entry point: the
+  same size check, the same empty check, and the same `normalizeCsv` the server runs, discarding
+  the normalized bytes. `FileInspection` is `{ ok: true; months } | { ok: false; rejection }`.
+  `describeUnreadableFile` owns the copy for `too-large` and `empty`, and `submission.ts` calls the
+  same function server-side, so neither path hand-builds the sentence. **This landed already** — the
+  "browser and server say the same thing" work is done, not pending.
+- `parseUploadRejection(error: ApiError)` exists in `rejection.ts` and **still gates on
+  `error.status !== 400`**. That is the one line of server-adjacent work PR 1 still has to change.
 - The shadcn components are vendored — `input`, `label`, `field`, `radio-group`, `alert`,
-  `separator`, `button` — along with the `file-drop-zone` (`Root` / `Trigger` / `Textarea`,
-  `displaySize`, a `label` prop on the trigger) and its tests. `runed` and `svelte-toolbelt` are
+  `alert-dialog`, `separator`, `button` — along with `file-drop-zone` (`Root` / `Trigger` /
+  `Textarea`, `displaySize`, a `label` prop on the trigger). `runed` and `svelte-toolbelt` are
   direct devDependencies.
-- **The API layer is in place and unused by anything yet.** [`$lib/api/fetch.ts`](apps/web/src/lib/api/fetch.ts)
-  is the one place a component may call `fetch`: `apiCall` returns the `Response` on 2xx, throws
-  `ApiError` (`status`, a log-only `message`, and `jsonBody: JsonValue | undefined`) on a non-2xx,
-  and `ApiUnreachableError` when no response ever arrived — including a request it aborts itself
-  after `DEFAULT_TIMEOUT_MS` (20s). [`$lib/reports/rejection.ts`](apps/web/src/lib/reports/rejection.ts)
-  is this feature's own client on top of it: `userFacingRejection` is what the server calls to turn
-  a `RejectedUploadRecord` into the `UploadRejection` it sends, and `parseUploadRejection(error:
-  ApiError)` is what a browser caller will call to turn a 400 back into the same shape, returning
-  `undefined` for anything else. Nothing crossing the wire carries an enum a client would switch
-  on — `summary` being a string is what tells a rejection body apart from any other 400.
-- `apps/web/README.md` already documents calling the API from the browser — a component calls
-  `$lib/api/fetch.ts`, never `fetch` itself, and a feature owns a parser that narrows `ApiError`
-  into its own outcome. The remaining conventions this form establishes get recorded PR by PR,
-  next to the code that establishes them — not as one dump.
+- `monthly-counts.ts` and `monthly-counts.svelte` are **built, tested, and merged in their final
+  home**. See *What already landed* below for what is settled about them.
 
-This is the repo's first real frontend route, so the deliverable is two things: the form, and the
-conventions the next ten routes copy.
+### What the app has learned since this plan was drafted
+
+The report *view* route shipped in full — waiting, processing, succeeded, failed, canceled, retry,
+delete, polling. That gave the repo its own conventions where this plan previously had to borrow
+`cfa-web-app`'s. Four of them change what this feature should do:
+
+| Landed | Where | What it means here |
+| --- | --- | --- |
+| `ActionState` | [`$lib/types/ActionState.ts`](apps/web/src/lib/types/ActionState.ts), used by `delete-button`, `waiting/cancel-button`, `failure-view` | A shared union now exists. The form still declares its own — but the reason has to be argued against *this* type, not cfa's. See *Decisions*. |
+| Feature clients over `apiCall` | `delete-report.ts`, `retry-report.ts`, `cancel-report.ts` | Three one-line wrappers that throw. `uploadReport` is the first that *returns* an outcome union. |
+| Screenshot suite | `e2e/lib/screenshots.ts`, `e2e/__screenshots__/`, the pinned browser container | Visual coverage is now a real, curated mechanism with a committed baseline for this very route. |
+| Layout overflow suite | [`layout.e2e.ts`](apps/web/e2e/layout.e2e.ts), `expectNoHorizontalOverflow`, `VIEWPORT_WIDTHS` | `/reports/new` is **already in `ROUTES`**, checked at 390/768/1280. The empty form needs no new responsive test; the rejection view does. |
+
+**There is still no `<form>` anywhere in `src/`.** This is genuinely the repo's first one, so
+`cfa-web-app` remains the only precedent for form mechanics specifically — native constraint
+validation, `onsubmit`, `FormData`. Everything else now has a local answer, and the local answer
+wins.
+
+So the deliverable is still two things: the form, and the conventions the next ten routes copy.
+
+### Two consequences that run through the whole design
 
 **The browser runs the real normalizer.** `csv/` is free of `$env`, `$lib/server` and anything
 Node-only, so the form derives the *exact* months the server will derive and the *exact* rejection
 copy the server would send, before a byte is uploaded. `REQUIREMENTS.md § Errors` asks for errors
-caught as early as feasible; this is as early as it gets. Two consequences run through the whole
-design:
+caught as early as feasible; this is as early as it gets.
 
 - **A rejected file is normally never uploaded at all.** A server 400 is the rare path — a stale
   tab, a non-browser client, a limit that moved. Both paths must produce the same screen, because
@@ -66,6 +81,30 @@ design:
 
 `months.length === 0` is unreachable on a successful normalization: a date that will not resolve is
 a finding, and a finding is a rejection. The month component needs no empty state.
+
+## What already landed: the monthly counts component
+
+`monthly-counts.ts` (the pure model — `CountDraft`, `reconcileDraft`, `serializeCounts`,
+`formatMonth`, `groupByYear`, `missingMonthCount`) and
+[`monthly-counts.svelte`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/new/monthly-counts.svelte)
+are merged. The component takes `months: MonthsFromFile`, `basis: CountsBasis`, and
+`counts = $bindable<CountDraft>()`, and **needs no changes** for the work below.
+
+Two things about its final shape, recorded so they are not re-litigated:
+
+- **There is no "apply the same count to every month" shortcut.** It was in an earlier draft of
+  this plan and was deliberately removed: nobody asked for it, and copy-paste already covers it.
+  Revisit only if GBD asks.
+- **The progress line is the form's answer to "which field am I missing".** `Field.Set` carries
+  `aria-describedby` pointing at it, and it is an `aria-live="polite"` region, so the count updates
+  are announced without stealing focus. Inputs are `autocomplete="off"` — a browser filling
+  a phone number into "March 2026" is worse than an empty field. This is load-bearing for the
+  *submit button stays enabled* decision below.
+
+It is currently rendered only by a **dev-only preview block** in `+page.svelte`, against a
+hardcoded four-month fixture. That block, `previewCounts`, and the stub comment above it all die in
+PR 1. `new-report.screenshot.ts` drives that block today and must be re-pointed in the same PR —
+see PR 1.
 
 ## What a rejection actually looks like
 
@@ -88,24 +127,19 @@ The rejection UI is the hardest part of this form, and it cannot be designed wit
 One line, one action. **An `Alert` beside the drop zone is the whole design.**
 
 **A sibling to Shape A, not a member of it: rate limiting.** `describeRateLimitExceeded` in
-[`rate-limit.ts`](apps/web/src/lib/server/reports/rate-limit.ts) (merged to `main` after this plan
-was written — see `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT` in `limits.ts`) produces the same
+[`rate-limit.ts`](apps/web/src/lib/server/reports/rate-limit.ts) produces the same
 `RejectedUploadRecord` shape as `describeUnreadableFile` — one `summary`, no `rowProblems` or
-`dateOrderProblem` — so it renders through the exact same view with no new fields. Two things do
-differ, and both matter to PR 1:
+`dateOrderProblem` — so it renders through the exact same view with no new fields. Three things do
+differ, and all three matter to PR 1:
 
-- **It answers 429, not 400.** `_createReport` returns `json(userFacingRejection(rejection), {
-  status: 429 })` for a rate-limit rejection, and 400 for every other one. `parseUploadRejection`
-  currently gates on `error.status !== 400`; it has to accept 429 too, or a rate-limited upload
-  falls through to the `unknown` outcome and loses a summary that already tells the user what to
-  do.
+- **It answers 429, not 400.** `parseUploadRejection` currently gates on `error.status !== 400`; it
+  has to accept 429 too, or a rate-limited upload falls through to the `unknown` outcome and loses
+  a summary that already tells the user what to do.
 - **It is never client-side.** Every other Shape A reason can be caught by `inspectFile` before a
-  byte is sent; the rate limit lives in the database, so this one is always a server rejection —
-  `inspectFile` has nothing to check locally, and there is no "advisory" version of it the way
-  there is for size and emptiness.
+  byte is sent; the rate limit lives in the database, so this one is always a server rejection.
 - **The fix is not the file.** "Choose a different file" is the right instruction for every other
   Shape A reason and is actively wrong here — the file may be perfect, and the copy already says
-  "Try again in a little while" / "Try again next week". See the action rename below.
+  "Try again in a little while" / "Try again next week". See the action label below.
 
 ### Shape B — we read it and rows failed
 
@@ -121,8 +155,8 @@ differ, and both matter to PR 1:
   | --- | --- | --- |
   | `rule` | "The weight has a unit in it" | a full clause, up to ~120 chars |
   | `advice?` | "Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file." | its own sentence, sometimes longer than the rule |
-  | `rows` | `formatRows` → "row 15" / "5 rows: 2–4, 8, 11 and 3 more" / "all 4,500 rows" | up to `MAX_ROW_RANGES_REPORTED` ranges |
-  | `examples` | `"5 oz"`, `"12 lb"` | up to 3, each already quoted and cut at 40 chars |
+  | `rows` | `formatRows` → "row 15" / "5 rows: 2–4, 8, 11 and 3 more" | up to `MAX_ROW_RANGES_REPORTED` ranges |
+  | `examples` | `"5 oz"`, `"12 lb"` | up to `MAX_EXAMPLE_VALUES` (3), each already quoted and cut at `MAX_QUOTED_CHARS` |
 
 So the worst realistic payload is one paragraph plus twenty four-field records. That is a document,
 and it decides everything below.
@@ -131,7 +165,7 @@ and it decides everything below.
 
 **Not a table.** A table is right for homogeneous short values that a reader scans by column.
 These are two sentences of wildly varying length per row, and nobody sorts or compares them — each
-one is read once and carried to a spreadsheet. Four columns of prose at 375px either wrap into
+one is read once and carried to a spreadsheet. Four columns of prose at 390px either wrap into
 mush or force horizontal scroll on the one screen a user cannot afford to lose.
 
 **A list of problem records, laid out as a locator plus a body.** The user's loop is *read where →
@@ -176,17 +210,15 @@ back: **Back to the form**.
 That label, not "Choose a different file", is deliberate: it is the accurate description of what
 the button does — remount the form with every typed value intact — for every reason, including
 rate limiting, where the file was never the problem. A component that never switches on `reason`
-(the rule below) needs a label that is true regardless of which reason produced the rejection; a
-file-specific label was only ever true for the CSV reasons this plan started with.
+needs a label that is true regardless of which reason produced the rejection.
 
 It is a view, not a route, and the reason is precise: in the common case the rejection was produced
 in the browser and nothing was ever sent, so there is no server state a URL could address and
 nothing a refresh could reload. Adding `?rejected` would promise durability the data does not have.
 
 **Client-side and server-side rejections render identically** — same component, same copy, same
-action. The user's next move is the same in both cases, and `UploadRejection` is exactly the
-half of `RejectedUploadRecord` that both sides produce. One line covers both origins without the
-component knowing which it has: *No report was created.*
+action. `UploadRejection` is exactly the half of `RejectedUploadRecord` that both sides produce.
+One line covers both origins without the component knowing which it has: *No report was created.*
 
 **Trap: the swap must not eat typed work.** `{#if}` destroys the form's markup, so any value living
 only in a DOM node is lost — a user who fixes their CSV would have to retype the report name and
@@ -196,27 +228,25 @@ nothing and remounting restores it. Using `hidden` instead is worse: the control
 `new FormData(form)` still picks them up, and a `required` hidden control reintroduces the
 not-focusable trap below.
 
-`cfa-web-app`'s `auth-flow.svelte` is the same shape: the stages swap each other out while `email`
-is held by the parent and passed down with `bind:`.
-
 ## Decisions
 
 ### The API client stays generic; each feature owns its own outcome union
 
-`ApiError` must not grow a field for every payload a route invents, and this endpoint's 400 body
-does not fit the generic shape anyway: it has no `message` and no `problems`, it has `summary`,
-`rowProblems` and `dateOrderProblem`. Three layers, each knowing only what is true at its level:
+This is already the repo's documented rule — `apps/web/README.md § Calling the API from the
+browser` says a component calls `$lib/api/fetch.ts` and a feature owns a parser that narrows
+`ApiError`. What this feature adds is the first case where the parser's result is an *outcome
+union returned to the caller* rather than an exception the caller lets through.
 
 | Layer | Knows | Example |
 | --- | --- | --- |
 | `$lib/api/fetch.ts` | HTTP. A status, a message for a log, and the parsed JSON body, if any. | `apiCall`, `ApiError`, `ApiUnreachableError` |
-| A feature's client | Which statuses this endpoint means, and what its bodies are. | `parseUploadRejection` in `$lib/reports/rejection.ts` |
+| A feature's client | Which statuses this endpoint means, and what its bodies are. | `parseUploadRejection`, `uploadReport` |
 | The component | An outcome union with no HTTP in it. | `upload-form.svelte` |
 
-`ApiError` is `{ status, message, jsonBody: JsonValue | undefined }` — `message` only for a log or
-a last-resort string, `jsonBody` for the layer that knows the shape. `parseUploadRejection` is the
-only thing that knows a 400 *or 429* from this endpoint is an `UploadRejection`; `uploadReport`
-(PR 1) is its only caller:
+The three clients that shipped with the report view — `deleteReport`, `retryReport`,
+`cancelReport` — are one-line wrappers that just let `apiCall` throw, because for them every
+non-2xx really is a failure and the caller has one sentence to show. `uploadReport` is the first
+where a non-2xx is an *expected answer*:
 
 ```ts
 export type UploadOutcome =
@@ -225,28 +255,52 @@ export type UploadOutcome =
   | { kind: 'unknown' };
 ```
 
-This applies the README's existing server-side rule — *an outcome the caller expects is returned,
-not thrown* — to the browser side: `apiCall` throws because at the HTTP layer every non-2xx is
-exceptional, and `uploadReport` catches because at the feature layer a 400 or 429 is an expected
-answer.
+That is the README's existing server-side rule — *an outcome the caller expects is returned, not
+thrown* — applied to the browser side. `apiCall` throws because at the HTTP layer every non-2xx is
+exceptional; `uploadReport` catches because at the feature layer a 400 or 429 is an answer.
 
-**`parseUploadRejection` needs updating, not replacing.** It already exists (report rate limiting
-landed on `main` after this plan was drafted, ahead of the client) and currently reads
+**`parseUploadRejection` needs updating, not replacing.** It currently reads
 `if (error.status !== 400) return undefined;`. Change the guard to accept 400 or 429 — everything
 below it already works unchanged, because `describeRateLimitExceeded` produces the same
 `RejectedUploadRecord` shape `userFacingRejection` was already narrowing. No new branch in the
-component, no new field in `UploadRejection`: this is the "new failure mode" pattern the CSV side
-already established with `too-large`/`empty` in `describeUnreadableFile` — the new case is a fact
-about which status codes carry a rejection, decided in one function, not a switch that spreads
-through callers.
+component, no new field in `UploadRejection`.
 
 **Accepted:** `unknown` also swallows a 401/403/404, which are definite rather than unknown. The
 page's `load` already guarded access, so reaching one means the session died mid-form, and "we do
-not know whether that was received — check your reports" is still safe advice. Not worth a fourth
-branch until something can produce one. A 429 from something other than our own rate limiter (a
-proxy, a CDN) is not a case that exists in this stack today; if one appears, `parseUploadRejection`
-returning `undefined` for a body without a `summary` string already falls it through to `unknown`
-correctly, so no extra guard is needed ahead of that happening.
+not know whether that was received — check your reports" is still safe advice. A 429 from something
+other than our own rate limiter (a proxy, a CDN) does not exist in this stack today; if one appears,
+`parseUploadRejection` returning `undefined` for a body without a `summary` string already falls it
+through to `unknown` correctly.
+
+### `ActionState` is the repo's default, and this form is the documented exception
+
+[`$lib/types/ActionState.ts`](apps/web/src/lib/types/ActionState.ts) landed with the report view
+and is used by `delete-button.svelte`, `waiting/cancel-button.svelte`, and `failure-view.svelte`.
+All three are the same shape: **one button, one call, one sentence if it fails.**
+`{ status: 'error'; message: string }` fits that exactly, and a fourth button-shaped mutation
+should use it without arguing.
+
+This form is not that shape, on three independent counts:
+
+- **`rejected` carries a document, not a message.** `UploadRejection` is a summary plus up to
+  twenty structured problems plus a prose date-order block. Widening `ActionState['error']` to hold
+  it would push this feature's payload into a type three unrelated components import.
+- **`checking` is a phase with no request in flight.** `inspectFile` runs the whole normalizer
+  locally. Calling that `loading` would be a lie the UI then has to work around when deciding what
+  the submit button says.
+- **`success` never renders.** The page navigates away on 201, so there is no success state to
+  paint — only a window where the button must stay disabled because a `goto` is pending.
+
+So `upload-form.svelte` declares its own union: `idle | checking | submitting | rejected | unknown`.
+
+**What is still shared is the look, not the type.** The unknown-outcome panel renders the same way
+the other three render their `error` — a short destructive-toned line at the action that caused it
+— so a user who has seen a failed retry recognises a failed upload. Consistency in what the user
+sees does not require one type across components with different outcomes.
+
+Record this in `README.md § Forms` as a rule with a boundary, not as an exception granted once:
+*a button-shaped mutation uses `ActionState`; a form whose failure is more than one sentence
+declares its own union.*
 
 ### Three failure surfaces, deliberately not one
 
@@ -262,7 +316,9 @@ three different things asking for three different actions. They never share a wi
 **Announcement differs with size.** A short message gets `role="alert"` and is read out. The
 rejection view must **not** be a live region — announcing twenty problems on render is hostile.
 Move focus to its heading (`tabindex="-1"`, `.focus()`) and let the user read at their own pace.
-The "Checking your file…" state gets a polite `aria-live` region, not an alert.
+The "Checking your file…" state gets a polite `aria-live` region, not an alert — the same choice
+`report-view.svelte` already makes for its status headline and `monthly-counts.svelte` makes for
+its progress line.
 
 ### No toast, and the reason is not the dependency
 
@@ -271,10 +327,10 @@ Excel. Every message here is either attached to a field or long enough that it h
 screen while the file is repaired.
 
 A toast is still the right tool — for a *transient confirmation of an action on a page that stays
-put*. That is exactly how `cfa-web-app` uses `svelte-sonner`: "Your public profile is live again",
-"Failed to log out". Nothing on this form is that shape, and success navigates away, so there is
-nothing to confirm in place. Record the convention with that reasoning, so a later page that
-genuinely needs a toast is not blocked by a rule about dependencies.
+put*. That is exactly how `cfa-web-app` uses `svelte-sonner`. Nothing on this form is that shape,
+and success navigates away, so there is nothing to confirm in place. Record the convention with
+that reasoning, so a later page that genuinely needs a toast is not blocked by a rule about
+dependencies.
 
 ### The submit button stays enabled, and is disabled only in flight
 
@@ -287,27 +343,24 @@ Two different things get confused under "disabled submit":
 - **Disabled while a request is in flight** — kept, with the label changing to "Uploading…" and
   `aria-busy`. The reason is on screen, and it stops a double POST creating two reports. Guard on
   the state variable inside the handler too, not only the attribute — Enter in a text field submits
-  a form without touching the button.
+  a form without touching the button. `delete-button.svelte` and `failure-view.svelte` already
+  disable on `status === 'loading'` for the same reason.
 
-### The form follows `cfa-web-app`, minus the disabled gate
+### The form follows `cfa-web-app`'s mechanics, minus the disabled gate
 
-`cfa-web-app` has a settled pattern across four forms
-(`create-event/+page.svelte`, `profile-form.svelte`, `email-form.svelte`, `onboard-form.svelte`).
-Take it:
+The repo has no `<form>` yet, so this one part still borrows. `cfa-web-app` has a settled pattern
+across four forms (`create-event/+page.svelte`, `profile-form.svelte`, `email-form.svelte`,
+`onboard-form.svelte`). Take the mechanics:
 
 - `<form bind:this={formElement} onsubmit={handleSubmit}>`, and `event.preventDefault()` first
   thing in the handler.
 - Constraint attributes on the inputs — `required`, `maxlength`, `type`, `min`/`step` — as the only
   source of truth for what a valid field is. No schema mirrored in the browser.
 - `new FormData(event.currentTarget as HTMLFormElement)`, then `set`/`append` for what is not a
-  form control (`create-event` appends its cropped image; we set the file and the serialized
-  counts).
-- A state union driving the submit button's label — "Submitting…" / "Submitted" — and the button
-  disabled while `loading` **and** while `success`, since a navigation is still pending and a
-  second click would fire a second POST.
+  form control (we set the file and the serialized counts).
 - `<Field.Error>` for anything the browser did not say itself: async failures and our own checks.
 - `goto` from the response's `Location` header — `create-event/+page.svelte` does exactly this
-  after `POST /api/event`.
+  after `POST /api/event`, and `delete-button.svelte` already `goto`s after its own mutation here.
 
 **One divergence: the submit button is not disabled for an invalid form.** cfa gates it with
 
@@ -322,8 +375,9 @@ that appear after a file is chosen — so this is not a reservation about the te
 this form. cfa's largest gated form has nine fields; this one has up to **120 required month
 inputs**, and a greyed-out button is the least informative possible answer to "which of my 120
 fields is empty". Submitting instead makes the browser scroll to the first empty month and say
-"Please fill out this field" — a locator, which is what the user needs. The month fieldset's "3 of
-12 months still need a count" line is the standing, always-visible version of the same answer.
+"Please fill out this field" — a locator, which is what the user needs. `monthly-counts.svelte`'s
+"3 of 12 months still need a count" line is the standing, announced version of the same answer, and
+it is already built.
 
 Two smaller reasons follow from that:
 
@@ -333,8 +387,8 @@ Two smaller reasons follow from that:
 - A button that is grey from first paint until the last of 120 fields is filled spends nearly the
   whole session looking broken.
 
-If this ends up feeling inconsistent with the rest of the codebase, the fix is to settle it
-repo-wide rather than special-case this form.
+If this ends up feeling inconsistent later, the fix is to settle it repo-wide rather than
+special-case this form.
 
 **Two traps make native validation silent**, and both need a hand-written check plus a
 `<Field.Error>`:
@@ -353,26 +407,7 @@ For the two radio groups that check is avoided where it is safe to:
   is a silent 2.2× error in the analysis with nothing on screen to contradict it, and a default is
   exactly what gets accepted without being read.
 
-**Not taken: cfa's shared `ActionState`.** `{ status: 'error'; message: string }` cannot hold a
-rejection — that is a document, not a message — and `success` is not a state here because the page
-navigates away. Each form declaring its own union is the same conclusion cfa reached for
-`create-event`, which carries a `croppedImageFile` and a `Location` alongside its `ActionState`.
-
-### The browser and the server say the same thing about a file
-
-`inspectFile` runs the same size check, the same empty check, and the same `normalizeCsv` the
-server runs. The copy for the first two currently sits inline in
-[`submission.ts`](apps/web/src/lib/reports/submission.ts), which would put two copies of a
-user-facing sentence in the tree. Move them into
-[`csv/describe/file.ts`](apps/web/src/lib/reports/csv/describe/file.ts), which already owns *every
-sentence a customer reading a rejection sees* and already returns `reason: 'too_large'` for
-`too-many-rows` and `reason: 'empty'` for `no-data-rows`. Two new `UnreadableFile` kinds,
-`too-large` and `empty`, and both callers ask `describeUnreadableFile` for the words.
-
-**The server keeps its current order** — size, bytes, empty, metadata, `normalizeCsv`, month
-coverage. Do not hoist normalization above the metadata parse to share a bigger function: cheap
-validation belongs before the expensive parse, or a request with junk metadata still costs a
-500,000-row parse.
+### Cost and progress, both accepted as-is
 
 **Normalization blocks the main thread.** A 10MB CSV is a real parse, and the "Checking your file…"
 state cannot animate while it runs. Accepted for now: yield once (`await new Promise(setTimeout)`)
@@ -381,6 +416,11 @@ is the fallback if it feels bad — its own change, and nothing here has to move
 
 **Upload progress is not available.** `fetch` cannot report it; that needs XHR or request streams. A
 spinner without a percentage is the honest option. Out of scope, as is cancelling an upload.
+
+**The server keeps its current validation order** — size, bytes, empty, metadata, `normalizeCsv`,
+month coverage. Do not hoist normalization above the metadata parse to share a bigger function:
+cheap validation belongs before the expensive parse, or a request with junk metadata still costs a
+500,000-row parse.
 
 ### The form's shape
 
@@ -407,33 +447,34 @@ the browser; it needs a spreadsheet library and care with Excel serial dates. It
 
 ## Recording conventions in `apps/web/README.md`
 
-Load the `writing-docs` skill before touching the README in any of the PRs below. Each PR adds
-only the convention it establishes, in the section named for what a reader is looking up —
-`## Routes`, `## Forms`, `## Errors`, `## UI components` — never a new `## Frontend` catch-all.
-Splitting them this way, rather than writing the whole set in one PR, means each convention gets
-reviewed — and can be adjusted — in the PR that actually puts it into practice, instead of being
-approved in the abstract ahead of the code.
+Load the `writing-docs` skill before touching the README in either PR. Each PR adds only the
+convention it establishes, in the section named for what a reader is looking up — `## Forms`,
+`## Errors`, `## UI components`, `## Calling the API from the browser` — never a new `## Frontend`
+catch-all. Splitting them this way means each convention gets reviewed in the PR that puts it into
+practice, instead of being approved in the abstract ahead of the code.
+
+`## Forms` today is two sentences about where a schema lives. It is the section that grows most.
 
 ## PR 1 — the route
 
-`monthly-counts.ts` (the pure month-count model) and `.../reports/new/monthly-counts.svelte` (the
-component) are already built and merged, in their final home — this PR is wiring only. `CountDraft`,
-`reconcileDraft`, `serializeCounts`, `formatMonth`, `groupByYear`, and `missingMonthCount` all exist
-in [`monthly-counts.ts`](apps/web/src/lib/reports/monthly-counts.ts); the component takes `months:
-MonthsFromFile`, `basis: CountsBasis`, `counts = $bindable<CountDraft>()` and needs no changes here.
+Wiring only, on the model side: every module this PR calls already exists, tested.
 
-**Delete the dev-only preview.** [`+page.svelte`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/new/+page.svelte)
-currently renders `monthly-counts.svelte` against a hardcoded four-month fixture inside a
-`<!-- preview --> … <!-- /preview -->` block, purely so it had somewhere to be seen before the real
-form existed. Delete that block along with `previewCounts` and the stub comment above it — this PR's
-`<UploadForm>` is what replaces it.
+**Delete the dev-only preview.**
+[`+page.svelte`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/new/+page.svelte)
+renders `monthly-counts.svelte` against a hardcoded four-month fixture inside a
+`<!-- preview --> … <!-- /preview -->` block. Delete that block, `previewCounts`, and the stub
+comment above it. **The stub comment is also stale in a second way** — it points at "PR 2" for the
+form and rate-limit banner, from a numbering this plan has since dropped. It goes away with
+everything else it describes; do not update it in place.
 
-**Reconcile `new-report.screenshot.ts`.** It currently drives the preview block directly — fills
-three of the four hardcoded months and shoots `reports-new-monthly-counts.png`. With the preview
-gone it has nothing to render against, so this PR must give it a real path to the same state:
-`setInputFiles` a fixture CSV so `inspectFile` derives real months client-side (no POST needed, same
-reasoning as the rejection-view shots below), fill three of them, and shoot. Reusing the existing
-screenshot name keeps the diff meaningful rather than starting a new baseline.
+**Re-point `new-report.screenshot.ts`.** It drives the preview block directly today — fills three
+of the four hardcoded months and shoots `reports-new-monthly-counts.png`. With the preview gone it
+has nothing to render against, so this PR gives it a real path to the same state: `setInputFiles` a
+fixture CSV so `inspectFile` derives real months client-side, fill three of them, assert the
+progress line, and shoot. **No POST is involved**, which matters: `playwright.config.ts` sets
+`ORIGIN` to the host base URL, so a form actually submitted from the containerized screenshot
+browser gets a 403 from SvelteKit's CSRF check. Client-side inspection sidesteps that entirely.
+Reuse the existing shot name so the diff is a real before/after rather than a new baseline.
 
 **`src/lib/reports/upload.ts`** — the feature client:
 
@@ -446,84 +487,87 @@ export async function uploadReport(
 ```
 
 201 → `{ kind: 'created', location }` from the response header, falling back to
-`/orgs/{organizationId}` if it is absent. cfa throws there; a 201 means the report *was* created, so
-landing the user on the org page beats an error about a header they cannot act on. An `ApiError`
-with status 400 *or 429* whose `parseUploadRejection(error)` returns a value → `{ kind: 'rejected'
-}` — `_createReport` answers 429 for a rate-limit rejection and 400 for every other one, and
-`uploadReport` does not need to know which. Everything else, including `ApiUnreachableError`, a
-5xx, and a 400/429 that is not a rejection → `{ kind: 'unknown' }`.
+`/orgs/{organizationId}` if it is absent — a 201 means the report *was* created, so landing the user
+on the org page beats an error about a header they cannot act on. An `ApiError` with status 400 *or
+429* whose `parseUploadRejection(error)` returns a value → `{ kind: 'rejected' }`. Everything else,
+including `ApiUnreachableError`, a 5xx, and a 400/429 that is not a rejection → `{ kind: 'unknown' }`.
 
-**`.../reports/new/upload-form.svelte`** — prop `organizationId`. State:
+**`src/lib/reports/rejection.ts`** — widen the guard to `error.status !== 400 && error.status !== 429`.
+One line, its own regression test.
+
+**`.../reports/new/upload-form.svelte`** — props `organizationId` and `rateLimitWarning`. State:
 `idle | checking | submitting | rejected(UploadRejection) | unknown`. Success is not a state; the
 page navigates away. Every field's value is `$state` on this component, per the trap above.
 
-- Drop zone: `maxFiles={1}`, `accept=".csv,text/csv"`, `maxFileSize={MAX_UPLOAD_BYTES}`, trigger label
-  and hint copy from `MAX_UPLOAD_MEGABYTES` ([`limits.ts`](apps/web/src/lib/reports/limits.ts)).
+- `rateLimitWarning`, when set, renders in an `Alert` **above the drop zone**, non-blocking — the
+  form, drop zone, and submit button all stay enabled. Placement is before any file is chosen, so
+  someone already at a limit finds out before filling in up to 120 month fields. No "N of 5 used
+  this hour" counters for the other limits: a non-technical user has no use for four independent
+  numbers (org/user × hourly/weekly) until one of them actually stops an upload, and a stale banner
+  is never the only thing telling them — a submit that is actually rate-limited answers with the
+  identical sentence through the 429/rejection-view path.
+- Drop zone: `maxFiles={1}`, `accept=".csv,text/csv"`, `maxFileSize={MAX_UPLOAD_BYTES}`, trigger
+  label and hint copy from `MAX_UPLOAD_MEGABYTES` ([`limits.ts`](apps/web/src/lib/reports/limits.ts)).
   `onUpload` keeps `files[0]`, enters `checking`, runs `inspectFile`, and either sets `months` and
   runs `reconcileDraft` or moves to `rejected` and clears the file. `onFileRejected` renders
   `fileRejectionMessage(reason)` inline under the zone.
 - Chosen-file summary: name, `displaySize(file.size)`, Replace.
 - `Field` + `Input` for `report-name` (required) and `site-name` (optional), both
   `maxlength={MAX_FREE_TEXT_LENGTH}`.
-- `RadioGroup` for `counts-basis` (default `people`) and `unit-system` (no default), each with `name`
-  from `FIELD` so it reaches `FormData`.
+- `RadioGroup` for `counts-basis` (default `people`) and `unit-system` (no default), each with
+  `name` from `FIELD` so it reaches `FormData`.
 - `<MonthlyCounts bind:counts {months} basis={countsBasis} />` once a file is accepted, the
   placeholder otherwise.
-- Submit handler, following `cfa-web-app`'s `create-event/+page.svelte`: `event.preventDefault()`;
-  bail if already submitting; check the file and the unit system and render their `<Field.Error>`s;
-  build `new FormData(event.currentTarget as HTMLFormElement)`, then `set(FIELD.file, file)` and
-  `set(FIELD.monthlyCounts, serialized)`; bail if `serializeCounts` returned `null`. Then
-  `uploadReport`. `created` → `goto`. `rejected` → the rejection view. `unknown` → the short panel at
-  the submit button, linking to `/orgs/{organizationId}` and offering no retry.
+- Submit handler: `event.preventDefault()`; bail if already submitting; check the file and the unit
+  system and render their `<Field.Error>`s; build `new FormData(event.currentTarget as
+  HTMLFormElement)`, then `set(FIELD.file, file)` and `set(FIELD.monthlyCounts, serialized)`; bail
+  if `serializeCounts` returned `null`. Then `uploadReport`. `created` → `goto`. `rejected` → the
+  rejection view. `unknown` → the short panel at the submit button, linking to
+  `/orgs/{organizationId}` and offering no retry.
 - The button is disabled while `submitting` **and** after `created`, since the `goto` is still in
   flight. Its label follows the state.
 
 **`.../reports/new/rejection-view.svelte`** — created here, **plain**: the summary as a heading, the
-date-order problem as its own paragraph, an `<ol>` of problems each rendering
-`formatRows(problem.rows)`, `rule`, `advice`, and `examples` as running text, the "No report was
-created" line, and the **Back to the form** button. Correct and usable; PR 2 designs it.
-Props are `UploadRejection` plus the action — it never switches on `reason` and never writes a
-sentence about the file, which is exactly why a rate-limit rejection (all summary, no
-`rowProblems`/`dateOrderProblem`) needs no special case here: it renders through the same one-line
-Shape A path as `too_large` or `empty` already do.
+date-order problem as its own paragraph, an `<ol>` of problems each rendering `formatRows(problem.rows)`,
+`rule`, `advice`, and `examples` as running text, the "No report was created" line, and the
+**Back to the form** button. Correct and usable; PR 2 designs it. Props are `UploadRejection` plus
+the action — it never switches on `reason` and never writes a sentence about the file, which is why
+a rate-limit rejection needs no special case.
 
 **`.../reports/new/+page.svelte`** — heading, keep the sentence naming the organization
 (`REQUIREMENTS.md § Users and organizations` requires it), render
-`<UploadForm organizationId={data.organization.id} />`, drop the stub comment.
-
-**`+page.server.ts` is no longer a stub — the rate-limit load shipped ahead of this PR.** It
-exports `_loadRateLimitWarning(db, { organizationId, userId })`, returning
-`{ rateLimitWarning: string | undefined }`: `undefined` in the common case, or the one sentence
-`describeRateLimitExceeded` produces for whichever scope/window is exceeded first (same priority
-order the POST endpoint uses). It's an unlocked read —
-`$lib/server/reports/rate-limit.ts`'s `checkReportRateLimit` — so it's a snapshot, not a decision;
-`lockAndCheckReportRateLimit` is still what the POST endpoint uses to actually enforce.
-
-`upload-form.svelte` renders `data.rateLimitWarning` in an `Alert` above the drop zone **only when
-it's set**, non-blocking — the form, drop zone, and submit button all stay enabled regardless. No
-"N of 5 used this hour" counters for the other limits: a non-technical user has no use for four
-independent numbers (org/user × hourly/weekly) until one of them actually stops an upload, and a
-stale banner is never the only thing telling them — a submit that's actually rate-limited still
-answers with the identical sentence via the 429/rejection-view path above. Placement is above the
-drop zone, before any file is chosen, so someone already at a limit finds out before filling in up
-to 120 month fields.
+`<UploadForm organizationId={data.organization.id} rateLimitWarning={data.rateLimitWarning} />`.
 
 **Tests**
+
 - `upload.test.ts` (node, stubbed `fetch`): 201 yields the location; a 400 rejection body yields
-  `rejected` with its summary and problems; **a 429 rejection body (rate limiting) also yields
-  `rejected`, with only its summary** — the regression test for the status-code guard; a 400 that
-  is not a rejection yields `unknown`; a rejecting `fetch` yields `unknown`.
+  `rejected` with its summary and problems; **a 429 rejection body also yields `rejected`, with only
+  its summary** — the regression test for the status-code guard; a 400 that is not a rejection
+  yields `unknown`; a rejecting `fetch` yields `unknown`.
+- `rejection.test.ts` — add the 429 case beside the existing 400 ones.
 - `upload-form.svelte.test.ts` (browser, stubbed `fetch`): every field posts under its `FIELD` name;
   a 400 shows the rejection view; **returning from the rejection view restores the typed name and
   the month counts** — the regression test for the state trap; **a 429 shows the same rejection
   view, with the "Back to the form" label rather than file-specific copy**; a rejecting `fetch`
   renders the unknown-outcome message and the report-list link; submitting with no file posts
-  nothing and shows the inline message; submitting with no unit system posts nothing.
-- `apps/web/e2e/new-report.e2e.ts`: navigate from the org page, `setInputFiles` a fixture CSV, fill
-  the months, submit, land on the report page. A second case uploads a CSV with bad rows and asserts
-  the rejection view names them.
+  nothing and shows the inline message; submitting with no unit system posts nothing;
+  `rateLimitWarning` renders when set and is absent when not.
+- **`e2e/new-report/`** — per `e2e/README.md`, a feature gets a folder once it has two specs, so
+  this PR moves `new-report.screenshot.ts` into `e2e/new-report/` alongside the new
+  `new-report.e2e.ts`. The committed PNG name does **not** change: `__screenshots__/` stays flat and
+  is prefixed by feature rather than nested. The e2e spec navigates from the org page,
+  `setInputFiles` a fixture CSV, fills the months, submits, and lands on the report page; a second
+  case uploads a CSV with bad rows and asserts the rejection view names them. Behavioural specs run
+  on the host browser against `BASE_URL`, so the CSRF constraint above does not apply — this suite
+  can submit for real.
+- `layout.e2e.ts` needs no new route entry: `/orgs/:id/reports/new` is already in `ROUTES`, so the
+  empty form is checked at all three widths the moment it replaces the stub. That existing test
+  starts covering real content in this PR — expect it to be the first thing that catches a wide
+  drop zone or an overflowing hint line.
 
-**README** — `## Forms`, expanded with this PR's conventions:
+**README**
+
+`## Forms`, expanded:
 - Native constraint validation, no form library, consistent with `ARCHITECTURE.md` rejecting form
   actions. A real `<form>` with `onsubmit` and a `<button type="submit">` mean the browser blocks an
   invalid submit and focuses the first bad field; `reportValidity()` is only for a programmatic
@@ -532,14 +576,14 @@ to 120 month fields.
   a hidden file input blocks submission with no visible message; on a `RadioGroup`'s hidden input it
   does nothing at all. Those get a check in the handler and an inline message.
 - The submit button stays enabled for an invalid form, and is disabled only while a request is in
-  flight or a navigation is pending, with the reason in its label. A disabled button cannot say
-  which field it is waiting on; the browser's own refusal can.
+  flight or a navigation is pending, with the reason in its label.
 - A field name always comes from a `FIELD` map, never a literal in markup.
-- Each form declares its own outcome union.
+- **State:** a button-shaped mutation uses `ActionState`; a form whose failure is more than one
+  sentence declares its own outcome union. Both render a failure the same way.
 - **A form's values live in the component's state, not only in the DOM**, so a form that swaps its
   own view cannot lose typed work.
 
-And `## Errors`, with a "what the user sees" half added:
+`## Errors`, with a "what the user sees" half added:
 - Three surfaces, never merged: a field problem at the field, a rejected file in its own view, an
   unknown outcome at the action that caused it.
 - A short message gets `role="alert"`. A long one does not — announcing a whole document on render
@@ -548,14 +592,17 @@ And `## Errors`, with a "what the user sees" half added:
   confirmation of an action on a page that stays put; no page needs one yet, and adding one is a
   fine reason to add the dependency then.
 - One component renders both a client-side and a server-side rejection: both narrow to
-  `UploadRejection` (`summary`, `rowProblems?`, `dateOrderProblem?`) in
-  `src/lib/reports/rejection.ts`.
+  `UploadRejection` in `src/lib/reports/rejection.ts`.
+
+`## Calling the API from the browser`, one paragraph:
+- A feature client either lets `apiCall` throw (`deleteReport`) or returns an outcome union
+  (`uploadReport`). It returns one when a non-2xx is an answer the UI renders, not a failure.
 
 ## PR 2 — the rejection view
 
 The design described in *What a rejection actually looks like*. No behaviour changes, no new props:
-the component's contract is already fixed by PR 1, so this PR is layout, hierarchy, and the tests
-that hold them.
+the component's contract is fixed by PR 1, so this PR is layout, hierarchy, and the tests that hold
+them.
 
 - The locator/body grid, stacked on mobile and two-column from `sm:` up, with the locator wrapping
   rather than truncating.
@@ -567,34 +614,46 @@ that hold them.
 - The **Back to the form** action given real prominence at both the top and the bottom of a long
   list, so a user who has read to the end does not scroll back up.
 
-**Fixtures** — add a `rejectionWith(n)` helper to `csv/testing/` building a `UploadRejection`
-with `MAX_PROBLEMS_REPORTED` problems, a date-order problem, and one `everyRow` problem, so the
-worst case is what the tests render.
+**Fixtures** — add a `rejectionWith(n)` helper to `csv/testing/` building an `UploadRejection` with
+`MAX_PROBLEMS_REPORTED` problems, a date-order problem, and one `everyRow` problem, so the worst
+case is what the tests and the screenshot render.
 
-**Tests** — `rejection-view.svelte.test.ts`: the summary is the heading and takes focus; a
-date-order problem renders above the first list item; every problem renders its rows, rule, advice
-and examples; an example is not double-quoted; a 20-problem rejection renders 20 items; at
-`page.viewport(375, 667)` the view does not scroll horizontally
-(`document.documentElement.scrollWidth <= clientWidth`) — `@vitest/browser` 4.1.10 has `page.viewport`.
+**Tests**
 
-**Considered, not done:** a "Copy the list" button. `renderProblemsAsDetail` already produces exactly
-that text, so it is cheap if a user asks for it — but it is a second way to read the same thing, and
-nobody has asked.
+- `rejection-view.svelte.test.ts`: the summary is the heading and takes focus; a date-order problem
+  renders above the first list item; every problem renders its rows, rule, advice and examples; an
+  example is not double-quoted; a 20-problem rejection renders 20 items.
+- **Responsive coverage goes to `layout.e2e.ts`, not the component test.** The repo already owns
+  this: `expectNoHorizontalOverflow` names the offending element, and `VIEWPORT_WIDTHS` checks
+  390/768/1280 rather than one hand-picked 375. Add a case that navigates to the form,
+  `setInputFiles` a CSV with many bad rows, waits for the rejection view, and runs the same
+  three-width sweep the route entry already runs for the empty form. This replaces the ad-hoc
+  `page.viewport(375, 667)` assertion an earlier draft of this plan proposed.
+
+**Screenshot** — one new shot, `reports-new-rejection.png`, of the worst-case Shape B view. It
+earns its place by the `e2e/README.md` standard (*capture routes that carry real visual risk*):
+this is the densest layout in the app, its whole design is the grid, and a component test cannot
+see it. Like the monthly-counts shot it needs no POST — `setInputFiles` a bad CSV and `inspectFile`
+produces the rejection in the browser. It goes in `e2e/new-report/`, and the PNG stays flat in
+`__screenshots__/` under its feature-prefixed name.
+
+**Deliberately not captured:** Shape A and the rate-limit banner. Both are a single `Alert`
+containing one sentence — near-zero visual risk, and the rate-limit one would need backdated
+fixtures to reach `HOURLY_REPORT_LIMIT`. Assertions cover them. Every image is CI minutes and
+repository bytes forever.
+
+**Considered, not done:** a "Copy the list" button. `renderProblemsAsDetail` already produces
+exactly that text, so it is cheap if a user asks for it — but it is a second way to read the same
+thing, and nobody has asked.
 
 ## Follow-ups this work identifies but does not do
 
-**Screenshot coverage.** `reports-new-monthly-counts.png` exists already (reconciled onto the real
-form in PR 1, above); the rest of the route is still uncaptured. Once PR 1's form exists, the
-remaining shots are: the empty form, the rate-limit warning, and the rejection view in both its
-shapes.
-
-- The rate-limit warning needs `HOURLY_REPORT_LIMIT` (5) reports inside the rolling hour, or
-  `WEEKLY_REPORT_LIMIT` (20) inside the week, in either the organization or the user scope — four
-  distinct sentences. `insertReport`'s `createdAt` is the only knob needed; the same backdating
-  that keeps `e2e/fixtures/reports.ts`'s fixtures *out* of the window puts these *in* it.
-- **The rejection view does not need a POST.** `inspectFile` runs the whole normalizer in the
-  browser, so `setInputFiles` reaches it with no request at all — the CSRF limitation that blocks
-  a screenshot spec from submitting the form does not block those shots.
+- **A Web Worker for normalization**, if the hand-measurement in *Verification* shows the main
+  thread locked long enough to notice on a 10MB file.
+- **XLSX in the browser**, per `ARCHITECTURE.md`. Widens `accept` and adds a spreadsheet library.
+- **An empty-form screenshot**, once the form's visual design settles. Skipped now because PR 1's
+  form is functional-first and PR 2 changes only the rejection view; a baseline captured mid-design
+  is churn. `layout.e2e.ts` already guards the structural risk at three widths in the meantime.
 
 ## Verification
 
@@ -602,8 +661,11 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 
 1. Run `svelte-autofixer` (Svelte MCP) over every new `.svelte` file until it reports nothing.
 2. From the repo root: `pnpm lint && pnpm check && pnpm test`.
-3. `pnpm dev`, open `/` — seeded auth lands on the organization — then **New report**.
-4. By hand:
+3. After PR 1's screenshot re-point and PR 2's new shot:
+   `pnpm turbo run screenshots:update --filter=@gbd/web`, then review the PNG diffs by eye before
+   committing them.
+4. `pnpm dev`, open `/` — seeded auth lands on the organization — then **New report**.
+5. By hand:
    - Tab through the whole form keyboard-only, including the drop zone and the radio groups.
    - Submit empty: the browser focuses the report name. Then with a name but no file: the inline file
      message. Then with no unit system: its inline message.
@@ -611,7 +673,7 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
      our size copy.
    - Upload a CSV missing the weight column: a one-line Shape A rejection, not a list.
    - Upload a CSV with several kinds of bad row: the rejection view, focused, with the row spans
-     down the left edge. Narrow the window to 375px and confirm nothing scrolls sideways.
+     down the left edge. Narrow the window to 390px and confirm nothing scrolls sideways.
    - Upload a CSV whose dates are written both ways: the date-order block above the list.
    - **Back to the form** and confirm the report name and any month counts are still there.
    - Upload a good CSV spanning two years: a labelled input per month under year subheadings and the
@@ -622,4 +684,4 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
      tripping `HOURLY_REPORT_LIMIT` for real means five successful uploads first. If it needs a
      manual look, lower `HOURLY_REPORT_LIMIT` locally rather than uploading five real files, and
      revert the change before committing.
-5. Report which steps passed, and say plainly if any were skipped.
+6. Report which steps passed, and say plainly if any were skipped.
