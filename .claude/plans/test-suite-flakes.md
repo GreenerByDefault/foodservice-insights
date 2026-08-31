@@ -40,8 +40,8 @@ is what rules the code change out as the cause.
 ### Sighting 3 — `fix-component-cleanup` @ b100563, 2026-08-30
 
 Three failures on an otherwise-idle machine, all in the `client` project, all while *timing* that
-tier rather than changing it. **Two consecutive `pnpm test` runs failed**, which makes this the
-first sighting dense enough to chase without a harness.
+tier rather than changing it. **Three of four consecutive `pnpm test` runs failed**, which makes
+this the first sighting dense enough to chase without a harness.
 
 - Roughly 25 consecutive `client`-only runs produced one failure, of 1 file in 11. The file's
   name was not captured.
@@ -65,19 +65,19 @@ once it came back. Sighting 2's 103,325ms file is the same shape, larger.
 | --- | --- | --- |
 | `vitest run --project=client` alone | 11 browser files | 0 of 6 |
 | `vitest run` in `apps/web` (both projects) | + 52 node files | 0 of 3 |
-| `pnpm test` (`turbo run test:unit`) | + 5 other packages' suites | **3 of 3** |
+| `pnpm test` (`turbo run test:unit`) | + 5 other packages' suites | **3 of 4** |
 
-Only the last one fails, and it fails every time — so the trigger is load *outside* `apps/web`,
-not anything the browser tier does to itself. That also explains why every isolated rerun in
-sightings 1 and 2 passed. Lead 0 is the mechanism this points at; the missing step is whether
-starving the browser of CPU is enough to stall it for 28 seconds, or whether the contention is
-for something more specific.
+Only the last one fails, and it failed three times before going green — so the trigger is load
+*outside* `apps/web`, not anything the browser tier does to itself. That also explains why every
+isolated rerun in sightings 1 and 2 passed. Lead 0 is the mechanism this points at; the missing
+step is whether starving the browser of CPU is enough to stall it for 28 seconds, or whether the
+contention is for something more specific.
 
 ### What the sightings say together
 
-1. **`cancel.e2e.ts:14` and `retry.e2e.ts` appear in both e2e sightings.** The report-page action specs — the
-   ones that click through a dialog, POST, and wait for the page to converge — are the highest-signal
-   place to start.
+1. **`cancel.e2e.ts:14` and `retry.e2e.ts` appear in both e2e sightings.** The report-page action
+   specs — the ones that click through a dialog, POST, and wait for the page to converge — are the
+   highest-signal place to start.
 2. **This is not e2e-only.** `cancel-button.svelte.test.ts` is a Chromium component test with no
    Playwright webServer and no database anywhere near it. Any theory scoped to the e2e stack alone
    does not cover sighting 2, and a fix validated only against e2e will look like it worked.
