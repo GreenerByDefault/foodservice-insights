@@ -11,7 +11,7 @@ is a stub, and it is the only thing left between a user and a report. Everything
   when [`lockAndCheckReportRateLimit`](apps/web/src/lib/server/reports/rate-limit.ts) finds the
   organization or user over `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`. The client work below
   already accounts for this — see the rate-limiting notes under *Shape A*, the API client decision,
-  and PR 2.
+  and PR 1.
 - [`metadata.ts`](apps/web/src/lib/reports/metadata.ts) names the fields and validates them;
   [`rejection.ts`](apps/web/src/lib/reports/rejection.ts) defines what a refusal looks like on the
   wire. [`monthsWithoutCounts`](apps/web/src/lib/reports/monthly-coverage.ts) refuses a submission
@@ -92,7 +92,7 @@ One line, one action. **An `Alert` beside the drop zone is the whole design.**
 was written — see `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT` in `limits.ts`) produces the same
 `RejectedUploadRecord` shape as `describeUnreadableFile` — one `summary`, no `rowProblems` or
 `dateOrderProblem` — so it renders through the exact same view with no new fields. Two things do
-differ, and both matter to PR 2:
+differ, and both matter to PR 1:
 
 - **It answers 429, not 400.** `_createReport` returns `json(userFacingRejection(rejection), {
   status: 429 })` for a rate-limit rejection, and 400 for every other one. `parseUploadRejection`
@@ -216,7 +216,7 @@ does not fit the generic shape anyway: it has no `message` and no `problems`, it
 `ApiError` is `{ status, message, jsonBody: JsonValue | undefined }` — `message` only for a log or
 a last-resort string, `jsonBody` for the layer that knows the shape. `parseUploadRejection` is the
 only thing that knows a 400 *or 429* from this endpoint is an `UploadRejection`; `uploadReport`
-(PR 2) is its only caller:
+(PR 1) is its only caller:
 
 ```ts
 export type UploadOutcome =
@@ -414,47 +414,26 @@ Splitting them this way, rather than writing the whole set in one PR, means each
 reviewed — and can be adjusted — in the PR that actually puts it into practice, instead of being
 approved in the abstract ahead of the code.
 
-## PR 1 — the month-count model and its component
+## PR 1 — the route
 
-**`src/lib/reports/monthly-counts.ts`** — pure, node-tested:
+`monthly-counts.ts` (the pure month-count model) and `.../reports/new/monthly-counts.svelte` (the
+component) are already built and merged, in their final home — this PR is wiring only. `CountDraft`,
+`reconcileDraft`, `serializeCounts`, `formatMonth`, `groupByYear`, and `missingMonthCount` all exist
+in [`monthly-counts.ts`](apps/web/src/lib/reports/monthly-counts.ts); the component takes `months:
+MonthsFromFile`, `basis: CountsBasis`, `counts = $bindable<CountDraft>()` and needs no changes here.
 
-- `type CountDraft = Record<string, number | undefined>` — `undefined` because `bind:value` on
-  `<input type="number">` yields `undefined` for an empty or unparseable field.
-- `reconcileDraft(previous, months)` — keeps values for months still present, drops the rest, leaves
-  new months empty, so replacing a file does not discard typed work.
-- `serializeCounts(draft, months)` — the JSON the `monthly-counts` field carries, or `null` when a
-  month is missing. Must satisfy `MonthlyCountsSchema`.
-- `formatMonth('2026-01') → 'January 2026'` — `Intl.DateTimeFormat('en-US', { month: 'long', year:
-  'numeric', timeZone: 'UTC' })`, built once at module scope, matching `monthly-coverage.ts` and
-  `packages/email/src/messages/invite.ts`. The `Intl` ban is scoped to `csv/describe/` and does not
-  reach here. Parse the key as `Date.UTC(year, month - 1, 1)`, never `new Date(string)`.
-- `groupByYear(months)` and `missingMonthCount(draft, months)`.
+**Delete the dev-only preview.** [`+page.svelte`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/new/+page.svelte)
+currently renders `monthly-counts.svelte` against a hardcoded four-month fixture inside a
+`<!-- preview --> … <!-- /preview -->` block, purely so it had somewhere to be seen before the real
+form existed. Delete that block along with `previewCounts` and the stub comment above it — this PR's
+`<UploadForm>` is what replaces it.
 
-**`.../reports/new/monthly-counts.svelte`** — in its final home; PR 2 is wiring only.
-
-- Props: `months: MonthsFromFile`, `basis: CountsBasis`, `counts = $bindable<CountDraft>()`.
-- A `<fieldset>` whose `<legend>` follows `basis` — "Diners per month" / "Meals per month" — and a
-  description line reading `"{n} of {total} months still need a count"`, the standing answer to "why
-  did submit not go through". A hint, not an error: it does not turn red and blocks nothing.
-- A row per month: label from `formatMonth`, then
-  `<input type="number" min="0" step="1" inputmode="numeric" required bind:value={counts[month]}>`.
-  One column up to six months, `sm:grid-cols-2` beyond, with a year subheading when the span crosses
-  years. `MAX_MONTHS` is 120, so the grid has to survive a decade.
-- No empty state: `months` is only ever non-empty, and the form renders the "no file yet"
-  placeholder itself.
-- No shortcut for filling every month with the same count: the client didn't ask for it, and
-  copy-paste already covers it. Revisit only if GBD asks.
-
-**Tests** — `monthly-counts.test.ts` (node) for the pure functions;
-`monthly-counts.svelte.test.ts` for a labelled row per month, the legend following the basis, the
-progress line counting down, and inputs being `required`.
-
-**README** — `## UI components`: a route-local component lives beside its route and is promoted to
-`src/lib/components/<feature>/` only when a second route needs it; `ui/` stays purely vendored.
-`monthly-counts.svelte` is the first route-local component in the app, so this is where the
-convention is worth writing down rather than assumed.
-
-## PR 2 — the route
+**Reconcile `new-report.screenshot.ts`.** It currently drives the preview block directly — fills
+three of the four hardcoded months and shoots `reports-new-monthly-counts.png`. With the preview
+gone it has nothing to render against, so this PR must give it a real path to the same state:
+`setInputFiles` a fixture CSV so `inspectFile` derives real months client-side (no POST needed, same
+reasoning as the rejection-view shots below), fill three of them, and shoot. Reusing the existing
+screenshot name keeps the diff meaningful rather than starting a new baseline.
 
 **`src/lib/reports/upload.ts`** — the feature client:
 
@@ -502,7 +481,7 @@ page navigates away. Every field's value is `$state` on this component, per the 
 **`.../reports/new/rejection-view.svelte`** — created here, **plain**: the summary as a heading, the
 date-order problem as its own paragraph, an `<ol>` of problems each rendering
 `formatRows(problem.rows)`, `rule`, `advice`, and `examples` as running text, the "No report was
-created" line, and the **Back to the form** button. Correct and usable; PR 3 designs it.
+created" line, and the **Back to the form** button. Correct and usable; PR 2 designs it.
 Props are `UploadRejection` plus the action — it never switches on `reason` and never writes a
 sentence about the file, which is exactly why a rate-limit rejection (all summary, no
 `rowProblems`/`dateOrderProblem`) needs no special case here: it renders through the same one-line
@@ -572,10 +551,10 @@ And `## Errors`, with a "what the user sees" half added:
   `UploadRejection` (`summary`, `rowProblems?`, `dateOrderProblem?`) in
   `src/lib/reports/rejection.ts`.
 
-## PR 3 — the rejection view
+## PR 2 — the rejection view
 
 The design described in *What a rejection actually looks like*. No behaviour changes, no new props:
-the component's contract is already fixed by PR 2, so this PR is layout, hierarchy, and the tests
+the component's contract is already fixed by PR 1, so this PR is layout, hierarchy, and the tests
 that hold them.
 
 - The locator/body grid, stacked on mobile and two-column from `sm:` up, with the locator wrapping
@@ -604,9 +583,10 @@ nobody has asked.
 
 ## Follow-ups this work identifies but does not do
 
-**Screenshot coverage.** Nothing here is captured yet — this route was still a stub when the
-screenshot fixtures landed. Once PR 2's form exists, the shots are: the empty form, the rate-limit
-warning, and the rejection view in both its shapes.
+**Screenshot coverage.** `reports-new-monthly-counts.png` exists already (reconciled onto the real
+form in PR 1, above); the rest of the route is still uncaptured. Once PR 1's form exists, the
+remaining shots are: the empty form, the rate-limit warning, and the rejection view in both its
+shapes.
 
 - The rate-limit warning needs `HOURLY_REPORT_LIMIT` (5) reports inside the rolling hour, or
   `WEEKLY_REPORT_LIMIT` (20) inside the week, in either the organization or the user scope — four
