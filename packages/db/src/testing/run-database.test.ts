@@ -6,6 +6,7 @@ import {
   dropRunDatabase,
   ensureTemplateDatabase,
   sweepStaleRunDatabases,
+  sweepStaleTemplateBuilds,
   templateFingerprint,
 } from './run-database.ts';
 
@@ -49,6 +50,43 @@ describe('createRunDatabase', () => {
       }
     } finally {
       await dropRunDatabase(CONNECTION_STRING, run.name);
+    }
+  });
+});
+
+describe('sweepStaleTemplateBuilds', () => {
+  // Fabricates staging-shaped databases directly, rather than by killing a real build, so the
+  // "old" one can be backdated without waiting out the real staleness window.
+  test('drops an old idle staging database, and spares a young one and an old one with a live connection', async () => {
+    const maintenance = new Client({ connectionString: CONNECTION_STRING });
+    await maintenance.connect();
+
+    const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+    const oldIdle = `fsi_test_tmpl_abc123_building_${threeHoursAgo}_oldidle1`;
+    const oldLive = `fsi_test_tmpl_abc123_building_${threeHoursAgo}_oldlive1`;
+    const young = `fsi_test_tmpl_abc123_building_${Date.now()}_young001`;
+    let liveConnection: Client | undefined;
+
+    try {
+      for (const name of [oldIdle, oldLive, young]) {
+        await maintenance.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
+      }
+      liveConnection = new Client({ connectionString: connectionStringFor(oldLive) });
+      await liveConnection.connect();
+
+      const dropped = await sweepStaleTemplateBuilds(CONNECTION_STRING);
+      expect(dropped).toEqual([oldIdle]);
+
+      const { rows } = await maintenance.query<{ datname: string }>(
+        'SELECT datname FROM pg_database WHERE datname = ANY($1) ORDER BY datname',
+        [[oldIdle, oldLive, young]],
+      );
+      expect(rows.map((row) => row.datname)).toEqual([oldLive, young].sort());
+    } finally {
+      await liveConnection?.end();
+      await maintenance.query(`DROP DATABASE IF EXISTS "${oldLive}"`);
+      await maintenance.query(`DROP DATABASE IF EXISTS "${young}"`);
+      await maintenance.end();
     }
   });
 });

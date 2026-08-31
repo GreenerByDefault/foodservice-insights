@@ -35,6 +35,7 @@ export {
   dropRunDatabase,
   ensureTemplateDatabase,
   sweepStaleRunDatabases,
+  sweepStaleTemplateBuilds,
   templateFingerprint,
 } from './run-database.ts';
 export { withRollback } from './transactions.ts';
