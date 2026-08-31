@@ -10,6 +10,7 @@ import { MINUTE_MS, SECOND_MS } from '@gbd/core';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
 import { WORKER_DB_LIMITS } from './db.ts';
+import { TRANSIENT_RETRY_WAITS_MS } from './retry.ts';
 
 export type WorkerConfig = {
   /** Written to `analysis_attempt.worker_id`, so it has to be unique per running process. */
@@ -90,6 +91,12 @@ export type WorkerConfig = {
    * budget tells the two apart. */
   uploadRetryBudgetMs: number;
 
+  /** The wait before each retry of the database calls that get one — `one-retry-layer` in
+   * [`failures.ts`](./failures.ts) covers which calls those are, and `retry.ts` how to size the
+   * waits for real blips. A field rather than a constant so tests can shrink it, per
+   * `TEST_TRANSIENT_RETRY_WAITS_MS`. */
+  transientRetryWaitsMs: readonly number[];
+
   /** How often to run `sweeps/notifications.ts`. */
   notifyIntervalMs: number;
 
@@ -120,6 +127,7 @@ export const WORKER_DEFAULTS = {
   reapIntervalMs: MINUTE_MS,
   maxReapsPerSweep: 5,
   uploadRetryBudgetMs: 5 * MINUTE_MS,
+  transientRetryWaitsMs: TRANSIENT_RETRY_WAITS_MS,
   notifyIntervalMs: 15 * SECOND_MS,
   notificationRetryBaseMs: 5 * MINUTE_MS,
   maxNotificationAttempts: 5,
@@ -209,13 +217,21 @@ function workerConfigViolations(config: WorkerConfig): string[] {
   check(config.childCommand.executable.trim() !== '', 'childCommand.executable must not be blank');
 
   // Keyed off the defaults, so a numeric field added above is covered without touching this.
+  // Non-numeric fields are checked individually below.
   for (const field of Object.keys(WORKER_DEFAULTS) as (keyof typeof WORKER_DEFAULTS)[]) {
     const value = config[field];
+    if (typeof value !== 'number') continue;
     check(
       Number.isInteger(value) && value > 0,
       `${field} must be a positive whole number, not ${value}`,
     );
   }
+
+  check(
+    config.transientRetryWaitsMs.every((wait) => Number.isInteger(wait) && wait > 0),
+    'every transientRetryWaitsMs entry must be a positive whole number, not ' +
+      `[${config.transientRetryWaitsMs.join(', ')}]`,
+  );
 
   check(
     config.killAfterNoProgressMs > config.directIntervalMs,

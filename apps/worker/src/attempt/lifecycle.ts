@@ -40,7 +40,7 @@ import { type ChildEnding, classifyVerdict, type Kill, type Verdict } from './ve
 
 export type AttemptDependencies = Pick<
   WorkerConfig,
-  'workerId' | 'runRoot' | 'childCommand' | 'killGraceMs'
+  'workerId' | 'runRoot' | 'childCommand' | 'killGraceMs' | 'transientRetryWaitsMs'
 > & {
   db: DatabaseExecutor;
   store: BlobStore;
@@ -91,6 +91,7 @@ export async function startAttempt(
       {
         action: "load a claimed attempt's inputs",
         context: { attemptId },
+        waitsMs: dependencies.transientRetryWaitsMs,
       },
     );
 
@@ -232,6 +233,7 @@ export async function recordVerdict(
   return await retryOnTransientDbError(() => writeVerdictOnce(dependencies, attemptId, verdict), {
     action: 'record an attempt verdict',
     context: { attemptId, verdict: verdict.kind },
+    waitsMs: dependencies.transientRetryWaitsMs,
   });
 }
 

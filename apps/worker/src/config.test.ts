@@ -91,6 +91,20 @@ describe('the values a configuration must supply', () => {
       'maxReapsPerSweep must be a positive whole number',
     );
   });
+
+  // The loop above skips this field because it is not a number, so it carries its own check.
+  test.each(nonCounts)('refuses a %s retry wait', (_label, value) => {
+    expectOnlyViolation(
+      { transientRetryWaitsMs: [250, value] },
+      'every transientRetryWaitsMs entry must be a positive whole number',
+    );
+  });
+
+  test('accepts retrying without any wait at all', () => {
+    expect(
+      createWorkerConfig(REQUIRED_FIELDS, { transientRetryWaitsMs: [] }).transientRetryWaitsMs,
+    ).toEqual([]);
+  });
 });
 
 describe('the relations between the thresholds a parent enforces on its own child', () => {
