@@ -1,7 +1,7 @@
 /** Write `auth-schema.sql`: the `auth` schema GoTrue creates, self-contained enough to restore
  * into a fresh database created from `template0`.
  *
- * Modelled on `dump-schema.ts`. Unlike that file, this one's contents are decided entirely by the
+ * Modelled on `dump-public-schema.ts`. Unlike that file, this one's contents are decided entirely by the
  * GoTrue version the pinned Supabase CLI ships — see the `::notice::` in the `ts-db-types` CI job
  * for what to do when it drifts.
  *

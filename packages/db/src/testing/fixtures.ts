@@ -170,7 +170,7 @@ export async function insertInputFile(
  * - `canceled` is the exception: `ARCHITECTURE.md` § Canceling allows canceling a `pending`
  *   attempt that was never claimed.
  *
- * See `analysis_attempt` in schema.sql for the constraints themselves.
+ * See `analysis_attempt` in public-schema.sql for the constraints themselves.
  */
 export async function insertAnalysisAttempt(
   database: DatabaseExecutor,

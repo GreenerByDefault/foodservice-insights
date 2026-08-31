@@ -66,8 +66,8 @@ Applies to `packages/db` and every app or package that imports it (`apps/web`, `
   bare CLI finds neither stack and offers to create a third.
 - **Write migration columns in snake_case.** `CamelCasePlugin` translates identifiers, so a
   `site_name` column is what makes `siteName` work in queries.
-- **To read the schema, don't read the migrations.** `packages/db/schema.sql` is the current state
-  with every constraint, index, and trigger; `packages/db/src/generated/` is what you can query in TypeScript.
+- **To read the schema, don't read the migrations.** `packages/db/public-schema.sql` is the current
+  state with every constraint, index, and trigger; `packages/db/src/generated/` is what you can query in TypeScript.
   [`packages/db/README.md`](../../packages/db/README.md) covers the model and which file answers what.
 - **Query helpers take `db: DatabaseExecutor` as their first parameter**, so tests can pass a
   rolled-back transaction where the app passes its long-lived handle.
