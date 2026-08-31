@@ -38,6 +38,12 @@ let headline = $derived(screenHeadline(current));
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 
+/** Set by the `onMount` cleanup below. `clearTimeout` only cancels a poll that hasn't started
+ * yet — one already awaiting `pollReport` keeps running after unmount, and without this guard its
+ * `finally` would write to this (now-orphaned) instance's state and arm a timer nothing can ever
+ * clear again, which is how a single leaked poll turns into a permanent per-instance loop. */
+let destroyed = false;
+
 function scheduleNext(): void {
   clearTimeout(timer);
   const delayMs = nextPollDelayMs({ reportSettled, documentHidden, consecutiveFailures });
@@ -46,12 +52,15 @@ function scheduleNext(): void {
 
 async function poll(): Promise<void> {
   try {
-    current = await pollReport(current.pollHref);
+    const next = await pollReport(current.pollHref);
+    if (destroyed) return;
+    current = next;
     consecutiveFailures = 0;
   } catch {
+    if (destroyed) return;
     consecutiveFailures += 1;
   } finally {
-    scheduleNext();
+    if (!destroyed) scheduleNext();
   }
 }
 
@@ -82,6 +91,7 @@ onMount(() => {
   document.addEventListener('visibilitychange', onVisibilityChange);
 
   return () => {
+    destroyed = true;
     clearTimeout(timer);
     document.removeEventListener('visibilitychange', onVisibilityChange);
   };

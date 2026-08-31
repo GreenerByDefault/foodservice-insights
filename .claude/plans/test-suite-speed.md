@@ -2,37 +2,48 @@
 
 ## Context
 
-`pnpm test` takes ~97s locally after a typical change, and AGENTS.md § Verifying a change makes
-that the gate before any agent can say a change works. The suite's rigor is not in question — it
-has been through `/test-rigor` repeatedly and the tests earn their keep. What follows is about
-paying for that rigor only when it can tell us something.
+`pnpm test` used to take ~97s locally after a typical change, and AGENTS.md § Verifying a change
+makes that the gate before any agent can say a change works. The suite's rigor is not in
+question — it has been through `/test-rigor` repeatedly and the tests earn their keep. What
+follows is about paying for that rigor only when it can tell us something.
 
-Measured on `main` @ 7e299ac, macOS, warm caches, clean tree:
+Re-measured on this branch @ da547eb (one commit ahead of `main` @ 4d85631: adds
+`test:playwright`, the fix described below), macOS, warm caches, clean tree, `TEST_DB=1
+scripts/supabase start` already running:
 
 | Step | Nothing changed | After a web change |
 | --- | --- | --- |
 | `pnpm lint` | 1.0s | 1.0s |
-| `pnpm check` | 1.1s (FULL TURBO) | ~15s |
-| `pnpm test:unit` | 1.5s (FULL TURBO) | ~30s |
-| `pnpm test:e2e` | **42s — always** | 42s |
-| `pnpm test:screenshots` | **~25s — always** | ~25s |
-| **`pnpm test`** | **~68s floor** | **~97s** |
+| `pnpm check` | 1.1s (FULL TURBO) | ~13s |
+| `pnpm test:unit` | 1.1s (FULL TURBO) | ~55-60s |
+| `pnpm test:playwright` | 1.2s (FULL TURBO) | ~40-100s (see note below) |
+| **`pnpm test`** | **~3.3s floor (FULL TURBO)** | **~140s** |
 
-Turbo is doing its job: `check` and `test:unit` collapse to ~2.6s combined when untouched. Until
-this plan, `turbo.json` marked `test:e2e` and `test:screenshots` `cache: false`, so **67 of the
-~97 seconds went to two tasks Turbo was structurally forbidden from skipping** — including on a
-Markdown-only edit. That was not a missing build system; it was two opted-out tasks, and it is
-now fixed: both tasks' real inputs were already in the graph (`test:e2e` depends on `build`,
-which depends on `^build`, so `packages/db` migrations and every other package's source are
-transitively hashed), so turning caching back on was enough — a run that provably cannot reach
-either task now skips it entirely.
+Turbo is doing its job: `check` and `test:unit` collapse to ~2.3s combined when untouched, and
+`test:playwright` now joins them at ~1.2s — the caching fix from before this branch's PR 1 holds.
+Before that fix, `turbo.json` marked `test:e2e` and `test:screenshots` `cache: false`, so 67 of
+the ~97 seconds went to two tasks Turbo was structurally forbidden from skipping, including on a
+Markdown-only edit. That was not a missing build system; it was two opted-out tasks: both tasks'
+real inputs were already in the graph (`test:e2e` depends on `build`, which depends on `^build`,
+so `packages/db` migrations and every other package's source are transitively hashed), so turning
+caching back on was enough — a run that provably cannot reach either task now skips it entirely.
 
-The screenshot row already reflects a landed fix: `optimize-screenshots.teardown.ts` used to
+The screenshot cost already reflects a landed fix: `optimize-screenshots.teardown.ts` used to
 re-run oxipng on every local `test:screenshots`, re-optimizing already-optimized PNGs the run
 never wrote, costing 10s. It now skips via `wroteScreenshots()`
 (`apps/web/scripts/optimize-screenshots.ts`), which checks `git status --porcelain` on the
 screenshots directory instead of `updateSnapshots === 'none'` — so it also catches a plain local
 run against committed images, not just CI.
+
+**The `pnpm test:unit` and `pnpm test:playwright` "after a web change" numbers are both higher
+than this plan's original baseline (~30s and ~67s combined) and both showed real run-to-run
+variance across repeated measurements** (`test:unit`: 55-60s across two runs; `test:playwright`:
+39-84s of internal Playwright time across three runs, ~53-100s wall including app boot). This
+reflects the test suite growing since the original baseline — several feature PRs landed between
+it and this measurement, each adding tests — not a regression introduced by this plan's caching
+work; the caching wins (FULL TURBO on an untouched tree, one app boot instead of two) hold
+regardless of how large the underlying suite gets. Re-run before trusting a specific number if
+precision matters.
 
 Where the remaining time goes, all measured rather than inferred:
 
@@ -41,6 +52,8 @@ Where the remaining time goes, all measured rather than inferred:
   `test:playwright` task, which boots the app once for both.
 - The `client` project is ~34s wall standalone against 12.4s of reported test duration; the gap
   is Chromium + Vite startup for 43 component tests. No cheap fix that keeps the real browser.
+  The variance measured above in `pnpm test:unit` is consistent with this cost, not separate
+  from it.
 - **The Turbo daemon is a dead end — do not recommend it.** It is not running and does not
   auto-start, which looks like a missed optimization and is not one: `turbo.json`'s schema marks
   the `daemon` option deprecated, "no longer used for `turbo run`", and slated for removal in
