@@ -54,6 +54,10 @@ describe('serializeCounts', () => {
       JSON.stringify({ '2026-01': 100 }),
     );
   });
+
+  test('serializes a count of zero rather than treating it as missing', () => {
+    expect(serializeCounts({ '2026-01': 0 }, ['2026-01'])).toBe(JSON.stringify({ '2026-01': 0 }));
+  });
 });
 
 describe('missingMonthCount', () => {
@@ -67,6 +71,10 @@ describe('missingMonthCount', () => {
 
   test('counts every month before any is filled in', () => {
     expect(missingMonthCount({}, ['2026-01', '2026-02', '2026-03'])).toBe(3);
+  });
+
+  test('does not treat a count of zero as missing', () => {
+    expect(missingMonthCount({ '2026-01': 0 }, ['2026-01'])).toBe(0);
   });
 });
 
@@ -82,5 +90,9 @@ describe('groupByYear', () => {
       { year: '2025', months: ['2025-11', '2025-12'] },
       { year: '2026', months: ['2026-01', '2026-02'] },
     ]);
+  });
+
+  test('is no groups for an empty file', () => {
+    expect(groupByYear([])).toEqual([]);
   });
 });

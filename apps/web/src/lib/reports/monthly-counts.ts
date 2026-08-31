@@ -13,8 +13,6 @@ import type { MonthlyCounts, MonthsFromFile } from './metadata.ts';
  */
 export type CountDraft = Record<string, number | undefined>;
 
-// Built once at module scope, like the `Intl` instances in `monthly-coverage.ts` and
-// `packages/email/src/messages/invite.ts`.
 const monthFormat = new Intl.DateTimeFormat('en-US', {
   month: 'long',
   year: 'numeric',

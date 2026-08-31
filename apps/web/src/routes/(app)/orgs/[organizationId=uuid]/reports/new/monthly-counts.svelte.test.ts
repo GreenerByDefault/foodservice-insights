@@ -57,7 +57,7 @@ describe('MonthlyCounts', () => {
     await expect.element(meals.getByText('Meals per month')).toBeInTheDocument();
   });
 
-  test('the progress line counts down as months are filled in', async () => {
+  test('the progress line counts down as the user fills in an input', async () => {
     const counts: CountDraft = $state({ '2026-01': 100 });
     const screen = await render(MonthlyCounts, {
       months: ['2026-01', '2026-02', '2026-03'],
@@ -67,7 +67,8 @@ describe('MonthlyCounts', () => {
 
     await expect.element(screen.getByText('2 of 3 months still need a count')).toBeInTheDocument();
 
-    counts['2026-02'] = 200;
+    await screen.getByRole('spinbutton', { name: 'February 2026' }).fill('200');
     await expect.element(screen.getByText('1 of 3 months still need a count')).toBeInTheDocument();
+    expect(counts['2026-02']).toBe(200);
   });
 });
