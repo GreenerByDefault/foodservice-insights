@@ -120,10 +120,10 @@ jobs:
           TEST_DB: '1'
         run: |
           pnpm db:gen-types
-          if ! git diff --exit-code --quiet packages/db/src/generated packages/db/schema.sql; then
-            echo '::error::packages/db/src/generated or packages/db/schema.sql is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
-            echo '::notice::If you ran that locally and still see a diff, your local Supabase CLI version probably differs from the one pinned in .github/actions/setup-supabase/action.yml. Run `brew upgrade supabase`, then bump the pinned `version:` in that file to match `supabase --version`, and regenerate.'
-            git diff packages/db/src/generated packages/db/schema.sql
+          if ! git diff --exit-code --quiet packages/db/src/generated packages/db/schema.sql packages/db/auth-schema.sql; then
+            echo '::error::packages/db/src/generated, packages/db/schema.sql, or packages/db/auth-schema.sql is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
+            echo '::notice::If you ran that locally and still see a diff, your local Supabase CLI version probably differs from the one pinned in .github/actions/setup-supabase/action.yml. Run `brew upgrade supabase`, then bump the pinned `version:` in that file to match `supabase --version`, and regenerate. auth-schema.sql is especially sensitive to this: its contents come from the GoTrue version the pinned CLI ships, not from our own migrations.'
+            git diff packages/db/src/generated packages/db/schema.sql packages/db/auth-schema.sql
             exit 1
           fi
 
