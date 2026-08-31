@@ -14,6 +14,9 @@
  */
 
 import { execFile } from 'node:child_process';
+import { mkdir, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -48,16 +51,18 @@ const READY_TIMEOUT_MS = 600_000;
 const POLL_INTERVAL_MS = 250;
 
 export async function startBrowserServer(): Promise<void> {
-  // The container is stateless, so reuse one already serving the pinned image rather than racing a
-  // concurrent `screenshots` run to kill and restart it.
-  if ((await isRunningCurrentImage()) && (await isServing())) return;
+  // Cold start (check, maybe stop, run, wait) is serialized so a concurrent run can't tear down
+  // the container this one just created — the loser just finds it already serving and returns.
+  await withStartupLock(async () => {
+    // The container is stateless, so reuse one already serving the pinned image rather than
+    // racing a concurrent `screenshots` run to kill and restart it.
+    if ((await isRunningCurrentImage()) && (await isServing())) return;
 
-  // Otherwise — absent, unhealthy, or serving a stale image tag — reclaim the name and the port
-  // rather than failing on them. This is also the path a run killed mid-flight takes, since that
-  // leaves the container behind despite `--rm`.
-  await stopBrowserServer();
+    // Otherwise — absent, unhealthy, or serving a stale image tag — reclaim the name and the port
+    // rather than failing on them. This is also the path a run killed mid-flight takes, since that
+    // leaves the container behind despite `--rm`.
+    await stopBrowserServer();
 
-  try {
     await run('docker', [
       'run',
       '--detach',
@@ -81,15 +86,53 @@ export async function startBrowserServer(): Promise<void> {
       `npx -y playwright-core@${IMAGE_PLAYWRIGHT_VERSION} run-server ` +
         `--port ${SERVER_PORT} --host 0.0.0.0`,
     ]);
-  } catch (cause) {
-    // The check above and this `run` aren't atomic, so two runs can both see the container gone
-    // and race here; the loser's `docker run` fails on the name the winner just claimed. Treat
-    // that as a signal to wait on the winner's container, not as a real failure.
-    const stderr = cause instanceof Error && 'stderr' in cause ? String(cause.stderr) : '';
-    if (!stderr.includes('is already in use')) throw cause;
+
+    await waitUntilServing();
+  });
+}
+
+/** Cross-process mutex for the cold-start critical section, backed by `mkdir`'s atomicity
+ * (POSIX guarantees only one caller sees success on a shared path). Files, not sockets or
+ * locks scoped to one Node process, because concurrent `screenshots` runs are separate
+ * processes.
+ */
+const LOCK_DIR = join(tmpdir(), `${CONTAINER_NAME}.lock`);
+const LOCK_POLL_INTERVAL_MS = 250;
+// A cold pull is the slowest thing that can happen inside the lock, so give a waiting run at
+// least that long before giving up.
+const LOCK_TIMEOUT_MS = READY_TIMEOUT_MS;
+// Longer than the timeout above: past this age, the lock is assumed abandoned by a killed
+// process rather than held by a slow one.
+const LOCK_STALE_MS = LOCK_TIMEOUT_MS + 60_000;
+
+async function withStartupLock<T>(fn: () => Promise<T>): Promise<T> {
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+
+  for (;;) {
+    try {
+      await mkdir(LOCK_DIR);
+      break;
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') throw cause;
+
+      const lockStat = await stat(LOCK_DIR).catch(() => undefined);
+      if (lockStat === undefined) continue; // gone already; retry the mkdir
+      if (Date.now() - lockStat.mtimeMs > LOCK_STALE_MS) {
+        await rm(LOCK_DIR, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for the browser container startup lock at ${LOCK_DIR}.`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_INTERVAL_MS));
+    }
   }
 
-  await waitUntilServing();
+  try {
+    return await fn();
+  } finally {
+    await rm(LOCK_DIR, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export async function stopBrowserServer(): Promise<void> {
