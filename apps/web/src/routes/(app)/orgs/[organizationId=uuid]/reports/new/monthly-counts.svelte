@@ -1,6 +1,5 @@
 <script lang="ts">
 import type { CountsBasis } from '@gbd/db';
-import { Button } from '$lib/components/ui/button/index.js';
 import * as Field from '$lib/components/ui/field/index.js';
 import { Input } from '$lib/components/ui/input/index.js';
 import type { MonthsFromFile } from '$lib/reports/metadata';
@@ -21,39 +20,17 @@ let {
   counts: CountDraft;
 } = $props();
 
-let applyToAllValue: number | undefined = $state(undefined);
-
 const legend = $derived(basis === 'people' ? 'Diners per month' : 'Meals per month');
 const groups = $derived(groupByYear(months));
 const showYearHeadings = $derived(groups.length > 1);
 const missing = $derived(missingMonthCount(counts, months));
 // `MAX_MONTHS` is 120, so a single column still has to be usable for a decade of history.
 const gridClass = $derived(months.length <= 6 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2');
-
-function applyToAll() {
-  if (applyToAllValue === undefined) return;
-  for (const month of months) counts[month] = applyToAllValue;
-}
 </script>
 
 <Field.Set>
   <Field.Legend>{legend}</Field.Legend>
   <Field.Description>{missing} of {months.length} months still need a count</Field.Description>
-
-  <Field.Group class="flex-row items-end gap-2">
-    <Field.Field>
-      <Field.Label for="monthly-counts-apply-value">Use the same count for every month</Field.Label>
-      <Input
-        id="monthly-counts-apply-value"
-        type="number"
-        min="0"
-        step="1"
-        inputmode="numeric"
-        bind:value={applyToAllValue}
-      />
-    </Field.Field>
-    <Button type="button" variant="outline" onclick={applyToAll}>Apply</Button>
-  </Field.Group>
 
   {#each groups as group (group.year)}
     {#if showYearHeadings}

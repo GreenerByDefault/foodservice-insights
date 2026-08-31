@@ -439,15 +439,15 @@ approved in the abstract ahead of the code.
 - A row per month: label from `formatMonth`, then
   `<input type="number" min="0" step="1" inputmode="numeric" required bind:value={counts[month]}>`.
   One column up to six months, `sm:grid-cols-2` beyond, with a year subheading when the span crosses
-  years. `MAX_MONTHS` is 120, so the grid and the shortcut below both have to survive a decade.
-- **"Use the same count for every month"** — one input plus Apply, writing into every month. The main
-  time-saver past a year of data.
+  years. `MAX_MONTHS` is 120, so the grid has to survive a decade.
 - No empty state: `months` is only ever non-empty, and the form renders the "no file yet"
   placeholder itself.
+- No shortcut for filling every month with the same count: the client didn't ask for it, and
+  copy-paste already covers it. Revisit only if GBD asks.
 
 **Tests** — `monthly-counts.test.ts` (node) for the pure functions;
-`monthly-counts.svelte.test.ts` for a labelled row per month, Apply filling every row, the legend
-following the basis, the progress line counting down, and inputs being `required`.
+`monthly-counts.svelte.test.ts` for a labelled row per month, the legend following the basis, the
+progress line counting down, and inputs being `required`.
 
 **README** — `## UI components`: a route-local component lives beside its route and is promoted to
 `src/lib/components/<feature>/` only when a second route needs it; `ui/` stays purely vendored.
@@ -634,8 +634,8 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
      down the left edge. Narrow the window to 375px and confirm nothing scrolls sideways.
    - Upload a CSV whose dates are written both ways: the date-order block above the list.
    - **Back to the form** and confirm the report name and any month counts are still there.
-   - Upload a good CSV spanning two years: a labelled input per month under year subheadings, the
-     progress line counting down, and Apply filling every month. Submit and land on the report page.
+   - Upload a good CSV spanning two years: a labelled input per month under year subheadings and the
+     progress line counting down. Submit and land on the report page.
    - **Measure the block:** upload a CSV near 10MB and note how long the UI is unresponsive during
      "Checking your file…". Report the number — it decides whether the Web Worker follow-up is needed.
    - Rate limiting is exercised by `upload.test.ts` and `upload-form.svelte.test.ts`, not by hand —
