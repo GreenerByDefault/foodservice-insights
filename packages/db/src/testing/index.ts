@@ -31,6 +31,7 @@ export {
 export { setup } from './global-setup.ts';
 export type { RunDatabase } from './run-database.ts';
 export {
+  cleanAllTestDatabases,
   createRunDatabase,
   dropRunDatabase,
   ensureTemplateDatabase,

@@ -89,6 +89,10 @@
     "gen-types": {
       "dependsOn": ["^build"],
       "cache": false
+    },
+    "db:clean": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   }
 }

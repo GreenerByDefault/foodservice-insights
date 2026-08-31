@@ -380,3 +380,27 @@ function isStaleBuild(name: string): boolean {
   if (Number.isNaN(createdAt)) return false;
   return Date.now() - createdAt > BUILD_STALE_AFTER_MS;
 }
+
+/** Drop every `fsi_test_%` database — every run database, however old, and every template —
+ * and report which ones it dropped. For `pnpm test:db:clean`, the manual escape hatch: unlike
+ * `sweepStaleRunDatabases`, this is a deliberate, unconditional nuke, so it drops `WITH (FORCE)`
+ * rather than checking `pg_stat_activity` first, and it reaches templates too, which the sweep
+ * never touches since another worktree's branch may be the only thing still using one.
+ */
+export async function cleanAllTestDatabases(connectionString: string): Promise<string[]> {
+  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
+  await maintenance.connect();
+  let names: string[];
+  try {
+    const { rows } = await maintenance.query<{ datname: string }>(
+      `SELECT datname FROM pg_database WHERE datname LIKE 'fsi_test\\_%' ESCAPE '\\'`,
+    );
+    names = rows.map(({ datname }) => datname);
+    for (const name of names) {
+      await maintenance.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    }
+  } finally {
+    await maintenance.end();
+  }
+  return names;
+}

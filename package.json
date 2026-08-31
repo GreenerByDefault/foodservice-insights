@@ -23,7 +23,8 @@
     "seed:identity": "turbo run seed:identity",
     "seed:reports": "turbo run seed:reports",
     "truncate": "turbo run truncate",
-    "db:gen-types": "turbo run gen-types"
+    "db:gen-types": "turbo run gen-types",
+    "test:db:clean": "turbo run db:clean"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
