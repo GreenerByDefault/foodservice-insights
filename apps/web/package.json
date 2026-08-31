@@ -14,8 +14,9 @@
     "test:unit": "svelte-kit sync && TEST_DB=1 vitest run",
     "test:e2e": "TEST_DB=1 playwright test --project=e2e",
     "test:screenshots": "TEST_DB=1 playwright test --project=screenshots",
+    "test:playwright": "TEST_DB=1 playwright test --project=e2e --project=screenshots",
     "screenshots:update": "TEST_DB=1 playwright test --project=screenshots --update-snapshots",
-    "test": "pnpm run test:unit && pnpm run test:e2e && pnpm run test:screenshots"
+    "test": "pnpm run test:unit && pnpm run test:playwright"
   },
   "dependencies": {
     "@gbd/core": "workspace:*",

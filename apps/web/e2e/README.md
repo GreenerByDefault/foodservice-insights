@@ -9,6 +9,9 @@ Two suites share this directory, separated by suffix and by Playwright project:
 
 See [`../playwright.config.ts`](../playwright.config.ts).
 
+`pnpm test:playwright` (what `pnpm test` runs) runs both in one app boot. To scope to just one
+suite, `pnpm test:e2e` or `pnpm test:screenshots`.
+
 ## Layout
 
 The suffix decides which runner and browser a file gets, so directories are free to carry the

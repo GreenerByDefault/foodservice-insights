@@ -24,7 +24,10 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
   // Installed before navigation so it is in place before the retry re-arms the page's timer.
   await page.clock.install();
 
-  const reportId = await reports.create('failed');
+  // Not 'failed': that fixture pins a fixed creator email for reports.screenshot.ts's committed
+  // screenshot, which collides with a concurrent run of this test. See layout.e2e.ts's identical
+  // trade-off. 'failed-retried' still has attempts to spare, so retry behaves the same either way.
+  const reportId = await reports.create('failed-retried');
   await page.goto(reportUrl(reportId));
   await ensureHydrated(page);
 

@@ -61,6 +61,10 @@
       "dependsOn": ["build"],
       "outputs": ["playwright-report/**", "test-results/**"]
     },
+    "test:playwright": {
+      "dependsOn": ["build"],
+      "outputs": ["playwright-report/**", "test-results/**"]
+    },
     "screenshots:update": {
       "dependsOn": ["build"],
       "cache": false,

@@ -131,9 +131,10 @@ Turborepo.
 | `pnpm lint` | Biome: formatting, lint rules, and import sorting |
 | `pnpm fmt` | Biome, applying fixes |
 | `pnpm test:unit` | Unit and component tests (vitest) |
-| `pnpm test:e2e` | End-to-end tests (Playwright) |
-| `pnpm test:screenshots` | Pixel snapshots, needs Docker (Playwright) |
-| `pnpm test` | Every test suite |
+| `pnpm test:e2e` | End-to-end tests only (Playwright) |
+| `pnpm test:screenshots` | Pixel snapshots only, needs Docker (Playwright) |
+| `pnpm test:playwright` | `test:e2e` and `test:screenshots` together, one app boot |
+| `pnpm test` | Everything: `test:unit`, then `test:playwright` |
 | `pnpm build` | Production build of every package |
 
 To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web dev`. However, not all packages implement every command.
