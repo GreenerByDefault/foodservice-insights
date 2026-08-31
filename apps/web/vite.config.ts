@@ -54,6 +54,10 @@ export default defineConfig(({ command }) => ({
         extends: './vite.config.ts',
         test: {
           name: 'client',
+          // This tier's wall clock says little about the tests: startup is ~1.5s and the tests
+          // ~10s, but `chrome-headless-shell` then takes 1.5s to Playwright's 30s force-kill cap
+          // to exit, which is the whole of the variance. A bare launch-then-close, no page ever
+          // loaded, reproduces it, so little here — file count, `isolate`, flags — moves it.
           browser: {
             enabled: true,
             provider: playwright({ actionTimeout: 5_000 }),

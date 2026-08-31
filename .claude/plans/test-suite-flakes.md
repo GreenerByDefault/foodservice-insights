@@ -5,7 +5,7 @@
 `pnpm test` intermittently fails on specs that pass on an immediate rerun. `playwright.config.ts`
 sets `retries: 0`, and AGENTS.md § Verifying a change makes the full suite the gate before anyone
 can say a change works — so one flake costs a full re-run of a ~97s suite, and worse, it trains
-whoever hit it to re-run rather than read. Two sightings so far, on different branches in
+whoever hit it to re-run rather than read. The sightings below, on different branches in
 different sessions, agree on enough to be worth chasing.
 
 ### Sighting 1 — `main` @ 7e299ac, clean tree
@@ -37,9 +37,45 @@ is what rules the code change out as the cause.
 - `cancel.e2e.ts` alone, three consecutive runs: passed at **34.7s, 12.7s, 19.8s**.
 - **Run C** (`pnpm test`): fully green — 690 unit, 25 e2e, 16 screenshots.
 
-### What the two sightings say together
+### Sighting 3 — `fix-component-cleanup` @ b100563, 2026-08-30
 
-1. **`cancel.e2e.ts:14` and `retry.e2e.ts` appear in both.** The report-page action specs — the
+Three failures on an otherwise-idle machine, all in the `client` project, all while *timing* that
+tier rather than changing it. **Two consecutive `pnpm test` runs failed**, which makes this the
+first sighting dense enough to chase without a harness.
+
+- Roughly 25 consecutive `client`-only runs produced one failure, of 1 file in 11. The file's
+  name was not captured.
+- `pnpm test`: `failure-view.svelte.test.ts:138` — *while the request is in flight, the retry
+  button is disabled*.
+- The very next `pnpm test`: `waiting/cancel-button.svelte.test.ts:20` — *opens a confirming
+  dialog, and "Keep it running" closes it without calling the endpoint*. Sighting 2's file again.
+
+Both named failures are `Error: Test timed out in 15000ms`, reported against the `test(` line
+with **no assertion error** — an `await` that never settled, not a wrong value. The other four
+tests in the cancel-button file passed in 100-254ms each, in the same run.
+
+**The clock is the tell.** That cancel-button test is reported at **42,700ms — nearly 3× its own
+15,000ms timeout** (and its file at 43,388ms). A test cannot overrun its timeout by 28 seconds
+while the timer is running. The tester page was *stalled*, not slow, and the timeout only fired
+once it came back. Sighting 2's 103,325ms file is the same shape, larger.
+
+**It needs the rest of the workspace running.** Narrowing by how much else runs alongside:
+
+| What was run | Concurrency | Failures |
+| --- | --- | --- |
+| `vitest run --project=client` alone | 11 browser files | 0 of 6 |
+| `vitest run` in `apps/web` (both projects) | + 52 node files | 0 of 3 |
+| `pnpm test` (`turbo run test:unit`) | + 5 other packages' suites | **3 of 3** |
+
+Only the last one fails, and it fails every time — so the trigger is load *outside* `apps/web`,
+not anything the browser tier does to itself. That also explains why every isolated rerun in
+sightings 1 and 2 passed. Lead 0 is the mechanism this points at; the missing step is whether
+starving the browser of CPU is enough to stall it for 28 seconds, or whether the contention is
+for something more specific.
+
+### What the sightings say together
+
+1. **`cancel.e2e.ts:14` and `retry.e2e.ts` appear in both e2e sightings.** The report-page action specs — the
    ones that click through a dialog, POST, and wait for the page to converge — are the highest-signal
    place to start.
 2. **This is not e2e-only.** `cancel-button.svelte.test.ts` is a Chromium component test with no
@@ -47,11 +83,27 @@ is what rules the code change out as the cause.
    does not cover sighting 2, and a fix validated only against e2e will look like it worked.
 3. **The timing variance is itself the symptom.** 12.7s–34.7s for the same isolated spec file, 103s
    for a unit file that normally takes seconds, 1m6s against 41.3s for the same e2e suite. Something
-   is waiting, not computing.
+   is waiting, not computing — and sighting 3 shows a test overrunning its own timeout by 28
+   seconds, which narrows "waiting" to *stalled*. See lead 0.
 4. **Every failure is "the element never appeared", never a wrong value.** Consistent with a lost or
    delayed update, not with broken assertion logic.
 
 ### Leads, strongest first
+
+0. **Chromium itself stalls on this machine, for tens of seconds at a time.** Measured
+   independently while timing the `client` tier: `chrome-headless-shell` takes anywhere from 1.5s
+   to Playwright's 30s force-kill cap to exit after `Browser.close`, with every thread idle in
+   `mach_msg` — and a bare `chromium.launch()` then `close()`, no page ever loaded, reproduces the
+   same distribution. That exit wait cannot itself explain any of the failures, because it happens
+   after the results are printed. What makes it a lead is that it is the *same signature* in the
+   same binary: seconds-long idle stalls, no work being done. If one cause produces both, every
+   symptom here follows — the timeouts, the 100s test file, the e2e "element never appeared", the
+   variance — and no amount of test-side isolation will touch it. Cheap first checks: does the
+   rate change on a different Chromium version, or on CI's Linux runners? A flake that is
+   local-macOS-only is a very different problem from one that ships.
+   *Rejected as a fix: nothing in the tests' control moves it — `browser.isolate`, file count,
+   `--disable-gpu`, `--no-zygote`, `--in-process-gpu` and the full `chromium` channel were all
+   measured and none changed the distribution.*
 
 1. **The shared test Supabase stack, with nothing making one tier quiesce before the next.**
    `apps/web/e2e/setup/database.setup.ts` clears fixture reports as a barrier before either
@@ -75,8 +127,11 @@ is what rules the code change out as the cause.
 ### Reproduce before fixing
 
 A fix aimed at the wrong cause is indistinguishable from the flake going quiet on its own, and
-both sightings went green on the very next run. So nothing here gets fixed until it can be made to
-fail on demand.
+sightings 1 and 2 went green on the very next run. So nothing here gets fixed until it can be
+made to fail on demand.
+
+Sighting 3 may have removed the need for a harness to get there: two consecutive `pnpm test` runs
+failed, which is a rate you can watch directly. Check whether that still holds before building one.
 
 - For the cross-tier theory: `pnpm test:unit && pnpm test:e2e` in a loop.
 - For the unit-tier flake: the `client` project alone in a loop, which sighting 2 shows is enough
@@ -129,7 +184,7 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 
 1. From the repo root: `pnpm lint && pnpm check && pnpm test`.
 2. Run the PR 1 harness enough times to state a failure rate with a straight face, before and after
-   whatever PR 2 changes. A single green `pnpm test` is not evidence — both sightings were followed
-   by one.
+   whatever PR 2 changes. A single green `pnpm test` is not evidence — every sighting so far was
+   followed by one.
 3. Say plainly if the flake could not be reproduced. "Could not reproduce" is a real and useful
    result here; a silent fix is not.
