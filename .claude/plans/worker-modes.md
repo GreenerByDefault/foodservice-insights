@@ -147,9 +147,10 @@ and both tests share it.
 
 ## PR order
 
-One PR left. `REPORT_RATE_LIMIT=off` and the stubbed Python child (`worker_child/testing.py`,
+Two PRs left. `REPORT_RATE_LIMIT=off` and the stubbed Python child (`worker_child/testing.py`,
 `build_analyze`, the scenario catalogue) have both landed. PR 1 below is the mode switch that
-wires the stubbed child into `pnpm dev`; PR 2 needs PR 1.
+wires the stubbed child into `pnpm dev`; PR 2 and PR 3 both need PR 1, and PR 3 also wants PR 2
+landed first (see PR 3's note on why).
 
 ## PR 1 — the mode switch, and `pnpm dev` runs the worker
 
@@ -177,7 +178,35 @@ doesn't reach quickly is `processing-delayed`, the 15-minute overrun copy — it
 `!slow:1000` and a wait. It keeps its component test and its committed screenshot, and a row can
 still be hand-edited in Supabase Studio at <http://localhost:55323>.
 
-## PR 2 — `tests/e2e` becomes `@gbd/e2e`
+## PR 2 — the web app polls faster too, driven by `WORKER_MODE`
+
+The report page polls at a flat `BASE_POLL_INTERVAL_MS` (10s) no matter the mode — even `stubbed`,
+where nothing is real and there's no contention to be gentle about, sits on the same 10s ticks
+production would. That makes walking the scenario catalogue by eye (PR 1's verification step)
+slower than it needs to be. It's orthogonal to system-e2e speed: PR 3's tests drive `page.clock`
+directly through `advancePoll`/`advanceThroughPollFailures`, so the real interval's value never
+touches their wall-clock time either way. This PR is purely for the human watching the screen.
+
+`schedule.ts`'s `BASE_POLL_INTERVAL_MS` is a browser-side module constant, imported straight into
+`report-view.svelte` — and browser code can't read `$env/dynamic/private` itself. So the value has
+to be resolved server-side and threaded down, the same shape `REPORT_RATE_LIMIT=off` already uses:
+`+page.server.ts` reads `WORKER_MODE` (inside the load function, not module scope — same reasoning
+as `checkReportRateLimit`), adds a `pollIntervalMs` field to `ReportPageData`, and `nextPollDelayMs`
+takes it as a parameter instead of importing a constant. `stubbed` gets a fast interval (in the
+neighborhood of the worker's own `stubbed` profile, e.g. 1s); `mock-llm`, `live`, and `off` keep the
+current 10s — `mock-llm` is meant to feel like production, cadence included, so it doesn't get the
+fast profile `stubbed` does, matching `apps/worker/src/modes.ts`'s own reasoning for
+`STUBBED_OVERRIDES`.
+
+Touches `polling/schedule.ts`, `polling/schedule.test.ts`, `+page.server.ts`, `report-view.svelte`,
+and `report-view.svelte.test.ts`. `apps/web/e2e/lib/poll-interval.ts` changes from a static
+re-export of `BASE_POLL_INTERVAL_MS` to something that resolves the interval the same way the
+server does, since it's no longer a plain constant — this is why PR 3 wants this PR landed first,
+so `tests/e2e`'s own hardcoded poll constant (see § Playwright helpers live in
+`@gbd/browser-testing`) is written against the real fast value from the start instead of being
+retrofitted.
+
+## PR 3 — `tests/e2e` becomes `@gbd/e2e`
 
 CI is already waiting: `.github/workflows/ci.yml`'s `system-e2e` job runs `turbo run test:system`,
 gated on `tests/e2e/package.json` existing, and `.github/filters.yml` already has a `system` filter.
@@ -233,7 +262,11 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
   reaches `failed-retried`; the result email appears at <http://localhost:55324>. Check the waiting
   and result screens at 390px. Confirm `WORKER_MODE=mock-llm` refuses to start with a message saying
   why, and that an unset `WORKER_MODE` fails loudly.
-- **PR 2** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
+- **PR 2** — `pnpm dev` with `WORKER_MODE=stubbed`, watch the report page poll noticeably faster
+  than 10s; confirm `WORKER_MODE=mock-llm`/`live`/`off` still poll at the old cadence. Confirm
+  `schedule.test.ts` and `report-view.svelte.test.ts` pass with the interval now a parameter, not
+  an import.
+- **PR 3** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
   that spawns a worker and shares Mailpit is free of races. Check `uptime` first so a loaded machine
   is not misread as a flake.
 
@@ -245,11 +278,13 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 | `apps/worker/src/main.ts` | read `WORKER_MODE`, drop the inline `childCommand` |
 | `apps/worker/package.json` | `dev` runs the worker |
 | `.env.example`, `.env.test`, `turbo.json` | `WORKER_MODE`; fix `PYTHON_BIN` |
+| report route's `polling/schedule.ts`, `+page.server.ts`, `report-view.svelte` | poll interval driven by `WORKER_MODE` |
+| `apps/web/e2e/lib/poll-interval.ts` | resolves the interval instead of re-exporting a constant |
 | `tests/e2e/` | **new package** — `package.json`, `playwright.config.ts`, `scripts/test-run.ts`, two specs, README |
 | `turbo.json`, root `package.json` | `test:system` task and script |
 | `apps/worker/README.md`, root `README.md` | modes, scenarios, running it locally |
 
 Unchanged by design: `apps/worker/src/testing/fake-child.ts`, `python/worker_child/tests/support/child.py`,
 `worker_child/run.py`, `worker_child/__main__.py`, `contract/`, `apps/web/e2e/fixtures/reports.ts`,
-`apps/web/src/lib/reports/limits.ts`, and every route in `apps/web`. Already landed:
+`apps/web/src/lib/reports/limits.ts`, and every other route in `apps/web`. Already landed:
 `python/worker_child/src/worker_child/testing.py` and its `pyproject.toml` `per-file-ignores` entry.

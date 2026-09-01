@@ -151,6 +151,9 @@ macOS.
 scenarios like `!slow` and `!fail:<reason>` by report name. `REPORT_RATE_LIMIT=off` in `.env`
 bypasses the report limits, which walking the scenarios by hand hits fast.
 
+[`apps/web/sample-reports/`](apps/web/sample-reports/) has CSVs to upload by hand — one that's
+accepted, a few rejected for different reasons.
+
 ### Testing
 
 | Tier | Location | Runner | Naming |
