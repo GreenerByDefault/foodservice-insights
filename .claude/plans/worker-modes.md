@@ -80,6 +80,21 @@ unaffected. An absent variable means the limits apply, so it cannot leak to prod
 `apps/web/src/lib/reports/limits.ts` stays untouched — the browser imports it and its header forbids
 `$env`.
 
+### Playwright helpers live in `@gbd/browser-testing`
+
+`packages/browser-testing/` carries the Playwright helpers both e2e suites need: `advancePoll`
+and `advanceThroughPollFailures` drive a page's poll loop through Playwright's fake clock instead
+of waiting out real intervals, and `ensureHydrated` waits for Svelte's client runtime before a
+test interacts with the page. `apps/web` takes it as a `devDependency` (test-only, so not a
+`dependency`) and its e2e specs import all three directly.
+
+The one thing that stays local to each suite is the poll interval itself — a UI polling cadence
+doesn't belong in a shared package. `apps/web/e2e/lib/poll-interval.ts` re-exports
+`BASE_POLL_INTERVAL_MS` from a deep `apps/web` route path; `tests/e2e` cannot reach across the
+package boundary to reuse that re-export, so it keeps its own local constant, with a comment that
+it must exceed the app's poll interval. The drift risk is one number that only ever makes a test
+slower.
+
 ### No new TypeScript child
 
 `apps/worker/src/testing/fake-child.ts` stays exactly as it is — test-only, argv-driven, excluded
@@ -132,12 +147,11 @@ and both tests share it.
 
 ## PR order
 
-Four PRs left. `REPORT_RATE_LIMIT=off` has landed — the guard described above, plus
+Two PRs left. `REPORT_RATE_LIMIT=off` has landed — the guard described above, plus
 `REPORT_RATE_LIMIT` in `.env.example` and `turbo.json`'s `globalPassThroughEnv`, and a unit test for
 both branches of `checkReportRateLimit`.
 
-The first two below are independent of each other and can land in any order; PR 3 needs PR 1, PR 4
-needs PR 2 and PR 3.
+PR 1 needs nothing here; PR 2 needs PR 1.
 
 ## PR 1 — the stubbed child (Python only)
 
@@ -155,28 +169,7 @@ Tests in `python/worker_child/tests/`: the grammar parses (including `:argument`
 failure), and each scenario produces the outcome it claims. Nothing in TypeScript consumes this yet,
 so it lands and is verified entirely with `just`.
 
-## PR 2 — extract `@gbd/browser-testing`
-
-Prefactor, so PR 4 has something to import. New `packages/browser-testing/`, seeded with the
-Playwright helpers both suites need: `advancePoll` and `advanceThroughPollFailures` from
-`apps/web/e2e/lib/fake-poll.ts`, and `ensureHydrated` from `apps/web/e2e/lib/hydration.ts`.
-`apps/web` takes it as a `devDependency` (test-only, so not a `dependency`), and
-`apps/web/e2e/lib/fake-poll.ts` shrinks to re-exports so no existing spec changes.
-
-The **mechanics** move; the **interval** does not. `fake-poll.ts` re-exports
-`BASE_POLL_INTERVAL_MS` from a deep `apps/web` route path, which `tests/e2e` cannot import across the
-package boundary. So each suite keeps its own constant: `apps/web` its re-export, `tests/e2e` a local
-value with a comment that it must exceed the app's poll interval. A UI polling cadence does not
-belong in `@gbd/core`, and the drift risk is one number that only ever makes a test slower.
-
-Leave `no-reload.ts`, `layout.ts`, and `viewports.ts` in `apps/web/e2e/lib/` — move them if the
-system suite turns out to want them, not speculatively.
-
-Coordinate with `.claude/plans/organization-reports-list.md` PR 4, which moves
-`polling/schedule.ts` into `apps/web/src/lib/polling/` — that changes the path `fake-poll.ts`
-re-exports from.
-
-## PR 3 — the mode switch, and `pnpm dev` runs the worker
+## PR 2 — the mode switch, and `pnpm dev` runs the worker
 
 New `apps/worker/src/modes.ts` — `resolveWorkerMode(env)` returning `{ childCommand, overrides }`,
 plus a `modes.test.ts` decision table in the style of `config.test.ts` (no database, no child, no
@@ -202,11 +195,14 @@ doesn't reach quickly is `processing-delayed`, the 15-minute overrun copy — it
 `!slow:1000` and a wait. It keeps its component test and its committed screenshot, and a row can
 still be hand-edited in Supabase Studio at <http://localhost:55323>.
 
-## PR 4 — `tests/e2e` becomes `@gbd/e2e`
+## PR 3 — `tests/e2e` becomes `@gbd/e2e`
 
 CI is already waiting: `.github/workflows/ci.yml`'s `system-e2e` job runs `turbo run test:system`,
 gated on `tests/e2e/package.json` existing, and `.github/filters.yml` already has a `system` filter.
 Missing: the package, the turbo task, a root script, a Playwright config, and a run script.
+
+Leave `no-reload.ts`, `layout.ts`, and `viewports.ts` in `apps/web/e2e/lib/` — move them only if this
+suite turns out to want them, not speculatively.
 
 `tests/e2e/scripts/test-run.ts` mirrors `apps/web/scripts/test-run.ts` and reuses the same machinery
 — `ensureTemplateDatabase`/`createRunDatabase`/`dropRunDatabase` from
@@ -219,8 +215,8 @@ and bucket already live.
 
 **These tests must be fast.** Both use `page.clock` through `@gbd/browser-testing` rather than
 waiting out real 10-second polls; `page.clock.install()` goes in the spec before `page.goto()`, as
-`fake-poll.ts`'s header explains. The scenarios are chosen to finish immediately: the happy path is
-a plain report name, not `!slow`.
+`advancePoll`'s doc comment explains. The scenarios are chosen to finish immediately: the happy path
+is a plain report name, not `!slow`.
 
 Two tests:
 
@@ -250,15 +246,13 @@ Per PR, from the repo root. The gate is `pnpm lint && pnpm check && pnpm test` f
 TypeScript and `just lint && just check && just test` for anything Python, on top of what follows.
 
 - **PR 1** — `just` only; nothing consumes it yet.
-- **PR 2** — `pnpm test:playwright`. A pure move, so the existing specs passing unchanged is the
-  proof.
-- **PR 3** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
+- **PR 2** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
   holds on the waiting screen and can be canceled; `!hang` is killed as `hung` within ~30s;
   `!fail:unusable-data` and `!missing-pdf` land on the right failure copy; Retry on a failed report
   reaches `failed-retried`; the result email appears at <http://localhost:55324>. Check the waiting
   and result screens at 390px. Confirm `WORKER_MODE=mock-llm` refuses to start with a message saying
   why, and that an unset `WORKER_MODE` fails loudly.
-- **PR 4** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
+- **PR 3** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
   that spawns a worker and shares Mailpit is free of races. Check `uptime` first so a loaded machine
   is not misread as a flake.
 
@@ -268,8 +262,6 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 | --- | --- |
 | `python/worker_child/src/worker_child/testing.py` | **new** — scenario catalogue, `build_analyze`, `main` |
 | `pyproject.toml` | `per-file-ignores` for `**/testing.py` |
-| `packages/browser-testing/` | **new** — `advancePoll`, `advanceThroughPollFailures`, `ensureHydrated` |
-| `apps/web/e2e/lib/fake-poll.ts`, `hydration.ts` | shrink to re-exports |
 | `apps/worker/src/modes.ts`, `modes.test.ts` | **new** — `resolveWorkerMode(env)` |
 | `apps/worker/src/main.ts` | read `WORKER_MODE`, drop the inline `childCommand` |
 | `apps/worker/package.json` | `dev` runs the worker |
