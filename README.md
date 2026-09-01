@@ -127,7 +127,7 @@ Turborepo.
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Dev server at <http://localhost:5173>, plus a `tsc --watch` per package |
+| `pnpm dev` | Dev server at <http://localhost:5173>, a `tsc --watch` per package, and the worker — see [Running the worker locally](#running-the-worker-locally) |
 | `pnpm check` | `svelte-check` on the web app, `tsc --noEmit` on packages |
 | `pnpm lint` | Biome: formatting, lint rules, and import sorting |
 | `pnpm fmt` | Biome, applying fixes |
@@ -143,6 +143,16 @@ To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web de
 To run the production build, use `pnpm --filter @gbd/web start`, then go to
 <http://localhost:3000> — not the `0.0.0.0:3000` the server logs, which is unreachable on
 macOS.
+
+### Running the worker locally
+
+`pnpm dev` also starts the worker, so an uploaded report moves through the whole lifecycle. See
+[`apps/worker/README.md`](apps/worker/README.md#worker_mode) for `WORKER_MODE` and driving
+scenarios like `!slow` and `!fail:<reason>` by report name. `REPORT_RATE_LIMIT=off` in `.env`
+bypasses the report limits, which walking the scenarios by hand hits fast.
+
+[`apps/web/sample-reports/`](apps/web/sample-reports/) has CSVs to upload by hand — one that's
+accepted, a few rejected for different reasons.
 
 ### Testing
 

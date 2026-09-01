@@ -59,19 +59,22 @@ export type PreparedAttempt = {
  * apart.
  */
 export class MissingInputFileError extends Error {
-  constructor(readonly storageKey: string) {
+  readonly storageKey: string;
+
+  constructor(storageKey: string) {
     super(`input file missing at ${storageKey}`);
     this.name = 'MissingInputFileError';
+    this.storageKey = storageKey;
   }
 }
 
 export class CorruptInputFileError extends Error {
-  constructor(
-    readonly storageKey: string,
-    problem: string,
-  ) {
+  readonly storageKey: string;
+
+  constructor(storageKey: string, problem: string) {
     super(`input file at ${storageKey} is not what was uploaded: ${problem}`);
     this.name = 'CorruptInputFileError';
+    this.storageKey = storageKey;
   }
 }
 

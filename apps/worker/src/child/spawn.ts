@@ -81,7 +81,13 @@ export function spawnChild(
   const exited = new Promise<ChildOutcome>((resolve) => {
     // Reached when the program does not exist or cannot be executed; a child that started and then
     // failed reports that through its exit status instead.
-    child.once('error', (error) => resolve({ kind: 'spawn-failed', error }));
+    child.once('error', (error) => {
+      console.error('worker: failed to spawn child process', {
+        executable: command.executable,
+        error,
+      });
+      resolve({ kind: 'spawn-failed', error });
+    });
 
     child.once('exit', async (exitCode, signal) => {
       await Promise.race([stderrEnded, delay(STDERR_FLUSH_MS)]);

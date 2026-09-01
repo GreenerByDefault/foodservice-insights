@@ -2,23 +2,25 @@
 
 ## Context
 
-`pnpm dev` starts the web app and five `tsc --watch` processes. **Nothing starts the worker.** So a
-report uploaded in dev sits `pending` forever: you can exercise the upload form and the rejection
-view by hand, but never the waiting screen's transitions, the result screen arriving, a failure
-arriving, Cancel racing a live child, or the result email. Those states are reachable today only by
-writing rows directly with a Playwright fixture inside a test. Tests are not a substitute for a
-human watching the thing behave, especially for how it looks mid-transition and on a small screen.
+`pnpm dev` used to start only the web app and five `tsc --watch` processes, so a report uploaded in
+dev sat `pending` forever: the upload form and the rejection view were reachable by hand, but never
+the waiting screen's transitions, the result screen arriving, a failure arriving, Cancel racing a
+live child, or the result email — those states were reachable only by writing rows directly with a
+Playwright fixture inside a test. Tests are not a substitute for a human watching the thing behave,
+especially for how it looks mid-transition and on a small screen.
 
-The blocker was assumed to be the Python port. It isn't. `python/worker_child` is **complete and
+The blocker was assumed to be the Python port. It wasn't. `python/worker_child` is **complete and
 working**; only `gbd_foodservice_insights.analyze()` raises `NotImplementedError`. And
-`worker_child.run.run()` already takes an injectable `analyze`, while
-`gbd_foodservice_insights.testing.stub_analysis` already ships an `analyze` that writes real
-PDF/xlsx magic bytes and raises each failure type on demand. The whole lifecycle is one entrypoint
-and one env var away.
+`worker_child.run.run()` already took an injectable `analyze`, while
+`gbd_foodservice_insights.testing.stub_analysis` already shipped an `analyze` that writes real
+PDF/xlsx magic bytes and raises each failure type on demand. The whole lifecycle was one entrypoint
+and one env var away — and now `WORKER_MODE` in `.env` picks how the analysis is faked, `pnpm dev`
+runs a worker in that mode, and a dev drives scenarios by naming the report `!hang`, `!slow:90`,
+`!fail:unusable-data`, and so on (see § The scenario travels in the report name).
 
-**Outcome:** `WORKER_MODE` in `.env` picks how the analysis is faked; `pnpm dev` runs a worker in
-that mode; a dev drives scenarios by naming the report `!hang`, `!slow:90`, `!fail:unusable-data`;
-and `tests/e2e` becomes a real suite instead of a README.
+**Left to do:** the report page polls at production's cadence even in `stubbed` mode, which slows
+down watching a scenario play out by eye; and `tests/e2e` is still a README instead of a real
+suite.
 
 ## The three modes
 
@@ -147,35 +149,42 @@ and both tests share it.
 
 ## PR order
 
-One PR left. `REPORT_RATE_LIMIT=off` and the stubbed Python child (`worker_child/testing.py`,
-`build_analyze`, the scenario catalogue) have both landed. PR 1 below is the mode switch that
-wires the stubbed child into `pnpm dev`; PR 2 needs PR 1.
+Two PRs left. `REPORT_RATE_LIMIT=off`, the stubbed Python child (`worker_child/testing.py`,
+`build_analyze`, the scenario catalogue), and the mode switch itself have all landed: `WORKER_MODE`
+picks the child `apps/worker/src/modes.ts`'s `resolveWorkerMode` resolves to (`stubbed` runs
+`worker_child.testing`, `live` the real module, `mock-llm` fails loudly naming the port as the slot
+it fills, `off` starts no worker), `PYTHON_BIN` is anchored to the repo root by
+`apps/worker/src/python-bin.ts` since pnpm and `spawnChild` both run from directories that aren't
+it, and `pnpm dev` now runs the worker under `node --watch`. PR 1 below is the faster polling; PR 2
+needs PR 1 landed first (see its note on why).
 
-## PR 1 — the mode switch, and `pnpm dev` runs the worker
+## PR 1 — the web app polls faster too, driven by `WORKER_MODE`
 
-New `apps/worker/src/modes.ts` — `resolveWorkerMode(env)` returning `{ childCommand, overrides }`,
-plus a `modes.test.ts` decision table in the style of `config.test.ts` (no database, no child, no
-clock). `apps/worker/src/main.ts` calls it instead of building `childCommand` inline. `WORKER_MODE`
-is a `requireEnv`, not a defaulted value, so a stale `.env` fails loudly at startup rather than
-silently running `live` into `NotImplementedError`.
+The report page polls at a flat `BASE_POLL_INTERVAL_MS` (10s) no matter the mode — even `stubbed`,
+where nothing is real and there's no contention to be gentle about, sits on the same 10s ticks
+production would. That makes walking the scenario catalogue by eye slower than it needs to be.
+It's orthogonal to system-e2e speed: PR 2's tests drive `page.clock` directly through
+`advancePoll`/`advanceThroughPollFailures`, so the real interval's value never touches their
+wall-clock time either way. This PR is purely for the human watching the screen.
 
-`apps/worker`'s `dev` script changes from `tsc --watch` to running the worker under `node --watch`
-(Node 24 strips types, and `dependsOn: ["^build"]` already builds the `@gbd/*` dependencies). The
-worker loses its type-watch; the editor's TS server and `pnpm check` cover that.
+`schedule.ts`'s `BASE_POLL_INTERVAL_MS` is a browser-side module constant, imported straight into
+`report-view.svelte` — and browser code can't read `$env/dynamic/private` itself. So the value has
+to be resolved server-side and threaded down, the same shape `REPORT_RATE_LIMIT=off` already uses:
+`+page.server.ts` reads `WORKER_MODE` (inside the load function, not module scope — same reasoning
+as `checkReportRateLimit`), adds a `pollIntervalMs` field to `ReportPageData`, and `nextPollDelayMs`
+takes it as a parameter instead of importing a constant. `stubbed` gets a fast interval (in the
+neighborhood of the worker's own `stubbed` profile, e.g. 1s); `mock-llm`, `live`, and `off` keep the
+current 10s — `mock-llm` is meant to feel like production, cadence included, so it doesn't get the
+fast profile `stubbed` does, matching `apps/worker/src/modes.ts`'s own reasoning for
+`STUBBED_OVERRIDES`.
 
-`.env.example` and `.env.test` gain `WORKER_MODE`, and **fix `PYTHON_BIN`** — `python3` is the bare
-system interpreter, which cannot import `worker_child`; the correct value is the repo venv
-(`.venv/bin/python`). Add `WORKER_MODE` to `turbo.json`'s `globalPassThroughEnv`.
-
-Docs: `apps/worker/README.md` gains the mode table, and root `README.md` a short "Running the worker
-locally" subsection — the modes, the scenario grammar, `WORKER_MODE=off`, `REPORT_RATE_LIMIT=off`.
-The scenario catalogue itself stays in `worker_child/testing.py`, with the READMEs pointing at it.
-
-This is the first point at which `pnpm dev` gives you the whole lifecycle for a report named
-without a `!` scenario or driven through `!slow`/`!fail:*`/`WORKER_MODE=off`. The one state this
-doesn't reach quickly is `processing-delayed`, the 15-minute overrun copy — its only live path is
-`!slow:1000` and a wait. It keeps its component test and its committed screenshot, and a row can
-still be hand-edited in Supabase Studio at <http://localhost:55323>.
+Touches `polling/schedule.ts`, `polling/schedule.test.ts`, `+page.server.ts`, `report-view.svelte`,
+and `report-view.svelte.test.ts`. `apps/web/e2e/lib/poll-interval.ts` changes from a static
+re-export of `BASE_POLL_INTERVAL_MS` to something that resolves the interval the same way the
+server does, since it's no longer a plain constant — this is why PR 2 wants this PR landed first,
+so `tests/e2e`'s own hardcoded poll constant (see § Playwright helpers live in
+`@gbd/browser-testing`) is written against the real fast value from the start instead of being
+retrofitted.
 
 ## PR 2 — `tests/e2e` becomes `@gbd/e2e`
 
@@ -227,12 +236,10 @@ test uses.
 Per PR, from the repo root. The gate is `pnpm lint && pnpm check && pnpm test` for anything
 TypeScript and `just lint && just check && just test` for anything Python, on top of what follows.
 
-- **PR 1** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
-  holds on the waiting screen and can be canceled; `!hang` is killed as `hung` within ~30s;
-  `!fail:unusable-data` and `!missing-pdf` land on the right failure copy; Retry on a failed report
-  reaches `failed-retried`; the result email appears at <http://localhost:55324>. Check the waiting
-  and result screens at 390px. Confirm `WORKER_MODE=mock-llm` refuses to start with a message saying
-  why, and that an unset `WORKER_MODE` fails loudly.
+- **PR 1** — `pnpm dev` with `WORKER_MODE=stubbed`, watch the report page poll noticeably faster
+  than 10s; confirm `WORKER_MODE=mock-llm`/`live`/`off` still poll at the old cadence. Confirm
+  `schedule.test.ts` and `report-view.svelte.test.ts` pass with the interval now a parameter, not
+  an import.
 - **PR 2** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
   that spawns a worker and shares Mailpit is free of races. Check `uptime` first so a loaded machine
   is not misread as a flake.
@@ -241,15 +248,14 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 
 | File | Change |
 | --- | --- |
-| `apps/worker/src/modes.ts`, `modes.test.ts` | **new** — `resolveWorkerMode(env)` |
-| `apps/worker/src/main.ts` | read `WORKER_MODE`, drop the inline `childCommand` |
-| `apps/worker/package.json` | `dev` runs the worker |
-| `.env.example`, `.env.test`, `turbo.json` | `WORKER_MODE`; fix `PYTHON_BIN` |
+| report route's `polling/schedule.ts`, `+page.server.ts`, `report-view.svelte` | poll interval driven by `WORKER_MODE` |
+| `apps/web/e2e/lib/poll-interval.ts` | resolves the interval instead of re-exporting a constant |
 | `tests/e2e/` | **new package** — `package.json`, `playwright.config.ts`, `scripts/test-run.ts`, two specs, README |
 | `turbo.json`, root `package.json` | `test:system` task and script |
-| `apps/worker/README.md`, root `README.md` | modes, scenarios, running it locally |
 
 Unchanged by design: `apps/worker/src/testing/fake-child.ts`, `python/worker_child/tests/support/child.py`,
 `worker_child/run.py`, `worker_child/__main__.py`, `contract/`, `apps/web/e2e/fixtures/reports.ts`,
-`apps/web/src/lib/reports/limits.ts`, and every route in `apps/web`. Already landed:
-`python/worker_child/src/worker_child/testing.py` and its `pyproject.toml` `per-file-ignores` entry.
+`apps/web/src/lib/reports/limits.ts`, and every other route in `apps/web`. Already landed:
+`python/worker_child/src/worker_child/testing.py` and its `pyproject.toml` `per-file-ignores` entry,
+and the mode switch itself — `apps/worker/src/modes.ts`, `python-bin.ts`, `main.ts`, `.env.example`/
+`.env.test`/`turbo.json`'s `WORKER_MODE`, and `pnpm dev` running the worker.

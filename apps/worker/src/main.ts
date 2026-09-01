@@ -9,26 +9,36 @@ import { bucketExists } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownBlobStore } from '@gbd/storage/env';
 import { SYSTEM_CLOCK } from './clock.ts';
 import { createWorkerConfig } from './config.ts';
-import { INVOCATION } from './contract/names.ts';
 import { shutdown as shutdownDatabase, WORKER_DATABASE } from './db.ts';
+import { resolveWorkerMode } from './modes.ts';
+import { resolvePythonBin } from './python-bin.ts';
 import { createWorker } from './worker.ts';
 
 loadLocalEnv();
 
 async function main(): Promise<void> {
   try {
+    const resolved = resolveWorkerMode({
+      mode: requireEnv('WORKER_MODE'),
+      pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
+    });
+    if (resolved.mode === 'off') {
+      console.error('WORKER_MODE=off; not starting a worker.');
+      return;
+    }
+
     const config = createWorkerConfig(
       {
         // We add an abbreviated v4 UUID to avoid collisions between workers, e.g. from PID reuse.
         workerId:
           process.env.WORKER_ID ?? `${hostname()}-${process.pid}-${randomUUID().slice(0, 8)}`,
         runRoot: requireEnv('WORKER_RUN_ROOT'),
-        childCommand: {
-          executable: requireEnv('PYTHON_BIN'),
-          leadingArguments: ['-m', INVOCATION.module],
-        },
+        childCommand: resolved.childCommand,
       },
-      { maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS') },
+      {
+        ...resolved.overrides,
+        maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS'),
+      },
     );
 
     if (!(await bucketExists(BLOB_STORE))) {
