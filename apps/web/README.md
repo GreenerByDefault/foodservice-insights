@@ -45,6 +45,9 @@ parsed if the body was JSON. If no response ever arrived, it throws `ApiUnreacha
 `parseUploadRejection` in `src/lib/reports/rejection.ts`, narrows `ApiError.jsonBody` into a typed
 outcome.
 
+**A feature client either lets `apiCall` throw (`deleteReport`) or returns an outcome union
+(`uploadReport`).** It returns one when a non-2xx is an answer the UI renders, not a failure.
+
 ## UI components
 
 Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
@@ -72,6 +75,28 @@ into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 
 **A form's own schema lives with its feature**. What is not specific to one form lives in
 `src/lib/forms/`.
 
+**Native constraint validation, no form library** — consistent with `ARCHITECTURE.md` rejecting
+form actions. A real `<form>` with `onsubmit` and a `<button type="submit">` means the browser
+blocks an invalid submit and focuses the first bad field; `reportValidity()` is only for a
+programmatic submit. Async failures and hand-written checks render in a `<Field.Error>`.
+
+**Trap: a hidden or `type="hidden"` control is skipped by constraint validation.** `required` on a
+hidden file input blocks submission with no visible message; on a `RadioGroup`'s hidden input it
+does nothing at all. Those get a check in the handler, an inline message, and a manual
+`.focus()`/`.scrollIntoView()` — native validation gives you the locator for free, a hand-written
+check has to reproduce it or the failure is silent again.
+
+**The submit button stays enabled for an invalid form**, and is disabled only while a request is in
+flight or a navigation is pending, with the reason in its label.
+
+**A field name always comes from a `FIELD` map**, never a literal in markup.
+
+**State:** a button-shaped mutation uses `ActionState`; a form whose failure is more than one
+sentence declares its own outcome union. Both render a failure the same way.
+
+**A form's values live in the component's state, not only in the DOM**, so a form that swaps its
+own view cannot lose typed work.
+
 ## Errors
 
 **What a route passes to `error()` is for callers reading the JSON body, not for the screen.** Page
@@ -84,6 +109,19 @@ in `hooks.server.ts` logs it and hands the client a generic message.
 trade for a payload one route sets and one client reads. A route that fails in a way its own UI
 renders answers `json(body, { status })` with a type it owns. `error()` is left to the failures every caller handles
 the same way, like 404s.
+
+**What the user sees is three surfaces, never merged:** a field problem at the field, a rejected
+file in its own view, an unknown outcome at the action that caused it.
+
+**A short message gets `role="alert"`. A long one does not** — announcing a whole document on
+render is hostile; move focus to its heading instead.
+
+**A failure inside a form is shown inline and stays until it is fixed.** A toast is for a transient
+confirmation of an action on a page that stays put; no page needs one yet, and adding one is a
+fine reason to add the dependency then.
+
+**One component renders both a client-side and a server-side rejection**: both narrow to
+`UploadRejection` in `src/lib/reports/rejection.ts`.
 
 ## Auth
 
