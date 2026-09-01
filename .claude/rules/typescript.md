@@ -77,7 +77,6 @@ Applies to `packages/db` and every app or package that imports it (`apps/web`, `
 - **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
   test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
-- **`pnpm test` is deliberately serial** because `test:e2e` truncates the DB and would break `test:unit`.
 
 ## Blob store
 

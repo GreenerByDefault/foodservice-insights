@@ -18,6 +18,7 @@
     "migrate": "node scripts/migrate.ts",
     "seed:identity": "node scripts/seed-identity.ts",
     "truncate": "node scripts/truncate.ts",
+    "db:clean": "node scripts/clean.ts",
     "gen-types": "kanel && biome check --write src/generated && node scripts/dump-public-schema.ts && node scripts/dump-auth-schema.ts"
   },
   "dependencies": {

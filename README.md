@@ -176,7 +176,8 @@ pnpm turbo run screenshots:update --filter=@gbd/web
 ```
 
 They are captured through a browser in Docker, so the images match between macOS and CI. See
-[`apps/web/e2e/README.md`](apps/web/e2e/README.md).
+[`apps/web/e2e/README.md`](apps/web/e2e/README.md), including `pnpm test:browser:stop` for
+freeing the memory it holds.
 
 #### Tests and the database
 
@@ -211,6 +212,7 @@ avoid clashes between tests. If the test database gets into a strange state,
 | `pnpm seed:identity` | Create the placeholder user, organization, and membership the app runs as until Supabase Auth lands |
 | `pnpm truncate` | Delete every row, object, and local email, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/), [`packages/db/public-schema.sql`](packages/db/public-schema.sql), and [`packages/db/auth-schema.sql`](packages/db/auth-schema.sql) from the live database |
+| `pnpm test:db:clean` | Drop every leftover per-run test database and cached template (`fsi_test_%`) |
 
 `migrate` acts on the database and blob store; `truncate` acts on those plus the local mailbox.
 Use a pnpm filter to reach just one: `pnpm --filter @gbd/storage run migrate`.
