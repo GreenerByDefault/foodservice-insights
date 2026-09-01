@@ -1,13 +1,9 @@
 <script lang="ts">
 import { Button } from '$lib/components/ui/button';
-import { formatRows } from '$lib/reports/csv/describe';
+import { formatRowSpan } from '$lib/reports/csv/describe';
 import type { UploadRejection } from '$lib/reports/rejection';
 import { cn } from '$lib/utils/shadcn.js';
 
-// Every sentence here comes from the payload — this never switches on `reason`, which is why a
-// rate-limit or unreadable-file rejection (summary only, no rowProblems or dateOrderProblem)
-// renders through the same markup as a bad-rows one. See the plan's "What a rejection actually
-// looks like" for why this is a locator/body grid rather than a table.
 let { rejection, onBack }: { rejection: UploadRejection; onBack: () => void } = $props();
 
 let headingElement: HTMLHeadingElement | undefined = $state();
@@ -46,7 +42,7 @@ $effect(() => {
             problem.rows.everyRow && 'rounded-md bg-muted/50 p-3',
           )}
         >
-          <p class="font-semibold">{formatRows(problem.rows)}</p>
+          <p class="font-semibold">{formatRowSpan(problem.rows)}</p>
           <div class="space-y-1">
             <p>{problem.rule}.</p>
             {#if problem.advice}

@@ -33,12 +33,12 @@ export function renderProblemsAsDetail(problems: readonly Problem[]): string {
 
 function renderProblemAsDetailLine(problem: Problem): string {
   const examples = problem.examples.length > 0 ? ` For example ${listOf(problem.examples)}.` : '';
-  return `${formatRows(problem.rows)}: ${problem.rule}.${examples}`;
+  return `${formatRowSpan(problem.rows)}: ${problem.rule}.${examples}`;
 }
 
 /** Formats a `RowSpan` as the text a reader sees: `row 15`, `5 rows: 2–4, 8, 11`, or
  * `all 4,500 rows`. */
-export function formatRows(span: RowSpan): string {
+export function formatRowSpan(span: RowSpan): string {
   if (span.everyRow) return `all ${groupDigits(span.total)} rows`;
   if (span.total === 1) return `row ${span.ranges[0]?.start ?? ''}`;
   return `${groupDigits(span.total)} rows: ${formatRowRanges(span)}`;

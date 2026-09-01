@@ -87,7 +87,6 @@ describe('UploadForm', () => {
     await screen.getByRole('button', { name: 'Upload report' }).click();
     await expect.element(screen.getByText('We found problems.')).toBeInTheDocument();
 
-    // The rejection view repeats this button at the top and bottom of the list.
     await screen.getByRole('button', { name: 'Back to the form' }).first().click();
 
     await expect.element(screen.getByLabelText('Report name')).toHaveValue('Q1 procurement');
@@ -128,6 +127,51 @@ describe('UploadForm', () => {
       .element(screen.getByRole('link', { name: 'your reports' }))
       .toHaveAttribute('href', `/orgs/${ORGANIZATION_ID}`);
     expect(gotoMock).not.toHaveBeenCalled();
+  });
+
+  test('an empty file is rejected by inspection before ever reaching the network, and shows the rejection view', async () => {
+    const fetchMock = stubFetch(new Response(null, { status: 201 }));
+    const screen = await render(UploadForm, { organizationId: ORGANIZATION_ID });
+
+    await screen.getByLabelText('Choose a CSV file', { exact: false }).upload(csvFile(''));
+
+    await expect.element(screen.getByText('That file has no rows in it.')).toBeInTheDocument();
+    await expect.element(screen.getByText('No report was created.')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('a rejected file type shows its own inline message rather than the drop zone silently ignoring it', async () => {
+    const fetchMock = stubFetch(new Response(null, { status: 201 }));
+    const screen = await render(UploadForm, { organizationId: ORGANIZATION_ID });
+
+    await screen
+      .getByLabelText('Choose a CSV file', { exact: false })
+      .upload(new File(['not a csv'], 'notes.txt', { type: 'text/plain' }));
+
+    await expect
+      .element(
+        screen.getByText(
+          'We can only read CSV files right now. In Excel, choose File → Save As → CSV.',
+        ),
+      )
+      .toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('replacing a chosen file returns to the drop zone and clears the months prompt', async () => {
+    const screen = await render(UploadForm, { organizationId: ORGANIZATION_ID });
+
+    await screen.getByLabelText('Choose a CSV file', { exact: false }).upload(csvFile());
+    await expect.element(screen.getByText('1 of 1 months still need a count')).toBeInTheDocument();
+
+    await screen.getByRole('button', { name: 'Replace' }).click();
+
+    await expect
+      .element(screen.getByText('Choose a file first — we will list the months it covers.'))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByLabelText('Choose a CSV file', { exact: false }))
+      .toBeInTheDocument();
   });
 
   test('submitting with no file posts nothing and shows the inline message', async () => {

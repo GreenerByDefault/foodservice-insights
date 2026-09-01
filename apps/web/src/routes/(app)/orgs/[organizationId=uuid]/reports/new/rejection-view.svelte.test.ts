@@ -1,19 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { Problem } from '$lib/reports/csv/describe';
 import { rejectionWith } from '$lib/reports/csv/testing';
 import type { UploadRejection } from '$lib/reports/rejection';
 import RejectionView from './rejection-view.svelte';
-
-/** `rejectionWith(1)`'s one row problem, and its date-order problem — both are `Problem[]` and
- * `string | undefined` on the type, but the fixture always sets them. */
-function fixtureParts(rejection: UploadRejection): { problem: Problem; dateOrderProblem: string } {
-  const [problem] = rejection.rowProblems ?? [];
-  if (!problem) throw new Error('expected rejectionWith(1) to include a row problem');
-  if (!rejection.dateOrderProblem)
-    throw new Error('expected rejectionWith(1) to include a date-order problem');
-  return { problem, dateOrderProblem: rejection.dateOrderProblem };
-}
 
 describe('RejectionView', () => {
   test('the summary is the heading and takes focus', async () => {
@@ -27,7 +16,7 @@ describe('RejectionView', () => {
 
   test('a date-order problem renders above the first list item', async () => {
     const rejection = rejectionWith(1);
-    const { dateOrderProblem } = fixtureParts(rejection);
+    const { dateOrderProblem } = rejection;
     const screen = await render(RejectionView, { rejection, onBack: () => {} });
 
     await expect.element(screen.getByText(dateOrderProblem)).toBeInTheDocument();
@@ -39,7 +28,7 @@ describe('RejectionView', () => {
 
   test('every problem renders its rows, rule, advice and examples', async () => {
     const rejection = rejectionWith(1);
-    const { problem } = fixtureParts(rejection);
+    const [problem] = rejection.rowProblems;
     const screen = await render(RejectionView, { rejection, onBack: () => {} });
 
     if (!problem.advice) throw new Error('expected the fixture problem to carry advice');
@@ -54,7 +43,7 @@ describe('RejectionView', () => {
 
   test('an example is not double-quoted', async () => {
     const rejection = rejectionWith(1);
-    const { problem } = fixtureParts(rejection);
+    const [problem] = rejection.rowProblems;
     const [example] = problem.examples;
     if (!example) throw new Error('expected the fixture problem to carry an example');
     const screen = await render(RejectionView, { rejection, onBack: () => {} });
@@ -69,6 +58,29 @@ describe('RejectionView', () => {
 
     await expect.element(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getByRole('listitem').elements()).toHaveLength(20);
+  });
+
+  test('a problem with no advice and no examples renders only its rows and rule', async () => {
+    const rejection: UploadRejection = {
+      summary: 'We found problems in your rows.',
+      rowProblems: [
+        {
+          rule: 'The product is a placeholder rather than a product',
+          rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
+          examples: [],
+        },
+      ],
+    };
+    const screen = await render(RejectionView, { rejection, onBack: () => {} });
+
+    await expect
+      .element(screen.getByText('The product is a placeholder rather than a product.'))
+      .toBeInTheDocument();
+    // No advice paragraph and no examples row for this problem — nothing else to assert it
+    // against, so the item's whole text content is the check.
+    expect(screen.getByRole('listitem').elements()[0]?.textContent?.trim()).toBe(
+      'row 2 The product is a placeholder rather than a product.',
+    );
   });
 
   test('a rejection with only a summary (an unreadable file, or a rate limit) renders no list', async () => {

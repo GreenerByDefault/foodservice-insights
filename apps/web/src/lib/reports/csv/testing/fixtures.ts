@@ -45,8 +45,15 @@ export function sealedFindings(overrides: Partial<Findings> = {}): Findings {
 
 /** The worst realistic rejection with bad rows: `n` row problems, a file-wide date-order problem,
  * and one problem that fails on every row — what the rejection view's tests and its screenshot
- * render against. */
-export function rejectionWith(n: number): UploadRejection {
+ * render against.
+ *
+ * `rowProblems` and `dateOrderProblem` are optional on `UploadRejection` in general, but this
+ * fixture always sets both. The return type says so, so callers can destructure without
+ * re-checking. */
+export function rejectionWith(n: number): UploadRejection & {
+  rowProblems: readonly [Problem, ...Problem[]];
+  dateOrderProblem: string;
+} {
   return {
     summary: `We found problems in 4,102 of your 4,500 rows. Showing ${n} of ${n} things to fix.`,
     dateOrderProblem:
