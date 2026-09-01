@@ -10,7 +10,7 @@ import {
   withConcurrentTransactions,
   withRollback,
 } from '@gbd/db/testing';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { HOURLY_REPORT_LIMIT, WEEKLY_REPORT_LIMIT } from '$lib/reports/limits';
 import { database } from '$lib/server/db';
 import {
@@ -19,6 +19,13 @@ import {
   lockAndCheckReportRateLimit,
   type RateLimitExceeded,
 } from './rate-limit';
+
+const { mockEnv } = vi.hoisted(() => ({ mockEnv: {} as Record<string, string> }));
+vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
+
+afterEach(() => {
+  delete mockEnv.REPORT_RATE_LIMIT;
+});
 
 describe('checkReportRateLimit', () => {
   test('undefined when neither the organization nor the user is near a limit', async () => {
@@ -132,6 +139,24 @@ describe('checkReportRateLimit', () => {
         window: 'weekly',
         limit: WEEKLY_REPORT_LIMIT,
       } satisfies RateLimitExceeded);
+    });
+  });
+
+  test('REPORT_RATE_LIMIT=off bypasses the limit even at the hourly ceiling', async () => {
+    mockEnv.REPORT_RATE_LIMIT = 'off';
+
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+        await insertReport(transaction, { organizationId: organization.id, createdByUserId: null });
+      }
+
+      const result = await checkReportRateLimit(transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+      });
+
+      expect(result).toBeUndefined();
     });
   });
 });
