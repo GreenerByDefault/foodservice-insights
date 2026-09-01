@@ -133,16 +133,14 @@ and both tests share it.
 
 ## PR order
 
-Six PRs. The first three are independent of each other and can land in any order; PR 4 needs PR 2,
-PR 5 needs PR 4, PR 6 needs PR 3 and PR 4.
+Five PRs left. `REPORT_RATE_LIMIT=off` has landed — the guard described above, plus
+`REPORT_RATE_LIMIT` in `.env.example` and `turbo.json`'s `globalPassThroughEnv`, and a unit test for
+both branches of `checkReportRateLimit`.
 
-## PR 1 — `REPORT_RATE_LIMIT=off`
+The first two below are independent of each other and can land in any order; PR 3 needs PR 1, PR 4
+needs PR 3, PR 5 needs PR 2 and PR 3.
 
-The guard described above, plus `REPORT_RATE_LIMIT` in `.env.example` and `turbo.json`'s
-`globalPassThroughEnv`, and a unit test for both branches of `checkReportRateLimit`. Stands alone and
-is useful on its own; nothing else here depends on it landing first.
-
-## PR 2 — the stubbed child (Python only)
+## PR 1 — the stubbed child (Python only)
 
 New `python/worker_child/src/worker_child/testing.py`: the scenario catalogue, a `build_analyze()`
 that reads `request.report_name`, and a `main()` so it runs as
@@ -158,7 +156,7 @@ Tests in `python/worker_child/tests/`: the grammar parses (including `:argument`
 failure), and each scenario produces the outcome it claims. Nothing in TypeScript consumes this yet,
 so it lands and is verified entirely with `just`.
 
-## PR 3 — extract `@gbd/browser-testing`
+## PR 2 — extract `@gbd/browser-testing`
 
 Prefactor, so PR 6 has something to import. New `packages/browser-testing/`, seeded with the
 Playwright helpers both suites need: `advancePoll` and `advanceThroughPollFailures` from
@@ -179,7 +177,7 @@ Coordinate with `.claude/plans/organization-reports-list.md` PR 4, which moves
 `polling/schedule.ts` into `apps/web/src/lib/polling/` — that changes the path `fake-poll.ts`
 re-exports from.
 
-## PR 4 — the mode switch, and `pnpm dev` runs the worker
+## PR 3 — the mode switch, and `pnpm dev` runs the worker
 
 New `apps/worker/src/modes.ts` — `resolveWorkerMode(env)` returning `{ childCommand, overrides }`,
 plus a `modes.test.ts` decision table in the style of `config.test.ts` (no database, no child, no
@@ -201,9 +199,9 @@ The scenario catalogue itself stays in `worker_child/testing.py`, with the READM
 
 This is the first point at which `pnpm dev` gives you the whole lifecycle.
 
-## PR 5 — delete `pnpm seed:reports`
+## PR 4 — delete `pnpm seed:reports`
 
-A pure removal, once PR 4 has provided the replacement: `apps/web/scripts/seed-reports.ts`, the
+A pure removal, once PR 3 has provided the replacement: `apps/web/scripts/seed-reports.ts`, the
 turbo task, the root and `apps/web` scripts, and the README line under § Seeding.
 
 **The fixtures stay.** `apps/web/e2e/fixtures/reports.ts` is what the screenshot suite and several
@@ -231,7 +229,7 @@ hand-edited in Supabase Studio at <http://localhost:55323>.
 PR 2 plans to fix the `STATES` drift — now nothing to do — and its verification step 7 (a `pnpm dev`
 walkthrough with a mix of states) should use the live worker or its own `organizations` factory.
 
-## PR 6 — `tests/e2e` becomes `@gbd/e2e`
+## PR 5 — `tests/e2e` becomes `@gbd/e2e`
 
 CI is already waiting: `.github/workflows/ci.yml`'s `system-e2e` job runs `turbo run test:system`,
 gated on `tests/e2e/package.json` existing, and `.github/filters.yml` already has a `system` filter.
@@ -278,20 +276,18 @@ test uses.
 Per PR, from the repo root. The gate is `pnpm lint && pnpm check && pnpm test` for anything
 TypeScript and `just lint && just check && just test` for anything Python, on top of what follows.
 
-- **PR 1** — upload more than five reports in an hour with `REPORT_RATE_LIMIT=off`, then once with it
-  unset to confirm the limit still bites.
-- **PR 2** — `just` only; nothing consumes it yet.
-- **PR 3** — `pnpm test:playwright`. A pure move, so the existing specs passing unchanged is the
+- **PR 1** — `just` only; nothing consumes it yet.
+- **PR 2** — `pnpm test:playwright`. A pure move, so the existing specs passing unchanged is the
   proof.
-- **PR 4** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
+- **PR 3** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
   holds on the waiting screen and can be canceled; `!hang` is killed as `hung` within ~30s;
   `!fail:unusable-data` and `!missing-pdf` land on the right failure copy; Retry on a failed report
   reaches `failed-retried`; the result email appears at <http://localhost:55324>. Check the waiting
   and result screens at 390px. Confirm `WORKER_MODE=mock-llm` refuses to start with a message saying
   why, and that an unset `WORKER_MODE` fails loudly.
-- **PR 5** — `pnpm test:playwright`, since the fixtures the specs share are what the deletion must
+- **PR 4** — `pnpm test:playwright`, since the fixtures the specs share are what the deletion must
   not touch.
-- **PR 6** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
+- **PR 5** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
   that spawns a worker and shares Mailpit is free of races. Check `uptime` first so a loaded machine
   is not misread as a flake.
 
@@ -306,8 +302,7 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 | `apps/worker/src/modes.ts`, `modes.test.ts` | **new** — `resolveWorkerMode(env)` |
 | `apps/worker/src/main.ts` | read `WORKER_MODE`, drop the inline `childCommand` |
 | `apps/worker/package.json` | `dev` runs the worker |
-| `.env.example`, `.env.test`, `turbo.json` | `WORKER_MODE`, `REPORT_RATE_LIMIT`; fix `PYTHON_BIN` |
-| `apps/web/src/lib/server/reports/rate-limit.ts` | `REPORT_RATE_LIMIT=off` early return |
+| `.env.example`, `.env.test`, `turbo.json` | `WORKER_MODE`; fix `PYTHON_BIN` |
 | `apps/web/scripts/seed-reports.ts` | **deleted**, with its turbo task and root script |
 | `tests/e2e/` | **new package** — `package.json`, `playwright.config.ts`, `scripts/test-run.ts`, two specs, README |
 | `turbo.json`, root `package.json` | `test:system` task and script |
