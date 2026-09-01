@@ -61,13 +61,18 @@ Reach for assertions only when a screenshot genuinely can't see the problem.
 
 ## Database state
 
-Every fixture lives in the placeholder organization (`@gbd/db/seed`) — phase 1 has no second one.
-`e2e/fixtures/reports.ts` is the source of truth for what each state contains.
+Most fixtures live in the placeholder organization (`@gbd/db/seed`). `e2e/fixtures/reports.ts` is
+the source of truth for what each report state contains.
 
 There's no shared reset: every test mints its own report via the `reports` fixture
 (`e2e/fixtures/test.ts`) and deletes it when it ends, whether it passed or failed. Screenshots and
 e2e share the catalogue of states, not any rows, so a behavioural spec is free to mutate what it
 created without affecting another test.
+
+A spec that needs to control an organization's *entire* contents — rather than one report of its
+own — grants the placeholder user membership in a second, dedicated organization for the test's
+duration instead. `auth.e2e.ts` no longer assumes the placeholder user belongs to exactly one
+organization, so doing this does not race that spec the way it once did.
 
 ## Pending
 

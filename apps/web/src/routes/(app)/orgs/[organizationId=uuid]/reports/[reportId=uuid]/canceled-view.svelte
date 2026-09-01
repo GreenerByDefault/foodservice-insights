@@ -1,8 +1,8 @@
 <script lang="ts">
 import CircleStopIcon from '@lucide/svelte/icons/circle-stop';
+import RelativeTime from '$lib/components/reports/relative-time.svelte';
 import type { DeleteAction } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
-import RelativeTime from './relative-time.svelte';
 import StatusLine from './status-line.svelte';
 
 interface Props {

@@ -49,3 +49,20 @@ const TIMESTAMP_FORMAT = new Intl.DateTimeFormat('en-US', {
 export function formatTimestamp(at: Date): string {
   return TIMESTAMP_FORMAT.format(at);
 }
+
+/** Fixed to UTC, matching `TIMESTAMP_FORMAT` but without the time — the date alone is what a
+ * report older than a week is identified by. */
+const DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+
+/** `formatElapsed` under a week old; an absolute date beyond that, since `Intl.RelativeTimeFormat`
+ * has no precise notion of weeks or months and "412 days ago" is not useful. */
+export function formatWhen(now: Date, at: Date): string {
+  const ms = now.getTime() - at.getTime();
+  if (ms < WEEK_MS) return formatElapsed(now, at);
+  return DATE_FORMAT.format(at);
+}

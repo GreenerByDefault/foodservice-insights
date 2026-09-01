@@ -3,6 +3,7 @@ import {
   DAY_MS,
   formatElapsed,
   formatTimestamp,
+  formatWhen,
   HOUR_MS,
   MINUTE_MS,
   msAgo,
@@ -98,5 +99,23 @@ describe('formatElapsed', () => {
 describe('formatTimestamp', () => {
   it('formats the exact moment in UTC for a title attribute', () => {
     expect(formatTimestamp(CREATED_AT)).toBe('Jan 15, 2026, 10:00 AM UTC');
+  });
+});
+
+describe('formatWhen', () => {
+  it('just under a week delegates to formatElapsed', () => {
+    expect(formatWhen(new Date(CREATED_AT.getTime() + WEEK_MS - SECOND_MS), CREATED_AT)).toBe(
+      '6 days ago',
+    );
+  });
+
+  it('exactly a week switches to an absolute date', () => {
+    expect(formatWhen(new Date(CREATED_AT.getTime() + WEEK_MS), CREATED_AT)).toBe('Jan 15, 2026');
+  });
+
+  it('well over a week stays an absolute date', () => {
+    expect(formatWhen(new Date(CREATED_AT.getTime() + 412 * DAY_MS), CREATED_AT)).toBe(
+      'Jan 15, 2026',
+    );
   });
 });
