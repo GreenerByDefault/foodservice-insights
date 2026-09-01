@@ -1,3 +1,6 @@
+import type { UploadRejection } from '../../rejection.ts';
+import type { Problem } from '../describe/problems.ts';
+import { quote } from '../describe/text.ts';
 import type { FindingGroup, Findings, RowFinding } from '../findings.ts';
 
 /** A `'weight'` finding with representative defaults, for tests that don't care which fault
@@ -37,6 +40,37 @@ export function sealedFindings(overrides: Partial<Findings> = {}): Findings {
     // describing has no passing rows to count: `rowsRead` defaults to `failingRowCount`.
     rowsRead: overrides.rowsRead ?? failingRowCount,
     ...(overrides.dateOrder && { dateOrder: overrides.dateOrder }),
+  };
+}
+
+/** The worst realistic Shape B payload: `n` row problems, a file-wide date-order problem, and one
+ * problem that fails on every row — what the rejection view's tests and its screenshot render
+ * against. */
+export function rejectionWith(n: number): UploadRejection {
+  return {
+    summary: `We found problems in 4,102 of your 4,500 rows. Showing ${n} of ${n} things to fix.`,
+    dateOrderProblem:
+      'Your dates are written both ways: row 7 has "13/02/2026", which can only be day first, and row 12 has "02/13/2026", which can only be month first. Re-save the date column as YYYY-MM-DD and upload again.',
+    rowProblems: Array.from({ length: n }, (_, index) => rowProblem(index)),
+  };
+}
+
+function rowProblem(index: number): Problem {
+  // The first problem fails on every row — the one case where a single rule is the file's problem.
+  if (index === 0) {
+    return {
+      rule: 'The weight has a unit in it',
+      advice:
+        'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
+      rows: { ranges: [{ start: 2, end: 4500 }], total: 4500, everyRow: true },
+      examples: [quote('5 oz'), quote('12 lb'), quote('3 kg')],
+    };
+  }
+  const start = index * 7 + 2;
+  return {
+    rule: 'The product is a placeholder rather than a product',
+    rows: { ranges: [{ start, end: start }], total: 1, everyRow: false },
+    examples: [quote('n/a')],
   };
 }
 
