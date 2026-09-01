@@ -2,10 +2,9 @@
 import { defineConfig } from '@playwright/test';
 import { BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
 
-// Set by `apps/web/scripts/test-run.ts`, which every `pnpm test:e2e`/`test:screenshots`/
-// `test:playwright`/`screenshots:update` script routes through. A bare `playwright test` would
-// otherwise silently fall back to a fixed port and the shared database, reintroducing the
-// concurrent-run flake `test-run.ts` exists to fix — see `.claude/plans/test-run-isolation.md`.
+// Set by `apps/web/scripts/test-run.ts`, which every Playwright pnpm script routes through.
+// A bare `playwright test` would otherwise silently fall back to a fixed port and the shared
+// database, reintroducing the concurrent-run issues that `test-run.ts` fixes.
 if (!process.env.TEST_RUN_ID) {
   throw new Error(
     'TEST_RUN_ID is not set. Run tests through `pnpm test:e2e`, `pnpm test:screenshots`, ' +
@@ -93,10 +92,9 @@ export default defineConfig({
     // Runs the real adapter-node output, not `vite preview`, so e2e exercises the
     // deployed artifact. `turbo run test:e2e` depends on `build` running first.
     //
-    // No truncate/migrate/seed chain: `test-run.ts` already handed this process a database
-    // cloned from a pre-migrated template and seeded with the placeholder identity, addressed by
-    // the `DB_CONNECTION_STRING` already in this process's environment (Node's `--env-file`
-    // lets the environment win over the file, so `.env.test`'s value never overrides it).
+    // No need to migrate or seed the database: `test-run.ts` already hands this process a database
+    // cloned from a pre-migrated template. The script sets `DB_CONNECTION_STRING`, which
+    // overrides `env.test`.
     command: 'node --env-file-if-exists=../../.env.test start.js',
     env: {
       PORT: String(PORT),
@@ -110,9 +108,8 @@ export default defineConfig({
     },
     // `url` waits for a 2xx response; `port` only waits for a listening socket.
     url: `${BASE_URL}/health`,
-    // Every run gets its own port and its own database — reusing a listener here would mean
-    // reusing whatever process (and whichever worktree's code, and whichever run's database) is
-    // already bound to it, silently skipping the very isolation `test-run.ts` exists to provide.
+    // Every run gets its own port. Reusing a listener here would risk using the server
+    // from another worktree.
     reuseExistingServer: false,
     stdout: 'pipe',
     stderr: 'pipe',

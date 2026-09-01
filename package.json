@@ -24,7 +24,8 @@
     "seed:reports": "turbo run seed:reports",
     "truncate": "turbo run truncate",
     "db:gen-types": "turbo run gen-types",
-    "test:db:clean": "turbo run db:clean"
+    "test:db:clean": "turbo run db:clean",
+    "test:browser:stop": "turbo run test:browser:stop"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

@@ -176,7 +176,8 @@ pnpm turbo run screenshots:update --filter=@gbd/web
 ```
 
 They are captured through a browser in Docker, so the images match between macOS and CI. See
-[`apps/web/e2e/README.md`](apps/web/e2e/README.md).
+[`apps/web/e2e/README.md`](apps/web/e2e/README.md), including `pnpm test:browser:stop` for
+freeing the memory it holds.
 
 #### Tests and the database
 

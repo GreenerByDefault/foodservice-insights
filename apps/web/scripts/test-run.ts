@@ -1,6 +1,6 @@
 /** Wraps `playwright test` so every run gets its own database and blob store bucket, instead of
  * every `pnpm test:e2e` in every worktree sharing one and truncating it out from under each
- * other. See `.claude/plans/test-run-isolation.md` for the design this implements.
+ * other.
  *
  * `pnpm test:e2e`, `test:screenshots`, `test:playwright`, and `screenshots:update` all route
  * through this rather than calling `playwright test` directly — `playwright.config.ts` throws if

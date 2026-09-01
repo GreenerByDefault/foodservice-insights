@@ -77,11 +77,6 @@ Applies to `packages/db` and every app or package that imports it (`apps/web`, `
 - **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
   test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
-- **`pnpm test` is serial**, but no longer to protect `test:unit` from a truncate — `test:e2e` and
-  `test:screenshots` each run against their own database and blob store bucket now (see
-  `apps/web/scripts/test-run.ts`), not the shared one `test:unit` also uses. The remaining reason
-  is machine load: five vitest packages, a browser tier, Playwright workers, and a Docker browser
-  container, all fighting over one machine's cores.
 
 ## Blob store
 
