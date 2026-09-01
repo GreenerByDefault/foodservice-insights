@@ -478,34 +478,6 @@ describe('parked verdicts', () => {
     });
   });
 
-  test('a verdict that parks again spends the original budget, not a restarted one', async () => {
-    await withBreakable(breakableBlobStore, async (store) => {
-      await withWorker(
-        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
-        async (harness, fixture) => {
-          const attemptId = await startOne(harness);
-
-          await parkAtUpload(fixture, store, attemptId);
-
-          // Half the budget, a tick that re-parks against the still-broken store, then the other
-          // half. A `since` restarted on the second park would put the budget permanently out of
-          // reach, and the conversion below would never come.
-          const halfTheBudget = harness.config.uploadRetryBudgetMs / 2;
-          harness.advance(halfTheBudget);
-          await harness.worker.direct();
-          expect(await statusIs(attemptId, 'processing')).toBe(true);
-
-          harness.advance(halfTheBudget);
-          await directUntil(
-            harness.worker,
-            () => statusIs(attemptId, 'failed'),
-            'the original budget runs out and the verdict is converted',
-          );
-        },
-      );
-    });
-  });
-
   test('a reap mid-park drops the verdict without uploading at all', async () => {
     await withBreakable(breakableBlobStore, async (store) => {
       await withWorker(

@@ -3,10 +3,12 @@ import { ContractError } from '../contract/messages.ts';
 import {
   type AttemptDirective,
   decideDirective,
+  foldDeliveryOutcome,
   type TickReading,
   type TickState,
   type TickThresholds,
 } from './directive.ts';
+import type { SettleOutcome } from './lifecycle.ts';
 
 const THRESHOLDS: TickThresholds = {
   killAfterNoProgressMs: 1_000,
@@ -379,5 +381,37 @@ describe('the state transition', () => {
     expect(directiveOf(parkedUpload, aReading(), THRESHOLDS.uploadRetryBudgetMs)).toEqual({
       kind: 'convert-parked-verdict-to-upload-expired',
     });
+  });
+});
+
+const A_PARKED_VERDICT: SettleOutcome = {
+  kind: 'parked',
+  pending: { stage: 'record', verdict: { kind: 'failed', reason: 'infrastructure', detail: 'x' } },
+};
+
+describe('foldDeliveryOutcome', () => {
+  test('a first park stamps the current time as `since`', () => {
+    expect(foldDeliveryOutcome(undefined, A_PARKED_VERDICT, 100)).toEqual({
+      kind: 'parked',
+      parked: { stage: 'record', since: 100 },
+      pendingVerdict: A_PARKED_VERDICT.pending,
+    });
+  });
+
+  test('a re-park keeps the original `since` rather than restarting it', () => {
+    const existingParked: TickState['parked'] = { stage: 'record', since: 100 };
+    expect(foldDeliveryOutcome(existingParked, A_PARKED_VERDICT, 999)).toEqual({
+      kind: 'parked',
+      parked: { stage: 'record', since: 100 },
+      pendingVerdict: A_PARKED_VERDICT.pending,
+    });
+  });
+
+  test('settling clears any parked state', () => {
+    const existingParked: TickState['parked'] = { stage: 'upload', since: 100 };
+    expect(foldDeliveryOutcome(existingParked, { kind: 'recorded' }, 999)).toEqual({
+      kind: 'settled',
+    });
+    expect(foldDeliveryOutcome(existingParked, { kind: 'lost' }, 999)).toEqual({ kind: 'settled' });
   });
 });

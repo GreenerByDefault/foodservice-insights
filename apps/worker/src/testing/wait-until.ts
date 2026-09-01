@@ -2,10 +2,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const POLL_INTERVAL_MS = 5;
 
-/** Comfortably under vitest's 30s per-test timeout (`testTimeout` in `vitest.config.ts`, raised
- * for Supabase Storage contention), so a failure is reported here — naming what was being waited
- * for — rather than as an anonymous timeout on the test. */
-const DEFAULT_TIMEOUT_MS = 20_000;
+/** Sized against what convergence actually takes, not against `testTimeout` (30s in
+ * `vitest.config.ts`, raised separately for Supabase Storage contention in #52). Even under the
+ * CI load that caused #167, every real wait here — a DB write, a blob
+ * store round trip, a child process writing a file — settled in under 1.1s. 10s keeps close to an
+ * order of magnitude of margin over that while still failing well before `testTimeout` would, so
+ * a failure is reported here — naming what was being waited for — rather than as an anonymous
+ * timeout on the test. */
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 /** Waits for a condition by polling, instead of sleeping for a duration and hoping it was long
  * enough.
