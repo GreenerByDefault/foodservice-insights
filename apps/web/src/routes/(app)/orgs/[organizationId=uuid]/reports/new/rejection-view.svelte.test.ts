@@ -71,7 +71,7 @@ describe('RejectionView', () => {
     expect(screen.getByRole('listitem').elements()).toHaveLength(20);
   });
 
-  test('a Shape A rejection (summary only) renders no list', async () => {
+  test('a rejection with only a summary (an unreadable file, or a rate limit) renders no list', async () => {
     const rejection: UploadRejection = { summary: 'That file has no rows in it.' };
     const screen = await render(RejectionView, { rejection, onBack: () => {} });
 
