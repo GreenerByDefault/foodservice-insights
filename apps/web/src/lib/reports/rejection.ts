@@ -39,7 +39,7 @@ export function userFacingRejection({
 }
 
 export function parseUploadRejection(error: ApiError): UploadRejection | undefined {
-  if (error.status !== 400) return undefined;
+  if (error.status !== 400 && error.status !== 429) return undefined;
 
   const { jsonBody } = error;
   if (

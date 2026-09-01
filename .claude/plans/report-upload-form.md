@@ -399,6 +399,16 @@ special-case this form.
 - **`RadioGroup` submits through a hidden input**, and hidden inputs are barred from constraint
   validation, so `required` on it is a no-op rather than an error.
 
+**Both hand-written checks must also move focus, or the whole argument above has a hole in it.**
+The reason "leave the button enabled" works is that a failed submit always produces a locator: the
+browser scrolls to and focuses the first invalid field on its own. These two checks are the ones the
+browser can't see, so they have to fake that behavior by hand — `.focus()` (and, for the drop zone,
+`.scrollIntoView()` since it has no natively focusable control to land on) on the same
+`if (!file)` / `if (!unitSystem)` branch that renders the `<Field.Error>`. Skip this and a user who
+has scrolled down through 120 month inputs and clicks submit with no unit system chosen gets an error
+that appeared off-screen, above their scroll position — precisely the silent failure this whole
+section exists to avoid.
+
 For the two radio groups that check is avoided where it is safe to:
 
 - **`counts-basis` defaults to `people`.** The consequence is visible one line below, in the month
@@ -519,7 +529,9 @@ page navigates away. Every field's value is `$state` on this component, per the 
 - `<MonthlyCounts bind:counts {months} basis={countsBasis} />` once a file is accepted, the
   placeholder otherwise.
 - Submit handler: `event.preventDefault()`; bail if already submitting; check the file and the unit
-  system and render their `<Field.Error>`s; build `new FormData(event.currentTarget as
+  system, render their `<Field.Error>`s, and move focus to whichever fails first (`.scrollIntoView()`
+  plus `.focus()` on the drop zone's trigger button; `.focus()` on the radio group) so a hand-checked
+  failure produces the same locator a native one does; build `new FormData(event.currentTarget as
   HTMLFormElement)`, then `set(FIELD.file, file)` and `set(FIELD.monthlyCounts, serialized)`; bail
   if `serializeCounts` returned `null`. Then `uploadReport`. `created` → `goto`. `rejected` → the
   rejection view. `unknown` → the short panel at the submit button, linking to
@@ -574,7 +586,9 @@ a rate-limit rejection needs no special case.
   submit. Async failures and hand-written checks render in a `<Field.Error>`.
 - **Trap:** a hidden or `type="hidden"` control is skipped by constraint validation. `required` on
   a hidden file input blocks submission with no visible message; on a `RadioGroup`'s hidden input it
-  does nothing at all. Those get a check in the handler and an inline message.
+  does nothing at all. Those get a check in the handler, an inline message, **and a manual
+  `.focus()`/`.scrollIntoView()`** — native validation gives you the locator for free, a hand-written
+  check has to reproduce it or the failure is silent again.
 - The submit button stays enabled for an invalid form, and is disabled only while a request is in
   flight or a navigation is pending, with the reason in its label.
 - A field name always comes from a `FIELD` map, never a literal in markup.
@@ -668,7 +682,10 @@ The test stack must be running: `TEST_DB=1 scripts/supabase start`.
 5. By hand:
    - Tab through the whole form keyboard-only, including the drop zone and the radio groups.
    - Submit empty: the browser focuses the report name. Then with a name but no file: the inline file
-     message. Then with no unit system: its inline message.
+     message, with focus/scroll landing on the drop zone. Then with no unit system: its inline
+     message, with focus landing on the radio group — check this specifically after scrolling down
+     into the month fieldset first, since that's the scroll position where a silent failure would
+     actually go unnoticed.
    - Drop a `.txt` and an `.xlsx`: our CSV copy, not "File type not allowed". Drop a file over 10MB:
      our size copy.
    - Upload a CSV missing the weight column: a one-line Shape A rejection, not a list.

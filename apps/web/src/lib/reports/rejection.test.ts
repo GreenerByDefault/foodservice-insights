@@ -58,7 +58,13 @@ describe('parseUploadRejection', () => {
     ).toEqual(body);
   });
 
-  test('rejects a non-400 status, even with a rejection-shaped body', () => {
+  test('accepts a 429 whose body has a string summary', () => {
+    const body = { summary: 'You have created too many reports this hour.' };
+
+    expect(parseUploadRejection(new ApiError(429, 'Too Many Requests', body))).toEqual(body);
+  });
+
+  test('rejects a status that is neither 400 nor 429, even with a rejection-shaped body', () => {
     const body = { summary: 'We found problems.' };
 
     expect(parseUploadRejection(new ApiError(500, 'Internal Server Error', body))).toBeUndefined();
