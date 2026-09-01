@@ -8,6 +8,10 @@ import { lockAndCheckReportRateLimit } from '$lib/server/reports/rate-limit';
 import { withFileFixtures } from '$lib/server/tests/fixtures';
 import { _createReport } from './+server.ts';
 
+// A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
+// tests below that depend on it being enforced.
+vi.mock('$env/dynamic/private', () => ({ env: {} }));
+
 // Only `lockAndCheckReportRateLimit` is mocked, and it defaults to the real implementation — a
 // test below overrides it for one call to simulate the recheck losing a race that the initial
 // check won.
