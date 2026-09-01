@@ -172,11 +172,8 @@ needs `w-full`.
 **Empty state**: there is no precedent anywhere in the app, so this is being invented. Keep it to a
 muted sentence plus the New report button — it is also the first-run experience.
 
-**Also fix**: [apps/web/scripts/seed-reports.ts](apps/web/scripts/seed-reports.ts) lists
-`'failed-later-attempt'` in `STATES`, a `ReportState` member renamed to `'failed-retried'`, so
-`BUILDERS[state]` is `undefined` and `pnpm seed:reports` throws partway. It escapes `svelte-check`
-because `apps/web/scripts/` is not in the generated tsconfig's includes. I will hit this seeding data
-for the list.
+Bulk seeding for the list screen has no live source yet — the `organizations` factory above is
+where that lands.
 
 ### Tests
 
@@ -341,7 +338,8 @@ Per PR:
    a single green run does not prove a parallel race is gone. Per machine-load discipline, check
    `uptime` first so a slow run is not misread as a flake.
 6. `pnpm turbo run screenshots:update --filter=@gbd/web` for PR 1, and review both committed images.
-7. `pnpm dev` walkthrough with `pnpm seed:reports`: empty org shows the empty state; a mix of states
+7. `pnpm dev` walkthrough, using the live worker (`.claude/plans/worker-modes.md`) or the
+   `organizations` factory to get a mix of states: empty org shows the empty state; a mix of states
    shows the right statuses; a row links to its report; upload a report and watch it go
    Queued → Processing → Ready without a page reload; seed more than 20 and page Older then Newer
    back to the same rows.
