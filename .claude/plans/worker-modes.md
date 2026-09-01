@@ -147,29 +147,11 @@ and both tests share it.
 
 ## PR order
 
-Two PRs left. `REPORT_RATE_LIMIT=off` has landed — the guard described above, plus
-`REPORT_RATE_LIMIT` in `.env.example` and `turbo.json`'s `globalPassThroughEnv`, and a unit test for
-both branches of `checkReportRateLimit`.
+One PR left. `REPORT_RATE_LIMIT=off` and the stubbed Python child (`worker_child/testing.py`,
+`build_analyze`, the scenario catalogue) have both landed. PR 1 below is the mode switch that
+wires the stubbed child into `pnpm dev`; PR 2 needs PR 1.
 
-PR 1 needs nothing here; PR 2 needs PR 1.
-
-## PR 1 — the stubbed child (Python only)
-
-New `python/worker_child/src/worker_child/testing.py`: the scenario catalogue, a `build_analyze()`
-that reads `request.report_name`, and a `main()` so it runs as
-`python -m worker_child.testing <runDirectory>`. It calls the real
-`worker_child.run.run(run_directory, analyze=…)`, so `run.py` and `__main__.py` are untouched.
-
-Add `"**/testing.py" = ["TID251"]` to `[tool.ruff.lint.per-file-ignores]` in the root
-`pyproject.toml`, alongside the existing `python/worker_child/tests/**` entry. The rule this states:
-a package's shipped `testing.py` may import another package's `testing.py`; product modules may not.
-`gbd_foodservice_insights/testing.py` is the precedent for shipping a test helper in the wheel.
-
-Tests in `python/worker_child/tests/`: the grammar parses (including `:argument` and the unknown-name
-failure), and each scenario produces the outcome it claims. Nothing in TypeScript consumes this yet,
-so it lands and is verified entirely with `just`.
-
-## PR 2 — the mode switch, and `pnpm dev` runs the worker
+## PR 1 — the mode switch, and `pnpm dev` runs the worker
 
 New `apps/worker/src/modes.ts` — `resolveWorkerMode(env)` returning `{ childCommand, overrides }`,
 plus a `modes.test.ts` decision table in the style of `config.test.ts` (no database, no child, no
@@ -195,7 +177,7 @@ doesn't reach quickly is `processing-delayed`, the 15-minute overrun copy — it
 `!slow:1000` and a wait. It keeps its component test and its committed screenshot, and a row can
 still be hand-edited in Supabase Studio at <http://localhost:55323>.
 
-## PR 3 — `tests/e2e` becomes `@gbd/e2e`
+## PR 2 — `tests/e2e` becomes `@gbd/e2e`
 
 CI is already waiting: `.github/workflows/ci.yml`'s `system-e2e` job runs `turbo run test:system`,
 gated on `tests/e2e/package.json` existing, and `.github/filters.yml` already has a `system` filter.
@@ -245,14 +227,13 @@ test uses.
 Per PR, from the repo root. The gate is `pnpm lint && pnpm check && pnpm test` for anything
 TypeScript and `just lint && just check && just test` for anything Python, on top of what follows.
 
-- **PR 1** — `just` only; nothing consumes it yet.
-- **PR 2** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
+- **PR 1** — `pnpm dev`, then walk the catalogue in a browser: a plain upload succeeds; `!slow:90`
   holds on the waiting screen and can be canceled; `!hang` is killed as `hung` within ~30s;
   `!fail:unusable-data` and `!missing-pdf` land on the right failure copy; Retry on a failed report
   reaches `failed-retried`; the result email appears at <http://localhost:55324>. Check the waiting
   and result screens at 390px. Confirm `WORKER_MODE=mock-llm` refuses to start with a message saying
   why, and that an unset `WORKER_MODE` fails loudly.
-- **PR 3** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
+- **PR 2** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
   that spawns a worker and shares Mailpit is free of races. Check `uptime` first so a loaded machine
   is not misread as a flake.
 
@@ -260,8 +241,6 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 
 | File | Change |
 | --- | --- |
-| `python/worker_child/src/worker_child/testing.py` | **new** — scenario catalogue, `build_analyze`, `main` |
-| `pyproject.toml` | `per-file-ignores` for `**/testing.py` |
 | `apps/worker/src/modes.ts`, `modes.test.ts` | **new** — `resolveWorkerMode(env)` |
 | `apps/worker/src/main.ts` | read `WORKER_MODE`, drop the inline `childCommand` |
 | `apps/worker/package.json` | `dev` runs the worker |
@@ -272,4 +251,5 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 
 Unchanged by design: `apps/worker/src/testing/fake-child.ts`, `python/worker_child/tests/support/child.py`,
 `worker_child/run.py`, `worker_child/__main__.py`, `contract/`, `apps/web/e2e/fixtures/reports.ts`,
-`apps/web/src/lib/reports/limits.ts`, and every route in `apps/web`.
+`apps/web/src/lib/reports/limits.ts`, and every route in `apps/web`. Already landed:
+`python/worker_child/src/worker_child/testing.py` and its `pyproject.toml` `per-file-ignores` entry.
