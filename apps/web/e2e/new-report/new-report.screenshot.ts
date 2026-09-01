@@ -95,3 +95,48 @@ test('the rejection view, with a file dense enough to trigger every kind of prob
   await expect(page.getByText('4 rows: 2–4, 9', { exact: false })).toBeVisible();
   await expectScreenshot(page, 'reports-new-rejection.png');
 });
+
+// Every row has the same weight fault and nothing else wrong, so `everyRow` is true — the one
+// case the worst-case fixture above can't reach, since there each row fails for exactly one of
+// several distinct reasons instead of all rows failing for the same one.
+const EVERY_ROW_REJECTION_CSV = [
+  'product,date,weight',
+  'beef,2026-01-05,5 oz',
+  'beef,2026-01-06,5 oz',
+  'beef,2026-01-07,5 oz',
+].join('\n');
+
+test('the rejection view, with a rule that fails on every row', async ({ page }) => {
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
+  await ensureHydrated(page);
+
+  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
+    name: 'every-row.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(EVERY_ROW_REJECTION_CSV),
+  });
+
+  await expect(page.getByText('all 3 rows', { exact: false })).toBeVisible();
+  await expectScreenshot(page, 'reports-new-rejection-every-row.png');
+});
+
+// A missing column is a header fault, caught before any row is read — the rejection carries
+// only a summary, no rowProblems and no dateOrderProblem. That's the sparsest shape the
+// rejection view renders, and the one shot above it can't reach: no list, no date-order block,
+// and only the bottom "Back to the form" button (see rejection-view.svelte's `verbose` check).
+const MISSING_COLUMN_CSV = ['product,date', 'beef,2026-01-05'].join('\n');
+
+test('the rejection view, with only a bare summary and no row list', async ({ page }) => {
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
+  await ensureHydrated(page);
+
+  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
+    name: 'missing-column.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(MISSING_COLUMN_CSV),
+  });
+
+  await expect(page.getByText('Your file needs a column for weight.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to the form' })).toHaveCount(1);
+  await expectScreenshot(page, 'reports-new-rejection-bare-summary.png');
+});

@@ -13,6 +13,13 @@ let headingElement: HTMLHeadingElement | undefined = $state();
 $effect(() => {
   headingElement?.focus();
 });
+
+// Whether there's a row list or date-order block below the heading long enough that a
+// reader scrolling back up benefits from a button up there too, instead of hunting for the
+// one at the bottom.
+let hasScrollableDetail = $derived(
+  Boolean(rejection.rowProblems?.length || rejection.dateOrderProblem),
+);
 </script>
 
 <div class="space-y-6">
@@ -20,7 +27,9 @@ $effect(() => {
     <h2 bind:this={headingElement} tabindex="-1" class="text-lg font-semibold outline-none">
       {rejection.summary}
     </h2>
-    <Button variant="outline" onclick={onBack}>Back to the form</Button>
+    {#if hasScrollableDetail}
+      <Button variant="outline" onclick={onBack}>Back to the form</Button>
+    {/if}
   </div>
 
   {#if rejection.dateOrderProblem}
