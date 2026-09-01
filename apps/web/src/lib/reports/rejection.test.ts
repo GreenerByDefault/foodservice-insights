@@ -82,6 +82,10 @@ describe('parseUploadRejection', () => {
     expect(parseUploadRejection(new ApiError(400, 'oops', undefined))).toBeUndefined();
   });
 
+  test('rejects an array body', () => {
+    expect(parseUploadRejection(new ApiError(400, 'oops', []))).toBeUndefined();
+  });
+
   test('rejects a summary that is not a string', () => {
     expect(parseUploadRejection(new ApiError(400, 'oops', { summary: 404 }))).toBeUndefined();
   });

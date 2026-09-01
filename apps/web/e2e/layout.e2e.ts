@@ -3,6 +3,7 @@ import { expect, type Page } from '@playwright/test';
 import type { ReportState } from './fixtures/reports.ts';
 import { reportUrl } from './fixtures/reports.ts';
 import { test } from './fixtures/test.ts';
+import { ensureHydrated } from './lib/hydration.ts';
 import { expectNoHorizontalOverflow } from './lib/layout';
 import { VIEWPORT_WIDTHS } from './lib/viewports';
 
@@ -56,6 +57,33 @@ for (const state of TERMINAL_STATES) {
     await checkNoOverflowAtEveryWidth(page);
   });
 }
+
+// Several distinct kinds of bad row, plus dates written both ways, so the rejection view renders
+// its densest layout: the date-order block, multiple row problems, and their examples all at once.
+const DENSE_BAD_ROWS_CSV = [
+  'product,date,weight',
+  'beef,13/02/2026,5 oz',
+  'pork,02/13/2026,12 lb',
+  ',2026-01-01,3 kg',
+  'n/a,2026-01-02,-4',
+  'chicken,2026-01-03,$5',
+].join('\n');
+
+test('the reports/new rejection view has no horizontal overflow at any viewport', async ({
+  page,
+}) => {
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
+  await ensureHydrated(page);
+
+  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
+    name: 'bad.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(DENSE_BAD_ROWS_CSV),
+  });
+  await expect(page.getByRole('heading', { name: /problems/ })).toBeVisible();
+
+  await checkNoOverflowAtEveryWidth(page);
+});
 
 test('expectNoHorizontalOverflow fails, and names the offending element, on a page that overflows', async ({
   page,

@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'vitest';
-import { formatRows, renderProblemsAsDetail } from './problems.ts';
+import { formatRowSpan, renderProblemsAsDetail } from './problems.ts';
 
-describe('formatRows', () => {
+describe('formatRowSpan', () => {
   test('a single row', () => {
-    expect(formatRows({ ranges: [{ start: 15, end: 15 }], total: 1, everyRow: false })).toBe(
+    expect(formatRowSpan({ ranges: [{ start: 15, end: 15 }], total: 1, everyRow: false })).toBe(
       'row 15',
     );
   });
 
   test('several rows, with the total and every range', () => {
     expect(
-      formatRows({
+      formatRowSpan({
         ranges: [
           { start: 2, end: 4 },
           { start: 8, end: 8 },
@@ -23,19 +23,19 @@ describe('formatRows', () => {
   });
 
   test('a run of two is written out rather than ranged', () => {
-    expect(formatRows({ ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false })).toBe(
+    expect(formatRowSpan({ ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false })).toBe(
       '2 rows: 2, 3',
     );
   });
 
   test('rows past the range cap are named as a count', () => {
-    expect(formatRows({ ranges: [{ start: 2, end: 2 }], total: 4, everyRow: false })).toBe(
+    expect(formatRowSpan({ ranges: [{ start: 2, end: 2 }], total: 4, everyRow: false })).toBe(
       '4 rows: 2 and 3 more',
     );
   });
 
   test('every row, with thousands grouped', () => {
-    expect(formatRows({ ranges: [{ start: 1, end: 4500 }], total: 4500, everyRow: true })).toBe(
+    expect(formatRowSpan({ ranges: [{ start: 1, end: 4500 }], total: 4500, everyRow: true })).toBe(
       'all 4,500 rows',
     );
   });
