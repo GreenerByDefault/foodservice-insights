@@ -26,16 +26,23 @@ export type UploadRejection = Pick<
   'summary' | 'rowProblems' | 'dateOrderProblem'
 >;
 
-export function userFacingRejection({
+/** Drops `rowProblems`/`dateOrderProblem` rather than carrying them through as `undefined`, so a
+ * component can tell "no row problems" apart from "the key was never set" with a plain `in`/
+ * truthiness check instead of having to compare against `undefined` explicitly. */
+function toUploadRejection({
   summary,
   rowProblems,
   dateOrderProblem,
-}: RejectedUploadRecord): UploadRejection {
+}: Pick<RejectedUploadRecord, 'summary' | 'rowProblems' | 'dateOrderProblem'>): UploadRejection {
   return {
     summary,
     ...(rowProblems && { rowProblems }),
     ...(dateOrderProblem && { dateOrderProblem }),
   };
+}
+
+export function userFacingRejection(record: RejectedUploadRecord): UploadRejection {
+  return toUploadRejection(record);
 }
 
 export function parseUploadRejection(error: ApiError): UploadRejection | undefined {
@@ -50,14 +57,11 @@ export function parseUploadRejection(error: ApiError): UploadRejection | undefin
   )
     return undefined;
 
-  const { summary, rowProblems, dateOrderProblem } = jsonBody as unknown as {
-    summary: string;
-    rowProblems?: readonly Problem[];
-    dateOrderProblem?: string;
-  };
-  return {
-    summary,
-    ...(rowProblems && { rowProblems }),
-    ...(dateOrderProblem && { dateOrderProblem }),
-  };
+  return toUploadRejection(
+    jsonBody as unknown as {
+      summary: string;
+      rowProblems?: readonly Problem[];
+      dateOrderProblem?: string;
+    },
+  );
 }

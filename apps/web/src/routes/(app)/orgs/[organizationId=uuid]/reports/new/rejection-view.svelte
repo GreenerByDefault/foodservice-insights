@@ -2,9 +2,14 @@
 import { Button } from '$lib/components/ui/button';
 import { formatRowSpan } from '$lib/reports/csv/describe';
 import type { UploadRejection } from '$lib/reports/rejection';
-import { cn } from '$lib/utils/shadcn.js';
+import { cn } from '$lib/utils/shadcn';
 
-let { rejection, onBack }: { rejection: UploadRejection; onBack: () => void } = $props();
+interface Props {
+  rejection: UploadRejection;
+  onBack: () => void;
+}
+
+let { rejection, onBack }: Props = $props();
 
 let headingElement: HTMLHeadingElement | undefined = $state();
 
@@ -22,13 +27,17 @@ let hasScrollableDetail = $derived(
 );
 </script>
 
+{#snippet backButton(variant?: 'outline')}
+  <Button {variant} onclick={onBack}>Back to the form</Button>
+{/snippet}
+
 <div class="space-y-6">
   <div class="flex flex-wrap items-start justify-between gap-4">
     <h2 bind:this={headingElement} tabindex="-1" class="text-lg font-semibold outline-none">
       {rejection.summary}
     </h2>
     {#if hasScrollableDetail}
-      <Button variant="outline" onclick={onBack}>Back to the form</Button>
+      {@render backButton('outline')}
     {/if}
   </div>
 
@@ -75,5 +84,5 @@ let hasScrollableDetail = $derived(
 
   <p class="text-sm text-muted-foreground">No report was created.</p>
 
-  <Button onclick={onBack}>Back to the form</Button>
+  {@render backButton()}
 </div>

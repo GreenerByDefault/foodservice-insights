@@ -34,8 +34,10 @@ export default defineConfig({
   },
 
   // One canonical file per shot: no `-darwin`/`-chromium` suffixes, so a screenshot taken outside
-  // the container cannot land beside the real one instead of failing against it.
-  snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
+  // the container cannot land beside the real one instead of failing against it. Nested by
+  // `{testFileDir}` (empty for a spec directly under `e2e/`, so `{/testFileDir}` adds no segment
+  // there) so the shot names don't have to carry a feature prefix to stay a global namespace.
+  snapshotPathTemplate: '{testDir}/__screenshots__{/testFileDir}/{arg}{ext}',
   // Locally, a new shot is written on first run. In CI a missing snapshot is a failure — it means
   // someone added a screenshot test without committing its image.
   updateSnapshots: process.env.CI ? 'none' : 'missing',

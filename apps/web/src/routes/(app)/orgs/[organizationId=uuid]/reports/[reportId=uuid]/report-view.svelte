@@ -10,7 +10,7 @@ import { FAILURES_BEFORE_NOTICE, nextPollDelayMs } from './polling/schedule.ts';
 import ReportHeading from './report-heading.svelte';
 import ResultView from './result-view.svelte';
 import { describeProgress, isWaiting } from './waiting/progress.ts';
-import WaitingView from './waiting/view.svelte';
+import WaitingView from './waiting/waiting-view.svelte';
 
 let { data }: { data: ReportPageData } = $props();
 

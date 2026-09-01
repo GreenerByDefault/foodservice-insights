@@ -87,7 +87,7 @@ describe('UploadForm', () => {
     await screen.getByRole('button', { name: 'Upload report' }).click();
     await expect.element(screen.getByText('We found problems.')).toBeInTheDocument();
 
-    await screen.getByRole('button', { name: 'Back to the form' }).first().click();
+    await screen.getByRole('button', { name: 'Back to the form' }).click();
 
     await expect.element(screen.getByLabelText('Report name')).toHaveValue('Q1 procurement');
     await expect.element(screen.getByText('0 of 1 months still need a count')).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe('UploadForm', () => {
       .element(screen.getByText('You have created too many reports this hour.'))
       .toBeInTheDocument();
     await expect
-      .element(screen.getByRole('button', { name: 'Back to the form' }).first())
+      .element(screen.getByRole('button', { name: 'Back to the form' }))
       .toBeInTheDocument();
   });
 

@@ -1,11 +1,9 @@
 import {
-  ANALYSIS_FAILURE_EXPLANATIONS,
   type AnalysisAttemptId,
   type AnalysisAttemptStatus,
   type AnalysisFailureReason,
   type DatabaseExecutor,
   type InputFileId,
-  MAX_ANALYSIS_ATTEMPTS,
   type OrganizationId,
   type ReportId,
   type ResultFileId,
@@ -14,9 +12,11 @@ import {
 import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { newReportHref, organizationHref, reportHref } from '$lib/reports/hrefs';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
+import { type FailureCopy, toFailureCopy } from './failure-copy.ts';
 
 export const load: PageServerLoad = async ({ params }) => {
   const organizationId = params.organizationId as OrganizationId;
@@ -42,15 +42,6 @@ export type DeleteAction = { href: string; afterHref: string };
 export type ResultFiles = {
   pdf: FileLink;
   xlsx: FileLink;
-};
-
-/** What we ask the user to do next, and what to say about it. */
-export type FailureCopy = {
-  whatHappened: string;
-  followUpText: string;
-  canRetry: boolean;
-  attemptsExhausted: boolean;
-  contactMailto: string;
 };
 
 /** One report at one of its five reachable moments. `status` is the *screen*, not the column:
@@ -176,12 +167,12 @@ export async function _loadReport(
     },
     cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
     retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
-    newReportHref: `/orgs/${params.organizationId}/reports/new`,
+    newReportHref: newReportHref(params.organizationId),
     deleteAction: {
       href: `/api/orgs/${params.organizationId}/reports/${row.reportId}`,
-      afterHref: `/orgs/${params.organizationId}`,
+      afterHref: organizationHref(params.organizationId),
     },
-    pollHref: `/orgs/${params.organizationId}/reports/${row.reportId}/poll`,
+    pollHref: `${reportHref(params.organizationId, row.reportId)}/poll`,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
       originalFilename: row.inputFileOriginalFilename,
@@ -295,23 +286,4 @@ function toFileLink(file: { id: ResultFileId }): FileLink {
 
 function resultFileHref(id: ResultFileId): string {
   return `/file/result/${id}`;
-}
-
-function toFailureCopy(
-  reason: AnalysisFailureReason,
-  attemptNumber: number,
-  supportEmail: string,
-): FailureCopy {
-  const explanation = ANALYSIS_FAILURE_EXPLANATIONS[reason];
-  const cappedOutOfRetry =
-    explanation.followUp.action === 'retry' && attemptNumber >= MAX_ANALYSIS_ATTEMPTS;
-  return {
-    whatHappened: explanation.whatHappened,
-    followUpText: cappedOutOfRetry
-      ? `You've used all ${MAX_ANALYSIS_ATTEMPTS} attempts for this report. Contact us and we can help figure out what to change.`
-      : explanation.followUp.text,
-    canRetry: explanation.followUp.action === 'retry' && !cappedOutOfRetry,
-    attemptsExhausted: cappedOutOfRetry,
-    contactMailto: `mailto:${supportEmail}`,
-  };
 }
