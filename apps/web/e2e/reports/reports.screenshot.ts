@@ -1,9 +1,9 @@
+import { advanceThroughPollFailures, ensureHydrated } from '@gbd/browser-testing';
 import { MAX_ANALYSIS_ATTEMPTS, newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advanceThroughPollFailures, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
-import { ensureHydrated } from '../lib/hydration.ts';
+import { REPORT_POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
 import { expectScreenshot } from '../lib/screenshots.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {

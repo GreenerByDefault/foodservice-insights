@@ -9,7 +9,8 @@ interface Props {
 
 let { children }: Props = $props();
 
-// A signal for e2e tests that event listeners are attached — see `apps/web/e2e/lib/hydration.ts`.
+// A signal for e2e tests that event listeners are attached — see `@gbd/browser-testing`'s
+// `ensureHydrated`.
 $effect(() => {
   document.body.dataset.hydrated = 'true';
 });

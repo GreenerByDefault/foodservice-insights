@@ -1,6 +1,6 @@
+import { ensureHydrated } from '@gbd/browser-testing';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import { expect, test } from '@playwright/test';
-import { ensureHydrated } from '../lib/hydration.ts';
 import { expectScreenshot } from '../lib/screenshots.ts';
 
 test('the new report form, before any file is chosen', async ({ page }) => {

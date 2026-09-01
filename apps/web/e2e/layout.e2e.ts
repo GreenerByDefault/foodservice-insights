@@ -1,9 +1,9 @@
+import { ensureHydrated } from '@gbd/browser-testing';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import { expect, type Page } from '@playwright/test';
 import type { ReportState } from './fixtures/reports.ts';
 import { reportUrl } from './fixtures/reports.ts';
 import { test } from './fixtures/test.ts';
-import { ensureHydrated } from './lib/hydration.ts';
 import { expectNoHorizontalOverflow } from './lib/layout';
 import { VIEWPORT_WIDTHS } from './lib/viewports';
 

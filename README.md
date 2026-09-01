@@ -33,6 +33,7 @@ Everything above that heading is common to both.
 ```
 apps/web/                               SvelteKit app
 apps/worker/                            Worker parent: queue, child processes, DB and blob writes
+packages/browser-testing/               Playwright helpers shared by the e2e test suites
 packages/core/                          Shared TypeScript values and helpers
 packages/db/                            Kysely client, migrations, and generated types
 packages/email/                         The emails we send, and the transport under them

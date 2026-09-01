@@ -1,8 +1,8 @@
+import { ensureHydrated } from '@gbd/browser-testing';
 import type { ReportId } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
-import { ensureHydrated } from '../lib/hydration.ts';
 
 const GOOD_CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 

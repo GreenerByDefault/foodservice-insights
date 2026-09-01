@@ -5,10 +5,10 @@
  * status handling, the canceled screen's copy — is unit- and component-tested already.
  */
 
+import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
 
 test('canceling a report from the waiting screen shows the canceled screen, without a reload', async ({
