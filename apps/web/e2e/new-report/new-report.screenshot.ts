@@ -18,9 +18,6 @@ test('the new report form, with the monthly counts component partway filled in',
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
   await ensureHydrated(page);
 
-  // Client-side inspection derives the months from the file itself, so no POST is involved —
-  // `playwright.config.ts` sets `ORIGIN` to the host base URL, and a real submission from this
-  // containerized browser would get a 403 from SvelteKit's CSRF check.
   await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
     name: 'procurement.csv',
     mimeType: 'text/csv',

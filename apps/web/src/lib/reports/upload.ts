@@ -1,10 +1,4 @@
-/** The client-side call behind the new-report form.
- *
- * Unlike `deleteReport`/`retryReport`/`cancelReport`, which let `apiCall` throw because every
- * non-2xx really is a failure for them, a 400 or 429 here is an *expected* answer: the upload was
- * refused for a reason the form already knows how to explain. So this returns an outcome union
- * instead of throwing one.
- */
+/** The client-side call behind the new-report form. */
 
 import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
 import { parseUploadRejection, type UploadRejection } from './rejection.ts';
