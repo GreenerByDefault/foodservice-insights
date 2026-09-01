@@ -424,35 +424,35 @@ describe('each status narrows to the right variant', () => {
 });
 
 /** The load's one real rule: a terminal status outranks a cancel request, and a request on a
- * non-terminal row is already the stopped screen even though no worker has converged it.
+ * non-terminal row is already the stopped screen even though no worker has converged it. Which
+ * non-terminal statuses take that branch is `screenStatus`'s call, covered exhaustively in
+ * `attempt-status.test.ts`; this only has to show `_loadReport` wires its verdict into
+ * `stoppedAt` correctly for one of them.
  */
 describe('a cancel request', () => {
-  test.for(['pending', 'processing'] as const)(
-    'gives the stopped screen on a %s row, timed from the request',
-    async (status) => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const report = await aReportWithInputFile(transaction, organization.id);
-        const attempt = await insertAnalysisAttempt(transaction, {
-          reportId: report.id,
-          status,
-          cancelRequestedAt: NOW,
-        });
-        const stoppedAt = requireConstraint(
-          attempt.cancelRequestedAt,
-          'analysis_attempt_canceled_requires_request',
-        );
-
-        const data = await _loadReport(transaction, {
-          organizationId: organization.id,
-          reportId: report.id,
-          supportEmail: SUPPORT_EMAIL,
-        });
-
-        expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
+  test('gives the stopped screen on a pending row, timed from the request', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithInputFile(transaction, organization.id);
+      const attempt = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'pending',
+        cancelRequestedAt: NOW,
       });
-    },
-  );
+      const stoppedAt = requireConstraint(
+        attempt.cancelRequestedAt,
+        'analysis_attempt_canceled_requires_request',
+      );
+
+      const data = await _loadReport(transaction, {
+        organizationId: organization.id,
+        reportId: report.id,
+        supportEmail: SUPPORT_EMAIL,
+      });
+
+      expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
+    });
+  });
 
   test('loses to a succeeded row', async () => {
     await withRollback(database(), async (transaction) => {

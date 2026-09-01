@@ -35,7 +35,7 @@ complex filtering.**
 | Pagination | Yes — keyset cursor in the URL, page size 20, Older/Newer links |
 | Row layout | Two-line divided rows, whole row is one link |
 | Status | Plain text on every row, weighted — colour only where it matters |
-| PR split | 4 PRs |
+| PR split | 3 PRs remaining (a prefactor PR already landed) |
 
 **Why pagination at all**, given ~20 reports/org/week and no retention policy: the *poll* is what
 forces it. The poll endpoint re-serves the same query as `load` every 10 seconds while anything is
@@ -93,16 +93,20 @@ Deliberately excluded, each for a reason worth recording:
 This is the hard part, and it is specific to this page: **the list shows every report in the
 organization**, so unlike every screen built so far it is affected by what *other* tests are doing.
 Playwright runs `fullyParallel: true`, one cloned database per run shared by all workers, and
-`apps/web/e2e/README.md` records that *"every fixture lives in the placeholder organization."* Any
-assertion about the list as a whole races every other spec that creates a report.
+`apps/web/e2e/README.md` § Database state records that any assertion about the list as a whole
+races every other spec that creates a report.
 
-The obvious fix — a fresh organization per test — has a trap. `_resolvePostSignInDestination`
-([orgs/+page.server.ts](apps/web/src/routes/(app)/orgs/+page.server.ts)) redirects to the org only
-when `auth.organizations.length === 1`, and [auth.e2e.ts](apps/web/e2e/auth.e2e.ts) asserts exactly
-that redirect. Granting the placeholder user a second membership, even for the seconds a test holds
-it, sends a concurrently-running `auth.e2e.ts` to the picker instead and fails it. There is no way
-to be a *different* user yet, because `identifyUser` is a stand-in that always returns the
-placeholder.
+The obvious fix — a fresh organization per test — had a trap, now cleared: `auth.e2e.ts` used to
+assert that `_resolvePostSignInDestination`
+([orgs/+page.server.ts](apps/web/src/routes/(app)/orgs/+page.server.ts)) redirects a signed-in
+request to the org when `auth.organizations.length === 1`, so granting the placeholder user a
+second membership, even for the seconds a test holds it, would have sent a concurrently-running
+`auth.e2e.ts` to the picker instead and failed it. `auth.e2e.ts` now goes straight to
+`/orgs/${PLACEHOLDER_ORGANIZATION_ID}` and asserts the banner, so that invariant is gone —
+everything the redirect assertion uniquely covered stays hermetically proven by the pure unit test
+[resolve-post-sign-in-destination.test.ts](apps/web/src/routes/(app)/orgs/resolve-post-sign-in-destination.test.ts).
+There is still no way to be a *different* user, because `identifyUser` is a stand-in that always
+returns the placeholder — only a second *membership* is available, not a second identity.
 
 So the strategy splits by what a test actually needs to control:
 
@@ -110,21 +114,6 @@ So the strategy splits by what a test actually needs to control:
 | --- | --- |
 | One report's own rendering, linking, live update | Placeholder org, assertions scoped to that report's unique name |
 | The *whole* list — empty state, pagination, screenshots | A dedicated per-test organization |
-
-and the dedicated-org half is unblocked by one small change, in PR 1:
-
-**Retarget `auth.e2e.ts` off the single-org redirect.** Have it `goto` the placeholder org directly
-and assert the banner, dropping only the "picks the one organization" hop — which is already covered
-exhaustively and hermetically by the pure unit test
-[resolve-post-sign-in-destination.test.ts](apps/web/src/routes/(app)/orgs/resolve-post-sign-in-destination.test.ts).
-Everything that test uniquely covers (the seeded identity, `hooks.server.ts`, the `(app)` guard, data
-reaching a component) survives. That removes a global "the placeholder user has exactly one org"
-invariant which is a landmine for any future spec, not just this one.
-
-Before landing that, grep for other assumptions: `PLACEHOLDER_ORGANIZATION`, and anything asserting
-on the header's org switcher. The switcher renders every org the user belongs to, but it is a
-collapsed `<details>` — only the *current* org's name is visible — so a second org does not change
-rendered pixels.
 
 **A dedicated org is also what makes the timestamps and rate limits work out.** The main screenshot
 wants a row that is "12 minutes ago", which is inside `HOURLY_REPORT_LIMIT`'s rolling window; the
@@ -138,43 +127,7 @@ user, and its reports at controlled `createdAt` values, deleting the org on tear
 reports cascade). Names must be unique (`organization_name_unique_ci`): a random suffix for
 behavioural specs, a fixed name for a screenshot, where the org name is rendered in the `<h1>`.
 
-`apps/web/e2e/README.md` § Database state then says something false, and per `AGENTS.md` the code
-wins and the README is a bug to fix — update it in the same PR.
-
-## PR 1 — Prefactor: the shared pieces the list needs
-
-Pure refactor and pure additions. No new feature; existing tests prove no behaviour change.
-
-**`formatWhen(now, at)` in [packages/core/src/time.ts](packages/core/src/time.ts).** The existing
-`formatElapsed` deliberately stops at days, so an old report would read "412 days ago". `formatWhen`
-delegates to `formatElapsed` under 7 days (`WEEK_MS` is already exported there) and otherwise
-formats an absolute date with a new `Intl.DateTimeFormat`, fixed to UTC exactly as `formatTimestamp`
-is, so server and client agree. Unit tests either side of the boundary.
-
-**Promote `relative-time.svelte` to `src/lib/components/reports/relative-time.svelte`.** The list is
-the second consumer, which is precisely the promotion trigger `apps/web/README.md` § UI components
-names. The `<time datetime title={formatTimestamp(at)}>` shell and the `now`-as-a-prop contract stay;
-settle when writing it whether the caller picks the formatter or the component takes a `format` prop.
-
-**Extract `screenStatus` to `src/lib/reports/attempt-status.ts`.** `toAttempt` in the report page's
-`+page.server.ts` collapses `cancelRequestedAt !== null && status in (pending, processing)` into the
-`canceled` screen. `ARCHITECTURE.md` § Canceling explains why (the web server never writes `status`;
-a worker converges it) and warns that *a reader has to trust `status` over the request*. The list
-needs the identical rule, and a second copy of a subtle invariant is where it drifts. Extract just
-the collapse:
-
-```ts
-export function screenStatus(attempt: {
-  status: AnalysisAttemptStatus;
-  cancelRequestedAt: Date | null;
-}): AnalysisAttemptStatus
-```
-
-Rewire `toAttempt` to call it. The ARCHITECTURE reasoning moves onto this function.
-
-**Retarget `auth.e2e.ts`** and update `e2e/README.md`, per the section above.
-
-## PR 2 — The query and the static list
+## PR 1 — The query and the static list
 
 No polling, no pagination navigation yet.
 
@@ -196,7 +149,7 @@ Query notes that matter:
   `now - timestamp` against the database's clock, immune to skew and to SSR/CSR mismatch.
 - Left-join `appUser` and `auth.users` for the creator, as `_loadReport` does — `created_by_user_id`
   goes null on `ON DELETE SET NULL` and a report outlives the account.
-- The row's status comes from `screenStatus` (PR 1), not the raw column.
+- The row's status comes from `screenStatus` ([`$lib/reports/attempt-status.ts`](apps/web/src/lib/reports/attempt-status.ts)), not the raw column.
 - Hrefs are minted server-side into the payload, matching `_loadReport`.
 
 **Components** (route-local; a view gets a subfolder once it is more than one file):
@@ -246,7 +199,7 @@ E2E (`e2e/reports-list.e2e.ts` — flat until the feature has two suites): a rep
 placeholder org appears and its row links to the report page, asserted by that report's unique
 name so nothing races.
 
-## PR 3 — Pagination
+## PR 2 — Pagination
 
 **One query param, mutually exclusive**: `?older=<reportId>` or `?newer=<reportId>`, where the value
 is the id of the last (resp. first) report on the page you are leaving. A single uuid keeps the URL
@@ -286,7 +239,7 @@ same rows, and a cursor whose report has been soft-deleted. The e2e — 21 repor
 Newer — needs the **dedicated organization** fixture, both to control the page contents and to keep
 21 reports out of the shared org.
 
-## PR 4 — Polling
+## PR 3 — Polling
 
 **Prefactor first, in the same PR**: extract the poll loop out of
 [report-view.svelte](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/report-view.svelte)
@@ -314,7 +267,7 @@ rewires onto it with no behaviour change, proven by
 [report-view.svelte.test.ts](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/report-view.svelte.test.ts),
 `schedule.test.ts`, `e2e/reports/live-update.e2e.ts` and `e2e/reports/reconnect.e2e.ts`.
 
-If that reads large in review, it splits cleanly into 4a (extract and rewire the report page) and 4b
+If that reads large in review, it splits cleanly into 3a (extract and rewire the report page) and 3b
 (wire the list) — the extraction touches no list code.
 
 **Then the list side:**
@@ -361,7 +314,7 @@ spec it gets an `e2e/reports-list/` folder holding both.
 Responsiveness needs no new screenshot: `e2e/layout.e2e.ts`'s `ROUTES` **already includes
 `/orgs/${PLACEHOLDER_ORGANIZATION_ID}`** and sweeps 390/768/1280 asserting no horizontal overflow.
 That existing test is what the two-line row layout is designed to pass, and it will start doing real
-work the moment PR 2 lands.
+work the moment PR 1 lands.
 
 ## Coordination risk
 
@@ -384,10 +337,10 @@ Per PR:
    `pnpm --filter @gbd/web test:e2e -- <path>`.
 4. The gate, verbatim, in the background: `pnpm lint && pnpm check && pnpm test`.
 5. Because this is the first screen whose tests can interfere with other specs, **run
-   `pnpm test:playwright` more than once** before landing PR 2 and PR 3 and confirm it is stable —
+   `pnpm test:playwright` more than once** before landing PR 1 and PR 2 and confirm it is stable —
    a single green run does not prove a parallel race is gone. Per machine-load discipline, check
    `uptime` first so a slow run is not misread as a flake.
-6. `pnpm turbo run screenshots:update --filter=@gbd/web` for PR 2, and review both committed images.
+6. `pnpm turbo run screenshots:update --filter=@gbd/web` for PR 1, and review both committed images.
 7. `pnpm dev` walkthrough with `pnpm seed:reports`: empty org shows the empty state; a mix of states
    shows the right statuses; a row links to its report; upload a report and watch it go
    Queued → Processing → Ready without a page reload; seed more than 20 and page Older then Newer
