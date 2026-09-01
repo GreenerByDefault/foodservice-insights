@@ -19,6 +19,7 @@ import type { Emailer } from '@gbd/email';
 import type { BlobStore } from '@gbd/storage';
 import {
   decideDirective,
+  foldDeliveryOutcome,
   type LeaseReading,
   type TickReading,
   type TickState,
@@ -217,19 +218,14 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   /** Fold a `deliverVerdict` outcome into the in-flight record: drop it once the verdict is off
    * our hands, or hold `pendingVerdict` for the next tick's `launchResume` if it parked. */
   function applyDeliveryOutcome(record: InFlightAttempt, outcome: SettleOutcome): void {
-    if (outcome.kind !== 'parked') {
+    const folded = foldDeliveryOutcome(record.state.parked, outcome, clock.now());
+    if (folded.kind === 'settled') {
       inFlight.delete(record.prepared.attemptId);
       return;
     }
 
-    // A resume that parks again should keep its original `since`, so `uploadRetryBudgetMs` is spent
-    // rather than restarted on every tick.
-    const parkedSince = record.state.parked?.since ?? clock.now();
-    record.pendingVerdict = outcome.pending;
-    record.state = {
-      ...record.state,
-      parked: { stage: outcome.pending.stage, since: parkedSince },
-    };
+    record.pendingVerdict = folded.pendingVerdict;
+    record.state = { ...record.state, parked: folded.parked };
   }
 
   // -----------------------------------------------------------

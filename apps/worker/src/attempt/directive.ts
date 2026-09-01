@@ -5,7 +5,7 @@
 
 import type { WorkerConfig } from '../config.ts';
 import { ContractError } from '../contract/messages.ts';
-import type { PendingVerdict } from './lifecycle.ts';
+import type { PendingVerdict, SettleOutcome } from './lifecycle.ts';
 import type { Lease } from './queue.ts';
 import type { Kill } from './verdict.ts';
 
@@ -179,4 +179,25 @@ function directiveFor(
   }
 
   return { kind: 'nothing' };
+}
+
+export type DeliveryFold =
+  | { kind: 'settled' }
+  | { kind: 'parked'; parked: NonNullable<TickState['parked']>; pendingVerdict: PendingVerdict };
+
+/** Fold a `deliverVerdict` outcome into an attempt's `parked` state, side-effect free. */
+export function foldDeliveryOutcome(
+  existingParked: TickState['parked'],
+  outcome: SettleOutcome,
+  now: number,
+): DeliveryFold {
+  if (outcome.kind !== 'parked') return { kind: 'settled' };
+
+  return {
+    kind: 'parked',
+    // Keep the original `since` on a re-park rather than restarting it, so `uploadRetryBudgetMs`
+    // is spent once, not reset on every tick a broken store keeps failing.
+    parked: { stage: outcome.pending.stage, since: existingParked?.since ?? now },
+    pendingVerdict: outcome.pending,
+  };
 }
