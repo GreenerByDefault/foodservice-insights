@@ -12,6 +12,7 @@ import {
 import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { screenStatus } from '$lib/reports/attempt-status';
 import { newReportHref, organizationHref, reportHref } from '$lib/reports/hrefs';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
@@ -46,7 +47,7 @@ export type ResultFiles = {
 
 /** One report at one of its five reachable moments. `status` is the *screen*, not the column:
  * they agree except for a cancel the worker hasn't converged on yet, which shows as `canceled`
- * (see `toAttempt`).
+ * (see `screenStatus`).
  *
  * `claimedAt`/`finishedAt` are non-nullable where the DB guarantees them
  * (`analysis_attempt_processing_is_claimed`, `analysis_attempt_finished_at_iff_terminal`), so
@@ -210,12 +211,7 @@ async function toAttempt(
   row: ReportRow,
   supportEmail: string,
 ): Promise<Attempt> {
-  // We allow requests that were cancelled but still succeeded or failed to pass through.
-  if (row.cancelRequestedAt !== null && (row.status === 'pending' || row.status === 'processing')) {
-    return { status: 'canceled', stoppedAt: row.cancelRequestedAt };
-  }
-
-  switch (row.status) {
+  switch (screenStatus(row)) {
     case 'pending':
       return { status: 'pending', createdAt: row.createdAt };
     case 'processing':

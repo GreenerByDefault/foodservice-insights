@@ -2,7 +2,7 @@
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 import CircleIcon from '@lucide/svelte/icons/circle';
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-import RelativeTime from '../relative-time.svelte';
+import RelativeTime from '$lib/components/reports/relative-time.svelte';
 import type { Step } from './progress.ts';
 
 interface Props {
