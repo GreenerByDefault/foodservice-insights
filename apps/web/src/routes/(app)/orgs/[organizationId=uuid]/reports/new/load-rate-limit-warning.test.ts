@@ -1,11 +1,15 @@
 /** `rate-limit.test.ts` already checks most of the edge cases; this file is for the wiring. */
 
 import { insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { HOURLY_REPORT_LIMIT } from '$lib/reports/limits';
 import { database } from '$lib/server/db';
 import { describeRateLimitExceeded } from '$lib/server/reports/rate-limit';
 import { _loadRateLimitWarning } from './+page.server.ts';
+
+// A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
+// test below that depends on it being enforced.
+vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 describe('_loadRateLimitWarning', () => {
   test('undefined when neither the organization nor the user is near a limit', async () => {
