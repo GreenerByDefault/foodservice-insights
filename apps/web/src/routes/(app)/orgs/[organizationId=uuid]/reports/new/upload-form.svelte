@@ -164,10 +164,7 @@ function backToForm() {
 
       {#if file}
         <div class="flex items-center justify-between gap-4 rounded-md border p-3">
-          <div>
-            <p class="font-medium">{file.name}</p>
-            <p class="text-sm text-muted-foreground">{FileDropZone.displaySize(file.size)}</p>
-          </div>
+          <p class="font-medium">{file.name}</p>
           <Button type="button" variant="outline" onclick={replaceFile}>Replace</Button>
         </div>
         {#if formState.status === 'checking'}
@@ -218,23 +215,7 @@ function backToForm() {
       </Field.Field>
 
       <Field.Field>
-        <Field.Legend variant="label">Counts basis</Field.Legend>
-        <RadioGroup
-          name={FIELD.countsBasis}
-          value={countsBasis}
-          onValueChange={(value) => (countsBasis = value as CountsBasis)}
-        >
-          {#each COUNTS_BASES as basis (basis)}
-            <Field.Label>
-              <RadioGroupItem value={basis} />
-              {basis === 'people' ? 'Diners' : 'Meals'}
-            </Field.Label>
-          {/each}
-        </RadioGroup>
-      </Field.Field>
-
-      <Field.Field>
-        <Field.Legend variant="label">Unit system</Field.Legend>
+        <Field.Legend variant="label">Weight unit</Field.Legend>
         <RadioGroup
           bind:ref={unitSystemRef}
           name={FIELD.unitSystem}
@@ -256,6 +237,23 @@ function backToForm() {
 
     <Field.Set>
       <Field.Legend>Monthly counts</Field.Legend>
+
+      <Field.Field>
+        <Field.Legend variant="label">Counts basis</Field.Legend>
+        <RadioGroup
+          name={FIELD.countsBasis}
+          value={countsBasis}
+          onValueChange={(value) => (countsBasis = value as CountsBasis)}
+        >
+          {#each COUNTS_BASES as basis (basis)}
+            <Field.Label>
+              <RadioGroupItem value={basis} />
+              {basis === 'people' ? 'Diners' : 'Meals'}
+            </Field.Label>
+          {/each}
+        </RadioGroup>
+      </Field.Field>
+
       {#if months}
         <MonthlyCounts {months} basis={countsBasis} bind:counts />
       {:else}
