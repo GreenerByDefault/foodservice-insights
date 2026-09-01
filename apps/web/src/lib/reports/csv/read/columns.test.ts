@@ -17,6 +17,7 @@ describe('resolveHeader', () => {
     ['Date Ordered', 'date'],
     ['order-date', 'date'],
     ['weight', 'weight'],
+    ['Product Weight', 'weight'],
   ] as const)('reads "%s" as the %s column', ([alias, column]) => {
     expect(resolveHeader(headerFor(alias, column))).toEqual({
       ok: true,

@@ -19,7 +19,7 @@ export const REQUIRED_COLUMNS: readonly RequiredColumn[] = ['product', 'date', '
 const ALIASES = {
   product: ['product', 'product name', 'item', 'item name', 'description'],
   date: ['date', 'date ordered', 'order date'],
-  weight: ['weight'],
+  weight: ['weight', 'product weight'],
 } as const satisfies Record<RequiredColumn, readonly string[]>;
 
 export type ColumnIndexes = Record<RequiredColumn, number>;
