@@ -6,15 +6,15 @@
  * cap arithmetic — is unit- and component-tested already.
  */
 
+import { advancePoll, ensureHydrated } from '@gbd/browser-testing';
 import { withTransaction } from '@gbd/db';
 import { insertResultFile } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
 import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advancePoll, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
-import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
+import { REPORT_POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
 
 test('retrying a failed report shows the waiting screen and resumes polling, without a reload', async ({
   page,

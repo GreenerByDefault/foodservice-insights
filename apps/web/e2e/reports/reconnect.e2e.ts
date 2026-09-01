@@ -7,12 +7,12 @@
  * dedicated `+server.ts` with a plain `fetch` avoids that.
  */
 
+import { advanceThroughPollFailures, ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { advanceThroughPollFailures, REPORT_POLL_INTERVAL_MS } from '../lib/fake-poll.ts';
-import { ensureHydrated } from '../lib/hydration.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
+import { REPORT_POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
 
 test('an unreachable poll leaves the timeline up and shows a reconnecting notice, never a reload', async ({
   page,
