@@ -1,5 +1,5 @@
-/** Drop every `fsi_test_%` database — every leftover run database and every cached template.
- * `TEST_DB=1` targets the test stack, though this is the one command that only makes sense there.
+/** CLI for `cleanAllTestDatabases` (see `run-database.ts`). `TEST_DB=1` targets the test stack,
+ * though this is the one command that only makes sense there.
  *
  *   pnpm test:db:clean
  *

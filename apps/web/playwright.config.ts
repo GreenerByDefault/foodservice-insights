@@ -6,7 +6,6 @@ import { BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
 // `test:playwright`/`screenshots:update` script routes through. A bare `playwright test` would
 // otherwise silently fall back to a fixed port and the shared database, reintroducing the
 // concurrent-run flake `test-run.ts` exists to fix — see `.claude/plans/test-run-isolation.md`.
-// The precedent for this style is `expectScreenshot`'s guard in `e2e/lib/screenshots.ts`.
 if (!process.env.TEST_RUN_ID) {
   throw new Error(
     'TEST_RUN_ID is not set. Run tests through `pnpm test:e2e`, `pnpm test:screenshots`, ' +
