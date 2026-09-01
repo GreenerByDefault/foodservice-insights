@@ -46,7 +46,12 @@ let destroyed = false;
 
 function scheduleNext(): void {
   clearTimeout(timer);
-  const delayMs = nextPollDelayMs({ reportSettled, documentHidden, consecutiveFailures });
+  const delayMs = nextPollDelayMs({
+    reportSettled,
+    documentHidden,
+    consecutiveFailures,
+    baseIntervalMs: current.pollIntervalMs,
+  });
   timer = delayMs === undefined ? undefined : setTimeout(poll, delayMs);
 }
 

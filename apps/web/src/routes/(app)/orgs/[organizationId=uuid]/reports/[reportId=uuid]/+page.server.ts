@@ -11,6 +11,7 @@ import {
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
+import { env } from '$env/dynamic/private';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { screenStatus } from '$lib/reports/attempt-status';
 import { newReportHref, organizationHref, reportHref } from '$lib/reports/hrefs';
@@ -18,6 +19,7 @@ import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
 import { type FailureCopy, toFailureCopy } from './failure-copy.ts';
+import { pollIntervalMsForWorkerMode } from './polling/schedule.ts';
 
 export const load: PageServerLoad = async ({ params }) => {
   const organizationId = params.organizationId as OrganizationId;
@@ -29,6 +31,7 @@ export const load: PageServerLoad = async ({ params }) => {
         organizationId,
         reportId,
         supportEmail: requireVar('EMAIL_SUPPORT_ADDRESS'),
+        pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
       }),
     { action: 'load a report', context: { organizationId, reportId } },
   );
@@ -76,6 +79,7 @@ export type ReportPageData = {
   newReportHref: string;
   deleteAction: DeleteAction;
   pollHref: string;
+  pollIntervalMs: number;
   inputFile: { href: string; originalFilename: string; byteSize: number };
   attempt: Attempt;
   /** The database's clock, not the browser's — every duration on the page is `now - timestamp`
@@ -113,7 +117,12 @@ type ReportRow = {
  */
 export async function _loadReport(
   db: DatabaseExecutor,
-  params: { organizationId: OrganizationId; reportId: ReportId; supportEmail: string },
+  params: {
+    organizationId: OrganizationId;
+    reportId: ReportId;
+    supportEmail: string;
+    pollIntervalMs: number;
+  },
 ): Promise<ReportPageData> {
   // Latest attempt via `order by attempt_number desc limit 1`, safe because of the
   // `(report_id, attempt_number)` unique constraint. Result files aren't joined here — they
@@ -174,6 +183,7 @@ export async function _loadReport(
       afterHref: organizationHref(params.organizationId),
     },
     pollHref: `${reportHref(params.organizationId, row.reportId)}/poll`,
+    pollIntervalMs: params.pollIntervalMs,
     inputFile: {
       href: `/file/input/${row.inputFileId}`,
       originalFilename: row.inputFileOriginalFilename,

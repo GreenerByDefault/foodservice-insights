@@ -21,6 +21,7 @@ const BASE = {
   deleteAction: { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' },
   newReportHref: '/orgs/org-1/reports/new',
   pollHref: POLL_HREF,
+  pollIntervalMs: BASE_POLL_INTERVAL_MS,
   inputFile: {
     href: '/file/input/1',
     originalFilename: 'orders.csv',
