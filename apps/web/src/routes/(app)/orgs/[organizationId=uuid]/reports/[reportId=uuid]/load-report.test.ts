@@ -23,6 +23,20 @@ import { _loadReport } from './+page.server.ts';
 
 const SUPPORT_EMAIL = 'support@foodservice-insights.test';
 
+/** Every test loads with the same support email and poll interval — only the org/report vary. */
+function loadReport(
+  transaction: DatabaseExecutor,
+  organizationId: OrganizationId,
+  reportId: ReportId,
+) {
+  return _loadReport(transaction, {
+    organizationId,
+    reportId,
+    supportEmail: SUPPORT_EMAIL,
+    pollIntervalMs: 1_000,
+  });
+}
+
 async function aReportWithInputFile(
   transaction: DatabaseExecutor,
   organizationId: OrganizationId,
@@ -33,11 +47,20 @@ async function aReportWithInputFile(
   return report;
 }
 
+/** The organization+report pair nearly every test needs before it can shape its own attempt. */
+async function anOrgAndReport(
+  transaction: DatabaseExecutor,
+  overrides: { siteName?: string; createdByUserId?: UserId | null } = {},
+) {
+  const { organization } = await insertOrganization(transaction);
+  const report = await aReportWithInputFile(transaction, organization.id, overrides);
+  return { organization, report };
+}
+
 describe('a report the caller may see', () => {
   test('the latest attempt wins when there are several', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       // A new attempt is only ever created after the previous one failed — see
       // analysis_attempt_new_attempt_only_after_failure — so this is the only shape a
       // multi-attempt report can be in.
@@ -52,11 +75,7 @@ describe('a report the caller may see', () => {
         status: 'pending',
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt.status).toBe('pending');
     });
@@ -64,19 +83,12 @@ describe('a report the caller may see', () => {
 
   test('a report in another organization is a 404, not a leak', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization: owner } = await insertOrganization(transaction);
+      const { report } = await anOrgAndReport(transaction);
       const { organization: outsider } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, owner.id);
       await insertAnalysisAttempt(transaction, { reportId: report.id });
 
       await expect(
-        statusOf(() =>
-          _loadReport(transaction, {
-            organizationId: outsider.id,
-            reportId: report.id,
-            supportEmail: SUPPORT_EMAIL,
-          }),
-        ),
+        statusOf(() => loadReport(transaction, outsider.id, report.id)),
       ).resolves.toEqual({ status: 404, code: 'not_found' });
     });
   });
@@ -86,21 +98,14 @@ describe('a report the caller may see', () => {
       const { organization } = await insertOrganization(transaction);
 
       await expect(
-        statusOf(() =>
-          _loadReport(transaction, {
-            organizationId: organization.id,
-            reportId: crypto.randomUUID() as ReportId,
-            supportEmail: SUPPORT_EMAIL,
-          }),
-        ),
+        statusOf(() => loadReport(transaction, organization.id, crypto.randomUUID() as ReportId)),
       ).resolves.toEqual({ status: 404, code: 'not_found' });
     });
   });
 
   test('a soft-deleted report is a 404, cancel request and all', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       // Deleting a running report writes `cancel_requested_at` in the same transaction as
       // `deleted_at` (REQUIREMENTS.md § Data deletion), so this is the shape a deleted report
       // usually arrives in — and it must be a 404, not the stopped screen.
@@ -115,32 +120,19 @@ describe('a report the caller may see', () => {
         .execute();
 
       await expect(
-        statusOf(() =>
-          _loadReport(transaction, {
-            organizationId: organization.id,
-            reportId: report.id,
-            supportEmail: SUPPORT_EMAIL,
-          }),
-        ),
+        statusOf(() => loadReport(transaction, organization.id, report.id)),
       ).resolves.toEqual({ status: 404, code: 'not_found' });
     });
   });
 
   test('a report with no attempt is our bug, not a 404', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
       // One transaction always creates report, input_file and the first attempt together — this
       // fixture builds the state that transaction guarantees never exists.
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
 
       await expect(
-        statusOf(() =>
-          _loadReport(transaction, {
-            organizationId: organization.id,
-            reportId: report.id,
-            supportEmail: SUPPORT_EMAIL,
-          }),
-        ),
+        statusOf(() => loadReport(transaction, organization.id, report.id)),
       ).resolves.toEqual({ status: 500 });
     });
   });
@@ -149,17 +141,12 @@ describe('a report the caller may see', () => {
 describe('report.siteName', () => {
   test('is passed through when set', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id, {
+      const { organization, report } = await anOrgAndReport(transaction, {
         siteName: 'Riverside Diner',
       });
       await insertAnalysisAttempt(transaction, { reportId: report.id });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.report.siteName).toBe('Riverside Diner');
     });
@@ -169,18 +156,13 @@ describe('report.siteName', () => {
 describe('report.creator', () => {
   test('carries the display name of a named creator', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
       const user = await insertAppUser(transaction, { displayName: 'Dana Cook' });
-      const report = await aReportWithInputFile(transaction, organization.id, {
+      const { organization, report } = await anOrgAndReport(transaction, {
         createdByUserId: user.id,
       });
       await insertAnalysisAttempt(transaction, { reportId: report.id });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.report.creator).toEqual({ displayName: 'Dana Cook', email: expect.any(String) });
     });
@@ -188,18 +170,13 @@ describe('report.creator', () => {
 
   test('falls back to email when the creator has no display name', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
       const user = await insertAppUser(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id, {
+      const { organization, report } = await anOrgAndReport(transaction, {
         createdByUserId: user.id,
       });
       await insertAnalysisAttempt(transaction, { reportId: report.id });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.report.creator?.displayName).toBeNull();
       expect(data.report.creator?.email).toMatch(/@example\.test$/);
@@ -208,17 +185,12 @@ describe('report.creator', () => {
 
   test('is null when created_by_user_id is null (a deleted user)', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id, {
+      const { organization, report } = await anOrgAndReport(transaction, {
         createdByUserId: null,
       });
       await insertAnalysisAttempt(transaction, { reportId: report.id });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.report.creator).toBeNull();
     });
@@ -228,8 +200,7 @@ describe('report.creator', () => {
 describe('each status narrows to the right variant', () => {
   test('pending', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       const createdAt = new Date('2026-01-15T10:00:00Z');
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
@@ -237,11 +208,7 @@ describe('each status narrows to the right variant', () => {
         createdAt,
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({ status: 'pending', createdAt });
     });
@@ -249,8 +216,7 @@ describe('each status narrows to the right variant', () => {
 
   test('processing', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       const createdAt = new Date('2026-01-15T10:00:00Z');
       const claimedAt = new Date('2026-01-15T10:05:00Z');
       await insertAnalysisAttempt(transaction, {
@@ -260,11 +226,7 @@ describe('each status narrows to the right variant', () => {
         claimedAt,
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({ status: 'processing', createdAt, claimedAt });
     });
@@ -272,8 +234,7 @@ describe('each status narrows to the right variant', () => {
 
   test('failed', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       const createdAt = new Date('2026-01-15T10:00:00Z');
       const finishedAt = new Date('2026-01-15T10:05:00Z');
       await insertAnalysisAttempt(transaction, {
@@ -284,11 +245,7 @@ describe('each status narrows to the right variant', () => {
         failureReason: 'child_crashed',
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({
         status: 'failed',
@@ -308,8 +265,7 @@ describe('each status narrows to the right variant', () => {
 
   test('failed at the attempt cap: retry copy is suppressed even for a reason whose own follow-up is retry', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       // Every earlier attempt must itself be `failed` — see
       // analysis_attempt_new_attempt_only_after_failure — so this is the only shape a
       // report at the cap can be in.
@@ -334,11 +290,7 @@ describe('each status narrows to the right variant', () => {
         'analysis_attempt_finished_at_iff_terminal',
       );
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({
         status: 'failed',
@@ -357,8 +309,7 @@ describe('each status narrows to the right variant', () => {
 
   test('succeeded', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       const createdAt = new Date('2026-01-15T10:00:00Z');
       const claimedAt = new Date('2026-01-15T10:03:00Z');
       const finishedAt = new Date('2026-01-15T10:05:00Z');
@@ -378,11 +329,7 @@ describe('each status narrows to the right variant', () => {
         kind: 'xlsx',
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({
         status: 'succeeded',
@@ -399,8 +346,7 @@ describe('each status narrows to the right variant', () => {
 
   test('canceled', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       const createdAt = new Date('2026-01-15T10:00:00Z');
       const stoppedAt = new Date('2026-01-15T10:05:00Z');
       await insertAnalysisAttempt(transaction, {
@@ -412,11 +358,7 @@ describe('each status narrows to the right variant', () => {
         finishedAt: new Date('2026-01-15T11:00:00Z'),
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
     });
@@ -432,8 +374,7 @@ describe('each status narrows to the right variant', () => {
 describe('a cancel request', () => {
   test('gives the stopped screen on a pending row, timed from the request', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'pending',
@@ -444,11 +385,7 @@ describe('a cancel request', () => {
         'analysis_attempt_canceled_requires_request',
       );
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({ status: 'canceled', stoppedAt });
     });
@@ -456,8 +393,7 @@ describe('a cancel request', () => {
 
   test('loses to a succeeded row', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       // The child finished inside the window before the parent's next lease renewal could kill it,
       // so the verdict stands and carries the request forever — see `markIfStillOwned`.
       const attempt = await insertAnalysisAttempt(transaction, {
@@ -474,11 +410,7 @@ describe('a cancel request', () => {
         kind: 'xlsx',
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt).toEqual({
         status: 'succeeded',
@@ -495,19 +427,14 @@ describe('a cancel request', () => {
 
   test('loses to a failed row, which keeps its retry copy', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization } = await insertOrganization(transaction);
-      const report = await aReportWithInputFile(transaction, organization.id);
+      const { organization, report } = await anOrgAndReport(transaction);
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'failed',
         cancelRequestedAt: NOW,
       });
 
-      const data = await _loadReport(transaction, {
-        organizationId: organization.id,
-        reportId: report.id,
-        supportEmail: SUPPORT_EMAIL,
-      });
+      const data = await loadReport(transaction, organization.id, report.id);
 
       expect(data.attempt.status).toBe('failed');
     });
