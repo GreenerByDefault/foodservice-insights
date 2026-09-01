@@ -21,8 +21,7 @@ let { organizationId, rateLimitWarning }: { organizationId: string; rateLimitWar
   $props();
 
 // Every field's value lives here, in the component's own state, rather than only in the DOM —
-// so swapping to the rejection view and back never loses what the user already typed. See
-// .claude/plans/report-upload-form.md's "Trap: the swap must not eat typed work."
+// so swapping to the rejection view and back never loses what the user already typed.
 let file: File | undefined = $state();
 let months: readonly string[] | undefined = $state();
 let counts: CountDraft = $state({});
@@ -70,7 +69,7 @@ async function onUpload(files: File[]) {
   fileError = undefined;
   formState = { status: 'checking' };
   // Yields once so the "Checking your file…" state paints before the normalizer locks the main
-  // thread — see the plan's "Cost and progress, both accepted as-is".
+  // thread.
   await new Promise((resolve) => setTimeout(resolve));
 
   const inspection = await inspectFile(chosen);

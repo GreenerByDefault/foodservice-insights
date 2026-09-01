@@ -94,7 +94,6 @@ describe('UploadForm', () => {
     await expect.element(screen.getByRole('spinbutton', { name: 'January 2026' })).toHaveValue(100);
   });
 
-  // The regression test for the status-code guard `parseUploadRejection` used to have.
   test('a 429 shows the same rejection view, with the "Back to the form" label rather than file-specific copy', async () => {
     stubFetch(
       new Response(JSON.stringify({ summary: 'You have created too many reports this hour.' }), {
