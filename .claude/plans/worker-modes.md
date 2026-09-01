@@ -6,9 +6,8 @@
 report uploaded in dev sits `pending` forever: you can exercise the upload form and the rejection
 view by hand, but never the waiting screen's transitions, the result screen arriving, a failure
 arriving, Cancel racing a live child, or the result email. Those states are reachable today only by
-writing rows directly — `pnpm seed:reports` for a static look, or a Playwright fixture inside a
-test. Tests are not a substitute for a human watching the thing behave, especially for how it looks
-mid-transition and on a small screen.
+writing rows directly with a Playwright fixture inside a test. Tests are not a substitute for a
+human watching the thing behave, especially for how it looks mid-transition and on a small screen.
 
 The blocker was assumed to be the Python port. It isn't. `python/worker_child` is **complete and
 working**; only `gbd_foodservice_insights.analyze()` raises `NotImplementedError`. And
@@ -133,12 +132,12 @@ and both tests share it.
 
 ## PR order
 
-Five PRs left. `REPORT_RATE_LIMIT=off` has landed — the guard described above, plus
+Four PRs left. `REPORT_RATE_LIMIT=off` has landed — the guard described above, plus
 `REPORT_RATE_LIMIT` in `.env.example` and `turbo.json`'s `globalPassThroughEnv`, and a unit test for
 both branches of `checkReportRateLimit`.
 
 The first two below are independent of each other and can land in any order; PR 3 needs PR 1, PR 4
-needs PR 3, PR 5 needs PR 2 and PR 3.
+needs PR 2 and PR 3.
 
 ## PR 1 — the stubbed child (Python only)
 
@@ -158,7 +157,7 @@ so it lands and is verified entirely with `just`.
 
 ## PR 2 — extract `@gbd/browser-testing`
 
-Prefactor, so PR 6 has something to import. New `packages/browser-testing/`, seeded with the
+Prefactor, so PR 4 has something to import. New `packages/browser-testing/`, seeded with the
 Playwright helpers both suites need: `advancePoll` and `advanceThroughPollFailures` from
 `apps/web/e2e/lib/fake-poll.ts`, and `ensureHydrated` from `apps/web/e2e/lib/hydration.ts`.
 `apps/web` takes it as a `devDependency` (test-only, so not a `dependency`), and
@@ -197,39 +196,13 @@ Docs: `apps/worker/README.md` gains the mode table, and root `README.md` a short
 locally" subsection — the modes, the scenario grammar, `WORKER_MODE=off`, `REPORT_RATE_LIMIT=off`.
 The scenario catalogue itself stays in `worker_child/testing.py`, with the READMEs pointing at it.
 
-This is the first point at which `pnpm dev` gives you the whole lifecycle.
+This is the first point at which `pnpm dev` gives you the whole lifecycle for a report named
+without a `!` scenario or driven through `!slow`/`!fail:*`/`WORKER_MODE=off`. The one state this
+doesn't reach quickly is `processing-delayed`, the 15-minute overrun copy — its only live path is
+`!slow:1000` and a wait. It keeps its component test and its committed screenshot, and a row can
+still be hand-edited in Supabase Studio at <http://localhost:55323>.
 
-## PR 4 — delete `pnpm seed:reports`
-
-A pure removal, once PR 3 has provided the replacement: `apps/web/scripts/seed-reports.ts`, the
-turbo task, the root and `apps/web` scripts, and the README line under § Seeding.
-
-**The fixtures stay.** `apps/web/e2e/fixtures/reports.ts` is what the screenshot suite and several
-e2e specs are built on, and `.claude/plans/organization-reports-list.md`'s proposed `organizations`
-factory is where bulk seeding for the list screen belongs. Only the script is redundant:
-
-- Every state it seeds is now reachable through the real path in seconds — `!slow` for `processing`,
-  `!fail:*` for `failed`, Retry for `failed-retried` (`MAX_ANALYSIS_ATTEMPTS` is 5), Cancel during
-  `!slow` for `canceled`, `WORKER_MODE=off` for `pending`.
-- A live run is better evidence. A fixture can commit a row the system could never produce; an
-  upload cannot.
-- It has already drifted unnoticed: `STATES` names `'failed-later-attempt'`, no longer a
-  `ReportState`, so the script throws partway — and it escapes `svelte-check`, because
-  `apps/web/scripts/` is outside the generated tsconfig's includes.
-- Deleting it dissolves a collision instead of managing it. A live worker claims the seeded `pending`
-  and `pending-delayed` rows (whose input files have no real blob object, so they fail) and reaps
-  `processing` and `processing-delayed` as `abandoned`. Only terminal rows are immune, so trimming
-  the list instead would have left a permanent footnote in the README.
-
-Genuinely lost: `processing-delayed`, the 15-minute overrun copy, whose only live path is `!slow:1000`
-and a wait. It keeps its component test and its committed screenshot, and a row can still be
-hand-edited in Supabase Studio at <http://localhost:55323>.
-
-**Hand off to `.claude/plans/organization-reports-list.md`**, which references the script twice: its
-PR 2 plans to fix the `STATES` drift — now nothing to do — and its verification step 7 (a `pnpm dev`
-walkthrough with a mix of states) should use the live worker or its own `organizations` factory.
-
-## PR 5 — `tests/e2e` becomes `@gbd/e2e`
+## PR 4 — `tests/e2e` becomes `@gbd/e2e`
 
 CI is already waiting: `.github/workflows/ci.yml`'s `system-e2e` job runs `turbo run test:system`,
 gated on `tests/e2e/package.json` existing, and `.github/filters.yml` already has a `system` filter.
@@ -285,9 +258,7 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
   reaches `failed-retried`; the result email appears at <http://localhost:55324>. Check the waiting
   and result screens at 390px. Confirm `WORKER_MODE=mock-llm` refuses to start with a message saying
   why, and that an unset `WORKER_MODE` fails loudly.
-- **PR 4** — `pnpm test:playwright`, since the fixtures the specs share are what the deletion must
-  not touch.
-- **PR 5** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
+- **PR 4** — `pnpm test:system`, run **more than once**: a single green run does not prove a suite
   that spawns a worker and shares Mailpit is free of races. Check `uptime` first so a loaded machine
   is not misread as a flake.
 
@@ -303,7 +274,6 @@ TypeScript and `just lint && just check && just test` for anything Python, on to
 | `apps/worker/src/main.ts` | read `WORKER_MODE`, drop the inline `childCommand` |
 | `apps/worker/package.json` | `dev` runs the worker |
 | `.env.example`, `.env.test`, `turbo.json` | `WORKER_MODE`; fix `PYTHON_BIN` |
-| `apps/web/scripts/seed-reports.ts` | **deleted**, with its turbo task and root script |
 | `tests/e2e/` | **new package** — `package.json`, `playwright.config.ts`, `scripts/test-run.ts`, two specs, README |
 | `turbo.json`, root `package.json` | `test:system` task and script |
 | `apps/worker/README.md`, root `README.md` | modes, scenarios, running it locally |
