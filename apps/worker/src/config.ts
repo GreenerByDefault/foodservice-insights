@@ -141,9 +141,12 @@ export type WorkerRequiredFields = Pick<WorkerConfig, 'workerId' | 'runRoot' | '
 export type WorkerDefaultableFields = Partial<Omit<WorkerConfig, keyof WorkerRequiredFields>>;
 
 export class WorkerConfigError extends Error {
-  constructor(readonly violations: readonly string[]) {
+  readonly violations: readonly string[];
+
+  constructor(violations: readonly string[]) {
     super(`Unusable worker configuration:\n${violations.map((line) => `  - ${line}`).join('\n')}`);
     this.name = 'WorkerConfigError';
+    this.violations = violations;
   }
 }
 
