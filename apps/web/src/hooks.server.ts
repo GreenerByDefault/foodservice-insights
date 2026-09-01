@@ -72,6 +72,11 @@ export const handleError: HandleServerError = ({ error: cause, event, status, me
  * https://svelte.dev/docs/kit/adapter-node#Graceful-shutdown
  */
 export const init: ServerInit = () => {
+  // `vite dev` builds a fresh `Server` per request and calls `init` on each one — unlike
+  // production's single long-lived instance — so without this guard every request in a dev
+  // session would add another listener and eventually trip MaxListenersExceededWarning.
+  if (process.listenerCount('sveltekit:shutdown') > 0) return;
+
   process.on('sveltekit:shutdown', async (reason) => {
     console.log('Shutting down:', reason);
     // allSettled, so one failing cleanup cannot strand the others.
