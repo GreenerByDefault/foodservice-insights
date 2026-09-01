@@ -8,11 +8,9 @@
  * up to `BACKOFF_CAP_MS`. */
 export const BASE_POLL_INTERVAL_MS = 10_000;
 
-/** `stubbed` mode fakes the whole lifecycle, so there's no real backend to be gentle with —
- * fast enough to walk the scenario catalogue (see `.claude/plans/worker-modes.md`) by eye. In
- * the neighborhood of `STUBBED_OVERRIDES` in `apps/worker/src/modes.ts`, not tied to it: this is
- * how fast a human wants to watch the screen change, that config is how fast the worker itself
- * ticks. */
+/** `stubbed` mode fakes the whole lifecycle and speeds up the worker config with
+ * `STUBBED_OVERRIDES` in `apps/worker/src/modes.ts`. So, we can show results on screen
+ * much faster and aren't worried about pegging a prod server */
 const STUBBED_POLL_INTERVAL_MS = 1_000;
 
 /** The longest the schedule ever waits, no matter how long a run of failures gets. */
@@ -26,8 +24,7 @@ export const FAILURES_BEFORE_NOTICE = 2;
  * Only `stubbed` gets the fast interval. `mock-llm` is meant to feel like production, cadence
  * included, and `live`/`off` *are* production or off — matching `apps/worker/src/modes.ts`'s own
  * reasoning for which modes get `STUBBED_OVERRIDES`. An unset or unrecognised mode falls back to
- * the production interval rather than guessing fast, since `resolveWorkerMode` is what rejects an
- * invalid `WORKER_MODE` — this function just picks a cadence, not a validator.
+ * the production interval.
  */
 export function pollIntervalMsForWorkerMode(workerMode: string | undefined): number {
   return workerMode === 'stubbed' ? STUBBED_POLL_INTERVAL_MS : BASE_POLL_INTERVAL_MS;
