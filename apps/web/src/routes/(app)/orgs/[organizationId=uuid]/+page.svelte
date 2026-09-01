@@ -1,17 +1,14 @@
 <script lang="ts">
 import type { PageProps } from './$types';
+import ReportsList from './reports-list.svelte';
 
 let { data }: PageProps = $props();
 </script>
 
-<!-- **Stub:** the heading and the link are real; the list of reports is not built yet.
-     The dashboard is the list — REQUIREMENTS.md asks for no search and no filtering. While any row
-     is still queued or processing, poll a colocated `+server.ts` roughly every ten seconds, the way
-     the report page does — see `README.md` § Routes for why not `invalidate()`. -->
-<h1 class="text-2xl font-semibold tracking-tight">{data.organization.name}</h1>
+<!-- The dashboard is the list — REQUIREMENTS.md asks for no search and no filtering. -->
+<div class="flex w-full items-center justify-between">
+  <h1 class="text-2xl font-semibold tracking-tight">{data.organization.name}</h1>
+  <a class="underline hover:no-underline" href={data.newReportHref}>New report</a>
+</div>
 
-<p class="text-muted-foreground">Boilerplate only. Real features arrive in later phases.</p>
-
-<a class="underline hover:no-underline" href="/orgs/{data.organization.id}/reports/new">
-  New report
-</a>
+<ReportsList reports={data.reports} newReportHref={data.newReportHref} />

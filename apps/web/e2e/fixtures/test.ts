@@ -4,10 +4,15 @@
  * pool at import time, and the config-loading process has no worker fixture to close it again.
  */
 
-import type { Database, ReportId } from '@gbd/db';
+import type { Database, OrganizationId, ReportId } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { test as base } from '@playwright/test';
 import type { Kysely } from 'kysely';
+import {
+  clearOrganizationFixture,
+  insertOrganizationFixture,
+  type OrganizationReportSpec,
+} from './organizations.ts';
 import { insertReportFixture, type ReportState } from './reports.ts';
 
 export interface ReportFactory {
@@ -17,7 +22,16 @@ export interface ReportFactory {
   create(state: ReportState): Promise<ReportId>;
 }
 
-export const test = base.extend<{ reports: ReportFactory }, { db: Kysely<Database> }>({
+export interface OrganizationFactory {
+  /** Commit a private organization, with the placeholder user as its only member, and return its
+   * id. Deleted when this test ends, whether it passed or failed. */
+  create(spec: { name: string; reports?: OrganizationReportSpec[] }): Promise<OrganizationId>;
+}
+
+export const test = base.extend<
+  { reports: ReportFactory; organizations: OrganizationFactory },
+  { db: Kysely<Database> }
+>({
   // Worker-scoped: one pool per Playwright worker process, closed or the worker hangs.
   db: [
     // The empty pattern is required, not vestigial: Playwright statically parses a fixture
@@ -45,5 +59,19 @@ export const test = base.extend<{ reports: ReportFactory }, { db: Kysely<Databas
     if (createdIds.length > 0) {
       await db.deleteFrom('report').where('id', 'in', createdIds).execute();
     }
+  },
+
+  organizations: async ({ db }, use) => {
+    const createdIds: OrganizationId[] = [];
+
+    await use({
+      create: async (spec) => {
+        const organizationId = await insertOrganizationFixture(db, spec);
+        createdIds.push(organizationId);
+        return organizationId;
+      },
+    });
+
+    await Promise.all(createdIds.map((id) => clearOrganizationFixture(db, id)));
   },
 });

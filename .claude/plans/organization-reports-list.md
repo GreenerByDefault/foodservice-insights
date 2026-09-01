@@ -172,9 +172,6 @@ needs `w-full`.
 **Empty state**: there is no precedent anywhere in the app, so this is being invented. Keep it to a
 muted sentence plus the New report button — it is also the first-run experience.
 
-Bulk seeding for the list screen has no live source yet — the `organizations` factory above is
-where that lands.
-
 ### Tests
 
 Server (`load-reports.test.ts` — no `+` prefix, SvelteKit reserves those). These are already
