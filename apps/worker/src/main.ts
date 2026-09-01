@@ -11,6 +11,7 @@ import { SYSTEM_CLOCK } from './clock.ts';
 import { createWorkerConfig } from './config.ts';
 import { shutdown as shutdownDatabase, WORKER_DATABASE } from './db.ts';
 import { resolveWorkerMode } from './modes.ts';
+import { resolvePythonBin } from './python-bin.ts';
 import { createWorker } from './worker.ts';
 
 loadLocalEnv();
@@ -19,7 +20,7 @@ async function main(): Promise<void> {
   try {
     const resolved = resolveWorkerMode({
       mode: requireEnv('WORKER_MODE'),
-      pythonBin: process.env.PYTHON_BIN,
+      pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
     });
     if (resolved.mode === 'off') {
       console.error('WORKER_MODE=off; not starting a worker.');
