@@ -298,6 +298,11 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       progressSequence = (await readProgress(record.prepared.runDirectory))?.sequence;
     } catch (error) {
       // `no-check-no-renewal` in `failures.ts`: this tick has no check to stand behind.
+      console.error(
+        `Could not read progress for attempt ${record.prepared.attemptId}; skipping this ` +
+          "tick's lease renewal",
+        error,
+      );
       return { progress: { kind: 'failed', error }, lease: { kind: 'skipped' } };
     }
     return { progress: { kind: 'read', progressSequence }, ...(await renew(record)) };
@@ -322,6 +327,11 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   function kill(record: InFlightAttempt, reason: Kill): void {
     // Recorded before the kill, so the settle continuation knows why the child died.
     record.kill = reason;
+    // `canceled` and `shutting-down` are the user and the platform behaving normally; every other
+    // reason is this worker giving up on the child on its own, which is worth knowing about.
+    if (reason.reason !== 'canceled' && reason.reason !== 'shutting-down') {
+      console.error(`Killing attempt ${record.prepared.attemptId}'s child`, reason);
+    }
     record.prepared.child.kill();
   }
 
