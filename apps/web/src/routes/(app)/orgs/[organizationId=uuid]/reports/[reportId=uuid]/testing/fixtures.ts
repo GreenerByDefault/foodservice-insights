@@ -1,4 +1,4 @@
-import type { FailureCopy } from '../+page.server.ts';
+import type { FailureCopy } from '../failure-copy.ts';
 
 /** Failure copy for a transient failure with retries remaining. */
 export function retryableFailure(overrides: Partial<FailureCopy> = {}): FailureCopy {

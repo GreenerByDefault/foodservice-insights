@@ -15,6 +15,7 @@ import {
 } from '@gbd/storage';
 import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
+import { reportHref } from '$lib/reports/hrefs';
 import type { ReportMetadata } from '$lib/reports/metadata';
 import { type RejectedUploadRecord, userFacingRejection } from '$lib/reports/rejection';
 import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
@@ -131,7 +132,7 @@ export async function _createReport(
 
   return json(
     { reportId },
-    { status: 201, headers: { location: `/orgs/${organizationId}/reports/${reportId}` } },
+    { status: 201, headers: { location: reportHref(organizationId, reportId) } },
   );
 }
 

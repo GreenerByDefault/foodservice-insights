@@ -21,16 +21,17 @@ other axis: **what part of the product a spec covers.**
 | --- | --- |
 | `lib/` | Helpers a spec imports. No tests, no side effects at import. |
 | `fixtures/` | The report-state catalogue and the extended `test` that commits and cleans up a report. |
-| `setup/` | Getting the containerized browser up, the database reset, and taking the browser down. Not tests of the app. |
-| `__screenshots__/` | The committed PNGs, flat. |
+| `setup/` | Getting the containerized browser up, taking it down, and optimizing screenshots afterward. Not tests of the app. |
+| `__screenshots__/` | The committed PNGs, nested to match the spec that captures them. |
 | everything else | Specs, both suites. |
 
 **Specs stay flat until a feature has two of them, then that feature gets a folder** holding both
 its suites.
 
-`__screenshots__/` stays flat however the specs nest, because it is browsed as a gallery. That
-makes the shot names a global namespace, so prefix them with the feature the way a folder would:
-`reports-failed.png`, not `failed.png`.
+`__screenshots__/` mirrors that same nesting (`snapshotPathTemplate` in
+[`../playwright.config.ts`](../playwright.config.ts) keys it off the spec's own directory), so a
+shot's name only has to be unique within its feature — `reports/failed.png`, not
+`reports-failed.png`. It's still browsed as a gallery, one folder per feature.
 
 ## Screenshots
 
@@ -63,11 +64,10 @@ Reach for assertions only when a screenshot genuinely can't see the problem.
 Every fixture lives in the placeholder organization (`@gbd/db/seed`) — phase 1 has no second one.
 `e2e/fixtures/reports.ts` is the source of truth for what each state contains.
 
-The `database` Playwright project (`setup/database.setup.ts`) deletes every fixture report in the
-placeholder organization before either suite runs.
-
-Screenshots and e2e share the catalogue, not its rows: every test mints its own report and deletes
-it when it ends, so a behavioural spec is free to mutate what it created.
+There's no shared reset: every test mints its own report via the `reports` fixture
+(`e2e/fixtures/test.ts`) and deletes it when it ends, whether it passed or failed. Screenshots and
+e2e share the catalogue of states, not any rows, so a behavioural spec is free to mutate what it
+created without affecting another test.
 
 ## Pending
 

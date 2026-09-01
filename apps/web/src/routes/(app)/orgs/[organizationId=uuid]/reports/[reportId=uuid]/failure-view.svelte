@@ -4,9 +4,10 @@ import MailIcon from '@lucide/svelte/icons/mail';
 import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 import { Button } from '$lib/components/ui/button';
 import { retryReport } from '$lib/reports/retry-report';
-import type { ActionState } from '$lib/types/ActionState';
-import type { DeleteAction, FailureCopy } from './+page.server.ts';
+import type { ActionState } from '$lib/types/action-state';
+import type { DeleteAction } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
+import type { FailureCopy } from './failure-copy.ts';
 import StatusLine from './status-line.svelte';
 
 interface Props {

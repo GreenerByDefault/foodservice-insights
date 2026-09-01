@@ -1,6 +1,7 @@
 /** The client-side call behind the new-report form. */
 
 import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
+import { organizationHref } from './hrefs.ts';
 import { parseUploadRejection, type UploadRejection } from './rejection.ts';
 
 export type UploadOutcome =
@@ -21,7 +22,7 @@ export async function uploadReport(
     });
     return {
       kind: 'created',
-      location: response.headers.get('location') ?? `/orgs/${organizationId}`,
+      location: response.headers.get('location') ?? organizationHref(organizationId),
     };
   } catch (error) {
     if (error instanceof ApiError) {

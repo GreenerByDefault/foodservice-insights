@@ -8,7 +8,7 @@ test('the new report form, before any file is chosen', async ({ page }) => {
   await ensureHydrated(page);
 
   await expect(page.getByText('Choose a CSV file')).toBeVisible();
-  await expectScreenshot(page, 'reports-new-empty.png');
+  await expectScreenshot(page, 'empty.png');
 });
 
 // Spans two years, like the fixture this replaced, so the shot also exercises the year headings.
@@ -40,7 +40,7 @@ test('the new report form, with the monthly counts component partway filled in',
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('130');
 
   await expect(page.getByText('1 of 4 months still need a count')).toBeVisible();
-  await expectScreenshot(page, 'reports-new.png');
+  await expectScreenshot(page, 'filled.png');
 });
 
 // Every column at once, one distinct fault per row plus two rows whose dates prove opposite
@@ -93,7 +93,7 @@ test('the rejection view, with a file dense enough to trigger every kind of prob
 
   await expect(page.getByText('Showing 20 of 22 things to fix.', { exact: false })).toBeVisible();
   await expect(page.getByText('4 rows: 2–4, 9', { exact: false })).toBeVisible();
-  await expectScreenshot(page, 'reports-new-rejection.png');
+  await expectScreenshot(page, 'rejection.png');
 });
 
 // Every row has the same weight fault and nothing else wrong, so `everyRow` is true — the one
@@ -117,13 +117,14 @@ test('the rejection view, with a rule that fails on every row', async ({ page })
   });
 
   await expect(page.getByText('all 3 rows', { exact: false })).toBeVisible();
-  await expectScreenshot(page, 'reports-new-rejection-every-row.png');
+  await expectScreenshot(page, 'rejection-every-row.png');
 });
 
 // A missing column is a header fault, caught before any row is read — the rejection carries
 // only a summary, no rowProblems and no dateOrderProblem. That's the sparsest shape the
 // rejection view renders, and the one shot above it can't reach: no list, no date-order block,
-// and only the bottom "Back to the form" button (see rejection-view.svelte's `verbose` check).
+// and only the bottom "Back to the form" button (see rejection-view.svelte's `hasScrollableDetail`
+// check).
 const MISSING_COLUMN_CSV = ['product,date', 'beef,2026-01-05'].join('\n');
 
 test('the rejection view, with only a bare summary and no row list', async ({ page }) => {
@@ -138,5 +139,5 @@ test('the rejection view, with only a bare summary and no row list', async ({ pa
 
   await expect(page.getByText('Your file needs a column for weight.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to the form' })).toHaveCount(1);
-  await expectScreenshot(page, 'reports-new-rejection-bare-summary.png');
+  await expectScreenshot(page, 'rejection-bare-summary.png');
 });

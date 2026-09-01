@@ -8,17 +8,22 @@ import type { FileRejectedReason } from '$lib/components/ui/file-drop-zone';
 import * as Field from '$lib/components/ui/field';
 import { Input } from '$lib/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group';
-import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '$lib/reports/metadata';
+import { organizationHref } from '$lib/reports/hrefs';
 import { inspectFile } from '$lib/reports/inspect-file';
 import { MAX_FREE_TEXT_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from '$lib/reports/limits';
+import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '$lib/reports/metadata';
 import { type CountDraft, reconcileDraft, serializeCounts } from '$lib/reports/monthly-counts';
 import { userFacingRejection, type UploadRejection } from '$lib/reports/rejection';
 import { uploadReport } from '$lib/reports/upload';
 import MonthlyCounts from './monthly-counts.svelte';
 import RejectionView from './rejection-view.svelte';
 
-let { organizationId, rateLimitWarning }: { organizationId: string; rateLimitWarning?: string } =
-  $props();
+interface Props {
+  organizationId: string;
+  rateLimitWarning?: string;
+}
+
+let { organizationId, rateLimitWarning }: Props = $props();
 
 // Every field's value lives here, in the component's own state, rather than only in the DOM —
 // so swapping to the rejection view and back never loses what the user already typed.
@@ -35,7 +40,7 @@ type FormState =
   | { status: 'checking' }
   | { status: 'submitting' }
   | { status: 'rejected'; rejection: UploadRejection }
-  | { status: 'unknown' };
+  | { status: 'outcome-unknown' };
 
 let formState: FormState = $state({ status: 'idle' });
 
@@ -43,8 +48,8 @@ let fileError: string | undefined = $state();
 let unitSystemError: string | undefined = $state();
 
 let formElement: HTMLFormElement | undefined = $state();
-let dropZoneTriggerRef: HTMLElement | null = $state(null);
-let unitSystemRef: HTMLElement | null = $state(null);
+let dropZoneTriggerElement: HTMLElement | null = $state(null);
+let unitSystemElement: HTMLElement | null = $state(null);
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
   switch (reason) {
@@ -61,7 +66,7 @@ function onFileRejected({ reason }: { reason: FileRejectedReason; file: File }) 
   fileError = fileRejectionMessage(reason);
 }
 
-async function onUpload(files: File[]) {
+async function inspectChosenFile(files: File[]) {
   const chosen = files[0];
   if (!chosen) return;
 
@@ -107,15 +112,18 @@ async function handleSubmit(event: SubmitEvent) {
   unitSystemError = unitSystem ? undefined : 'Choose lb or kg.';
 
   if (!chosenFile) {
-    dropZoneTriggerRef?.scrollIntoView({ block: 'center' });
-    dropZoneTriggerRef?.focus();
+    dropZoneTriggerElement?.scrollIntoView({ block: 'center' });
+    dropZoneTriggerElement?.focus();
     return;
   }
   if (!unitSystem) {
-    unitSystemRef?.focus();
+    unitSystemElement?.focus();
     return;
   }
 
+  // Unreachable in practice — every month input carries `required`, so native validation blocks
+  // the submit event before this runs. `serializeCounts` returning `null` is the caller's cue not
+  // to submit, kept as a safety net rather than an `as string` cast on its result.
   const serialized = serializeCounts(counts, months ?? []);
   if (serialized === null) return;
 
@@ -137,7 +145,7 @@ async function handleSubmit(event: SubmitEvent) {
     return;
   }
 
-  formState = { status: 'unknown' };
+  formState = { status: 'outcome-unknown' };
 }
 
 function backToForm() {
@@ -176,10 +184,10 @@ function backToForm() {
           fileCount={0}
           maxFileSize={MAX_UPLOAD_BYTES}
           accept=".csv,text/csv"
-          {onUpload}
+          onUpload={inspectChosenFile}
           {onFileRejected}
         >
-          <FileDropZone.Trigger bind:ref={dropZoneTriggerRef} label="Choose a CSV file" />
+          <FileDropZone.Trigger bind:ref={dropZoneTriggerElement} label="Choose a CSV file" />
         </FileDropZone.Root>
       {/if}
 
@@ -217,7 +225,7 @@ function backToForm() {
       <Field.Field>
         <Field.Legend variant="label">Weight unit</Field.Legend>
         <RadioGroup
-          bind:ref={unitSystemRef}
+          bind:ref={unitSystemElement}
           name={FIELD.unitSystem}
           value={unitSystem}
           onValueChange={(value) => (unitSystem = value as UnitSystem)}
@@ -263,17 +271,17 @@ function backToForm() {
       {/if}
     </Field.Set>
 
-    {#if formState.status === 'unknown'}
+    {#if formState.status === 'outcome-unknown'}
       <p role="alert" class="text-sm text-destructive">
         We're not sure whether that upload went through. Check
-        <a class="underline" href="/orgs/{organizationId}">your reports</a>
+        <a class="underline" href={organizationHref(organizationId)}>your reports</a>
         before trying again.
       </p>
     {/if}
 
     <Button
       type="submit"
-      disabled={formState.status === 'submitting'}
+      disabled={formState.status === 'checking' || formState.status === 'submitting'}
       aria-busy={formState.status === 'submitting'}
     >
       {formState.status === 'submitting' ? 'Uploading…' : 'Upload report'}
