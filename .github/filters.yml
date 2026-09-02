@@ -3,9 +3,38 @@
 # *all* of that filter's patterns — hence `'**'` plus exclusions, rather than an inclusion
 # list. Only add an exclusion you can defend out loud.
 #
+# `&anchor` / `*anchor` below reuse a glob list across filters — see dorny/paths-filter's
+# README, "Use YAML anchors to reuse path expression(s) inside another rule". `non_code` and
+# `ts_workspace` aren't filters anyone consumes; they exist only to be aliased.
+#
 # `scripts/ci/check_filters.py` enforces that every exclusion still matches a tracked file
 # (or is marked `# planned` and matches none). `push: main` runs everything unfiltered as a
 # second backstop.
+
+# Docs and agent-only files: no CI job depends on these.
+non_code: &non_code
+  - '!.claude/**'
+  - '!*.md'
+  - '!**/README.md'
+  - '!LICENSE'
+
+# Paths that exist only for the TS workspace; Python has no use for them.
+ts_workspace: &ts_workspace
+  - '!apps/**'
+  - '!packages/**'
+  - '!tests/e2e/**'
+  - '!supabase-dev/**'
+  - '!supabase-test/**'
+  - '!scripts/supabase'
+  - '!.env.example'
+  - '!.env.test'
+  - '!package.json'
+  - '!pnpm-lock.yaml'
+  - '!pnpm-workspace.yaml'
+  - '!tsconfig.base.json'
+  - '!turbo.json'
+  - '!biome.json'
+  - '!.nvmrc'
 
 # TypeScript never imports Python. (We use `system` for e2e tests.)
 ts:
@@ -15,67 +44,27 @@ ts:
   - '!uv.lock'
   - '!Justfile'
   - '!.python-version'
-  - '!.claude/**'
-  - '!*.md'
-  - '!**/README.md'
-  - '!LICENSE'
+  - *non_code
 
 # `gbd_foodservice_insights` and `worker_child`. Python imports no TypeScript, and no Python in
 # the product imports the lab.
 python:
   - '**'
-  - '!apps/**'
-  - '!packages/**'
-  - '!tests/e2e/**'
-  - '!supabase-dev/**'
-  - '!supabase-test/**'
-  - '!scripts/supabase'
-  - '!.env.example'
-  - '!.env.test'
+  - *ts_workspace
   - '!python/gbd_foodservice_insights_lab/**'
-  - '!package.json'
-  - '!pnpm-lock.yaml'
-  - '!pnpm-workspace.yaml'
-  - '!tsconfig.base.json'
-  - '!turbo.json'
-  - '!biome.json'
-  - '!.nvmrc'
-  - '!.claude/**'
-  - '!*.md'
-  - '!**/README.md'
-  - '!LICENSE'
+  - *non_code
 
 # gbd_foodservice_insights_lab depends on gbd_foodservice_insights, so a core change reaches it;
 # nothing depends on the lab, so it reaches nothing else. Same as `python` minus the lab
 # exclusion.
 python_lab:
   - '**'
-  - '!apps/**'
-  - '!packages/**'
-  - '!tests/e2e/**'
-  - '!supabase-dev/**'
-  - '!supabase-test/**'
-  - '!scripts/supabase'
-  - '!.env.example'
-  - '!.env.test'
-  - '!package.json'
-  - '!pnpm-lock.yaml'
-  - '!pnpm-workspace.yaml'
-  - '!tsconfig.base.json'
-  - '!turbo.json'
-  - '!biome.json'
-  - '!.nvmrc'
-  - '!.claude/**'
-  - '!*.md'
-  - '!**/README.md'
-  - '!LICENSE'
+  - *ts_workspace
+  - *non_code
 
 # Whole-stack e2e depends on nearly everything; the lab is the one real
 # exclusion, since nothing imports it and it's not in the worker image.
 system:
   - '**'
   - '!python/gbd_foodservice_insights_lab/**'
-  - '!.claude/**'
-  - '!*.md'
-  - '!**/README.md'
-  - '!LICENSE'
+  - *non_code
