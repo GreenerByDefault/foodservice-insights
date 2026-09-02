@@ -50,15 +50,16 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   await page.goto(`/orgs/${organizationId}`);
 
   await expect(page.getByRole('heading', { name: 'Riverside Foods' })).toBeVisible();
-  await expect(page.getByText('Chicken order, March')).toBeVisible();
-  await expect(page.getByText('Processing')).toBeVisible();
-  await expect(page.getByText('Q1 procurement')).toBeVisible();
-  await expect(page.getByText('Ready')).toBeVisible();
-  await expect(page.getByText('Winter deliveries')).toBeVisible();
-  await expect(page.getByText("Couldn't finish")).toBeVisible();
+  // The same elements are repeated in the DOM for mobile vs desktop, so we use `.first()`.
+  await expect(page.getByText('Chicken order, March').first()).toBeVisible();
+  await expect(page.getByText('Processing').first()).toBeVisible();
+  await expect(page.getByText('Q1 procurement').first()).toBeVisible();
+  await expect(page.getByText('Ready').first()).toBeVisible();
+  await expect(page.getByText('Winter deliveries').first()).toBeVisible();
+  await expect(page.getByText("Couldn't finish").first()).toBeVisible();
 
   // Hover one row so the committed image also shows the hover affordance.
-  await page.getByText('Q1 procurement').hover();
+  await page.getByText('Q1 procurement').first().hover();
   await expectScreenshots(page, 'reports-list.png');
 });
 
