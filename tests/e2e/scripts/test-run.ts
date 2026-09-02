@@ -28,8 +28,6 @@ import { aTestEmailAddress } from '@gbd/email/testing';
 
 const REPO_ROOT = findRepoRoot();
 
-/** Node 24 runs TypeScript directly, so there is no build step between here and the real worker —
- * the same entrypoint, spawned the same way, as `apps/worker`'s own `dev` script. */
 const WORKER_ENTRYPOINT = path.join(REPO_ROOT, 'apps', 'worker', 'src', 'main.ts');
 
 /** How long a drain gets after SIGTERM before we stop being polite. Comfortably above the

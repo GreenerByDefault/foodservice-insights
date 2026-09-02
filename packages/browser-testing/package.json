@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./test-run": "./dist/test-run.js"
+    "./test-run": "./dist/test-run.js",
+    "./playwright-config": "./dist/playwright-config.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

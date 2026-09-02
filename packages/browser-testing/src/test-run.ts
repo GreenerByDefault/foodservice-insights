@@ -25,9 +25,8 @@ import {
 import { type BlobStoreConfig, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { createRunBucket, deleteRunBucket, sweepStaleRunBuckets } from '@gbd/storage/testing';
 
-/** Locates the `playwright` binary next to a `scripts/test-run.ts` caller — both
- * `apps/web/scripts/test-run.ts` and `tests/e2e/scripts/test-run.ts` sit one directory below
- * their app's `node_modules/.bin`. Pass the caller's own `import.meta.url`. */
+/** Locates the `playwright` binary next to a `scripts/test-run.ts` caller.
+ * Pass the caller's own `import.meta.url`. */
 export function resolvePlaywrightBin(scriptModuleUrl: string): string {
   return path.join(
     fileURLToPath(new URL('.', scriptModuleUrl)),
