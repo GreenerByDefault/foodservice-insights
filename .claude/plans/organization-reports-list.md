@@ -27,7 +27,7 @@ complex filtering.**
 | Pagination | Yes — keyset cursor in the URL, page size 20, Older/Newer links |
 | Row layout | Two-line divided rows, whole row is one link |
 | Status | Plain text on every row, weighted — colour only where it matters |
-| PR split | 1 PR remaining (the prefactor, the query/static-list PR, and the pagination PR are already landed) |
+| PR split | 1 PR remaining — the list's poll endpoint and UI. The query/static-list PR, the pagination PR, and the polling prefactor are all already landed. |
 
 **Why pagination at all**, given ~20 reports/org/week and no retention policy: the *poll* is what
 forces it. The poll endpoint re-serves the same query as `load` every 10 seconds while anything is
@@ -119,53 +119,52 @@ user, and its reports at controlled `createdAt` values, deleting the org on tear
 reports cascade). Names must be unique (`organization_name_unique_ci`): a random suffix for
 behavioural specs, a fixed name for a screenshot, where the org name is rendered in the `<h1>`.
 
-## PR 1 — Polling
+## PR 1 — Polling for the list
 
-**Prefactor first, in the same PR**: extract the poll loop out of
+The prefactor has landed: `createPoller` now lives at
+[src/lib/polling/create-poller.svelte.ts](apps/web/src/lib/polling/create-poller.svelte.ts), and
+`schedule.ts` moved with it to `src/lib/polling/schedule.ts`. Its shape settled slightly differently
+than the original sketch — the fetch option is named `poll`, not `fetch`, and it takes an extra
+`pollIntervalMs: () => number` getter (also a getter, like `isSettled`, so the caller can thread a
+value that changes over the poller's lifetime rather than closing over one read at construction).
+`nextPollDelayMs`'s `reportSettled` field is now just `settled`, since the schedule is no longer
+report-specific.
 [report-view.svelte](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/report-view.svelte)
-into `src/lib/polling/`, and move `polling/schedule.ts` there too — the list is the second consumer,
-which is the promotion trigger. That file is ~60 lines carrying four separate hard-won subtleties:
-the `destroyed` guard against a leaked in-flight poll arming an unclearable timer, the
-`visibilitychange` catch-up that polls immediately rather than waiting out the pending delay, the
-`untrack(scheduleNext)` that keeps the effect's dependencies to exactly two conditions so a failure
-does not fight the backoff, and the backoff itself. A second copy of that reasoning is where it
-drifts.
+is rewired onto it with no behaviour change. The tests moved with it: `createPoller`'s own
+mechanics — the backoff threshold, the reconnecting notice, resuming on a settled→unsettled swap —
+are now exhaustively covered at that level in
+[create-poller.svelte.test.ts](apps/web/src/lib/polling/create-poller.svelte.test.ts), driven
+through a
+[poller-harness.svelte](apps/web/src/lib/polling/testing/poller-harness.svelte) test double (a
+`createPoller` needs component-init context, so it can't be unit-tested as a bare module).
+`report-view.svelte.test.ts` no longer re-proves any of that; it now only proves the wiring — that
+a poll result actually flows from `pollReport` back into the page's screen. The list side should
+follow the same split: reuse `create-poller.svelte.test.ts`'s coverage of the shared mechanics, and
+write only a wiring test for the list's own `createPoller` call. `pollReport` and `isWaiting` were
+**not** moved — they stay colocated with the report page (`polling/poll-report.ts`,
+`waiting/progress.ts`) since the list still needs its own equivalents, below.
 
-Sketch, to be settled against the Svelte MCP docs when writing it:
+**The list side, the only work left:**
 
-```ts
-createPoller<T>(options: {
-  fetch: () => Promise<T>;
-  isSettled: () => boolean;   // a getter, so it re-reads reactive state
-  onData: (data: T) => void;
-}): { readonly connectionStatus: 'ok' | 'retrying'; pollNow: () => Promise<void> }
-```
-
-The poller owns `consecutiveFailures`, `documentHidden`, the timer, the `destroyed` flag, the
-`$effect` and the listener. The page keeps owning its own `current` copy of the data. `report-view`
-rewires onto it with no behaviour change, proven by
-[report-view.svelte.test.ts](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/report-view.svelte.test.ts),
-`schedule.test.ts`, `e2e/reports/live-update.e2e.ts` and `e2e/reports/reconnect.e2e.ts`.
-
-If that reads large in review, it splits cleanly into 3a (extract and rewire the report page) and 3b
-(wire the list) — the extraction touches no list code.
-
-**Then the list side:**
-
-- Colocated `poll/+server.ts` calling the same `_loadReports`, so a direct hit gets the same
-  404/500 shape as `load`. `requireReportRouteContext` is typed for a `reportId`, so this needs its
-  own org-only prologue — `requireOrganizationAccess(requireAuth(locals), organizationId)`.
+- Colocated `poll/+server.ts` (under the list's own route) calling the same `_loadReports`, so a
+  direct hit gets the same 404/500 shape as `load`. `requireReportRouteContext` is typed for a
+  `reportId`, so this needs its own org-only prologue — `requireOrganizationAccess(requireAuth(locals), organizationId)`.
 - The poll forwards `page.url.search`, so it re-serves whatever page the user is on. That is what
   keeps the payload bounded and makes a retry on an old row update correctly.
 - A client `poll-reports.ts` reviving ISO strings back into `Date`s, mirroring `poll-report.ts`.
 - Poll while any row is queued or processing. Promote `isWaiting` from
   `reports/[reportId=uuid]/waiting/progress.ts` to `src/lib/reports/` — its signature is already
-  generic over the union.
+  generic over the union. This is still pending; the prefactor PR deliberately left it in place
+  since only `createPoller`/`schedule.ts` had a second consumer at that point.
+- Wire `createPoller` up with `poll` reading the list's own endpoint, `isSettled` from the promoted
+  `isWaiting`, and `pollIntervalMs` from whatever `_loadReports` threads down (mirroring
+  `report-view.svelte`'s `current.pollIntervalMs`).
 - An always-mounted `aria-live="polite" class="sr-only"` region, as `report-view.svelte` has. It
   announces reports that just *settled* — diff the previous rows against the next on each poll and
   name them ("Q1 procurement is ready") — rather than restating the whole list, which would be
   chatty when several finish at once.
-- The "Reconnecting…" `<Alert>` at `connectionStatus === 'retrying'`, copying `report-view.svelte`.
+- The "Reconnecting…" `<Alert>` at `poller.connectionStatus === 'retrying'`, copying
+  `report-view.svelte`.
 
 Tests: the e2e follows `e2e/reports/live-update.e2e.ts` exactly — `page.clock.install()` before
 navigation, `ensureHydrated`, `watchPageLoads`, mutate the DB through the `db` fixture,
