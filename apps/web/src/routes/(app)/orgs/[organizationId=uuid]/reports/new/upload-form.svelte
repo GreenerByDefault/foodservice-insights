@@ -172,7 +172,7 @@ function backToForm() {
 
       {#if file}
         <div class="flex items-center justify-between gap-4 rounded-md border p-3">
-          <p class="font-medium">{file.name}</p>
+          <p class="min-w-0 truncate font-medium">{file.name}</p>
           <Button type="button" variant="outline" onclick={replaceFile}>Replace</Button>
         </div>
         {#if formState.status === 'checking'}

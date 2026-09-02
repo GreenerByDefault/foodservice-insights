@@ -38,9 +38,12 @@ let { finishedAt, now, files, inputFile, deleteAction }: Props = $props();
 
   <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
     <span>Uploaded file:</span>
-    <a class="inline-flex items-center gap-1.5 underline hover:no-underline" href={inputFile.href}>
+    <a
+      class="inline-flex min-w-0 items-center gap-1.5 underline hover:no-underline"
+      href={inputFile.href}
+    >
       <FileSpreadsheetIcon class="size-4 shrink-0" aria-hidden="true" />
-      {inputFile.originalFilename}
+      <span class="truncate">{inputFile.originalFilename}</span>
     </a>
   </div>
 </div>
