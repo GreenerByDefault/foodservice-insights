@@ -21,9 +21,7 @@ let reportSubheading = $derived(subheading(report.siteName, report.creator));
   >
     <span class="flex items-center justify-between gap-4">
       <span class="min-w-0 truncate font-medium" title={report.name}>{report.name}</span>
-      <!-- Status and chevron share one flex line so they sit on the same baseline instead of the
-      chevron centering on the row's full two-line height, which put it between the lines rather
-      than level with the status text it's paired with. -->
+      <!-- Status and chevron share one flex line so they sit on the same baseline. -->
       <span class="flex shrink-0 items-center gap-2">
         <ReportStatus status={report.status} />
         <ChevronRightIcon
