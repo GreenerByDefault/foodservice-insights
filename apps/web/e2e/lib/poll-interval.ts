@@ -5,6 +5,6 @@
  * webServer process was started with (`playwright.config.ts`'s `webServer.env`, ultimately
  * `.env.test`).
  */
-import { pollIntervalMsForWorkerMode } from '../../src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/polling/schedule.ts';
+import { pollIntervalMsForWorkerMode } from '../../src/lib/polling/schedule.ts';
 
 export const REPORT_POLL_INTERVAL_MS = pollIntervalMsForWorkerMode(process.env.WORKER_MODE);

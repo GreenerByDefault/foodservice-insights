@@ -1,8 +1,8 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
 import type { ReportPageData } from './+page.server.ts';
-import { BASE_POLL_INTERVAL_MS } from './polling/schedule.ts';
 import ReportView from './report-view.svelte';
 import { retryableFailure } from './testing/fixtures.ts';
 
@@ -180,10 +180,10 @@ describe('ReportView', () => {
     });
 
     test('navigating to a running report resumes polling on its own schedule, even though the previous report was settled', async () => {
-      // The `reportSettled`/`documentHidden` effect stops the timer once a report is settled — and, unlike a
-      // retry, a navigation between reports never calls `poll` itself to re-arm it. This is the one
-      // path that has to notice the swap on its own, so it needs the real schedule (fake timers)
-      // rather than the `visibilitychange` shortcut the other tests use.
+      // The poller's effect stops the timer once a report is settled — and, unlike a retry, a
+      // navigation between reports never calls `pollNow` itself to re-arm it. This is the one path
+      // that has to notice the swap on its own, so it needs the real schedule (fake timers) rather
+      // than the `visibilitychange` shortcut the other tests use.
       vi.useFakeTimers();
       const fetchMock = vi.fn().mockResolvedValue(jsonResponse(succeededWireBody()));
       vi.stubGlobal('fetch', fetchMock);

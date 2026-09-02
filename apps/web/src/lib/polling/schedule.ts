@@ -1,5 +1,4 @@
-/** The report page's polling schedule: how long to wait before checking again, or when to stop
- * altogether. */
+/** A poller's schedule: how long to wait before checking again, or when to stop altogether. */
 
 /** The interval production polls at, and every `WORKER_MODE` except `stubbed` (see
  * `pollIntervalMsForWorkerMode`).
@@ -32,8 +31,8 @@ export function pollIntervalMsForWorkerMode(workerMode: string | undefined): num
 
 /** How long to wait before polling again, or `undefined` to stop.
  *
- * - `reportSettled`: a terminal report will not change again without a user action, so there is
- *   nothing left to poll for.
+ * - `settled`: a terminal report, or a list with nothing left running, will not change again
+ *   without a user action, so there is nothing left to poll for.
  * - `documentHidden`: a backgrounded tab stops polling too. The caller polls immediately instead
  *   on `visibilitychange` back to visible, rather than waiting out whatever delay was pending.
  * - `consecutiveFailures`: each one doubles `baseIntervalMs` — so a real outage doesn't keep
@@ -43,12 +42,12 @@ export function pollIntervalMsForWorkerMode(workerMode: string | undefined): num
  *   threads it down from `+page.server.ts` instead of this module importing a constant.
  */
 export function nextPollDelayMs(state: {
-  reportSettled: boolean;
+  settled: boolean;
   documentHidden: boolean;
   consecutiveFailures: number;
   baseIntervalMs: number;
 }): number | undefined {
-  if (state.reportSettled || state.documentHidden) return undefined;
+  if (state.settled || state.documentHidden) return undefined;
   if (state.consecutiveFailures === 0) return state.baseIntervalMs;
   return Math.min(state.baseIntervalMs * 2 ** state.consecutiveFailures, BACKOFF_CAP_MS);
 }
