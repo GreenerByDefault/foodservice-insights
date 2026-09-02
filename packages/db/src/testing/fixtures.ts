@@ -11,7 +11,7 @@
  * Values that must be unique are randomised, because tests run concurrently against one database.
  */
 
-import { sql } from 'kysely';
+import { type RawBuilder, sql } from 'kysely';
 import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../generated/public/AnalysisAttemptStatus.ts';
@@ -28,7 +28,17 @@ import type { DatabaseExecutor } from '../schema.ts';
  * not `new Date()`, to any override below that means "right now" — a `created_at` a caller left
  * defaulted is also Postgres's `now()`, so a JS-clock value raced against it can land on either
  * side of a check constraint under load. */
-export const NOW = sql<Date>`now()`;
+export const DB_NOW = sql<Date>`now()`;
+
+/** Postgres's clock, `ms` milliseconds into the past — the backdating equivalent of `DB_NOW`. Pass
+ * this, not `msAgo(ms)` (`@gbd/core`), to any override below that a test later expects a page to
+ * describe relative to `now()`: that comparison happens against Postgres's clock (see
+ * `ReportPageData.now` in the web app), and a value backdated from the JS clock instead drifts
+ * against it — small enough to pass most of the time, but enough after a host suspend/resume to
+ * round to the wrong hour or minute. */
+export function dbMsAgo(ms: number): RawBuilder<Date> {
+  return sql<Date>`now() - make_interval(secs => ${ms / 1000})`;
+}
 
 /** A 32-byte checksum, the only length `checksum_sha256` accepts. */
 export function aChecksum(): Buffer {
@@ -180,20 +190,20 @@ export async function insertAnalysisAttempt(
     status?: AnalysisAttemptStatus;
     workerId?: string;
     requestedByUserId?: UsersId | null;
-    createdAt?: Date;
+    createdAt?: Date | RawBuilder<Date>;
     /** Only meaningful for `processing`, `succeeded`, and `failed` — the statuses a claim implies.
      * Defaults to `finishedAt` so a terminal row's claim and finish line up without repeating the
      * timestamp; set this explicitly to backdate a claim on a `processing` row, which has no
      * `finishedAt` of its own. */
-    claimedAt?: Date;
+    claimedAt?: Date | RawBuilder<Date>;
     /** Only meaningful for a terminal `status` — once inserted, `analysis_attempt_terminal_is_final`
      * forbids ever moving this by `UPDATE`, so a backdated terminal row has to be born that way. */
-    finishedAt?: Date;
-    /** Defaults to `NOW` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
+    finishedAt?: Date | RawBuilder<Date>;
+    /** Defaults to `DB_NOW` for `status: 'canceled'`, since `analysis_attempt_canceled_requires_request`
      * forbids a canceled row with no request. Set explicitly for a `pending`/`processing` row a test
-     * wants to look like a cancel request has already landed on — pass `NOW` rather than `new Date()`
-     * unless the test needs a specific value. */
-    cancelRequestedAt?: Date | typeof NOW;
+     * wants to look like a cancel request has already landed on — pass `DB_NOW`/`dbMsAgo(ms)` rather than
+     * `new Date()`/`msAgo(ms)` unless the test needs a specific value. */
+    cancelRequestedAt?: Date | RawBuilder<Date>;
     /** Only meaningful for `status: 'failed'` — `analysis_attempt_failure_reason_iff_failed` requires
      * one there and forbids one everywhere else. Defaults to `'child_crashed'`, an arbitrary member of
      * `analysis_failure_reason`; set this to exercise a specific reason's copy. */
@@ -221,13 +231,13 @@ export async function insertAnalysisAttempt(
       ...(isClaimed
         ? {
             workerId: overrides.workerId ?? 'test-worker',
-            claimedAt: overrides.claimedAt ?? overrides.finishedAt ?? NOW,
-            leaseRenewedAt: overrides.claimedAt ?? overrides.finishedAt ?? NOW,
+            claimedAt: overrides.claimedAt ?? overrides.finishedAt ?? DB_NOW,
+            leaseRenewedAt: overrides.claimedAt ?? overrides.finishedAt ?? DB_NOW,
           }
         : {}),
       ...(isTerminal
         ? {
-            finishedAt: overrides.finishedAt ?? NOW,
+            finishedAt: overrides.finishedAt ?? DB_NOW,
             failureReason:
               status === 'failed' ? (overrides.failureReason ?? 'child_crashed') : null,
           }
@@ -235,7 +245,7 @@ export async function insertAnalysisAttempt(
       ...(overrides.cancelRequestedAt !== undefined
         ? { cancelRequestedAt: overrides.cancelRequestedAt }
         : isCanceled
-          ? { cancelRequestedAt: NOW }
+          ? { cancelRequestedAt: DB_NOW }
           : {}),
     })
     .returningAll()

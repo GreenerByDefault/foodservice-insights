@@ -7,13 +7,13 @@ import {
   type UserId,
 } from '@gbd/db';
 import {
+  DB_NOW,
   insertAnalysisAttempt,
   insertAppUser,
   insertInputFile,
   insertOrganization,
   insertReport,
   insertResultFile,
-  NOW,
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
@@ -111,7 +111,7 @@ describe('a report the caller may see', () => {
       // usually arrives in — and it must be a 404, not the stopped screen.
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
       await transaction
         .updateTable('report')
@@ -283,7 +283,7 @@ describe('each status narrows to the right variant', () => {
         // child_crashed's own follow-up is `retry` — the cap has to override it regardless of reason.
         failureReason: 'child_crashed',
       });
-      // Read back rather than asserting a literal: every attempt here defaults to NOW (the
+      // Read back rather than asserting a literal: every attempt here defaults to DB_NOW (the
       // transaction's own now()), so this is whatever that resolved to.
       const finishedAt = requireConstraint(
         lastAttempt.finishedAt,
@@ -378,7 +378,7 @@ describe('a cancel request', () => {
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'pending',
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
       const stoppedAt = requireConstraint(
         attempt.cancelRequestedAt,
@@ -399,7 +399,7 @@ describe('a cancel request', () => {
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'succeeded',
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
       const pdf = await insertResultFile(transaction, {
         analysisAttemptId: attempt.id,
@@ -431,7 +431,7 @@ describe('a cancel request', () => {
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
         status: 'failed',
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
 
       const data = await loadReport(transaction, organization.id, report.id);

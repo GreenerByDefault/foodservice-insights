@@ -11,12 +11,12 @@
 
 import type { AnalysisAttemptId, Database, OrganizationId, ReportId } from '@gbd/db';
 import {
+  DB_NOW,
   insertAnalysisAttempt,
   insertFixtureOrganization,
   insertInputFile,
   insertOrganization,
   insertReport,
-  NOW,
   readAnalysisAttemptRow,
   withCommittedFixture,
   withConcurrentTransactions,
@@ -356,7 +356,7 @@ describe('renewLease', () => {
         reportId: report.id,
         status: 'processing',
         workerId,
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
       // `insertAnalysisAttempt` sets `claimedAt`/`leaseRenewedAt` to real wall-clock `Date`s,
       // which land later than the frozen `now()` that `renewLease` is about to write with (the

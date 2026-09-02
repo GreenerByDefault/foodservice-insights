@@ -10,14 +10,18 @@
  * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
  * spends the placeholder organization's rate-limit budget (that's what the limit counts against —
  * see `countReportsSince`). The exceptions are the timestamps a screen renders relative to "now"
- * rather than as an absolute date which are recent instead, via `msAgo` (`@gbd/core`).
+ * rather than as an absolute date which are recent instead, via `dbMsAgo` (`@gbd/db/testing`) —
+ * Postgres's own clock, not `msAgo`'s (`@gbd/core`), since that "now" is `ReportPageData.now`,
+ * itself Postgres's `now()`; backdating from the JS clock instead drifts against it, most
+ * visibly across a host suspend/resume, and can round to the wrong hour or minute.
  */
 
-import { HOUR_MS, msAgo, SECOND_MS } from '@gbd/core';
+import { HOUR_MS, SECOND_MS } from '@gbd/core';
 import type { AnalysisFailureReason, Database, ReportId, UserId } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import {
+  dbMsAgo,
   insertAnalysisAttempt,
   insertAppUser,
   insertInputFile,
@@ -76,7 +80,7 @@ function buildPending(
     await insertAnalysisAttempt(tx, {
       reportId,
       status: 'pending',
-      createdAt: msAgo(queuedForMs),
+      createdAt: dbMsAgo(queuedForMs),
     });
     return reportId;
   };
@@ -92,8 +96,8 @@ function buildProcessing(
     await insertAnalysisAttempt(tx, {
       reportId,
       status: 'processing',
-      createdAt: msAgo(queuedForMs + analyzingForMs),
-      claimedAt: msAgo(analyzingForMs),
+      createdAt: dbMsAgo(queuedForMs + analyzingForMs),
+      claimedAt: dbMsAgo(analyzingForMs),
     });
     return reportId;
   };
@@ -110,9 +114,9 @@ async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
   const attempt = await insertAnalysisAttempt(tx, {
     reportId,
     status: 'succeeded',
-    createdAt: msAgo(finishedMsAgo + 210 * SECOND_MS),
-    claimedAt: msAgo(finishedMsAgo + 180 * SECOND_MS),
-    finishedAt: msAgo(finishedMsAgo),
+    createdAt: dbMsAgo(finishedMsAgo + 210 * SECOND_MS),
+    claimedAt: dbMsAgo(finishedMsAgo + 180 * SECOND_MS),
+    finishedAt: dbMsAgo(finishedMsAgo),
   });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
@@ -185,8 +189,8 @@ async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
   await insertAnalysisAttempt(tx, {
     reportId,
     status: 'canceled',
-    createdAt: msAgo(stoppedMsAgo + 45 * SECOND_MS),
-    cancelRequestedAt: msAgo(stoppedMsAgo),
+    createdAt: dbMsAgo(stoppedMsAgo + 45 * SECOND_MS),
+    cancelRequestedAt: dbMsAgo(stoppedMsAgo),
   });
   return reportId;
 }

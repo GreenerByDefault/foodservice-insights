@@ -6,11 +6,11 @@
 
 import type { AnalysisAttemptId, Database, ReportId } from '@gbd/db';
 import {
+  DB_NOW,
   insertAnalysisAttempt,
   insertFixtureOrganization,
   insertInputFile,
   insertReport,
-  NOW,
   raceAgainstCommittedWrite,
   readAnalysisAttemptRow,
   withRollback,
@@ -54,7 +54,7 @@ async function processingAttempt(
     reportId: report.id,
     status: 'processing',
     workerId,
-    ...(options.cancelRequested ? { cancelRequestedAt: NOW } : {}),
+    ...(options.cancelRequested ? { cancelRequestedAt: DB_NOW } : {}),
   });
   await backdateAttemptTimeline(transaction, attempt.id, offsets);
   return { attemptId: attempt.id, reportId: report.id };
@@ -441,7 +441,7 @@ describe('cancelRequestedPendingAttempts', () => {
       const report = await insertReport(transaction);
       const attempt = await insertAnalysisAttempt(transaction, {
         reportId: report.id,
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
 
       const converged = await cancelRequestedPendingAttempts(transaction, {
@@ -472,7 +472,7 @@ describe('cancelRequestedPendingAttempts', () => {
         reportId: processingReport.id,
         status: 'processing',
         workerId: aWorkerId(),
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
 
       const terminalReport = await insertReport(transaction);
@@ -504,13 +504,13 @@ describe('cancelRequestedPendingAttempts', () => {
       const inScopeReport = await insertReport(transaction);
       const inScope = await insertAnalysisAttempt(transaction, {
         reportId: inScopeReport.id,
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
 
       const outOfScopeReport = await insertReport(transaction);
       const outOfScope = await insertAnalysisAttempt(transaction, {
         reportId: outOfScopeReport.id,
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
 
       const converged = await cancelRequestedPendingAttempts(transaction, {
@@ -543,7 +543,7 @@ describe('cancelRequestedPendingAttempts', () => {
         await insertInputFile(transaction, { reportId: report.id });
         const attempt = await insertAnalysisAttempt(transaction, {
           reportId: report.id,
-          cancelRequestedAt: NOW,
+          cancelRequestedAt: DB_NOW,
         });
         return { attemptId: attempt.id, reportId: report.id };
       },
@@ -580,7 +580,7 @@ describe('cancelRequestedPendingAttempts', () => {
       const report = await insertReport(transaction);
       await insertAnalysisAttempt(transaction, {
         reportId: report.id,
-        cancelRequestedAt: NOW,
+        cancelRequestedAt: DB_NOW,
       });
 
       await cancelRequestedPendingAttempts(transaction, { candidateReports: [report.id] });
