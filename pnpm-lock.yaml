@@ -274,6 +274,9 @@ importers:
 
   packages/browser-testing:
     dependencies:
+      '@gbd/core':
+        specifier: workspace:*
+        version: link:../core
       '@gbd/db':
         specifier: workspace:*
         version: link:../db

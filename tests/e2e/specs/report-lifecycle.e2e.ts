@@ -1,11 +1,5 @@
-/** The whole chain, end to end: browser -> web app -> Postgres -> worker parent -> the real Python
- * child -> blob store -> email.
- *
- * No other tier reaches this far. `apps/web/e2e` writes report rows directly and never starts a
- * worker; `apps/worker/src/worker.test.ts` drives `fake-child.ts`, a TypeScript stand-in, so the
- * child's real writers never meet the parent's real readers. Both tests here go through the upload
- * form and wait on a real worker, so what they prove is the wiring between components — not any
- * component's own behaviour, which its own tier already covers.
+/** The whole chain, end to end. See `README.md` for how this tier differs from `apps/web/e2e` and
+ * `apps/worker/src/worker.test.ts`.
  *
  * The report's *name* is what selects the scenario the stubbed child plays out; see
  * `python/worker_child/src/worker_child/testing.py` for the grammar.
@@ -20,8 +14,7 @@ const CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 
 /** What `stub_analysis` writes in place of a real PDF. Copied from
  * `python/gbd_foodservice_insights/src/gbd_foodservice_insights/testing.py`'s `PDF_MAGIC_BYTES`,
- * which is the source of truth — there is no import across the language boundary, and a drift
- * here fails this test loudly rather than silently. */
+ * which is the source of truth. */
 const STUB_PDF_MAGIC_BYTES = '%PDF-1.4\n%stub\n';
 
 /** Set by `scripts/test-run.ts`, which points this run's placeholder user at a mailbox no other

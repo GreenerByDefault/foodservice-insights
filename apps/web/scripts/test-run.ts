@@ -11,46 +11,23 @@
  * path/to/thing.e2e.ts`, `--project=screenshots`, `--update-snapshots`, ...).
  */
 
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { runAgainstFreshStack } from '@gbd/browser-testing/test-run';
+import {
+  blobStoreConfigFromEnv,
+  installCleanupSignalHandlers,
+  resolvePlaywrightBin,
+  runAgainstFreshStack,
+} from '@gbd/browser-testing/test-run';
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
-import type { BlobStoreConfig } from '@gbd/storage';
-
-loadLocalEnv();
-
-const PLAYWRIGHT_BIN = path.join(
-  fileURLToPath(new URL('.', import.meta.url)),
-  '..',
-  'node_modules',
-  '.bin',
-  'playwright',
-);
-
-function blobStoreConfig(): BlobStoreConfig {
-  return {
-    endpoint: requireEnv('S3_ENDPOINT'),
-    region: requireEnv('S3_REGION'),
-    accessKeyId: requireEnv('S3_ACCESS_KEY_ID'),
-    secretAccessKey: requireEnv('S3_SECRET_ACCESS_KEY'),
-    bucket: requireEnv('S3_BUCKET'),
-  };
-}
 
 async function main(): Promise<void> {
+  loadLocalEnv();
+  installCleanupSignalHandlers();
   process.exitCode = await runAgainstFreshStack({
     connectionString: requireEnv('DB_CONNECTION_STRING'),
-    s3: blobStoreConfig(),
-    playwrightBin: PLAYWRIGHT_BIN,
+    s3: blobStoreConfigFromEnv(),
+    playwrightBin: resolvePlaywrightBin(import.meta.url),
     playwrightArgs: process.argv.slice(2),
   });
 }
-
-// Node's default SIGINT/SIGTERM handling exits before `main`'s cleanup runs. Registering a
-// handler — even one that does nothing — suppresses that default, so a Ctrl-C still reaches
-// `playwright test` (same process group) and `runAgainstFreshStack`'s cleanup still runs once
-// that child exits and settles.
-process.on('SIGINT', () => {});
-process.on('SIGTERM', () => {});
 
 await main();

@@ -5,14 +5,20 @@ server and worker, so it is safe to run alongside anything else.
 
 The one tier that exercises more than one component at a time:
 
-```
-browser -> web app -> Postgres -> worker parent -> Python child -> blob store -> email
-```
+- Browser uploads through the web app, which writes a report row to Postgres.
+- The worker parent polls Postgres for that row, fetches the input file from the blob store,
+  and spawns the Python child.
+- While the child runs, the parent repeatedly reads its progress and renews its lease in
+  Postgres.
+- On exit, the parent uploads the child's result files back to the blob store, then writes
+  the verdict to Postgres.
+- A separate notification sweep polls Postgres for finished/failed attempts and sends email,
+  on its own schedule.
 
-Everything else stops short of that. `apps/web/e2e` writes report rows straight into the database
-and never starts a worker; `apps/worker/src/worker.test.ts` drives `fake-child.ts`, a TypeScript
-stand-in, so the child's real writers never meet the parent's real readers. So the tests here are
-about the *wiring* between components — a component's own behaviour belongs to its own tier.
+Every package's other test suite stops short of that: `apps/web/e2e` seeds rows straight into the database with no
+worker involved, and `apps/worker/src/worker.test.ts` drives the TypeScript `fake-child.ts` instead
+of a real child. This tier is only the wiring between components — a component's own behaviour
+belongs to its own tier.
 
 The worker runs in `WORKER_MODE=stubbed`, where the report's name selects the scenario the child
 plays out (see [`apps/worker/README.md`](../../apps/worker/README.md#worker_mode)).
@@ -24,16 +30,11 @@ seeded rows. Keep this suite small; every test here costs a real worker and a re
 
 ## When the analysis library is ported
 
-**Open:** only the happy path moves to `WORKER_MODE=mock-llm`. What changes there is its *content*
-and its cadence — a 15-byte stub PDF becomes a real report, `resultMetadata` becomes real, and a
-realistic progress cadence is the only thing that ever exercises `killAfterNoProgressMs` against a
-real workload. What survives unchanged is the chain itself and the contract round trip between the
-parent's readers and the child's real writers.
+**Open:** only the happy path moves to `WORKER_MODE=mock-llm` — real content and a real progress
+cadence, so `killAfterNoProgressMs` finally runs against a real workload. The wiring itself doesn't
+change. `!fail:unusable-data` stays on `stubbed` permanently — provoking that failure for real is
+the library's tier, not this one.
 
-The failure test stays on `stubbed`, permanently: `!fail:unusable-data` fires exactly that failure,
-instantly, every time, where reaching it under `mock-llm` would mean constructing input that
-genuinely provokes the library's judgement — which is the library's tier, not this one.
-
-Two modes means two workers, and two workers cannot share one queue (`claimNextAttempt` is
-`FOR UPDATE SKIP LOCKED`, so either could claim either report). So the happy path moves to a second
-Playwright project with its own run database, bucket, and worker.
+Two modes need two workers, since one queue can't serve both (`claimNextAttempt`'s row lock lets
+either claim either report). So the happy path gets its own Playwright project: its own database,
+bucket, and worker.

@@ -13,29 +13,20 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   type BeforePlaywrightResult,
+  blobStoreConfigFromEnv,
   type FreshStack,
+  installCleanupSignalHandlers,
+  resolvePlaywrightBin,
   runAgainstFreshStack,
 } from '@gbd/browser-testing/test-run';
 import { findRepoRoot, loadLocalEnv, requireEnv } from '@gbd/core/env';
 import { initializeDatabase, shutdownDatabase } from '@gbd/db';
 import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { aTestEmailAddress } from '@gbd/email/testing';
-import type { BlobStoreConfig } from '@gbd/storage';
-
-loadLocalEnv();
 
 const REPO_ROOT = findRepoRoot();
-
-const PLAYWRIGHT_BIN = path.join(
-  fileURLToPath(new URL('.', import.meta.url)),
-  '..',
-  'node_modules',
-  '.bin',
-  'playwright',
-);
 
 /** Node 24 runs TypeScript directly, so there is no build step between here and the real worker —
  * the same entrypoint, spawned the same way, as `apps/worker`'s own `dev` script. */
@@ -45,16 +36,6 @@ const WORKER_ENTRYPOINT = path.join(REPO_ROOT, 'apps', 'worker', 'src', 'main.ts
  * `stubbed` profile's `killGraceMs` of 5s, so a worker still killing a child is not cut off
  * mid-teardown. */
 const WORKER_SHUTDOWN_TIMEOUT_MS = 15_000;
-
-function blobStoreConfig(): BlobStoreConfig {
-  return {
-    endpoint: requireEnv('S3_ENDPOINT'),
-    region: requireEnv('S3_REGION'),
-    accessKeyId: requireEnv('S3_ACCESS_KEY_ID'),
-    secretAccessKey: requireEnv('S3_SECRET_ACCESS_KEY'),
-    bucket: requireEnv('S3_BUCKET'),
-  };
-}
 
 /** Route this run's notifications to an address nothing else will send to.
  *
@@ -152,20 +133,15 @@ async function startWorkerAndMailbox(stack: FreshStack): Promise<BeforePlaywrigh
 }
 
 async function main(): Promise<void> {
+  loadLocalEnv();
+  installCleanupSignalHandlers();
   process.exitCode = await runAgainstFreshStack({
     connectionString: requireEnv('DB_CONNECTION_STRING'),
-    s3: blobStoreConfig(),
-    playwrightBin: PLAYWRIGHT_BIN,
+    s3: blobStoreConfigFromEnv(),
+    playwrightBin: resolvePlaywrightBin(import.meta.url),
     playwrightArgs: process.argv.slice(2),
     beforePlaywright: startWorkerAndMailbox,
   });
 }
-
-// Node's default SIGINT/SIGTERM handling exits before `main`'s cleanup runs. Registering a
-// handler — even one that does nothing — suppresses that default, so a Ctrl-C still reaches
-// `playwright test` (same process group) and `runAgainstFreshStack`'s cleanup still runs once
-// that child exits and settles.
-process.on('SIGINT', () => {});
-process.on('SIGTERM', () => {});
 
 await main();

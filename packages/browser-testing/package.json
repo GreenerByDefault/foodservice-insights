@@ -13,6 +13,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
     "@gbd/storage": "workspace:*",
     "@playwright/test": "catalog:"
