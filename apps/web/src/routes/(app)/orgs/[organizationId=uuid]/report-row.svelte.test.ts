@@ -18,9 +18,7 @@ function aReport(overrides: Partial<ReportListRow> = {}): ReportListRow {
 }
 
 describe('ReportRow', () => {
-  // The row renders two mutually-exclusive layouts (mobile and sm:+, see report-row.svelte)
-  // toggled by CSS, so every field exists twice in the DOM regardless of viewport — `.first()`
-  // picks the sm:+ copy, which is what's visible at this test's default (wide) viewport.
+  // The same elements are repeated in the DOM for mobile vs desktop, so we use `.first()`.
 
   test('links to the report, and shows its name and metadata', async () => {
     const report = aReport();

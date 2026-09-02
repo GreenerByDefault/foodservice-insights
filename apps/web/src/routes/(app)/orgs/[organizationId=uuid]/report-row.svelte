@@ -16,12 +16,7 @@ let reportSubheading = $derived(subheading(report.siteName, report.creator));
 
 <li>
   <a href={report.href} class="flex w-full px-2 py-3 hover:bg-accent focus-visible:bg-accent">
-    <!-- Below `sm` there's no room for the name, status, and time to share two lines without
-    truncating something essential (the name mid-word, or the time entirely), so this is a
-    separate four-line layout rather than a reflow of the tablet/desktop one — sharing a single
-    DOM structure across breakpoints risked nudging `sm:`+ spacing off its current pixel
-    baseline. Listed second (after the `sm:` block) so a `.first()` locator in a test lands on
-    whichever copy is visible at that test's default (non-mobile) viewport. -->
+    <!-- The tablet/desktop entry, which uses only two rows. -->
     <span class="hidden w-full flex-col gap-1 sm:flex">
       <span class="flex items-center justify-between gap-4">
         <span class="min-w-0 truncate font-medium" title={report.name}>{report.name}</span>
@@ -40,6 +35,7 @@ let reportSubheading = $derived(subheading(report.siteName, report.creator));
         · <RelativeTime at={report.createdAt} now={report.now} /></span
       >
     </span>
+    <!-- The mobile entry, which uses four rows. -->
     <span class="flex w-full flex-col gap-1 sm:hidden">
       <span class="flex items-center justify-between gap-4">
         <span class="min-w-0 truncate font-medium" title={report.name}>{report.name}</span>
