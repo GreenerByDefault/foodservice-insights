@@ -1,7 +1,7 @@
 import { test } from '@playwright/test';
-import { expectScreenshot } from './lib/screenshots';
+import { expectScreenshots } from './lib/screenshots';
 
 test('the 404 page', async ({ page }) => {
   await page.goto('/no-such-page');
-  await expectScreenshot(page, 'not-found.png');
+  await expectScreenshots(page, 'not-found.png');
 });

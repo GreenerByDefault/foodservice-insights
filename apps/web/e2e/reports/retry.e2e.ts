@@ -25,8 +25,8 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
   await page.clock.install();
 
   // Not 'failed': that fixture pins a fixed creator email for reports.screenshot.ts's committed
-  // screenshot, which collides with a concurrent run of this test. See layout.e2e.ts's identical
-  // trade-off. 'failed-retried' still has attempts to spare, so retry behaves the same either way.
+  // screenshot, which collides with a concurrent run of this test. 'failed-retried' still has
+  // attempts to spare, so retry behaves the same either way.
   const reportId = await reports.create('failed-retried');
   await page.goto(reportUrl(reportId));
   await ensureHydrated(page);

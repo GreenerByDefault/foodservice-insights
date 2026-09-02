@@ -308,10 +308,10 @@ Follow `e2e/reports/reports.screenshot.ts`: assert the state actually rendered, 
 `expectScreenshot`. Flat feature-prefixed names. Once the feature has both an e2e and a screenshot
 spec it gets an `e2e/reports-list/` folder holding both.
 
-Responsiveness needs no new screenshot: `e2e/layout.e2e.ts`'s `ROUTES` **already includes
-`/orgs/${PLACEHOLDER_ORGANIZATION_ID}`** and sweeps 390/768/1280 asserting no horizontal overflow.
-That existing test is what the two-line row layout is designed to pass, and it will start doing real
-work the moment PR 1 lands.
+Responsiveness needs no *extra* spec: `expectScreenshots` captures every shot at each viewport in
+`e2e/lib/viewports.ts`, so the two screenshots above already cover the row layout on a phone and a
+tablet. `e2e/layout.e2e.ts` has been deleted — don't add an overflow assertion in its place; a
+narrow capture shows whether the truncation *looks* right, not merely that nothing overflowed.
 
 ## Coordination risk
 
