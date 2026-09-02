@@ -1,0 +1,22 @@
+{
+  "name": "@gbd/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:system": "TEST_DB=1 node scripts/test-run.ts",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@gbd/browser-testing": "workspace:*",
+    "@gbd/core": "workspace:*",
+    "@gbd/db": "workspace:*",
+    "@gbd/email": "workspace:*",
+    "@gbd/storage": "workspace:*",
+    "@gbd/web": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:"
+  }
+}

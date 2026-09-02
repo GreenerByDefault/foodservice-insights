@@ -56,13 +56,8 @@ jobs:
         run: |
           emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
-          # area <name> <filter-result> [file the area's workspace must have]
-          #
-          # TODO: once tests/e2e/ is a permanent fixture, the third argument's existence
-          # check is always true. Drop it and the [ -f ] line, and call area with just
-          # <name> <filter-result> everywhere.
+          # area <name> <filter-result>
           area() {
-            if [ -n "${3:-}" ] && [ ! -f "$3" ]; then emit "$1" false; return; fi
             if [ "$UNFILTERED" = 'true' ] || [ "$2" = 'true' ]; then emit "$1" true; return; fi
             emit "$1" false
           }
@@ -70,7 +65,7 @@ jobs:
           area ts "$TS"
           area python "$PYTHON"
           area python_lab "$PYTHON_LAB"
-          area system "$SYSTEM" tests/e2e/package.json
+          area system "$SYSTEM"
 
   ts-static:
     name: 'TS: lint + typecheck'
@@ -255,7 +250,17 @@ jobs:
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-python
       - uses: ./.github/actions/playwright-browsers
+      - uses: ./.github/actions/setup-supabase
       - run: pnpm exec turbo run test:system
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: system-playwright-report
+          path: |
+            tests/e2e/playwright-report/
+            tests/e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Stable name to point branch protection at, independent of the jobs above.
   # Must stay always(): most jobs are skipped on most runs, and skipped isn't a failure.
