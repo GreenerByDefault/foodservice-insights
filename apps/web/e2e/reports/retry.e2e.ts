@@ -14,7 +14,7 @@ import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { REPORT_POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
+import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
 
 test('retrying a failed report shows the waiting screen and resumes polling, without a reload', async ({
   page,
@@ -57,7 +57,7 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
       .execute();
   });
 
-  await advancePoll(page, REPORT_POLL_INTERVAL_MS);
+  await advancePoll(page, POLL_INTERVAL_MS);
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   expect(loads.count).toBe(0);
 });

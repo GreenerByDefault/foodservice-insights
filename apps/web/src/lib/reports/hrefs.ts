@@ -30,3 +30,9 @@ export function olderReportsHref(organizationId: string, reportId: string): stri
 export function newerReportsHref(organizationId: string, reportId: string): string {
   return `${organizationHref(organizationId)}?newer=${reportId}`;
 }
+
+/** The list's own reads after the first. Names only the route — the caller appends its own
+ * `?older=`/`?newer=` search so a poll re-serves whichever page it is currently on. */
+export function reportsPollHref(organizationId: string): string {
+  return `${organizationHref(organizationId)}/poll`;
+}

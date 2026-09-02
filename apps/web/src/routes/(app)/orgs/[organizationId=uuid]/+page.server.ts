@@ -1,7 +1,15 @@
 import type { AnalysisAttemptStatus, DatabaseExecutor, OrganizationId, ReportId } from '@gbd/db';
 import { sql } from 'kysely';
+import { env } from '$env/dynamic/private';
+import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { screenStatus } from '$lib/reports/attempt-status';
-import { newerReportsHref, newReportHref, olderReportsHref, reportHref } from '$lib/reports/hrefs';
+import {
+  newerReportsHref,
+  newReportHref,
+  olderReportsHref,
+  reportHref,
+  reportsPollHref,
+} from '$lib/reports/hrefs';
 import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
@@ -11,10 +19,15 @@ export const load: PageServerLoad = async ({ params, url }) => {
   const organizationId = params.organizationId as OrganizationId;
   const cursor = parseCursor(url.searchParams);
 
-  return await withDbErrorHandling(() => _loadReports(database(), { organizationId, cursor }), {
-    action: "load an organization's reports",
-    context: { organizationId },
-  });
+  return await withDbErrorHandling(
+    () =>
+      _loadReports(database(), {
+        organizationId,
+        cursor,
+        pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
+      }),
+    { action: "load an organization's reports", context: { organizationId } },
+  );
 };
 
 /** How many reports one page of the list shows. Matches `WEEKLY_REPORT_LIMIT`, so a full page is
@@ -44,6 +57,10 @@ export type ReportsPageData = {
   olderHref: string | null;
   /** Set only when a page of newer reports exists — see `pagination.ts`. */
   newerHref: string | null;
+  /** Names this same page, not this whole route: the poller appends its own `page.url.search` so
+   * a poll re-serves whichever page (`?older=`/`?newer=`) the user is currently on. */
+  pollHref: string;
+  pollIntervalMs: number;
 };
 
 type ReportListRowQuery = {
@@ -108,7 +125,7 @@ async function resolveCursor(db: DatabaseExecutor, cursor: ReportsCursor): Promi
  */
 export async function _loadReports(
   db: DatabaseExecutor,
-  params: { organizationId: OrganizationId; cursor: ReportsCursor },
+  params: { organizationId: OrganizationId; cursor: ReportsCursor; pollIntervalMs: number },
 ): Promise<ReportsPageData> {
   const cursor = await resolveCursor(db, params.cursor);
 
@@ -182,6 +199,8 @@ export async function _loadReports(
       hasOlder && olderCursorId ? olderReportsHref(params.organizationId, olderCursorId) : null,
     newerHref:
       hasNewer && newerCursorId ? newerReportsHref(params.organizationId, newerCursorId) : null,
+    pollHref: reportsPollHref(params.organizationId),
+    pollIntervalMs: params.pollIntervalMs,
   };
 }
 

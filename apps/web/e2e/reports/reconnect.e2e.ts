@@ -12,7 +12,7 @@ import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { REPORT_POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
+import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
 
 test('an unreachable poll leaves the timeline up and shows a reconnecting notice, never a reload', async ({
   page,
@@ -29,10 +29,7 @@ test('an unreachable poll leaves the timeline up and shows a reconnecting notice
   await page.route('**/poll', (route) => route.abort());
 
   // Two consecutive failures: the base interval, then double it — see `nextPollDelayMs`.
-  await advanceThroughPollFailures(page, '/poll', [
-    REPORT_POLL_INTERVAL_MS,
-    REPORT_POLL_INTERVAL_MS * 2,
-  ]);
+  await advanceThroughPollFailures(page, '/poll', [POLL_INTERVAL_MS, POLL_INTERVAL_MS * 2]);
 
   await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
   await expect(page.getByText('You can close this page', { exact: false })).toBeVisible();

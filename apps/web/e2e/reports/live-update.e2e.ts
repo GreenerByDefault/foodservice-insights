@@ -13,7 +13,7 @@ import { sql } from 'kysely';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
-import { REPORT_POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
+import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
 
 test('a report that finishes while the page is open updates in place, without a reload', async ({
   page,
@@ -45,7 +45,7 @@ test('a report that finishes while the page is open updates in place, without a 
       .execute();
   });
 
-  await advancePoll(page, REPORT_POLL_INTERVAL_MS);
+  await advancePoll(page, POLL_INTERVAL_MS);
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   expect(loads.count).toBe(0);
 });
