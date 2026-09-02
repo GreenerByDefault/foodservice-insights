@@ -50,15 +50,18 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   await page.goto(`/orgs/${organizationId}`);
 
   await expect(page.getByRole('heading', { name: 'Riverside Foods' })).toBeVisible();
-  await expect(page.getByText('Chicken order, March')).toBeVisible();
-  await expect(page.getByText('Processing')).toBeVisible();
-  await expect(page.getByText('Q1 procurement')).toBeVisible();
-  await expect(page.getByText('Ready')).toBeVisible();
-  await expect(page.getByText('Winter deliveries')).toBeVisible();
-  await expect(page.getByText("Couldn't finish")).toBeVisible();
+  // Each row renders a mobile and a sm:+ layout, toggled by CSS (see report-row.svelte), so
+  // every field exists twice in the DOM regardless of viewport — `.first()` picks whichever
+  // copy is visible at the page's current (desktop-sized) viewport.
+  await expect(page.getByText('Chicken order, March').first()).toBeVisible();
+  await expect(page.getByText('Processing').first()).toBeVisible();
+  await expect(page.getByText('Q1 procurement').first()).toBeVisible();
+  await expect(page.getByText('Ready').first()).toBeVisible();
+  await expect(page.getByText('Winter deliveries').first()).toBeVisible();
+  await expect(page.getByText("Couldn't finish").first()).toBeVisible();
 
   // Hover one row so the committed image also shows the hover affordance.
-  await page.getByText('Q1 procurement').hover();
+  await page.getByText('Q1 procurement').first().hover();
   await expectScreenshots(page, 'reports-list.png');
 });
 

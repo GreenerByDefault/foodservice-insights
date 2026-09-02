@@ -18,17 +18,22 @@ function aReport(overrides: Partial<ReportListRow> = {}): ReportListRow {
 }
 
 describe('ReportRow', () => {
-  test('links to the report, and shows its name and the joined metadata line', async () => {
+  // The row renders two mutually-exclusive layouts (mobile and sm:+, see report-row.svelte)
+  // toggled by CSS, so every field exists twice in the DOM regardless of viewport — `.first()`
+  // picks the sm:+ copy, which is what's visible at this test's default (wide) viewport.
+
+  test('links to the report, and shows its name and metadata', async () => {
     const report = aReport();
 
     const screen = await render(ReportRow, { report });
 
     const link = screen.getByRole('link');
     await expect.element(link).toHaveAttribute('href', report.href);
-    await expect.element(screen.getByText('Q1 procurement')).toBeVisible();
+    await expect.element(screen.getByText('Q1 procurement').first()).toBeVisible();
     await expect
-      .element(screen.getByText('Riverside Cafeteria · Created by Ana Ruiz · 12 minutes ago'))
+      .element(screen.getByText('Riverside Cafeteria · Created by Ana Ruiz').first())
       .toBeVisible();
+    await expect.element(screen.getByText('12 minutes ago').first()).toBeVisible();
   });
 
   // Site name, creator name, and their fallbacks are subheading()'s branches — see
@@ -39,6 +44,6 @@ describe('ReportRow', () => {
 
     const screen = await render(ReportRow, { report });
 
-    await expect.element(screen.getByText("Couldn't finish")).toBeVisible();
+    await expect.element(screen.getByText("Couldn't finish").first()).toBeVisible();
   });
 });
