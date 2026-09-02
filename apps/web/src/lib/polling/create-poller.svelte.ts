@@ -1,7 +1,5 @@
-/** A repeating poll loop, generic over what it polls: the report page and the reports list are
- * both an `isSettled` condition away from "nothing left to check". Extracted out of
- * `report-view.svelte` because the list is a second consumer of the same four hard-won
- * subtleties below — a second copy of this reasoning is where it drifts. */
+/** A repeating poll loop, generic over what it polls. Pauses while the tab is hidden and catches
+ * up immediately when it becomes visible again. */
 
 import { onMount, untrack } from 'svelte';
 import { FAILURES_BEFORE_NOTICE, nextPollDelayMs } from './schedule.ts';
@@ -24,8 +22,12 @@ export interface Poller {
   pollNow: () => Promise<void>;
 }
 
-/** Must be called during component initialization — it uses `$effect` and `onMount`, which both
- * require that. */
+/** Runs `options.poll` on a repeating, backed-off schedule and reports each result via
+ * `options.onData`, until `options.isSettled` says to stop.
+ *
+ * Must be called during component initialization — it uses `$effect` and `onMount`, which both
+ * require that.
+ */
 export function createPoller<T>(options: PollerOptions<T>): Poller {
   let consecutiveFailures = $state(0);
   let documentHidden = $state(false);
