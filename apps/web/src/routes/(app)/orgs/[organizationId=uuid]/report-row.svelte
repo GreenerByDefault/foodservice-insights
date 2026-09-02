@@ -32,7 +32,7 @@ function subheading(report: ReportListRow): string {
     class="flex w-full flex-col gap-1 px-2 py-3 hover:bg-accent focus-visible:bg-accent"
   >
     <span class="flex items-center justify-between gap-4">
-      <span class="min-w-0 truncate font-medium">{report.name}</span>
+      <span class="min-w-0 truncate font-medium" title={report.name}>{report.name}</span>
       <!-- Status and chevron share one flex line so they sit on the same baseline instead of the
       chevron centering on the row's full two-line height, which put it between the lines rather
       than level with the status text it's paired with. -->
@@ -45,7 +45,7 @@ function subheading(report: ReportListRow): string {
         />
       </span>
     </span>
-    <span class="truncate text-sm text-muted-foreground"
+    <span class="truncate text-sm text-muted-foreground" title={subheading(report)}
       >{subheading(report)}
       · <RelativeTime at={report.createdAt} now={report.now} /></span
     >
