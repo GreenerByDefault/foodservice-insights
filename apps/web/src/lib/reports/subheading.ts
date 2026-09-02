@@ -1,4 +1,4 @@
-/** displayName is null when the user is deleted. */
+/** The Creator is null when the user is deleted. */
 export type Creator = { displayName: string | null; email: string } | null;
 
 // Lowercase, so it reads naturally after "Created by".

@@ -124,7 +124,7 @@ export async function insertReport(
     name: string;
     siteName: string | null;
     monthlyCounts: unknown;
-    createdAt: Date;
+    createdAt: Date | RawBuilder<Date>;
   }> = {},
 ): Promise<Report> {
   const organizationId =

@@ -2,22 +2,19 @@
  * contents are fully controlled, rather than the shared placeholder organization every other
  * spec is also writing reports into.
  *
- * Timestamp stability follows `e2e/fixtures/reports.ts`'s discipline: the row meant to render
- * *relative* ("12 minutes ago") uses `msAgo`, and the row meant to render an *absolute* date uses
- * a fixed past instant, well past `formatWhen`'s 7-day boundary, so the committed image doesn't
- * drift with the day this is regenerated.
+ * Timestamp stability follows `e2e/fixtures/reports.ts`'s discipline.
  */
 
-import { DAY_MS, HOUR_MS, MINUTE_MS, msAgo, SECOND_MS } from '@gbd/core';
-import { insertAppUser } from '@gbd/db/testing';
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@gbd/core';
+import { dbMsAgo, insertAppUser } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('a mix of report states', async ({ page, organizations, db }) => {
   const creator = await insertAppUser(db, { displayName: 'Ana Ruiz' });
-  const processingCreatedAt = msAgo(12 * MINUTE_MS + 30 * SECOND_MS);
-  const succeededCreatedAt = msAgo(3 * DAY_MS + 2 * HOUR_MS);
+  const processingCreatedAt = dbMsAgo(12 * MINUTE_MS + 30 * SECOND_MS);
+  const succeededCreatedAt = dbMsAgo(3 * DAY_MS + 2 * HOUR_MS);
 
   const organizationId = await organizations.create({
     name: 'Riverside Foods',
@@ -28,7 +25,7 @@ test('a mix of report states', async ({ page, organizations, db }) => {
         createdByUserId: creator.id,
         createdAt: processingCreatedAt,
         status: 'processing',
-        claimedAt: msAgo(11 * MINUTE_MS),
+        claimedAt: dbMsAgo(11 * MINUTE_MS),
       },
       {
         name: 'Q1 procurement',
@@ -36,8 +33,8 @@ test('a mix of report states', async ({ page, organizations, db }) => {
         createdByUserId: creator.id,
         createdAt: succeededCreatedAt,
         status: 'succeeded',
-        claimedAt: msAgo(3 * DAY_MS + 2 * HOUR_MS - 3 * MINUTE_MS),
-        finishedAt: msAgo(3 * DAY_MS + 2 * HOUR_MS - 5 * MINUTE_MS),
+        claimedAt: dbMsAgo(3 * DAY_MS + 2 * HOUR_MS - 3 * MINUTE_MS),
+        finishedAt: dbMsAgo(3 * DAY_MS + 2 * HOUR_MS - 5 * MINUTE_MS),
       },
       {
         name: 'Winter deliveries',
@@ -60,16 +57,12 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   await expect(page.getByText('Winter deliveries')).toBeVisible();
   await expect(page.getByText("Couldn't finish")).toBeVisible();
 
-  // Hover one row so the committed image also shows the hover affordance, not just the resting
-  // state every row shares.
+  // Hover one row so the committed image also shows the hover affordance.
   await page.getByText('Q1 procurement').hover();
   await expectScreenshots(page, 'reports-list.png');
 });
 
 test('the empty state', async ({ page, organizations }) => {
-  // Free of report fixtures entirely, so it's the cheapest image in the suite — worth its own
-  // screenshot anyway, since it's a screen invented from scratch and doubles as the first-run
-  // experience.
   const organizationId = await organizations.create({ name: 'New Foodservice Co' });
 
   await page.goto(`/orgs/${organizationId}`);

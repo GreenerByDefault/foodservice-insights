@@ -2,6 +2,7 @@ import type { AnalysisAttemptStatus, DatabaseExecutor, OrganizationId, ReportId 
 import { sql } from 'kysely';
 import { screenStatus } from '$lib/reports/attempt-status';
 import { newReportHref, reportHref } from '$lib/reports/hrefs';
+import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
@@ -19,8 +20,7 @@ export type ReportListRow = {
   href: string;
   name: string;
   siteName: string | null;
-  /** Null when the creating user's account was deleted. */
-  creator: { displayName: string | null; email: string } | null;
+  creator: Creator;
   createdAt: Date;
   /** The screen status, not the raw column — see `screenStatus`. */
   status: AnalysisAttemptStatus;

@@ -23,9 +23,6 @@ test('a report appears in the organization list and links to its report page', a
       name,
     });
     await insertInputFile(transaction, { reportId: report.id });
-    // Not 'succeeded': that status's deferred `analysis_attempt_succeeded_has_result_files`
-    // constraint only fires at commit, which `withTransaction` reaches (unlike `withRollback`),
-    // so it would need result files too — irrelevant to what this test is proving.
     await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'pending' });
     return report.id;
   });

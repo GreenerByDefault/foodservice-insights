@@ -3,14 +3,19 @@ import { render } from 'vitest-browser-svelte';
 import ReportStatus from './report-status.svelte';
 
 describe('ReportStatus', () => {
-  test('pending reads as Queued', async () => {
+  test('pending reads as Queued, in the muted colour, with no spinner', async () => {
     const screen = await render(ReportStatus, { status: 'pending' });
-    await expect.element(screen.getByText('Queued')).toBeVisible();
+    const status = screen.getByText('Queued');
+    await expect.element(status).toBeVisible();
+    await expect.element(status).toHaveClass('text-muted-foreground');
+    expect(status.element().querySelector('svg')).toBeNull();
   });
 
-  test('processing reads as Processing', async () => {
+  test('processing reads as Processing, with a spinner', async () => {
     const screen = await render(ReportStatus, { status: 'processing' });
-    await expect.element(screen.getByText('Processing')).toBeVisible();
+    const status = screen.getByText('Processing');
+    await expect.element(status).toBeVisible();
+    expect(status.element().querySelector('svg')).not.toBeNull();
   });
 
   test('succeeded reads as Ready', async () => {

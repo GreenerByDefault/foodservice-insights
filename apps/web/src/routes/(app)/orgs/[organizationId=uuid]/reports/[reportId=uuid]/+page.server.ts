@@ -15,6 +15,7 @@ import { env } from '$env/dynamic/private';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { screenStatus } from '$lib/reports/attempt-status';
 import { newReportHref, organizationHref, reportHref } from '$lib/reports/hrefs';
+import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
@@ -71,8 +72,7 @@ export type ReportPageData = {
     id: ReportId;
     name: string;
     siteName: string | null;
-    /** Null when `created_by_user_id` is null — the creating user's account was deleted. */
-    creator: { displayName: string | null; email: string } | null;
+    creator: Creator;
   };
   cancelButtonHref: string;
   retryButtonHref: string;

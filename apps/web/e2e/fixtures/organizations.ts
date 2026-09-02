@@ -1,8 +1,6 @@
 /** A private organization, for anything that needs to control the *whole* reports list rather
  * than one report inside it — the empty state, pagination, or a screenshot whose contents must be
- * fully known. `reports.ts`'s fixtures all assume the shared placeholder organization, which
- * every other spec is also writing to; see the plan's "Test isolation" section
- * (`.claude/plans/organization-reports-list.md`) for why that split exists.
+ * fully known.
  *
  * Names collide on `organization_name_unique_ci`, so every caller passes its own unique one — a
  * random suffix for a behavioural spec, a fixed name for a screenshot whose committed image
@@ -18,17 +16,17 @@ import {
   insertReport,
   insertResultFile,
 } from '@gbd/db/testing';
-import type { Kysely, Transaction } from 'kysely';
+import type { Kysely, RawBuilder, Transaction } from 'kysely';
 
 export type OrganizationReportSpec = {
   name: string;
   siteName?: string;
   createdByUserId?: UserId | null;
-  createdAt: Date;
+  createdAt: Date | RawBuilder<Date>;
   status: AnalysisAttemptStatus;
-  claimedAt?: Date;
-  finishedAt?: Date;
-  cancelRequestedAt?: Date;
+  claimedAt?: Date | RawBuilder<Date>;
+  finishedAt?: Date | RawBuilder<Date>;
+  cancelRequestedAt?: Date | RawBuilder<Date>;
 };
 
 /** One committed report: the input file (and, for `succeeded`, both result files) have to land
