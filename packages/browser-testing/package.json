@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./test-run": "./dist/test-run.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -12,9 +13,12 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@gbd/db": "workspace:*",
+    "@gbd/storage": "workspace:*",
     "@playwright/test": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "typescript": "catalog:"
   }
 }

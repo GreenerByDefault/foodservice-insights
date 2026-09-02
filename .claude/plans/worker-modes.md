@@ -98,6 +98,31 @@ of waiting out real intervals, and `ensureHydrated` waits for Svelte's client ru
 test interacts with the page. `apps/web` takes it as a `devDependency` (test-only, so not a
 `dependency`) and its e2e specs import all three directly.
 
+**Already landed:** a second export, `@gbd/browser-testing/test-run` (`src/test-run.ts`), gives
+both suites' `scripts/test-run.ts` one `runAgainstFreshStack` function instead of two copies of
+the same ~90-line orchestration (sweep stale resources, `ensureTemplateDatabase` +
+`createRunDatabase`, seed, `createRunBucket`, pick a free port, spawn `playwright test`, tear
+down in reverse). `apps/web/scripts/test-run.ts` already runs on it — confirmed with
+`pnpm --filter @gbd/web run test:playwright`, twice, all 47 specs green both times. Kept as a
+separate subpath (not folded into the main `.` export) so a spec importing the page helpers above
+doesn't pull `@gbd/db`/`@gbd/storage` in with them — `package.json`'s `exports` map and its new
+`@gbd/db`/`@gbd/storage` `dependencies` follow the same split `@gbd/db`/`@gbd/db/testing` already
+use.
+
+The one hook this function needs for PR 1 below: `beforePlaywright(stack)`, called once the run's
+database and bucket exist, before Playwright is spawned. It returns `{ env?, afterPlaywright? }`
+— `env` is merged into Playwright's process, `afterPlaywright` runs once Playwright exits, before
+the bucket and database are torn down. `apps/web`'s script passes nothing; `tests/e2e`'s script
+(still to write) uses it to: spawn the worker (`node apps/worker/src/main.ts`, `WORKER_MODE`
+already `stubbed` from `.env.test`) pointed at `stack.connectionString`/`stack.s3Bucket` with a
+`mkdtemp`'d `WORKER_RUN_ROOT`; SIGTERM it (with a SIGKILL fallback) in `afterPlaywright`; and
+give the run's placeholder user (`PLACEHOLDER_USER_ID` from `@gbd/db/seed`) a fresh
+`aTestEmailAddress()` by updating `auth.users.email` directly against `stack.connectionString` —
+`analysisAttempt.requestedByUserId` is always that id (`identifyUser` is a phase-one stand-in,
+see `apps/web/src/lib/server/auth/identify.ts`), and `sendPendingNotifications` joins through it
+for the notification's `to`, so this is what lets the happy-path spec `waitForEmail` on an
+address nothing else in the suite could send to.
+
 The one thing that stays local to each suite is the poll interval itself — a UI polling cadence
 doesn't belong in a shared package. `apps/web/e2e/lib/poll-interval.ts` resolves it by calling
 `pollIntervalMsForWorkerMode(process.env.WORKER_MODE)` (the same function `+page.server.ts` and
