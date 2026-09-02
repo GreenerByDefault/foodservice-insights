@@ -1,6 +1,5 @@
 /** Pagination needs the dedicated organization fixture (`e2e/fixtures/organizations.ts`), both to
- * control the page contents and to keep 21 reports out of the shared placeholder organization —
- * see the plan's "Test isolation" section.
+ * control the page contents and to keep 21 reports out of the shared placeholder organization.
  */
 
 import { MINUTE_MS } from '@gbd/core';
@@ -40,7 +39,6 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
 
   await older.click();
 
-  // The one remaining, oldest report.
   await expect(page.getByText('Pagination report 0', { exact: true })).toBeVisible();
   await expect(page.getByText('Pagination report 1', { exact: true })).not.toBeVisible();
   await expect(page.getByRole('link', { name: 'Older' })).not.toBeVisible();
@@ -49,7 +47,6 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
 
   await newer.click();
 
-  // Back to the first page, the same 20 rows.
   await expect(page.getByText('Pagination report 20', { exact: true })).toBeVisible();
   await expect(page.getByText('Pagination report 1', { exact: true })).toBeVisible();
   await expect(page.getByText('Pagination report 0', { exact: true })).not.toBeVisible();
