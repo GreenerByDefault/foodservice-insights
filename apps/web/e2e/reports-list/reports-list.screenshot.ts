@@ -59,6 +59,10 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   await expect(page.getByText('Ready')).toBeVisible();
   await expect(page.getByText('Winter deliveries')).toBeVisible();
   await expect(page.getByText("Couldn't finish")).toBeVisible();
+
+  // Hover one row so the committed image also shows the hover affordance, not just the resting
+  // state every row shares.
+  await page.getByText('Q1 procurement').hover();
   await expectScreenshot(page, 'reports-list.png');
 });
 
