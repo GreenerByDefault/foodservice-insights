@@ -17,6 +17,8 @@ export {
 export { aDatabaseError, anUnreachableDatabaseError, divideByZero } from './errors.ts';
 export {
   aChecksum,
+  DB_NOW,
+  dbMsAgo,
   insertAnalysisAttempt,
   insertAppUser,
   insertAppUserWithEmail,
@@ -25,7 +27,6 @@ export {
   insertReport,
   insertReportWithAttempt,
   insertResultFile,
-  NOW,
   readAnalysisAttemptRow,
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';
