@@ -304,6 +304,30 @@ describe('_loadReports pagination', () => {
     });
   });
 
+  test('an older page with a further older page shows both links', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE * 2 + 1);
+      const newestFirst = [...ids].reverse();
+      const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
+
+      const data = await _loadReports(transaction, {
+        organizationId: organization.id,
+        cursor: { direction: 'older', cursor: firstPageLast },
+      });
+
+      expect(data.reports.map((row) => row.id)).toEqual(
+        newestFirst.slice(_REPORTS_PAGE_SIZE, _REPORTS_PAGE_SIZE * 2),
+      );
+      expect(data.newerHref).toBe(
+        newerReportsHref(organization.id, data.reports[0]?.id as ReportId),
+      );
+      expect(data.olderHref).toBe(
+        olderReportsHref(organization.id, data.reports[data.reports.length - 1]?.id as ReportId),
+      );
+    });
+  });
+
   test('paging older then newer returns to the same rows', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);

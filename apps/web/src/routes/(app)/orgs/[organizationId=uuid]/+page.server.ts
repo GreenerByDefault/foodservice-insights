@@ -59,6 +59,10 @@ type ReportListRowQuery = {
   now: Date;
 };
 
+// -----------------------------------------------------
+// Cursor
+// -----------------------------------------------------
+
 /** The keyset-pagination boundary: strictly newer or older than the cursor report, compared
  * against the outer query's own `reportCreatedAt`/`reportId` columns.
  *
@@ -90,6 +94,10 @@ async function resolveCursor(db: DatabaseExecutor, cursor: ReportsCursor): Promi
     .executeTakeFirst();
   return cursorReport ? cursor : { direction: 'newest' };
 }
+
+// -----------------------------------------------------
+// Query
+// -----------------------------------------------------
 
 /** One page of an organization's reports for the dashboard/list page, newest upload first
  * regardless of paging direction — see `ReportsCursor`.
@@ -164,34 +172,8 @@ export async function _loadReports(
     rows.reverse();
   }
 
-  // The opposite direction from the one requested exists by construction: paging `older` means a
-  // newer page — the one just left — is there, and vice versa. Only the requested direction's
-  // extra row settles whether *it* has a further page.
-  let hasOlder: boolean;
-  let hasNewer: boolean;
-  switch (cursor.direction) {
-    case 'newest':
-      hasOlder = hasMoreInDirection;
-      hasNewer = false;
-      break;
-    case 'older':
-      hasOlder = hasMoreInDirection;
-      hasNewer = true;
-      break;
-    case 'newer':
-      hasOlder = true;
-      hasNewer = hasMoreInDirection;
-      break;
-  }
-
-  // The row to cursor from is normally an end of this page. A page can come back empty despite a
-  // further page existing by construction — an `older`/`newer` link landing exactly on the last
-  // row of the organization's history — so fall back to the cursor that got us here, which is
-  // exactly as valid a boundary for the opposite direction.
-  const newerCursorId =
-    rows[0]?.reportId ?? (cursor.direction === 'older' ? cursor.cursor : undefined);
-  const olderCursorId =
-    rows[rows.length - 1]?.reportId ?? (cursor.direction === 'newer' ? cursor.cursor : undefined);
+  const { hasOlder, hasNewer } = paginationFlags(cursor.direction, hasMoreInDirection);
+  const { olderCursorId, newerCursorId } = pagingCursorIds(rows, cursor);
 
   return {
     newReportHref: newReportHref(params.organizationId),
@@ -202,6 +184,49 @@ export async function _loadReports(
       hasNewer && newerCursorId ? newerReportsHref(params.organizationId, newerCursorId) : null,
   };
 }
+
+/** Whether the page should show an Older/Newer link, given the direction paged and whether the
+ * query's extra row confirmed more exist in that direction.
+ *
+ * The opposite direction from the one requested exists by construction: paging `older` means a
+ * newer page — the one just left — is there, and vice versa. Only the requested direction's extra
+ * row settles whether *it* has a further page.
+ */
+function paginationFlags(
+  direction: ReportsCursor['direction'],
+  hasMoreInDirection: boolean,
+): { hasOlder: boolean; hasNewer: boolean } {
+  switch (direction) {
+    case 'newest':
+      return { hasOlder: hasMoreInDirection, hasNewer: false };
+    case 'older':
+      return { hasOlder: hasMoreInDirection, hasNewer: true };
+    case 'newer':
+      return { hasOlder: true, hasNewer: hasMoreInDirection };
+  }
+}
+
+/** The report id each direction's link should cursor from.
+ *
+ * The row to cursor from is normally an end of this page. A page can come back empty despite a
+ * further page existing by construction — an `older`/`newer` link landing exactly on the last row
+ * of the organization's history — so fall back to the cursor that got us here, which is exactly as
+ * valid a boundary for the opposite direction.
+ */
+function pagingCursorIds(
+  rows: ReportListRowQuery[],
+  cursor: ReportsCursor,
+): { newerCursorId: ReportId | undefined; olderCursorId: ReportId | undefined } {
+  return {
+    newerCursorId: rows[0]?.reportId ?? (cursor.direction === 'older' ? cursor.cursor : undefined),
+    olderCursorId:
+      rows[rows.length - 1]?.reportId ?? (cursor.direction === 'newer' ? cursor.cursor : undefined),
+  };
+}
+
+// -----------------------------------------------------
+// Row mapping
+// -----------------------------------------------------
 
 function toReportListRow(organizationId: OrganizationId, row: ReportListRowQuery): ReportListRow {
   return {
