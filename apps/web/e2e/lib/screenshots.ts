@@ -5,10 +5,11 @@ import { SCREENSHOT_VIEWPORTS } from './viewports.ts';
  *
  * `@media (hover: hover)` is false on a phone or a tablet, so a hovered row in a narrow shot
  * would commit a state no such device can reach. `setViewportSize` alone doesn't clear `:hover` —
- * Chromium holds it until a real pointer move. (0, 0) is the page's top-left corner, which lands
- * in the shell's own padding rather than on anything hoverable.
+ * Chromium holds it until a real pointer move.
  */
 async function clearHover(page: Page): Promise<void> {
+  // The page's top-left corner, which lands in the shell's own padding rather than on
+  // anything hoverable.
   await page.mouse.move(0, 0);
 }
 
@@ -44,6 +45,6 @@ export async function expectScreenshots(page: Page, name: string): Promise<void>
   }
 
   // Restored so the helper leaves no viewport behind it: an assertion added after a capture
-  // shouldn't silently run at 390px. Hover deliberately isn't restored — no spec needs it back.
+  // shouldn't silently run at mobile. Hover deliberately isn't restored because nothing needs that.
   await page.setViewportSize(SCREENSHOT_VIEWPORTS.desktop);
 }

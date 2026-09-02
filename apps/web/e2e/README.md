@@ -33,9 +33,7 @@ its suites.
 shot's name only has to be unique within its feature — `reports/failed.png`, not
 `reports-failed.png`. It's still browsed as a gallery, one folder per feature.
 
-Every spec is captured at each viewport in [`lib/viewports.ts`](lib/viewports.ts). The widest keeps
-the bare name; each narrower one nests under a directory named for itself, so browsing a feature's
-own folder still shows one canonical image per screen.
+Every spec is captured at each viewport in [`lib/viewports.ts`](lib/viewports.ts).g
 
 ## Screenshots
 
@@ -59,11 +57,7 @@ Keep the set curated. The unit to weigh is a *screen*, not an image — adding o
 per viewport, and every one of them is CI minutes and a file a reviewer has to look at on any
 visual change. Capture screens that carry real visual risk, not every route.
 
-**A screen with real layout gets a screenshot; a screen without one gets nothing until it has.**
-The stub routes are the ones to leave alone: there is nothing to see in an `<h1>` and a `<p>`, and
-the instinct to cover them with a cheap property assertion instead is what
-`layout.e2e.ts` was, before narrow-width captures replaced it. Assert directly only for a defect a
-screenshot genuinely cannot see — one that's cut off rather than merely ugly.
+**Stubs don't get a screenshot until they're implemented.**
 
 ## Database state
 
