@@ -15,6 +15,7 @@
     "test:e2e": "turbo run test:e2e",
     "test:screenshots": "turbo run test:screenshots",
     "test:playwright": "turbo run test:playwright",
+    "test:system": "turbo run test:system",
     "screenshots:update": "turbo run screenshots:update",
     "test": "pnpm run test:unit && pnpm run test:playwright",
     "lint": "biome ci --error-on-warnings .",

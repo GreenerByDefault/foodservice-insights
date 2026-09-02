@@ -11,6 +11,9 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { requireEnv } from '@gbd/core/env';
 import { initializeDatabase, shutdownDatabase } from '@gbd/db';
 import { seedPlaceholderIdentity } from '@gbd/db/seed';
 import {
@@ -21,6 +24,38 @@ import {
 } from '@gbd/db/testing';
 import { type BlobStoreConfig, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { createRunBucket, deleteRunBucket, sweepStaleRunBuckets } from '@gbd/storage/testing';
+
+/** Locates the `playwright` binary next to a `scripts/test-run.ts` caller.
+ * Pass the caller's own `import.meta.url`. */
+export function resolvePlaywrightBin(scriptModuleUrl: string): string {
+  return path.join(
+    fileURLToPath(new URL('.', scriptModuleUrl)),
+    '..',
+    'node_modules',
+    '.bin',
+    'playwright',
+  );
+}
+
+export function blobStoreConfigFromEnv(): BlobStoreConfig {
+  return {
+    endpoint: requireEnv('S3_ENDPOINT'),
+    region: requireEnv('S3_REGION'),
+    accessKeyId: requireEnv('S3_ACCESS_KEY_ID'),
+    secretAccessKey: requireEnv('S3_SECRET_ACCESS_KEY'),
+    bucket: requireEnv('S3_BUCKET'),
+  };
+}
+
+/** Node's default SIGINT/SIGTERM handling exits before a test-run script's cleanup runs.
+ * Registering a handler — even one that does nothing — suppresses that default, so a Ctrl-C
+ * still reaches `playwright test` (same process group) and `runAgainstFreshStack`'s cleanup
+ * still runs once that child exits and settles. Call this from `main`, not at module scope, so
+ * importing the script has no side effect. */
+export function installCleanupSignalHandlers(): void {
+  process.on('SIGINT', () => {});
+  process.on('SIGTERM', () => {});
+}
 
 /** An OS-assigned free port. A run started between this closing its probe socket and Playwright's
  * `webServer` binding the same number would collide — rare enough locally to accept rather than

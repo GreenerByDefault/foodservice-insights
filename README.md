@@ -135,6 +135,7 @@ Turborepo.
 | `pnpm test:e2e` | End-to-end tests only (Playwright) |
 | `pnpm test:screenshots` | Pixel snapshots only, needs Docker (Playwright) |
 | `pnpm test:playwright` | `test:e2e` and `test:screenshots` together, one app boot |
+| `pnpm test:system` | Whole-system e2e, against a real worker and Python child — see [`tests/e2e/`](tests/e2e/) |
 | `pnpm test` | Everything: `test:unit`, then `test:playwright` |
 | `pnpm build` | Production build of every package |
 
@@ -163,7 +164,7 @@ accepted, a few rejected for different reasons.
 | Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
 | Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
 | Screenshots | `apps/web/e2e/` | Playwright, containerized Chromium | `*.screenshot.ts` |
-| System e2e | `tests/e2e/` (not yet) | Playwright | `*.e2e.ts` |
+| System e2e | [`tests/e2e/`](tests/e2e/) | Playwright | `*.e2e.ts` |
 
 **Component tests** render a single component in a real browser via
 `vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
