@@ -18,8 +18,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 };
 
 /** How many reports one page of the list shows. Matches `WEEKLY_REPORT_LIMIT`, so a full page is
- * roughly a week of maximum use. Exported for the tests. Not in `$lib/reports/limits.ts`, which
- * is scoped to caps on an upload's size and metadata. */
+ * roughly a week of maximum use. */
 export const _REPORTS_PAGE_SIZE = 20;
 
 export type ReportListRow = {
@@ -60,8 +59,8 @@ type ReportListRowQuery = {
   now: Date;
 };
 
-/** `(created_at, id) < ((select created_at from report where id = :cursor), :cursor)` (or `>` for
- * `newer`), against the outer query's own `reportCreatedAt`/`reportId` columns.
+/** The keyset-pagination boundary: strictly newer or older than the cursor report, compared
+ * against the outer query's own `reportCreatedAt`/`reportId` columns.
  *
  * The scalar subquery goes straight to `report`, not through the outer query, so it still
  * resolves for a soft-deleted cursor report — `REQUIREMENTS.md` § Data deletion keeps the row,
@@ -71,6 +70,7 @@ type ReportListRowQuery = {
  */
 function cursorCondition(direction: 'older' | 'newer', cursor: ReportId) {
   const operator = direction === 'older' ? sql.raw('<') : sql.raw('>');
+  // (created_at, id) < ((select created_at from report where id = :cursor), :cursor) — `>` for `newer`.
   return sql<boolean>`(${sql.ref('reportCreatedAt')}, ${sql.ref('reportId')}) ${operator} ((select created_at from report where id = ${cursor}), ${cursor})`;
 }
 
@@ -106,7 +106,7 @@ export async function _loadReports(
           'analysisAttempt.status as status',
           'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
           // Selected alongside the row rather than as a separate query, so every row of one
-          // response is one consistent snapshot — see `ReportListRow.now`.
+          // response is one consistent snapshot.
           sql<Date>`now()`.as('now'),
         ])
         .where('report.organizationId', '=', params.organizationId)

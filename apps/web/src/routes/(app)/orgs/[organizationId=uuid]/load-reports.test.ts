@@ -8,7 +8,7 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { newReportHref, olderReportsHref, reportHref } from '$lib/reports/hrefs';
+import { newerReportsHref, newReportHref, olderReportsHref, reportHref } from '$lib/reports/hrefs';
 import { database } from '$lib/server/db';
 import { _loadReports, _REPORTS_PAGE_SIZE } from './+page.server.ts';
 
@@ -329,6 +329,40 @@ describe('_loadReports pagination', () => {
       expect(newerPage.reports.map((row) => row.id)).toEqual(
         firstPage.reports.map((row) => row.id),
       );
+    });
+  });
+
+  test('paging older past the last report gives an empty page with only a Newer link', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const ids = await insertReports(transaction, organization.id, 3);
+      const oldest = ids[0] as ReportId;
+
+      const data = await _loadReports(transaction, {
+        organizationId: organization.id,
+        cursor: { direction: 'older', cursor: oldest },
+      });
+
+      expect(data.reports).toEqual([]);
+      expect(data.olderHref).toBeNull();
+      expect(data.newerHref).toBe(newerReportsHref(organization.id, oldest));
+    });
+  });
+
+  test('paging newer past the first report gives an empty page with only an Older link', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const ids = await insertReports(transaction, organization.id, 3);
+      const newest = ids[ids.length - 1] as ReportId;
+
+      const data = await _loadReports(transaction, {
+        organizationId: organization.id,
+        cursor: { direction: 'newer', cursor: newest },
+      });
+
+      expect(data.reports).toEqual([]);
+      expect(data.olderHref).toBe(olderReportsHref(organization.id, newest));
+      expect(data.newerHref).toBeNull();
     });
   });
 

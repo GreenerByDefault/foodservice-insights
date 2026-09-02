@@ -41,6 +41,15 @@ describe('parseCursor', () => {
     });
   });
 
+  test('a malformed older cursor still lets a valid newer cursor through', () => {
+    const reportId = newReportId();
+
+    expect(parseCursor(new URLSearchParams({ older: 'not-a-uuid', newer: reportId }))).toEqual({
+      direction: 'newer',
+      cursor: reportId,
+    });
+  });
+
   test('a malformed newer cursor falls back to the newest page', () => {
     expect(parseCursor(new URLSearchParams({ newer: 'not-a-uuid' }))).toEqual({
       direction: 'newest',

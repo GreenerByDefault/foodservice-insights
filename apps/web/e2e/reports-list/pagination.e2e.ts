@@ -29,9 +29,11 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
 
   await page.goto(`/orgs/${organizationId}`);
 
+  // The same elements are repeated in the DOM for mobile vs desktop, so we use `.first()`.
+
   // Newest 20 of 21: reports 1..20, oldest ("report 0") not on this page.
-  await expect(page.getByText('Pagination report 20', { exact: true })).toBeVisible();
-  await expect(page.getByText('Pagination report 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pagination report 20', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Pagination report 1', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Pagination report 0', { exact: true })).not.toBeVisible();
   await expect(page.getByRole('link', { name: 'Newer' })).not.toBeVisible();
   const older = page.getByRole('link', { name: 'Older' });
@@ -39,7 +41,7 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
 
   await older.click();
 
-  await expect(page.getByText('Pagination report 0', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pagination report 0', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Pagination report 1', { exact: true })).not.toBeVisible();
   await expect(page.getByRole('link', { name: 'Older' })).not.toBeVisible();
   const newer = page.getByRole('link', { name: 'Newer' });
@@ -47,8 +49,8 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
 
   await newer.click();
 
-  await expect(page.getByText('Pagination report 20', { exact: true })).toBeVisible();
-  await expect(page.getByText('Pagination report 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pagination report 20', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Pagination report 1', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Pagination report 0', { exact: true })).not.toBeVisible();
   await expect(page.getByRole('link', { name: 'Newer' })).not.toBeVisible();
   await expect(page.getByRole('link', { name: 'Older' })).toBeVisible();
