@@ -4,6 +4,9 @@
   "tasks": {
     "check": {
       "dependsOn": ["^build", "build"]
+    },
+    "test:unit": {
+      "dependsOn": ["^build", "build"]
     }
   }
 }
