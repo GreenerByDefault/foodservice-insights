@@ -30,7 +30,6 @@ describe('ReportsList', () => {
           name: 'Winter deliveries',
         }),
       ],
-      newReportHref: '/orgs/org-1/reports/new',
     });
 
     await expect.element(screen.getByRole('list')).toBeVisible();
@@ -38,14 +37,9 @@ describe('ReportsList', () => {
     await expect.element(screen.getByRole('link', { name: /Winter deliveries/ })).toBeVisible();
   });
 
-  test('shows an empty-state sentence and the new-report link when there are no reports', async () => {
-    const screen = await render(ReportsList, {
-      reports: [],
-      newReportHref: '/orgs/org-1/reports/new',
-    });
+  test('shows an empty-state sentence when there are no reports', async () => {
+    const screen = await render(ReportsList, { reports: [] });
 
-    await expect.element(screen.getByText(/No reports yet/)).toBeVisible();
-    const link = screen.getByRole('link', { name: 'Upload your first one' });
-    await expect.element(link).toHaveAttribute('href', '/orgs/org-1/reports/new');
+    await expect.element(screen.getByText('No reports yet.')).toBeVisible();
   });
 });
