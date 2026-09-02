@@ -12,7 +12,7 @@ import { DAY_MS, HOUR_MS, MINUTE_MS, msAgo, SECOND_MS } from '@gbd/core';
 import { insertAppUser } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
-import { expectScreenshot } from '../lib/screenshots.ts';
+import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('a mix of report states', async ({ page, organizations, db }) => {
   const creator = await insertAppUser(db, { displayName: 'Ana Ruiz' });
@@ -63,7 +63,7 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   // Hover one row so the committed image also shows the hover affordance, not just the resting
   // state every row shares.
   await page.getByText('Q1 procurement').hover();
-  await expectScreenshot(page, 'reports-list.png');
+  await expectScreenshots(page, 'reports-list.png');
 });
 
 test('the empty state', async ({ page, organizations }) => {
@@ -75,5 +75,5 @@ test('the empty state', async ({ page, organizations }) => {
   await page.goto(`/orgs/${organizationId}`);
 
   await expect(page.getByText('No reports yet', { exact: false })).toBeVisible();
-  await expectScreenshot(page, 'reports-list-empty.png');
+  await expectScreenshots(page, 'reports-list-empty.png');
 });

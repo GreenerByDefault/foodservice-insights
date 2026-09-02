@@ -1,10 +1,10 @@
 import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
 import {
+  DB_NOW,
   insertAnalysisAttempt,
   insertAppUser,
   insertOrganization,
   insertReport,
-  NOW,
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
@@ -149,7 +149,7 @@ describe('_loadReports', () => {
         transaction,
         organization.id,
         {},
-        { status: 'pending', cancelRequestedAt: NOW },
+        { status: 'pending', cancelRequestedAt: DB_NOW },
       );
 
       const data = await _loadReports(transaction, { organizationId: organization.id });
