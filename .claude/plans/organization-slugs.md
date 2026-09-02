@@ -217,7 +217,7 @@ with `TEST_DB=1`.
 - Every href: the `(app)` switcher, `orgs/+page.svelte`,
   `_resolvePostSignInDestination` in [`orgs/+page.server.ts`](apps/web/src/routes/(app)/orgs/+page.server.ts),
   and the four minted in the report page's server load.
-- E2E fixtures move to `PLACEHOLDER_ORGANIZATION_SLUG`: `e2e/fixtures/reports.ts`, `e2e/layout.e2e.ts`,
+- E2E fixtures move to `PLACEHOLDER_ORGANIZATION_SLUG`: `e2e/fixtures/reports.ts`,
   `e2e/upload-limit.e2e.ts`, `e2e/lib/fake-poll.ts`.
 - The reserved-slug drift test described above.
 - Docs: the route line in `apps/web/README.md`, and the encoded path link at `ARCHITECTURE.md:88`.

@@ -1,14 +1,14 @@
 import { ensureHydrated } from '@gbd/browser-testing';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import { expect, test } from '@playwright/test';
-import { expectScreenshot } from '../lib/screenshots.ts';
+import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('the new report form, before any file is chosen', async ({ page }) => {
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
   await ensureHydrated(page);
 
   await expect(page.getByText('Choose a CSV file')).toBeVisible();
-  await expectScreenshot(page, 'empty.png');
+  await expectScreenshots(page, 'empty.png');
 });
 
 // Spans two years, like the fixture this replaced, so the shot also exercises the year headings.
@@ -40,7 +40,7 @@ test('the new report form, with the monthly counts component partway filled in',
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('130');
 
   await expect(page.getByText('1 of 4 months still need a count')).toBeVisible();
-  await expectScreenshot(page, 'filled.png');
+  await expectScreenshots(page, 'filled.png');
 });
 
 // Every column at once, one distinct fault per row plus two rows whose dates prove opposite
@@ -93,7 +93,7 @@ test('the rejection view, with a file dense enough to trigger every kind of prob
 
   await expect(page.getByText('Showing 20 of 22 things to fix.', { exact: false })).toBeVisible();
   await expect(page.getByText('4 rows: 2–4, 9', { exact: false })).toBeVisible();
-  await expectScreenshot(page, 'rejection.png');
+  await expectScreenshots(page, 'rejection.png');
 });
 
 // Every row has the same weight fault and nothing else wrong, so `everyRow` is true — the one
@@ -117,7 +117,7 @@ test('the rejection view, with a rule that fails on every row', async ({ page })
   });
 
   await expect(page.getByText('all 3 rows', { exact: false })).toBeVisible();
-  await expectScreenshot(page, 'rejection-every-row.png');
+  await expectScreenshots(page, 'rejection-every-row.png');
 });
 
 // A missing column is a header fault, caught before any row is read — the rejection carries
@@ -139,5 +139,5 @@ test('the rejection view, with only a bare summary and no row list', async ({ pa
 
   await expect(page.getByText('Your file needs a column for weight.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to the form' })).toHaveCount(1);
-  await expectScreenshot(page, 'rejection-bare-summary.png');
+  await expectScreenshots(page, 'rejection-bare-summary.png');
 });

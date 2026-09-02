@@ -5,6 +5,7 @@ import {
   resolvePlaywrightTarget,
 } from '@gbd/browser-testing/playwright-config';
 import { defineConfig } from '@playwright/test';
+import { SCREENSHOT_VIEWPORTS } from './e2e/lib/viewports';
 import { BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
 
 assertTestRunId(
@@ -50,9 +51,12 @@ export default defineConfig({
         use: {
           baseURL: baseURLFromContainer,
           connectOptions: { wsEndpoint: BROWSER_WS_ENDPOINT },
-          // One width, at 1:1. Each additional viewport multiplies the bytes committed forever;
-          // `layout.e2e.ts` covers the cheap part of responsive breakage across three widths.
-          viewport: { width: 1280, height: 800 },
+          // The width a spec starts at; `expectScreenshots` resizes from here to capture the rest
+          // of `SCREENSHOT_VIEWPORTS` on the same navigation.
+          viewport: SCREENSHOT_VIEWPORTS.desktop,
+          // 1:1. A real phone is 2–3x, but scale factor changes rasterization, not layout — it
+          // would multiply the bytes and the pixel-diff cost of every shot while saying nothing new
+          // about how the page is laid out.
           deviceScaleFactor: 1,
         },
       },

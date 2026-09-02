@@ -22,7 +22,7 @@ other axis: **what part of the product a spec covers.**
 | `lib/` | Helpers a spec imports. No tests, no side effects at import. |
 | `fixtures/` | The report-state catalogue and the extended `test` that commits and cleans up a report. |
 | `setup/` | Getting the containerized browser up, taking it down, and optimizing screenshots afterward. Not tests of the app. |
-| `__screenshots__/` | The committed PNGs, nested to match the spec that captures them. |
+| `__screenshots__/` | The committed PNGs, nested to match the spec that captures them, and by viewport. |
 | everything else | Specs, both suites. |
 
 **Specs stay flat until a feature has two of them, then that feature gets a folder** holding both
@@ -32,6 +32,10 @@ its suites.
 [`../playwright.config.ts`](../playwright.config.ts) keys it off the spec's own directory), so a
 shot's name only has to be unique within its feature — `reports/failed.png`, not
 `reports-failed.png`. It's still browsed as a gallery, one folder per feature.
+
+Every spec is captured at each viewport in [`lib/viewports.ts`](lib/viewports.ts). The widest keeps
+the bare name; each narrower one nests under a directory named for itself, so browsing a feature's
+own folder still shows one canonical image per screen.
 
 ## Screenshots
 
@@ -51,13 +55,15 @@ pnpm turbo run screenshots:update --filter=@gbd/web
 Run that for whatever Playwright's failure output suggests — it's the fix regardless of what
 changed. It also runs `oxipng` to shrink file size (`brew install oxipng` or `cargo install oxipng`).
 
-Keep the set curated: every image is CI minutes and repository bytes forever, so capture routes
-that carry real visual risk, not every route.
+Keep the set curated. The unit to weigh is a *screen*, not an image — adding one costs an image
+per viewport, and every one of them is CI minutes and a file a reviewer has to look at on any
+visual change. Capture screens that carry real visual risk, not every route.
 
-Screenshots can't show everything, though — a defect that's cut off, or one that only appears at
-an uncaptured viewport width, needs a direct assertion instead. For example, that's what
-[`layout.e2e.ts`](layout.e2e.ts) is for.
-Reach for assertions only when a screenshot genuinely can't see the problem.
+**A screen with real layout gets a screenshot; a screen without one gets nothing until it has.**
+The stub routes are the ones to leave alone: there is nothing to see in an `<h1>` and a `<p>`, and
+the instinct to cover them with a cheap property assertion instead is what
+`layout.e2e.ts` was, before narrow-width captures replaced it. Assert directly only for a defect a
+screenshot genuinely cannot see — one that's cut off rather than merely ugly.
 
 ## Database state
 
