@@ -1,12 +1,11 @@
 <script lang="ts">
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
-import { onMount, untrack } from 'svelte';
 import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+import { createPoller } from '$lib/polling/create-poller.svelte';
 import type { ReportPageData } from './+page.server.ts';
 import CanceledView from './canceled-view.svelte';
 import FailureView from './failure-view.svelte';
 import { pollReport } from './polling/poll-report.ts';
-import { FAILURES_BEFORE_NOTICE, nextPollDelayMs } from './polling/schedule.ts';
 import ReportHeading from './report-heading.svelte';
 import ResultView from './result-view.svelte';
 import { describeProgress, isWaiting } from './waiting/progress.ts';
@@ -20,86 +19,23 @@ let { data }: { data: ReportPageData } = $props();
  * The reset matters because SvelteKit reuses this component across `[reportId]` — navigating from
  * one report to another changes `data` without remounting, and a plain `$state` copy would keep
  * showing the report the user just left. Nothing else replaces `data`: this page is the
- * only writer of its own state, and it writes through `poll` (see `./poll/+server.ts` for why
+ * only writer of its own state, and it writes through the poller (see `./poll/+server.ts` for why
  * `invalidate()` is not used here).
  *
  * A failed poll never touches `current`, so "keep the last known state on screen through an
  * outage" falls out of that rather than needing its own retention logic. */
 let current = $derived(data);
 
-let consecutiveFailures = $state(0);
-let documentHidden = $state(false);
-
 let reportSettled = $derived(!isWaiting(current.attempt));
-let connectionStatus = $derived<'ok' | 'retrying'>(
-  consecutiveFailures >= FAILURES_BEFORE_NOTICE ? 'retrying' : 'ok',
-);
 let headline = $derived(screenHeadline(current));
 
-let timer: ReturnType<typeof setTimeout> | undefined;
-
-/** Set by the `onMount` cleanup below. `clearTimeout` only cancels a poll that hasn't started
- * yet — one already awaiting `pollReport` keeps running after unmount, and without this guard its
- * `finally` would write to this (now-orphaned) instance's state and arm a timer nothing can ever
- * clear again, which is how a single leaked poll turns into a permanent per-instance loop. */
-let destroyed = false;
-
-function scheduleNext(): void {
-  clearTimeout(timer);
-  const delayMs = nextPollDelayMs({
-    reportSettled,
-    documentHidden,
-    consecutiveFailures,
-    baseIntervalMs: current.pollIntervalMs,
-  });
-  timer = delayMs === undefined ? undefined : setTimeout(poll, delayMs);
-}
-
-async function poll(): Promise<void> {
-  try {
-    const next = await pollReport(current.pollHref);
-    if (destroyed) return;
+const poller = createPoller({
+  poll: () => pollReport(current.pollHref),
+  isSettled: () => reportSettled,
+  pollIntervalMs: () => current.pollIntervalMs,
+  onData: (next) => {
     current = next;
-    consecutiveFailures = 0;
-  } catch {
-    if (destroyed) return;
-    consecutiveFailures += 1;
-  } finally {
-    if (!destroyed) scheduleNext();
-  }
-}
-
-/** Starts and stops the loop above, which cannot do either for itself. Each poll arms the next
- * one, so the chain keeps going once it is going. But nothing in it notices a report that
- * becomes pollable again from a standstill — a retry turning a settled report back into a
- * waiting one, or a navigation from a finished report to a running one. */
-$effect(() => {
-  if (reportSettled || documentHidden) {
-    clearTimeout(timer);
-    timer = undefined;
-    return;
-  }
-  // untrack keeps the dependencies to exactly the two conditions above. scheduleNext also reads
-  // consecutiveFailures, and re-running this on every failed poll would fight the backoff the
-  // chain is already applying.
-  untrack(scheduleNext);
-});
-
-function onVisibilityChange(): void {
-  documentHidden = document.hidden;
-  // Catch up right away rather than waiting out the delay the effect above is arming.
-  if (!documentHidden && !reportSettled) poll();
-}
-
-onMount(() => {
-  documentHidden = document.hidden;
-  document.addEventListener('visibilitychange', onVisibilityChange);
-
-  return () => {
-    destroyed = true;
-    clearTimeout(timer);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
-  };
+  },
 });
 
 /** What the live region announces. */
@@ -131,7 +67,7 @@ function screenHeadline(report: ReportPageData): string {
 <!-- Outside the switch on purpose so that it is not unmounted when the view changes. -->
 <div aria-live="polite" class="sr-only">{headline}</div>
 
-{#if connectionStatus === 'retrying'}
+{#if poller.connectionStatus === 'retrying'}
   <Alert>
     <WifiOffIcon />
     <AlertTitle>Reconnecting…</AlertTitle>
@@ -146,7 +82,7 @@ function screenHeadline(report: ReportPageData): string {
     attempt={current.attempt}
     now={current.now}
     cancelButtonHref={current.cancelButtonHref}
-    onReportChanged={poll}
+    onReportChanged={poller.pollNow}
   />
 {:else if current.attempt.status === 'succeeded'}
   <ResultView
@@ -162,7 +98,7 @@ function screenHeadline(report: ReportPageData): string {
     failure={current.attempt.failure}
     retryButtonHref={current.retryButtonHref}
     deleteAction={current.deleteAction}
-    onReportChanged={poll}
+    onReportChanged={poller.pollNow}
   />
 {:else if current.attempt.status === 'canceled'}
   <CanceledView

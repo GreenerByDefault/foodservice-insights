@@ -1,8 +1,9 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
+import { triggerImmediatePoll } from '$lib/polling/testing/trigger-immediate-poll';
 import type { ReportPageData } from './+page.server.ts';
-import { BASE_POLL_INTERVAL_MS } from './polling/schedule.ts';
 import ReportView from './report-view.svelte';
 import { retryableFailure } from './testing/fixtures.ts';
 
@@ -60,15 +61,6 @@ function jsonResponse(body: unknown) {
 
 function liveRegionText(screen: Awaited<ReturnType<typeof render>>): string | null | undefined {
   return screen.container.querySelector('[aria-live]')?.textContent;
-}
-
-/** Bypasses the real poll interval: toggling the tab hidden then visible makes the component
- * poll immediately, the same path a real backgrounded-then-foregrounded tab takes. */
-async function triggerImmediatePoll(): Promise<void> {
-  Object.defineProperty(document, 'hidden', { value: true, configurable: true });
-  document.dispatchEvent(new Event('visibilitychange'));
-  Object.defineProperty(document, 'hidden', { value: false, configurable: true });
-  document.dispatchEvent(new Event('visibilitychange'));
 }
 
 afterEach(() => {
@@ -161,49 +153,10 @@ describe('ReportView', () => {
   });
 
   describe('polling behavior', () => {
-    test('a poll failure keeps the previous screen up; a second failure in a row shows a reconnecting notice', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-      const screen = await render(ReportView, { data: pendingData() });
-
-      await triggerImmediatePoll();
-      await expect
-        .element(screen.getByText('You can close this page', { exact: false }))
-        .toBeVisible();
-      await expect
-        .element(screen.getByText('We lost the connection', { exact: false }))
-        .not.toBeInTheDocument();
-
-      await triggerImmediatePoll();
-      await expect
-        .element(screen.getByText('We lost the connection', { exact: false }))
-        .toBeVisible();
-    });
-
-    test('navigating to a running report resumes polling on its own schedule, even though the previous report was settled', async () => {
-      // The `reportSettled`/`documentHidden` effect stops the timer once a report is settled — and, unlike a
-      // retry, a navigation between reports never calls `poll` itself to re-arm it. This is the one
-      // path that has to notice the swap on its own, so it needs the real schedule (fake timers)
-      // rather than the `visibilitychange` shortcut the other tests use.
-      vi.useFakeTimers();
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(succeededWireBody()));
-      vi.stubGlobal('fetch', fetchMock);
-      const screen = await render(ReportView, {
-        data: {
-          ...BASE,
-          attempt: { status: 'canceled', stoppedAt: new Date('2026-01-15T10:02:00Z') },
-        },
-      });
-      await expect
-        .element(screen.getByText('Someone stopped this report', { exact: false }))
-        .toBeVisible();
-
-      await screen.rerender({ data: pendingData() });
-      expect(fetchMock).not.toHaveBeenCalled();
-
-      await vi.advanceTimersByTimeAsync(BASE_POLL_INTERVAL_MS);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    });
-
+    // The backoff threshold, the reconnecting notice, and resuming on a settled→unsettled swap
+    // are `createPoller`'s own mechanics, exhaustively covered at that level in
+    // `create-poller.svelte.test.ts`. What's left here is the wiring: that a poll result actually
+    // flows from `pollReport` back into this page's screen.
     test('a poll success updates the screen in place, and clears a prior reconnecting notice', async () => {
       const fetchMock = vi
         .fn()

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { BASE_POLL_INTERVAL_MS, nextPollDelayMs, pollIntervalMsForWorkerMode } from './schedule.ts';
 
 const NOT_SETTLED = {
-  reportSettled: false,
+  settled: false,
   documentHidden: false,
   consecutiveFailures: 0,
   baseIntervalMs: BASE_POLL_INTERVAL_MS,
@@ -10,9 +10,9 @@ const NOT_SETTLED = {
 
 describe('nextPollDelayMs', () => {
   test('stops when the report has settled, regardless of visibility or failures', () => {
-    expect(nextPollDelayMs({ ...NOT_SETTLED, reportSettled: true })).toBeUndefined();
+    expect(nextPollDelayMs({ ...NOT_SETTLED, settled: true })).toBeUndefined();
     expect(
-      nextPollDelayMs({ ...NOT_SETTLED, reportSettled: true, consecutiveFailures: 3 }),
+      nextPollDelayMs({ ...NOT_SETTLED, settled: true, consecutiveFailures: 3 }),
     ).toBeUndefined();
   });
 

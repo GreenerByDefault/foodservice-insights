@@ -13,6 +13,7 @@ import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { env } from '$env/dynamic/private';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { screenStatus } from '$lib/reports/attempt-status';
 import { newReportHref, organizationHref, reportHref } from '$lib/reports/hrefs';
 import type { Creator } from '$lib/reports/subheading';
@@ -20,7 +21,6 @@ import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
 import { type FailureCopy, toFailureCopy } from './failure-copy.ts';
-import { pollIntervalMsForWorkerMode } from './polling/schedule.ts';
 
 export const load: PageServerLoad = async ({ params }) => {
   const organizationId = params.organizationId as OrganizationId;

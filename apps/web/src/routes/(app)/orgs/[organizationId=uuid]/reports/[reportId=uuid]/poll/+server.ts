@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import { requireReportRouteContext } from '$lib/server/reports/route-context';
 import { _loadReport } from '../+page.server.ts';
-import { pollIntervalMsForWorkerMode } from '../polling/schedule.ts';
 import type { RequestHandler } from './$types';
 
 /** The report page's own reads after the first — not `/api`, and not a page `load`.
