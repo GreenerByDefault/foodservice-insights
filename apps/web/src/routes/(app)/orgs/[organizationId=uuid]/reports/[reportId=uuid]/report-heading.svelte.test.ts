@@ -14,33 +14,6 @@ describe('ReportHeading', () => {
     await expect.element(screen.getByText('Riverside Diner · Created by Dana Cook')).toBeVisible();
   });
 
-  test('omits the site name when there is none', async () => {
-    const screen = await render(ReportHeading, {
-      name: 'Q1 procurement',
-      siteName: null,
-      creator: { displayName: 'Dana Cook', email: 'dana@example.test' },
-    });
-
-    await expect.element(screen.getByText('Created by Dana Cook')).toBeVisible();
-  });
-
-  test('falls back to email when the creator has no display name', async () => {
-    const screen = await render(ReportHeading, {
-      name: 'Q1 procurement',
-      siteName: null,
-      creator: { displayName: null, email: 'dana@example.test' },
-    });
-
-    await expect.element(screen.getByText('Created by dana@example.test')).toBeVisible();
-  });
-
-  test('says a deleted user submitted it when the creator is null', async () => {
-    const screen = await render(ReportHeading, {
-      name: 'Q1 procurement',
-      siteName: null,
-      creator: null,
-    });
-
-    await expect.element(screen.getByText('Created by a deleted user')).toBeVisible();
-  });
+  // Site name, creator name, and their fallbacks are subheading()'s branches — see
+  // subheading.test.ts. This only has to show the heading passes its props through.
 });
