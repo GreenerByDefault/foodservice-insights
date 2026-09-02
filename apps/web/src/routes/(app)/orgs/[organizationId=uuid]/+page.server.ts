@@ -1,19 +1,25 @@
 import type { AnalysisAttemptStatus, DatabaseExecutor, OrganizationId, ReportId } from '@gbd/db';
 import { sql } from 'kysely';
 import { screenStatus } from '$lib/reports/attempt-status';
-import { newReportHref, reportHref } from '$lib/reports/hrefs';
+import { newerReportsHref, newReportHref, olderReportsHref, reportHref } from '$lib/reports/hrefs';
 import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
+import { parseCursor, type ReportsCursor } from './pagination.ts';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, url }) => {
   const organizationId = params.organizationId as OrganizationId;
+  const cursor = parseCursor(url.searchParams);
 
-  return await withDbErrorHandling(() => _loadReports(database(), { organizationId }), {
+  return await withDbErrorHandling(() => _loadReports(database(), { organizationId, cursor }), {
     action: "load an organization's reports",
     context: { organizationId },
   });
 };
+
+/** How many reports one page of the list shows. Matches `WEEKLY_REPORT_LIMIT`, so a full page is
+ * roughly a week of maximum use. */
+export const _REPORTS_PAGE_SIZE = 20;
 
 export type ReportListRow = {
   id: ReportId;
@@ -34,6 +40,10 @@ export type ReportsPageData = {
   newReportHref: string;
   /** Newest upload first. */
   reports: ReportListRow[];
+  /** Set only when a page of older reports exists — see `pagination.ts`. */
+  olderHref: string | null;
+  /** Set only when a page of newer reports exists — see `pagination.ts`. */
+  newerHref: string | null;
 };
 
 type ReportListRowQuery = {
@@ -49,7 +59,48 @@ type ReportListRowQuery = {
   now: Date;
 };
 
-/** Every report in an organization, newest upload first, for the dashboard/list page.
+// -----------------------------------------------------
+// Cursor
+// -----------------------------------------------------
+
+/** The keyset-pagination boundary: strictly newer or older than the cursor report, compared
+ * against the outer query's own `reportCreatedAt`/`reportId` columns.
+ *
+ * The scalar subquery goes straight to `report`, not through the outer query, so it still
+ * resolves for a soft-deleted cursor report — `REQUIREMENTS.md` § Data deletion keeps the row,
+ * and a stale bookmark should still page correctly. `(created_at, id)` — not `created_at` alone —
+ * is a total order: two reports can share a timestamp, and an order that isn't total lets paging
+ * repeat or skip a row.
+ */
+function cursorCondition(direction: 'older' | 'newer', cursor: ReportId) {
+  const operator = direction === 'older' ? sql.raw('<') : sql.raw('>');
+  // (created_at, id) < ((select created_at from report where id = :cursor), :cursor) — `>` for `newer`.
+  return sql<boolean>`(${sql.ref('reportCreatedAt')}, ${sql.ref('reportId')}) ${operator} ((select created_at from report where id = ${cursor}), ${cursor})`;
+}
+
+/** A cursor naming a report that no longer exists at all (not merely soft-deleted) resolves to
+ * `newest`, the same fallback `parseCursor` gives a malformed cursor — see its doc comment. Without
+ * this, `cursorCondition`'s subquery returns NULL for such an id, which makes the row comparison
+ * NULL for every row and silently empties the page instead of falling back.
+ */
+async function resolveCursor(db: DatabaseExecutor, cursor: ReportsCursor): Promise<ReportsCursor> {
+  if (cursor.direction === 'newest') {
+    return cursor;
+  }
+  const cursorReport = await db
+    .selectFrom('report')
+    .select('id')
+    .where('id', '=', cursor.cursor)
+    .executeTakeFirst();
+  return cursorReport ? cursor : { direction: 'newest' };
+}
+
+// -----------------------------------------------------
+// Query
+// -----------------------------------------------------
+
+/** One page of an organization's reports for the dashboard/list page, newest upload first
+ * regardless of paging direction — see `ReportsCursor`.
  *
  * Filters on `organizationId` and `deleted_at is null`. `report_organization_id_created_at`
  * covers the ordering but not the deletion filter, so that's a heap recheck rather than
@@ -57,9 +108,11 @@ type ReportListRowQuery = {
  */
 export async function _loadReports(
   db: DatabaseExecutor,
-  params: { organizationId: OrganizationId },
+  params: { organizationId: OrganizationId; cursor: ReportsCursor },
 ): Promise<ReportsPageData> {
-  const rows: ReportListRowQuery[] = await db
+  const cursor = await resolveCursor(db, params.cursor);
+
+  let query = db
     .selectFrom((eb) =>
       eb
         .selectFrom('report')
@@ -78,7 +131,7 @@ export async function _loadReports(
           'analysisAttempt.status as status',
           'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
           // Selected alongside the row rather than as a separate query, so every row of one
-          // response is one consistent snapshot — see `ReportListRow.now`.
+          // response is one consistent snapshot.
           sql<Date>`now()`.as('now'),
         ])
         .where('report.organizationId', '=', params.organizationId)
@@ -94,15 +147,86 @@ export async function _loadReports(
         .orderBy('analysisAttempt.attemptNumber', 'desc')
         .as('latest'),
     )
-    .selectAll()
-    .orderBy('reportCreatedAt', 'desc')
-    .execute();
+    .selectAll();
+
+  // `newer` walks the index ascending and gets reversed below, so its page comes out newest
+  // first like every other direction — the caller never sees the ascending order.
+  if (cursor.direction === 'newer') {
+    query = query
+      .where(cursorCondition('newer', cursor.cursor))
+      .orderBy('reportCreatedAt', 'asc')
+      .orderBy('reportId', 'asc');
+  } else {
+    if (cursor.direction === 'older') {
+      query = query.where(cursorCondition('older', cursor.cursor));
+    }
+    query = query.orderBy('reportCreatedAt', 'desc').orderBy('reportId', 'desc');
+  }
+
+  // One extra row, discarded below, only to learn whether a further page exists in this
+  // direction — the opposite direction follows from the request itself (see `ReportsCursor`).
+  let rows: ReportListRowQuery[] = await query.limit(_REPORTS_PAGE_SIZE + 1).execute();
+  const hasMoreInDirection = rows.length > _REPORTS_PAGE_SIZE;
+  rows = rows.slice(0, _REPORTS_PAGE_SIZE);
+  if (cursor.direction === 'newer') {
+    rows.reverse();
+  }
+
+  const { hasOlder, hasNewer } = paginationFlags(cursor.direction, hasMoreInDirection);
+  const { olderCursorId, newerCursorId } = pagingCursorIds(rows, cursor);
 
   return {
     newReportHref: newReportHref(params.organizationId),
     reports: rows.map((row) => toReportListRow(params.organizationId, row)),
+    olderHref:
+      hasOlder && olderCursorId ? olderReportsHref(params.organizationId, olderCursorId) : null,
+    newerHref:
+      hasNewer && newerCursorId ? newerReportsHref(params.organizationId, newerCursorId) : null,
   };
 }
+
+/** Whether the page should show an Older/Newer link, given the direction paged and whether the
+ * query's extra row confirmed more exist in that direction.
+ *
+ * The opposite direction from the one requested exists by construction: paging `older` means a
+ * newer page — the one just left — is there, and vice versa. Only the requested direction's extra
+ * row settles whether *it* has a further page.
+ */
+function paginationFlags(
+  direction: ReportsCursor['direction'],
+  hasMoreInDirection: boolean,
+): { hasOlder: boolean; hasNewer: boolean } {
+  switch (direction) {
+    case 'newest':
+      return { hasOlder: hasMoreInDirection, hasNewer: false };
+    case 'older':
+      return { hasOlder: hasMoreInDirection, hasNewer: true };
+    case 'newer':
+      return { hasOlder: true, hasNewer: hasMoreInDirection };
+  }
+}
+
+/** The report id each direction's link should cursor from.
+ *
+ * The row to cursor from is normally an end of this page. A page can come back empty despite a
+ * further page existing by construction — an `older`/`newer` link landing exactly on the last row
+ * of the organization's history — so fall back to the cursor that got us here, which is exactly as
+ * valid a boundary for the opposite direction.
+ */
+function pagingCursorIds(
+  rows: ReportListRowQuery[],
+  cursor: ReportsCursor,
+): { newerCursorId: ReportId | undefined; olderCursorId: ReportId | undefined } {
+  return {
+    newerCursorId: rows[0]?.reportId ?? (cursor.direction === 'older' ? cursor.cursor : undefined),
+    olderCursorId:
+      rows[rows.length - 1]?.reportId ?? (cursor.direction === 'newer' ? cursor.cursor : undefined),
+  };
+}
+
+// -----------------------------------------------------
+// Row mapping
+// -----------------------------------------------------
 
 function toReportListRow(organizationId: OrganizationId, row: ReportListRowQuery): ReportListRow {
   return {

@@ -12,9 +12,9 @@ The dashboard **is** the list, at the org root — not a new `/reports` segment.
 "Reports" tab already owns that root and gets `aria-current="page"` for free.
 
 `_loadReports` in
-[`orgs/[organizationId=uuid]/+page.server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/+page.server.ts)
-and the static list (`reports-list.svelte`, `report-row.svelte`, `report-status.svelte`) are built
-and merged. What remains is pagination and polling, below.
+[`orgs/[organizationId=uuid]/+page.server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/+page.server.ts),
+the static list (`reports-list.svelte`, `report-row.svelte`, `report-status.svelte`), and pagination
+(`pagination.ts`, `reports-pagination.svelte`) are built and merged. What remains is polling, below.
 
 The whole product requirement is `REQUIREMENTS.md` § Multiple reports: *"A user can see historical
 reports, sorted by upload date."* § Out of scope adds, as load-bearing constraints: **no search, no
@@ -27,7 +27,7 @@ complex filtering.**
 | Pagination | Yes — keyset cursor in the URL, page size 20, Older/Newer links |
 | Row layout | Two-line divided rows, whole row is one link |
 | Status | Plain text on every row, weighted — colour only where it matters |
-| PR split | 2 PRs remaining (a prefactor PR and the query/static-list PR already landed) |
+| PR split | 1 PR remaining (the prefactor, the query/static-list PR, and the pagination PR are already landed) |
 
 **Why pagination at all**, given ~20 reports/org/week and no retention policy: the *poll* is what
 forces it. The poll endpoint re-serves the same query as `load` every 10 seconds while anything is
@@ -119,47 +119,7 @@ user, and its reports at controlled `createdAt` values, deleting the org on tear
 reports cascade). Names must be unique (`organization_name_unique_ci`): a random suffix for
 behavioural specs, a fixed name for a screenshot, where the org name is rendered in the `<h1>`.
 
-## PR 1 — Pagination
-
-**One query param, mutually exclusive**: `?older=<reportId>` or `?newer=<reportId>`, where the value
-is the id of the last (resp. first) report on the page you are leaving. A single uuid keeps the URL
-clean and needs no encoding scheme.
-
-Ordering is `(created_at desc, id desc)` — a total order, since `created_at` alone can tie. The
-cursor's `created_at` is resolved with a scalar subquery on the cursor id, which works even for a
-soft-deleted cursor report (the row still exists; `REQUIREMENTS.md` § Data deletion keeps everything).
-
-```
-older:  where (created_at, id) < ((select created_at from report where id = :c), :c)
-        order by created_at desc, id desc   limit PAGE_SIZE + 1
-newer:  where (created_at, id) > (…)
-        order by created_at asc,  id asc    limit PAGE_SIZE + 1   then reverse in JS
-```
-
-The `+ 1` row is discarded and only used to decide whether the button in that direction shows. The
-opposite direction falls out of the request itself: if `older` is set a newer page exists by
-construction, and vice versa. No param means the newest page, so Newer is hidden.
-
-`parseCursor(searchParams)` lives in a colocated `pagination.ts` as a pure function with its own
-tests, returning `{ direction: 'newest' } | { direction: 'older' | 'newer', cursor: ReportId }`. A
-malformed cursor falls back to the newest page rather than erroring — the query is org-scoped either
-way so there is nothing to leak, and a stale bookmark does not deserve an error page. Both params set
-prefers `older`.
-
-`REPORTS_PAGE_SIZE = 20` is exported from `+page.server.ts` for the tests. It does not belong in
-[lib/reports/limits.ts](apps/web/src/lib/reports/limits.ts), which is scoped to caps on an upload's
-size and metadata.
-
-Nav component: two links, `← Newer` / `Older →`, each rendered only when that direction has a page.
-Because the cursor is in the URL, back/forward and refresh work with no client state.
-
-Tests: `parseCursor` unit tests for each shape and each malformed input; `_loadReports` tests
-(hermetic, as above) for a full page, a partial last page, paging older then newer returning to the
-same rows, and a cursor whose report has been soft-deleted. The e2e — 21 reports, page Older then
-Newer — needs the **dedicated organization** fixture, both to control the page contents and to keep
-21 reports out of the shared org.
-
-## PR 2 — Polling
+## PR 1 — Polling
 
 **Prefactor first, in the same PR**: extract the poll loop out of
 [report-view.svelte](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/report-view.svelte)
@@ -238,7 +198,6 @@ Per PR:
    first so a slow run is not misread as a flake.
 6. `pnpm dev` walkthrough, using the live worker (`.claude/plans/worker-modes.md`) or the
    `organizations` fixture to get a mix of states: upload a report and watch it go Queued →
-   Processing → Ready without a page reload; seed more than 20 and page Older then Newer back to
-   the same rows.
+   Processing → Ready without a page reload.
 
 Report which steps passed, and say plainly if any were skipped.
