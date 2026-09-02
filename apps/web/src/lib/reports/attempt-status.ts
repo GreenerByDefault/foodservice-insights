@@ -21,3 +21,10 @@ export function screenStatus(attempt: {
   }
   return attempt.status;
 }
+
+/** Whether an attempt is still running. */
+export function isWaiting<T extends { status: AnalysisAttemptStatus }>(
+  attempt: T,
+): attempt is Extract<T, { status: 'pending' | 'processing' }> {
+  return attempt.status === 'pending' || attempt.status === 'processing';
+}

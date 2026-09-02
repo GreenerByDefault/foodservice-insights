@@ -2,13 +2,14 @@
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 import { createPoller } from '$lib/polling/create-poller.svelte';
+import { isWaiting } from '$lib/reports/attempt-status';
 import type { ReportPageData } from './+page.server.ts';
 import CanceledView from './canceled-view.svelte';
 import FailureView from './failure-view.svelte';
 import { pollReport } from './polling/poll-report.ts';
 import ReportHeading from './report-heading.svelte';
 import ResultView from './result-view.svelte';
-import { describeProgress, isWaiting } from './waiting/progress.ts';
+import { describeProgress } from './waiting/progress.ts';
 import WaitingView from './waiting/waiting-view.svelte';
 
 let { data }: { data: ReportPageData } = $props();

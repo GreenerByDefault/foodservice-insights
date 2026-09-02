@@ -152,10 +152,12 @@ write only a wiring test for the list's own `createPoller` call. `pollReport` an
 - The poll forwards `page.url.search`, so it re-serves whatever page the user is on. That is what
   keeps the payload bounded and makes a retry on an old row update correctly.
 - A client `poll-reports.ts` reviving ISO strings back into `Date`s, mirroring `poll-report.ts`.
-- Poll while any row is queued or processing. Promote `isWaiting` from
-  `reports/[reportId=uuid]/waiting/progress.ts` to `src/lib/reports/` — its signature is already
-  generic over the union. This is still pending; the prefactor PR deliberately left it in place
-  since only `createPoller`/`schedule.ts` had a second consumer at that point.
+- Poll while any row is queued or processing. `isWaiting` is now promoted to
+  [`src/lib/reports/attempt-status.ts`](apps/web/src/lib/reports/attempt-status.ts), alongside
+  `screenStatus` — the other status-classification helper on the same shape.
+  `report-view.svelte` is rewired onto it with no behaviour change; `WaitingAttempt` and
+  `describeProgress` stay in `waiting/progress.ts`, since they're specific to the report page's
+  timeline.
 - Wire `createPoller` up with `poll` reading the list's own endpoint, `isSettled` from the promoted
   `isWaiting`, and `pollIntervalMs` from whatever `_loadReports` threads down (mirroring
   `report-view.svelte`'s `current.pollIntervalMs`).
