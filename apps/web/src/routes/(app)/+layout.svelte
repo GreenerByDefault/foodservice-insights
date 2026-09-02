@@ -11,9 +11,11 @@ const currentOrganization = $derived(page.data.organization);
 </script>
 
 <div class="mx-auto flex min-h-svh max-w-4xl flex-col gap-6 p-8">
-  <header class="flex items-baseline justify-between gap-4 text-sm">
-    <details class="relative">
-      <summary class="cursor-pointer font-medium">
+  <header
+    class="flex flex-col gap-1 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+  >
+    <details class="relative min-w-0">
+      <summary class="cursor-pointer truncate font-medium">
         {currentOrganization?.name ?? 'Choose an organization'}
       </summary>
 
@@ -39,7 +41,7 @@ const currentOrganization = $derived(page.data.organization);
     <!-- Signing out is a browser-side Supabase call, so it will arrives as a component with the rest of
          auth, rather than as a link to a route. -->
 
-    <a class="text-muted-foreground hover:text-foreground" href="/account">
+    <a class="min-w-0 truncate text-muted-foreground hover:text-foreground" href="/account">
       {data.auth.user.email}
     </a>
   </header>
