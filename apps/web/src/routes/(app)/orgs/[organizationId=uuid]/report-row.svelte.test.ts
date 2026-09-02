@@ -31,29 +31,8 @@ describe('ReportRow', () => {
       .toBeVisible();
   });
 
-  test('omits the site name when there is none', async () => {
-    const report = aReport({ siteName: null });
-
-    const screen = await render(ReportRow, { report });
-
-    await expect.element(screen.getByText('Created by Ana Ruiz · 12 minutes ago')).toBeVisible();
-  });
-
-  test('falls back to email when the creator has no display name', async () => {
-    const report = aReport({ creator: { displayName: null, email: 'ana@example.test' } });
-
-    const screen = await render(ReportRow, { report });
-
-    await expect.element(screen.getByText(/Created by ana@example\.test/)).toBeVisible();
-  });
-
-  test('says a deleted user submitted it when the creator is null', async () => {
-    const report = aReport({ creator: null });
-
-    const screen = await render(ReportRow, { report });
-
-    await expect.element(screen.getByText(/Created by a deleted user/)).toBeVisible();
-  });
+  // Site name, creator name, and their fallbacks are subheading()'s branches — see
+  // subheading.test.ts. This only has to show the row passes report's fields through.
 
   test('shows the row status', async () => {
     const report = aReport({ status: 'failed' });

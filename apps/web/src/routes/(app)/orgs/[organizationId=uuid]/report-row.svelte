@@ -1,6 +1,7 @@
 <script lang="ts">
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import RelativeTime from '$lib/components/reports/relative-time.svelte';
+import { subheading } from '$lib/reports/subheading';
 import type { ReportListRow } from './+page.server.ts';
 import ReportStatus from './report-status.svelte';
 
@@ -10,20 +11,7 @@ interface Props {
 
 let { report }: Props = $props();
 
-// Copied from report-heading.svelte's creatorName/subheading rather than shared, since the only
-// difference here is the relative time appended after it.
-function creatorName(creator: ReportListRow['creator']): string {
-  if (creator === null) return 'a deleted user';
-  return creator.displayName ?? creator.email;
-}
-
-function subheading(report: ReportListRow): string {
-  const parts = [
-    ...(report.siteName ? [report.siteName] : []),
-    `Created by ${creatorName(report.creator)}`,
-  ];
-  return parts.join(' · ');
-}
+let reportSubheading = $derived(subheading(report.siteName, report.creator));
 </script>
 
 <li>
@@ -45,8 +33,8 @@ function subheading(report: ReportListRow): string {
         />
       </span>
     </span>
-    <span class="truncate text-sm text-muted-foreground" title={subheading(report)}
-      >{subheading(report)}
+    <span class="truncate text-sm text-muted-foreground" title={reportSubheading}
+      >{reportSubheading}
       · <RelativeTime at={report.createdAt} now={report.now} /></span
     >
   </a>
