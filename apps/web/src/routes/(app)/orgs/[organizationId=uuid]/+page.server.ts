@@ -74,6 +74,23 @@ function cursorCondition(direction: 'older' | 'newer', cursor: ReportId) {
   return sql<boolean>`(${sql.ref('reportCreatedAt')}, ${sql.ref('reportId')}) ${operator} ((select created_at from report where id = ${cursor}), ${cursor})`;
 }
 
+/** A cursor naming a report that no longer exists at all (not merely soft-deleted) resolves to
+ * `newest`, the same fallback `parseCursor` gives a malformed cursor — see its doc comment. Without
+ * this, `cursorCondition`'s subquery returns NULL for such an id, which makes the row comparison
+ * NULL for every row and silently empties the page instead of falling back.
+ */
+async function resolveCursor(db: DatabaseExecutor, cursor: ReportsCursor): Promise<ReportsCursor> {
+  if (cursor.direction === 'newest') {
+    return cursor;
+  }
+  const cursorReport = await db
+    .selectFrom('report')
+    .select('id')
+    .where('id', '=', cursor.cursor)
+    .executeTakeFirst();
+  return cursorReport ? cursor : { direction: 'newest' };
+}
+
 /** One page of an organization's reports for the dashboard/list page, newest upload first
  * regardless of paging direction — see `ReportsCursor`.
  *
@@ -85,7 +102,7 @@ export async function _loadReports(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId; cursor: ReportsCursor },
 ): Promise<ReportsPageData> {
-  const { cursor } = params;
+  const cursor = await resolveCursor(db, params.cursor);
 
   let query = db
     .selectFrom((eb) =>

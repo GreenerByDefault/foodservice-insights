@@ -366,6 +366,31 @@ describe('_loadReports pagination', () => {
     });
   });
 
+  test('a cursor naming a report that does not exist falls back to the newest page', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 1);
+      const newestFirst = [...ids].reverse();
+      const missingCursor = crypto.randomUUID() as ReportId;
+
+      const olderPage = await _loadReports(transaction, {
+        organizationId: organization.id,
+        cursor: { direction: 'older', cursor: missingCursor },
+      });
+      const newerPage = await _loadReports(transaction, {
+        organizationId: organization.id,
+        cursor: { direction: 'newer', cursor: missingCursor },
+      });
+
+      expect(olderPage.reports.map((row) => row.id)).toEqual(
+        newestFirst.slice(0, _REPORTS_PAGE_SIZE),
+      );
+      expect(newerPage.reports.map((row) => row.id)).toEqual(
+        newestFirst.slice(0, _REPORTS_PAGE_SIZE),
+      );
+    });
+  });
+
   test('a cursor whose report has been soft-deleted still pages', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
