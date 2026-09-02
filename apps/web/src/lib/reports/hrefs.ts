@@ -18,3 +18,15 @@ export function newReportHref(organizationId: string): string {
 export function reportHref(organizationId: string, reportId: string): string {
   return `${organizationHref(organizationId)}/reports/${reportId}`;
 }
+
+/** The reports list, paged to the reports older than `reportId` — the last report on the page
+ * being left. See `pagination.ts`. */
+export function olderReportsHref(organizationId: string, reportId: string): string {
+  return `${organizationHref(organizationId)}?older=${reportId}`;
+}
+
+/** The reports list, paged to the reports newer than `reportId` — the first report on the page
+ * being left. See `pagination.ts`. */
+export function newerReportsHref(organizationId: string, reportId: string): string {
+  return `${organizationHref(organizationId)}?newer=${reportId}`;
+}

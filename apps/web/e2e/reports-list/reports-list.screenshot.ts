@@ -1,4 +1,4 @@
-/** Both images render in a dedicated organization (`e2e/fixtures/organizations.ts`) so their
+/** Every image renders in a dedicated organization (`e2e/fixtures/organizations.ts`) so its
  * contents are fully controlled, rather than the shared placeholder organization every other
  * spec is also writing reports into.
  *
@@ -8,6 +8,7 @@
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@gbd/core';
 import { dbMsAgo, insertAppUser } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
+import type { OrganizationReportSpec } from '../fixtures/organizations.ts';
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
@@ -70,4 +71,24 @@ test('the empty state', async ({ page, organizations }) => {
 
   await expect(page.getByText('No reports yet', { exact: false })).toBeVisible();
   await expectScreenshots(page, 'reports-list-empty.png');
+});
+
+test('the pagination nav, with both Newer and Older visible', async ({ page, organizations }) => {
+  const base = new Date('2026-01-01T00:00:00Z');
+  // More than two full pages, so landing on page 2 leaves reports on both sides of it — the only
+  // way to get both nav links on screen at once. Oldest first, a minute apart.
+  const reports: OrganizationReportSpec[] = Array.from({ length: 41 }, (_, i) => ({
+    name: `Pagination report ${i + 1}`,
+    createdAt: new Date(base.getTime() + i * MINUTE_MS),
+    status: 'succeeded',
+  }));
+
+  const organizationId = await organizations.create({ name: 'Pagination Nav Co', reports });
+
+  await page.goto(`/orgs/${organizationId}`);
+  await page.getByRole('link', { name: 'Older' }).click();
+
+  await expect(page.getByRole('link', { name: 'Newer' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Older' })).toBeVisible();
+  await expectScreenshots(page, 'reports-list-pagination.png');
 });

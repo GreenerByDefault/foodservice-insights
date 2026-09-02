@@ -2,6 +2,7 @@
 import { Button } from '$lib/components/ui/button';
 import type { PageProps } from './$types';
 import ReportsList from './reports-list.svelte';
+import ReportsPagination from './reports-pagination.svelte';
 
 let { data }: PageProps = $props();
 </script>
@@ -12,3 +13,4 @@ let { data }: PageProps = $props();
 </div>
 
 <ReportsList reports={data.reports} />
+<ReportsPagination olderHref={data.olderHref} newerHref={data.newerHref} />
