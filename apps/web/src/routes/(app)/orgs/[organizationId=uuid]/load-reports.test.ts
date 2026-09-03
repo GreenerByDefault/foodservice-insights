@@ -16,7 +16,7 @@ import {
   reportsPollHref,
 } from '$lib/reports/hrefs';
 import { database } from '$lib/server/db';
-import { _loadReports, _REPORTS_PAGE_SIZE } from './+page.server.ts';
+import { _loadReports, _loadReportsByIds, _REPORTS_PAGE_SIZE } from './+page.server.ts';
 import type { ReportsCursor } from './pagination.ts';
 
 const POLL_INTERVAL_MS = 1_000;
@@ -463,6 +463,97 @@ describe('_loadReports pagination', () => {
 
         expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(_REPORTS_PAGE_SIZE));
       });
+    });
+  });
+});
+
+describe('_loadReportsByIds', () => {
+  test('an empty id list returns an empty list without a query', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [],
+      });
+
+      expect(data).toEqual({ reports: [] });
+    });
+  });
+
+  test('returns only the given, still-visible ids, regardless of order requested', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const first = await aReportWithAttempt(transaction, organization.id);
+      const second = await aReportWithAttempt(transaction, organization.id);
+      const notRequested = await aReportWithAttempt(transaction, organization.id);
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [second.id, first.id],
+      });
+
+      expect(data.reports.map((row) => row.id).sort()).toEqual([first.id, second.id].sort());
+      expect(data.reports.map((row) => row.id)).not.toContain(notRequested.id);
+    });
+  });
+
+  test('a soft-deleted report is absent, even when its id is requested', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithAttempt(transaction, organization.id);
+      await transaction
+        .updateTable('report')
+        .set({ deletedAt: new Date() })
+        .where('id', '=', report.id)
+        .execute();
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [report.id],
+      });
+
+      expect(data.reports).toEqual([]);
+    });
+  });
+
+  test("another org's report is absent, even when its id is requested", async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization: owner } = await insertOrganization(transaction);
+      const { organization: outsider } = await insertOrganization(transaction);
+      const report = await aReportWithAttempt(transaction, owner.id);
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: outsider.id,
+        ids: [report.id],
+      });
+
+      expect(data.reports).toEqual([]);
+    });
+  });
+
+  test('the latest attempt decides a row status when a report has several', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await insertReport(transaction, { organizationId: organization.id });
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: 1,
+        status: 'failed',
+      });
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: 2,
+        status: 'pending',
+      });
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [report.id],
+      });
+
+      expect(data.reports).toHaveLength(1);
+      expect(data.reports[0]?.status).toBe('pending');
     });
   });
 });

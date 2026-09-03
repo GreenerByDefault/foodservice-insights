@@ -1,5 +1,4 @@
 <script lang="ts">
-import { page } from '$app/state';
 import { createPoller } from '$lib/polling/create-poller.svelte';
 import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
 import { isWaiting } from '$lib/reports/attempt-status';
@@ -19,16 +18,27 @@ let anySettling = $derived(current.reports.some((report) => isWaiting(report)));
 let announcement = $state('');
 
 const poller = createPoller({
-  // The current page's search (`?older=`/`?newer=`), not `current.pollHref`'s own — so a poll
-  // re-serves whichever page the user is on, the same page `pollHref` was minted for.
-  poll: () => pollReports(`${current.pollHref}${page.url.search}`),
+  // Only the ids already on screen — see `_loadReportsByIds`'s doc comment for why a poll never
+  // adds or removes rows, just refreshes the ones the client already has.
+  poll: () =>
+    pollReports(
+      current.pollHref,
+      current.reports.map((report) => report.id),
+    ),
   isSettled: () => !anySettling,
   pollIntervalMs: () => current.pollIntervalMs,
   onData: (next) => {
     announcement = settledAnnouncement(current.reports, next.reports);
-    current = next;
+    current = { ...current, reports: mergeReports(current.reports, next.reports) };
   },
 });
+
+/** Keeps the screen's own row order and drops any id the poll didn't return — a soft delete, or a
+ * move out of this organization, since the last poll. */
+function mergeReports(onScreen: ReportListRow[], polled: ReportListRow[]): ReportListRow[] {
+  const byId = new Map(polled.map((report) => [report.id, report]));
+  return onScreen.flatMap((report) => byId.get(report.id) ?? []);
+}
 
 /** Names only the reports that just finished, rather than restating the whole list — which would
  * be chatty when several finish at once. */

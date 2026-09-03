@@ -43,6 +43,10 @@ function wireReport(report: ReportListRow) {
   return { ...report, createdAt: report.createdAt.toISOString(), now: report.now.toISOString() };
 }
 
+function aPollResponse(reports: ReportListRow[]) {
+  return { reports: reports.map((report) => wireReport(report)) };
+}
+
 function liveRegionText(screen: Awaited<ReturnType<typeof render>>): string | null | undefined {
   return screen.container.querySelector('[aria-live]')?.textContent;
 }
@@ -64,7 +68,7 @@ describe('ReportsView', () => {
         .fn()
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-        .mockResolvedValueOnce(jsonResponse(aPageData([wireReport(succeeded) as never])));
+        .mockResolvedValueOnce(jsonResponse(aPollResponse([succeeded])));
       vi.stubGlobal('fetch', fetchMock);
       const screen = await render(ReportsView, { data: aPageData([pending]) });
 
@@ -96,12 +100,7 @@ describe('ReportsView', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(
-          jsonResponse(
-            aPageData([
-              wireReport(stillPending) as never,
-              wireReport({ ...justFinished, status: 'succeeded' }) as never,
-            ]),
-          ),
+          jsonResponse(aPollResponse([stillPending, { ...justFinished, status: 'succeeded' }])),
         );
       vi.stubGlobal('fetch', fetchMock);
       const screen = await render(ReportsView, { data: aPageData([stillPending, justFinished]) });
@@ -109,6 +108,42 @@ describe('ReportsView', () => {
       await triggerImmediatePoll();
 
       await expect.poll(() => liveRegionText(screen)).toBe('Q1 procurement is ready');
+    });
+
+    test('polls with exactly the ids currently on screen', async () => {
+      const first = aReport({ name: 'Q1 procurement' });
+      const second = aReport({
+        id: 'a4f8e2b0-1111-4a11-8111-000000000002' as ReportListRow['id'],
+        name: 'Winter deliveries',
+      });
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(aPollResponse([first, second])));
+      vi.stubGlobal('fetch', fetchMock);
+      await render(ReportsView, { data: aPageData([first, second]) });
+
+      await triggerImmediatePoll();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        POLL_HREF,
+        expect.objectContaining({ body: JSON.stringify({ ids: [first.id, second.id] }) }),
+      );
+    });
+
+    test('a report the poll no longer returns (soft-deleted) drops off the screen', async () => {
+      const deleted = aReport({ name: 'Q1 procurement' });
+      const stillHere = aReport({
+        id: 'a4f8e2b0-1111-4a11-8111-000000000002' as ReportListRow['id'],
+        name: 'Winter deliveries',
+        status: 'succeeded',
+      });
+      // The poll response omits `deleted` — exactly what `_loadReportsByIds` returns for an id
+      // that's been soft-deleted since the last poll.
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(aPollResponse([stillHere]))));
+      const screen = await render(ReportsView, { data: aPageData([deleted, stillHere]) });
+
+      await triggerImmediatePoll();
+
+      await expect.poll(() => screen.getByText('Q1 procurement').elements().length).toBe(0);
+      await expect.element(screen.getByText('Winter deliveries').first()).toBeVisible();
     });
   });
 });

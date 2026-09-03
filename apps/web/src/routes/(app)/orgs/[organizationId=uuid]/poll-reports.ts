@@ -1,24 +1,26 @@
-/** The client side of `./poll/+server.ts`: fetches it and turns the JSON back into the same
- * `ReportsPageData` shape `+page.server.ts` renders with — see `reports/[reportId=uuid]/polling/
- * poll-report.ts`'s doc comment for why dates need reviving at all.
+/** The client side of `./poll/+server.ts`: posts the ids currently on screen and turns the JSON
+ * back into the same `ReportsPollData` shape `+page.server.ts` describes — see
+ * `reports/[reportId=uuid]/polling/poll-report.ts`'s doc comment for why dates need reviving at
+ * all.
  */
 
+import type { ReportId } from '@gbd/db';
 import { apiCall } from '$lib/api/fetch';
-import type { ReportListRow, ReportsPageData } from './+page.server.ts';
+import type { ReportListRow, ReportsPollData } from './+page.server.ts';
 
 type WireReportListRow = Omit<ReportListRow, 'createdAt' | 'now'> & {
   createdAt: string;
   now: string;
 };
 
-type WireReportsPageData = Omit<ReportsPageData, 'reports'> & { reports: WireReportListRow[] };
+type WireReportsPollData = Omit<ReportsPollData, 'reports'> & { reports: WireReportListRow[] };
 
 /** Throws `ApiError` on a non-2xx response, `ApiUnreachableError` if none arrived — see
  * `$lib/api/fetch.ts`. */
-export async function pollReports(pollHref: string): Promise<ReportsPageData> {
-  const response = await apiCall(pollHref);
-  const wire: WireReportsPageData = await response.json();
-  return { ...wire, reports: wire.reports.map(reviveRow) };
+export async function pollReports(pollHref: string, ids: ReportId[]): Promise<ReportsPollData> {
+  const response = await apiCall(pollHref, { method: 'POST', body: JSON.stringify({ ids }) });
+  const wire: WireReportsPollData = await response.json();
+  return { reports: wire.reports.map(reviveRow) };
 }
 
 function reviveRow(row: WireReportListRow): ReportListRow {

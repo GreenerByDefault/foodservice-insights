@@ -57,10 +57,15 @@ export type ReportsPageData = {
   olderHref: string | null;
   /** Set only when a page of newer reports exists — see `pagination.ts`. */
   newerHref: string | null;
-  /** Names this same page, not this whole route: the poller appends its own `page.url.search` so
-   * a poll re-serves whichever page (`?older=`/`?newer=`) the user is currently on. */
+  /** Where the poller sends the ids it wants refreshed — see `poll/+server.ts`. */
   pollHref: string;
   pollIntervalMs: number;
+};
+
+/** What a poll refreshes: the given reports' current fields, nothing about the page around them.
+ * See `_loadReportsByIds`. */
+export type ReportsPollData = {
+  reports: ReportListRow[];
 };
 
 type ReportListRowQuery = {
@@ -202,6 +207,51 @@ export async function _loadReports(
     pollHref: reportsPollHref(params.organizationId),
     pollIntervalMs: params.pollIntervalMs,
   };
+}
+
+/** Refreshes exactly the given reports' current fields, for the list's poller.
+ *
+ * Deliberately not paginated: a poll only ever asks about reports already on the client's
+ * screen, so there is no cursor, ordering, or Older/Newer recompute here — see `poll/+server.ts`.
+ * That also means membership on screen never changes from a poll; a new upload or a deletion only
+ * shows up on the next navigation. A soft-deleted or since-moved-to-another-org id is silently
+ * absent from the result — the caller drops whatever id it doesn't get back.
+ */
+export async function _loadReportsByIds(
+  db: DatabaseExecutor,
+  params: { organizationId: OrganizationId; ids: ReportId[] },
+): Promise<ReportsPollData> {
+  if (params.ids.length === 0) {
+    return { reports: [] };
+  }
+
+  const rows = await db
+    .selectFrom('report')
+    .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
+    // Left, not inner — see the identical join in `_loadReports`.
+    .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
+    .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
+    .select([
+      'report.id as reportId',
+      'report.name as reportName',
+      'report.siteName as siteName',
+      'report.createdAt as reportCreatedAt',
+      'appUser.displayName as creatorDisplayName',
+      'auth.users.email as creatorEmail',
+      'analysisAttempt.status as status',
+      'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
+      sql<Date>`now()`.as('now'),
+    ])
+    .where('report.organizationId', '=', params.organizationId)
+    .where('report.deletedAt', 'is', null)
+    .where('report.id', 'in', params.ids)
+    // One row per report, keeping the latest attempt — see the identical clause in `_loadReports`.
+    .distinctOn('report.id')
+    .orderBy('report.id')
+    .orderBy('analysisAttempt.attemptNumber', 'desc')
+    .execute();
+
+  return { reports: rows.map((row) => toReportListRow(params.organizationId, row)) };
 }
 
 /** Whether the page should show an Older/Newer link, given the direction paged and whether the
