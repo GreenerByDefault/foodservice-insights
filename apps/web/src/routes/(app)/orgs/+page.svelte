@@ -1,4 +1,5 @@
 <script lang="ts">
+import PageHeading from '$lib/components/page-heading.svelte';
 import { organizationHref } from '$lib/hrefs';
 import type { PageProps } from './$types';
 
@@ -8,7 +9,7 @@ let { data }: PageProps = $props();
 <!-- The picker, reached only when more than one organization is on offer; `+page.server.ts` sends
      everyone else straight on. The switcher in the header does the same job afterwards, so this
      page exists for the one moment before the user has chosen anything. -->
-<h1 class="text-2xl font-semibold tracking-tight">Choose an organization</h1>
+<PageHeading>Choose an organization</PageHeading>
 
 <ul class="flex flex-col gap-2">
   {#each data.auth.organizations as organization (organization.organizationId)}

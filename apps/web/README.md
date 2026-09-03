@@ -61,6 +61,10 @@ rather than depending on a component library.
 **A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
 route needs it.
 
+**A page's shape comes from a component, not a class string copied between pages** — the heading a
+page opens with, the chrome a page outside the `(app)` gate carries, and the placeholder an unbuilt
+page shows are each one component in `src/lib/components/`.
+
 **A view within a route gets its own subfolder once it's more than one file** — a single-file
 view stays flat, and a component two views share sits beside them at the route root.
 

@@ -1,11 +1,12 @@
 <script lang="ts">
+import PageHeading from '$lib/components/page-heading.svelte';
 import UploadForm from './upload-form.svelte';
 import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 </script>
 
-<h1 class="text-2xl font-semibold tracking-tight">New report</h1>
+<PageHeading>New report</PageHeading>
 <p>Uploading to <strong>{data.organization.name}</strong>.</p>
 
 <div class="mt-6 max-w-2xl">

@@ -22,6 +22,13 @@ export function screenStatus(attempt: {
   return attempt.status;
 }
 
+export type SettledStatus = Exclude<AnalysisAttemptStatus, 'pending' | 'processing'>;
+
+/** `undefined` while the attempt is still running. */
+export function settledStatus(status: AnalysisAttemptStatus): SettledStatus | undefined {
+  return status === 'pending' || status === 'processing' ? undefined : status;
+}
+
 /** Whether an attempt is still running. */
 export function isWaiting<T extends { status: AnalysisAttemptStatus }>(
   attempt: T,

@@ -1,7 +1,8 @@
 <script lang="ts">
 import { createPoller } from '$lib/polling/create-poller.svelte';
 import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
-import { isWaiting } from '$lib/reports/attempt-status';
+import { isWaiting, settledStatus } from '$lib/reports/attempt-status';
+import { SETTLED_IN_LIST } from '$lib/reports/status-copy';
 import type { ReportListRow, ReportsPageData } from './+page.server.ts';
 import { pollReports } from './poll-reports.ts';
 import ReportsList from './reports-list.svelte';
@@ -14,7 +15,7 @@ let { data }: { data: ReportsPageData } = $props();
  * comment for why this is the only writer of its own state. */
 let current = $derived(data);
 
-let anySettling = $derived(current.reports.some((report) => isWaiting(report)));
+let anyWaiting = $derived(current.reports.some((report) => isWaiting(report)));
 let announcement = $state('');
 
 const poller = createPoller({
@@ -25,7 +26,7 @@ const poller = createPoller({
       current.pollHref,
       current.reports.map((report) => report.id),
     ),
-  isSettled: () => !anySettling,
+  isSettled: () => !anyWaiting,
   pollIntervalMs: () => current.pollIntervalMs,
   onData: (next) => {
     announcement = settledAnnouncement(current.reports, next.reports);
@@ -42,25 +43,15 @@ function mergeReports(onScreen: ReportListRow[], polled: ReportListRow[]): Repor
 /** Names only the reports that just finished, rather than restating the whole list — which would
  * be chatty when several finish at once. */
 function settledAnnouncement(previous: ReportListRow[], next: ReportListRow[]): string {
-  const justSettled = next.filter((report) => {
-    const before = previous.find((row) => row.id === report.id);
-    return before !== undefined && isWaiting(before) && !isWaiting(report);
-  });
-  return justSettled.map((report) => `${report.name} ${settledCopy(report.status)}`).join('. ');
-}
+  return next
+    .flatMap((report) => {
+      const before = previous.find((row) => row.id === report.id);
+      if (before === undefined || !isWaiting(before)) return [];
 
-function settledCopy(status: ReportListRow['status']): string {
-  switch (status) {
-    case 'succeeded':
-      return 'is ready';
-    case 'failed':
-      return "couldn't finish";
-    case 'canceled':
-      return 'was stopped';
-    case 'pending':
-    case 'processing':
-      throw new Error('unreachable: settledAnnouncement only calls this for a settled status');
-  }
+      const settled = settledStatus(report.status);
+      return settled ? [`${report.name} ${SETTLED_IN_LIST[settled]}`] : [];
+    })
+    .join('. ');
 }
 </script>
 

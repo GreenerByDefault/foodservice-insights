@@ -1,4 +1,5 @@
 <script lang="ts">
+import PageHeading from '$lib/components/page-heading.svelte';
 import { subheading, type Creator } from '$lib/reports/subheading';
 
 interface Props {
@@ -10,5 +11,5 @@ interface Props {
 let { name, siteName, creator }: Props = $props();
 </script>
 
-<h1 class="text-2xl font-semibold tracking-tight">{name}</h1>
+<PageHeading>{name}</PageHeading>
 <p class="text-sm text-muted-foreground">{subheading(siteName, creator)}</p>
