@@ -4,19 +4,27 @@
 # list. Only add an exclusion you can defend out loud.
 #
 # `&anchor` / `*anchor` below reuse a glob list across filters — see dorny/paths-filter's
-# README, "Use YAML anchors to reuse path expression(s) inside another rule". `non_code` and
-# `ts_workspace` aren't filters anyone consumes; they exist only to be aliased.
+# README, "Use YAML anchors to reuse path expression(s) inside another rule". `non_code`,
+# `docs_and_agent_files`, and `ts_workspace` aren't filters anyone consumes; they exist only to
+# be aliased.
 #
 # `scripts/ci/check_filters.py` enforces that every exclusion still matches a tracked file
 # (or is marked `# planned` and matches none). `push: main` runs everything unfiltered as a
 # second backstop.
 
-# Docs and agent-only files: no CI job depends on these.
+# Files no CI job depends on, full stop.
 non_code: &non_code
+  - '!LICENSE'
+  - '!.claude/settings.json'
+  - '!.claude/hooks/**'
+
+# Everything `non_code` excludes, plus Markdown and the rest of `.claude/` — safe wherever
+# nothing runs ruff. (Repeats `non_code`'s entries rather than aliasing it.)
+docs_and_agent_files: &docs_and_agent_files
+  - '!LICENSE'
   - '!.claude/**'
   - '!*.md'
   - '!**/README.md'
-  - '!LICENSE'
 
 # Paths that exist only for the TS workspace; Python has no use for them.
 ts_workspace: &ts_workspace
@@ -36,7 +44,8 @@ ts_workspace: &ts_workspace
   - '!biome.json'
   - '!.nvmrc'
 
-# TypeScript never imports Python. (We use `system` for e2e tests.)
+# TypeScript never imports Python. (We use `system` for e2e tests.) Biome doesn't touch
+# Markdown, so `ts` can use the broad docs exclusion.
 ts:
   - '**'
   - '!python/**'
@@ -44,10 +53,11 @@ ts:
   - '!uv.lock'
   - '!Justfile'
   - '!.python-version'
-  - *non_code
+  - *docs_and_agent_files
 
 # `gbd_foodservice_insights` and `worker_child`. Python imports no TypeScript, and no Python in
-# the product imports the lab.
+# the product imports the lab. Uses the narrow `non_code`, not `docs_and_agent_files`: ruff
+# formats/lints Markdown across the whole repo.
 python:
   - '**'
   - *ts_workspace
@@ -62,9 +72,9 @@ python_lab:
   - *ts_workspace
   - *non_code
 
-# Whole-stack e2e depends on nearly everything; the lab is the one real
-# exclusion, since nothing imports it and it's not in the worker image.
+# Whole-stack e2e depends on nearly everything; the lab is the one real exclusion, since nothing
+# imports it and it's not in the worker image.
 system:
   - '**'
   - '!python/lab/**'
-  - *non_code
+  - *docs_and_agent_files
