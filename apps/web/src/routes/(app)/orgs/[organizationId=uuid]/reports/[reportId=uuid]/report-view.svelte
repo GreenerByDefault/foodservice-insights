@@ -1,7 +1,6 @@
 <script lang="ts">
-import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
-import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 import { createPoller } from '$lib/polling/create-poller.svelte';
+import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
 import { isWaiting } from '$lib/reports/attempt-status';
 import type { ReportPageData } from './+page.server.ts';
 import CanceledView from './canceled-view.svelte';
@@ -69,13 +68,7 @@ function screenHeadline(report: ReportPageData): string {
 <div aria-live="polite" class="sr-only">{headline}</div>
 
 {#if poller.connectionStatus === 'retrying'}
-  <Alert>
-    <WifiOffIcon />
-    <AlertTitle>Reconnecting…</AlertTitle>
-    <AlertDescription>
-      We lost the connection, but your report is safe — this page will catch up automatically.
-    </AlertDescription>
-  </Alert>
+  <ReconnectingAlert subject="report" />
 {/if}
 
 {#if isWaiting(current.attempt)}

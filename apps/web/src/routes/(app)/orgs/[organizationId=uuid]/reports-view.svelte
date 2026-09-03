@@ -1,9 +1,8 @@
 <script lang="ts">
-import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import { page } from '$app/state';
-import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 import { createPoller } from '$lib/polling/create-poller.svelte';
-import { isWaiting } from '$lib/reports/waiting';
+import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
+import { isWaiting } from '$lib/reports/attempt-status';
 import type { ReportListRow, ReportsPageData } from './+page.server.ts';
 import { pollReports } from './poll-reports.ts';
 import ReportsList from './reports-list.svelte';
@@ -60,13 +59,7 @@ function settledCopy(status: ReportListRow['status']): string {
 <div aria-live="polite" class="sr-only">{announcement}</div>
 
 {#if poller.connectionStatus === 'retrying'}
-  <Alert>
-    <WifiOffIcon />
-    <AlertTitle>Reconnecting…</AlertTitle>
-    <AlertDescription>
-      We lost the connection, but your reports are safe — this page will catch up automatically.
-    </AlertDescription>
-  </Alert>
+  <ReconnectingAlert subject="reports" />
 {/if}
 
 <ReportsList reports={current.reports} />
