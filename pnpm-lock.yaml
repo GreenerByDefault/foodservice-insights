@@ -22,8 +22,8 @@ catalogs:
       specifier: ^3.12.3
       version: 3.12.3
     '@lucide/svelte':
-      specifier: ^1.31.0
-      version: 1.31.0
+      specifier: ^1.39.0
+      version: 1.39.0
     '@playwright/test':
       specifier: 1.62.1
       version: 1.62.1
@@ -164,7 +164,7 @@ importers:
         version: 3.12.3
       '@lucide/svelte':
         specifier: 'catalog:'
-        version: 1.31.0(svelte@5.56.9)
+        version: 1.39.0(svelte@5.56.9)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.1
@@ -610,8 +610,8 @@ packages:
   '@kristiandupont/recase@1.4.1':
     resolution: {integrity: sha512-e5t4YqhnRGbS9sU4N52cQgTn37qKwTsxDDcIuIkgPvX0UmnL+7eoOR6oFXeCib5zYuw03vYKpR55NBq+W43j1A==}
 
-  '@lucide/svelte@1.31.0':
-    resolution: {integrity: sha512-pgPuLEJdF0UpsajG9eSw0YvqXVuDxB+/x58BRiC4xE/KEHiopOqT1id3KCUvRN/PUmQkN1F26sslcs/1jutlBQ==}
+  '@lucide/svelte@1.39.0':
+    resolution: {integrity: sha512-jCgA/RqDv9uWHs4DiIUef4kpf5TfLl9y8OMGrh+W4aQTCOscT4X2BX14ta65J+5ooslrN1bXXiO9AaeAOHAcPA==}
     peerDependencies:
       svelte: ^5
 
@@ -2408,7 +2408,7 @@ snapshots:
     dependencies:
       ramda: 0.30.1
 
-  '@lucide/svelte@1.31.0(svelte@5.56.9)':
+  '@lucide/svelte@1.39.0(svelte@5.56.9)':
     dependencies:
       svelte: 5.56.9
 
