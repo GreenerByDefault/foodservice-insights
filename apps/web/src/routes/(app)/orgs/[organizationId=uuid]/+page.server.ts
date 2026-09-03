@@ -120,6 +120,46 @@ async function resolveCursor(db: DatabaseExecutor, cursor: ReportsCursor): Promi
 // Query
 // -----------------------------------------------------
 
+/** Every live report in the organization, one row each, carrying its latest attempt — the shape
+ * both list reads start from, so what a row shows can only change for both at once.
+ *
+ * DISTINCT ON keeps this a single query instead of the N+1 an `order by attempt_number desc limit
+ * 1` per report would become at list scale; both forms hit
+ * `analysis_attempt_report_id_attempt_number` on its leading column, and keeping the latest
+ * attempt this way is safe because of the `(report_id, attempt_number)` unique constraint.
+ * Postgres requires DISTINCT ON's expression to lead ORDER BY, which is why nothing here orders
+ * by report — a caller that needs its own order wraps this in a subquery.
+ */
+function latestAttemptPerReport(db: DatabaseExecutor, organizationId: OrganizationId) {
+  return (
+    db
+      .selectFrom('report')
+      .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
+      // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL`, and a report
+      // outlives the account that submitted it (see `_loadReport`).
+      .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
+      .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
+      .select([
+        'report.id as reportId',
+        'report.name as reportName',
+        'report.siteName as siteName',
+        'report.createdAt as reportCreatedAt',
+        'appUser.displayName as creatorDisplayName',
+        'auth.users.email as creatorEmail',
+        'analysisAttempt.status as status',
+        'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
+        // Selected alongside the row rather than as a separate query, so every row of one response
+        // is one consistent snapshot.
+        sql<Date>`now()`.as('now'),
+      ])
+      .where('report.organizationId', '=', organizationId)
+      .where('report.deletedAt', 'is', null)
+      .distinctOn('report.id')
+      .orderBy('report.id')
+      .orderBy('analysisAttempt.attemptNumber', 'desc')
+  );
+}
+
 /** One page of an organization's reports for the dashboard/list page, newest upload first
  * regardless of paging direction — see `ReportsCursor`.
  *
@@ -133,41 +173,10 @@ export async function _loadReports(
 ): Promise<ReportsPageData> {
   const cursor = await resolveCursor(db, params.cursor);
 
+  // Wrapped in a subquery because DISTINCT ON dictates its own ORDER BY (see
+  // `latestAttemptPerReport`), leaving the outer query free to order by report instead.
   let query = db
-    .selectFrom((eb) =>
-      eb
-        .selectFrom('report')
-        .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
-        // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL`, and a report
-        // outlives the account that submitted it (see `_loadReport`).
-        .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
-        .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
-        .select([
-          'report.id as reportId',
-          'report.name as reportName',
-          'report.siteName as siteName',
-          'report.createdAt as reportCreatedAt',
-          'appUser.displayName as creatorDisplayName',
-          'auth.users.email as creatorEmail',
-          'analysisAttempt.status as status',
-          'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
-          // Selected alongside the row rather than as a separate query, so every row of one
-          // response is one consistent snapshot.
-          sql<Date>`now()`.as('now'),
-        ])
-        .where('report.organizationId', '=', params.organizationId)
-        .where('report.deletedAt', 'is', null)
-        // One row per report, keeping the latest attempt — safe because of the
-        // `(report_id, attempt_number)` unique constraint. DISTINCT ON keeps this a single query
-        // instead of the N+1 an `order by attempt_number desc limit 1` per report would become
-        // at list scale; both forms hit `analysis_attempt_report_id_attempt_number` on its
-        // leading column. Postgres requires DISTINCT ON's expression to lead ORDER BY, so the
-        // report-level ordering happens in the outer query instead.
-        .distinctOn('report.id')
-        .orderBy('report.id')
-        .orderBy('analysisAttempt.attemptNumber', 'desc')
-        .as('latest'),
-    )
+    .selectFrom(latestAttemptPerReport(db, params.organizationId).as('latest'))
     .selectAll();
 
   // `newer` walks the index ascending and gets reversed below, so its page comes out newest
@@ -224,30 +233,8 @@ export async function _loadReportsByIds(
     return { reports: [] };
   }
 
-  const rows = await db
-    .selectFrom('report')
-    .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
-    // Left, not inner — see the identical join in `_loadReports`.
-    .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
-    .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
-    .select([
-      'report.id as reportId',
-      'report.name as reportName',
-      'report.siteName as siteName',
-      'report.createdAt as reportCreatedAt',
-      'appUser.displayName as creatorDisplayName',
-      'auth.users.email as creatorEmail',
-      'analysisAttempt.status as status',
-      'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
-      sql<Date>`now()`.as('now'),
-    ])
-    .where('report.organizationId', '=', params.organizationId)
-    .where('report.deletedAt', 'is', null)
+  const rows = await latestAttemptPerReport(db, params.organizationId)
     .where('report.id', 'in', params.ids)
-    // One row per report, keeping the latest attempt — see the identical clause in `_loadReports`.
-    .distinctOn('report.id')
-    .orderBy('report.id')
-    .orderBy('analysisAttempt.attemptNumber', 'desc')
     .execute();
 
   return { reports: rows.map((row) => toReportListRow(params.organizationId, row)) };

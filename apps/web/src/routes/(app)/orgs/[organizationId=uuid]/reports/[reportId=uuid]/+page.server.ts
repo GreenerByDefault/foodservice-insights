@@ -36,16 +36,20 @@ export const load: PageServerLoad = async ({ params }) => {
   const reportId = params.reportId as ReportId;
 
   return await withDbErrorHandling(
-    () =>
-      _loadReport(database(), {
-        organizationId,
-        reportId,
-        supportEmail: requireVar('EMAIL_SUPPORT_ADDRESS'),
-        pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
-      }),
+    () => _loadReport(database(), { organizationId, reportId, ..._reportEnvironment() }),
     { action: 'load a report', context: { organizationId, reportId } },
   );
 };
+
+/** What `_loadReport` needs beyond the ids, read from the environment. Shared with
+ * `poll/+server.ts`, which serves the same page's later reads and so must ask for it identically.
+ */
+export function _reportEnvironment(): { supportEmail: string; pollIntervalMs: number } {
+  return {
+    supportEmail: requireVar('EMAIL_SUPPORT_ADDRESS'),
+    pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
+  };
+}
 
 export type FileLink = { href: string };
 
