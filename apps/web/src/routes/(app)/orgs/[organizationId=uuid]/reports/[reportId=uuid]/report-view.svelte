@@ -5,7 +5,7 @@ import { isWaiting } from '$lib/reports/attempt-status';
 import { SETTLED_ON_PAGE } from '$lib/reports/status-copy';
 import type { ReportPageData } from './+page.server.ts';
 import CanceledView from './canceled-view.svelte';
-import FailureView from './failure-view.svelte';
+import FailureView from './failure/failure-view.svelte';
 import { pollReport } from './polling/poll-report.ts';
 import ReportHeading from './report-heading.svelte';
 import ResultView from './result-view.svelte';

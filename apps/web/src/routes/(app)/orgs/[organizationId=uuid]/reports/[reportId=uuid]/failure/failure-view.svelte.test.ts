@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { atRetryCapFailure, notRetryableFailure, retryableFailure } from '../testing/fixtures.ts';
 import FailureView from './failure-view.svelte';
-import { atRetryCapFailure, notRetryableFailure, retryableFailure } from './testing/fixtures.ts';
 
 /** Stands in for the polling view's `poll`, which is what the retry button asks for a refresh. */
 const onReportChanged = vi.fn(() => Promise.resolve());

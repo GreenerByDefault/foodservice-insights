@@ -29,7 +29,7 @@ import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
-import { type FailureCopy, toFailureCopy } from './failure-copy.ts';
+import { type FailureCopy, toFailureCopy } from './failure/failure-copy.ts';
 
 export const load: PageServerLoad = async ({ params }) => {
   const organizationId = params.organizationId as OrganizationId;

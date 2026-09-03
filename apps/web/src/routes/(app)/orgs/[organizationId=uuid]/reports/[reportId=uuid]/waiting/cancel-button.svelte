@@ -1,5 +1,5 @@
 <script lang="ts">
-import { cancelReport } from '$lib/reports/cancel-report';
+import { cancelReport } from '$lib/reports/api/cancel-report';
 import ConfirmAction from '../confirm-action.svelte';
 
 interface Props {

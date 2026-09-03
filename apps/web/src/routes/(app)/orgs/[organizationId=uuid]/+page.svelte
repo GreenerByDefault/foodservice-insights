@@ -2,7 +2,7 @@
 import PageHeading from '$lib/components/page-heading.svelte';
 import { Button } from '$lib/components/ui/button';
 import type { PageProps } from './$types';
-import ReportsView from './reports-view.svelte';
+import ReportsView from './reports-list/reports-view.svelte';
 
 let { data }: PageProps = $props();
 </script>

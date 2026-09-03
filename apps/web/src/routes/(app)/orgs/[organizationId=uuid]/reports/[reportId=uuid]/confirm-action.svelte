@@ -12,7 +12,7 @@ import {
   AlertDialogTrigger,
 } from '$lib/components/ui/alert-dialog';
 import { buttonVariants } from '$lib/components/ui/button';
-import type { ActionState } from '$lib/types/action-state';
+import type { ActionState } from '$lib/forms/action-state';
 
 /** The confirm dialog behind both destructive report actions (delete, cancel): the trigger, the
  * "are you sure" copy, and the loading/error handling around one irreversible request.
