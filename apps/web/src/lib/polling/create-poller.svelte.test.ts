@@ -72,4 +72,29 @@ describe('createPoller', () => {
     await vi.advanceTimersByTimeAsync(BASE_POLL_INTERVAL_MS);
     expect(poll).toHaveBeenCalledTimes(1);
   });
+
+  test('a poll in flight when the component unmounts is ignored on resolution, and arms no further timer', async () => {
+    // Exercises the `destroyed` guard: without it, the in-flight poll's `finally` would write to
+    // this (now-orphaned) instance's state and re-arm a timer nothing could ever clear again.
+    vi.useFakeTimers();
+    let resolvePoll: (value: string) => void = () => {};
+    const poll = vi.fn(() => new Promise<string>((resolve) => (resolvePoll = resolve)));
+    const onData = vi.fn();
+    const screen = await render(PollerHarness, {
+      poll,
+      settled: false,
+      pollIntervalMs: BASE_POLL_INTERVAL_MS,
+      onData,
+    });
+    await vi.advanceTimersByTimeAsync(BASE_POLL_INTERVAL_MS);
+    expect(poll).toHaveBeenCalledTimes(1);
+
+    await screen.unmount();
+    resolvePoll('data');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onData).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(BASE_POLL_INTERVAL_MS * 10);
+    expect(poll).toHaveBeenCalledTimes(1);
+  });
 });

@@ -33,8 +33,7 @@ const poller = createPoller({
   },
 });
 
-/** Keeps the screen's own row order and drops any id the poll didn't return — a soft delete, or a
- * move out of this organization, since the last poll. */
+/** Keeps the screen's own row order and drops any id the poll didn't return. */
 function mergeReports(onScreen: ReportListRow[], polled: ReportListRow[]): ReportListRow[] {
   const byId = new Map(polled.map((report) => [report.id, report]));
   return onScreen.flatMap((report) => byId.get(report.id) ?? []);

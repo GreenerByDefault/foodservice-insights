@@ -110,6 +110,37 @@ describe('ReportsView', () => {
       await expect.poll(() => liveRegionText(screen)).toBe('Q1 procurement is ready');
     });
 
+    test('a failure and a cancellation settling together each get their own wording, joined', async () => {
+      const failed = aReport({
+        id: 'a4f8e2b0-1111-4a11-8111-000000000001' as ReportListRow['id'],
+        name: 'Q1 procurement',
+        status: 'pending',
+      });
+      const canceled = aReport({
+        id: 'a4f8e2b0-1111-4a11-8111-000000000002' as ReportListRow['id'],
+        name: 'Winter deliveries',
+        status: 'pending',
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(
+            aPollResponse([
+              { ...failed, status: 'failed' },
+              { ...canceled, status: 'canceled' },
+            ]),
+          ),
+        ),
+      );
+      const screen = await render(ReportsView, { data: aPageData([failed, canceled]) });
+
+      await triggerImmediatePoll();
+
+      await expect
+        .poll(() => liveRegionText(screen))
+        .toBe("Q1 procurement couldn't finish. Winter deliveries was stopped");
+    });
+
     test('polls with exactly the ids currently on screen', async () => {
       const first = aReport({ name: 'Q1 procurement' });
       const second = aReport({

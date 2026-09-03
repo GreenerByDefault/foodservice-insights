@@ -2,7 +2,8 @@
  * updating a row in place with no reload.
  *
  * Scoped to a report's own unique name, in the placeholder organization, the same tradeoff
- * `reports-list.e2e.ts` makes — see its doc comment and the plan's "Test isolation" section.
+ * `reports-list.e2e.ts` makes — see its doc comment.
+ *
  * Everything about the schedule itself is covered by `polling/schedule.test.ts`, and everything
  * about `ReportsView` itself by `reports-view.svelte.test.ts`.
  */

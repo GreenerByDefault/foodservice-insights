@@ -62,8 +62,7 @@ export type ReportsPageData = {
   pollIntervalMs: number;
 };
 
-/** What a poll refreshes: the given reports' current fields, nothing about the page around them.
- * See `_loadReportsByIds`. */
+/** What a poll refreshes: latest field values for the given reports. */
 export type ReportsPollData = {
   reports: ReportListRow[];
 };
@@ -209,13 +208,13 @@ export async function _loadReports(
   };
 }
 
-/** Refreshes exactly the given reports' current fields, for the list's poller.
+/** Refreshes latest field values for exactly the given reports, for the list's poller.
  *
  * Deliberately not paginated: a poll only ever asks about reports already on the client's
  * screen, so there is no cursor, ordering, or Older/Newer recompute here — see `poll/+server.ts`.
- * That also means membership on screen never changes from a poll; a new upload or a deletion only
- * shows up on the next navigation. A soft-deleted or since-moved-to-another-org id is silently
- * absent from the result — the caller drops whatever id it doesn't get back.
+ * That also means a poll can only shrink what's on screen, never grow it: it re-fetches exactly
+ * the ids already there, so a new upload never appears until the next navigation. But an id for
+ * a deleted report is silently absent from the result, and the caller removes it from the screen.
  */
 export async function _loadReportsByIds(
   db: DatabaseExecutor,

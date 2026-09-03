@@ -31,8 +31,6 @@ export function newerReportsHref(organizationId: string, reportId: string): stri
   return `${organizationHref(organizationId)}?newer=${reportId}`;
 }
 
-/** The list's own reads after the first. A POST of the ids currently on screen, not paged —
- * see `_loadReportsByIds`. */
 export function reportsPollHref(organizationId: string): string {
   return `${organizationHref(organizationId)}/poll`;
 }
