@@ -6,7 +6,7 @@
 
 ## Context
 
-Gathered while planning [`deploy-pipeline.md`](deploy-pipeline.md),
+Gathered while planning the deploy pipeline (now [`workflows/deploy.yml`](../../.github/workflows/deploy.yml)),
 [`deploy-docker-images.md`](deploy-docker-images.md), and
 [`deploy-skew-hardening.md`](deploy-skew-hardening.md). **Not a recommendation.**
 

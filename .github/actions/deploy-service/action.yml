@@ -1,0 +1,27 @@
+name: Deploy service
+description: >
+  Deploy one named service at a named commit to whatever the hosting provider turns out to be, and
+  return a real exit code. Both jobs in workflows/deploy.yml call this one step, so wiring up the
+  provider is a single-file change instead of two.
+
+inputs:
+  service:
+    description: Service to deploy (web or worker)
+    required: true
+  sha:
+    description: Commit SHA to deploy
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # ARCHITECTURE.md § Hosting has no provider chosen yet. Until it does there is nothing to call
+    # here, so fail loudly rather than pretend a deploy happened. Replace this step with the
+    # provider's deploy-at-commit call once one is chosen — the two jobs in workflows/deploy.yml
+    # need no changes.
+    - name: Deploy
+      shell: bash
+      run: |
+        echo "::error::No hosting provider is configured yet — see ARCHITECTURE.md § Hosting."
+        echo "Would deploy service '${{ inputs.service }}' at ${{ inputs.sha }}."
+        exit 1

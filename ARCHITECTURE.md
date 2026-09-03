@@ -284,26 +284,25 @@ worker runs 2 or 3.
 
 ### Deployments
 
-Naively, deploying the worker kills in-flight analysis attempts, because the hosting platform
-kills the old container. Two mitigations:
+Deploying the worker naively kills every in-flight analysis attempt, since the hosting platform
+kills the old container outright. Two mitigations, both required:
 
-1. **Decouple the web app deployment from the worker**, so the worker is not redeployed
-   unnecessarily.
-2. **Let the worker drain.** The parent distinguishes `SIGTERM` from `SIGKILL`. Even if we cannot
-   drain every attempt, we can catch most of them.
+- **The worker deploys independently of the web app, and only on demand.**
+  [`workflows/deploy.yml`](.github/workflows/deploy.yml) deploys web, migrations included, on every
+  push to `main`; the worker deploys only when someone dispatches it for a specific commit. One
+  consequence follows from that asymmetry: the deployed worker is always the side running behind
+  schema and web app, never ahead, so the web ↔ worker and app ↔ schema contracts must stay
+  backwards compatible for as long as an old worker might still be running.
+- **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
+  gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
+  [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
+  are. An analysis attempt still running when the grace expires gets `failed('shut_down')`.
 
-A grace period is worth being generous with: an attempt takes 2–15 minutes but typically about 5,
-so a drain that runs long usually saves real work our own deploy would otherwise destroy. An
-attempt still draining when the grace runs out gets `failed('shut_down')` — the one verdict that
-means "nothing was wrong with this attempt, we just ran out of time to finish it."
-
-**The hosting platform's own shutdown grace has to exceed `drainGraceMs` plus `killGraceMs`**,
-[`config.ts`](apps/worker/src/config.ts) covers why — and this is a real trap, not a hypothetical
-one: Render's shutdown delay defaults to 30s (configurable up to 300s), but Railway's
-`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**. An unconfigured Railway service SIGKILLs
-the worker mid-drain, and the failure looks like a worker bug rather than a platform default. This
-is the one relation `createWorkerConfig` cannot check, since it depends on a setting that lives on
-the platform, not in this repo.
+**The trap: the hosting platform's own shutdown grace has to exceed the worker's drain grace, and
+that relation lives on the platform, not in this repo** — nothing here can check it. Render's
+shutdown delay defaults to 30s (configurable to 300s); Railway's
+`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**, which SIGKILLs the worker mid-drain and
+looks exactly like a worker bug.
 
 ## Hosting
 
