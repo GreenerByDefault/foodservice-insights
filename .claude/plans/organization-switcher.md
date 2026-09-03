@@ -14,11 +14,17 @@ The switcher is in the header, IBM-Cloud style, because *which organization am I
 answerable without reading the URL — a user lives inside one for months and every page they visit
 is scoped to it.
 
-The blocking question was scale. A superadmin is admin over every organization, and
-[`everyOrganization()`](apps/web/src/lib/server/auth/authorization.ts#L64-L76) currently reads the
-**entire `organization` table on every request** — page loads, `/api` writes, poll endpoints alike —
-and the result is serialized into the HTML of every page. So "what happens with a lot of
-organizations" is not a scrolling problem first; it is a data-loading problem, and it exists today.
+The blocking question was scale. A superadmin is admin over every organization, and authorization
+used to resolve that by reading the **entire `organization` table on every request** — page loads,
+`/api` writes, poll endpoints alike — with the result serialized into the HTML of every page. That
+bottleneck is already fixed:
+[`requireOrganizationAccess`](apps/web/src/lib/server/auth/guards.ts#L14-L51) now resolves a
+superadmin with a single primary-key lookup, and
+[`AuthContext.memberships`](apps/web/src/lib/server/auth/types.ts#L17-L31) is only ever the genuine
+`organization_member` rows a user — superadmin or not — actually holds. What is not fixed is the
+switcher itself: showing a superadmin every organization the same way would reproduce the same
+scan one screen later, so "what happens with a lot of organizations" is still a data-loading
+problem here, just narrowed down to the one query the switcher runs.
 
 ## Decisions
 
@@ -93,81 +99,7 @@ shadcn-svelte versions do. This is a safety net, not the mechanism; 8 stays the 
 
 ---
 
-## PR 1 — authorization stops reading the whole `organization` table
-
-A prefactor with no user-visible change. It has to come first: the switcher list cannot be bounded
-while `requireOrganizationAccess` authorizes by scanning that same list.
-
-**[`types.ts`](apps/web/src/lib/server/auth/types.ts)** — `AuthContext.organizations` →
-`memberships`, and it becomes *only* genuine `organization_member` rows. A superadmin's may be
-empty. The doc comment there today claims "a superadmin holds no `organization_member` row
-anywhere" — that is already false (a superadmin who creates an organization gets one, per
-`organization_check_has_member`), and it is the belief the next bullet has to defend against.
-Replace it, don't restate it.
-
-**[`authorization.ts`](apps/web/src/lib/server/auth/authorization.ts)** — delete
-`everyOrganization()` and `findOrganizationAccess()`. `loadAuthorization` returns memberships
-unconditionally.
-
-**[`guards.ts`](apps/web/src/lib/server/auth/guards.ts)** — `requireOrganizationAccess` gains a
-`db: DatabaseExecutor` first parameter and becomes async, resolving **superadmin first**:
-
-```ts
-// A superadmin is admin everywhere, including an organization where they hold a `member` row —
-// so the flag is checked before the membership, never after.
-if (auth.user.isSuperadmin) {
-  const organization = await /* PK lookup on `organization` */;
-  if (!organization) error(404, ...);
-  return { organizationId, organizationName: organization.name, role: 'admin' };
-}
-const access = auth.memberships.find(...);
-if (!access) error(404, ...);
-return access;
-```
-
-Three properties this keeps that a cheaper design loses:
-
-- **404-not-403 is unchanged for everyone.** A non-superadmin takes the same in-memory `find` →
-  404 whether the organization exists or not, with no database access either way — so status *and*
-  timing stay indistinguishable. A superadmin's nonexistent id still 404s at the guard.
-- **No downstream site inherits the existence check.**
-  [`api/orgs/[id]/reports/+server.ts`](apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/+server.ts#L145)
-  uploads to the blob store *before* touching the database, on purpose. Letting a bad org id
-  through the guard would orphan objects under a prefix no `deletePrefix` ever reaches, then 500 on
-  the FK violation.
-- **The query runs only for superadmins**, and it is one PK lookup instead of a full table scan on
-  every request.
-
-`requireOrganizationAdmin` follows (async, same first parameter). Wrap the lookup in
-`withDbErrorHandling` so an outage is a 503, and raise the 404 *inside* the callback — an
-`HttpError` is not a database failure and passes back out untouched.
-
-**Call sites** (five, each gains `database()` and an `await`):
-[`route-context.ts`](apps/web/src/lib/server/reports/route-context.ts#L15),
-[`orgs/[id]/+layout.server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/+layout.server.ts#L8),
-[`orgs/[id]/poll/+server.ts`](apps/web/src/routes/(app)/orgs/[organizationId=uuid]/poll/+server.ts#L22),
-[`api/orgs/[id]/reports/+server.ts`](apps/web/src/routes/api/orgs/[organizationId=uuid]/reports/+server.ts#L38),
-and `requireOrganizationAdmin` itself. The org layout still reads `organizationName` off the
-returned access row exactly as it does now.
-
-**[`orgs/+page.server.ts`](apps/web/src/routes/(app)/orgs/+page.server.ts#L23-L26)** — a superadmin
-with zero memberships must not be redirected to `/orgs/new`. `_resolvePostSignInDestination`
-returns `null` (stay on the picker) for a superadmin before the length checks, or the one user who
-should see every organization is offered nothing but a create form metered at five.
-
-**Tests.** `anAuthContext` in [`fixtures.ts`](apps/web/src/lib/server/tests/fixtures.ts) renames its
-override. `guards.test.ts` has **no superadmin case at all today**, and superadmin resolution is the
-entire new surface — add: superadmin with no membership → `admin`; superadmin holding a `member`
-row → `admin` (the demotion trap above); superadmin on a nonexistent id → 404; non-member
-non-superadmin → 404. Delete `authorization.test.ts`'s "gives a superadmin admin over organizations
-they hold no membership in" — it tests `everyOrganization`, and its awkward filter over rows
-committed by concurrent test files disappears with it. Add a superadmin case to
-`resolve-post-sign-in-destination.test.ts`, where the existing "sent to create an organization" test
-would otherwise pass while asserting the wrong thing.
-
----
-
-## PR 2 — the switcher
+## PR 1 — the switcher
 
 **Vendor the component:**
 
