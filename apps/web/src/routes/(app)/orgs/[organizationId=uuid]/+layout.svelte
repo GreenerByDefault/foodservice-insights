@@ -1,27 +1,31 @@
 <script lang="ts">
 import { page } from '$app/state';
+import { organizationHref, organizationMembersHref, organizationSettingsHref } from '$lib/hrefs';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();
 
-const root = $derived(`/orgs/${data.organization.id}`);
+/** Root first, then each nested section — `currentSection` relies on that order. */
+const sections = $derived([
+  { label: 'Reports', href: organizationHref(data.organization.id) },
+  { label: 'Members', href: organizationMembersHref(data.organization.id) },
+  { label: 'Settings', href: organizationSettingsHref(data.organization.id) },
+]);
 
-function currentSection(pathname: string, organizationRoot: string) {
-  if (pathname.startsWith(`${organizationRoot}/members`)) return 'members';
-  if (pathname.startsWith(`${organizationRoot}/settings`)) return 'settings';
-  // Reports live at the organization's root rather than under `reports/`, so this tab owns the
-  // root itself as well as everything beneath `reports/`.
-  return 'reports';
-}
-
-const section = $derived(currentSection(page.url.pathname, root));
+/** The most specific section the path falls under. Reports live at the organization's root rather
+ * than under `reports/`, so its href prefixes every other section's — the last match wins. */
+const currentSection = $derived(
+  sections.filter((section) => page.url.pathname.startsWith(section.href)).at(-1),
+);
 </script>
 
 <!-- The organization's sections. -->
 <nav class="flex gap-4 border-b pb-2 text-sm" aria-label="Organization">
-  <a href={root} aria-current={section === 'reports' ? 'page' : undefined}>Reports</a>
-  <a href="{root}/members" aria-current={section === 'members' ? 'page' : undefined}>Members</a>
-  <a href="{root}/settings" aria-current={section === 'settings' ? 'page' : undefined}>Settings</a>
+  {#each sections as section (section.href)}
+    <a href={section.href} aria-current={section === currentSection ? 'page' : undefined}>
+      {section.label}
+    </a>
+  {/each}
 </nav>
 
 {@render children()}

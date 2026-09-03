@@ -1,5 +1,6 @@
 <script lang="ts">
 import { page } from '$app/state';
+import { organizationHref } from '$lib/hrefs';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();
@@ -24,7 +25,7 @@ const currentOrganization = $derived(page.data.organization);
           <li>
             <a
               class="block rounded-sm px-2 py-1 hover:bg-muted"
-              href="/orgs/{organization.organizationId}"
+              href={organizationHref(organization.organizationId)}
             >
               {organization.organizationName}
             </a>

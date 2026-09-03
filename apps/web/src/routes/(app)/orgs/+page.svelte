@@ -1,4 +1,5 @@
 <script lang="ts">
+import { organizationHref } from '$lib/hrefs';
 import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
@@ -12,7 +13,7 @@ let { data }: PageProps = $props();
 <ul class="flex flex-col gap-2">
   {#each data.auth.organizations as organization (organization.organizationId)}
     <li>
-      <a class="underline hover:no-underline" href="/orgs/{organization.organizationId}">
+      <a class="underline hover:no-underline" href={organizationHref(organization.organizationId)}>
         {organization.organizationName}
       </a>
     </li>

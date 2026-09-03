@@ -1,7 +1,7 @@
 /** The client-side call behind the new-report form. */
 
 import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
-import { organizationHref } from './hrefs.ts';
+import { createReportApiHref, organizationHref } from '$lib/hrefs';
 import { parseUploadRejection, type UploadRejection } from './rejection.ts';
 
 export type UploadOutcome =
@@ -15,7 +15,7 @@ export async function uploadReport(
   signal?: AbortSignal,
 ): Promise<UploadOutcome> {
   try {
-    const response = await apiCall(`/api/orgs/${organizationId}/reports`, {
+    const response = await apiCall(createReportApiHref(organizationId), {
       method: 'POST',
       body: form,
       signal,
