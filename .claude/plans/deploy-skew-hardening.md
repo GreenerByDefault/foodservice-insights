@@ -9,21 +9,18 @@ until every old instance is gone. Web deploys, migrations included, on every pus
 dispatched for a specific commit. So the skew always points one way: **the deployed worker is the
 one running behind** — the invariant `ARCHITECTURE.md` § Deployments records.
 
-Four items. The first is a bug that exists today; the second closes a gap
-[`config.ts`](../../apps/worker/src/config.ts) explicitly documents as uncheckable; the third only
-works if it ships before the change it guards.
+Two items remain. The first closes a gap [`config.ts`](../../apps/worker/src/config.ts) explicitly
+documents as uncheckable; the second only works if it ships before the change it guards.
 
-## a. Make the failure-reason lookup total
-
+*Already landed:* the failure-reason lookup in
 [`failure-copy.ts`](<../../apps/web/src/routes/(app)/orgs/[organizationId=uuid]/reports/[reportId=uuid]/failure/failure-copy.ts>)
-does `ANALYSIS_FAILURE_EXPLANATIONS[reason]` and immediately reads `.whatHappened`. A migration adds
-an enum value, a new worker writes it, an old web app is still up — `undefined.whatHappened`, 500 on
-the report page. `failure_reason` is the volatile vocabulary here; it grows as the analysis library
-lands. Fall back to the `unknown` copy.
+now falls back to the `unknown` copy instead of reading `.whatHappened` off `undefined` — the case
+was a migration adding a `failure_reason` value a newer worker writes while an old web app, compiled
+against the prior enum, is still serving. Logging the build at boot is deferred to
+[`hosting-provider-notes.md`](hosting-provider-notes.md) § Once a provider is chosen, since
+normalizing "whichever env var the provider injects" needs the provider decided first.
 
-`status` is a fixed five-value state machine and needs no equivalent.
-
-## b. Close the drain-grace gap
+## a. Close the drain-grace gap
 
 [`config.ts:48-55`](../../apps/worker/src/config.ts) names the one relation `createWorkerConfig`
 cannot check: the platform's shutdown grace against `drainGraceMs + killGraceMs` plus one terminal
@@ -40,7 +37,7 @@ write. Make it checkable.
 Sizing is a provider question — see [`hosting-provider-notes.md`](hosting-provider-notes.md). A drain
 worth having is minutes, not seconds, since an attempt averages ~5 minutes.
 
-## c. Add the claim-time capability guard, while it is still a no-op
+## b. Add the claim-time capability guard, while it is still a no-op
 
 Add `required_contract_version smallint not null default 1` to `analysis_attempt`, and a
 `where required_contract_version <= $ours` predicate to `nextPendingAttempt` in
@@ -63,28 +60,10 @@ test in `packages/db/tests/` asserting the database rejects a violation.
 [`README.md`](../../README.md#add-a-database-migration); a pattern-matcher over migration text would
 fire on the safe cases and miss the unsafe ones.
 
-## d. Log the build at boot
-
-Both services log their commit at startup, from whichever env var the provider injects, normalized to
-one `GIT_SHA`. This is what answers "which of these two is behind?" when a deploy half-fails, or when
-one of two worker replicas did not restart — neither of which the `deploy/worker` tag can see, since
-it records what we asked for rather than what is running.
-
-*Not on `/health`.* That route is unauthenticated and deliberately reports only `ok`/`degraded` —
-"which check failed stays in the log"
-([`+server.ts`](../../apps/web/src/routes/health/+server.ts)). Publishing a private repo's deployed
-commit there breaks the same reasoning that keeps the failure detail out.
-
-*Rejected: a `worker_instance` fleet table.* For a two-worker fleet the provider dashboard already
-shows the deployed commit per service, and a boot log line covers the rest. Revisit if the fleet grows,
-or if a deploy ever silently half-lands.
-
 ## Verification
 
 `pnpm lint && pnpm check && pnpm test` from the repo root. Per item:
 
-- Failure-reason fallback: a unit test passing a reason absent from `ANALYSIS_FAILURE_EXPLANATIONS`,
-  asserting copy rather than a throw.
 - Drain-grace relation: a `config.test.ts` case per direction, in the existing table-driven
   `workerConfigViolations` style.
 - Claim guard: a `queue.test.ts` case proving an attempt above the worker's version stays `pending`

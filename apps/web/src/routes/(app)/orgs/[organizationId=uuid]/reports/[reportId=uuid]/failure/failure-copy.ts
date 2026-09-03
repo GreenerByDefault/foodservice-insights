@@ -21,7 +21,10 @@ export function toFailureCopy(
   attemptNumber: number,
   supportEmail: string,
 ): FailureCopy {
-  const explanation = ANALYSIS_FAILURE_EXPLANATIONS[reason];
+  // We handle an unknown `reason` because the live database may have added new migrations
+  // without a new worker yet being deployed.
+  const explanation =
+    ANALYSIS_FAILURE_EXPLANATIONS[reason] ?? ANALYSIS_FAILURE_EXPLANATIONS.unknown;
   const cappedOutOfRetry =
     explanation.followUp.action === 'retry' && attemptNumber >= MAX_ANALYSIS_ATTEMPTS;
   return {

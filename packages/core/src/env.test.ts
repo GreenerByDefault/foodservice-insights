@@ -62,6 +62,12 @@ describe('loadLocalEnv', () => {
 
     expect(() => loadLocalEnv()).not.toThrow();
   });
+
+  test('a missing repo root is not an error, as in a pruned deploy image', () => {
+    process.chdir(mkdtempSync(join(tmpdir(), 'gbd-no-workspace-')));
+
+    expect(() => loadLocalEnv()).not.toThrow();
+  });
 });
 
 describe('requireEnv', () => {
