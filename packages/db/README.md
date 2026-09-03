@@ -123,6 +123,6 @@ This package owns the invariants; who claims an attempt and when is the worker's
 itself is documented at [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue), and every terminal
 transition is tested beside the code that writes it — `attempt/queue.ts` writes the transitions a
 parent reaches through its own lifecycle,
-[`sweeps/reaper.ts`](../../apps/worker/src/sweeps/reaper.ts) writes the ones reaping converges, and
+[`sweeps/converge.ts`](../../apps/worker/src/sweeps/converge.ts) writes the ones reaping converges, and
 [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) writes the notification
 columns above.

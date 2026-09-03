@@ -208,14 +208,14 @@ notice it is itself hung:
    perfectly healthy. It is the second, independent predicate of the same sweep as defense 4, since
    the parent this catches is by definition not going to catch itself. See
    [`config.ts`](apps/worker/src/config.ts).
-4. **Other workers reap**, in [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The reaper exists for the
+4. **Other workers reap**, in [`converge.ts`](apps/worker/src/sweeps/converge.ts). The reaper exists for the
    *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
    namespace and takes every child with it, and the PaaS restarts the container — there is no
    orphan class of process to worry about. What can happen is a container dying (e.g. OOM) and
    leaving its claimed attempts stuck `processing`, with nobody left to reach a verdict and nothing
    else to ever converge them. So, every worker proactively looks for `processing` attempts whose
    lease has expired and marks them `failed('abandoned')` — see
-   [`reaper.ts`](apps/worker/src/sweeps/reaper.ts). The notification sweep sends the email, on its
+   [`converge.ts`](apps/worker/src/sweeps/converge.ts). The notification sweep sends the email, on its
    own schedule, once the row is terminal.
 
 Reaping introduces a race: another parent can kill an attempt while the original parent, being
@@ -245,7 +245,7 @@ child?", and a parent whose clock is skewed poisons every other worker's livenes
 own children locally, so the only case where the reap's own filter would matter is a parent that is
 alive but no longer directing — exactly when the reap should fire. Reaping one of our own costs
 nothing: the next lease renewal returns "lost" and the direct loop kills the child. See
-[`reaper.ts`](apps/worker/src/sweeps/reaper.ts).
+[`converge.ts`](apps/worker/src/sweeps/converge.ts).
 
 ### Canceling
 
