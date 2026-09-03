@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { describeProgress, isWaiting } from './progress.ts';
+import { describeProgress } from './progress.ts';
 
 const CREATED_AT = new Date('2026-01-15T10:00:00Z');
 const CLAIMED_AT = new Date('2026-01-15T10:03:00Z');
@@ -7,16 +7,6 @@ const CLAIMED_AT = new Date('2026-01-15T10:03:00Z');
 function minutesAfter(at: Date, minutes: number): Date {
   return new Date(at.getTime() + minutes * 60_000);
 }
-
-describe('isWaiting', () => {
-  test.for(['pending', 'processing'] as const)('%s is waiting', (status) => {
-    expect(isWaiting({ status })).toBe(true);
-  });
-
-  test.for(['succeeded', 'failed', 'canceled'] as const)('%s is not waiting', (status) => {
-    expect(isWaiting({ status })).toBe(false);
-  });
-});
 
 describe('describeProgress', () => {
   test('pending, fresh: queued is current, no warning', () => {

@@ -4,18 +4,11 @@
  * `created_at`, `claimed_at` and the status.
  */
 
-import type { AnalysisAttemptStatus } from '@gbd/db';
 import { ANALYSIS_WARNING_AFTER_MS, QUEUE_WARNING_AFTER_MS } from '$lib/reports/limits';
 
 export type WaitingAttempt =
   | { status: 'pending'; createdAt: Date }
   | { status: 'processing'; createdAt: Date; claimedAt: Date };
-
-export function isWaiting<T extends { status: AnalysisAttemptStatus }>(
-  attempt: T,
-): attempt is Extract<T, { status: 'pending' | 'processing' }> {
-  return attempt.status === 'pending' || attempt.status === 'processing';
-}
 
 export type Stage = 'received' | 'queued' | 'analyzing';
 

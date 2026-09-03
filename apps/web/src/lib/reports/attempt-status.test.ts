@@ -1,5 +1,5 @@
-import { expect, test } from 'vitest';
-import { screenStatus } from './attempt-status.ts';
+import { describe, expect, test } from 'vitest';
+import { isWaiting, screenStatus } from './attempt-status.ts';
 
 const NOW = new Date('2026-01-15T10:00:00Z');
 
@@ -22,4 +22,14 @@ test('a failed attempt with a cancel request keeps its terminal status', () => {
 test('no cancel request passes the raw status through unchanged', () => {
   expect(screenStatus({ status: 'pending', cancelRequestedAt: null })).toBe('pending');
   expect(screenStatus({ status: 'processing', cancelRequestedAt: null })).toBe('processing');
+});
+
+describe('isWaiting', () => {
+  test.for(['pending', 'processing'] as const)('%s is waiting', (status) => {
+    expect(isWaiting({ status })).toBe(true);
+  });
+
+  test.for(['succeeded', 'failed', 'canceled'] as const)('%s is not waiting', (status) => {
+    expect(isWaiting({ status })).toBe(false);
+  });
 });
