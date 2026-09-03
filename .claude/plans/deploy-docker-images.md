@@ -6,8 +6,11 @@ Nothing here is containerized for shipping — Docker appears only for local Sup
 screenshot browser. Both services need an image.
 
 Deliberately short. A dedicated sprint builds these; this records the constraints so that sprint does
-not rediscover them. The deploy model that consumes these images is in
-[`deploy-pipeline.md`](deploy-pipeline.md).
+not rediscover them. The deploy pipeline that will consume these images —
+[`workflows/deploy.yml`](../../.github/workflows/deploy.yml) and
+[`actions/deploy-service`](../../.github/actions/deploy-service/action.yml) — already exists; its
+composite deploy step is a stub until a hosting provider is chosen, and building these images is
+what fills it in.
 
 ## Both services get a Dockerfile
 

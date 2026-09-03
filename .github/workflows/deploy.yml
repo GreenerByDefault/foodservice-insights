@@ -1,0 +1,79 @@
+name: Deploy
+
+# Web deploys on every push to main because it runs the database migrations, which the worker
+# may later need.
+#
+# The worker only ever deploys via workflow_dispatch, naming a SHA. This is because deploying
+# the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
+#
+# We also use workflow_dispatch for rollbacks of either service: dispatch it again naming an
+# older SHA.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service to deploy
+        type: choice
+        options: [web, worker]
+        required: true
+      sha:
+        description: Commit SHA to deploy (defaults to the branch tip)
+        type: string
+        required: false
+
+concurrency:
+  # Serializes same-service deploys; a web push and a worker dispatch never contend.
+  group: deploy-${{ inputs.service || 'web' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-web:
+    name: Deploy web
+    if: github.event_name == 'push' || inputs.service == 'web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - uses: ./.github/actions/deploy-service
+        with:
+          service: web
+          sha: ${{ inputs.sha || github.sha }}
+
+  deploy-worker:
+    name: Deploy worker
+    if: github.event_name == 'workflow_dispatch' && inputs.service == 'worker'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to move the deploy/worker tag on success
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0 # need full history and tags for the delta below, and to move the tag
+
+      - name: Show commits since the last worker deploy
+        run: |
+          if git rev-parse -q --verify refs/tags/deploy/worker >/dev/null; then
+            git log deploy/worker..HEAD --oneline
+          else
+            echo 'No deploy/worker tag yet — this is the first tracked worker deploy.'
+          fi
+
+      - uses: ./.github/actions/deploy-service
+        with:
+          service: worker
+          sha: ${{ inputs.sha || github.sha }}
+
+      - name: Move the deploy/worker tag
+        run: |
+          git tag -f deploy/worker HEAD
+          git push -f origin deploy/worker

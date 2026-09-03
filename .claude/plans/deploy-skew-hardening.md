@@ -4,8 +4,10 @@
 
 Two services deploy on separate schedules against one shared Postgres, and there is no way to make
 them land together — so the web ↔ worker and app ↔ schema contracts must stay backwards compatible
-until every old instance is gone. Given the model in [`deploy-pipeline.md`](deploy-pipeline.md) the
-skew always points one way: **the deployed worker is the one running behind.**
+until every old instance is gone. Web deploys, migrations included, on every push to `main`
+([`workflows/deploy.yml`](../../.github/workflows/deploy.yml)); the worker deploys only when
+dispatched for a specific commit. So the skew always points one way: **the deployed worker is the
+one running behind** — the invariant `ARCHITECTURE.md` § Deployments records.
 
 Four items. The first is a bug that exists today; the second closes a gap
 [`config.ts`](../../apps/worker/src/config.ts) explicitly documents as uncheckable; the third only
@@ -45,8 +47,9 @@ Add `required_contract_version smallint not null default 1` to `analysis_attempt
 [`queue.ts`](../../apps/worker/src/attempt/queue.ts), beside the existing cancel-request filter. An
 old worker then *leaves* work it cannot handle in the queue instead of claiming and failing it — the
 attempt waits for the worker deploy rather than burning one of the user's retries, and the
-already-planned "attempts waiting too long to be claimed" alert is what notices.
-[`deploy-pipeline.md`](deploy-pipeline.md) leans on this as the only signal a stale worker needs.
+already-planned "attempts waiting too long to be claimed" alert is what notices. The deploy
+workflow deliberately has no "worker needs deploying" check of its own — this guard plus that
+alert are the only signal a stale worker needs.
 
 **The reason to do it now, when it guards nothing: the guard only works if it shipped before the
 change it guards.** On the first genuinely incompatible change, the worker that must hold back is the
