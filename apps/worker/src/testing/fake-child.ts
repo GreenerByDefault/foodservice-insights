@@ -31,7 +31,6 @@ export type FakeChildStep =
   | {
       step: 'result';
       withoutFiles?: readonly string[];
-      resultMetadata?: Record<string, unknown>;
     }
   | { step: 'failure'; reason: string; detail: string; traceback?: string | null }
   /** Write bytes of your choosing over one of the contract's documents. */
@@ -208,7 +207,6 @@ async function writeResult(
       // The real child reads this out of `run.json`; taking it from the directory name keeps a
       // scenario from having to know the attempt id.
       analysisAttemptId: basename(runDirectory),
-      resultMetadata: step.resultMetadata ?? {},
     }),
   );
 }

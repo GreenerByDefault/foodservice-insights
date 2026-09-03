@@ -217,14 +217,11 @@ export async function markAttemptSucceeded(
   workerId: string,
   outcome: { result: ChildResult; resultFiles: readonly ResultFileRecord[] },
 ): Promise<boolean> {
-  const { resultMetadata } = outcome.result;
-
   return await withTransaction(db, async (transaction) => {
     // The guarded update goes first so that losing the race writes nothing at all: `result_file`
     // rows for an attempt whose verdict is someone else's would be results nothing points at.
     const won = await markIfStillOwned(transaction, attemptId, workerId, {
       status: 'succeeded',
-      resultMetadata,
     });
     if (!won) return false;
 

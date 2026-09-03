@@ -50,11 +50,7 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
 
     outcome = analyze(request, report_progress=progress_reporter(run_directory))
 
-    # Validate the shape of `outcome` before touching the filesystem.
-    payload = result_payload(
-        analysis_attempt_id=manifest.analysis_attempt_id,
-        result_metadata=outcome.metadata,
-    )
+    payload = result_payload(analysis_attempt_id=manifest.analysis_attempt_id)
     place_result_files(run_directory, outcome)
     write_json_atomically(run_directory / layout.RESULT, payload)
 

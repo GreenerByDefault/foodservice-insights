@@ -17,12 +17,16 @@ read-only.
 **Open:** AI usage (model, tokens, cost) is dropped from this seam for now — REQUIREMENTS.md
 § Persistence. It needs to come back once the library is ported and its actual output shape is
 known.
+
+**Open:** structured result metadata (rows in, rows categorized, products uncategorized, ...) is
+dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. `AnalysisOutcome` is
+where it will arrive once the library is ported and its shape is known.
 """
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 type ReportProgress = Callable[[], None]
 
@@ -47,7 +51,6 @@ class AnalysisRequest:
 class AnalysisOutcome:
     pdf: Path
     xlsx: Path
-    metadata: Mapping[str, Any]  # rows in, rows categorized, products uncategorized, ...
 
 
 class AnalysisError(Exception):

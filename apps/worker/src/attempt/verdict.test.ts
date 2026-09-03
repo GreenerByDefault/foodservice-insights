@@ -9,7 +9,6 @@ const NOT_READ: DocumentRead = { kind: 'not-read' };
 
 const A_RESULT: Extract<DocumentRead, { kind: 'result' }>['result'] = {
   analysisAttemptId: '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f',
-  resultMetadata: {},
 };
 
 const A_FAILURE: Extract<DocumentRead, { kind: 'failure' }>['failure'] = {

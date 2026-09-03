@@ -20,11 +20,6 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(0));
 
-const opaqueObject = v.custom<Record<string, unknown>>(
-  (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
-  'expected a JSON object',
-);
-
 const RunManifestSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
   report: v.strictObject({
@@ -45,7 +40,6 @@ const ProgressSchema = v.strictObject({
 
 const ChildResultSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
-  resultMetadata: opaqueObject,
 });
 
 const ChildFailureSchema = v.strictObject({

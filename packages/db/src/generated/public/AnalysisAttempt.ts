@@ -46,8 +46,6 @@ export default interface AnalysisAttemptTable {
 
   reapedByWorkerId: ColumnType<string | null, string | null, string | null>;
 
-  resultMetadata: ColumnType<unknown | null, unknown | null, unknown | null>;
-
   notificationEmailSentAt: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   /** Set by a worker before it sends the notification email, so a second worker cannot claim the\n       same row. Left in place if the send fails, so the row stays claimed until it expires — that\n       expiry is what lets a later sweep retry the send instead of the claim silently losing it. */

@@ -58,8 +58,11 @@ database.
 
 - **Input metadata:** uploader, name, upload time, file size.
 - **Result metadata:** file size and processing time.
-  - **Open:** the full result metadata shape depends on the JSON output from the AI library,
-    which still needs to be reviewed.
+  - **Open:** a `result_metadata` JSON column existed for structured output from the AI library
+    (rows in, rows categorized, products uncategorized, ...) but was dropped for now — it wasn't
+    being used, and its shape depended on the not-yet-ported analysis library. See the git
+    history for `analysis_attempt`'s `result_metadata` column
+    (`packages/db/migrations/001_initial_schema.ts`) to bring it back once the shape is settled.
   - **Open:** AI usage (model, tokens, cost) was tracked here too, but was dropped for now —
     its shape depended on the not-yet-ported analysis library and unsettled alignment with GBD
     on what to track. See the git history for `analysis_attempt`'s `ai_*` columns

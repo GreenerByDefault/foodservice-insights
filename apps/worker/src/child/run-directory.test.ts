@@ -31,7 +31,6 @@ const MANIFEST = buildRunManifest({
 
 const RESULT = {
   analysisAttemptId: ATTEMPT_ID,
-  resultMetadata: {},
 };
 
 async function directoriesUnder(root: string): Promise<string[]> {

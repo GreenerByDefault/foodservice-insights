@@ -1,7 +1,3 @@
-from collections.abc import Mapping
-from types import MappingProxyType
-from typing import Any
-
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisOutcome,
@@ -25,7 +21,6 @@ def stub_analysis(
     report_progress: ReportProgress = _ignore,
     write_pdf: bool = True,
     write_xlsx: bool = True,
-    result_metadata: Mapping[str, Any] = MappingProxyType({}),
     progress_calls: int = 2,
     raises: type[AnalysisError] | None = None,
 ) -> AnalysisOutcome:
@@ -52,8 +47,4 @@ def stub_analysis(
     if write_xlsx:
         xlsx.write_bytes(XLSX_MAGIC_BYTES)
 
-    return AnalysisOutcome(
-        pdf=pdf,
-        xlsx=xlsx,
-        metadata=result_metadata,
-    )
+    return AnalysisOutcome(pdf=pdf, xlsx=xlsx)

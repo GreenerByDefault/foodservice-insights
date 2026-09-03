@@ -62,7 +62,6 @@ async function processingAttempt(
 
 const A_MINIMAL_RESULT = {
   analysisAttemptId: crypto.randomUUID(),
-  resultMetadata: {},
 };
 
 describe('reapExpiredAttempts', () => {
