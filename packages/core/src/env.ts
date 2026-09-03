@@ -35,10 +35,19 @@ export function findRepoRoot(startingFrom: string = process.cwd()): string {
 /** Load the repo root's `.env`, or `.env.test` when `TEST_DB` is set.
  *
  * Variables already in the environment win over the file. Safe to call more than once.
+ *
+ * Tolerates finding no repo root: a pruned deploy image has no `pnpm-workspace.yaml`, and a
+ * platform injects real env vars there instead of shipping a `.env` file.
  */
 export function loadLocalEnv(): void {
+  let root: string;
+  try {
+    root = findRepoRoot();
+  } catch {
+    return;
+  }
   const fileName = process.env.TEST_DB ? '.env.test' : '.env';
-  const path = join(findRepoRoot(), fileName);
+  const path = join(root, fileName);
   if (existsSync(path)) process.loadEnvFile(path);
 }
 

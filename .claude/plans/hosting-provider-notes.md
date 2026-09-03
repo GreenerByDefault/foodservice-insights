@@ -98,3 +98,12 @@ Both providers researched can do all four. The differences are in how much is do
   documented lifecycle implies yes; that is inference.
 - **Open:** Render worker instance-type pricing; `/docs/instance-types` 404s.
 - **Open:** DigitalOcean, if it stays a candidate.
+
+## Once a provider is chosen
+
+- **Log the build at boot.** Both services should log their commit at startup, from whichever env
+  var the provider injects (Railway: `RAILWAY_GIT_COMMIT_SHA`; Render: `RENDER_GIT_COMMIT`),
+  normalized to one `GIT_SHA`. Answers "which of these two is behind?" when a deploy half-fails, or
+  when one of several worker replicas didn't restart. Not on `/health` — that route is
+  unauthenticated and deliberately reports only `ok`/`degraded`; publishing a private repo's
+  deployed commit there breaks the same reasoning that keeps failure detail out of it.

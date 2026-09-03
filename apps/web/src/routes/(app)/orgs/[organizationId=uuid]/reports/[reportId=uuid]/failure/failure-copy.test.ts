@@ -1,3 +1,4 @@
+import type { AnalysisFailureReason } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { toFailureCopy } from './failure-copy.ts';
@@ -39,6 +40,22 @@ describe('toFailureCopy', () => {
       followUpText:
         'Retrying is unlikely to help. Contact us and we can help figure out what to change.',
       canRetry: false,
+      attemptsExhausted: false,
+      contactMailto: `mailto:${SUPPORT_EMAIL}`,
+    });
+  });
+
+  test('a reason absent from ANALYSIS_FAILURE_EXPLANATIONS falls back to the unknown copy, instead of throwing', () => {
+    const futureReason = 'some_future_reason' as AnalysisFailureReason;
+
+    const copy = toFailureCopy(futureReason, 1, SUPPORT_EMAIL);
+
+    expect(copy).toEqual({
+      whatHappened: 'Something on our end interrupted the analysis before it could finish.',
+      followUpText:
+        'This was not a problem with your file. You can run it again without uploading it a ' +
+        'second time, or contact us if it keeps happening.',
+      canRetry: true,
       attemptsExhausted: false,
       contactMailto: `mailto:${SUPPORT_EMAIL}`,
     });
