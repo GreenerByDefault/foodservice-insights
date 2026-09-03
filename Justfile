@@ -21,9 +21,9 @@ fmt:
     uv run ruff format .
     uv run ruff check --fix .
 
-# Typecheck. The lab is excluded: it carries none of the product's guarantees.
+# Typecheck.
 check:
-    uv run ty check python/insights python/worker_child scripts
+    uv run ty check python scripts
 
 # Test everything we ship.
 test:

@@ -46,8 +46,6 @@ constraints, so its code carries none of the product's guarantees.
   runs one way only.
 - Put code in the lab when it is exploratory, and move it into `gbd_foodservice_insights` when
   the worker needs it — not the other way around.
-- **The lab is not typechecked.** `just check` excludes `python/lab` — it carries none of the
-  product's guarantees.
 
 ## Style
 
