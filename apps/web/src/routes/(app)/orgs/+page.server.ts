@@ -20,9 +20,15 @@ export async function _resolvePostSignInDestination(
   auth: AuthContext,
 ): Promise<string | null> {
   if (await hasLiveInvite(db, auth)) return '/invites';
-  if (auth.organizations.length === 0) return '/orgs/new';
 
-  const singleOrg = auth.organizations.length === 1 ? auth.organizations[0] : undefined;
+  // A superadmin's memberships don't bound what they may act in — see `AuthContext` — so the
+  // membership count below would send one with none straight to `/orgs/new`, offering a create
+  // form metered at five to the one user who should see every organization instead.
+  if (auth.user.isSuperadmin) return null;
+
+  if (auth.memberships.length === 0) return '/orgs/new';
+
+  const singleOrg = auth.memberships.length === 1 ? auth.memberships[0] : undefined;
   return singleOrg ? organizationHref(singleOrg.organizationId) : null;
 }
 

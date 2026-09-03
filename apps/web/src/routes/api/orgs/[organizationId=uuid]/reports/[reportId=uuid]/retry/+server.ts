@@ -17,7 +17,7 @@ import type { RequestHandler } from './$types';
 
 /** Retry a failed analysis. */
 export const POST: RequestHandler = async (event) => {
-  const { organizationId, reportId, actor } = requireReportRouteContext(event);
+  const { organizationId, reportId, actor } = await requireReportRouteContext(database(), event);
 
   await withDbErrorHandling(() => _retryReport(database(), { organizationId, reportId, actor }), {
     action: 'retry a report',

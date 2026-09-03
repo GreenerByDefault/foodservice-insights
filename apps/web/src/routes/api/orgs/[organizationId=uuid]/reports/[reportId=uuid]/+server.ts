@@ -15,7 +15,7 @@ import type { RequestHandler } from './$types';
 
 /** Delete a report; requests cancellation of its in-flight attempt too. */
 export const DELETE: RequestHandler = async (event) => {
-  const { organizationId, reportId, actor } = requireReportRouteContext(event);
+  const { organizationId, reportId, actor } = await requireReportRouteContext(database(), event);
 
   await withDbErrorHandling(() => _deleteReport(database(), { organizationId, reportId, actor }), {
     action: 'delete a report',

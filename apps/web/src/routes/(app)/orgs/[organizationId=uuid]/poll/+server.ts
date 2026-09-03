@@ -19,7 +19,7 @@ const BodySchema = v.object({ ids: v.array(v.pipe(v.string(), v.uuid())) });
  * auth + org-access prologue is inlined here instead. */
 export const POST: RequestHandler = async (event) => {
   const organizationId = event.params.organizationId as OrganizationId;
-  requireOrganizationAccess(requireAuth(event.locals), organizationId);
+  await requireOrganizationAccess(database(), requireAuth(event.locals), organizationId);
 
   const body = v.safeParse(BodySchema, await event.request.json());
   if (!body.success) {

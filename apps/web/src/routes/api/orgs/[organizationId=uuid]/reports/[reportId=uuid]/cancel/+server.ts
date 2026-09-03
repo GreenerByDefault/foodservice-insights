@@ -5,7 +5,7 @@ import type { RequestHandler } from './$types';
 
 /** Cancel a running analysis. */
 export const POST: RequestHandler = async (event) => {
-  const { organizationId, reportId, actor } = requireReportRouteContext(event);
+  const { organizationId, reportId, actor } = await requireReportRouteContext(database(), event);
 
   await withDbErrorHandling(
     () => requestCancellation(database(), { organizationId, reportId, actor }),

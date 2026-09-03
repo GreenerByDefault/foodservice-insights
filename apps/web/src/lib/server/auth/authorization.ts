@@ -1,9 +1,9 @@
 /** What a user ID is allowed to do. */
 
-import type { DatabaseExecutor, OrganizationId, UserId } from '@gbd/db';
+import type { DatabaseExecutor, UserId } from '@gbd/db';
 import type { AuthContext, OrganizationAccess } from './types.ts';
 
-/** The user and every organization they may act in, or null if there is no such user. */
+/** The user and the organizations they belong to, or null if there is no such user. */
 export async function loadAuthorization(
   db: DatabaseExecutor,
   userId: UserId,
@@ -37,9 +37,7 @@ export async function loadAuthorization(
       displayName: user.displayName,
       isSuperadmin: user.isSuperadmin,
     },
-    organizations: user.isSuperadmin
-      ? await everyOrganization(db)
-      : await memberOrganizations(db, userId),
+    memberships: await memberOrganizations(db, userId),
   };
 }
 
@@ -59,25 +57,4 @@ async function memberOrganizations(
     // By name, not by when they joined, so the organization switcher has a stable order.
     .orderBy('organization.name')
     .execute();
-}
-
-async function everyOrganization(db: DatabaseExecutor): Promise<OrganizationAccess[]> {
-  const organizations = await db
-    .selectFrom('organization')
-    .select(['id', 'name'])
-    .orderBy('name')
-    .execute();
-
-  return organizations.map(({ id, name }) => ({
-    organizationId: id,
-    organizationName: name,
-    role: 'admin',
-  }));
-}
-
-export function findOrganizationAccess(
-  auth: AuthContext,
-  organizationId: OrganizationId,
-): OrganizationAccess | undefined {
-  return auth.organizations.find((access) => access.organizationId === organizationId);
 }

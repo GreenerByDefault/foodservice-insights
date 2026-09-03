@@ -21,7 +21,7 @@ const currentOrganization = $derived(page.data.organization);
       </summary>
 
       <ul class="absolute left-0 z-10 mt-2 min-w-56 rounded-md border bg-background p-1 shadow-md">
-        {#each data.auth.organizations as organization (organization.organizationId)}
+        {#each data.auth.memberships as organization (organization.organizationId)}
           <li>
             <a
               class="block rounded-sm px-2 py-1 hover:bg-muted"
