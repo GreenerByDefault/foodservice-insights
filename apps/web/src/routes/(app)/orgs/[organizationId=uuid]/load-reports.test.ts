@@ -8,9 +8,26 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { newerReportsHref, newReportHref, olderReportsHref, reportHref } from '$lib/reports/hrefs';
+import {
+  newerReportsHref,
+  newReportHref,
+  olderReportsHref,
+  reportHref,
+  reportsPollHref,
+} from '$lib/reports/hrefs';
 import { database } from '$lib/server/db';
-import { _loadReports, _REPORTS_PAGE_SIZE } from './+page.server.ts';
+import { _loadReports, _loadReportsByIds, _REPORTS_PAGE_SIZE } from './+page.server.ts';
+import type { ReportsCursor } from './pagination.ts';
+
+const POLL_INTERVAL_MS = 1_000;
+
+/** Every test loads with the same poll interval — only the org/cursor vary. */
+function loadReports(
+  transaction: DatabaseExecutor,
+  args: { organizationId: OrganizationId; cursor: ReportsCursor },
+) {
+  return _loadReports(transaction, { ...args, pollIntervalMs: POLL_INTERVAL_MS });
+}
 
 async function aReportWithAttempt(
   transaction: DatabaseExecutor,
@@ -46,7 +63,7 @@ describe('_loadReports', () => {
       await withRollback(database(), async (transaction) => {
         const { organization } = await insertOrganization(transaction);
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -56,6 +73,8 @@ describe('_loadReports', () => {
           reports: [],
           olderHref: null,
           newerHref: null,
+          pollHref: reportsPollHref(organization.id),
+          pollIntervalMs: POLL_INTERVAL_MS,
         });
       });
     });
@@ -74,7 +93,7 @@ describe('_loadReports', () => {
         });
         await insertAnalysisAttempt(transaction, { reportId: newer.id });
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -89,7 +108,7 @@ describe('_loadReports', () => {
         const { organization: outsider } = await insertOrganization(transaction);
         await aReportWithAttempt(transaction, owner.id);
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: outsider.id,
           cursor: { direction: 'newest' },
         });
@@ -108,7 +127,7 @@ describe('_loadReports', () => {
           .where('id', '=', report.id)
           .execute();
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -137,7 +156,7 @@ describe('_loadReports', () => {
           status: 'pending',
         });
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -189,7 +208,7 @@ describe('_loadReports', () => {
           { status: 'pending', cancelRequestedAt: DB_NOW },
         );
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -209,7 +228,7 @@ describe('_loadReports', () => {
         const { organization } = await insertOrganization(transaction);
         await aReportWithAttempt(transaction, organization.id, { createdByUserId: null });
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -224,7 +243,7 @@ describe('_loadReports', () => {
         const user = await insertAppUser(transaction, { displayName: 'Dana Cook' });
         await aReportWithAttempt(transaction, organization.id, { createdByUserId: user.id });
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -241,13 +260,14 @@ describe('_loadReports', () => {
         const { organization } = await insertOrganization(transaction);
         const report = await aReportWithAttempt(transaction, organization.id);
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
 
         expect(data.newReportHref).toBe(newReportHref(organization.id));
         expect(data.reports[0]?.href).toBe(reportHref(organization.id, report.id));
+        expect(data.pollHref).toBe(reportsPollHref(organization.id));
       });
     });
   });
@@ -260,7 +280,7 @@ describe('_loadReports pagination', () => {
         const { organization } = await insertOrganization(transaction);
         await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE);
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -277,7 +297,7 @@ describe('_loadReports pagination', () => {
         const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 1);
         const newestFirst = [...ids].reverse();
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
@@ -297,7 +317,7 @@ describe('_loadReports pagination', () => {
         const newestFirst = [...ids].reverse();
         const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'older', cursor: firstPageLast },
         });
@@ -316,7 +336,7 @@ describe('_loadReports pagination', () => {
         const newestFirst = [...ids].reverse();
         const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'older', cursor: firstPageLast },
         });
@@ -338,19 +358,19 @@ describe('_loadReports pagination', () => {
         const { organization } = await insertOrganization(transaction);
         await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
 
-        const firstPage = await _loadReports(transaction, {
+        const firstPage = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newest' },
         });
         const lastOfFirstPage = firstPage.reports[firstPage.reports.length - 1]?.id as ReportId;
 
-        const olderPage = await _loadReports(transaction, {
+        const olderPage = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'older', cursor: lastOfFirstPage },
         });
         const firstOfOlderPage = olderPage.reports[0]?.id as ReportId;
 
-        const newerPage = await _loadReports(transaction, {
+        const newerPage = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newer', cursor: firstOfOlderPage },
         });
@@ -369,7 +389,7 @@ describe('_loadReports pagination', () => {
         const ids = await insertReports(transaction, organization.id, 3);
         const oldest = ids[0] as ReportId;
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'older', cursor: oldest },
         });
@@ -386,7 +406,7 @@ describe('_loadReports pagination', () => {
         const ids = await insertReports(transaction, organization.id, 3);
         const newest = ids[ids.length - 1] as ReportId;
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newer', cursor: newest },
         });
@@ -406,11 +426,11 @@ describe('_loadReports pagination', () => {
         const newestFirst = [...ids].reverse();
         const missingCursor = crypto.randomUUID() as ReportId;
 
-        const olderPage = await _loadReports(transaction, {
+        const olderPage = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'older', cursor: missingCursor },
         });
-        const newerPage = await _loadReports(transaction, {
+        const newerPage = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'newer', cursor: missingCursor },
         });
@@ -436,13 +456,104 @@ describe('_loadReports pagination', () => {
           .where('id', '=', cursorId)
           .execute();
 
-        const data = await _loadReports(transaction, {
+        const data = await loadReports(transaction, {
           organizationId: organization.id,
           cursor: { direction: 'older', cursor: cursorId },
         });
 
         expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(_REPORTS_PAGE_SIZE));
       });
+    });
+  });
+});
+
+describe('_loadReportsByIds', () => {
+  test('an empty id list returns an empty list without a query', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [],
+      });
+
+      expect(data).toEqual({ reports: [] });
+    });
+  });
+
+  test('returns only the given, still-visible ids, regardless of order requested', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const first = await aReportWithAttempt(transaction, organization.id);
+      const second = await aReportWithAttempt(transaction, organization.id);
+      const notRequested = await aReportWithAttempt(transaction, organization.id);
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [second.id, first.id],
+      });
+
+      expect(data.reports.map((row) => row.id).sort()).toEqual([first.id, second.id].sort());
+      expect(data.reports.map((row) => row.id)).not.toContain(notRequested.id);
+    });
+  });
+
+  test('a soft-deleted report is absent, even when its id is requested', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await aReportWithAttempt(transaction, organization.id);
+      await transaction
+        .updateTable('report')
+        .set({ deletedAt: new Date() })
+        .where('id', '=', report.id)
+        .execute();
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [report.id],
+      });
+
+      expect(data.reports).toEqual([]);
+    });
+  });
+
+  test("another org's report is absent, even when its id is requested", async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization: owner } = await insertOrganization(transaction);
+      const { organization: outsider } = await insertOrganization(transaction);
+      const report = await aReportWithAttempt(transaction, owner.id);
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: outsider.id,
+        ids: [report.id],
+      });
+
+      expect(data.reports).toEqual([]);
+    });
+  });
+
+  test('the latest attempt decides a row status when a report has several', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await insertReport(transaction, { organizationId: organization.id });
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: 1,
+        status: 'failed',
+      });
+      await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: 2,
+        status: 'pending',
+      });
+
+      const data = await _loadReportsByIds(transaction, {
+        organizationId: organization.id,
+        ids: [report.id],
+      });
+
+      expect(data.reports).toHaveLength(1);
+      expect(data.reports[0]?.status).toBe('pending');
     });
   });
 });

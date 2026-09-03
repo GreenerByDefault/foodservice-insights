@@ -30,3 +30,7 @@ export function olderReportsHref(organizationId: string, reportId: string): stri
 export function newerReportsHref(organizationId: string, reportId: string): string {
   return `${organizationHref(organizationId)}?newer=${reportId}`;
 }
+
+export function reportsPollHref(organizationId: string): string {
+  return `${organizationHref(organizationId)}/poll`;
+}
