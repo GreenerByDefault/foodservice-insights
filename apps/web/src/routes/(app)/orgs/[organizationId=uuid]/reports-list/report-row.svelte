@@ -2,7 +2,7 @@
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import RelativeTime from '$lib/components/reports/relative-time.svelte';
 import { subheading } from '$lib/reports/subheading';
-import type { ReportListRow } from './+page.server.ts';
+import type { ReportListRow } from '../+page.server.ts';
 import ReportStatus from './report-status.svelte';
 
 interface Props {

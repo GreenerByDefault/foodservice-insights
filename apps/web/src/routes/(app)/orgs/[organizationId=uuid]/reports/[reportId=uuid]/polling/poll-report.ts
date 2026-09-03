@@ -8,7 +8,7 @@
 
 import { apiCall } from '$lib/api/fetch';
 import type { Attempt, ReportPageData, ResultFiles } from '../+page.server.ts';
-import type { FailureCopy } from '../failure-copy.ts';
+import type { FailureCopy } from '../failure/failure-copy.ts';
 
 type WireAttempt =
   | { status: 'pending'; createdAt: string }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { ReportListRow } from './+page.server.ts';
+import type { ReportListRow } from '../+page.server.ts';
 import ReportsList from './reports-list.svelte';
 
 function aReport(overrides: Partial<ReportListRow> = {}): ReportListRow {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ReportsPageData } from './+page.server.ts';
+import type { ReportsPageData } from '../+page.server.ts';
 import ReportRow from './report-row.svelte';
 
 interface Props {

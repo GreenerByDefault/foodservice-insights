@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import type { Problem } from './csv/describe/index.ts';
+import type { Problem } from '../csv/describe/index.ts';
 import { uploadReport } from './upload.ts';
 
 const PROBLEM: Problem = {

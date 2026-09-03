@@ -13,7 +13,7 @@ import { screenStatus } from '$lib/reports/attempt-status';
 import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
-import { parseCursor, type ReportsCursor } from './pagination.ts';
+import { parseCursor, type ReportsCursor } from './reports-list/pagination.ts';
 
 export const load: PageServerLoad = async ({ params, url }) => {
   const organizationId = params.organizationId as OrganizationId;

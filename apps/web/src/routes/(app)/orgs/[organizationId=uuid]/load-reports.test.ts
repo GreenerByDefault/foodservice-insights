@@ -17,7 +17,7 @@ import {
 } from '$lib/hrefs';
 import { database } from '$lib/server/db';
 import { _loadReports, _loadReportsByIds, _REPORTS_PAGE_SIZE } from './+page.server.ts';
-import type { ReportsCursor } from './pagination.ts';
+import type { ReportsCursor } from './reports-list/pagination.ts';
 
 const POLL_INTERVAL_MS = 1_000;
 

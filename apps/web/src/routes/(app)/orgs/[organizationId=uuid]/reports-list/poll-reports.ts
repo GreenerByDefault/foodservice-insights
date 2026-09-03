@@ -6,7 +6,7 @@
 
 import type { ReportId } from '@gbd/db';
 import { apiCall } from '$lib/api/fetch';
-import type { ReportListRow, ReportsPollData } from './+page.server.ts';
+import type { ReportListRow, ReportsPollData } from '../+page.server.ts';
 
 type WireReportListRow = Omit<ReportListRow, 'createdAt' | 'now'> & {
   createdAt: string;

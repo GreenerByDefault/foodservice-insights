@@ -14,7 +14,7 @@ import { MAX_FREE_TEXT_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from '$l
 import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '$lib/reports/metadata';
 import { type CountDraft, reconcileDraft, serializeCounts } from '$lib/reports/monthly-counts';
 import { userFacingRejection, type UploadRejection } from '$lib/reports/rejection';
-import { uploadReport } from '$lib/reports/upload';
+import { uploadReport } from '$lib/reports/api/upload';
 import MonthlyCounts from './monthly-counts.svelte';
 import RejectionView from './rejection-view.svelte';
 

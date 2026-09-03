@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
 import { triggerImmediatePoll } from '$lib/polling/testing/trigger-immediate-poll';
-import type { ReportListRow, ReportsPageData } from './+page.server.ts';
+import type { ReportListRow, ReportsPageData } from '../+page.server.ts';
 import ReportsView from './reports-view.svelte';
 
 const POLL_HREF = '/orgs/org-1/poll';
