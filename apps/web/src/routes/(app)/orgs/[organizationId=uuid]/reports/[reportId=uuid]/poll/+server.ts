@@ -1,10 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
-import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { requireVar } from '$lib/server/env';
 import { requireReportRouteContext } from '$lib/server/reports/route-context';
-import { _loadReport } from '../+page.server.ts';
+import { _loadReport, _reportEnvironment } from '../+page.server.ts';
 import type { RequestHandler } from './$types';
 
 /** The report page's own reads after the first — not `/api`, and not a page `load`.
@@ -21,13 +18,7 @@ export const GET: RequestHandler = async (event) => {
   // Same query as the page's own `load`, so a first request landing here directly gets the same
   // 404/500 shape.
   const data = await withDbErrorHandling(
-    () =>
-      _loadReport(database(), {
-        organizationId,
-        reportId,
-        supportEmail: requireVar('EMAIL_SUPPORT_ADDRESS'),
-        pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
-      }),
+    () => _loadReport(database(), { organizationId, reportId, ..._reportEnvironment() }),
     { action: 'poll a report', context: { organizationId, reportId } },
   );
 
