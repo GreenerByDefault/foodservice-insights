@@ -36,8 +36,8 @@ select = [
 "gbd_foodservice_insights.testing".msg = "Product code must not import the tests."
 
 [tool.ruff.lint.per-file-ignores]
-"python/gbd_foodservice_insights_lab/**" = ["TID251"]
-"python/gbd_foodservice_insights/tests/**" = ["TID251"]
+"python/lab/**" = ["TID251"]
+"python/insights/tests/**" = ["TID251"]
 "python/worker_child/tests/**" = ["TID251"]
 # A package's shipped `testing.py` may import another package's `testing.py`; product
 # modules may not. `gbd_foodservice_insights/testing.py` is the precedent for shipping a

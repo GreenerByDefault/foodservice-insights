@@ -52,11 +52,11 @@ developer's command, `--package worker-child` is the image's. That is the whole 
 must stay its own workspace member for it to work (an "extra" on one project would install the
 lab's code everywhere).
 
-## Target layout (after PR 1)
+## Target layout
 
-The current `python/gbd_foodservice_insights/src/gbd_foodservice_insights/…` repeats the name
-three times. PR 1 flattens it: **project directories get short names, the `src/` level goes, and
-the import names stay**. Hatchling takes `packages = ["gbd_foodservice_insights"]` directly.
+The layout is already flat: project directories have short names, there is no `src/` level, and
+import names match the source repo. Hatchling takes `packages = ["gbd_foodservice_insights"]`
+directly.
 
 ```
 python/
@@ -103,7 +103,7 @@ worth it.)
 Every PR ends with `just lint && just check && just test` (+ `just test-lab` when the lab is
 touched), and `pnpm lint && pnpm check && pnpm test` when TS is touched.
 
-### Copy mechanics (PRs 2 and 3)
+### Copy mechanics (PRs 1 and 2)
 
 Copy with `cp`, then fix up until CI is green; commits at the author's convenience (the PR
 squash-merges). Reviewer checklist: the sensitive-content grep on the diff is empty (one known
@@ -126,29 +126,7 @@ the unmocked end-to-end report test *running*, not skipped. Fix-ups, in order:
    rules that fire, headed: *"Ported modules were never typechecked. A PR that edits one of these
    files for any other reason deletes its entry and fixes what surfaces."*
 
-## PR 1 — Prefactor: flatten the Python layout
-
-Pure moves and path updates; no behaviour change. `git mv`:
-`python/gbd_foodservice_insights/src/gbd_foodservice_insights` → `python/insights/gbd_foodservice_insights`
-(+ `tests/`, `pyproject.toml`); the lab → `python/lab/gbd_foodservice_insights_lab`;
-`python/worker_child/src/worker_child` → `python/worker_child/worker_child`.
-
-- Each member `pyproject.toml`: `[tool.hatch.build.targets.wheel] packages = ["<import name>"]`.
-- Root `pyproject.toml`: per-file-ignores paths (`python/lab/**`, `python/insights/tests/**`,
-  `python/worker_child/tests/**`); `pythonpath = ["python/worker_child/tests"]` is unchanged.
-- `Justfile`: `test` → `python/insights python/worker_child`; `test-lab` → `python/lab`;
-  `check` → `ty check python/insights python/worker_child scripts` (explicit list; the lab is
-  excluded from typechecking from here on — it "carries none of the product's guarantees").
-- `.github/filters.yml`: `python/gbd_foodservice_insights_lab/**` → `python/lab/**` (two
-  places); `scripts/ci/check_filters.py` fails CI otherwise. This is the one CI touch, required
-  by the rename.
-- `apps/worker` spawns `python -m worker_child` with `PYTHON_BIN=.venv/bin/python` — module
-  names are unchanged, so no TS change; run `pnpm exec turbo run test:system` to prove it.
-- Docs: `.claude/rules/python.md` (paths; add the lab-is-not-typechecked line under § The lab
-  boundary), `python/README.md`, `ARCHITECTURE.md` component table, `apps/worker/README.md`
-  and `tests/e2e/README.md` links, `AGENTS.md` table row.
-
-## PR 2 — Copy the product closure into `insights/`
+## PR 1 — Copy the product closure into `insights/`
 
 Goal: `categorize_products` and `run_food_report` work in the monorepo; the unmocked end-to-end
 report test passes; **no cache CSV is committed**.
@@ -166,24 +144,24 @@ report test passes; **no cache CSV is committed**.
   `data_files/README.md` when the file is absent (test with `caplog`). `data_files/README.md`
   (committed) says what the file is and that it is handed out privately. Source tests already
   patch the loader, so none read the real file; delete the two that test the file itself.
-  `analyze()` (PR 6) passes `cache_write_mode="none"` — product code never writes it.
+  `analyze()` (PR 5) passes `cache_write_mode="none"` — product code never writes it.
 - **Split `LLMs.py` here**: delete the LLMWhisperer/PDF/unit/weight functions, the `whisper=`
   branch of `setup_api_clients`, `DEFAULT_PDF_MODEL`, and the `unstract`/`requests` imports, so
-  the shipped library never depends on `llmwhisperer-client`. PR 3 re-copies the source file
+  the shipped library never depends on `llmwhisperer-client`. PR 2 re-copies the source file
   verbatim as the lab's `llm_extraction.py` and deletes the other half there.
 - **Keep the report pipeline's own "serving" axis** (`report_schema.ReportMode`, ~35 references)
   in the library, inert — `analyze()` always passes `"procurement"`. Only the entree detector
-  moves (PR 4).
+  moves (PR 3).
 - Dead code dropped: `report_diagnostics.{clean_column_names,validate_date_column,
   baseline_pre_flight_checks}`; the 11 `plotting_utils` helpers only `pilot_plots` calls (→ lab
-  `plotting_extras.py` in PR 3); `food_report`'s two `*diner_meal_mapping*` compat wrappers;
+  `plotting_extras.py` in PR 2); `food_report`'s two `*diner_meal_mapping*` compat wrappers;
   `tests/test_package_imports.py` (builds a pip venv).
 - Tests → `python/insights/tests/`: `test_{aggregate,categories,categorize,categorize_cache,
   categorize_entrees,categorize_reviews,categorize_steps,emissions,integration_food_report,llms,
   plotting_utils,report_aggregation,report_builder,report_diagnostics,report_outputs,
   report_refactor,utils}.py` + `conftest.py` (`MPLBACKEND=Agg` before any matplotlib import;
   the `sample_*` and mock-client fixtures). Drop unregistered markers (`--strict-markers`). The
-  16 `test_report_diagnostics` tests that import `extract_*` move to the lab in PR 3. Fixture:
+  16 `test_report_diagnostics` tests that import `extract_*` move to the lab in PR 2. Fixture:
   the source repo's anonymized `test_data/step_2_output/aggregated_baseline.csv` (documented
   there as anonymized) is copied to `tests/data/` (user-approved).
 - Deps: `matplotlib>=3.10`, `numpy>=2.2`, `pandas>=2.2`, `PyYAML>=6`, `seaborn>=0.13`,
@@ -197,7 +175,7 @@ report test passes; **no cache CSV is committed**.
 - `.env.example` gains `OPENAI_API_KEY=` and `GEMINI_API_KEY=` (lab) with one-line comments;
   `python/README.md` § API keys points there.
 
-## PR 3 — Copy everything else into `lab/`
+## PR 2 — Copy everything else into `lab/`
 
 Goal: `catering_analysis` is fully archived; GBD's manual workflow runs from the monorepo.
 
@@ -205,8 +183,8 @@ Goal: `catering_analysis` is fully archived; GBD's manual workflow runs from the
   `extract_other`, `extract_tabular_io`, `extract_tabular_inspection`, `clean_product_weights`,
   `pilot_analysis`, `pilot_plots`, `procurement_serving_comparison`, `notebook_runscript_setup`,
   `LLM_testing`, `gemini_api_examples`; new `llm_extraction.py` (source `LLMs.py` minus the half
-  PR 2 kept), `notebook_utils.py` (`get_head_and_tail`/`is_interactive`/`remove_file` out of the
-  library's `utils`), `plotting_extras.py` (the 11 helpers PR 2 dropped);
+  PR 1 kept), `notebook_utils.py` (`get_head_and_tail`/`is_interactive`/`remove_file` out of the
+  library's `utils`), `plotting_extras.py` (the 11 helpers PR 1 dropped);
   `scripts/backfill_entree_cleaned_names.py` (the promote script is dead — drop);
   `prompts/{cbord_pdf_extraction,clean_units,extract_pdf,extract_weight,standard_pdf_extraction}_prompt.md`.
   Two seds: the package rename, then `gbd_foodservice_insights.<lab module>` →
@@ -243,7 +221,7 @@ Goal: `catering_analysis` is fully archived; GBD's manual workflow runs from the
 - Source repo afterwards: one README line ("archived into `foodservice-insights` at commit …"),
   then archive. Nothing else is done there.
 
-## PR 4 — Move serving mode into the lab
+## PR 3 — Move serving mode into the lab
 
 Goal: the library's categorization path is procurement-only; the lab composes library steps
 with its own entree detector.
@@ -264,7 +242,7 @@ with its own entree detector.
 - Tests: `test_categorize_entrees.py` → lab `test_serving.py`; the serving `merge_categorizations`
   test and the 4 entree `test_categorize_cache` tests → lab; one new library test for `keep_rows`.
 
-## PR 5 — `LlmClient` protocol, one retry layer, keyword fake
+## PR 4 — `LlmClient` protocol, one retry layer, keyword fake
 
 - `LLMs.py` → `llm.py`:
 
@@ -309,7 +287,7 @@ with its own entree detector.
 - Docs: python.md § LLM providers (OpenAI for categorization in `llm.py`; GBD prefers Gemini for
   new work; `llm.py` is where a swap happens). ARCHITECTURE.md failure row "e.g. Gemini" → OpenAI.
 
-## PR 6 — `analyze()` and `organizationName`
+## PR 5 — `analyze()` and `organizationName`
 
 Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
 
@@ -375,7 +353,7 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
 
 - `matplotlib.use("Agg")` at the top of `analysis.py` before `food_report` is imported.
 - `run_food_report`'s two file couplings (stem-derived identity; `client_metadata.json` sibling)
-  are worked around in `work_directory` (discarded) and refactored in PR 8. The one
+  are worked around in `work_directory` (discarded) and refactored in PR 7. The one
   `food_report.py` change: `report_progress`, called from `_log_stage` (15 stage boundaries;
   plot/PDF stages take tens of seconds). `dict(request.monthly_counts)` because the library does
   `isinstance(x, dict)` and the manifest hands a `MappingProxyType`.
@@ -399,7 +377,7 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
   a synthetic CSV (3 months, ~12 keyword-table products, 2 unknowns) — `%PDF` magic, xlsx sheet
   names, one `new_categorizations` row per unique product with a non-empty cleaned name,
   `match_type_counts == {"llm": n}`, `report_progress` count; keep it in the default suite
-  (8–20 s; PR 8's graph-export skip is the real speedup). Cache hit (a temp CSV patched in as the
+  (8–20 s; PR 7's graph-export skip is the real speedup). Cache hit (a temp CSV patched in as the
   loader's path) changes `match_type_counts` and shortens `llm.calls`; lb→kg;
   `counts_basis="meals"`; each `InvalidInputError` branch; `UnusableDataError`; `UpstreamApiError`
   passthrough; `json_safe`.
@@ -412,7 +390,7 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
   `OpenAiLlmClient` as where tokens would be counted; its cache Open stays, pointing at the
   categorization-cache plan.
 
-## PR 7 — `WORKER_MODE=mock-llm`
+## PR 6 — `WORKER_MODE=mock-llm`
 
 - `python/worker_child/worker_child/mock_llm.py`, following the `worker_child.testing`
   precedent: `main(argv)` → `run(Path(argv[1]), analyze=functools.partial(analyze,
@@ -430,7 +408,7 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
 - Docs: `apps/worker/README.md` `WORKER_MODE` rows; `tests/e2e/README.md` Open resolved;
   python.md Status banner removed and both Open items deleted.
 
-## PR 8 — Later cleanups (optional; not needed for the product to work)
+## PR 7 — Later cleanups (optional; not needed for the product to work)
 
 - `run_food_report(df, *, client_name, output_dir, export_graphs: bool, ...)`: no input file, no
   stem, no `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
@@ -443,12 +421,12 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
 
 ## Verification
 
-- Per PR: the gates above; PR 2 additionally proves `test_food_report_end_to_end_produces_valid_artifacts`
-  *ran*; PR 1 and PR 6 run `pnpm exec turbo run test:system`.
-- After PR 6: `WORKER_MODE=live` with a real key on a 20-row CSV, direct call then through the app.
-- After PR 7: the e2e happy path on `WORKER_MODE=mock-llm`; `pnpm dev` with no API key at all
+- Per PR: the gates above; PR 1 additionally proves `test_food_report_end_to_end_produces_valid_artifacts`
+  *ran*; PR 5 runs `pnpm exec turbo run test:system`.
+- After PR 5: `WORKER_MODE=live` with a real key on a 20-row CSV, direct call then through the app.
+- After PR 6: the e2e happy path on `WORKER_MODE=mock-llm`; `pnpm dev` with no API key at all
   still produces a report.
-- After PR 3: `just test-lab` green with none of the three CSVs present, and `git ls-files | grep
+- After PR 2: `just test-lab` green with none of the three CSVs present, and `git ls-files | grep
   '\.csv$'` shows only `tests/data/` fixtures.
 
 ## Risks

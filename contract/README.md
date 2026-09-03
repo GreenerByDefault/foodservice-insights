@@ -21,7 +21,7 @@ The layout itself, and why it is shaped this way, is documented on
 
 1. Edit `contract.json` and the fixtures together.
 2. Update both halves: `apps/worker/src/contract/` and
-   `python/worker_child/src/worker_child/`.
+   `python/worker_child/worker_child/`.
 3. `pnpm lint && pnpm check && pnpm test` and `just lint && just check && just test`.
 
 Two constraints on fixtures. Every file under `invalid/` must be **syntactically valid JSON** —

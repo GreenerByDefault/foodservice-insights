@@ -32,7 +32,7 @@ touched the lab.
 - **Never add a `[tool.ruff]` section to a package's `pyproject.toml`.** Ruff binds each file
   to the *closest* `pyproject.toml` that has one, so a local section silently replaces the
   root config — including the lab ban — rather than extending it.
-- **Packaged assets live inside `src/<package>/`.** Hatchling ships every non-Python file
+- **Packaged assets live inside `<package>/`.** Hatchling ships every non-Python file
   under the package directory and nothing outside it.
 
 ## The lab boundary
@@ -46,6 +46,8 @@ constraints, so its code carries none of the product's guarantees.
   runs one way only.
 - Put code in the lab when it is exploratory, and move it into `gbd_foodservice_insights` when
   the worker needs it — not the other way around.
+- **The lab is not typechecked.** `just check` excludes `python/lab` — it carries none of the
+  product's guarantees.
 
 ## Style
 
