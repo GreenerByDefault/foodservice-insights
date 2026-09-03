@@ -24,7 +24,7 @@ def test_dump_json_encodes_sorted_indented_utf8_with_a_trailing_newline() -> Non
 def test_dump_json_refuses_nan() -> None:
     # Python emits a bare `NaN`, which `JSON.parse` rejects.
     with pytest.raises(ValueError):
-        dump_json({"resultMetadata": float("nan")})
+        dump_json({"value": float("nan")})
 
 
 def test_write_atomically_leaves_no_temporary_file_behind(run_directory: Path) -> None:
@@ -81,7 +81,7 @@ def test_write_json_atomically_rejects_nan_before_touching_the_filesystem(
 ) -> None:
     path = run_directory / layout.RESULT
     with pytest.raises(ValueError):
-        write_json_atomically(path, {"resultMetadata": float("nan")})
+        write_json_atomically(path, {"value": float("nan")})
 
     assert not path.exists()
     assert files_in(path.parent) == []

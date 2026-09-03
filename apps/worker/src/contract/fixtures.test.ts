@@ -87,11 +87,7 @@ describe('valid fixtures', () => {
   test('result.json parses into the values the parent writes to the database', () => {
     const result = parseResult(read('valid', 'result.json'));
 
-    expect(result.resultMetadata).toEqual({
-      rowsIn: 4821,
-      rowsCategorized: 4790,
-      productsUncategorized: 31,
-    });
+    expect(result.analysisAttemptId).toBe('0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f');
   });
 
   test('failure.json parses into a reason the database accepts', () => {

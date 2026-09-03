@@ -90,10 +90,7 @@ def test_progress_payload_is_the_fixture() -> None:
 
 
 def test_result_payload_is_the_fixture() -> None:
-    payload = result_payload(
-        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
-        result_metadata={"rowsIn": 4821, "rowsCategorized": 4790, "productsUncategorized": 31},
-    )
+    payload = result_payload(analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID)
 
     assert payload == load("valid", "result.json")
 

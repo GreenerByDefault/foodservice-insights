@@ -30,7 +30,6 @@ def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: 
     assert exit_code == names.EXIT_WROTE_RESULT
     assert read_json(run_directory / layout.RESULT) == {
         "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
-        "resultMetadata": {},
     }
     assert not (run_directory / layout.FAILURE).exists()
 

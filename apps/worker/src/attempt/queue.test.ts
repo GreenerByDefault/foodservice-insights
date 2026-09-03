@@ -108,7 +108,6 @@ function renewedSince(attempt: { leaseRenewedAt: Date | null }): number {
 
 const A_RESULT: ChildResult = {
   analysisAttemptId: crypto.randomUUID(),
-  resultMetadata: { rows: 1_234 },
 };
 
 describe('claiming', () => {
@@ -426,7 +425,6 @@ describe('finishing', () => {
     expect(finished.attempt).toMatchObject({
       status: 'succeeded',
       failureReason: null,
-      resultMetadata: A_RESULT.resultMetadata,
     });
     expect(finished.attempt.finishedAt).toBeInstanceOf(Date);
     expect(finished.files.map((file) => file.storageKey).sort()).toEqual(

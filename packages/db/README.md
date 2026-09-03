@@ -126,10 +126,3 @@ parent reaches through its own lifecycle,
 [`sweeps/reaper.ts`](../../apps/worker/src/sweeps/reaper.ts) writes the ones reaping converges, and
 [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) writes the notification
 columns above.
-
-## Open questions
-
-- **Open:** the AI metadata fields on `analysis_attempt` are a placeholder and may change. The
-  worker child fills `ai_metadata` and `result_metadata` from two deliberately opaque bags in
-  [`contract/`](../../contract/), so their shape is unconstrained until the analysis library is
-  ported. Deciding which keys graduate out of those bags into structured columns is a follow-up.

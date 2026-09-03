@@ -18,7 +18,7 @@ def outcome_with(output_directory: Path) -> AnalysisOutcome:
     xlsx = output_directory / "some-workbook-name.xlsx"
     pdf.write_bytes(b"%PDF-stub")
     xlsx.write_bytes(b"PKstub")
-    return AnalysisOutcome(pdf=pdf, xlsx=xlsx, metadata={})
+    return AnalysisOutcome(pdf=pdf, xlsx=xlsx)
 
 
 def test_renames_declared_files_to_contract_names(tmp_path: Path, output_directory: Path) -> None:

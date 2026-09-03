@@ -274,13 +274,15 @@ with its own entree detector.
       def categorize(self, cleaned_name: str, categories: Sequence[str]) -> str: ...
       def fuzzy_match_category(self, label: str, categories: Sequence[str]) -> str: ...
 
+
   @dataclass(frozen=True)
-  class OpenAiLlmClient:      # openai.OpenAI(max_retries=0, timeout=60): this loop is the one retry layer
+  class OpenAiLlmClient:  # openai.OpenAI(max_retries=0, timeout=60): this loop is the one retry layer
       client: openai.OpenAI
       model: str = "gpt-4.1-mini"
       sleep: Callable[[float], None] = time.sleep
+
       @classmethod
-      def from_env(cls) -> "OpenAiLlmClient": ...   # OPENAI_API_KEY
+      def from_env(cls) -> "OpenAiLlmClient": ...  # OPENAI_API_KEY
   ```
 
   `MAX_ATTEMPTS = 5`, exponential 2/4/8/16 s + jitter (≈30 s worst case per call, asserted
@@ -325,23 +327,50 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
   ```python
   LB_TO_KG: Final = 0.45359237
 
+
   def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -> AnalysisOutcome:
       llm = llm if llm is not None else OpenAiLlmClient.from_env()
-      df = _read_input_csv(request.input_csv)              # InvalidInputError on any shape problem
-      if request.unit_system == "lb": df["weight"] *= LB_TO_KG
+      df = _read_input_csv(request.input_csv)  # InvalidInputError on any shape problem
+      if request.unit_system == "lb":
+          df["weight"] *= LB_TO_KG
       df_final, summary, ai_review_df = categorize_products(
-          df, llm, get_previously_categorized_items(), dayfirst_preference=False, report_progress=report_progress)
-      report_input = request.work_directory / "categorized_report.csv"      # stem → food_report_report.{pdf,xlsx}
-      df_final.rename(columns={"weight": "kilos_total"})[["date", "product", "category", "kilos_total"]].to_csv(report_input, index=False)
-      (request.work_directory / "client_metadata.json").write_text(json.dumps(
-          {"client": _title(request), "baseline_pilot": "baseline", "procurement_serving": "procurement"}))
-      result = run_food_report(input_file=report_input, diner_meal_mapping=dict(request.monthly_counts),
-          output_dir=request.work_directory / "report", procurement_serving="procurement",
-          diner_or_meal={"people": "diner", "meals": "meal"}[request.counts_basis], region="us",
-          missing_data_policy="warn_continue", show_quality_successes=False, report_progress=report_progress)
-      pdf = _move(Path(result["pdf_path"]), request.output_directory)        # place_result_files renames
+          df,
+          llm,
+          get_previously_categorized_items(),
+          dayfirst_preference=False,
+          report_progress=report_progress,
+      )
+      report_input = (
+          request.work_directory / "categorized_report.csv"
+      )  # stem → food_report_report.{pdf,xlsx}
+      df_final.rename(columns={"weight": "kilos_total"})[
+          ["date", "product", "category", "kilos_total"]
+      ].to_csv(report_input, index=False)
+      (request.work_directory / "client_metadata.json").write_text(
+          json.dumps(
+              {
+                  "client": _title(request),
+                  "baseline_pilot": "baseline",
+                  "procurement_serving": "procurement",
+              }
+          )
+      )
+      result = run_food_report(
+          input_file=report_input,
+          diner_meal_mapping=dict(request.monthly_counts),
+          output_dir=request.work_directory / "report",
+          procurement_serving="procurement",
+          diner_or_meal={"people": "diner", "meals": "meal"}[request.counts_basis],
+          region="us",
+          missing_data_policy="warn_continue",
+          show_quality_successes=False,
+          report_progress=report_progress,
+      )
+      pdf = _move(Path(result["pdf_path"]), request.output_directory)  # place_result_files renames
       xlsx = _move(Path(result["client_excel_path"]), request.output_directory)
-      return AnalysisOutcome(pdf=pdf, xlsx=xlsx, metadata=json_safe(_metadata(summary, result, ai_review_df)))
+      return AnalysisOutcome(
+          pdf=pdf, xlsx=xlsx, metadata=json_safe(_metadata(summary, result, ai_review_df))
+      )
   ```
 
 - `matplotlib.use("Agg")` at the top of `analysis.py` before `food_report` is imported.

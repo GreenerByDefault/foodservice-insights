@@ -546,7 +546,6 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "failure_reason" "public"."analysis_failure_reason",
     "failure_detail" "text",
     "reaped_by_worker_id" "text",
-    "result_metadata" "jsonb",
     "notification_email_sent_at" timestamp with time zone,
     "notification_claimed_at" timestamp with time zone,
     "notification_claimed_by_worker_id" "text",

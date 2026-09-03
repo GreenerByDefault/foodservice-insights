@@ -567,7 +567,6 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addColumn('failure_reason', sql`analysis_failure_reason`)
     .addColumn('failure_detail', 'text')
     .addColumn('reaped_by_worker_id', 'text')
-    .addColumn('result_metadata', 'jsonb')
     .addColumn('notification_email_sent_at', 'timestamptz')
     .addColumn('notification_claimed_at', 'timestamptz')
     .addColumn('notification_claimed_by_worker_id', 'text')

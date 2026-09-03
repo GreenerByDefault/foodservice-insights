@@ -74,17 +74,10 @@ def progress_payload(sequence: int) -> dict[str, Any]:
     return {"sequence": sequence}
 
 
-def result_payload(
-    *,
-    analysis_attempt_id: str,
-    result_metadata: Mapping[str, Any],
-) -> dict[str, Any]:
+def result_payload(*, analysis_attempt_id: str) -> dict[str, Any]:
     _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
 
-    return {
-        "analysisAttemptId": analysis_attempt_id,
-        "resultMetadata": _opaque(result_metadata, "resultMetadata"),
-    }
+    return {"analysisAttemptId": analysis_attempt_id}
 
 
 def failure_payload(
@@ -96,12 +89,6 @@ def failure_payload(
     _require(reason in CHILD_FAILURE_REASONS, f"'{reason}' is not a reason a child may claim")
     _require(bool(detail), "detail must not be empty")
     return {"reason": reason, "detail": detail, "traceback": traceback}
-
-
-def _opaque(value: Mapping[str, Any], name: str) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        raise ContractError(f"{name} must be a JSON object")
-    return dict(value)
 
 
 def _require(condition: object, problem: str) -> None:
