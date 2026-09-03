@@ -27,8 +27,8 @@ check:
 
 # Test everything we ship.
 test:
-    uv run pytest -n auto python/gbd_foodservice_insights python/worker_child
+    uv run pytest -n auto python/insights python/worker_child
 
 # Test the lab, which ships nothing.
 test-lab:
-    uv run pytest -n auto python/gbd_foodservice_insights_lab
+    uv run pytest -n auto python/lab

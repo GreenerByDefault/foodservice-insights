@@ -32,7 +32,7 @@ touched the lab.
 - **Never add a `[tool.ruff]` section to a package's `pyproject.toml`.** Ruff binds each file
   to the *closest* `pyproject.toml` that has one, so a local section silently replaces the
   root config — including the lab ban — rather than extending it.
-- **Packaged assets live inside `src/<package>/`.** Hatchling ships every non-Python file
+- **Packaged assets live inside `<package>/`.** Hatchling ships every non-Python file
   under the package directory and nothing outside it.
 
 ## The lab boundary

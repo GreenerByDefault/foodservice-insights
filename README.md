@@ -38,9 +38,9 @@ packages/core/                          Shared TypeScript values and helpers
 packages/db/                            Kysely client, migrations, and generated types
 packages/email/                         The emails we send, and the transport under them
 packages/storage/                       Blob store client and object operations
-python/gbd_foodservice_insights/        The AI analysis library
+python/insights/                        The AI analysis library
 python/worker_child/                    One analysis run, spawned by the worker parent
-python/gbd_foodservice_insights_lab/    Data-science experiments; ships nothing
+python/lab/                             Data-science experiments; ships nothing
 contract/                               The worker parent ↔ child contract, parsed by both stacks
 supabase-dev/                           Local Supabase stack for development
 supabase-test/                          Local Supabase stack for tests

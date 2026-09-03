@@ -2,7 +2,7 @@
  * `apps/worker/src/worker.test.ts`.
  *
  * The report's *name* is what selects the scenario the stubbed child plays out; see
- * `python/worker_child/src/worker_child/testing.py` for the grammar.
+ * `python/worker_child/worker_child/testing.py` for the grammar.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -13,7 +13,7 @@ import { expect, type Page, test } from '@playwright/test';
 const CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 
 /** What `stub_analysis` writes in place of a real PDF. Copied from
- * `python/gbd_foodservice_insights/src/gbd_foodservice_insights/testing.py`'s `PDF_MAGIC_BYTES`,
+ * `python/insights/gbd_foodservice_insights/testing.py`'s `PDF_MAGIC_BYTES`,
  * which is the source of truth. */
 const STUB_PDF_MAGIC_BYTES = '%PDF-1.4\n%stub\n';
 

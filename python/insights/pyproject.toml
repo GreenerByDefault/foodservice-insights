@@ -12,4 +12,4 @@ build-backend = "hatchling.build"
 # Hatchling ships every non-Python file inside the package directory, so the packaged data
 # files and prompts need no glob list for a new file extension to fall out of.
 [tool.hatch.build.targets.wheel]
-packages = ["src/gbd_foodservice_insights"]
+packages = ["gbd_foodservice_insights"]

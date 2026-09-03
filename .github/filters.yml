@@ -51,7 +51,7 @@ ts:
 python:
   - '**'
   - *ts_workspace
-  - '!python/gbd_foodservice_insights_lab/**'
+  - '!python/lab/**'
   - *non_code
 
 # gbd_foodservice_insights_lab depends on gbd_foodservice_insights, so a core change reaches it;
@@ -66,5 +66,5 @@ python_lab:
 # exclusion, since nothing imports it and it's not in the worker image.
 system:
   - '**'
-  - '!python/gbd_foodservice_insights_lab/**'
+  - '!python/lab/**'
   - *non_code

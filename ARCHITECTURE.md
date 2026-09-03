@@ -41,8 +41,8 @@ keep settled decisions settled — read them before proposing a change.
 | Worker parent | TypeScript | Queue claiming, child process lifecycle, DB and blob store writes, email |
 | `packages/*` | TypeScript | Shared database, storage, email, and domain code |
 | `python/worker_child` | Python | One analysis run, via `gbd_foodservice_insights` |
-| `python/gbd_foodservice_insights` | Python | The AI analysis library |
-| `python/gbd_foodservice_insights_lab` | Python | Data-science experiments. Ships nothing |
+| `python/insights` | Python | The AI analysis library |
+| `python/lab` | Python | Data-science experiments. Ships nothing |
 
 Only the web app and the worker parent touch the database and blob store. The child process
 touches neither; it reads and writes a run directory the parent sets up for it.
