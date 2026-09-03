@@ -1,9 +1,8 @@
-import type { OrganizationId, UserId } from '@gbd/db';
+import type { UserId } from '@gbd/db';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { anAuthContext } from '$lib/server/tests/fixtures';
 import { database } from '../db.ts';
-import { findOrganizationAccess, loadAuthorization } from './authorization.ts';
+import { loadAuthorization } from './authorization.ts';
 
 describe('loadAuthorization', () => {
   test('returns the user and the organization they administer', async () => {
@@ -14,7 +13,7 @@ describe('loadAuthorization', () => {
 
       expect(auth).toMatchObject({
         user: { id: admin.id, isSuperadmin: false },
-        organizations: [
+        memberships: [
           { organizationId: organization.id, organizationName: 'Acme Foods', role: 'admin' },
         ],
       });
@@ -35,7 +34,7 @@ describe('loadAuthorization', () => {
 
       const auth = await loadAuthorization(transaction, user.id);
 
-      expect(auth?.organizations.map((access) => access.organizationName)).toEqual([
+      expect(auth?.memberships.map((access) => access.organizationName)).toEqual([
         'Apple Co',
         'Mango Co',
         'Zucchini Co',
@@ -62,7 +61,7 @@ describe('loadAuthorization', () => {
 
       const auth = await loadAuthorization(transaction, user.id);
 
-      expect(auth).toMatchObject({ user: { id: user.id }, organizations: [] });
+      expect(auth).toMatchObject({ user: { id: user.id }, memberships: [] });
     });
   });
 
@@ -73,26 +72,28 @@ describe('loadAuthorization', () => {
 
       const auth = await loadAuthorization(transaction, outsider.id);
 
-      expect(auth?.organizations).toEqual([]);
+      expect(auth?.memberships).toEqual([]);
     });
   });
 
-  test('gives a superadmin admin over organizations they hold no membership in', async () => {
+  test('gives a superadmin their own memberships, not every organization', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organization: apple } = await insertOrganization(transaction, { name: 'Apple Co' });
-      const { organization: mango } = await insertOrganization(transaction, { name: 'Mango Co' });
-      const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
+      await insertOrganization(transaction, { name: 'Apple Co' });
+      const { organization: mango, admin: superadmin } = await insertOrganization(transaction, {
+        name: 'Mango Co',
+      });
+      await transaction
+        .updateTable('appUser')
+        .set({ isSuperadmin: true })
+        .where('id', '=', superadmin.id)
+        .execute();
 
       const auth = await loadAuthorization(transaction, superadmin.id);
 
-      // A superadmin sees every organization in the database — including the seeded placeholder
-      // and the rows other test files commit for real while this one runs (see
-      // packages/db/src/testing/concurrency.ts) — so assert only on the ones this test created.
-      const created = (auth?.organizations ?? []).filter((org) =>
-        [apple.id, mango.id].includes(org.organizationId),
-      );
-      expect(created).toEqual([
-        { organizationId: apple.id, organizationName: 'Apple Co', role: 'admin' },
+      // A superadmin's memberships are exactly the organizations they hold a genuine
+      // `organization_member` row in — creating Mango Co enrolled them there — never the whole
+      // table. `requireOrganizationAccess` is what grants them access beyond this list.
+      expect(auth?.memberships).toEqual([
         { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
       ]);
     });
@@ -117,25 +118,5 @@ describe('loadAuthorization', () => {
 
       await expect(loadAuthorization(transaction, user.id)).rejects.toThrow(/has no email/);
     });
-  });
-});
-
-const ORGANIZATION_ID = crypto.randomUUID() as OrganizationId;
-
-describe('findOrganizationAccess', () => {
-  test('finds the access the user holds', () => {
-    const access = {
-      organizationId: ORGANIZATION_ID,
-      organizationName: 'Acme Foods',
-      role: 'member',
-    } as const;
-
-    expect(
-      findOrganizationAccess(anAuthContext({ organizations: [access] }), ORGANIZATION_ID),
-    ).toBe(access);
-  });
-
-  test('is undefined where the user has none', () => {
-    expect(findOrganizationAccess(anAuthContext(), ORGANIZATION_ID)).toBeUndefined();
   });
 });

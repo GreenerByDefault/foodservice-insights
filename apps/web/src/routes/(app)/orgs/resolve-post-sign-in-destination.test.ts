@@ -56,7 +56,7 @@ test('a waiting invite comes before anything else, even for an existing member',
   await withRollback(database(), async (transaction) => {
     const email = anEmail();
     await inviteExpiring(transaction, email, IN_A_WEEK);
-    const auth = anAuthContext({ user: { email }, organizations: [accessTo('Acme Foods')] });
+    const auth = anAuthContext({ user: { email }, memberships: [accessTo('Acme Foods')] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe('/invites');
   });
@@ -67,7 +67,7 @@ test('an invite past its deadline is ignored, however its status still reads', a
     const email = anEmail();
     await inviteExpiring(transaction, email, A_WEEK_AGO);
     const access = accessTo('Acme Foods');
-    const auth = anAuthContext({ user: { email }, organizations: [access] });
+    const auth = anAuthContext({ user: { email }, memberships: [access] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
       `/orgs/${access.organizationId}`,
@@ -80,7 +80,7 @@ test('an accepted invite is ignored even though it has not expired', async () =>
     const email = anEmail();
     await inviteExpiring(transaction, email, IN_A_WEEK, 'accepted');
     const access = accessTo('Acme Foods');
-    const auth = anAuthContext({ user: { email }, organizations: [access] });
+    const auth = anAuthContext({ user: { email }, memberships: [access] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
       `/orgs/${access.organizationId}`,
@@ -106,10 +106,18 @@ test('somebody who can reach nowhere is sent to create an organization', async (
   });
 });
 
+test('a superadmin with no memberships stays on the picker instead, since they may act everywhere', async () => {
+  await withRollback(database(), async (transaction) => {
+    const auth = anAuthContext({ user: { email: anEmail(), isSuperadmin: true } });
+
+    await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBeNull();
+  });
+});
+
 test('one organization skips the picker', async () => {
   await withRollback(database(), async (transaction) => {
     const access = accessTo('Acme Foods');
-    const auth = anAuthContext({ user: { email: anEmail() }, organizations: [access] });
+    const auth = anAuthContext({ user: { email: anEmail() }, memberships: [access] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
       `/orgs/${access.organizationId}`,
@@ -121,7 +129,7 @@ test('several organizations means staying on the picker', async () => {
   await withRollback(database(), async (transaction) => {
     const auth = anAuthContext({
       user: { email: anEmail() },
-      organizations: [accessTo('Acme Foods'), accessTo('Zenith Dining')],
+      memberships: [accessTo('Acme Foods'), accessTo('Zenith Dining')],
     });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBeNull();

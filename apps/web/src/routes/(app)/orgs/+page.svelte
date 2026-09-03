@@ -12,7 +12,7 @@ let { data }: PageProps = $props();
 <PageHeading>Choose an organization</PageHeading>
 
 <ul class="flex flex-col gap-2">
-  {#each data.auth.organizations as organization (organization.organizationId)}
+  {#each data.auth.memberships as organization (organization.organizationId)}
     <li>
       <a class="underline hover:no-underline" href={organizationHref(organization.organizationId)}>
         {organization.organizationName}

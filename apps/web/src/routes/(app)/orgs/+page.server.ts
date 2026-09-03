@@ -20,9 +20,14 @@ export async function _resolvePostSignInDestination(
   auth: AuthContext,
 ): Promise<string | null> {
   if (await hasLiveInvite(db, auth)) return '/invites';
-  if (auth.organizations.length === 0) return '/orgs/new';
 
-  const singleOrg = auth.organizations.length === 1 ? auth.organizations[0] : undefined;
+  // Even if a superadmin doesn't belong as a normal member to any organizations,
+  // they should see the full organization list rather than the org creation list.
+  if (auth.user.isSuperadmin) return null;
+
+  if (auth.memberships.length === 0) return '/orgs/new';
+
+  const singleOrg = auth.memberships.length === 1 ? auth.memberships[0] : undefined;
   return singleOrg ? organizationHref(singleOrg.organizationId) : null;
 }
 

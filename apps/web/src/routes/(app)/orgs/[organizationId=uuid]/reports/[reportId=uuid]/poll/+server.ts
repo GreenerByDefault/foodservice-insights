@@ -13,7 +13,7 @@ import type { RequestHandler } from './$types';
  * staying on screen needs.
  */
 export const GET: RequestHandler = async (event) => {
-  const { organizationId, reportId } = requireReportRouteContext(event);
+  const { organizationId, reportId } = await requireReportRouteContext(database(), event);
 
   // Same query as the page's own `load`, so a first request landing here directly gets the same
   // 404/500 shape.

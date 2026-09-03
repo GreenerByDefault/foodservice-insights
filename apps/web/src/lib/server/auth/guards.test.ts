@@ -1,5 +1,7 @@
 import type { OrganizationId } from '@gbd/db';
+import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
+import { database } from '$lib/server/db';
 import { anAuthContext } from '$lib/server/tests/fixtures';
 import { statusOf } from '$lib/server/tests/http-error';
 import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
@@ -9,7 +11,7 @@ const ORGANIZATION_ID = crypto.randomUUID() as OrganizationId;
 
 function withRoleIn(role: 'member' | 'admin'): AuthContext {
   return anAuthContext({
-    organizations: [{ organizationId: ORGANIZATION_ID, organizationName: 'Acme Foods', role }],
+    memberships: [{ organizationId: ORGANIZATION_ID, organizationName: 'Acme Foods', role }],
   });
 }
 
@@ -29,35 +31,88 @@ describe('requireAuth', () => {
 });
 
 describe('requireOrganizationAccess', () => {
-  test('returns the access', () => {
-    expect(requireOrganizationAccess(withRoleIn('member'), ORGANIZATION_ID)).toEqual({
+  test('returns the access a membership row grants', async () => {
+    await expect(
+      requireOrganizationAccess(database(), withRoleIn('member'), ORGANIZATION_ID),
+    ).resolves.toEqual({
       organizationId: ORGANIZATION_ID,
       organizationName: 'Acme Foods',
       role: 'member',
     });
   });
 
-  test('404s someone with no access rather than 403ing them', async () => {
+  test('404s a non-superadmin with no membership, rather than 403ing them', async () => {
     await expect(
-      statusOf(() => requireOrganizationAccess(anAuthContext(), ORGANIZATION_ID)),
+      statusOf(() => requireOrganizationAccess(database(), anAuthContext(), ORGANIZATION_ID)),
     ).resolves.toEqual({ status: 404, code: 'not_found' });
+  });
+
+  test('a superadmin with no membership is admin anyway', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction, { name: 'Acme Foods' });
+      const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
+      const auth = anAuthContext({ user: { id: superadmin.id, isSuperadmin: true } });
+
+      await expect(requireOrganizationAccess(transaction, auth, organization.id)).resolves.toEqual({
+        organizationId: organization.id,
+        organizationName: 'Acme Foods',
+        role: 'admin',
+      });
+    });
+  });
+
+  // The demotion trap: a superadmin who created an organization holds a genuine `member` row
+  // there (`organization_check_has_member`), and that row must not shadow the superadmin flag.
+  test("a superadmin holding a member row is still admin, not the row's own role", async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction, { name: 'Acme Foods' });
+      await transaction
+        .updateTable('appUser')
+        .set({ isSuperadmin: true })
+        .where('id', '=', admin.id)
+        .execute();
+      const auth = anAuthContext({
+        user: { id: admin.id, isSuperadmin: true },
+        memberships: [
+          { organizationId: organization.id, organizationName: 'Acme Foods', role: 'admin' },
+        ],
+      });
+
+      await expect(requireOrganizationAccess(transaction, auth, organization.id)).resolves.toEqual({
+        organizationId: organization.id,
+        organizationName: 'Acme Foods',
+        role: 'admin',
+      });
+    });
+  });
+
+  test('404s a superadmin on an organization id that does not exist', async () => {
+    await withRollback(database(), async (transaction) => {
+      const auth = anAuthContext({ user: { isSuperadmin: true } });
+
+      await expect(
+        statusOf(() => requireOrganizationAccess(transaction, auth, ORGANIZATION_ID)),
+      ).resolves.toEqual({ status: 404, code: 'not_found' });
+    });
   });
 });
 
 describe('requireOrganizationAdmin', () => {
-  test('lets an admin through', () => {
-    expect(() => requireOrganizationAdmin(withRoleIn('admin'), ORGANIZATION_ID)).not.toThrow();
+  test('lets an admin through', async () => {
+    await expect(
+      requireOrganizationAdmin(database(), withRoleIn('admin'), ORGANIZATION_ID),
+    ).resolves.toBeUndefined();
   });
 
   test('403s a plain member', async () => {
     await expect(
-      statusOf(() => requireOrganizationAdmin(withRoleIn('member'), ORGANIZATION_ID)),
+      statusOf(() => requireOrganizationAdmin(database(), withRoleIn('member'), ORGANIZATION_ID)),
     ).resolves.toEqual({ status: 403, code: 'forbidden' });
   });
 
   test('404s an outsider', async () => {
     await expect(
-      statusOf(() => requireOrganizationAdmin(anAuthContext(), ORGANIZATION_ID)),
+      statusOf(() => requireOrganizationAdmin(database(), anAuthContext(), ORGANIZATION_ID)),
     ).resolves.toEqual({ status: 404, code: 'not_found' });
   });
 });

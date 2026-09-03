@@ -10,7 +10,7 @@ import { blobStore } from '../storage.ts';
 export function anAuthContext(
   overrides: {
     user?: Partial<AuthenticatedUser>;
-    organizations?: readonly OrganizationAccess[];
+    memberships?: readonly OrganizationAccess[];
   } = {},
 ): AuthContext {
   return {
@@ -21,7 +21,7 @@ export function anAuthContext(
       isSuperadmin: false,
       ...overrides.user,
     },
-    organizations: overrides.organizations ?? [],
+    memberships: overrides.memberships ?? [],
   };
 }
 

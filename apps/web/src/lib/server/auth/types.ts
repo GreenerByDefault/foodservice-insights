@@ -14,18 +14,20 @@ export type OrganizationAccess = {
   role: OrganizationRole;
 };
 
-/** Every organization the user may act in, and what they may do in each.
+/** The organizations the user genuinely belongs to, and what they may do in each.
  *
- * A user can act in several organizations. Which one a request acts on is a property of the
+ * A user can belong to several organizations. Which one a request acts on is a property of the
  * request, resolved by the route, not of the user.
  *
- * This is what the user *may do*, not what they *belong to*: a superadmin holds no
- * `organization_member` row anywhere, and `loadAuthorization` still lists every organization here
- * for them. `user.isSuperadmin` is the only truthful answer to "is this person a member".
+ * This is a membership list, not an access list: a superadmin's may be empty, or may hold rows
+ * like anyone else's — creating an organization enrolls its creator as an `organization_member`,
+ * superadmin or not (see `organization_check_has_member`). `user.isSuperadmin` is what actually
+ * grants access beyond this list; resolving *that* is `requireOrganizationAccess`'s job, not
+ * this type's.
  */
 export type AuthContext = {
   user: AuthenticatedUser;
-  organizations: readonly OrganizationAccess[];
+  memberships: readonly OrganizationAccess[];
 };
 
 /** Who is making a request, and in what role. */

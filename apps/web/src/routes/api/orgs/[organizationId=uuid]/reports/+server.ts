@@ -35,7 +35,7 @@ export type Uploader = { organizationId: OrganizationId; userId: UserId };
 export const POST: RequestHandler = async ({ request, params, locals }) => {
   const auth = requireAuth(locals);
   const organizationId = params.organizationId as OrganizationId;
-  requireOrganizationAccess(auth, organizationId);
+  await requireOrganizationAccess(database(), auth, organizationId);
 
   return await _createReport(
     database(),
