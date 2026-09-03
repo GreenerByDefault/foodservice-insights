@@ -2,6 +2,7 @@
 import { createPoller } from '$lib/polling/create-poller.svelte';
 import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
 import { isWaiting } from '$lib/reports/attempt-status';
+import { SETTLED_ON_PAGE } from '$lib/reports/status-copy';
 import type { ReportPageData } from './+page.server.ts';
 import CanceledView from './canceled-view.svelte';
 import FailureView from './failure-view.svelte';
@@ -40,17 +41,9 @@ const poller = createPoller({
 
 /** What the live region announces. */
 function screenHeadline(report: ReportPageData): string {
-  switch (report.attempt.status) {
-    case 'pending':
-    case 'processing':
-      return describeProgress(report.attempt, report.now).headline;
-    case 'succeeded':
-      return 'Your report is ready';
-    case 'failed':
-      return 'Your report could not be finished';
-    case 'canceled':
-      return 'This report was stopped';
-  }
+  return isWaiting(report.attempt)
+    ? describeProgress(report.attempt, report.now).headline
+    : SETTLED_ON_PAGE[report.attempt.status];
 }
 </script>
 
