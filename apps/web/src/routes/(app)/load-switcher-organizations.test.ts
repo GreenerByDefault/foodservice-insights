@@ -31,42 +31,45 @@ test('a member under the cap sees every organization they belong to, unsliced', 
   const memberships = paddedNames(3).map(membershipTo);
   const auth = anAuthContext({ memberships });
 
-  const organizations = await _loadSwitcherOrganizations(database(), auth);
+  const result = await _loadSwitcherOrganizations(database(), auth);
 
-  expect(organizations).toEqual(
-    memberships.map(({ organizationId, organizationName }) => ({
+  expect(result).toEqual({
+    organizations: memberships.map(({ organizationId, organizationName }) => ({
       id: organizationId,
       name: organizationName,
     })),
-  );
+    hasMoreOrganizations: false,
+  });
 });
 
-test('a member of more than _SWITCHER_LIMIT organizations is truncated at exactly the cap', async () => {
+test('a member of more than _SWITCHER_LIMIT organizations is truncated, with hasMoreOrganizations', async () => {
   const memberships = paddedNames(_SWITCHER_LIMIT + 3).map(membershipTo);
   const auth = anAuthContext({ memberships });
 
-  const organizations = await _loadSwitcherOrganizations(database(), auth);
+  const result = await _loadSwitcherOrganizations(database(), auth);
 
-  expect(organizations).toEqual(
+  expect(result.organizations).toEqual(
     memberships.slice(0, _SWITCHER_LIMIT).map(({ organizationId, organizationName }) => ({
       id: organizationId,
       name: organizationName,
     })),
   );
+  expect(result.hasMoreOrganizations).toBe(true);
 });
 
-test('a superadmin sees the organization table itself, alphabetically, limited to the cap', async () => {
+test('a superadmin sees the organization table itself, alphabetically, limited and flagged for overflow', async () => {
   await withRollback(database(), async (transaction) => {
     const names = paddedNamesSortingFirst(_SWITCHER_LIMIT + 2);
     for (const name of names) await insertOrganization(transaction, { name });
     const auth = anAuthContext({ user: { isSuperadmin: true } });
 
-    const organizations = await _loadSwitcherOrganizations(transaction, auth);
+    const result = await _loadSwitcherOrganizations(transaction, auth);
 
     // These sort ahead of everything else in the table (see `paddedNamesSortingFirst`), so the
     // capped result is exactly our own first _SWITCHER_LIMIT — not "some _SWITCHER_LIMIT rows".
-    expect(organizations.map((organization) => organization.name)).toEqual(
+    expect(result.organizations.map((organization) => organization.name)).toEqual(
       names.slice(0, _SWITCHER_LIMIT),
     );
+    expect(result.hasMoreOrganizations).toBe(true);
   });
 });

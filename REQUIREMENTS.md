@@ -168,7 +168,9 @@ admins for *all* organizations.
 
 - The UI does not show the superadmin in an organization's membership management.
 - The superadmin does not count toward the one-admin-per-org invariant.
-- The superadmin sees all orgs in the org switcher.
+- The org switcher shows the superadmin up to eight organizations, current one first, and links
+  to `/orgs` for the rest — the same cap and layout everyone else's switcher uses. `/orgs` itself
+  lists every organization, unpaginated.
 
 ### GBD email notifications
 
