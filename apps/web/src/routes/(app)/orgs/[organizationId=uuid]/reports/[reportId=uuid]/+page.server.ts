@@ -13,9 +13,18 @@ import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { env } from '$env/dynamic/private';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import {
+  cancelReportApiHref,
+  inputFileHref,
+  newReportHref,
+  organizationHref,
+  reportApiHref,
+  reportPollHref,
+  resultFileHref,
+  retryReportApiHref,
+} from '$lib/hrefs';
 import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { screenStatus } from '$lib/reports/attempt-status';
-import { newReportHref, organizationHref, reportHref } from '$lib/reports/hrefs';
 import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requireVar } from '$lib/server/env';
@@ -175,17 +184,17 @@ export async function _loadReport(
         ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
         : null,
     },
-    cancelButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/cancel`,
-    retryButtonHref: `/api/orgs/${params.organizationId}/reports/${row.reportId}/retry`,
+    cancelButtonHref: cancelReportApiHref(params.organizationId, row.reportId),
+    retryButtonHref: retryReportApiHref(params.organizationId, row.reportId),
     newReportHref: newReportHref(params.organizationId),
     deleteAction: {
-      href: `/api/orgs/${params.organizationId}/reports/${row.reportId}`,
+      href: reportApiHref(params.organizationId, row.reportId),
       afterHref: organizationHref(params.organizationId),
     },
-    pollHref: `${reportHref(params.organizationId, row.reportId)}/poll`,
+    pollHref: reportPollHref(params.organizationId, row.reportId),
     pollIntervalMs: params.pollIntervalMs,
     inputFile: {
-      href: `/file/input/${row.inputFileId}`,
+      href: inputFileHref(row.inputFileId),
       originalFilename: row.inputFileOriginalFilename,
       byteSize: row.inputFileByteSize,
     },
@@ -288,8 +297,4 @@ async function loadResultFiles(
 
 function toFileLink(file: { id: ResultFileId }): FileLink {
   return { href: resultFileHref(file.id) };
-}
-
-function resultFileHref(id: ResultFileId): string {
-  return `/file/result/${id}`;
 }

@@ -19,6 +19,10 @@ poll, and any write like cancel or retry — so a flaky connection can never und
 did. *Rejected: `invalidate()`, because its request falls back to a full-page navigation when the
 network is what failed.* The reasoning is in `reports/[reportId]/poll/+server.ts`.
 
+**A URL that carries an id comes from `src/lib/hrefs.ts`** — never spelled out again by the loader
+that hands it out or the component that follows it. One with no id in it stays a literal where it
+is used.
+
 **A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
 already is, so there is no `?next=` to carry anywhere.
 

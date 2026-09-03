@@ -3,6 +3,7 @@
 import type { DatabaseExecutor } from '@gbd/db';
 import { redirect } from '@sveltejs/kit';
 import { sql } from 'kysely';
+import { organizationHref } from '$lib/hrefs';
 import { requireAuth } from '$lib/server/auth/guards';
 import type { AuthContext } from '$lib/server/auth/types';
 import { database, withDbErrorHandling } from '$lib/server/db';
@@ -22,7 +23,7 @@ export async function _resolvePostSignInDestination(
   if (auth.organizations.length === 0) return '/orgs/new';
 
   const singleOrg = auth.organizations.length === 1 ? auth.organizations[0] : undefined;
-  return singleOrg ? `/orgs/${singleOrg.organizationId}` : null;
+  return singleOrg ? organizationHref(singleOrg.organizationId) : null;
 }
 
 /** Whether an invite is waiting that has not run out. */
