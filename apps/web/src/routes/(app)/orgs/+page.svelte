@@ -1,19 +1,15 @@
 <script lang="ts">
 import PageHeading from '$lib/components/page-heading.svelte';
-import { organizationHref } from '$lib/hrefs';
+import { Button } from '$lib/components/ui/button';
 import type { PageProps } from './$types';
+import OrganizationsList from './organizations-list.svelte';
 
 let { data }: PageProps = $props();
 </script>
 
-<PageHeading>Choose an organization</PageHeading>
+<div class="flex w-full flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <PageHeading>Organizations</PageHeading>
+  <Button href="/orgs/new">New organization</Button>
+</div>
 
-<ul class="flex flex-col gap-2">
-  {#each data.organizations as organization (organization.id)}
-    <li>
-      <a class="underline hover:no-underline" href={organizationHref(organization.id)}>
-        {organization.name}
-      </a>
-    </li>
-  {/each}
-</ul>
+<OrganizationsList organizations={data.organizations} />

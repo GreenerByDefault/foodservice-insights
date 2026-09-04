@@ -19,6 +19,7 @@ import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
+import { stubOrganizationsAsEmpty } from '../lib/stub-page-data.ts';
 
 // Both tests below use a "24/7 "-prefixed name to dominate the sort order (see the file doc
 // comment above), which only keeps *other* specs out — nothing stops these two tests' own
@@ -79,7 +80,28 @@ test('the /orgs list, past eight organizations', async ({ page, organizationMemb
   const lastRow = page.getByRole('link', { name: names.at(-1) });
   await expect(lastRow).toBeVisible();
 
-  // Hover the unopened switcher so the committed image also shows its hover affordance.
-  await page.getByRole('button', { name: 'Switch organization' }).hover();
+  // Hover one row so the committed image also shows the hover affordance.
+  await page.getByRole('link', { name: '24/7 List Cedar Grove Dining' }).hover();
   await expectScreenshots(page, 'orgs-list.png', { clipBelow: lastRow });
+});
+
+test('the /orgs list, empty', async ({ page, organizationMemberships }) => {
+  // A letter-led name is fine here, unlike the two tests above: this list is stubbed empty before
+  // it's captured, so there is no sort order of real rows to defend against other specs'.
+  const name = 'Waypoint Foodservice';
+  await organizationMemberships.create({ name });
+
+  await page.goto('/orgs');
+  await ensureHydrated(page);
+  await stubOrganizationsAsEmpty(page);
+
+  // Into an organization and back out again — the only way to trigger the client-side navigation
+  // that `stubOrganizationsAsEmpty` waits for (see its doc comment).
+  await page.getByRole('link', { name }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+  await page.goBack();
+
+  await expect(page.getByText('No organizations yet.')).toBeVisible();
+  await expect(page.getByRole('link', { name })).toHaveCount(0);
+  await expectScreenshots(page, 'orgs-list-empty.png');
 });

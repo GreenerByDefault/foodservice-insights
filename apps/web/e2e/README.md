@@ -74,6 +74,10 @@ own — grants the placeholder user membership in a second, dedicated organizati
 duration instead. `auth.e2e.ts` no longer assumes the placeholder user belongs to exactly one
 organization, so doing this does not race that spec the way it once did.
 
+One screen has no fixture that can reach it: an empty `/orgs`, since the placeholder user always
+belongs to at least one organization. `lib/stub-page-data.ts` rewrites the page-data response
+instead — a temporary stand-in for real sign-in, same as `identifyUser`.
+
 ## Pending
 
 `requireAuth`/`requireOrganizationAccess` guard every route below, but `identifyUser` always
