@@ -1,6 +1,6 @@
 /** A list of all organizations the user belongs to, in alphabetical order. */
 
-import type { DatabaseExecutor } from '@gbd/db';
+import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
 import { redirect } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { organizationHref } from '$lib/hrefs';
@@ -8,6 +8,8 @@ import { requireAuth } from '$lib/server/auth/guards';
 import type { AuthContext } from '$lib/server/auth/types';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
+
+export type OrganizationListRow = { id: OrganizationId; name: string };
 
 export const load: PageServerLoad = async ({ locals }) => {
   const auth = requireAuth(locals);
@@ -20,7 +22,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 export async function _loadAllOrganizations(
   db: DatabaseExecutor,
   auth: AuthContext,
-): Promise<readonly { id: string; name: string }[]> {
+): Promise<readonly OrganizationListRow[]> {
   if (!auth.user.isSuperadmin) {
     return auth.memberships.map((membership) => ({
       id: membership.organizationId,
