@@ -31,16 +31,11 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 /** The organizations the switcher offers this user, capped at `_SWITCHER_LIMIT`.
  *
- * A superadmin sees the whole `organization` table, alphabetically, in one bounded query — the
- * unbounded scan this replaced (see `requireOrganizationAccess`) is already fixed there; this is
- * the one remaining place that read every organization, now bounded by `LIMIT`. Everyone else is
- * already holding their full membership list in `auth.memberships`, ordered by name (see
- * `memberOrganizations`), so this reads no database at all.
- *
- * Truncated here, not only in the switcher component: `auth.memberships` isn't bounded by the
- * five-organization create limit — invites can put a user in far more — so leaving it unsliced
- * would report `hasMoreOrganizations` as false while quietly handing the component more rows than
- * it renders.
+ * A superadmin sees the whole `organization` table, alphabetically. It's a bounded query, unlike
+ * `orgs/+page.server.ts`'s `_loadAllOrganizations`, which reads the same table unbounded for the
+ * full `/orgs` picker. Non superadmins already hold their full membership list in
+ * `auth.memberships`, ordered by name (see `memberOrganizations`), so they don't need the
+ * database.
  */
 export async function _loadSwitcherOrganizations(
   db: DatabaseExecutor,
