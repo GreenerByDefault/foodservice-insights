@@ -27,9 +27,7 @@ test.describe.configure({ mode: 'serial' });
 
 test('the header switcher list, past the cap', async ({ page, organizationMemberships }) => {
   // Already alphabetical, so navigating to the first one keeps it inside the server's own
-  // first-eight slice — this branch's header list has no current-first reordering of its own
-  // (that lands with the dropdown-menu switcher in `org-switcher`), so a name past the cap simply
-  // wouldn't appear in it.
+  // first-eight slice — a name past the cap simply wouldn't appear in the list.
   const names = [
     '24/7 Switcher Acme Foodservice', // navigated to below
     '24/7 Switcher Bakers Row',
@@ -51,8 +49,7 @@ test('the header switcher list, past the cap', async ({ page, organizationMember
   await page.locator('summary').click();
   // Scoped to the switcher's own list, not the page as a whole — the organization page renders
   // its own nav links ("Reports", "Members", "Settings") that `getByRole('link')` would otherwise
-  // pick up too. The server-side cap is what this test guards: the list never grows past it, no
-  // matter how many organizations the user belongs to.
+  // pick up too.
   const organizationRows = page.locator('details ul a').filter({ hasNotText: 'New organization' });
   await expect(organizationRows).toHaveCount(8);
 

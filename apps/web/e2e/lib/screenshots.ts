@@ -32,12 +32,10 @@ export async function expectScreenshots(
   options: {
     /** Crop the capture to end just past this locator's bottom edge, instead of the full page.
      *
-     * For a listing with no natural bound of its own — the organization switcher and `/orgs`
-     * both show *every* organization the signed-in user belongs to, and every spec shares that
-     * one identity (see `e2e/fixtures/organizations.ts`) — content after the fixture's own last
-     * row is whatever else happens to be committed by a concurrently running spec, not something
-     * this test controls. Naming that row here keeps it out of the captured image instead of
-     * fighting to make the whole unbounded list deterministic.
+     * For a listing with no natural bound of its own, where content past the last row a spec
+     * created could be anything else committed concurrently — not something the spec controls.
+     * Naming that row here keeps it out of the captured image instead of fighting to make the
+     * whole unbounded list deterministic.
      */
     clipBelow?: Locator;
   } = {},
