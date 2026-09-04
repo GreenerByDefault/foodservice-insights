@@ -51,6 +51,9 @@ test('the full switcher, past the cap', async ({ page, organizationMemberships }
   await page.getByRole('button', { name: 'Switch organization' }).click();
   await expect(page.getByRole('menuitem', { name: 'View all organizations' })).toBeVisible();
 
+  // Hover one row so the committed image also shows the hover affordance.
+  await page.getByRole('menuitem', { name: '24/7 Switcher Bakers Row' }).hover();
+
   await expectScreenshots(page, 'organization-switcher.png');
 });
 

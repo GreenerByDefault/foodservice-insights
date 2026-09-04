@@ -1,23 +1,14 @@
-import type { Database, OrganizationId, OrganizationInviteStatus } from '@gbd/db';
+import type { Database, OrganizationInviteStatus } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
 import { expect, test } from 'vitest';
-import type { OrganizationAccess } from '$lib/server/auth/types';
 import { database } from '$lib/server/db';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext, anOrganizationAccess } from '$lib/server/tests/fixtures';
 import { _resolvePostSignInDestination } from './+page.server.ts';
 
 function anEmail(): string {
   // A unique address per test, so no test can see another's invite.
   return `${crypto.randomUUID()}@example.test`;
-}
-
-function accessTo(name: string): OrganizationAccess {
-  return {
-    organizationId: crypto.randomUUID() as OrganizationId,
-    organizationName: name,
-    role: 'member',
-  };
 }
 
 const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
@@ -56,7 +47,10 @@ test('a waiting invite comes before anything else, even for an existing member',
   await withRollback(database(), async (transaction) => {
     const email = anEmail();
     await inviteExpiring(transaction, email, IN_A_WEEK);
-    const auth = anAuthContext({ user: { email }, memberships: [accessTo('Acme Foods')] });
+    const auth = anAuthContext({
+      user: { email },
+      memberships: [anOrganizationAccess('Acme Foods')],
+    });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe('/invites');
   });
@@ -66,7 +60,7 @@ test('an invite past its deadline is ignored, however its status still reads', a
   await withRollback(database(), async (transaction) => {
     const email = anEmail();
     await inviteExpiring(transaction, email, A_WEEK_AGO);
-    const access = accessTo('Acme Foods');
+    const access = anOrganizationAccess('Acme Foods');
     const auth = anAuthContext({ user: { email }, memberships: [access] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
@@ -79,7 +73,7 @@ test('an accepted invite is ignored even though it has not expired', async () =>
   await withRollback(database(), async (transaction) => {
     const email = anEmail();
     await inviteExpiring(transaction, email, IN_A_WEEK, 'accepted');
-    const access = accessTo('Acme Foods');
+    const access = anOrganizationAccess('Acme Foods');
     const auth = anAuthContext({ user: { email }, memberships: [access] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
@@ -116,7 +110,7 @@ test('a superadmin with no memberships stays on the picker instead, since they m
 
 test('one organization skips the picker', async () => {
   await withRollback(database(), async (transaction) => {
-    const access = accessTo('Acme Foods');
+    const access = anOrganizationAccess('Acme Foods');
     const auth = anAuthContext({ user: { email: anEmail() }, memberships: [access] });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBe(
@@ -129,7 +123,7 @@ test('several organizations means staying on the picker', async () => {
   await withRollback(database(), async (transaction) => {
     const auth = anAuthContext({
       user: { email: anEmail() },
-      memberships: [accessTo('Acme Foods'), accessTo('Zenith Dining')],
+      memberships: [anOrganizationAccess('Acme Foods'), anOrganizationAccess('Zenith Dining')],
     });
 
     await expect(_resolvePostSignInDestination(transaction, auth)).resolves.toBeNull();

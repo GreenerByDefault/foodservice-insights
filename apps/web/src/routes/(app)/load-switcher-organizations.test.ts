@@ -1,18 +1,8 @@
-import type { OrganizationId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { expect, test } from 'vitest';
-import type { OrganizationAccess } from '$lib/server/auth/types';
 import { database } from '$lib/server/db';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext, anOrganizationAccess } from '$lib/server/tests/fixtures';
 import { _loadSwitcherOrganizations, _SWITCHER_LIMIT } from './+layout.server.ts';
-
-function membershipTo(name: string): OrganizationAccess {
-  return {
-    organizationId: crypto.randomUUID() as OrganizationId,
-    organizationName: name,
-    role: 'member',
-  };
-}
 
 function paddedNames(count: number): string[] {
   return Array.from({ length: count }, (_, i) => `Org ${String(i).padStart(2, '0')}`);
@@ -28,7 +18,7 @@ function paddedNamesSortingFirst(count: number): string[] {
 }
 
 test('a member under the cap sees every organization they belong to, unsliced', async () => {
-  const memberships = paddedNames(3).map(membershipTo);
+  const memberships = paddedNames(3).map((name) => anOrganizationAccess(name));
   const auth = anAuthContext({ memberships });
 
   const result = await _loadSwitcherOrganizations(database(), auth);
@@ -43,7 +33,7 @@ test('a member under the cap sees every organization they belong to, unsliced', 
 });
 
 test('a member of more than _SWITCHER_LIMIT organizations is truncated, with hasMoreOrganizations', async () => {
-  const memberships = paddedNames(_SWITCHER_LIMIT + 3).map(membershipTo);
+  const memberships = paddedNames(_SWITCHER_LIMIT + 3).map((name) => anOrganizationAccess(name));
   const auth = anAuthContext({ memberships });
 
   const result = await _loadSwitcherOrganizations(database(), auth);

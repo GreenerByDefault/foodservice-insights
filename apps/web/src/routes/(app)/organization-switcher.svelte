@@ -6,6 +6,7 @@ import PlusIcon from '@lucide/svelte/icons/plus';
 import { Button } from '$lib/components/ui/button';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import { organizationHref } from '$lib/hrefs';
+import { cnChildProps } from '$lib/utils/shadcn.js';
 
 type SwitcherOrganization = { id: string; name: string };
 
@@ -52,7 +53,11 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
     {#each menuOrganizations as organization (organization.id)}
       <DropdownMenu.Item class="px-3 py-2">
         {#snippet child({ props })}
-          <a {...props} href={organizationHref(organization.id)} class="flex items-center gap-2">
+          <a
+            {...props}
+            href={organizationHref(organization.id)}
+            class={cnChildProps(props, 'flex items-center gap-2')}
+          >
             <CheckIcon
               class={['size-4 shrink-0', organization.id !== current?.id && 'invisible']}
             />
@@ -66,7 +71,7 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
 
     <DropdownMenu.Item class="px-3 py-2">
       {#snippet child({ props })}
-        <a {...props} href="/orgs/new" class="flex items-center gap-2">
+        <a {...props} href="/orgs/new" class={cnChildProps(props, 'flex items-center gap-2')}>
           <PlusIcon class="size-4 shrink-0" />
           New organization
         </a>
@@ -76,7 +81,7 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
     {#if hasMore}
       <DropdownMenu.Item class="px-3 py-2">
         {#snippet child({ props })}
-          <a {...props} href="/orgs" class="flex items-center gap-2">
+          <a {...props} href="/orgs" class={cnChildProps(props, 'flex items-center gap-2')}>
             <span class="size-4 shrink-0"></span>
             <span class="flex-1">View all organizations</span>
             <ChevronRightIcon class="size-4 shrink-0" />
