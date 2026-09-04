@@ -11,6 +11,7 @@ import type { Kysely } from 'kysely';
 import {
   clearOrganizationFixture,
   insertOrganizationFixture,
+  insertOrganizationMembershipFixture,
   type OrganizationReportSpec,
 } from './organizations.ts';
 import { insertReportFixture, type ReportState } from './reports.ts';
@@ -28,8 +29,24 @@ export interface OrganizationFactory {
   create(spec: { name: string; reports?: OrganizationReportSpec[] }): Promise<OrganizationId>;
 }
 
+export interface OrganizationMembershipFactory {
+  /** Commit a private organization admin'd by a disposable user, add the placeholder user as a
+   * plain member, and return the organization's id. Deleted when this test ends, whether it
+   * passed or failed.
+   *
+   * Use this, not `organizations.create`, for a spec that puts the placeholder user in several
+   * organizations at once — see `insertOrganizationMembershipFixture`'s doc comment for why
+   * `organizations.create` doesn't scale past a couple of calls in the whole suite.
+   */
+  create(spec: { name: string }): Promise<OrganizationId>;
+}
+
 export const test = base.extend<
-  { reports: ReportFactory; organizations: OrganizationFactory },
+  {
+    reports: ReportFactory;
+    organizations: OrganizationFactory;
+    organizationMemberships: OrganizationMembershipFactory;
+  },
   { db: Kysely<Database> }
 >({
   // Worker-scoped: one pool per Playwright worker process, closed or the worker hangs.
@@ -67,6 +84,20 @@ export const test = base.extend<
     await use({
       create: async (spec) => {
         const organizationId = await insertOrganizationFixture(db, spec);
+        createdIds.push(organizationId);
+        return organizationId;
+      },
+    });
+
+    await Promise.all(createdIds.map((id) => clearOrganizationFixture(db, id)));
+  },
+
+  organizationMemberships: async ({ db }, use) => {
+    const createdIds: OrganizationId[] = [];
+
+    await use({
+      create: async (spec) => {
+        const organizationId = await insertOrganizationMembershipFixture(db, spec);
         createdIds.push(organizationId);
         return organizationId;
       },

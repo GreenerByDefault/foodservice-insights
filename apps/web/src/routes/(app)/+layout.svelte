@@ -1,6 +1,6 @@
 <script lang="ts">
 import { page } from '$app/state';
-import { organizationHref } from '$lib/hrefs';
+import OrganizationSwitcher from './organization-switcher.svelte';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();
@@ -15,29 +15,7 @@ const currentOrganization = $derived(page.data.organization);
   <header
     class="flex flex-col gap-1 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
   >
-    <details class="relative min-w-0">
-      <summary class="cursor-pointer truncate font-medium">
-        {currentOrganization?.name ?? 'Choose an organization'}
-      </summary>
-
-      <ul class="absolute left-0 z-10 mt-2 min-w-56 rounded-md border bg-background p-1 shadow-md">
-        {#each data.auth.memberships as organization (organization.organizationId)}
-          <li>
-            <a
-              class="block rounded-sm px-2 py-1 hover:bg-muted"
-              href={organizationHref(organization.organizationId)}
-            >
-              {organization.organizationName}
-            </a>
-          </li>
-        {/each}
-        <li>
-          <a class="block rounded-sm px-2 py-1 hover:bg-muted" href="/orgs/new">
-            New organization
-          </a>
-        </li>
-      </ul>
-    </details>
+    <OrganizationSwitcher current={currentOrganization} organizations={data.organizations} />
 
     <!-- Signing out is a browser-side Supabase call, so it will arrives as a component with the rest of
          auth, rather than as a link to a route. -->

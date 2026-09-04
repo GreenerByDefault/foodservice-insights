@@ -13,6 +13,7 @@ import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import {
   insertAnalysisAttempt,
   insertInputFile,
+  insertOrganization,
   insertReport,
   insertResultFile,
 } from '@gbd/db/testing';
@@ -84,6 +85,39 @@ export async function insertOrganizationFixture(
     for (const report of spec.reports ?? []) {
       await insertOrganizationReport(tx, organization.id, report);
     }
+
+    return organization.id;
+  });
+}
+
+/** Commit a private organization admin'd by a fresh, disposable user, with the placeholder user
+ * added as a plain member. Returns the organization's id.
+ *
+ * For a spec that needs the placeholder user in *several* organizations at once — the org
+ * switcher, `/orgs` — rather than one. `insertOrganizationFixture` won't do: it makes the
+ * placeholder the organization's *creator*, and creating one permanently costs one of the five
+ * total `app_user.organizations_created_count` ever allows that user — a nonrenewable budget
+ * (nothing decrements it, including deleting the organization) the rest of this suite already
+ * spends against. Granting membership instead of creating costs that budget nothing, because the
+ * disposable admin this makes is never reused.
+ *
+ * Both inserts have to share one transaction, like `insertOrganizationFixture`'s do:
+ * `organization_check_has_member` is `DEFERRABLE INITIALLY DEFERRED`, checked at `COMMIT`, so
+ * `insertOrganization`'s own admin-membership insert has to still be uncommitted when this one
+ * runs — two separate auto-committed statements would let its organization row commit with zero
+ * members and fail that constraint before this ever adds one.
+ */
+export async function insertOrganizationMembershipFixture(
+  db: Kysely<Database>,
+  spec: { name: string },
+): Promise<OrganizationId> {
+  return await withTransaction(db, async (tx) => {
+    const { organization } = await insertOrganization(tx, { name: spec.name });
+
+    await tx
+      .insertInto('organizationMember')
+      .values({ userId: PLACEHOLDER_USER_ID, organizationId: organization.id, role: 'member' })
+      .execute();
 
     return organization.id;
   });
