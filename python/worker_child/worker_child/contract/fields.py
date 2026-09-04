@@ -44,7 +44,7 @@ class Fields:
                 return candidate
         raise self._fail(key, f"one of {', '.join(allowed)}")
 
-    def nested(self, key: str) -> "Fields":
+    def nested(self, key: str) -> Fields:
         return Fields(f"{self._path}.{key}", self._object(key))
 
     def counts(self, key: str, month: re.Pattern[str]) -> Mapping[str, int]:
