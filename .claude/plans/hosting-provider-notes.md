@@ -21,11 +21,10 @@ filters, check-suite gating — is **not** something we need. What is left:
 1. **Deploy one named service at a named commit, from CI, with a real exit code.**
 2. **A shutdown grace with a documented maximum**, generous enough to be worth draining into. An
    attempt averages ~5 minutes, so the useful range is minutes.
-3. A per-service pre-deploy step for migrations, running with the service's own credentials.
-4. `ARCHITECTURE.md` § Hosting's existing criteria: manual scaling, restarts, price, logging, alerts
+3. `ARCHITECTURE.md` § Hosting's existing criteria: manual scaling, restarts, price, logging, alerts
    on CPU/memory/disk, simplicity over time.
 
-Both providers researched can do all four. The differences are in how much is documented.
+Both providers researched can do all three. The differences are in how much is documented.
 
 ## Railway
 
@@ -36,7 +35,7 @@ Both providers researched can do all four. The differences are in how much is do
   ([config-as-code](https://docs.railway.com/config-as-code),
   [infrastructure-as-code](https://docs.railway.com/infrastructure-as-code))
 - The IaC reference page **under-documents `service()`**. `drainingSeconds`, `overlapSeconds`,
-  `watchPatterns`, `preDeployCommand`, `builder`, `dockerfilePath` all exist in the `railway` npm
+  `watchPatterns`, `builder`, `dockerfilePath` all exist in the `railway` npm
   package's type definitions but not in the docs. Verified from source, not doc-guaranteed — worth an
   empirical check before relying on any of them.
 - Shutdown: SIGTERM then SIGKILL, gap set by `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` /
@@ -63,8 +62,6 @@ Both providers researched can do all four. The differences are in how much is do
   pipeline wants, and it is reviewable.
 - Rolling deploys apply to background workers: new instance up, ~60s, SIGTERM to the old, SIGKILL
   after the shutdown delay. No documented way to get stop-then-start.
-- `preDeployCommand` runs after build, before the new instance starts, on a separate instance whose
-  filesystem changes do not persist. Paid plans only; per-service.
 - **Do not set `rootDir`.** "Files outside your service's root directory are not available to the
   service at build time or at runtime," which makes a pnpm workspace unbuildable. Leave it unset and
   set `dockerContext: .` with `dockerfilePath: ./apps/<svc>/Dockerfile`. The docs contradict
@@ -83,8 +80,6 @@ Both providers researched can do all four. The differences are in how much is do
   is set, so the new worker takes the queue while the old finishes what it holds.
 - Neither offers stop-then-start, so "only ever one worker" would have to be enforced in the app. We
   do not need it.
-- Both run pre-deploy in a separate container whose filesystem changes do not persist — correct for
-  migrations, useless for anything the service later reads off disk.
 - DigitalOcean was not researched.
 
 ## Open
@@ -94,8 +89,6 @@ Both providers researched can do all four. The differences are in how much is do
   the first thing to test.
 - **Open:** Docker build context vs Root Directory on Railway — undocumented, needs an empirical test
   before committing to Dockerfiles there.
-- **Open:** whether the old deployment keeps serving during a Railway pre-deploy command. The
-  documented lifecycle implies yes; that is inference.
 - **Open:** Render worker instance-type pricing; `/docs/instance-types` 404s.
 - **Open:** DigitalOcean, if it stays a candidate.
 

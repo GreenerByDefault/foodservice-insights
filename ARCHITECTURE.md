@@ -304,15 +304,16 @@ shutdown delay defaults to 30s (configurable to 300s); Railway's
 `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**, which SIGKILLs the worker mid-drain and
 looks exactly like a worker bug.
 
+**[`workflows/deploy.yml`](.github/workflows/deploy.yml) runs the database migrations itself,
+before it deploys to the hosting provider.** There is no way to unapply a database migration.
+You must fix forward.
+
 ## Hosting
 
 What we care about: manual horizontal and vertical scaling; reliability, including automatic
 restarts and draining the existing container on deploy; price; logging; continuous deployment with
 the web app and worker separated; and overall simplicity over time. We explicitly do not care
 about autoscaling.
-
-**Deploys run database migrations before updating the app.** A failed code deploy can be rolled
-back, but a migration cannot — once it has run, fix forward rather than reverting it.
 
 **Open:** Railway vs Render vs DigitalOcean.
 

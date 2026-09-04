@@ -161,12 +161,6 @@ alone is enough — **verified** — so the lab's source stays out.
   makes the whole drain design inert and presents as a worker bug. `ARCHITECTURE.md` already
   assumes "the parent is PID 1 in its container." This is process trees, not a platform quirk. Put
   the reasoning as a comment on the Dockerfile `CMD` and on `apps/worker/package.json`'s `start`.
-- **Node refuses to strip types under `node_modules`.** `packages/db`'s migrations and
-  `scripts/migrate.ts` are TypeScript that `tsconfig.build.json` deliberately does not emit, run
-  today by Node from the package directory. In an image, `@gbd/db` lives under `node_modules`, and
-  `FileMigrationProvider`'s `import()` of a migration dies with
-  `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` — **verified**. This is the pre-deploy migration
-  step, so it fails the deploy, in the one step that cannot be rolled back. PR 2.
 - **`resolvePythonBin()` calls `findRepoRoot()`**
   ([`python-bin.ts`](../../apps/worker/src/python-bin.ts)), which throws where there is no
   `pnpm-workspace.yaml`. An absolute `PYTHON_BIN` returns before the call, which is why
@@ -186,28 +180,19 @@ quoted forward reference in
 [`contract/fields.py`](../../python/worker_child/worker_child/contract/fields.py), which deferred
 annotations make unnecessary.
 
-## PR 2 — Emit the migrations, so they run outside a workspace
-
-Prefactor; no Dockerfile. Compile `migrations/` (and whatever `scripts/migrate.ts` needs to
-become) into `packages/db/dist/`, and move `migrationFolder()`
-([`migrate.ts`](../../packages/db/src/migrate.ts)) onto the emitted path. Ends production's
-dependence on Node's type stripping, and the trap above with it. `pnpm migrate` must still work
-unchanged.
-
-## PR 3 — `apps/worker/Dockerfile`
+## PR 2 — `apps/worker/Dockerfile`
 
 The three stages above, its `COPY` allowlist, the shared `.dockerignore`, and the `CMD` comment.
 Repo root as build context.
 
-## PR 4 — `apps/web/Dockerfile`
+## PR 3 — `apps/web/Dockerfile`
 
-Node builder and Node runtime, no Python, plus the pre-deploy migration entrypoint PR 2 makes
-possible.
+Node builder and Node runtime, no Python, and no migration entrypoint —
+[`deploy-migrations.md`](deploy-migrations.md) puts migrations in CI instead.
 
 ## Verification
 
 Build both images locally and run the worker against the dev Supabase stack with
 `WORKER_MODE=stubbed`. Confirm `docker stop` drains rather than killing — that is what proves the
-PID 1 fix, and it is not observable any other way. Run the web image's migration entrypoint
-against the dev stack too: it is the step that fails a deploy irreversibly, and PR 2 is only
-proven by running it from inside the image.
+PID 1 fix, and it is not observable any other way.
+
