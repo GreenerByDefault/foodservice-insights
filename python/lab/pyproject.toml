@@ -2,7 +2,7 @@
 name = "gbd-foodservice-insights-lab"
 version = "0.0.0"
 description = "Experiments against the analysis library. Ships nothing; nothing imports it."
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = ["gbd-foodservice-insights"]
 
 [build-system]

@@ -2,7 +2,7 @@
 name = "worker-child"
 version = "0.0.0"
 description = "One analysis run, spawned as a child process by the TypeScript worker parent."
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = ["gbd-foodservice-insights"]
 
 [build-system]
