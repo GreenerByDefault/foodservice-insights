@@ -308,6 +308,18 @@ looks exactly like a worker bug.
 before it deploys to the hosting provider.** There is no way to unapply a database migration.
 You must fix forward.
 
+## Container images
+
+The web app and worker each ship as a Docker image, built from
+[`apps/web/Dockerfile`](apps/web/Dockerfile) and [`apps/worker/Dockerfile`](apps/worker/Dockerfile).
+Our deployments are complex, such as the worker being polyglot, so it's easier to use Docker images
+than the hosting platform's build packs.
+
+**Both build on Red Hat's UBI minimal images**, not Debian/Alpine bases like `node:*-slim`. UBI is
+free to redistribute without a Red Hat subscription, gets CVE patches on a predictable cadence, and
+the `-minimal` variant uses `microdnf` to keep the image small while still being a full RPM-based
+system if we ever need a package the slim bases lack.
+
 ## Hosting
 
 What we care about: manual horizontal and vertical scaling; reliability, including automatic
