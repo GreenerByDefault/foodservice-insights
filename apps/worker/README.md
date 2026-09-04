@@ -20,12 +20,6 @@ Node's usual `node_modules` exclusion doesn't apply — which mid-processes an a
 another package's `tsc --watch` recompiles. A dependency change still needs a manual restart to
 take effect.
 
-**In a container, `start` must run as `exec node dist/main.js` (the Dockerfile `CMD`), never as
-`pnpm --filter @gbd/worker start`.** Under pnpm, pnpm is PID 1 and SIGTERM never reaches Node,
-which makes the drain design in [`worker.ts`](src/worker.ts) inert and presents as a worker bug
-rather than a process-tree one. `ARCHITECTURE.md` already assumes "the parent is PID 1 in its
-container."
-
 Beyond the vars every package reads from `.env`, it needs:
 
 | Var | |
