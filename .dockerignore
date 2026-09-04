@@ -1,0 +1,9 @@
+# Every Dockerfile in this repo names what it wants via per-entry `COPY` lines rather than
+# `COPY .`. This file exists only to keep stale
+# local build output (and other things no image ever wants) out of the build context; it is
+# not an allowlist, and it must never need to be one.
+
+**/node_modules
+**/dist
+**/__pycache__
+.venv

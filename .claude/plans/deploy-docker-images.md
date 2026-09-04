@@ -44,10 +44,14 @@ incidental.
 
 ## Base images: UBI 10's language images
 
-`registry.access.redhat.com/ubi10/nodejs-24-minimal` and `ubi10/python-314-minimal`, pinned by
-digest. Red Hat rebuilds them against RHEL's errata stream and publishes them with no Docker Hub
-pull limit and no account, which is the supply-chain property we are buying: a base whose CVE
-backports are somebody's job, for both runtimes rather than just the OS underneath them.
+`registry.access.redhat.com/ubi10/nodejs-24-minimal` and `ubi10/python-314-minimal`, floating
+(`:latest`) rather than pinned by digest. Red Hat rebuilds them against RHEL's errata stream and
+publishes them with no Docker Hub pull limit and no account, which is the supply-chain property we
+are buying: a base whose CVE backports are somebody's job, for both runtimes rather than just the
+OS underneath them — and a digest pin would freeze that stream instead of tracking it. This is the
+same call [`deploy-image-registry.md`](deploy-image-registry.md) already made about the runtime
+stage's own `microdnf install` and `npm install -g pnpm`: nothing here claims a rebuild is
+reproducible, so pinning only the base and not the RPM stream on top of it would buy nothing.
 
 **Verified:** Node 24.19.0 with `node` and `npm` at `/usr/bin`, and CPython 3.14.7. Both images
 already run as uid 1001, so the non-root requirement and a writable `WORKER_RUN_ROOT` are the
