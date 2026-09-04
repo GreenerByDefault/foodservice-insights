@@ -11,14 +11,12 @@ The deploy pipeline that consumes them —
 composite deploy step is a stub until a hosting provider is chosen, and these images are what
 fills it in.
 
-**The provider builds the image from a git checkout; CI never pushes one.** Both candidates in
-[`hosting-provider-notes.md`](hosting-provider-notes.md) build Docker themselves, and
-`deploy-service` only names a service and a SHA. So each Dockerfile does the whole build from
-source — nothing built on a developer's machine or in a CI job is available to `COPY`.
-
-*Rejected: building in CI and pushing to a registry. It decouples the build from the provider,
-but adds a registry, its credentials, and a second place a deploy can fail, to a pipeline whose
-point is one call per service.*
+**CI builds the image once per commit and pushes it to GHCR; the provider never builds.** See
+[`deploy-image-registry.md`](deploy-image-registry.md) for why — in short, a provider that builds
+from a checkout cannot deploy bytes that already ran, which a rollback and a later staging
+environment both need, and the registry a public repo needs is free and needs no credential. Each
+Dockerfile still does the whole build from source; only *where* that build runs, and what happens
+to its output, has changed.
 
 Facts below marked **verified** were checked on 2026-09-03 against `linux/amd64`. Base images and
 RPM streams move; re-check before trusting a version number.
