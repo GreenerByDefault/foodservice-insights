@@ -48,9 +48,9 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
     {/snippet}
   </DropdownMenu.Trigger>
 
-  <DropdownMenu.Content class="max-h-(--bits-floating-available-height) w-64 overflow-y-auto">
+  <DropdownMenu.Content class="max-h-(--bits-floating-available-height) w-72 overflow-y-auto p-2">
     {#each menuOrganizations as organization (organization.id)}
-      <DropdownMenu.Item>
+      <DropdownMenu.Item class="px-3 py-2">
         {#snippet child({ props })}
           <a {...props} href={organizationHref(organization.id)} class="flex items-center gap-2">
             <CheckIcon
@@ -62,9 +62,9 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
       </DropdownMenu.Item>
     {/each}
 
-    <DropdownMenu.Separator />
+    <DropdownMenu.Separator class="my-2" />
 
-    <DropdownMenu.Item>
+    <DropdownMenu.Item class="px-3 py-2">
       {#snippet child({ props })}
         <a {...props} href="/orgs/new" class="flex items-center gap-2">
           <PlusIcon class="size-4 shrink-0" />
@@ -74,10 +74,11 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
     </DropdownMenu.Item>
 
     {#if hasMore}
-      <DropdownMenu.Item>
+      <DropdownMenu.Item class="px-3 py-2">
         {#snippet child({ props })}
-          <a {...props} href="/orgs" class="flex items-center justify-between gap-2">
-            View all organizations
+          <a {...props} href="/orgs" class="flex items-center gap-2">
+            <span class="size-4 shrink-0"></span>
+            <span class="flex-1">View all organizations</span>
             <ChevronRightIcon class="size-4 shrink-0" />
           </a>
         {/snippet}
