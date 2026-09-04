@@ -96,9 +96,11 @@ test('the /orgs list, empty', async ({ page, organizationMemberships }) => {
   await stubOrganizationsAsEmpty(page);
 
   // Into an organization and back out again — the only way to trigger the client-side navigation
-  // that `stubOrganizationsAsEmpty` waits for (see its doc comment).
+  // that `stubOrganizationsAsEmpty` waits for (see its doc comment). The org page's own heading
+  // is just "Reports"; the switcher is what still names the organization, so that's the proof
+  // navigation landed on the right one.
   await page.getByRole('link', { name }).click();
-  await expect(page.getByRole('heading', { name })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Switch organization' })).toContainText(name);
   await page.goBack();
 
   await expect(page.getByText('No organizations yet.')).toBeVisible();

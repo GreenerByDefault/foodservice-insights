@@ -7,8 +7,8 @@ import ReportsView from './reports-list/reports-view.svelte';
 let { data }: PageProps = $props();
 </script>
 
-<div class="flex w-full flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-  <PageHeading>{data.organization.name}</PageHeading>
+<div class="flex w-full items-center justify-between">
+  <PageHeading>Reports</PageHeading>
   <Button href={data.newReportHref}>New report</Button>
 </div>
 

@@ -19,10 +19,17 @@ const currentSection = $derived(
 );
 </script>
 
-<!-- The organization's sections. -->
-<nav class="flex gap-4 border-b pb-2 text-sm" aria-label="Organization">
+<!-- The organization's sections, styled like tabs. -->
+<nav class="flex w-full gap-1 border-b text-sm" aria-label="Organization">
   {#each sections as section (section.href)}
-    <a href={section.href} aria-current={section === currentSection ? 'page' : undefined}>
+    <a
+      href={section.href}
+      aria-current={section === currentSection ? 'page' : undefined}
+      class="-mb-px border-b-2 border-transparent px-3 py-2 font-medium text-muted-foreground
+        transition-colors hover:text-foreground focus-visible:outline-2
+        focus-visible:outline-offset-2 focus-visible:outline-ring
+        aria-[current=page]:border-foreground aria-[current=page]:text-foreground"
+    >
       {section.label}
     </a>
   {/each}

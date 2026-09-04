@@ -19,7 +19,11 @@ export const load: LayoutServerLoad = async ({ locals }) => {
     database(),
     auth,
   );
-  return { user: { email: auth.user.email }, organizations, hasMoreOrganizations };
+  return {
+    user: { email: auth.user.email, displayName: auth.user.displayName },
+    organizations,
+    hasMoreOrganizations,
+  };
 };
 
 /** The organizations the switcher offers this user, capped at `SWITCHER_LIMIT`.

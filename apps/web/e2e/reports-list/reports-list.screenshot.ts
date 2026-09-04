@@ -50,7 +50,8 @@ test('a mix of report states', async ({ page, organizations, db }) => {
 
   await page.goto(`/orgs/${organizationId}`);
 
-  await expect(page.getByRole('heading', { name: 'Riverside Foods' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Riverside Foods' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible();
   // The same elements are repeated in the DOM for mobile vs desktop, so we use `.first()`.
   await expect(page.getByText('Chicken order, March').first()).toBeVisible();
   await expect(page.getByText('Processing').first()).toBeVisible();

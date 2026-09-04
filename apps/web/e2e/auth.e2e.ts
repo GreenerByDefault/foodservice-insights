@@ -15,5 +15,8 @@ test('a signed-in request reaches its organization, which the shell names', asyn
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}`);
 
   await expect(page.getByRole('banner')).toContainText('Phase One Foodservice');
-  await expect(page.getByRole('banner')).toContainText('phase-one@example.test');
+
+  // The account menu is portalled outside `<header>`, so the email is checked there instead.
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await expect(page.getByText('phase-one@example.test')).toBeVisible();
 });

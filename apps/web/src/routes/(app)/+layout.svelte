@@ -1,7 +1,9 @@
 <script lang="ts">
+import { APP_NAME } from '@gbd/core';
 import { page } from '$app/state';
 import OrganizationSwitcher from './organization-switcher.svelte';
 import type { LayoutProps } from './$types';
+import UserMenu from './user-menu.svelte';
 
 let { data, children }: LayoutProps = $props();
 
@@ -11,25 +13,26 @@ let { data, children }: LayoutProps = $props();
 const currentOrganization = $derived(page.data.organization);
 </script>
 
-<div class="mx-auto flex min-h-svh max-w-4xl flex-col gap-6 p-8">
-  <header
-    class="flex flex-col gap-1 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
-  >
-    <OrganizationSwitcher
-      current={currentOrganization}
-      organizations={data.organizations}
-      hasMore={data.hasMoreOrganizations}
-    />
+<div class="flex min-h-svh flex-col">
+  <header class="border-b">
+    <div class="mx-auto flex w-full max-w-4xl items-center gap-3 px-6 py-3 sm:px-8">
+      <a href="/" class="hidden shrink-0 text-sm font-medium text-muted-foreground sm:block">
+        {APP_NAME}
+      </a>
 
-    <!-- Signing out is a browser-side Supabase call, so it will arrives as a component with the rest of
-         auth, rather than as a link to a route. -->
+      <OrganizationSwitcher
+        current={currentOrganization}
+        organizations={data.organizations}
+        hasMore={data.hasMoreOrganizations}
+      />
 
-    <a class="min-w-0 truncate text-muted-foreground hover:text-foreground" href="/account">
-      {data.user.email}
-    </a>
+      <div class="ml-auto">
+        <UserMenu email={data.user.email} displayName={data.user.displayName} />
+      </div>
+    </div>
   </header>
 
-  <main class="flex flex-1 flex-col items-start gap-4">
+  <main class="mx-auto flex w-full max-w-4xl flex-1 flex-col items-start gap-4 px-6 py-8 sm:px-8">
     {@render children()}
   </main>
 </div>
