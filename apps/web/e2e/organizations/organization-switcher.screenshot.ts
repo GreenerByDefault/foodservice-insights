@@ -76,5 +76,7 @@ test('the /orgs list, past eight organizations', async ({ page, organizationMemb
   const lastRow = page.getByRole('link', { name: names.at(-1) });
   await expect(lastRow).toBeVisible();
 
+  // Hover the unopened switcher so the committed image also shows its hover affordance.
+  await page.getByRole('button', { name: 'Switch organization' }).hover();
   await expectScreenshots(page, 'orgs-list.png', { clipBelow: lastRow });
 });

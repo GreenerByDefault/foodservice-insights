@@ -40,7 +40,7 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
-      <Button {...props} variant="ghost" class="min-w-0 max-w-full justify-between gap-1.5">
+      <Button {...props} variant="outline" class="min-w-0 max-w-full justify-between gap-1.5">
         <span class="truncate">{current?.name ?? 'Choose an organization'}</span>
         <span class="sr-only">Switch organization</span>
         <ChevronsUpDownIcon class="shrink-0 opacity-60" />
