@@ -1,21 +1,11 @@
-import type { OrganizationId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { expect, test } from 'vitest';
-import type { OrganizationAccess } from '$lib/server/auth/types';
 import { database } from '$lib/server/db';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext, anOrganizationAccess } from '$lib/server/tests/fixtures';
 import { _loadAllOrganizations } from './+page.server.ts';
 
-function membershipTo(name: string): OrganizationAccess {
-  return {
-    organizationId: crypto.randomUUID() as OrganizationId,
-    organizationName: name,
-    role: 'member',
-  };
-}
-
 test('a non-superadmin gets their own memberships, not the organization table', async () => {
-  const memberships = [membershipTo('Zenith Dining'), membershipTo('Acme Foods')];
+  const memberships = [anOrganizationAccess('Zenith Dining'), anOrganizationAccess('Acme Foods')];
   const auth = anAuthContext({ memberships });
 
   // No database passed: a query here would throw, not just fail an assertion.
@@ -38,7 +28,7 @@ test('a superadmin gets the whole organization table, alphabetically — not jus
     for (const name of names) await insertOrganization(transaction, { name });
     const auth = anAuthContext({
       user: { isSuperadmin: true },
-      memberships: [membershipTo('Not the customer list')],
+      memberships: [anOrganizationAccess('Not the customer list')],
     });
 
     const result = await _loadAllOrganizations(transaction, auth);

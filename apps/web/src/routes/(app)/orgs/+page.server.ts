@@ -1,6 +1,4 @@
-/** Where a signed-in user goes when they have not asked for anything in particular, and — for
- * everyone who stays — the full, alphabetical picker. Also where the switcher's "View all
- * organizations" row lands once the menu is over the cap. */
+/** A list of all organizations the user belongs to, in alphabetical order. */
 
 import type { DatabaseExecutor } from '@gbd/db';
 import { redirect } from '@sveltejs/kit';
@@ -18,13 +16,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   return { organizations: await _loadAllOrganizations(database(), auth) };
 };
 
-/** Every organization this user may pick, name-ordered, with no cap.
- *
- * **Must branch on `isSuperadmin`.** Reading the whole table unconditionally would hand every
- * signed-in user the customer list — the exact disclosure the 404-not-403 rule in
- * `guards.ts` exists to prevent. A non-superadmin gets their own `auth.memberships` instead,
- * already ordered by name and with no query of its own.
- */
+/** Every organization this user may pick, name-ordered, with no cap. */
 export async function _loadAllOrganizations(
   db: DatabaseExecutor,
   auth: AuthContext,

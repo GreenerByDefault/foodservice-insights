@@ -7,6 +7,7 @@ import { Button } from '$lib/components/ui/button';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import { organizationHref } from '$lib/hrefs';
 import { cnChildProps } from '$lib/utils/shadcn.js';
+import { SWITCHER_LIMIT } from './switcher-limit';
 
 type SwitcherOrganization = { id: string; name: string };
 
@@ -18,22 +19,12 @@ interface Props {
 
 let { current, organizations, hasMore }: Props = $props();
 
-// Matches `_SWITCHER_LIMIT` in `+layout.server.ts` — duplicated, not imported, because that file
-// is server-only and this component ships to the browser. This is the row count's last word: the
-// server already caps `organizations` to the same number, but `current` can arrive as an extra
-// row on top of it (see below), so this is what keeps the menu itself at eight no matter which
-// side contributed the organization that put it over.
-const DISPLAY_LIMIT = 8;
-
-// Current first, always — even when it sorts past the cap and so is not itself in `organizations`
-// — then everyone else alphabetically. One rule, true whether or not `organizations` already
-// contains `current`, so there is no merge-and-resort special case to get wrong. `rest` is
-// trimmed to leave room for `current` precisely when `current` isn't already one of its rows.
 const rest = $derived(
   organizations
     .filter((organization) => organization.id !== current?.id)
     .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, current ? DISPLAY_LIMIT - 1 : DISPLAY_LIMIT),
+    // Leave room for `current` unless it's already excluded above.
+    .slice(0, current ? SWITCHER_LIMIT - 1 : SWITCHER_LIMIT),
 );
 const menuOrganizations = $derived(current ? [current, ...rest] : rest);
 </script>
