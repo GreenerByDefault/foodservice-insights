@@ -87,7 +87,8 @@ If you're using LLMs, set up the [Svelte MCP server](https://svelte.dev/docs/ai/
 
 ### Start the databases
 
-There are two independent Supabase stacks, and they run side by side.
+There are two independent Supabase stacks. Start only the one you need — running both at once
+is supported but competes for the same memory and CPU, especially across concurrent sessions.
 
 | Stack | For | Ports | Yours to modify? |
 | --- | --- | --- | --- |
@@ -103,7 +104,8 @@ scripts/supabase start
 TEST_DB=1 scripts/supabase start
 ```
 
-Leave them running; the containers stop when your machine restarts. To stop them by hand:
+Containers stop when your machine restarts, but stop a stack yourself once you're done with
+it — the dev stack in particular, if you're not hand-editing data — to free it up:
 
 ```sh
 scripts/supabase stop
