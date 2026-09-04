@@ -5,13 +5,14 @@
  * shows up here is whatever else is committed for that user at the moment this test happens to
  * run — including the seeded placeholder organization itself, `"Phase One Foodservice"`.
  *
- * The fix is the same one `_loadSwitcherOrganizations` already relies on for its own unit tests:
- * give these organizations a name that sorts ahead of anything an ordinary fixture would use.
- * Every other organization in this suite has a letter-led name (a human-readable one, `Test org
- * <uuid>`, or the seeded placeholder), so no letter can promise "always first" — some other name,
- * present or future, is free to start earlier in the alphabet. A leading digit can promise that,
- * since it sorts before every letter, so these are named like a real digit-led foodservice
- * chain — `"24/7 …"` — rather than with a bare, test-only-looking prefix.
+ * The fix is the same one `_loadSwitcherOrganizations`/`_loadAllOrganizations` already rely on
+ * for their own unit tests: give these organizations a name that sorts ahead of anything an
+ * ordinary fixture would use. Every other organization in this suite has a letter-led name (a
+ * human-readable one, `Test org <uuid>`, or the seeded placeholder), so no letter can promise
+ * "always first" — some other name, present or future, is free to start earlier in the alphabet.
+ * A leading digit can promise that, since it sorts before every letter, so these are named like a
+ * real digit-led foodservice chain — `"24/7 …"` — rather than with a bare, test-only-looking
+ * prefix.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -25,11 +26,13 @@ import { expectScreenshots } from '../lib/screenshots.ts';
 // keeps this file's fixtures fully torn down before the next test's are created.
 test.describe.configure({ mode: 'serial' });
 
-test('the header switcher list, past the cap', async ({ page, organizationMemberships }) => {
-  // Already alphabetical, so navigating to the first one keeps it inside the server's own
-  // first-eight slice — a name past the cap simply wouldn't appear in the list.
+test('the full switcher, past the cap', async ({ page, organizationMemberships }) => {
+  // Nine names, one past `_SWITCHER_LIMIT`, so the menu offers "View all organizations". The
+  // navigated-to one sorts *last* of the nine, which puts it outside the server's own first-eight
+  // slice — the case where `current` is pinned to the top of the menu by the component alone.
   const names = [
-    '24/7 Switcher Acme Foodservice', // navigated to below
+    '24/7 Switcher Riverside Foods', // navigated to below, so this is "current"
+    '24/7 Switcher Acme Foodservice',
     '24/7 Switcher Bakers Row',
     '24/7 Switcher Cedar Grove Dining',
     '24/7 Switcher Dockside Catering',
@@ -37,7 +40,6 @@ test('the header switcher list, past the cap', async ({ page, organizationMember
     '24/7 Switcher Fairview Foodservice',
     '24/7 Switcher Grovemont Catering',
     '24/7 Switcher Harborview Foods',
-    '24/7 Switcher Ivywood Catering', // the ninth: what pushes this past _SWITCHER_LIMIT
   ];
   const [currentId] = await Promise.all(
     names.map((name) => organizationMemberships.create({ name })),
@@ -46,12 +48,11 @@ test('the header switcher list, past the cap', async ({ page, organizationMember
   await page.goto(`/orgs/${currentId}`);
   await ensureHydrated(page);
 
-  await page.locator('summary').click();
-  // Scoped to the switcher's own list, not the page as a whole — the organization page renders
-  // its own nav links ("Reports", "Members", "Settings") that `getByRole('link')` would otherwise
-  // pick up too.
-  const organizationRows = page.locator('details ul a').filter({ hasNotText: 'New organization' });
-  await expect(organizationRows).toHaveCount(8);
+  await page.getByRole('button', { name: 'Switch organization' }).click();
+  await expect(page.getByRole('menuitem', { name: 'View all organizations' })).toBeVisible();
+
+  // Hover one row so the committed image also shows the hover affordance.
+  await page.getByRole('menuitem', { name: '24/7 Switcher Bakers Row' }).hover();
 
   await expectScreenshots(page, 'organization-switcher.png');
 });
@@ -78,5 +79,7 @@ test('the /orgs list, past eight organizations', async ({ page, organizationMemb
   const lastRow = page.getByRole('link', { name: names.at(-1) });
   await expect(lastRow).toBeVisible();
 
+  // Hover the unopened switcher so the committed image also shows its hover affordance.
+  await page.getByRole('button', { name: 'Switch organization' }).hover();
   await expectScreenshots(page, 'orgs-list.png', { clipBelow: lastRow });
 });

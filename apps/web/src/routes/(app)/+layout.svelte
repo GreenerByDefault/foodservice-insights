@@ -15,13 +15,17 @@ const currentOrganization = $derived(page.data.organization);
   <header
     class="flex flex-col gap-1 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
   >
-    <OrganizationSwitcher current={currentOrganization} organizations={data.organizations} />
+    <OrganizationSwitcher
+      current={currentOrganization}
+      organizations={data.organizations}
+      hasMore={data.hasMoreOrganizations}
+    />
 
     <!-- Signing out is a browser-side Supabase call, so it will arrives as a component with the rest of
          auth, rather than as a link to a route. -->
 
     <a class="min-w-0 truncate text-muted-foreground hover:text-foreground" href="/account">
-      {data.auth.user.email}
+      {data.user.email}
     </a>
   </header>
 

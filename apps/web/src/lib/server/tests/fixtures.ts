@@ -1,4 +1,4 @@
-import type { Database, OrganizationId, UserId } from '@gbd/db';
+import type { Database, OrganizationId, OrganizationRole, UserId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { type BlobStore, deletePrefix, organizationPrefix } from '@gbd/storage';
 import type { Transaction } from 'kysely';
@@ -22,6 +22,19 @@ export function anAuthContext(
       ...overrides.user,
     },
     memberships: overrides.memberships ?? [],
+  };
+}
+
+/** An `OrganizationAccess` for an organization named `name`, with a random id and `member` role
+ * unless overridden. */
+export function anOrganizationAccess(
+  name: string,
+  role: OrganizationRole = 'member',
+): OrganizationAccess {
+  return {
+    organizationId: crypto.randomUUID() as OrganizationId,
+    organizationName: name,
+    role,
   };
 }
 

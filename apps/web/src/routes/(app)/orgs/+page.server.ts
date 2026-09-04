@@ -1,4 +1,4 @@
-/** Where a signed-in user goes when they have not asked for anything in particular. */
+/** A list of all organizations the user belongs to, in alphabetical order. */
 
 import type { DatabaseExecutor } from '@gbd/db';
 import { redirect } from '@sveltejs/kit';
@@ -10,9 +10,29 @@ import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  const destination = await _resolvePostSignInDestination(database(), requireAuth(locals));
+  const auth = requireAuth(locals);
+  const destination = await _resolvePostSignInDestination(database(), auth);
   if (destination) redirect(303, destination);
+  return { organizations: await _loadAllOrganizations(database(), auth) };
 };
+
+/** Every organization this user may pick, name-ordered, with no cap. */
+export async function _loadAllOrganizations(
+  db: DatabaseExecutor,
+  auth: AuthContext,
+): Promise<readonly { id: string; name: string }[]> {
+  if (!auth.user.isSuperadmin) {
+    return auth.memberships.map((membership) => ({
+      id: membership.organizationId,
+      name: membership.organizationName,
+    }));
+  }
+
+  return await withDbErrorHandling(
+    () => db.selectFrom('organization').select(['id', 'name']).orderBy('name').execute(),
+    { action: 'list all organizations', context: { userId: auth.user.id } },
+  );
+}
 
 /** The next page, or null to stay here and pick one. */
 export async function _resolvePostSignInDestination(
