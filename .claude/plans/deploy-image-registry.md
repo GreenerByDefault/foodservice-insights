@@ -2,15 +2,10 @@
 
 ## Context
 
-`deploy-docker-images.md` records the current decision plainly:
-
-> **The provider builds the image from a git checkout; CI never pushes one.** […]
->
-> *Rejected: building in CI and pushing to a registry. It decouples the build from the provider,
-> but adds a registry, its credentials, and a second place a deploy can fail, to a pipeline whose
-> point is one call per service.*
-
-**This plan reverses that.** Three things the rejection did not weigh:
+`deploy-docker-images.md` used to record a different decision: the provider builds the image from
+a git checkout, and CI never pushes one — rejecting a registry as a second place a deploy can fail,
+for a pipeline whose point was one call per service. That plan now points here instead. Three
+things the old rejection did not weigh:
 
 - **The credential cost it priced in is close to zero here.** `GreenerByDefault/foodservice-insights`
   is public, so its GHCR packages can be public: free storage, free bandwidth, and *anonymous pull*
@@ -64,8 +59,7 @@ image, every environment. Lowercase is not cosmetic: `${{ github.repository }}` 
 `GreenerByDefault/…` and GHCR rejects an uppercase path, so the base path is a literal rather than
 an expression.
 
-**How a deploy gets from a SHA to bytes**, since that is the step this plan was previously vague
-about: the deploy names the tag, and a single
+**How a deploy gets from a SHA to bytes:** the deploy names the tag, and a single
 `docker buildx imagetools inspect <image>:<sha> --format '{{.Manifest.Digest}}'` reads the digest
 back out of the registry. It is a manifest lookup — no layers pulled, about a second — and it
 fails loudly when nothing was ever built for that commit. The provider is then handed the digest
@@ -74,7 +68,7 @@ if it accepts one, and the tag if it does not.
 **We accept that OCI tags are mutable.** Anyone holding `packages: write` could repoint a commit's
 tag at different bytes, and the registry will not stop them. That is the cost of treating the tag
 as the identity, and it is accepted, not mitigated. Two things fall out of the design anyway and
-are worth having: the build skips when the tag already exists (§ PR 2), so the workflow itself
+are worth having: the build skips when the tag already exists (§ PR 1), so the workflow itself
 never moves one; and the resolved digest goes into the run log and the annotated `deploy/worker`
 tag, so a tag that *did* move is detectable afterwards. That is the honest claim — the resolution
 is a record and a canary, not a control. Nothing stops a mover from acting between the inspect and
@@ -133,33 +127,7 @@ Three registry-housekeeping decisions follow:
   that are still tagged, with `manifest unknown`. Set `provenance: false` and `sbom: false`, which
   removes the clutter that motivates the cleanup in the first place.
 
-## PR 1 — Reverse the recorded rejection
-
-Plans only; no code. Land it first, or the two plan files contradict each other while work is in
-flight.
-
-- `deploy-docker-images.md`: rewrite the § Context paragraph ("The provider builds the image from a
-  git checkout; CI never pushes one") and replace the *Rejected: building in CI…* note with a
-  pointer here. Its § "The allowlist is the `COPY` lines" reasoning **survives untouched** —
-  `actions/checkout` gives the same clean tree the provider's checkout would, and a dirty local
-  working tree is still the case the four-line `.dockerignore` covers.
-- `hosting-provider-notes.md`: requirement 1 becomes *"deploy one named service at a named image
-  **tag or digest**, from CI, with a real exit code"*. Both researched calls are commit-based
-  (`serviceInstanceDeployV2(serviceId, environmentId, commitSha)`,
-  `render deploys create --commit`) and are now the wrong API. § Hosting stays open; the notes gain:
-  - Render (as of 2026-09-03): `runtime: image` with `image: {url, creds}`, digest references
-    documented, `autoDeployTrigger: off`, and image-backed services deliberately do *not* redeploy
-    when a tag moves — which is the behaviour this design wants.
-  - Railway: image source appears to be dashboard-configured; digest support is undocumented, and
-    the CI path in its own guide is a mutable tag plus `railway redeploy`. **Open:** can Railway
-    deploy a GHCR image by digest from CI at all, and can the image be set outside the dashboard?
-  - Its § "Once a provider is chosen" gets a cheaper answer: the deployed commit is now a build
-    label on the image, so `org.opencontainers.image.revision` carries it and the provider's own
-    `*_GIT_COMMIT_SHA` variable does not need normalizing.
-  - The `dockerContext` / `dockerfilePath` / `rootDir` guidance for Render, and the Open item on
-    Railway's build context, both become moot — neither provider builds anything now.
-
-## PR 2 — Build and push both images on every push to `main`
+## PR 1 — Build and push both images on every push to `main`
 
 Depends on `deploy-docker-images.md` PR 2 and PR 3, the two Dockerfiles. Deploys stay stubbed — the
 images can sit unused for weeks while the provider question resolves, and every day they sit there
@@ -197,7 +165,7 @@ default branch's copy of the workflow, has an awkward context, and buys nothing 
 it shares the repo's 10GB cache budget with `setup-node`, `setup-python`, and
 `playwright-browsers`, so multi-GB layer caches would make every other job slower.
 
-## PR 3 — Deploy by digest, never by rebuild
+## PR 2 — Deploy by digest, never by rebuild
 
 Manual first, and it will 401 otherwise: flip both packages to public, then confirm from a laptop
 with `docker logout ghcr.io && docker buildx imagetools inspect …`.
@@ -223,7 +191,7 @@ with `docker logout ghcr.io && docker buildx imagetools inspect …`.
   Keep it immediately beside the existing forward-only migration sentence — **a rollback is fast
   and reproducible, not safe**, and that distinction is what someone reads at 2am.
 
-## PR 4 — Build both images on PRs (optional)
+## PR 3 — Build both images on PRs (optional)
 
 A broken Dockerfile currently surfaces only after merge, where `build-web` fails, `deploy-web` is
 blocked, and that commit has no image and no rollback target. Add a `docker` filter to
@@ -241,10 +209,10 @@ token with no `packages` scope.
 Each PR's own check is `pnpm lint && pnpm check && pnpm test` from the repo root, but the pipeline
 is only proven by running it:
 
-- **PR 2.** Push to `main`; confirm two packages appear and `docker buildx imagetools inspect` both.
+- **PR 1.** Push to `main`; confirm two packages appear and `docker buildx imagetools inspect` both.
   Re-run the same workflow run and confirm the build skips with its notice. Pull the web image
   locally by digest and `docker run` it.
-- **PR 3.** After the visibility flip, `docker logout ghcr.io` and inspect anonymously — that is
+- **PR 2.** After the visibility flip, `docker logout ghcr.io` and inspect anonymously — that is
   what proves the provider will not need a credential. Then dispatch a deploy at an *older* SHA and
   confirm from the log that it resolved a digest and never built. Dispatch a SHA that was never on
   `main` and confirm it fails with the explanatory message rather than a bare 404. Confirm the
