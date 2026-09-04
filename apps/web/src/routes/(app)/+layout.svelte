@@ -20,13 +20,17 @@ const currentOrganization = $derived(page.data.organization);
         {APP_NAME}
       </a>
 
-      <OrganizationSwitcher
-        current={currentOrganization}
-        organizations={data.organizations}
-        hasMore={data.hasMoreOrganizations}
-      />
+      <!-- Mobile hides the app title, so the switcher sits first and reads as the page's
+           identity; sm+ shows the title and groups the switcher with the avatar instead. -->
+      <div class="min-w-0 sm:ml-auto">
+        <OrganizationSwitcher
+          current={currentOrganization}
+          organizations={data.organizations}
+          hasMore={data.hasMoreOrganizations}
+        />
+      </div>
 
-      <div class="ml-auto">
+      <div class="ml-auto sm:ml-0">
         <UserMenu email={data.user.email} displayName={data.user.displayName} />
       </div>
     </div>
