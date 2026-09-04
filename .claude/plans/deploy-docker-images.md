@@ -54,14 +54,10 @@ already run as uid 1001, so the non-root requirement and a writable `WORKER_RUN_
 image's problem rather than ours. `npm install -g pnpm@<the version in `packageManager`>` works on
 the Node image.
 
-Two facts about the family shape the design:
-
-- **UBI 10 ships no Python 3.13 in any form** — no `ubi10/python-313` image, no `python3.13` RPM.
-  3.14 is what the distro has, and it is what we move to. PR 1.
-- **`ubi10/python-314-minimal` is `ubi-minimal` plus the `python3.14` RPM** and a venv at
-  `/opt/app-root` — **verified**, same `python3.14-3.14.7-2.el10_2` build that
-  `microdnf install python3.14` fetches. So the worker's runtime stage can obtain the *identical*
-  interpreter without copying one out of the Python builder.
+**`ubi10/python-314-minimal` is `ubi-minimal` plus the `python3.14` RPM** and a venv at
+`/opt/app-root` — **verified**, same `python3.14-3.14.7-2.el10_2` build that
+`microdnf install python3.14` fetches. So the worker's runtime stage can obtain the *identical*
+interpreter without copying one out of the Python builder.
 
 *Rejected: `ubi10/nodejs-24`, the S2I builder image — 956MB against `-minimal`'s 342MB, for an
 assemble/run framework a hand-written Dockerfile does not use.*
@@ -71,8 +67,8 @@ assemble/run framework a hand-written Dockerfile does not use.*
 `#!/usr/bin/env node` shebang npm writes — and leaves the image running as root. Both are things
 the language image has already solved.*
 
-*Rejected: a uv-managed CPython (`uv python install`). It gets any version we like, including 3.13,
-but adds python-build-standalone to the supply chain we picked UBI to shrink.*
+*Rejected: a uv-managed CPython (`uv python install`). It gets any version we like, but adds
+python-build-standalone to the supply chain we picked UBI to shrink.*
 
 ## Two builder stages that never meet
 
@@ -165,25 +161,12 @@ alone is enough — **verified** — so the lab's source stays out.
   `/opt/venv/bin/python` is absolute rather than conventional. `loadLocalEnv()` sat on the same
   call and already tolerates it ([`env.ts`](../../packages/core/src/env.ts)).
 
-## PR 1 — Move Python to 3.14
-
-Prefactor; no Dockerfile. Driven by the image — UBI 10 has no 3.13 — but it stands on its own, and
-landing it first keeps the image PRs about packaging. `.python-version`, ruff's `target-version`,
-ty's `python-version`, and `requires-python`, which should become `>=3.14` so nothing silently
-resolves back to 3.13.
-
-**Verified** on 3.14.6 against a copy of the workspace: `uv sync` clean, `ty check` clean, 117
-tests pass, and `ruff check` at `py314` flags exactly one thing — an autofixable `UP037` on the
-quoted forward reference in
-[`contract/fields.py`](../../python/worker_child/worker_child/contract/fields.py), which deferred
-annotations make unnecessary.
-
-## PR 2 — `apps/worker/Dockerfile`
+## PR 1 — `apps/worker/Dockerfile`
 
 The three stages above, its `COPY` allowlist, the shared `.dockerignore`, and the `CMD` comment.
 Repo root as build context.
 
-## PR 3 — `apps/web/Dockerfile`
+## PR 2 — `apps/web/Dockerfile`
 
 Node builder and Node runtime, no Python, and no migration entrypoint —
 [`deploy-migrations.md`](deploy-migrations.md) puts migrations in CI instead.
