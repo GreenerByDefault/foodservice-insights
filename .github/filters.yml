@@ -12,6 +12,11 @@
 # (or is marked `# planned` and matches none). `push: main` runs everything unfiltered as a
 # second backstop.
 
+# Docker build inputs.
+docker_files: &docker_files
+  - '!**/Dockerfile'
+  - '!.dockerignore'
+
 # Files no CI job depends on, full stop.
 non_code: &non_code
   - '!LICENSE'
@@ -53,6 +58,7 @@ ts:
   - '!uv.lock'
   - '!Justfile'
   - '!.python-version'
+  - *docker_files
   - *docs_and_agent_files
 
 # `gbd_foodservice_insights` and `worker_child`. Python imports no TypeScript, and no Python in
@@ -60,8 +66,9 @@ ts:
 # formats/lints Markdown across the whole repo.
 python:
   - '**'
-  - *ts_workspace
   - '!python/lab/**'
+  - *ts_workspace
+  - *docker_files
   - *non_code
 
 # gbd_foodservice_insights_lab depends on gbd_foodservice_insights, so a core change reaches it;
@@ -70,6 +77,7 @@ python:
 python_lab:
   - '**'
   - *ts_workspace
+  - *docker_files
   - *non_code
 
 # Whole-stack e2e depends on nearly everything; the lab is the one real exclusion, since nothing
