@@ -1,5 +1,10 @@
 name: Deploy
 
+# Every push to main builds *both* images, whichever service ends up deploying. One image per
+# commit is what makes a deploy a promotion and a rollback a redeploy of bytes that already ran
+# (`.claude/plans/deploy-image-registry.md`); a commit that only ever built one of the two is a
+# commit the other service can never be rolled back to.
+#
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
@@ -23,7 +28,7 @@ on:
         type: string
         required: false
       force_rebuild:
-        description: Rebuild the worker image even if this commit already has one
+        description: Rebuild the chosen service's image even if this commit already has one
         type: boolean
         required: false
         default: false
@@ -32,13 +37,42 @@ permissions:
   contents: read
 
 jobs:
-  # Builds on every push regardless of which service a later dispatch targets — a worker
-  # dispatch, or a revert to any commit, needs an image already waiting for that SHA. There is
-  # no build-web counterpart yet: apps/web/Dockerfile doesn't exist
-  # (`.claude/plans/deploy-docker-images.md` PR 2), so web still deploys through the stub.
+  # Two jobs rather than a matrix over [web, worker]: `needs:` has no per-leg granularity, so a
+  # matrix would make every web deploy — the path that runs migrations — wait on the slower
+  # Node+Python worker build, and a worker build failure would block it outright.
+  #
+  # On a dispatch these build only the service being deployed. force_rebuild is the one thing in
+  # this workflow that deliberately moves an existing tag, so it moves exactly the one the
+  # operator asked to redeploy.
+  build-web:
+    name: Build web image
+    if: >-
+      github.event_name == 'push'
+      || (inputs.force_rebuild == true && inputs.service == 'web')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: build-web-${{ inputs.sha || github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read # a job-level block replaces the workflow-level one, so restate this
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - uses: ./.github/actions/build-image
+        with:
+          service: web
+          sha: ${{ inputs.sha || github.sha }}
+          force_rebuild: ${{ inputs.force_rebuild }}
+
   build-worker:
     name: Build worker image
-    if: github.event_name == 'push' || inputs.force_rebuild == true
+    if: >-
+      github.event_name == 'push'
+      || (inputs.force_rebuild == true && inputs.service == 'worker')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -58,9 +92,16 @@ jobs:
           sha: ${{ inputs.sha || github.sha }}
           force_rebuild: ${{ inputs.force_rebuild }}
 
+  # Both deploy jobs name a status function rather than a plain boolean `if:`. A plain one is
+  # implicitly ANDed with success() over `needs`, so a dispatch that skips the build would skip
+  # the deploy with it. It must be !cancelled() and not always(), which would deploy straight
+  # through an operator hitting Cancel.
   deploy-web:
     name: Deploy web
-    if: github.event_name == 'push' || inputs.service == 'web'
+    needs: build-web
+    if: >-
+      !cancelled() && needs.build-web.result != 'failure' && needs.build-web.result != 'cancelled'
+      && (github.event_name == 'push' || inputs.service == 'web')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -79,7 +120,11 @@ jobs:
 
   deploy-worker:
     name: Deploy worker
-    if: github.event_name == 'workflow_dispatch' && inputs.service == 'worker'
+    needs: build-worker
+    if: >-
+      !cancelled() && needs.build-worker.result != 'failure'
+      && needs.build-worker.result != 'cancelled'
+      && github.event_name == 'workflow_dispatch' && inputs.service == 'worker'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:

@@ -45,20 +45,19 @@ already passed, differing only in where it runs. Real, on a separate small budge
   deploy freely there, since no user's in-flight analysis is at stake. Prod becomes dispatch-only
   for both services. That is the switchover: `deploy-worker`'s `if:` gains the push event for
   staging, and `deploy-web`'s prod path loses it.
-- **Three things keyed on `service` alone have to gain the environment.** They read as bookkeeping
+- **Two things keyed on `service` alone have to gain the environment.** They read as bookkeeping
   and are not: each one silently does the wrong thing under two environments.
   - **The concurrency group** becomes `deploy-<env>-<service>`. Left as `deploy-<service>`, a prod
     dispatch queues behind the staging deploy of the same service — and since GitHub keeps only one
-    queued run per group, a second prod dispatch cancels the first while it waits. The build groups
-    ([`deploy-image-registry.md`](deploy-image-registry.md) § Traps) need no environment at all,
-    which is the one-image invariant showing up as an absence.
-  - **`deploy-worker` gains a `needs: build-worker` edge** and the same `!cancelled()` status-
-    function `if:` that `deploy-web` carries. That plan gives it no edge specifically because the
-    worker never runs on `push`; staging is the change that makes that false, and a plain boolean
-    `if:` on a job with a `needs:` would skip the whole staging worker deploy on a prod dispatch.
+    queued run per group, a second prod dispatch cancels the first while it waits.
   - **The supersession guard** — skip when `github.sha` is behind the tip of `main` — has to be on
     both push-triggered staging jobs, not just web. Out-of-order builds reorder the worker exactly
     as readily, and staging is where the rehearsal is supposed to catch that.
+- **Nothing on the build side changes at all**, and that absence is the one-image invariant showing
+  up as a diff that isn't there. `build-web` and `build-worker` stay keyed on service and SHA — no
+  environment in their concurrency groups, none in `force_rebuild`'s gate, no second build. Both
+  deploy jobs already carry a `needs: build-<service>` edge and the `!cancelled()` status-function
+  `if:` they need for a build that skips, so only the event clause inside those `if:`s moves.
 - **`deploy/worker` becomes `deploy/<env>/<service>`**, four tags, each still annotated and still
   carrying the deployed digest in its message. The staging pair is what makes promotion mechanical:
   **a prod dispatch defaults its `sha` to `deploy/staging/<service>`**, so the default action is

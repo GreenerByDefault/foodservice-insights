@@ -7,8 +7,7 @@
 ## Context
 
 Gathered while planning the deploy pipeline (now [`workflows/deploy.yml`](../../.github/workflows/deploy.yml)),
-[`deploy-docker-images.md`](deploy-docker-images.md),
-[`deploy-image-registry.md`](deploy-image-registry.md), and
+the two Dockerfiles, [`deploy-image-registry.md`](deploy-image-registry.md), and
 [`deploy-skew-hardening.md`](deploy-skew-hardening.md). **Not a recommendation.**
 
 Provider docs move. Treat everything here as of 2026-09-03 and re-check before committing.
@@ -20,10 +19,10 @@ with the platform's git integration off, most of the provider's own CD machinery
 filters, check-suite gating — is **not** something we need. What is left:
 
 1. **Deploy one named service at a named image tag or digest, from CI, with a real exit code.**
-   [`deploy-image-registry.md`](deploy-image-registry.md) builds in CI and pushes to GHCR, so
-   neither provider builds anything — this replaces "at a named commit" from the earlier draft of
-   these notes, and the two sections below are re-evaluated against it rather than against a
-   commit-based deploy call.
+   `deploy.yml` already builds both images in CI and pushes them to GHCR tagged with the commit
+   SHA, so neither provider builds anything — this replaces "at a named commit" from the earlier
+   draft of these notes, and the two sections below are re-evaluated against it rather than against
+   a commit-based deploy call.
 2. **A shutdown grace with a documented maximum**, generous enough to be worth draining into. An
    attempt averages ~5 minutes, so the useful range is minutes.
 3. `ARCHITECTURE.md` § Hosting's existing criteria: manual scaling, restarts, price, logging, alerts
@@ -114,8 +113,9 @@ deploys and immutable tags are documented, which now bears directly on requireme
 ## Once a provider is chosen
 
 - **The deployed commit is already on the image**, not something to normalize from a
-  provider-injected variable: [`deploy-image-registry.md`](deploy-image-registry.md) labels every
-  build `org.opencontainers.image.revision=<sha>`, and the resolved digest is recorded in the
-  deploy run's log and the annotated `deploy/worker` tag. A service can still log it at boot by
+  provider-injected variable: [`build-image`](../../.github/actions/build-image/action.yml) labels
+  every build `org.opencontainers.image.revision=<sha>`, and
+  [`deploy-image-registry.md`](deploy-image-registry.md) puts the resolved digest in the deploy
+  run's log and the annotated `deploy/worker` tag. A service can still log it at boot by
   reading that label if that turns out to be useful; it no longer needs reconciling between
   `RAILWAY_GIT_COMMIT_SHA` and `RENDER_GIT_COMMIT`, since neither provider builds anymore.
