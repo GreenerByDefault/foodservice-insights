@@ -1,9 +1,3 @@
-"""The three reasons `analyze()` can fail. A leaf module so `llm.py` can raise
-`UpstreamApiError` without importing `analysis.py`, which would close a
-`llm → analysis → categorize` cycle.
-"""
-
-
 class AnalysisError(Exception):
     """Base for every reason `analyze()` cannot produce a report."""
 
