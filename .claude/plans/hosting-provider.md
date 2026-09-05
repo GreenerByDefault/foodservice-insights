@@ -31,7 +31,11 @@ provider builds nothing and needs no git integration. What is left:
 
 Candidates: Railway, Render, and DigitalOcean App Platform. *Rejected: a DigitalOcean Droplet.*
 $12–18/month runs both containers, but OS patching, Docker, TLS, restarts, log shipping, and a
-deploy script become ours to maintain — the opposite of simplicity over time.
+deploy script become ours to maintain — the opposite of simplicity over time. *Rejected: Cloud
+Run, Fargate, Heroku.* Each caps or fixes the shutdown grace at 10–120 seconds. *Rejected:
+Cloudflare Workers + Containers.* Containers wake on requests and sleep when idle, so an always-on
+worker needs a controller Worker, Durable Object, and Cron Trigger that we would write and operate;
+they also cannot pull from GHCR or pin a digest, and there are no alerts below Enterprise.
 
 ## 1. How each one bills
 
