@@ -106,10 +106,7 @@ describe('organization', () => {
   });
 
   // Together, these two tests pin MAX_ORGANIZATION_NAME_LENGTH to the `organization_name_length`
-  // CHECK constraint it mirrors, in both directions: if the migration's bound ever moves without
-  // the constant moving with it, either this insert starts failing (constant now claims one more
-  // character than the DB allows) or the next test's insert starts succeeding (constant now
-  // claims one fewer than the DB allows).
+  // CHECK constraint it mirrors: either side drifting from the other fails one of them.
 
   test('accepts a name exactly at the cap', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
