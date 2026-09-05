@@ -147,12 +147,14 @@ export async function loadAttemptInputs(
     .selectFrom('analysisAttempt')
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
     .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
+    .innerJoin('organization', 'organization.id', 'report.organizationId')
     .select([
       'report.id as reportId',
       'inputFile.id as inputFileId',
       'report.organizationId',
       'report.name',
       'report.siteName',
+      'organization.name as organizationName',
       'report.countsBasis',
       'report.unitSystem',
       'report.monthlyCounts',
@@ -175,6 +177,7 @@ export async function loadAttemptInputs(
     report: {
       name: row.name,
       siteName: row.siteName,
+      organizationName: row.organizationName,
       countsBasis: row.countsBasis,
       unitSystem: row.unitSystem,
       monthlyCounts: row.monthlyCounts,

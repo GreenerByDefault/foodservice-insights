@@ -25,6 +25,7 @@ const RunManifestSchema = v.strictObject({
   report: v.strictObject({
     name: v.nullable(nonEmptyString),
     siteName: v.nullable(nonEmptyString),
+    organizationName: nonEmptyString,
     countsBasis: v.picklist(COUNTS_BASES),
     unitSystem: v.picklist(UNIT_SYSTEMS),
     monthlyCounts: v.pipe(
@@ -59,6 +60,7 @@ export type RunManifestInput = {
   report: {
     name: string | null;
     siteName: string | null;
+    organizationName: string;
     countsBasis: CountsBasis;
     unitSystem: UnitSystem;
     monthlyCounts: unknown;

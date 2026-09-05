@@ -7,16 +7,10 @@ export const INVOCATION = {
   positionalArguments: ['runDirectory'],
   workingDirectory: 'work',
   // Everything the child's environment is allowed to hold — inherited from the parent's own
-  // process (PATH, HOME, LANG, TZ) plus the secrets it needs (the API keys).
-  environmentVariables: [
-    'PATH',
-    'HOME',
-    'LANG',
-    'TZ',
-    'GEMINI_API_KEY',
-    'LLM_WHISPERER_API_KEY',
-    'OPENAI_API_KEY',
-  ],
+  // process (PATH, HOME, LANG, TZ) plus the one secret it needs (the OpenAI key). The PDF
+  // extractor's and entree detector's keys stay out: both run in the lab, outside the shipped
+  // child.
+  environmentVariables: ['PATH', 'HOME', 'LANG', 'TZ', 'OPENAI_API_KEY'],
 } as const;
 
 export const EXIT_CODES = {

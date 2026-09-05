@@ -314,7 +314,9 @@ describe('claiming', () => {
 describe('loadAttemptInputs', () => {
   test('returns a manifest the contract accepts, and the input file to fetch', async () => {
     const loaded = await withRollback(WORKER_DATABASE, async (transaction) => {
+      const { organization } = await insertOrganization(transaction, { name: 'Acme Foodservice' });
       const report = await insertReport(transaction, {
+        organizationId: organization.id,
         name: 'Q3 procurement',
         siteName: 'North kitchen',
         monthlyCounts: { '2026-03': 900 },
@@ -336,6 +338,7 @@ describe('loadAttemptInputs', () => {
       report: {
         name: 'Q3 procurement',
         siteName: 'North kitchen',
+        organizationName: 'Acme Foodservice',
         countsBasis: 'people',
         unitSystem: 'lb',
         monthlyCounts: { '2026-03': 900 },
