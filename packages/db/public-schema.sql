@@ -532,6 +532,7 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "notification_claimed_at" timestamp with time zone,
     "notification_claimed_by_worker_id" "text",
     "notification_attempts" integer DEFAULT 0 NOT NULL,
+    "required_contract_version" smallint DEFAULT 1 NOT NULL,
     CONSTRAINT "analysis_attempt_attempt_number_range" CHECK ((("attempt_number" >= 1) AND ("attempt_number" <= 5))),
     CONSTRAINT "analysis_attempt_cancel_requested_at_after_created_at" CHECK ((("cancel_requested_at" IS NULL) OR ("cancel_requested_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_canceled_is_not_notified" CHECK ((("notification_claimed_at" IS NULL) OR ("status" <> 'canceled'::"public"."analysis_attempt_status"))),
@@ -550,7 +551,8 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     CONSTRAINT "analysis_attempt_notification_requires_finished" CHECK ((("notification_email_sent_at" IS NULL) OR ("finished_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_notification_sent_requires_claim" CHECK ((("notification_email_sent_at" IS NULL) OR ("notification_claimed_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_pending_is_unclaimed" CHECK ((("status" <> 'pending'::"public"."analysis_attempt_status") OR (("worker_id" IS NULL) AND ("claimed_at" IS NULL) AND ("lease_renewed_at" IS NULL)))),
-    CONSTRAINT "analysis_attempt_processing_is_claimed" CHECK ((("status" <> 'processing'::"public"."analysis_attempt_status") OR (("worker_id" IS NOT NULL) AND ("claimed_at" IS NOT NULL) AND ("lease_renewed_at" IS NOT NULL) AND ("finished_at" IS NULL))))
+    CONSTRAINT "analysis_attempt_processing_is_claimed" CHECK ((("status" <> 'processing'::"public"."analysis_attempt_status") OR (("worker_id" IS NOT NULL) AND ("claimed_at" IS NOT NULL) AND ("lease_renewed_at" IS NOT NULL) AND ("finished_at" IS NULL)))),
+    CONSTRAINT "analysis_attempt_required_contract_version_positive" CHECK (("required_contract_version" >= 1))
 );
 
 
@@ -603,6 +605,14 @@ COMMENT ON COLUMN "public"."analysis_attempt"."notification_attempts" IS 'Increm
        configured maximum the row stops being claimed, however stale its claim, so a permanently
        undeliverable address costs a fixed number of provider requests rather than an unbounded
        retry loop.';
+
+
+--
+-- Name: COLUMN "analysis_attempt"."required_contract_version"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."required_contract_version" IS 'The lowest worker contract version that can safely claim this row, so an old worker leaves
+       an attempt it cannot handle in the queue instead of claiming and failing it.';
 
 
 --

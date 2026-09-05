@@ -56,6 +56,9 @@ export default interface AnalysisAttemptTable {
 
   /** Incremented by the claim, before the send is attempted. Bounds retries: once it reaches the\n       configured maximum the row stops being claimed, however stale its claim, so a permanently\n       undeliverable address costs a fixed number of provider requests rather than an unbounded\n       retry loop. */
   notificationAttempts: ColumnType<number, number | undefined, number>;
+
+  /** The lowest worker contract version that can safely claim this row, so an old worker leaves\n       an attempt it cannot handle in the queue instead of claiming and failing it. */
+  requiredContractVersion: ColumnType<number, number | undefined, number>;
 }
 
 export type AnalysisAttempt = Selectable<AnalysisAttemptTable>;

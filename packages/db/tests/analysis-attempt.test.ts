@@ -267,6 +267,22 @@ describe('analysis_attempt column invariants', () => {
     });
   });
 
+  test('rejects a required_contract_version below 1', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const attempt = await insertAnalysisAttempt(transaction);
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ requiredContractVersion: 0 })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expect(update).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'analysis_attempt_required_contract_version_positive',
+    });
+  });
+
   test.each([
     {
       description: 'a positive attempt count without a claim',

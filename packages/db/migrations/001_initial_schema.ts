@@ -532,6 +532,7 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addColumn('notification_claimed_at', 'timestamptz')
     .addColumn('notification_claimed_by_worker_id', 'text')
     .addColumn('notification_attempts', 'integer', (column) => column.notNull().defaultTo(0))
+    .addColumn('required_contract_version', 'smallint', (column) => column.notNull().defaultTo(1))
     // So two workers cannot claim to be the same attempt.
     .addUniqueConstraint('analysis_attempt_report_id_attempt_number', [
       'report_id',
@@ -541,6 +542,10 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
     .addCheckConstraint(
       'analysis_attempt_attempt_number_range',
       sql`attempt_number BETWEEN 1 AND 5`,
+    )
+    .addCheckConstraint(
+      'analysis_attempt_required_contract_version_positive',
+      sql`required_contract_version >= 1`,
     )
     .addCheckConstraint(
       'analysis_attempt_pending_is_unclaimed',
@@ -662,6 +667,12 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
        configured maximum the row stops being claimed, however stale its claim, so a permanently
        undeliverable address costs a fixed number of provider requests rather than an unbounded
        retry loop.'
+  `.execute(database);
+
+  await sql`
+    COMMENT ON COLUMN analysis_attempt.required_contract_version IS
+      'The lowest worker contract version that can safely claim this row, so an old worker leaves
+       an attempt it cannot handle in the queue instead of claiming and failing it.'
   `.execute(database);
 
   // At most one active attempt per report.
