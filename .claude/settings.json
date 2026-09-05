@@ -92,6 +92,7 @@
       "Bash(grep *)",
       "Bash(rg *)",
       "Bash(sd *)",
+      "Bash(sed *)",
       "Bash(xargs cat)",
       "Bash(ls *)",
       "Bash(head *)",
@@ -118,6 +119,10 @@
       "Bash(uv --version)",
       "Bash(python3 --version)",
       "Bash(just --version)",
+
+      "Read",
+      "Glob",
+      "Grep",
 
       "WebSearch",
 
