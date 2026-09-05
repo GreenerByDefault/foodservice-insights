@@ -22,8 +22,8 @@ provider builds nothing and needs no git integration. What is left:
    Web and worker deploy separately; a rollback is the same call at an older commit.
 2. **A shutdown grace measured in minutes.** An attempt averages ~5 minutes (range 2–15). The
    worker drains on SIGTERM and needs the platform to wait;
-   [`deploy-skew-hardening.md`](deploy-skew-hardening.md) makes that relation checkable once the
-   platform's number is known.
+   [`config.ts`](../../apps/worker/src/config.ts)'s `PLATFORM_SHUTDOWN_GRACE_MS` check makes that
+   relation checkable once the platform's number is known.
 3. **Manual scaling, restarts, alerts on CPU/memory/disk, and logs** — § Choosing a host and
    § Failure modes.
 4. **Price, and simplicity over time**, for a two-person nonprofit team. No autoscaling.
@@ -102,7 +102,7 @@ about the average. None covers the 15-minute tail, and none needs to: the worker
 someone dispatches it, so it can go out at a quiet hour, and an attempt cut off at the grace is
 recorded `shut_down` and retried by the user. `drainGraceMs` is then sized to the platform's number
 minus `killGraceMs` and one terminal write — the `PLATFORM_SHUTDOWN_GRACE_MS` check in
-[`deploy-skew-hardening.md`](deploy-skew-hardening.md).
+[`config.ts`](../../apps/worker/src/config.ts).
 
 ## 5. Running it: scaling, logs, alerts
 
@@ -168,7 +168,8 @@ Four things, whichever provider wins:
 1. Replace the stub step in `actions/deploy-service` with the provider's deploy-by-digest call,
    waiting for a terminal status.
 2. Commit the provider's config-as-code file: both services, the shutdown grace at its maximum,
-   and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it — [`deploy-skew-hardening.md`](deploy-skew-hardening.md) § a.
+   and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it, per the relation in
+   [`config.ts`](../../apps/worker/src/config.ts).
 3. Set the production secrets in the provider, and `DB_CONNECTION_STRING` in GitHub Actions
    ([`deploy-migrations.md`](deploy-migrations.md)), both pointing at the Supavisor session pooler.
 4. Set the spend and resource alerts, and on DigitalOcean, log forwarding.

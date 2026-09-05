@@ -82,9 +82,9 @@ secret scoping, branch restriction, and deployment history first.
 
 ## Interaction with the rest of the design
 
-- [`deploy-skew-hardening.md`](deploy-skew-hardening.md) gets *more* important, not less: staging
-  makes deploy skew a thing you can rehearse, and its `PLATFORM_SHUTDOWN_GRACE_MS` check must be
-  set per environment on the same service block as the platform's own grace.
+- Deploy skew hardening gets *more* important, not less: staging makes deploy skew a thing you can
+  rehearse, and [`config.ts`](../../apps/worker/src/config.ts)'s `PLATFORM_SHUTDOWN_GRACE_MS` check
+  must be set per environment on the same service block as the platform's own grace.
 - The one-image invariant is what this rests on. If a `PUBLIC_*` variable or an `$env/static/*`
   import ever appears, the artifact stops being promotable and staging silently starts testing
   different bytes than prod runs. Worth a comment where it would first be tempting.

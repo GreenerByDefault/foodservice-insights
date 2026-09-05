@@ -49,8 +49,8 @@ export type WorkerConfig = {
    *
    * The hosting platform's own shutdown grace has to exceed this plus `killGraceMs` plus one
    * terminal write, or the platform kills the worker mid-drain and every attempt still draining is
-   * left to another worker's reaper instead of recording `shut_down`. Nothing here can check a
-   * setting that lives on the platform. See
+   * left to another worker's reaper instead of recording `shut_down`. Checked against
+   * `PLATFORM_SHUTDOWN_GRACE_MS`, when set, by `createWorkerConfig`'s optional third argument. See
    * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#deployments). */
   drainGraceMs: number;
 
@@ -150,13 +150,17 @@ export class WorkerConfigError extends Error {
   }
 }
 
-/** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below. */
+/** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below.
+ *
+ * `platformShutdownGraceMs` (`PLATFORM_SHUTDOWN_GRACE_MS`) is a platform fact, not a worker
+ * behaviour, so it stays out of `WorkerConfig` — see `drainGraceMs` for the relation it checks. */
 export function createWorkerConfig(
   required: WorkerRequiredFields,
   overrides: WorkerDefaultableFields = {},
+  platformShutdownGraceMs?: number,
 ): WorkerConfig {
   const config = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...required };
-  const violations = workerConfigViolations(config);
+  const violations = workerConfigViolations(config, platformShutdownGraceMs);
   if (violations.length > 0) throw new WorkerConfigError(violations);
   return config;
 }
@@ -206,7 +210,7 @@ function notificationRetryWindowMs(
 
 /** Every relation between these values that can be decided from the values alone, as one message
  * per relation the config breaks. */
-function workerConfigViolations(config: WorkerConfig): string[] {
+function workerConfigViolations(config: WorkerConfig, platformShutdownGraceMs?: number): string[] {
   const violations: string[] = [];
   const check = (holds: boolean, violation: string) => {
     if (!holds) violations.push(violation);
@@ -259,6 +263,17 @@ function workerConfigViolations(config: WorkerConfig): string[] {
   // reaper was already entitled to reap. The overlap is harmless, since every terminal write is
   // guarded and the loser writes nothing, and subtracting an interval from leaseExpiresAfterMs
   // would cost more clarity than 30s against a multi-minute expiry is worth.
+
+  if (platformShutdownGraceMs !== undefined) {
+    check(
+      platformShutdownGraceMs >
+        config.drainGraceMs + config.killGraceMs + MAX_RENEWAL_ROUND_TRIP_MS,
+      `PLATFORM_SHUTDOWN_GRACE_MS (${platformShutdownGraceMs}ms) must exceed drainGraceMs + ` +
+        `killGraceMs plus one terminal write's round trip (${MAX_RENEWAL_ROUND_TRIP_MS}ms). ` +
+        'Otherwise the platform can kill the worker mid-drain, leaving an attempt still draining ' +
+        "to another worker's reaper instead of recording shut_down.",
+    );
+  }
 
   check(
     config.claimedCeilingMs >
