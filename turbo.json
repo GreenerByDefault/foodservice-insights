@@ -69,6 +69,18 @@
     },
     "test:system": {
       "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/web/Dockerfile",
+        "$TURBO_ROOT$/apps/worker/Dockerfile",
+        "$TURBO_ROOT$/.dockerignore",
+        "$TURBO_ROOT$/pyproject.toml",
+        "$TURBO_ROOT$/uv.lock",
+        "$TURBO_ROOT$/python/**",
+        "!$TURBO_ROOT$/python/lab/**",
+        "!$TURBO_ROOT$/python/**/__pycache__/**",
+        "!$TURBO_ROOT$/python/**/*.md"
+      ],
       "outputs": ["playwright-report/**", "test-results/**"]
     },
     "screenshots:update": {

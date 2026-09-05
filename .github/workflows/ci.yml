@@ -239,6 +239,10 @@ jobs:
       - uses: ./.github/actions/setup-python
       - run: just test-lab
 
+  # Runs both services as the Docker images they deploy as, so this job is the only thing that
+  # validates either Dockerfile — see tests/e2e/scripts/containers.ts. It builds them itself, which
+  # is why there is no setup-python step: the Python child ships inside the worker image, and
+  # nothing else here invokes uv or just.
   system-e2e:
     name: 'System e2e tests'
     needs: changes
@@ -248,9 +252,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node
-      - uses: ./.github/actions/setup-python
       - uses: ./.github/actions/playwright-browsers
       - uses: ./.github/actions/setup-supabase
+
+      # Both images build from scratch here — four base images, two pnpm installs, a vite build, a
+      # tsc, and a uv sync — which is minutes, not seconds. There is deliberately no layer cache:
+      # `.claude/plans/deploy-image-registry.md` rejected `type=gha` for this repo, since multi-GB
+      # layer caches would crowd out setup-node and playwright-browsers in the same 10GB budget.
+      # Once that plan's registry cache exists, `cache-from` it is what makes this warm.
+
+      # The browser follows a report download to a blob-store URL the web container signed, so the
+      # host has to resolve the same name the container did. Same line README.md documents locally.
+      - name: Resolve host.docker.internal on the runner
+        run: echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts
+
       - run: pnpm exec turbo run test:system
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}

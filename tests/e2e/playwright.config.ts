@@ -1,14 +1,21 @@
 /// <reference types="node" />
-import { fileURLToPath } from 'node:url';
 import {
   assertTestRunId,
   createPlaywrightConfig,
   resolvePlaywrightTarget,
 } from '@gbd/browser-testing/playwright-config';
+import { requireEnv } from '@gbd/core/env';
 import { defineConfig } from '@playwright/test';
+import {
+  assertBuiltImages,
+  containerStackFromEnv,
+  webContainerCommand,
+} from './scripts/containers.ts';
 
 assertTestRunId('`pnpm test:system`');
+const images = assertBuiltImages();
 const { port, baseURL } = resolvePlaywrightTarget();
+const runName = requireEnv('TEST_RUN_ID');
 
 export default defineConfig(
   createPlaywrightConfig({
@@ -21,10 +28,20 @@ export default defineConfig(
     timeout: 120_000,
     projects: [{ name: 'e2e', testMatch: '**/*.e2e.ts' }],
     webServer: {
-      // The same adapter-node output `apps/web`'s own suite runs, from this package instead —
-      // hence the `cwd`, which `--env-file-if-exists`'s relative path is resolved against too.
-      // `turbo run test:system` builds it first, through this package's `@gbd/web` dependency.
-      cwd: fileURLToPath(new URL('../../apps/web', import.meta.url)),
+      // The deployed artifact itself, not a host process running its build output — this tier is
+      // the only thing that validates either image. `scripts/test-run.ts` built them and named
+      // them in the environment; `assertBuiltImages` is what refuses to run without that.
+      command: webContainerCommand({
+        image: images.web,
+        runName,
+        port,
+        baseURL,
+        stack: containerStackFromEnv(),
+      }),
+      // A killed `docker run` leaves its container running, and Playwright's default teardown is
+      // SIGKILL to the process group. The container is removed in `test-run.ts` either way; this
+      // is what lets the app shut down cleanly first.
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 15_000 },
     },
   }),
 );

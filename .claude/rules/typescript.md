@@ -34,6 +34,12 @@ change touches several files in one package and there's no single file to target
 that fallback is `pnpm test:playwright` — `test:e2e` and `test:screenshots` together, one app
 boot, and what `pnpm test` itself runs.
 
+**`pnpm test:system` is deliberately not in that gate**, and should not be added to it. It builds
+both Docker images and runs them, so it costs minutes rather than seconds, and CI runs it on every
+PR that touches the paths it covers. Run it locally when the change is one it is the only tier to
+cover — either Dockerfile, either service's startup or shutdown, `python/worker_child`, or the
+seam between the app, the worker and the child. For anything else, let CI have it.
+
 **Run the gate in the background** (`run_in_background: true` on the Bash tool) once the
 change is ready, rather than blocking on it — Claude Code notifies on completion, so the wait
 overlaps with re-reading the diff, `/prune-comments`, and drafting the PR body instead of

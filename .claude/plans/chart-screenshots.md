@@ -31,6 +31,18 @@ What does work, confirmed the same way: **routing the pre-redirect, app-origin U
 would 302. That request is same-origin to the app server the container already reaches via
 `host.docker.internal`, so it's routable.
 
+**An unexplored alternative, since confirmed in a different tier:** `tests/e2e/scripts/containers.ts`
+(the `pnpm test:system` suite) hits the same signed-host problem and solves it without stubbing —
+not by rewriting a URL after signing, but by signing with `host.docker.internal` from the start
+(`S3_ENDPOINT` set to the alias before the app ever builds the URL) and making sure whoever follows
+the redirect resolves that same alias. There, the app is the container and the browser is the host,
+so the host needed a one-time `/etc/hosts` entry (see `assertDockerIsUsable`). For screenshots the
+roles are flipped — the app is a host process and the browser is the container — but the container
+already resolves `host.docker.internal` back to the host via `--add-host=host.docker.internal:host-gateway`
+(`e2e/setup/browser-container.ts`). So pointing the host app's `S3_ENDPOINT` at `host.docker.internal`
+for the screenshot run might let the real redirect-and-sign chain work end-to-end, no stub needed.
+Not verified — worth checking before committing to the stub approach below.
+
 ## The approach
 
 Stub the file-serving route in the screenshot project only, fulfilling from a committed image

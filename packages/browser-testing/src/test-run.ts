@@ -121,6 +121,10 @@ function spawnPlaywright(
  * starts (e.g. a worker) at the same database and bucket, and give the app's own process the
  * same origin. */
 export type FreshStack = {
+  /** This run's identifier, also exported to Playwright as `TEST_RUN_ID`. Unique per run and
+   * safe in a Docker tag or container name, so a caller that starts containers can scope theirs
+   * to the run rather than racing another worktree for a shared name. */
+  name: string;
   connectionString: string;
   s3Bucket: string;
   port: number;
@@ -164,6 +168,7 @@ export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions)
     try {
       const port = await freePort();
       const stack: FreshStack = {
+        name: runDatabase.name,
         connectionString: runDatabase.connectionString,
         s3Bucket: runBucket.name,
         port,
@@ -179,7 +184,7 @@ export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions)
           S3_BUCKET: stack.s3Bucket,
           SITE_URL: stack.siteUrl,
           PLAYWRIGHT_PORT: String(port),
-          TEST_RUN_ID: runDatabase.name,
+          TEST_RUN_ID: stack.name,
         });
       } finally {
         await before.afterPlaywright?.();
