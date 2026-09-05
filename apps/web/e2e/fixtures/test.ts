@@ -35,8 +35,8 @@ export interface OrganizationMembershipFactory {
    * passed or failed.
    *
    * Use this, not `organizations.create`, for a spec that puts the placeholder user in several
-   * organizations at once — see `insertOrganizationMembershipFixture`'s doc comment for why
-   * `organizations.create` doesn't scale past a couple of calls in the whole suite.
+   * organizations at once as a plain member — see `insertOrganizationMembershipFixture`'s doc
+   * comment for why that needs a disposable admin rather than reusing `organizations.create`.
    */
   create(spec: { name: string }): Promise<OrganizationId>;
 }

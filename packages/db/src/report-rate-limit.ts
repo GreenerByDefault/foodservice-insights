@@ -15,11 +15,11 @@ const LOCK_CLASS_USER = 2;
  * upload for that same organization or that same user.
  *
  * The hourly and weekly report limits in REQUIREMENTS.md#abuse-limits are windowed — "N per
- * rolling period" — so, unlike `app_user.organizations_created_count`, there is no counter column
- * a `CHECK` can cap: a report ages out of the window without any write happening. That means
- * whatever counts reports in the window and whatever then inserts one have to be serialized by
- * hand, or two uploads can each count 4 in the window, each decide they're under a limit of 5, and
- * both insert — see `tests/report-rate-limit.test.ts`.
+ * rolling period" — so there is no counter column a `CHECK` can cap: a report ages out of the
+ * window without any write happening. That means whatever counts reports in the window and
+ * whatever then inserts one have to be serialized by hand, or two uploads can each count 4 in the
+ * window, each decide they're under a limit of 5, and both insert — see
+ * `tests/report-rate-limit.test.ts`.
  *
  * Call this first, inside the transaction that will count and then either insert a report or
  * record why it refused to. The lock is transaction-scoped: it releases itself on commit or

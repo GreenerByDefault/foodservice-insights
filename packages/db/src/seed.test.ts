@@ -21,16 +21,6 @@ describe('seedPlaceholderIdentity', () => {
       expect(memberships).toMatchObject([
         { organizationId: PLACEHOLDER_ORGANIZATION_ID, role: 'admin' },
       ]);
-
-      // The count is what a re-seed would quietly corrupt: an upsert instead of DO NOTHING
-      // would re-fire `organization_count_against_creator` and, after five runs, make seeding
-      // fail against `app_user_organizations_created_count_max`.
-      const user = await transaction
-        .selectFrom('appUser')
-        .select('organizationsCreatedCount')
-        .where('id', '=', PLACEHOLDER_USER_ID)
-        .executeTakeFirstOrThrow();
-      expect(user.organizationsCreatedCount).toBe(1);
     });
   });
 

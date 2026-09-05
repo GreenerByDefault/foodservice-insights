@@ -83,16 +83,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     )
     .addColumn('display_name', 'text')
     .addColumn('is_superadmin', 'boolean', (column) => column.notNull().defaultTo(false))
-    .addColumn('organizations_created_count', 'integer', (column) => column.notNull().defaultTo(0))
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
-    .addCheckConstraint(
-      'app_user_organizations_created_count_non_negative',
-      sql`organizations_created_count >= 0`,
-    )
-    .addCheckConstraint(
-      'app_user_organizations_created_count_max',
-      sql`organizations_created_count <= 5`,
-    )
     .execute();
 
   await sql`
@@ -151,36 +142,6 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     .execute();
 
   await updatedAtTrigger(database, 'organization');
-
-  // The counter `app_user_organizations_created_count_max` limits, maintained here rather than by
-  // the app, because that is what makes the limit hold when two requests arrive at once: the
-  // read-modify-write is one UPDATE, so the second creation waits on the first's row lock and then
-  // counts from what it committed. An app-side `SELECT` followed by `SET count = $n` loses one of
-  // the two and lets an extra organization through. See `tests/concurrency.test.ts`.
-  //
-  // It only ever counts up. The column records organizations *created*, so deleting one does not
-  // hand the quota back — otherwise the limit would be trivial to walk around.
-  await sql`
-    CREATE FUNCTION organization_count_against_creator() RETURNS trigger
-    LANGUAGE plpgsql AS $$
-    BEGIN
-      UPDATE app_user
-         SET organizations_created_count = organizations_created_count + 1
-       WHERE id = NEW.created_by_user_id;
-      RETURN NULL;
-    END;
-    $$
-  `.execute(database);
-
-  // `created_by_user_id` is nullable — it is set to null when the creator deletes their account —
-  // and an organization nobody claims to have created counts against nobody.
-  await sql`
-    CREATE TRIGGER organization_count_against_creator
-      AFTER INSERT ON organization
-      FOR EACH ROW
-      WHEN (NEW.created_by_user_id IS NOT NULL)
-      EXECUTE FUNCTION organization_count_against_creator()
-  `.execute(database);
 
   // --- organization_member --------------------------------------------------
 

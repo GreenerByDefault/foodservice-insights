@@ -149,9 +149,8 @@ rule in [guards.ts](apps/web/src/lib/server/auth/guards.ts) goes out of its way 
 would still need the 409 path underneath, since any check can go stale between keystroke and submit.
 At our user count the submit-time error will fire approximately never.
 
-**Other failures**, per the conventions in `.claude/plans/report-upload-form.md`: the five-org
-allowance returns 409 `organization_limit_reached` and replaces the form with an explanation;
-anything else is a short `role="alert"` panel at the submit button. No toast.
+**Other failures**, per the conventions in `.claude/plans/report-upload-form.md`: a short
+`role="alert"` panel at the submit button. No toast.
 
 ### Settings — `/orgs/[organizationSlug]/settings`
 
@@ -229,20 +228,18 @@ with `TEST_DB=1`.
   [`lib/reports/metadata.ts`](apps/web/src/lib/reports/metadata.ts).
 - **New** `apps/web/src/lib/orgs/create-organization.ts` — the feature's own client, narrowing
   `ApiError` from [`$lib/api/fetch.ts`](apps/web/src/lib/api/fetch.ts) into
-  `'name-taken' | 'address-taken' | 'address-reserved' | 'no-address' | 'limit-reached' | 'unknown'`.
+  `'name-taken' | 'address-taken' | 'address-reserved' | 'no-address' | 'unknown'`.
 - [`api/orgs/+server.ts`](apps/web/src/routes/api/orgs/+server.ts): logic in an exported
   `_createOrganization` (per the route-handler rule) — derive, 422 on `null` or a reserved slug,
   then one transaction inserting the organization, the admin membership row, the audit event, and
   the GBD notification (REQUIREMENTS.md:170-174). A plain insert: no candidate loop, because a
   taken address is now the user's to resolve. Map the two unique violations apart by `constraint` —
   `organization_name_unique_ci` → 409 `organization_name_taken`, `organization_slug_unique` → 409
-  `organization_slug_taken` (the body carries the derived slug, so the message can name the address)
-  — and `app_user_organizations_created_count_max` → 409 `organization_limit_reached`. Classify with
-  `isPermanentDatabaseError` + `POSTGRES_CODE_UNIQUE_VIOLATION` from `@gbd/db`, never
+  `organization_slug_taken` (the body carries the derived slug, so the message can name the address).
+  Classify with `isPermanentDatabaseError` + `POSTGRES_CODE_UNIQUE_VIOLATION` from `@gbd/db`, never
   `instanceof DatabaseError`. Tested as `create-organization.test.ts`, covering both 409s
   separately — mapping the wrong constraint to the wrong message is the likely bug here.
-- [`orgs/new/+page.server.ts`](apps/web/src/routes/(app)/orgs/new/+page.server.ts): read
-  `organizations_created_count` for the allowance copy only, as its stub comment already specifies.
+- No server `load` needed for `orgs/new` — there is nothing to read for the form.
 - `orgs/new/+page.svelte`: `Field` + `Input` + `Field.Error`, live address preview, submit disabled
   only in flight, `goto` the `Location` header. Component test covers the preview (including the
   derives-to-nothing and reserved messages) and that each 409 renders its own copy inline and takes

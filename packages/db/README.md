@@ -67,11 +67,8 @@ Design reasoning:
   `rejection_reason` is ours rather than the user's, so that one is an enum.
 - **Superadmin is a boolean on `app_user`, not a membership row.** See
   [`ARCHITECTURE.md`](../../ARCHITECTURE.md#auth).
-- **`app_user.organizations_created_count` is maintained by a trigger, not by the app.** The limit
-  it feeds only holds if the read and the write are one statement. Application code must never
-  write that column.
 - **The hourly and weekly report limits in [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits)
-  can't use that trick — they're windowed, not cumulative.**
+  are windowed, not cumulative, so no counter column can cap them.**
   [`report-rate-limit.ts`](src/report-rate-limit.ts) exports `lockReportRateLimit`, an advisory
   lock the app takes instead; see its doc comment for why.
 
