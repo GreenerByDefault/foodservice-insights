@@ -32,11 +32,22 @@ export type CreatePlaywrightConfigOptions = {
    * than an assertion they wrote themselves. */
   timeout?: number;
   webServer?: {
+    /** Replaces the default `node start.js`. A caller that starts the app some other way — e.g.
+     * `tests/e2e`, which runs it as a container — supplies its own here.
+     *
+     * **`env` below does not reach a command that is only a launcher.** Playwright sets it on the
+     * process it spawns, so for a `docker run` it lands on the CLI rather than in the container:
+     * such a command has to carry `PORT`, `ORIGIN` and the rest itself. */
+    command?: string;
     /** Set when the config isn't itself next to the app's `start.js` — e.g. `tests/e2e`, which
      * runs `apps/web`'s build from outside that package. */
     cwd?: string;
     /** Merged on top of the shared `PORT`/`ORIGIN`/`TEST_DB`. */
     env?: Record<string, string>;
+    /** Opt in to a SIGTERM-then-wait teardown. Playwright's default is SIGKILL to the process
+     * group, which is fine for a server it owns directly but strands whatever a launcher command
+     * started — a killed `docker run` leaves its container running. */
+    gracefulShutdown?: { signal: 'SIGTERM'; timeout: number };
   };
 };
 
@@ -67,15 +78,18 @@ export function createPlaywrightConfig(
     projects,
     ...(timeout !== undefined ? { timeout } : {}),
     webServer: {
-      // Runs the real adapter-node output, not `vite preview`, so a suite built on this exercises
-      // the deployed artifact. `turbo run test:e2e`/`test:system` depend on `build` running
+      // The default runs the real adapter-node output, not `vite preview`, so a suite built on
+      // this exercises the deployed artifact. `turbo run test:e2e` depends on `build` running
       // first.
       //
       // No need to migrate or seed the database: `test-run.ts` already hands this process a
       // database cloned from a pre-migrated template. It sets `DB_CONNECTION_STRING`, which
       // overrides `.env.test`.
-      command: 'node --env-file-if-exists=../../.env.test start.js',
+      command: webServer?.command ?? 'node --env-file-if-exists=../../.env.test start.js',
       ...(webServer?.cwd !== undefined ? { cwd: webServer.cwd } : {}),
+      ...(webServer?.gracefulShutdown !== undefined
+        ? { gracefulShutdown: webServer.gracefulShutdown }
+        : {}),
       env: {
         PORT: String(port),
         // SvelteKit's CSRF check rejects a POST whose Origin header doesn't match this. A caller

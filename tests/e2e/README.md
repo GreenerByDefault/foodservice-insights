@@ -3,6 +3,12 @@
 `pnpm test:system`, from the repo root. It gives the run its own database, blob-store bucket, app
 server and worker, so it is safe to run alongside anything else.
 
+**Both services run as their real Docker images** — see
+[`scripts/containers.ts`](scripts/containers.ts) for why, and for the networking that makes a
+container reachable from a host browser. That networking needs a one-time `/etc/hosts` line (see
+the repo root [`README.md`](../../README.md)), which the run checks for before it does anything
+slow.
+
 The one tier that exercises more than one component at a time:
 
 - Browser uploads through the web app, which writes a report row to Postgres.
@@ -22,6 +28,11 @@ belongs to its own tier.
 
 The worker runs in `WORKER_MODE=stubbed`, where the report's name selects the scenario the child
 plays out (see [`apps/worker/README.md`](../../apps/worker/README.md#worker_mode)).
+
+**`@gbd/worker` is a devDependency here even though nothing imports it**, and the `test:system`
+task in [`turbo.json`](../../turbo.json) names the Dockerfiles and `python/**` in its `inputs`.
+Both exist to put what the images are built from into Turbo's hash, so a worker or Python change
+invalidates the cache and rebuilds an image instead of replaying a stale pass.
 
 **Deliberately not covered:** the other failure reasons, and the parent-torture cases — a child
 that ignores SIGTERM, exits with no verdict, or leaks a grandchild. `apps/worker/src/worker.test.ts`

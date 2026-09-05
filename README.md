@@ -67,12 +67,18 @@ Playwright. For the Python equivalents, see [`python/README.md`](python/README.m
   corepack enable
   ```
 
-- **Docker**, running — Docker Desktop, Rancher Desktop, or OrbStack. The local Postgres
-  runs in it.
+- **Docker**, running — Docker Desktop, Rancher Desktop, or OrbStack.
 - **The Supabase CLI**:
 
   ```sh
   brew install supabase/tap/supabase
+  ```
+
+- **A `host.docker.internal` entry**, once per machine. `pnpm test:system` needs your machine to
+  resolve `host.docker.internal` to itself (`127.0.0.1`):
+
+  ```sh
+  sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
   ```
 
 ### Install
@@ -137,7 +143,7 @@ Turborepo.
 | `pnpm test:e2e` | End-to-end tests only (Playwright) |
 | `pnpm test:screenshots` | Pixel snapshots only, needs Docker (Playwright) |
 | `pnpm test:playwright` | `test:e2e` and `test:screenshots` together, one app boot |
-| `pnpm test:system` | Whole-system e2e, against a real worker and Python child — see [`tests/e2e/`](tests/e2e/) |
+| `pnpm test:system` | Whole-system e2e, against both services' real Docker images — see [`tests/e2e/`](tests/e2e/) |
 | `pnpm test` | Everything: `test:unit`, then `test:playwright` |
 | `pnpm build` | Production build of every package |
 

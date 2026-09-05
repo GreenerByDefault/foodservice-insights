@@ -239,6 +239,7 @@ jobs:
       - uses: ./.github/actions/setup-python
       - run: just test-lab
 
+  # Runs both services as the Docker images they deploy as.
   system-e2e:
     name: 'System e2e tests'
     needs: changes
@@ -248,9 +249,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node
-      - uses: ./.github/actions/setup-python
       - uses: ./.github/actions/playwright-browsers
       - uses: ./.github/actions/setup-supabase
+
+      # The browser follows a report download to a blob-store URL the web container signed, so the
+      # host has to resolve the same name the container did.
+      - name: Resolve host.docker.internal on the runner
+        run: echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts
+
       - run: pnpm exec turbo run test:system
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}

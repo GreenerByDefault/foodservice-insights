@@ -413,6 +413,9 @@ importers:
       '@gbd/web':
         specifier: workspace:*
         version: link:../../apps/web
+      '@gbd/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.1

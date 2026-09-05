@@ -14,6 +14,7 @@
     "@gbd/email": "workspace:*",
     "@gbd/storage": "workspace:*",
     "@gbd/web": "workspace:*",
+    "@gbd/worker": "workspace:*",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "playwright": "catalog:",
