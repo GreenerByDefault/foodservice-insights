@@ -17,14 +17,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Compute image names
+    - uses: ./.github/actions/resolve-image-name
       id: image
+      with:
+        service: ${{ inputs.service }}
+
+    - name: Compute cache image name
+      id: cache
       shell: bash
       run: |
         # GHCR rejects an uppercase path, and ${{ github.repository }} is `GreenerByDefault/...`.
         repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        echo "name=ghcr.io/$repo_lower/${{ inputs.service }}" >> "$GITHUB_OUTPUT"
-        echo "cache=ghcr.io/$repo_lower/cache" >> "$GITHUB_OUTPUT"
+        echo "name=ghcr.io/$repo_lower/cache" >> "$GITHUB_OUTPUT"
 
     # Needed even to check whether the tag exists: the package starts private on first push, so
     # an anonymous `docker manifest inspect` 401s until someone flips it to public.
@@ -74,5 +78,5 @@ runs:
         sbom: false
         # mode=max: without it, a multi-stage build only caches the final stage and throws
         # away the expensive builder layers.
-        cache-from: type=registry,ref=${{ steps.image.outputs.cache }}:${{ inputs.service }}
-        cache-to: type=registry,ref=${{ steps.image.outputs.cache }}:${{ inputs.service }},mode=max
+        cache-from: type=registry,ref=${{ steps.cache.outputs.name }}:${{ inputs.service }}
+        cache-to: type=registry,ref=${{ steps.cache.outputs.name }}:${{ inputs.service }},mode=max

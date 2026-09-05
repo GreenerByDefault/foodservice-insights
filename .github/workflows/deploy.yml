@@ -53,10 +53,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
+
+      - name: Resolve full commit SHA
+        id: sha
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/build-image
         with:
           service: web
-          sha: ${{ inputs.sha || github.sha }}
+          sha: ${{ steps.sha.outputs.sha }}
           force_rebuild: ${{ inputs.force_rebuild }}
 
   build-worker:
@@ -76,10 +82,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
+
+      - name: Resolve full commit SHA
+        id: sha
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/build-image
         with:
           service: worker
-          sha: ${{ inputs.sha || github.sha }}
+          sha: ${{ steps.sha.outputs.sha }}
           force_rebuild: ${{ inputs.force_rebuild }}
 
   deploy-web:
@@ -97,10 +109,38 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0 # need origin/main's current tip for the supersession check below
+
+      - name: Resolve full commit SHA
+        id: sha
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Build time varies, so runs can finish out of push order: push A (a slow base-layer change)
+      # can finish after push B (a fast cache hit) has already deployed, which would roll prod
+      # *backwards*. Skip a push run once main has moved
+      # past its SHA.
+      #
+      # Push-only — a workflow_dispatch deliberately names a non-tip SHA for rollback and must
+      # never be skipped.
+      #
+      # This check must sit above the migrate step deploy-migrations.md will add, so a
+      # superseded run does nothing at all rather than migrating and then declining to deploy.
+      - name: Skip if main has moved past this commit
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          current_tip=$(git rev-parse origin/main)
+          if [ "${{ steps.sha.outputs.sha }}" != "$current_tip" ]; then
+            echo "::notice::main is now at $current_tip, past ${{ steps.sha.outputs.sha }} — a newer push will deploy instead. Skipping."
+            echo "superseded=true" >> "$GITHUB_ENV"
+          fi
+
       - uses: ./.github/actions/deploy-service
+        if: env.superseded != 'true'
         with:
           service: web
-          sha: ${{ inputs.sha || github.sha }}
+          sha: ${{ steps.sha.outputs.sha }}
 
   deploy-worker:
     name: Deploy worker
@@ -122,6 +162,10 @@ jobs:
           ref: ${{ inputs.sha || github.sha }}
           fetch-depth: 0 # need full history and tags for the delta below, and to move the tag
 
+      - name: Resolve full commit SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Show commits since the last worker deploy
         run: |
           if git rev-parse -q --verify refs/tags/deploy/worker >/dev/null; then
@@ -131,11 +175,12 @@ jobs:
           fi
 
       - uses: ./.github/actions/deploy-service
+        id: deploy
         with:
           service: worker
-          sha: ${{ inputs.sha || github.sha }}
+          sha: ${{ steps.sha.outputs.sha }}
 
       - name: Move the deploy/worker tag
         run: |
-          git tag -f deploy/worker HEAD
+          git tag -f -a deploy/worker HEAD -m "digest: ${{ steps.deploy.outputs.digest }}"
           git push -f origin deploy/worker
