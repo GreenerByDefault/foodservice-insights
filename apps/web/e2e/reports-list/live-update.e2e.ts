@@ -22,10 +22,8 @@ test('a report that finishes while the list is open updates in place, without a 
   const name = 'Live update report';
   const organizationId = await organizations.create({
     name: `Reports list live update test org ${crypto.randomUUID()}`,
-    // Now-dated, unlike `e2e/fixtures/reports.ts`'s backdated catalogue: a report older than
-    // `QUEUE_WARNING_AFTER_MS` renders as delayed rather than 'Queued', which the assertion below
-    // needs. A fresh organization has its whole `HOURLY_REPORT_LIMIT` budget, so there is nothing
-    // to dodge by backdating here.
+    // Must be recent: a report older than `QUEUE_WARNING_AFTER_MS` renders as delayed rather
+    // than 'Queued', which the assertion below needs.
     reports: [{ name, createdAt: dbMsAgo(0), status: 'pending' }],
   });
   const { id: reportId } = await db
