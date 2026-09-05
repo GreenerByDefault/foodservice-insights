@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import {
   createWorkerConfig,
   EMAIL_LATENCY_TARGET_MS,
+  MAX_RENEWAL_ROUND_TRIP_MS,
   WORKER_DEFAULTS,
   WorkerConfigError,
   type WorkerDefaultableFields,
@@ -20,9 +21,10 @@ const REQUIRED_FIELDS: WorkerRequiredFields = {
 function refusalFor(
   overrides: WorkerDefaultableFields,
   required: Partial<WorkerRequiredFields> = {},
+  platformShutdownGraceMs?: number,
 ): WorkerConfigError {
   try {
-    createWorkerConfig({ ...REQUIRED_FIELDS, ...required }, overrides);
+    createWorkerConfig({ ...REQUIRED_FIELDS, ...required }, overrides, platformShutdownGraceMs);
   } catch (error) {
     if (error instanceof WorkerConfigError) return error;
     throw error;
@@ -175,6 +177,30 @@ describe('the relations between a worker and the rest of the fleet', () => {
       { maxConcurrentAttempts: WORKER_DEFAULTS.maxConcurrentAttempts + 1 },
       "maxConcurrentAttempts must keep the worker's concurrent database work inside the pool's",
     );
+  });
+});
+
+describe("the relation against the hosting platform's own shutdown grace", () => {
+  const drainPlusKillPlusWrite =
+    WORKER_DEFAULTS.drainGraceMs + WORKER_DEFAULTS.killGraceMs + MAX_RENEWAL_ROUND_TRIP_MS;
+
+  test('is skipped when the platform grace is not known', () => {
+    expect(createWorkerConfig(REQUIRED_FIELDS)).toEqual({ ...WORKER_DEFAULTS, ...REQUIRED_FIELDS });
+  });
+
+  test('refuses a platform grace that does not outlast drainGraceMs + killGraceMs + one terminal write', () => {
+    const { violations } = refusalFor({}, {}, drainPlusKillPlusWrite);
+    expect(violations).toHaveLength(1);
+    const [violation] = violations;
+    expect(violation).toContain('PLATFORM_SHUTDOWN_GRACE_MS');
+    expect(violation).toContain('must exceed drainGraceMs + killGraceMs');
+  });
+
+  test('accepts a platform grace that leaves room for the terminal write after a kill', () => {
+    expect(createWorkerConfig(REQUIRED_FIELDS, {}, drainPlusKillPlusWrite + 1)).toEqual({
+      ...WORKER_DEFAULTS,
+      ...REQUIRED_FIELDS,
+    });
   });
 });
 

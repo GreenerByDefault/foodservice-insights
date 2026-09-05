@@ -38,7 +38,9 @@ async function main(): Promise<void> {
       {
         ...resolved.overrides,
         maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS'),
+        drainGraceMs: optionalIntEnv('WORKER_DRAIN_GRACE_MS'),
       },
+      optionalIntEnv('PLATFORM_SHUTDOWN_GRACE_MS'),
     );
 
     if (!(await bucketExists(BLOB_STORE))) {
