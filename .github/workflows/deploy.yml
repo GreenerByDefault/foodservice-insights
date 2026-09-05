@@ -182,5 +182,7 @@ jobs:
 
       - name: Move the deploy/worker tag
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -f -a deploy/worker HEAD -m "digest: ${{ steps.deploy.outputs.digest }}"
           git push -f origin deploy/worker
