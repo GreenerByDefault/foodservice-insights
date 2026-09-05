@@ -12,7 +12,6 @@ import {
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '../src/postgres-codes.ts';
 import {
-  fixtureOrganizationName,
   insertFixtureOrganization,
   sendBlockingStatement,
   withCommittedFixture,
@@ -32,7 +31,6 @@ describe('app_user', () => {
     expect(user).toMatchObject({
       displayName: 'Ada Lovelace',
       isSuperadmin: false,
-      organizationsCreatedCount: 0,
     });
   });
 
@@ -50,38 +48,6 @@ describe('app_user', () => {
     expect(remaining).toBeUndefined();
   });
 
-  test('cannot have created a negative number of organizations', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const user = await insertAppUser(transaction);
-      await transaction
-        .updateTable('appUser')
-        .set({ organizationsCreatedCount: -1 })
-        .where('id', '=', user.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'app_user_organizations_created_count_non_negative',
-    });
-  });
-
-  test('cannot have created more than 5 organizations', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const user = await insertAppUser(transaction);
-      await transaction
-        .updateTable('appUser')
-        .set({ organizationsCreatedCount: 6 })
-        .where('id', '=', user.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'app_user_organizations_created_count_max',
-    });
-  });
-
   test('cannot exist without an auth.users row', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       await transaction
@@ -95,24 +61,6 @@ describe('app_user', () => {
 });
 
 describe('organization', () => {
-  /** An organization and its one admin, as the app would write them: two statements in one
-   * transaction, which is what `organization_has_a_member` being deferred is for. */
-  async function createOrganization(
-    transaction: Transaction,
-    admin: AppUser,
-  ): Promise<OrganizationId> {
-    const organization = await transaction
-      .insertInto('organization')
-      .values({ name: fixtureOrganizationName(), createdByUserId: admin.id })
-      .returning('id')
-      .executeTakeFirstOrThrow();
-    await transaction
-      .insertInto('organizationMember')
-      .values({ userId: admin.id, organizationId: organization.id, role: 'admin' })
-      .execute();
-    return organization.id;
-  }
-
   test('rejects a duplicate name', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const name = `Duplicate ${crypto.randomUUID()}`;
@@ -131,79 +79,6 @@ describe('organization', () => {
     });
 
     await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
-  });
-
-  test('counts against the user who created it', async () => {
-    const count = await withRollback(DATABASE, async (transaction) => {
-      const { admin } = await insertOrganization(transaction);
-      const user = await transaction
-        .selectFrom('appUser')
-        .select('organizationsCreatedCount')
-        .where('id', '=', admin.id)
-        .executeTakeFirstOrThrow();
-      return user.organizationsCreatedCount;
-    });
-
-    expect(count).toBe(1);
-  });
-
-  test('is refused once its creator has created five', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const { admin } = await insertOrganization(transaction);
-      for (let number = 2; number <= 6; number++) {
-        await transaction
-          .insertInto('organization')
-          .values({ name: `Extra ${crypto.randomUUID()}`, createdByUserId: admin.id })
-          .execute();
-      }
-    });
-
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'app_user_organizations_created_count_max',
-    });
-  });
-
-  test('refuses the second of two concurrent creations at the limit', async () => {
-    // Proves the row lock in `organization_count_against_creator` (migrations/001_initial_schema.ts)
-    // actually serializes: without it, both creations would read count=4 and only one increment
-    // would stick, letting a sixth organization through.
-    await withCommittedFixture(
-      DATABASE,
-      async (transaction, trash) => {
-        const user = await insertAppUser(transaction);
-        trash.user(user.id);
-        await transaction
-          .updateTable('appUser')
-          .set({ organizationsCreatedCount: 4 })
-          .where('id', '=', user.id)
-          .execute();
-        return user;
-      },
-      async (user, trash) => {
-        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-          const fifth = await createOrganization(alpha.transaction, user);
-
-          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-            createOrganization(transaction, user),
-          );
-
-          await alpha.transaction.commit().execute();
-          trash.organization(fifth);
-
-          await expect(blocked.result).rejects.toMatchObject({
-            code: POSTGRES_CODE_CHECK_VIOLATION,
-            constraint: 'app_user_organizations_created_count_max',
-          });
-        });
-
-        const after = await DATABASE.selectFrom('appUser')
-          .select('organizationsCreatedCount')
-          .where('id', '=', user.id)
-          .executeTakeFirstOrThrow();
-        expect(after.organizationsCreatedCount).toBe(5);
-      },
-    );
   });
 
   test('cannot be created with no members at all', async () => {

@@ -5,10 +5,14 @@
 Every organization-management route already exists in the tree as a `**Stub:**` — the pages render
 `StubNotice`, the API handlers answer 501 — and each stub's doc comment is a short spec written when
 the schema was designed. The schema itself is finished: `organization`, `organization_member`,
-`organization_invite`, `audit_event`, the deferred `organization_has_a_member` and
-`organization_member_at_least_one_admin` triggers, and the `organizations_created_count` trigger that
-caps a user at five organizations. `packages/email` already renders `GbdOrganizationCreated` and
-`GbdOrganizationDeleted`. What is missing is the web app: the four screens and the four handlers.
+`organization_invite`, `audit_event`, and the deferred `organization_has_a_member` and
+`organization_member_at_least_one_admin` triggers. `packages/email` already renders
+`GbdOrganizationCreated` and `GbdOrganizationDeleted`. What is missing is the web app: the four
+screens and the four handlers.
+
+Org creation is deliberately uncapped — see the comment on `app_user` in
+[`001_initial_schema.ts`](packages/db/migrations/001_initial_schema.ts) and REQUIREMENTS.md §
+Abuse limits.
 
 This lands the org lifecycle a single user can drive today — see the roster, create, rename, delete —
 and deliberately stops short of invites and multi-user membership management. It goes **before**
@@ -28,13 +32,13 @@ us, and the stub user *can* be a plain member of a fixture org, so it is testabl
 | Screen | Route | Who sees what |
 | --- | --- | --- |
 | Roster | `orgs/[organizationId]/members` | Any member. Read-only. Admins also see a line saying inviting arrives later |
-| Create | `orgs/new` | Anyone. One name field, plus how much of the five-org allowance is left |
+| Create | `orgs/new` | Anyone. One name field |
 | Rename | `orgs/[organizationId]/settings` | Admin gets the form; a member sees the name read-only |
 | Delete | same page, below a separator | Admin only. Type-the-name confirmation |
 
 | Handler | Answers |
 | --- | --- |
-| `POST /api/orgs` | 201 + `Location`; 409 `name-taken`; 409 `limit-reached` |
+| `POST /api/orgs` | 201 + `Location`; 409 `name-taken` |
 | `PATCH /api/orgs/[organizationId]` | 204; 409 `name-taken`; 403 non-admin |
 | `DELETE /api/orgs/[organizationId]` | 204; 403 non-admin |
 
@@ -45,22 +49,7 @@ from [`organizations-list.svelte`](apps/web/src/routes/(app)/orgs/organizations-
 
 ## What to reuse, and what not to
 
-The user asked specifically about DRYing against the existing rate limits. The answer splits:
-
-- **Do not reuse [`report-rate-limit.ts`](packages/db/src/report-rate-limit.ts) or
-  `RateLimitExceeded`.** Those solve a *windowed* limit — "N per rolling hour" has no counter column
-  a CHECK can cap, so it needs `pg_advisory_xact_lock` plus a count. Org creation is a *cumulative*
-  cap already enforced atomically inside one `UPDATE` by
-  `organization_count_against_creator` + `app_user_organizations_created_count_max`. Re-checking it in
-  TypeScript would duplicate a constraint that already holds and still race — exactly what
-  [`typescript.md`](.claude/rules/typescript.md) warns against.
-- **Do reuse the *shape*.** `_loadOrganizationAllowance` mirrors
-  [`_loadRateLimitWarning`](apps/web/src/routes/(app)/orgs/%5BorganizationId=uuid%5D/reports/new/+page.server.ts):
-  an unlocked read whose only job is form copy, never a decision.
-- **Do put the number in one place.** `5` currently lives only in the migration; the form has to say
-  it too. PR 1 moves it to `@gbd/core`.
-
-Other reuse, all existing: `requireOrganizationAccess` / `requireOrganizationAdmin`
+Reuse, all existing: `requireOrganizationAccess` / `requireOrganizationAdmin`
 ([guards.ts](apps/web/src/lib/server/auth/guards.ts)), `withDbErrorHandling`, `apiCall` +
 `ApiError` ([fetch.ts](apps/web/src/lib/api/fetch.ts)), `requiredText`
 ([validation.ts](apps/web/src/lib/forms/validation.ts)), `ActionState`, `recordingEmailer`
@@ -69,36 +58,24 @@ Other reuse, all existing: `requireOrganizationAccess` / `requireOrganizationAdm
 
 ---
 
-## PR 1 — The five-organization limit, made honest
+## PR 1 — Bound `organization.name`
 
-A prefactor with no user-visible change. Separate because it **rewrites an applied migration**, so
-every local database has to be recreated rather than migrated — worth its own commit for
+A prefactor with no user-visible change, landed separately from this plan as its own two-PR unit
+(see `create-the-plan-for-cozy-naur.md`'s PR 1 and PR 2, which also removed the per-user org
+creation cap this plan originally assumed). Separate because it **rewrites an applied migration**,
+so every local database has to be recreated rather than migrated — worth its own commit for
 `git bisect`.
 
-- **New** `packages/core/src/organization.ts` (re-exported from `index.ts`):
-  `MAX_ORGANIZATION_NAME_LENGTH = 100`, `MAX_ORGANIZATIONS_PER_USER = 5`. `@gbd/core` is already a
-  dependency of `@gbd/db` and `apps/web`, and already runs in the browser.
-- [`001_initial_schema.ts`](packages/db/migrations/001_initial_schema.ts): build
-  `app_user_organizations_created_count_max` from `MAX_ORGANIZATIONS_PER_USER` instead of a literal,
-  and close the hole where `organization.name` has no bound at all — add
-  `organization_name_trimmed` (`name = btrim(name)`) and `organization_name_length`
+- **New** `MAX_ORGANIZATION_NAME_LENGTH = 100` in [`types.ts`](packages/db/src/types.ts),
+  re-exported from `index.ts`.
+- [`001_initial_schema.ts`](packages/db/migrations/001_initial_schema.ts): close the hole where
+  `organization.name` has no bound at all — add `organization_name_trimmed`
+  (`name = btrim(name)`) and `organization_name_length`
   (`char_length(name) between 1 and MAX_ORGANIZATION_NAME_LENGTH`).
 - `pnpm --filter @gbd/db gen-types` to regenerate `public-schema.sql`. No TypeScript type changes.
-- [`organization.test.ts`](packages/db/tests/organization.test.ts): reject an untrimmed name, an empty
-  name, and one a character over the cap. The existing max-5 and unique-name tests stay.
-- [`REQUIREMENTS.md`](REQUIREMENTS.md) § Abuse limits: replace the literal "up to 5 organizations"
-  with a link to the constant, which the file's own header instructs.
-
-**Also here, because the suite is one call away from breaking:** the placeholder user's creation
-budget is *exactly* spent today — the seed spends 1 and the four `organizations.create` calls in
-`e2e/` spend the rest. A fifth would fail on the CHECK. Fix it in
-[`e2e/fixtures/organizations.ts`](apps/web/e2e/fixtures/organizations.ts): when
-`clearOrganizationFixture` deletes an organization the placeholder created, hand the quota back with
-one atomic `UPDATE app_user SET organizations_created_count = organizations_created_count - 1` (a
-relative decrement, so it is correct under `fullyParallel`). Comment why a *test* may write a column
-production code must never touch: the counter only ever counts up by design, and a suite that deletes
-its fixtures would otherwise run out mid-run. Also give the `organizations` fixture a `track(id)`, so
-PR 3's spec can hand an organization it created *through the UI* to the same teardown.
+- [`organization.test.ts`](packages/db/tests/organization.test.ts): reject an untrimmed name, an
+  empty name, and one a character over the cap; accept one exactly at the cap. The existing
+  unique-name tests stay.
 
 ## PR 2 — The members roster
 
@@ -144,40 +121,21 @@ Independent of everything else, read-only, and it makes a stubbed page real.
 - [`api/orgs/+server.ts`](apps/web/src/routes/api/orgs/+server.ts): `POST` delegating to an exported
   `_createOrganization`. One transaction inserting the organization, the creator's admin row (both
   must share it — `organization_has_a_member` is deferred to commit) and the audit event; then
-  `notifyGbd` after commit. **No pre-check of the allowance.** Classify the violations with
-  `isPermanentDatabaseError` + the `POSTGRES_CODE_*` constants from `@gbd/db`, never
-  `instanceof DatabaseError`, and tell them apart by `constraint`:
-  `organization_name_unique_ci` → 409 `name-taken`, `app_user_organizations_created_count_max` → 409
-  `limit-reached`. Answer with `json(body, { status })`, not `error()` — the UI renders both.
-
-  **Why 409 and not 429, unlike the reports route.** 429 carries a contract — too many requests *in a
-  window*, wait and retry — and the reports limit honours it, because waiting genuinely works there.
-  The org allowance never replenishes: nothing decrements `organizations_created_count`, not even
-  deleting the organization. A 429 would tell the client to retry something that can never succeed,
-  and would invite a `Retry-After` we cannot write. 409 Conflict is the accurate answer — the request
-  conflicts with the caller's own durable state — and it is what
-  [`organization-slugs.md`](.claude/plans/organization-slugs.md) already specifies for
-  `organization_limit_reached`. Worth a comment at the mapping, since the neighbouring reports route
-  sets the opposite expectation.
+  `notifyGbd` after commit. Classify the violation with `isPermanentDatabaseError` + the
+  `POSTGRES_CODE_*` constants from `@gbd/db`, never `instanceof DatabaseError`:
+  `organization_name_unique_ci` → 409 `name-taken`. Answer with `json(body, { status })`, not
+  `error()` — the UI renders it.
 - **New** `$lib/orgs/api/create-organization.ts`, the feature's client, narrowing `ApiError` into
-  `'created' | 'name-taken' | 'limit-reached' | 'unknown'`.
-- [`orgs/new/+page.server.ts`](apps/web/src/routes/(app)/orgs/new/+page.server.ts): exported
-  `_loadOrganizationAllowance(db, userId)` reading `organizations_created_count` for the copy only,
-  as its stub comment already specifies.
+  `'created' | 'name-taken' | 'unknown'`.
+- No server `load` needed for `orgs/new` — there is nothing to read for the form.
 - `orgs/new/+page.svelte` + a route-local `create-organization-form.svelte`: one `Input` with
   `required` and `maxlength`, submit disabled only in flight with the reason in its label, `goto` the
   `Location` header. A 409 `name-taken` renders in `Field.Error` under the input with focus moved
-  there; 409 `limit-reached` replaces the form with an explanation. When the load already says
-  `remaining === 0`, render that explanation instead of the form. The copy has to say the allowance is
-  a lifetime one — deleting an organization does not hand it back, which is surprising enough to
-  spell out.
+  there.
 - [`hrefs.ts`](apps/web/src/lib/hrefs.ts): `organizationApiHref(id)` for PRs 4–5. `/api/orgs` itself
   carries no id, so it stays a literal.
-- Test note: the likely bug here is mapping the wrong constraint to the wrong message, so
-  `create-organization.test.ts` must cover the two 409s **separately**, with a name colliding only by
-  case for the first and a user already at five for the second. Also assert the organization is still
-  created when the emailer throws — the notification is best effort, and a test is the only thing
-  holding that.
+- Test note: assert the organization is still created when the emailer throws — the notification is
+  best effort, and a test is the only thing holding that.
 
 ## PR 4 — Rename an organization
 
@@ -229,7 +187,7 @@ on any visual change.
 
 | Spec | The thing no other layer can check |
 | --- | --- |
-| `e2e/organizations/create-organization.e2e.ts` | The whole real path: fill the form, submit through the real handler, land on the new organization, and see the shell and switcher name it. A second test submits a name that already exists and asserts the inline error appears *and the typed value survives*. Uses `organizations.create` for the colliding name and `track(id)` on the one the UI made, so teardown deletes both and returns the quota. |
+| `e2e/organizations/create-organization.e2e.ts` | The whole real path: fill the form, submit through the real handler, land on the new organization, and see the shell and switcher name it. A second test submits a name that already exists and asserts the inline error appears *and the typed value survives*. Uses `organizations.create` for the colliding name; the one the UI made needs its own teardown since it wasn't made through the fixture. |
 | `e2e/organizations/settings.e2e.ts` | Two tests, one per role — the only tier where a real `role` flows from the layout load into the page. **Admin** (`organizations.create`): rename, then the heading *and* the switcher change after `invalidateAll()` while the URL stays put. **Member** (`organizationMemberships.create`): the name is read-only, with no rename form and no delete affordance present at all. |
 | `e2e/organizations/delete-organization.e2e.ts` | The confirm button stays disabled until the organization's name is typed; confirming lands on `/orgs`, drops it from the switcher, and its reports are gone. |
 
@@ -245,21 +203,13 @@ Six screens, so eighteen PNGs under `e2e/__screenshots__/organizations/`.
 | Image | How the state is reached |
 | --- | --- |
 | `members.png` | `organizations.create({ name, members: [...] })` with several people — both roles, and one with a null `displayName` so the email-only row is in the picture. Hover one row for the affordance. |
-| `orgs-new.png` | Navigate `/orgs/new`. The empty form with the allowance line. |
-| `orgs-new-limit.png` | The form replaced by the allowance-spent explanation. |
+| `orgs-new.png` | Navigate `/orgs/new`. The empty form. |
 | `settings.png` | Admin: the rename form and the delete section below it. |
 | `settings-member.png` | `organizationMemberships.create`: the read-only name, no delete section. |
 | `delete-organization.png` | Click the trigger; capture the open dialog with its phrase field empty and the confirm button disabled. |
 
-Two mechanics the implementer will otherwise get wrong:
+One mechanic the implementer will otherwise get wrong:
 
-- **`orgs-new-limit.png` needs a new stub helper.** Setting the shared placeholder user's counter to
-  five would race any spec creating an organization concurrently, so add
-  `stubOrganizationAllowanceAsSpent(page)` to
-  [`e2e/lib/stub-page-data.ts`](apps/web/e2e/lib/stub-page-data.ts) beside `stubOrganizationsAsEmpty`,
-  which exists for exactly this class of unreachable screen. Like that one, it only works after a
-  **client-side** navigation — a `page.goto` is server-rendered and never requests `__data.json` — so
-  the spec has to land on `/orgs` first and click "New organization".
 - **These specs do not need the `"24/7 "` name prefix.** That trick in
   [`organizations.screenshot.ts`](apps/web/e2e/organizations/organizations.screenshot.ts) exists only
   because `/orgs` and the switcher render an *unbounded list of the user's organizations*, which other
@@ -268,9 +218,9 @@ Two mechanics the implementer will otherwise get wrong:
 
 ---
 
-## Testing: the three real limitations
+## Testing: the two real limitations
 
-The stub identity is workable for all of this, but three constraints shaped the tables above.
+The stub identity is workable for all of this, but two constraints shaped the tables above.
 
 **One identity per Playwright run.** `identifyUser` always returns the placeholder user, so no e2e can
 be a bystander or signed out — 401/403 paths stay at the unit tier with `anAuthContext` /
@@ -278,10 +228,6 @@ be a bystander or signed out — 401/403 paths stay at the unit tier with `anAut
 `organizations.create` makes the placeholder the org's admin, `organizationMemberships.create` makes
 them a plain member. That is what makes `settings.e2e.ts` and `settings-member.png` possible, and the
 role branch is the difference most worth seeing.
-
-**The five-organization budget is per-run and currently exhausted.** PR 1's decrement-on-teardown
-fixes it, and is a prerequisite for `create-organization.e2e.ts`. Without it, adding any
-`organizations.create` call breaks the suite with a CHECK violation that looks nothing like its cause.
 
 **Screenshot specs cannot POST** — the containerized browser's origin does not match the server's
 `ORIGIN`, so SvelteKit's CSRF check 403s. Hence the split above: screenshots capture states reached by
@@ -314,11 +260,10 @@ Then `pnpm dev` and walk it, with Mailpit open at the endpoint in `.env.example`
 notices actually arrive:
 
 - `/orgs/<id>/members` lists the seeded admin, and lists several people once a fixture adds them.
-- `/orgs/new` says how many organizations are left; `Acme Foodservice` creates one and lands on it,
-  the switcher gains it, and Mailpit shows "New organization: Acme Foodservice".
+- `/orgs/new` creates `Acme Foodservice` and lands on it, the switcher gains it, and Mailpit shows
+  "New organization: Acme Foodservice".
 - The same name again — and `acme foodservice` — show the inline "already called" error under the
   field, with focus on it.
-- Five organizations in, the form is replaced by the allowance explanation.
 - Renaming from Settings changes the heading and the switcher while the URL stays put; renaming to a
   name another organization holds errors inline.
 - Deleting refuses to enable its button until the name is typed, then lands on `/orgs` (or

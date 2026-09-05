@@ -4,9 +4,9 @@ import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('the account menu, open', async ({ page, organizationMemberships }) => {
-  // `organizationMemberships`, not `organizations`: the latter creates the org under the
-  // placeholder user, which only tolerates a couple of calls across the whole suite — see its
-  // fixture doc comment.
+  // `organizationMemberships`, not `organizations`: the latter would make the placeholder the
+  // org's creating admin, and this only needs it as a member — see
+  // `insertOrganizationMembershipFixture`'s doc comment.
   const organizationId = await organizationMemberships.create({ name: 'Riverside Foods' });
 
   await page.goto(`/orgs/${organizationId}`);

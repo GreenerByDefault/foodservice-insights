@@ -12,8 +12,6 @@ export default interface AppUserTable {
 
   isSuperadmin: ColumnType<boolean, boolean | undefined, boolean>;
 
-  organizationsCreatedCount: ColumnType<number, number | undefined, number>;
-
   updatedAt: ColumnType<Date, Date | string | undefined, Date | string>;
 }
 

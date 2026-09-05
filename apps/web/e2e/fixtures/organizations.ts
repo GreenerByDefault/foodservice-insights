@@ -94,12 +94,10 @@ export async function insertOrganizationFixture(
  * added as a plain member. Returns the organization's id.
  *
  * For a spec that needs the placeholder user in *several* organizations at once — the org
- * switcher, `/orgs` — rather than one. `insertOrganizationFixture` won't do: it makes the
- * placeholder the organization's *creator*, and creating one permanently costs one of the five
- * total `app_user.organizations_created_count` ever allows that user — a nonrenewable budget
- * (nothing decrements it, including deleting the organization) the rest of this suite already
- * spends against. Granting membership instead of creating costs that budget nothing, because the
- * disposable admin this makes is never reused.
+ * switcher, `/orgs` — rather than one, or for a spec that needs the placeholder as a plain
+ * *member* rather than the admin `insertOrganizationFixture` always makes it. The two are not
+ * interchangeable: a member-only view of settings or the roster needs a real admin sitting
+ * elsewhere, which only a disposable creator can stand in for.
  *
  * Both inserts have to share one transaction, like `insertOrganizationFixture`'s do:
  * `organization_check_has_member` is `DEFERRABLE INITIALLY DEFERRED`, checked at `COMMIT`, so
