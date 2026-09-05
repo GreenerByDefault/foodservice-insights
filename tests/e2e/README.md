@@ -31,10 +31,8 @@ plays out (see [`apps/worker/README.md`](../../apps/worker/README.md#worker_mode
 
 **`@gbd/worker` is a devDependency here even though nothing imports it**, and the `test:system`
 task in [`turbo.json`](../../turbo.json) names the Dockerfiles and `python/**` in its `inputs`.
-Both exist for one reason: to put what the images are built from into Turbo's hash. Without them a
-worker or Python change replays a cached pass and never rebuilds an image, which is the one failure
-mode that would make this whole tier quietly stop testing anything. Neither is dead weight to
-remove.
+Both exist to put what the images are built from into Turbo's hash, so a worker or Python change
+invalidates the cache and rebuilds an image instead of replaying a stale pass.
 
 **Deliberately not covered:** the other failure reasons, and the parent-torture cases — a child
 that ignores SIGTERM, exits with no verdict, or leaks a grandchild. `apps/worker/src/worker.test.ts`

@@ -12,10 +12,9 @@
  * Containers reach the host's Supabase and Mailpit through it (`--add-host`), and the *host* has
  * to resolve it too, via the `/etc/hosts` line `assertDockerIsUsable` names. That second half is
  * forced rather than chosen: a presigned blob-store URL carries `X-Amz-SignedHeaders=host`, so
- * its host is inside the signature and cannot be rewritten afterwards (confirmed empirically —
- * see `.claude/plans/chart-screenshots.md`). The web container therefore has to sign with the
- * exact name the browser will follow the 302 to, and one name resolving on both sides is the
- * only shape that satisfies both ends.
+ * its host is inside the signature and cannot be rewritten afterwards. The web container
+ * therefore has to sign with the exact name the browser will follow the 302 to, and one name
+ * resolving on both sides is the only shape that satisfies both ends.
  *
  * *`--network host` would need no `/etc/hosts` entry, and is what CI would happily use. It is out
  * because on macOS the host cannot reach such a container's published port at all.*
