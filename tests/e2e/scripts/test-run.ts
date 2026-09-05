@@ -1,11 +1,8 @@
 /** Wraps `playwright test` via `@gbd/browser-testing/test-run` — see that module for the per-run
  * database/bucket lifecycle, shared with `apps/web/scripts/test-run.ts`. What this suite adds is
  * everything the *system* tier needs alive before the browser starts: the two service images
- * built and running against the run's database and bucket, and a mailbox only this run sends to.
- *
- * Both services run as their real Docker images, and that is the only way this suite runs — see
- * `containers.ts` for why the images are worth the build, and for the networking that makes them
- * reachable from a host browser.
+ * built by `containers.ts` and running against the run's database and bucket, and a mailbox only
+ * this run sends to.
  *
  * `pnpm test:system` routes through this rather than calling `playwright test` directly —
  * `playwright.config.ts` throws if it detects a bare invocation, via the `TEST_RUN_ID` this sets

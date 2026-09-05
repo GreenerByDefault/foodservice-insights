@@ -3,13 +3,11 @@
 `pnpm test:system`, from the repo root. It gives the run its own database, blob-store bucket, app
 server and worker, so it is safe to run alongside anything else.
 
-**Both services run as their real Docker images**, built from source on every run — this is the
-only thing in the repo that validates [`apps/web/Dockerfile`](../../apps/web/Dockerfile) and
-[`apps/worker/Dockerfile`](../../apps/worker/Dockerfile), and the only way this suite runs.
-[`scripts/containers.ts`](scripts/containers.ts) explains the networking that makes a container
-reachable from a host browser, and why it needs a one-time `/etc/hosts` line that the run checks
-for before it does anything slow. That is also why this tier is slower than the others, and why
-`pnpm test` does not include it: CI runs it on every PR that touches the paths it covers.
+**Both services run as their real Docker images** — see
+[`scripts/containers.ts`](scripts/containers.ts) for why, and for the networking that makes a
+container reachable from a host browser. That networking needs a one-time `/etc/hosts` line (see
+the repo root [`README.md`](../../README.md)), which the run checks for before it does anything
+slow.
 
 The one tier that exercises more than one component at a time:
 
