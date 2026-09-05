@@ -30,6 +30,7 @@ keep settled decisions settled — read them before proposing a change.
 | Unit and component tests | vitest |
 | End-to-end tests | Playwright |
 | Edge / DDoS | Cloudflare |
+| Registry | GHCR, `ghcr.io/greenerbydefault/foodservice-insights/{web,worker}`, tagged by commit SHA |
 | Hosting | **Open:** Railway vs Render vs DigitalOcean |
 | Email | (**Open:** which provider), using HTTP and generated emails. |
 
@@ -308,6 +309,12 @@ looks exactly like a worker bug.
 before it deploys to the hosting provider.** There is no way to unapply a database migration.
 You must fix forward.
 
+**A rollback is fast and reproducible, not safe.** It redeploys the exact digest that already ran
+for an older commit (§ Hosting) — nothing rebuilds and nothing about *that* can surprise you. It
+does nothing to undo a migration already applied against the database, which is the fix-forward
+rule above: the distinction someone needs at 2am is that the image half of a rollback is a solved
+problem and the schema half never is.
+
 ## Container images
 
 The web app and worker each ship as a Docker image, built from
@@ -326,6 +333,12 @@ What we care about: manual horizontal and vertical scaling; reliability, includi
 restarts and draining the existing container on deploy; price; logging; continuous deployment with
 the web app and worker separated; and overall simplicity over time. We explicitly do not care
 about autoscaling.
+
+**A deploy is a promotion of an existing image, never a rebuild.** Every commit that reaches
+`main` gets one image per service, built once in CI and pushed to the registry (§ Container
+images); `deploy.yml` resolves the commit SHA it's deploying to that image's digest and hands the
+digest to the provider. A rollback is the same operation aimed at an older commit — see § Worker
+› Deployments for what that does and doesn't make safe.
 
 **Open:** Railway vs Render vs DigitalOcean.
 

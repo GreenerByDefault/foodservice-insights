@@ -1,28 +1,55 @@
 name: Deploy service
 description: >
-  Deploy one named service at a named commit to whatever the hosting provider turns out to be, and
-  return a real exit code. Both jobs in workflows/deploy.yml call this one step, so wiring up the
-  provider is a single-file change instead of two.
+  Resolve one named service's commit-tagged image to a digest, then deploy that digest to whatever
+  the hosting provider turns out to be, returning a real exit code.
 
 inputs:
   service:
     description: Service to deploy (web or worker)
     required: true
   sha:
-    description: Commit SHA to deploy
+    description: Commit SHA to deploy — the full 40 characters, not an abbreviation
     required: true
+
+outputs:
+  digest:
+    description: The resolved image digest (sha256:...)
+    value: ${{ steps.resolve.outputs.digest }}
 
 runs:
   using: composite
   steps:
+    - uses: ./.github/actions/resolve-image-name
+      id: image
+      with:
+        service: ${{ inputs.service }}
+
+    - uses: docker/setup-buildx-action@v4
+
+    # Deliberately unauthenticated: this job never logs in to ghcr.io, and that's the point — an
+    # anonymous inspect here is the same pull a hosting provider will make, so a failure here is
+    # the earliest warning that the package went private again, not a token problem in this job.
+    - name: Resolve digest
+      id: resolve
+      shell: bash
+      run: |
+        image="${{ steps.image.outputs.name }}:${{ inputs.sha }}"
+        if ! digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>&1); then
+          echo "::error::Could not resolve $image to a digest. Either no build ever pushed a tag for this commit (build-${{ inputs.service }} has to run first), or the ${{ inputs.service }} package went private again — this is the same anonymous pull the hosting provider will make."
+          echo "$digest"
+          exit 1
+        fi
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        echo "Resolved ${{ inputs.service }}@${{ inputs.sha }} to $digest"
+
     # ARCHITECTURE.md § Hosting has no provider chosen yet. Until it does there is nothing to call
     # here, so warn rather than pretend a deploy happened — but don't fail the run. This step
     # fires on every push to main, and a red deploy workflow there would mask real signal (e.g.
     # flakes) from the workflows that actually verify the code. Replace this step with the
-    # provider's deploy-at-commit call once one is chosen — the two jobs in workflows/deploy.yml
-    # need no changes.
+    # provider's deploy-by-digest call once one is chosen (falling back to the tag if it can't take
+    # a digest) — the two jobs in workflows/deploy.yml need no changes.
     - name: Deploy
       shell: bash
       run: |
         echo "::warning::No hosting provider is configured yet — see ARCHITECTURE.md § Hosting."
-        echo "Would deploy service '${{ inputs.service }}' at ${{ inputs.sha }}."
+        echo "Would deploy ${{ steps.image.outputs.name }}@${{ steps.resolve.outputs.digest }}."

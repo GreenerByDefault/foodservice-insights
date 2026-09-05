@@ -1,0 +1,23 @@
+name: Resolve image name
+description: Compute a service's GHCR image name for this repo.
+
+inputs:
+  service:
+    description: Service to name (web or worker)
+    required: true
+
+outputs:
+  name:
+    description: The image name (without tag), e.g. ghcr.io/org/repo/web
+    value: ${{ steps.image.outputs.name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute image name
+      id: image
+      shell: bash
+      run: |
+        # GHCR rejects an uppercase path, and ${{ github.repository }} is `GreenerByDefault/...`.
+        repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+        echo "name=ghcr.io/$repo_lower/${{ inputs.service }}" >> "$GITHUB_OUTPUT"
