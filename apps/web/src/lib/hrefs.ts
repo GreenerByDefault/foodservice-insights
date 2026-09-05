@@ -80,8 +80,7 @@ export function resultFileHref(resultFileId: string): string {
 // API writes
 // -----------------------------------------------------
 
-/** The organization itself, which the rename form `PATCH`es and the delete button `DELETE`s.
- * `/api/orgs` carries no id, so creating one stays a literal where it is used. */
+/** The organization itself, which the rename form `PATCH`es and the delete button `DELETE`s. */
 export function organizationApiHref(organizationId: string): string {
   return `/api/orgs/${organizationId}`;
 }

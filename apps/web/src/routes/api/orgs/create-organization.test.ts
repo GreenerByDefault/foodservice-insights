@@ -1,9 +1,10 @@
 import type { OrganizationId } from '@gbd/db';
-import { insertAppUserWithEmail, insertOrganization, withRollback } from '@gbd/db/testing';
+import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { unreachableEmailer } from '@gbd/email/testing';
 import { describe, expect, test, vi } from 'vitest';
 import { database } from '$lib/server/db';
-import { _createOrganization, type OrganizationCreator } from './+server.ts';
+import { anOrganizationCreator } from '$lib/server/tests/fixtures';
+import { _createOrganization } from './+server.ts';
 
 // Aimed at a port nothing listens on, so every test proves `notifyGbd`'s own catch rather than
 // depending on whatever Mailpit happens to be doing locally.
@@ -137,10 +138,3 @@ describe('an invalid name', () => {
     });
   });
 });
-
-async function anOrganizationCreator(
-  transaction: Parameters<typeof insertAppUserWithEmail>[0],
-): Promise<OrganizationCreator> {
-  const user = await insertAppUserWithEmail(transaction);
-  return { userId: user.id, actorEmail: user.email };
-}
