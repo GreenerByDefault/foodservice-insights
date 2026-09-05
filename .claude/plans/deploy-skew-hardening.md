@@ -17,7 +17,7 @@ documents as uncheckable; the second only works if it ships before the change it
 now falls back to the `unknown` copy instead of reading `.whatHappened` off `undefined` — the case
 was a migration adding a `failure_reason` value a newer worker writes while an old web app, compiled
 against the prior enum, is still serving. Logging the build at boot is deferred to
-[`hosting-provider-notes.md`](hosting-provider-notes.md) § Once a provider is chosen, since
+[`hosting-provider.md`](hosting-provider.md) § After the decision, since
 normalizing "whichever env var the provider injects" needs the provider decided first.
 
 ## a. Close the drain-grace gap
@@ -34,8 +34,8 @@ write. Make it checkable.
   one.
 - Update the `drainGraceMs` doc comment: the relation is now checked, and where.
 
-Sizing is a provider question — see [`hosting-provider-notes.md`](hosting-provider-notes.md). A drain
-worth having is minutes, not seconds, since an attempt averages ~5 minutes.
+Sizing is a provider question — see [`hosting-provider.md`](hosting-provider.md) § Draining the
+worker. A drain worth having is minutes, not seconds, since an attempt averages ~5 minutes.
 
 ## b. Add the claim-time capability guard, while it is still a no-op
 
