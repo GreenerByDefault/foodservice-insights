@@ -3,7 +3,7 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-/** Rename the organization. Admin only. */
+/** Rename the organization. Admin only. Audit it. */
 export const PATCH: RequestHandler = () => error(501, { message: 'Not implemented yet' });
 
 /** Hard delete the organization: its reports and attempts cascade, and its files go with one
