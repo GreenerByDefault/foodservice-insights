@@ -283,17 +283,42 @@ Watch upstream rate limits when tuning any of them.
 We will probably start with 2 workers, handling 4–6 concurrent attempts depending on whether each
 worker runs 2 or 3.
 
-### Deployments
+## Deployments
+
+Web and worker are separate services, each shipped as a Docker image and deployed independently.
+
+### Images
+
+Web and worker each build from [`apps/web/Dockerfile`](apps/web/Dockerfile) and
+[`apps/worker/Dockerfile`](apps/worker/Dockerfile) — Docker rather than the hosting platform's
+build packs, because our deployments are complex enough to need it (the worker alone is
+polyglot). **Both build on Red Hat's UBI minimal images**, not Debian/Alpine bases like
+`node:*-slim`: UBI is free to redistribute without a Red Hat subscription, gets CVE patches on a
+predictable cadence, and the `-minimal` variant uses `microdnf` to stay small while still being a
+full RPM-based system if we ever need a package the slim bases lack.
+
+[`workflows/deploy.yml`](.github/workflows/deploy.yml) builds both images on every push to `main`
+and pushes each to the GitHub Container Registry, tagged with the commit SHA — one pair of images per
+commit, whether or not that commit ever deploys. **A deploy is a promotion of an existing image,
+never a rebuild:** it resolves the commit SHA it's deploying to that image's digest and hands the
+digest to the hosting provider. That's also what makes a rollback simple.
+
+### Web deploys on every push
+
+Web deploys automatically on every push to `main`, database migrations included, because it's the side
+that owns the schema. **`deploy.yml` runs the database migrations itself, before it deploys to the
+hosting provider.** There is no way to unapply a database migration; a bad one is fixed forward.
+
+### Worker deploys only on demand
 
 Deploying the worker naively kills every in-flight analysis attempt, since the hosting platform
 kills the old container outright. Two mitigations, both required:
 
-- **The worker deploys independently of the web app, and only on demand.**
-  [`workflows/deploy.yml`](.github/workflows/deploy.yml) deploys web, migrations included, on every
-  push to `main`; the worker deploys only when someone dispatches it for a specific commit. One
-  consequence follows from that asymmetry: the deployed worker is always the side running behind
-  schema and web app, never ahead, so the web ↔ worker and app ↔ schema contracts must stay
-  backwards compatible for as long as an old worker might still be running.
+- **The worker deploys independently of web, and only when someone dispatches it for a specific
+  commit** — never on push. One consequence follows from that asymmetry: the deployed worker is
+  always the side running behind schema and web app, never ahead, so the web ↔ worker and app ↔
+  schema contracts must stay backwards compatible for as long as an old worker might still be
+  running.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
@@ -305,40 +330,18 @@ shutdown delay defaults to 30s (configurable to 300s); Railway's
 `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**, which SIGKILLs the worker mid-drain and
 looks exactly like a worker bug.
 
-**[`workflows/deploy.yml`](.github/workflows/deploy.yml) runs the database migrations itself,
-before it deploys to the hosting provider.** There is no way to unapply a database migration.
-You must fix forward.
+### Rollback
 
-**A rollback is fast and reproducible, not safe.** It redeploys the exact digest that already ran
-for an older commit (§ Hosting) — nothing rebuilds and nothing about *that* can surprise you. It
-does nothing to undo a migration already applied against the database, which is the fix-forward
-rule above: the distinction someone needs at 2am is that the image half of a rollback is a solved
-problem and the schema half never is.
+**A rollback is fast and reproducible: it's the same promotion described in § Images, aimed at an
+older commit.** It does nothing to undo a migration already applied against the database — that's
+the fix-forward rule above, and it applies regardless of which service is rolled back.
 
-## Container images
-
-The web app and worker each ship as a Docker image, built from
-[`apps/web/Dockerfile`](apps/web/Dockerfile) and [`apps/worker/Dockerfile`](apps/worker/Dockerfile).
-Our deployments are complex, such as the worker being polyglot, so it's easier to use Docker images
-than the hosting platform's build packs.
-
-**Both build on Red Hat's UBI minimal images**, not Debian/Alpine bases like `node:*-slim`. UBI is
-free to redistribute without a Red Hat subscription, gets CVE patches on a predictable cadence, and
-the `-minimal` variant uses `microdnf` to keep the image small while still being a full RPM-based
-system if we ever need a package the slim bases lack.
-
-## Hosting
+### Choosing a host
 
 What we care about: manual horizontal and vertical scaling; reliability, including automatic
 restarts and draining the existing container on deploy; price; logging; continuous deployment with
-the web app and worker separated; and overall simplicity over time. We explicitly do not care
+web and worker deployed separately; and overall simplicity over time. We explicitly do not care
 about autoscaling.
-
-**A deploy is a promotion of an existing image, never a rebuild.** Every commit that reaches
-`main` gets one image per service, built once in CI and pushed to the registry (§ Container
-images); `deploy.yml` resolves the commit SHA it's deploying to that image's digest and hands the
-digest to the provider. A rollback is the same operation aimed at an older commit — see § Worker
-› Deployments for what that does and doesn't make safe.
 
 **Open:** Railway vs Render vs DigitalOcean.
 

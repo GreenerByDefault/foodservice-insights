@@ -26,9 +26,7 @@ runs:
 
     - uses: docker/setup-buildx-action@v4
 
-    # Deliberately unauthenticated: this job never logs in to ghcr.io, and that's the point — an
-    # anonymous inspect here is the same pull a hosting provider will make, so a failure here is
-    # the earliest warning that the package went private again, not a token problem in this job.
+    # Deliberately unauthenticated so that we can confirm the images are public.
     - name: Resolve digest
       id: resolve
       shell: bash
