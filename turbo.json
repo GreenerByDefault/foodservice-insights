@@ -29,8 +29,6 @@
     "WORKER_RUN_ROOT",
     "WORKER_MAX_CONCURRENT_ATTEMPTS",
     "PYTHON_BIN",
-    "GEMINI_API_KEY",
-    "LLM_WHISPERER_API_KEY",
     "OPENAI_API_KEY"
   ],
   "tasks": {

@@ -75,6 +75,7 @@ describe('valid fixtures', () => {
       report: {
         name: 'Q1 2026 dining',
         siteName: null,
+        organizationName: 'Acme Foodservice',
         countsBasis: 'meals',
         unitSystem: 'lb',
         monthlyCounts: { '2025-01': 12040, '2025-02': 11360, '2025-03': 12890 },

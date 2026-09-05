@@ -45,6 +45,7 @@ def test_parses_the_run_manifest_the_parent_writes() -> None:
     assert manifest.analysis_attempt_id == VALID_ANALYSIS_ATTEMPT_ID
     assert manifest.report.name == "Q1 2026 dining"
     assert manifest.report.site_name is None
+    assert manifest.report.organization_name == "Acme Foodservice"
     assert manifest.report.counts_basis == "meals"
     assert manifest.report.unit_system == "lb"
     assert dict(manifest.report.monthly_counts) == {

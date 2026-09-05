@@ -63,6 +63,7 @@ def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisReques
         work_directory=run_directory / layout.WORK_DIRECTORY,
         report_name=manifest.report.name,
         site_name=manifest.report.site_name,
+        organization_name=manifest.report.organization_name,
         counts_basis=manifest.report.counts_basis,
         unit_system=manifest.report.unit_system,
         monthly_counts=manifest.report.monthly_counts,

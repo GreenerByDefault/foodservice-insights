@@ -27,6 +27,7 @@ UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 class ReportInputs:
     name: str | None
     site_name: str | None
+    organization_name: str
     counts_basis: CountsBasis
     unit_system: UnitSystem
     monthly_counts: Mapping[str, int]
@@ -57,6 +58,7 @@ def parse_run_manifest(text: str) -> RunManifest:
         report=ReportInputs(
             name=report.nullable_string("name"),
             site_name=report.nullable_string("siteName"),
+            organization_name=report.string("organizationName"),
             counts_basis=report.literal("countsBasis", COUNTS_BASES),
             unit_system=report.literal("unitSystem", UNIT_SYSTEMS),
             monthly_counts=report.counts("monthlyCounts", MONTH_PATTERN),

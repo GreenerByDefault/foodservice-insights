@@ -40,8 +40,6 @@ const PARENT_ENVIRONMENT: NodeJS.ProcessEnv = {
   HOME: '/home/analysis',
   LANG: 'en_US.UTF-8',
   TZ: 'UTC',
-  GEMINI_API_KEY: 'gemini-key',
-  LLM_WHISPERER_API_KEY: 'whisperer-key',
   OPENAI_API_KEY: 'openai-key',
   DB_CONNECTION_STRING: 'postgres://parent-only',
   S3_ENDPOINT: 'http://parent-only',

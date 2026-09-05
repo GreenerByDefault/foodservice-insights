@@ -3,6 +3,7 @@
   "report": {
     "name": 42,
     "siteName": null,
+    "organizationName": "Acme Foodservice",
     "countsBasis": "meals",
     "unitSystem": "lb",
     "monthlyCounts": {

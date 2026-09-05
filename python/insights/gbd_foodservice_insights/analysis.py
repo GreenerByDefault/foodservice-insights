@@ -42,6 +42,7 @@ class AnalysisRequest:
     work_directory: Path  # scratch; discarded after the run
     report_name: str | None
     site_name: str | None
+    organization_name: str
     counts_basis: CountsBasis
     unit_system: UnitSystem
     monthly_counts: Mapping[str, int]  # "YYYY-MM" -> diners or meals

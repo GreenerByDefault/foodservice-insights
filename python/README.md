@@ -58,6 +58,5 @@ Add it to `[project.dependencies]` of the package that imports it, then `just sy
 
 ### API keys
 
-The analysis library will want `GEMINI_API_KEY`, `OPENAI_API_KEY`, and
-`LLM_WHISPERER_API_KEY`. They are deliberately absent from
-[`../.env.example`](../.env.example) until the code that reads them lands.
+The analysis library will want `OPENAI_API_KEY`. It is deliberately absent from
+[`../.env.example`](../.env.example) until the code that reads it lands.

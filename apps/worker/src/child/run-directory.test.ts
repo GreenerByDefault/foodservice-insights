@@ -23,6 +23,7 @@ const MANIFEST = buildRunManifest({
   report: {
     name: 'Q1 2026 dining',
     siteName: null,
+    organizationName: 'Acme Foodservice',
     countsBasis: 'meals',
     unitSystem: 'lb',
     monthlyCounts: { '2025-01': 12040 },
