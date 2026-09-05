@@ -28,7 +28,7 @@ import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { aTestEmailAddress } from '@gbd/email/testing';
 import {
   assertDockerIsUsable,
-  buildImages,
+  buildContainerImages,
   removeRunResources,
   startWorkerContainer,
   sweepStaleContainers,
@@ -61,10 +61,9 @@ async function useAFreshNotificationAddress(connectionString: string): Promise<s
   return address;
 }
 
-/** The worker runs as its own container rather than an in-process import, for the same reason it
- * used to run as its own process: `apps/worker/src/db.ts`, `@gbd/storage/env` and
- * `@gbd/email/env` all read their environment at *import* time, so the run's database and bucket
- * have to be in place before the module graph loads.
+/** The worker runs as its own container, not an in-process import: `apps/worker/src/db.ts`,
+ * `@gbd/storage/env` and `@gbd/email/env` all read their environment at *import* time, so the
+ * run's database and bucket have to be in place before the module graph loads.
  *
  * Nothing is shared by filesystem — the input CSV and the result files both move through the blob
  * store — so the image's own `WORKER_RUN_ROOT` is used as-is. That is deliberate: its writability
@@ -75,22 +74,24 @@ async function startServices(stack: FreshStack): Promise<BeforePlaywrightResult>
 
   // Everything this run creates in Docker is named for `stack.name`, so two worktrees running at
   // once cannot race a shared tag, and one teardown call reaches all of it.
-  const images = await buildImages(REPO_ROOT, stack.name);
-  const worker = startWorkerContainer({ image: images.worker, runName: stack.name, stack });
+  const containerImages = await buildContainerImages(REPO_ROOT, stack.name);
+  const worker = startWorkerContainer({
+    image: containerImages.worker,
+    runName: stack.name,
+    stack,
+  });
 
   return {
     env: {
       RUN_NOTIFICATION_EMAIL: notificationEmail,
-      SYSTEM_E2E_WEB_IMAGE: images.web,
-      SYSTEM_E2E_WORKER_IMAGE: images.worker,
+      SYSTEM_E2E_WEB_IMAGE: containerImages.web,
+      SYSTEM_E2E_WORKER_IMAGE: containerImages.worker,
     },
     afterPlaywright: async () => {
       await worker.stop();
-      // Playwright is asked to stop the web container gracefully, but its fallback is a SIGKILL of
-      // the `docker run` client, which leaves the container itself running — and a live container
-      // holds a connection that makes the run database both undroppable and unsweepable
-      // (`sweepStaleRunDatabases` gates on having no connections). Owning the removal here rather
-      // than trusting that teardown is what keeps a killed run from accumulating both.
+      // Owned here rather than trusted to Playwright's own teardown of the web container — see
+      // `OWNER_LABEL` in `containers.ts` for why a killed run can't be relied on to clean up
+      // itself.
       await removeRunResources(stack.name);
     },
   };

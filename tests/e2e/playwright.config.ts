@@ -7,13 +7,13 @@ import {
 import { requireEnv } from '@gbd/core/env';
 import { defineConfig } from '@playwright/test';
 import {
-  assertBuiltImages,
+  assertBuiltContainerImages,
   containerStackFromEnv,
   webContainerCommand,
 } from './scripts/containers.ts';
 
 assertTestRunId('`pnpm test:system`');
-const images = assertBuiltImages();
+const containerImages = assertBuiltContainerImages();
 const { port, baseURL } = resolvePlaywrightTarget();
 const runName = requireEnv('TEST_RUN_ID');
 
@@ -28,19 +28,13 @@ export default defineConfig(
     timeout: 120_000,
     projects: [{ name: 'e2e', testMatch: '**/*.e2e.ts' }],
     webServer: {
-      // The deployed artifact itself, not a host process running its build output — this tier is
-      // the only thing that validates either image. `scripts/test-run.ts` built them and named
-      // them in the environment; `assertBuiltImages` is what refuses to run without that.
       command: webContainerCommand({
-        image: images.web,
+        image: containerImages.web,
         runName,
         port,
         baseURL,
         stack: containerStackFromEnv(),
       }),
-      // A killed `docker run` leaves its container running, and Playwright's default teardown is
-      // SIGKILL to the process group. The container is removed in `test-run.ts` either way; this
-      // is what lets the app shut down cleanly first.
       gracefulShutdown: { signal: 'SIGTERM', timeout: 15_000 },
     },
   }),

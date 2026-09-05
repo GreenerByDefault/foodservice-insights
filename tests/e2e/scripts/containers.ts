@@ -60,7 +60,8 @@ const OWNER_LABEL = 'gbd-system-e2e-owner-pid';
  * recycled, or which was started on a different machine than the one sweeping. */
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
-/** Set by `test-run.ts` for the Playwright child, and the thing `assertBuiltImages` looks for. */
+/** Set by `test-run.ts` for the Playwright child, and the thing `assertBuiltContainerImages`
+ * looks for. */
 const IMAGE_ENV_VARS: Record<Service, string> = {
   web: 'SYSTEM_E2E_WEB_IMAGE',
   worker: 'SYSTEM_E2E_WORKER_IMAGE',
@@ -89,7 +90,7 @@ function containerName(service: Service, runName: string): string {
  * and for the same reason: a bare `playwright test` would otherwise run against whatever the
  * config happened to compose, and the images — the entire point of this tier — would go
  * untested. */
-export function assertBuiltImages(): ContainerImages {
+export function assertBuiltContainerImages(): ContainerImages {
   const missing = SERVICES.filter((service) => !process.env[IMAGE_ENV_VARS[service]]);
   if (missing.length > 0) {
     throw new Error(
@@ -159,7 +160,10 @@ function runInherited(command: string, args: readonly string[]): Promise<void> {
  * BuildKit makes an unchanged rebuild seconds. Sequential rather than parallel so the progress
  * output stays readable; they share most of their base layers anyway.
  */
-export async function buildImages(repoRoot: string, runName: string): Promise<ContainerImages> {
+export async function buildContainerImages(
+  repoRoot: string,
+  runName: string,
+): Promise<ContainerImages> {
   const built: Partial<ContainerImages> = {};
   for (const service of SERVICES) {
     const tag = imageTag(service, runName);
@@ -278,8 +282,7 @@ export type RunningWorker = { stop(): Promise<void> };
 
 /** How long the container gets to drain after SIGTERM. Comfortably above the `stubbed` profile's
  * `killGraceMs` of 5s, so a worker still killing a child is not cut off mid-teardown — though it
- * is below `drainGraceMs` (30s), so what this exercises is a truncated drain, as it was when the
- * worker ran on the host. */
+ * is below `drainGraceMs` (30s), so what this exercises is a truncated drain. */
 const WORKER_SHUTDOWN_TIMEOUT_SECONDS = 15;
 
 /** Starts the worker image, attached, so its logs stay in the run's output.
