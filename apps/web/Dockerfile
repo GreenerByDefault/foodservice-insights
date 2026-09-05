@@ -19,6 +19,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/email/package.json packages/email/package.json
 COPY packages/storage/package.json packages/storage/package.json
 # @gbd/browser-testing is a devDependency of @gbd/web, not a runtime one — its source never
 # ships — but `uv sync`'s Python equivalent applies to pnpm too: `--frozen-lockfile` needs every
@@ -38,13 +39,16 @@ COPY packages/core/tsconfig.build.json packages/core/tsconfig.build.json
 COPY packages/db/src packages/db/src
 COPY packages/db/tsconfig.json packages/db/tsconfig.json
 COPY packages/db/tsconfig.build.json packages/db/tsconfig.build.json
+COPY packages/email/src packages/email/src
+COPY packages/email/tsconfig.json packages/email/tsconfig.json
+COPY packages/email/tsconfig.build.json packages/email/tsconfig.build.json
 COPY packages/storage/src packages/storage/src
 COPY packages/storage/tsconfig.json packages/storage/tsconfig.json
 COPY packages/storage/tsconfig.build.json packages/storage/tsconfig.build.json
 
 # `--filter-prod`, not `--filter`: it walks only `dependencies`, so it builds @gbd/core, @gbd/db,
-# and @gbd/storage (what the built server resolves from `node_modules` at runtime) without also
-# building @gbd/browser-testing, whose source was never copied in.
+# @gbd/email, and @gbd/storage (what the built server resolves from `node_modules` at runtime)
+# without also building @gbd/browser-testing, whose source was never copied in.
 RUN pnpm --filter-prod @gbd/web... run build
 # Emits a self-contained directory with a real `node_modules`, so `@gbd/core` et al. resolve at
 # runtime instead of being bundled — see `ssr.external` in vite.config.ts.
