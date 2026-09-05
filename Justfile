@@ -15,11 +15,13 @@ sync:
 lint:
     uv run ruff check .
     uv run ruff format --check .
+    git ls-files -z '*.ipynb' | xargs -0 -r uv run nbstripout --verify
 
 # Format, and apply every fix ruff can make.
 fmt:
     uv run ruff format .
     uv run ruff check --fix .
+    git ls-files -z '*.ipynb' | xargs -0 -r uv run nbstripout
 
 # Typecheck.
 check:

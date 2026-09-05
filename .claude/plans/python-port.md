@@ -18,6 +18,14 @@ A companion plan, `categorization-cache.md`, moves the product-categorization ca
 Postgres afterward. Nothing here depends on it — this plan leaves all three cache CSVs as
 gitignored files at the paths the library already reads them from.
 
+A groundwork PR already landed ahead of the copy PRs, to shrink them: the three cache-CSV
+`.gitignore` entries and their `data_files/README.md`s, `client_work/.gitignore`, nbstripout
+wiring (`just lint`/`just fmt` plus the `py-lab` CI job gaining `just lint`), the `errors.py`
+leaf (`AnalysisError` + its three subclasses, re-exported from `analysis.py`), and the
+`report.organizationName` contract change with the env allowlist trim to
+`PATH, HOME, LANG, TZ, OPENAI_API_KEY` are all already on `main`. PRs 1, 2, 4 and 5 below
+already assume these exist and only list what remains.
+
 ### What this port must get right
 
 1. **The three cache CSVs never enter git.** `previously_categorized_items.csv` (~39k rows of
@@ -138,13 +146,13 @@ report test passes; **no cache CSV is committed**.
   `report_excel`, `report_plots`, `report_quality`, `report_run_logging`, `report_schema`,
   `report_utils`, `utils`; `data_files/{GBD_categories.yaml,diagnostic_thresholds.yaml,gemini_models.json}`;
   `prompts/{clean_item_name,match_items_to_gbd_categories,fuzzy_match_gbd_category,entree_detector}_prompt.md`.
-- **The cache CSV**: add `python/insights/gbd_foodservice_insights/data_files/previously_categorized_items.csv`
-  to `.gitignore` **before copying anything**; the loader `get_previously_categorized_items()`
-  returns an empty frame with the three columns + `logger.warning(...)` naming
-  `data_files/README.md` when the file is absent (test with `caplog`). `data_files/README.md`
-  (committed) says what the file is and that it is handed out privately. Source tests already
-  patch the loader, so none read the real file; delete the two that test the file itself.
-  `analyze()` (PR 5) passes `cache_write_mode="none"` — product code never writes it.
+- **The cache CSV**: `data_files/previously_categorized_items.csv` is already gitignored and
+  `data_files/README.md` already committed (the groundwork PR). The loader
+  `get_previously_categorized_items()` returns an empty frame with the three columns +
+  `logger.warning(...)` naming `data_files/README.md` when the file is absent (test with
+  `caplog`). Source tests already patch the loader, so none read the real file; delete the two
+  that test the file itself. `analyze()` (PR 5) passes `cache_write_mode="none"` — product code
+  never writes it.
 - **Split `LLMs.py` here**: delete the LLMWhisperer/PDF/unit/weight functions, the `whisper=`
   branch of `setup_api_clients`, `DEFAULT_PDF_MODEL`, and the `unstract`/`requests` imports, so
   the shipped library never depends on `llmwhisperer-client`. PR 2 re-copies the source file
@@ -189,19 +197,20 @@ Goal: `catering_analysis` is fully archived; GBD's manual workflow runs from the
   `prompts/{cbord_pdf_extraction,clean_units,extract_pdf,extract_weight,standard_pdf_extraction}_prompt.md`.
   Two seds: the package rename, then `gbd_foodservice_insights.<lab module>` →
   `gbd_foodservice_insights_lab.<lab module>` for the lab list only.
-- **The two lab caches**: gitignore `python/lab/gbd_foodservice_insights_lab/data_files/previously_classified_{entrees,weights}.csv`
-  **before copying**; loaders return an empty frame + warning when absent; `data_files/README.md`.
+- **The two lab caches**: already gitignored, with `data_files/README.md` already committed (the
+  groundwork PR); loaders return an empty frame + warning when absent.
 - `runscripts/`: the 5 runscript `.py` and 4 `.ipynb` under their verbatim names. Notebooks stay
-  notebooks (user decision). **nbstripout**: add to the root `dev` group; `just lint` gains
-  `uv run nbstripout --verify $(git ls-files '*.ipynb')`, `just fmt` the stripping form; the lab
-  README says "run `just fmt` before committing a notebook". All 4 have zero outputs today.
-  Ruff already lints/formats notebook code cells natively.
-- CI: `py-lab` runs only `just test-lab`, and the `python` filter excludes the lab, so a lab-only
-  change is never linted today. Add `just lint` to the `py-lab` job — a one-line CI change that
-  is what makes the nbstripout check bite.
+  notebooks (user decision); nbstripout is already wired (the groundwork PR): `just lint`/`just
+  fmt` gained the null-safe `git ls-files -z '*.ipynb' | xargs -0 -r uv run nbstripout ...` form,
+  since a bare `$(git ls-files '*.ipynb')` with zero notebooks gives nbstripout no arguments and
+  it hangs reading stdin. All 4 have zero outputs today. Ruff already lints/formats notebook code
+  cells natively. The lab README still needs "run `just fmt` before committing a notebook."
+- CI: the `py-lab` job already gained `just lint` (the groundwork PR) — that's what makes the
+  nbstripout check above bite.
 - `notebook_runscript_setup.get_project_root()` → monorepo root; runscripts `load_dotenv` from
-  there. `client_work/` is gitignored wholesale (`*` + `!.gitignore`) — the data scientists'
-  working directories, with the existing `client_metadata.json`-in-cwd convention unchanged.
+  there. `client_work/.gitignore` (`*` + `!.gitignore`) already exists (the groundwork PR) — the
+  data scientists' working directories, with the existing `client_metadata.json`-in-cwd
+  convention unchanged.
 - `test_data/`: only the anonymized directories (`raw_data`, `step_*_output`); the real-client
   directory is never copied — the tests that read it already `pytest.skip` when absent.
 - Drop: `Docs/Devlog/*` + its test, the stray 2-row CSV at the source root, `example_dot_env.md`
@@ -270,8 +279,10 @@ with its own entree detector.
   `openai.APIError` → `UpstreamApiError` at once; exhaustion → `UpstreamApiError`. The SDK's own
   `max_retries=2` is disabled so there is exactly one retry layer (as `apps/worker/src/failures.ts`
   rules). Today the categorization path has **no retry at all** — a single 429 kills a run.
-- New leaf `errors.py` holds `AnalysisError` + the three subclasses; `analysis.py` re-exports
-  them (avoids an `llm.py → analysis.py → categorize.py` cycle); `worker_child` imports unchanged.
+- `errors.py` (leaf, `AnalysisError` + the three subclasses, re-exported from `analysis.py`)
+  already exists (the groundwork PR); `llm.py` imports it directly, avoiding the
+  `llm.py → analysis.py → categorize.py` cycle it was written for. `worker_child` imports
+  unchanged.
 - `categorize_steps`: `clean_product_names(df, llm, *, report_progress)`,
   `categorize_with_llm(df, llm, *, report_progress)`, `fuzzy_match_GBD_categories(df, llm)` —
   each loop body calls `llm.<op>()` then `report_progress()`. `categorize_products(df, llm,
@@ -291,15 +302,12 @@ with its own entree detector.
 
 Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
 
-- **Small contract change**: `run.json` gains `report.organizationName` (the PDF's "client"
-  slot names the organization — user decision). `contract/fixtures/valid/run.json` + an
-  `invalid/run.organization-name-blank.json`; `buildRunManifest` (`apps/worker/src/contract/messages.ts`,
-  non-blank string); `loadAttemptInputs` (`attempt/queue.ts`) joins `organization.name`; Python
-  `RunManifest`; `AnalysisRequest.organization_name: str`; `stub_analysis`, `_build_request`, and
-  every `_request()` test helper pass it. Same PR: trim the env allowlist to
-  `PATH, HOME, LANG, TZ, OPENAI_API_KEY` — the PDF extractor and the entree detector that used the
-  other two keys live in the lab now (also `turbo.json` `env`, `spawn.test.ts`'s parent-only half,
-  `python/README.md`).
+`report.organizationName` (the PDF's "client" slot names the organization) already landed as its
+own contract change ahead of this PR, along with trimming the env allowlist to
+`PATH, HOME, LANG, TZ, OPENAI_API_KEY` — the PDF extractor and the entree detector that used the
+other two keys live in the lab now. `AnalysisRequest.organization_name: str` already exists;
+`analyze()` below is the only thing left to write.
+
 - `analyze()`:
 
   ```python
@@ -443,6 +451,3 @@ Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
 - **Whitespace**: the golden cache's `product` values are verbatim (some with leading spaces or
   embedded newlines) while `apps/web` trims uploads; expect some exact-match misses that the
   cleaned-name pass catches. Do not "fix" by trimming the cache.
-
-Also fold in while touching docs: ARCHITECTURE.md and `packages/db/README.md` link
-`apps/worker/src/sweeps/reaper.ts`, but the file is `sweeps/converge.ts` — the code wins.

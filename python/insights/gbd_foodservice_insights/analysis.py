@@ -28,6 +28,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from gbd_foodservice_insights.errors import AnalysisError as AnalysisError
+from gbd_foodservice_insights.errors import InvalidInputError as InvalidInputError
+from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataError
+from gbd_foodservice_insights.errors import UpstreamApiError as UpstreamApiError
+
 type ReportProgress = Callable[[], None]
 
 CountsBasis = Literal["people", "meals"]
@@ -52,22 +57,6 @@ class AnalysisRequest:
 class AnalysisOutcome:
     pdf: Path
     xlsx: Path
-
-
-class AnalysisError(Exception):
-    """Base for every reason `analyze()` cannot produce a report."""
-
-
-class UpstreamApiError(AnalysisError):
-    """The AI provider was unreachable, or retries were exhausted."""
-
-
-class InvalidInputError(AnalysisError):
-    """`input.csv` is not what the parent promised — a validation hole in `apps/web`."""
-
-
-class UnusableDataError(AnalysisError):
-    """Data is syntactically correct, but cannot be used, such as bogus product names."""
 
 
 def _ignore() -> None:
