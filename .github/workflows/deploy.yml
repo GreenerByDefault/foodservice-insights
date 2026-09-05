@@ -1,9 +1,8 @@
 name: Deploy
 
 # Every push to main builds *both* images, whichever service ends up deploying. One image per
-# commit is what makes a deploy a promotion and a rollback a redeploy of bytes that already ran
-# (`.claude/plans/deploy-image-registry.md`); a commit that only ever built one of the two is a
-# commit the other service can never be rolled back to.
+# commit is what allows promotion and rollbacks to simply point at a commit SHA to move the
+# pointer to the pre-built image.
 #
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
@@ -12,7 +11,7 @@ name: Deploy
 # the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
 #
 # We also use workflow_dispatch for rollbacks of either service: dispatch it again naming an
-# older SHA.
+# older commit SHA.
 on:
   push:
     branches: [main]
@@ -37,13 +36,6 @@ permissions:
   contents: read
 
 jobs:
-  # Two jobs rather than a matrix over [web, worker]: `needs:` has no per-leg granularity, so a
-  # matrix would make every web deploy — the path that runs migrations — wait on the slower
-  # Node+Python worker build, and a worker build failure would block it outright.
-  #
-  # On a dispatch these build only the service being deployed. force_rebuild is the one thing in
-  # this workflow that deliberately moves an existing tag, so it moves exactly the one the
-  # operator asked to redeploy.
   build-web:
     name: Build web image
     if: >-
@@ -55,13 +47,12 @@ jobs:
       group: build-web-${{ inputs.sha || github.sha }}
       cancel-in-progress: false
     permissions:
-      contents: read # a job-level block replaces the workflow-level one, so restate this
+      contents: read
       packages: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
-
       - uses: ./.github/actions/build-image
         with:
           service: web
@@ -85,17 +76,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
-
       - uses: ./.github/actions/build-image
         with:
           service: worker
           sha: ${{ inputs.sha || github.sha }}
           force_rebuild: ${{ inputs.force_rebuild }}
 
-  # Both deploy jobs name a status function rather than a plain boolean `if:`. A plain one is
-  # implicitly ANDed with success() over `needs`, so a dispatch that skips the build would skip
-  # the deploy with it. It must be !cancelled() and not always(), which would deploy straight
-  # through an operator hitting Cancel.
   deploy-web:
     name: Deploy web
     needs: build-web
@@ -105,14 +91,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      # Serializes same-service deploys; a web push and a worker dispatch never contend.
       group: deploy-web
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
-
       - uses: ./.github/actions/deploy-service
         with:
           service: web
