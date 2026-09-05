@@ -70,6 +70,13 @@ export type Worker = {
   notify(): Promise<AnalysisAttemptId[]>;
   drain(): Promise<void>;
   run(): Promise<void>;
+  /** Where `attemptId`'s verdict is parked, or `undefined` if it is not parked or not in flight.
+   *
+   * Nothing in production reads this. It exists for `parkAtUpload` and `parkAtRecord` in
+   * [`testing/worker-harness.ts`](./testing/worker-harness.ts): a park's only other observable, the
+   * run directory disappearing, lands a beat *before* `applyDeliveryOutcome` stamps `parked.since`,
+   * so a test that advanced the clock in that beat was moving a clock the park had not read yet. */
+  parkedStage(attemptId: AnalysisAttemptId): PendingVerdict['stage'] | undefined;
 };
 
 /** One attempt this worker holds, from the moment its child is spawned to the moment its verdict
@@ -473,5 +480,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
   }
 
-  return { claimAndStart, direct, reap, notify, drain, run };
+  function parkedStage(attemptId: AnalysisAttemptId): PendingVerdict['stage'] | undefined {
+    return inFlight.get(attemptId)?.state.parked?.stage;
+  }
+
+  return { claimAndStart, direct, reap, notify, drain, run, parkedStage };
 }

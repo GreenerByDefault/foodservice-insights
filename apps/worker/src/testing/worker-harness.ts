@@ -2,7 +2,6 @@
  * fixture, and the helpers every test uses to seed, release, and observe it.
  */
 
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { MINUTE_MS, SECOND_MS } from '@gbd/core';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
@@ -169,42 +168,45 @@ export async function withWorker<T>(
   });
 }
 
-export function runDirectory(fixture: ReportFixture, attemptId: AnalysisAttemptId): string {
-  return join(fixture.runRoot, attemptId);
+export function runDirectory(root: { runRoot: string }, attemptId: AnalysisAttemptId): string {
+  return join(root.runRoot, attemptId);
 }
 
 export async function release(
-  fixture: ReportFixture,
+  root: { runRoot: string },
   attemptId: AnalysisAttemptId,
   sentinel = 'go',
 ): Promise<void> {
-  await releaseFakeChild(runDirectory(fixture, attemptId), sentinel);
+  await releaseFakeChild(runDirectory(root, attemptId), sentinel);
 }
 
-/** Break the store, release the child, and wait for its verdict to park at upload. */
+/** Break the store, release the child, and wait for its verdict to park at upload.
+ *
+ * Waits on the park itself, not on the run directory disappearing: that happens a beat earlier,
+ * and a test that advances the clock in between is advancing a clock the park has not read yet. */
 export async function parkAtUpload(
-  fixture: ReportFixture,
+  harness: Harness,
   store: Breakable<BlobStore>,
   attemptId: AnalysisAttemptId,
 ): Promise<void> {
   store.break();
-  await release(fixture, attemptId);
+  await release(harness.config, attemptId);
   await waitUntil(
-    () => !existsSync(runDirectory(fixture, attemptId)),
+    () => harness.worker.parkedStage(attemptId) === 'upload',
     'the upload fails and the verdict parks',
   );
 }
 
 /** Break the database, release the child, and wait for its verdict to park at record. */
 export async function parkAtRecord(
-  fixture: ReportFixture,
+  harness: Harness,
   database: Breakable<DatabaseExecutor>,
   attemptId: AnalysisAttemptId,
 ): Promise<void> {
   database.break();
-  await release(fixture, attemptId);
+  await release(harness.config, attemptId);
   await waitUntil(
-    () => !existsSync(runDirectory(fixture, attemptId)),
+    () => harness.worker.parkedStage(attemptId) === 'record',
     'the terminal write fails and the verdict parks',
   );
 }

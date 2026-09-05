@@ -97,11 +97,11 @@ describe('claiming and capacity', () => {
           reports: 2,
           overrides: { maxConcurrentAttempts: 1 },
         },
-        async (harness, fixture) => {
+        async (harness) => {
           const attemptId = await startOne(harness);
           await reportAt(harness, 1).seedAttempt();
 
-          await parkAtUpload(fixture, store, attemptId);
+          await parkAtUpload(harness, store, attemptId);
 
           expect(await harness.worker.claimAndStart()).toBe('at-capacity');
           expect((await attemptRow(attemptId)).status).toBe('processing');
@@ -400,12 +400,12 @@ describe('parked verdicts', () => {
     await withBreakable(breakableDatabase, async (database) => {
       await withWorker(
         { steps: SUCCEEDING_ON_RELEASE_STEPS, db: database.service },
-        async (harness, fixture) => {
+        async (harness) => {
           const attemptId = await startOne(harness);
 
           // Broken across the terminal write only: the upload happens against a healthy store, so
           // the verdict parks at `record` with its files already stored.
-          await parkAtRecord(fixture, database, attemptId);
+          await parkAtRecord(harness, database, attemptId);
           expect(await statusIs(attemptId, 'processing')).toBe(true);
 
           database.restore();
@@ -428,7 +428,7 @@ describe('parked verdicts', () => {
           const attemptId = await startOne(harness);
           await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
 
-          await parkAtUpload(fixture, store, attemptId);
+          await parkAtUpload(harness, store, attemptId);
           const parked = (await attemptRow(attemptId)).leaseRenewedAt as Date;
 
           // The database is healthy throughout, so a parked record keeps its lease renewed — which
@@ -459,7 +459,7 @@ describe('parked verdicts', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          await parkAtUpload(fixture, store, attemptId);
+          await parkAtUpload(harness, store, attemptId);
 
           harness.advance(harness.config.uploadRetryBudgetMs);
           await directUntil(
@@ -490,7 +490,7 @@ describe('parked verdicts', () => {
           const other = harness.anotherWorker();
           const attemptId = await startOne(harness);
 
-          await parkAtUpload(fixture, store, attemptId);
+          await parkAtUpload(harness, store, attemptId);
 
           await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
           expect((await other.worker.reap()).expired).toEqual([attemptId]);
@@ -517,7 +517,7 @@ describe('parked verdicts', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          await parkAtUpload(fixture, store, attemptId);
+          await parkAtUpload(harness, store, attemptId);
 
           await requestCancel(attemptId);
           // Restored, so an unconverted resume would happily upload a report the user just deleted.
@@ -590,10 +590,10 @@ describe('draining', () => {
           systemClock: true,
           overrides: { drainGraceMs: 300 },
         },
-        async (harness, fixture) => {
+        async (harness) => {
           const attemptId = await startOne(harness);
 
-          await parkAtUpload(fixture, store, attemptId);
+          await parkAtUpload(harness, store, attemptId);
 
           await harness.worker.drain();
 
@@ -617,7 +617,7 @@ describe('draining', () => {
         async (harness, fixture) => {
           const attemptId = await startOne(harness);
 
-          await parkAtRecord(fixture, database, attemptId);
+          await parkAtRecord(harness, database, attemptId);
 
           // Unlike an `upload` park, this one has nothing to convert to: the drain's last resume
           // goes to the same database that is still down. So the row is left `processing` for
