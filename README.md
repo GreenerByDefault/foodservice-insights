@@ -67,24 +67,19 @@ Playwright. For the Python equivalents, see [`python/README.md`](python/README.m
   corepack enable
   ```
 
-- **Docker**, running — Docker Desktop, Rancher Desktop, or OrbStack. The local Postgres
-  runs in it, as do both services under `pnpm test:system`.
+- **Docker**, running — Docker Desktop, Rancher Desktop, or OrbStack.
 - **The Supabase CLI**:
 
   ```sh
   brew install supabase/tap/supabase
   ```
 
-- **A `host.docker.internal` entry**, once per machine. Only `pnpm test:system` needs it, which
-  checks for it up front and prints this same line if it is missing:
+- **A `host.docker.internal` entry**, once per machine. `pnpm test:system` needs your machine to
+  resolve `host.docker.internal` to itself (`127.0.0.1`):
 
   ```sh
   sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
   ```
-
-  It is what lets one name reach the host from both a container and the browser — see
-  [`tests/e2e/scripts/containers.ts`](tests/e2e/scripts/containers.ts) for why a signed
-  blob-store URL leaves no alternative.
 
 ### Install
 
