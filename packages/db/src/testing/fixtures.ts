@@ -19,6 +19,8 @@ import type AnalysisFailureReason from '../generated/public/AnalysisFailureReaso
 import type { AppUser } from '../generated/public/AppUser.ts';
 import type { InputFile } from '../generated/public/InputFile.ts';
 import type { Organization } from '../generated/public/Organization.ts';
+import type { OrganizationMember } from '../generated/public/OrganizationMember.ts';
+import type OrganizationRole from '../generated/public/OrganizationRole.ts';
 import type { Report } from '../generated/public/Report.ts';
 import type { ResultFile } from '../generated/public/ResultFile.ts';
 import type ResultFileKind from '../generated/public/ResultFileKind.ts';
@@ -114,6 +116,30 @@ export async function insertOrganization(
     .execute();
 
   return { organization, admin };
+}
+
+/** A member row on an existing organization — creating the user if none was given, the same way
+ * every other fixture creates its parents. Does not create the organization itself; use
+ * `insertOrganization` for that, since a member alone can't satisfy `organization_has_a_member`. */
+export async function insertOrganizationMember(
+  database: DatabaseExecutor,
+  overrides: {
+    organizationId: Organization['id'];
+    userId?: AppUser['id'];
+    role?: OrganizationRole;
+  },
+): Promise<OrganizationMember> {
+  const userId = overrides.userId ?? (await insertAppUser(database)).id;
+
+  return await database
+    .insertInto('organizationMember')
+    .values({
+      userId,
+      organizationId: overrides.organizationId,
+      role: overrides.role ?? 'member',
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export async function insertReport(

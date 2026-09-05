@@ -11,6 +11,7 @@ import type { Kysely } from 'kysely';
 import {
   clearOrganizationFixture,
   insertOrganizationFixture,
+  type OrganizationMemberSpec,
   type OrganizationReportSpec,
 } from './organizations.ts';
 import { insertReportFixture, type ReportState } from './reports.ts';
@@ -32,6 +33,7 @@ export interface OrganizationFactory {
     name: string;
     reports?: OrganizationReportSpec[];
     role?: OrganizationRole;
+    members?: OrganizationMemberSpec[];
   }): Promise<OrganizationId>;
 }
 

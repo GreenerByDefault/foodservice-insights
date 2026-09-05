@@ -1,13 +1,15 @@
 <script lang="ts">
 import PageHeading from '$lib/components/page-heading.svelte';
-import StubNotice from '$lib/components/stub-notice.svelte';
-</script>
+import type { PageProps } from './$types';
+import MembersList from './members-list.svelte';
 
-<!-- **Stub:** renders a placeholder. It will offer invite, revoke, remove, promote and demote, all
-     hidden from a plain member. An organization must keep at least one admin, and the database
-     enforces that with a deferred trigger, so the UI's job is to explain the refusal rather than to
-     prevent it. -->
+let { data }: PageProps = $props();
+</script>
 
 <PageHeading>Members</PageHeading>
 
-<StubNotice />
+<MembersList members={data.members} />
+
+{#if data.role === 'admin'}
+  <p class="w-full text-sm text-muted-foreground">Inviting and removing people arrives later.</p>
+{/if}

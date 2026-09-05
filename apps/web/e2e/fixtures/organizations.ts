@@ -18,12 +18,22 @@ import { withTransaction } from '@gbd/db';
 import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import {
   insertAnalysisAttempt,
+  insertAppUser,
   insertInputFile,
   insertOrganization,
+  insertOrganizationMember,
   insertReport,
   insertResultFile,
 } from '@gbd/db/testing';
 import type { Kysely, RawBuilder, Transaction } from 'kysely';
+
+export type OrganizationMemberSpec = {
+  displayName?: string;
+  /** Defaults to a random address — set this for a screenshot spec, whose committed image needs
+   * the same text on every run, unlike a behavioural spec that only asserts the row exists. */
+  email?: string;
+  role?: OrganizationRole;
+};
 
 export type OrganizationReportSpec = {
   name: string;
@@ -84,7 +94,12 @@ async function insertOrganizationReport(
  */
 export async function insertOrganizationFixture(
   db: Kysely<Database>,
-  spec: { name: string; reports?: OrganizationReportSpec[]; role?: OrganizationRole },
+  spec: {
+    name: string;
+    reports?: OrganizationReportSpec[];
+    role?: OrganizationRole;
+    members?: OrganizationMemberSpec[];
+  },
 ): Promise<OrganizationId> {
   const role = spec.role ?? 'admin';
 
@@ -98,6 +113,14 @@ export async function insertOrganizationFixture(
 
     for (const report of spec.reports ?? []) {
       await insertOrganizationReport(tx, organizationId, report);
+    }
+
+    for (const member of spec.members ?? []) {
+      const user = await insertAppUser(tx, {
+        displayName: member.displayName,
+        email: member.email,
+      });
+      await insertOrganizationMember(tx, { organizationId, userId: user.id, role: member.role });
     }
 
     return organizationId;
