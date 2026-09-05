@@ -86,18 +86,6 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .execute();
 
-  // No cap on how many organizations a user may create. One was tried and removed before this
-  // ever shipped: signup is self-serve with nobody approving accounts, so a per-user total is a
-  // per-signup total — free to reset — while the report rate limits that actually guard cost
-  // (AI compute, see `report-rate-limit.ts`) are already enforced per-user independently of
-  // organization. A squatter is fully attributable via `organization.created_by_user_id` and the
-  // `organization.created`/`deleted` audit events, and cleanup is a `DELETE`. See REQUIREMENTS.md
-  // § Abuse limits for where the control point moves to once real auth lands.
-  //
-  // *Rejected: a per-user counter column with a CHECK ceiling*, enforced by a trigger so the
-  // read-modify-write races could not be won by two concurrent creations. It defended nothing a
-  // free-to-mint account couldn't route around, and its only measured effect was exhausting the
-  // e2e suite's single shared identity mid-run.
   await sql`
     COMMENT ON TABLE app_user IS
       'Mirrors auth.users, which owns email and created_at. Rows are created by a trigger on auth.users.'

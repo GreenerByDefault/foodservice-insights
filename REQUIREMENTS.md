@@ -271,12 +271,8 @@ Follow security best practices for web development.
 
 - Payload limits.
 - Server-side form validation.
-- **Org creation:** deliberately uncapped. **Open:** signup is self-serve and unauthenticated
-  accounts cost nothing to mint, so a per-user total buys no real defense — see the comment on
-  `app_user` in [`001_initial_schema.ts`](packages/db/migrations/001_initial_schema.ts). When real
-  auth lands, the control point is the signup boundary (email verification, per-IP signup limits);
-  if org creation itself ever needs bounding, it wants an IP- or globally-keyed window, never
-  another per-user total.
+- **No org creation limit** for now. We reverted it as not worth the complexity and too
+  restrictive to users.
 - **Hourly and weekly reports:** valid reports per rolling hour and per rolling 7 days, enforced
   per organization *and* per user — see `HOURLY_REPORT_LIMIT` and `WEEKLY_REPORT_LIMIT` in
   [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
