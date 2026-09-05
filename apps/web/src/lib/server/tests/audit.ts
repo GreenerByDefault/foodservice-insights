@@ -4,34 +4,18 @@
  */
 
 import type { Database, OrganizationId, ReportId, UserId } from '@gbd/db';
-import type { Selectable, Transaction } from 'kysely';
+import type { Transaction } from 'kysely';
 import type { ReportAuditAction } from '../reports/audit.ts';
+import { type AuditEventRow, auditEventsFor } from './audit-event.ts';
 
-const AUDIT_EVENT_COLUMNS = [
-  'action',
-  'actorUserId',
-  'actorKind',
-  'organizationId',
-  'targetType',
-  'targetId',
-] as const;
-
-export type ReportAuditEventRow = Pick<
-  Selectable<Database['auditEvent']>,
-  (typeof AUDIT_EVENT_COLUMNS)[number]
->;
+export type ReportAuditEventRow = AuditEventRow;
 
 /** Every audit row written for `reportId`, oldest first. */
 export async function reportAuditEvents(
   transaction: Transaction<Database>,
   reportId: ReportId,
 ): Promise<ReportAuditEventRow[]> {
-  return await transaction
-    .selectFrom('auditEvent')
-    .select(AUDIT_EVENT_COLUMNS)
-    .where('targetId', '=', reportId)
-    .orderBy('id')
-    .execute();
+  return await auditEventsFor(transaction, reportId);
 }
 
 /** The row `reportAuditEvents` should return for one `action` by one user. */
