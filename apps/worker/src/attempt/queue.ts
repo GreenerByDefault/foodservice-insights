@@ -36,6 +36,12 @@ import type { ChildResult, RunManifestInput } from '../contract/messages.ts';
 // Claiming
 // -----------------------------------------------------
 
+/** This worker's own contract version, compared against each pending attempt's
+ * `requiredContractVersion`. Bump it when a worker ↔ web or worker ↔ database change stops being
+ * backwards compatible with an older worker, and raise `requiredContractVersion` on whatever
+ * writes the incompatible attempt to match. */
+export const WORKER_CONTRACT_VERSION = 1;
+
 export type ClaimOptions = {
   /** Narrows the queue to attempts on these reports.
    *
@@ -44,9 +50,15 @@ export type ClaimOptions = {
    * belonging to another test file and fail it from the outside.
    */
   candidateReports?: readonly ReportId[];
+
+  /** This worker's contract version, checked against each candidate row.
+   *
+   * **Test-only override; production always claims at `WORKER_CONTRACT_VERSION`.** */
+  contractVersion?: number;
 };
 
-/** Take the oldest pending attempt, or `undefined` if there is nothing to take. */
+/** Take the oldest pending attempt this worker's contract version can handle, or `undefined` if
+ * there is nothing to take. */
 export async function claimNextAttempt(
   db: DatabaseExecutor,
   workerId: string,
@@ -60,14 +72,23 @@ export async function claimNextAttempt(
       claimedAt: sql<Date>`now()`,
       leaseRenewedAt: sql<Date>`now()`,
     })
-    .where('id', '=', nextPendingAttempt(db, options.candidateReports))
+    .where(
+      'id',
+      '=',
+      nextPendingAttempt(
+        db,
+        options.candidateReports,
+        options.contractVersion ?? WORKER_CONTRACT_VERSION,
+      ),
+    )
     .returning('id')
     .executeTakeFirst();
 
   return claimed?.id;
 }
 
-/** Get the oldest pending attempt not already cancel-requested. Locked for update.
+/** Get the oldest pending attempt not already cancel-requested and within our contract version.
+ * Locked for update.
  *
  * A cancel request on an unclaimed row means there is nothing to start — see
  * `cancelRequestedPendingAttempts` in `reaper.ts` for who converges it to `canceled`.
@@ -75,6 +96,7 @@ export async function claimNextAttempt(
 function nextPendingAttempt(
   db: DatabaseExecutor,
   candidateReports: readonly ReportId[] | undefined,
+  contractVersion: number,
 ) {
   const pending = db
     .selectFrom('analysisAttempt')
@@ -85,7 +107,9 @@ function nextPendingAttempt(
     // is *skipped* rather than waited on, and a row whose cancel already committed is re-read at
     // its new version once the lock is taken, so this predicate excludes it either way — the
     // claim never selects a row it would then have to re-check.
-    .where('cancelRequestedAt', 'is', null);
+    .where('cancelRequestedAt', 'is', null)
+    // A row above our version stays pending instead of being claimed and failed.
+    .where('requiredContractVersion', '<=', contractVersion);
 
   return (
     (candidateReports === undefined ? pending : pending.where('reportId', 'in', candidateReports))

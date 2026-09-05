@@ -185,6 +185,7 @@ describe('claiming', () => {
     async function withPendingAttempts(
       count: number,
       body: (reportIds: ReportId[]) => Promise<void>,
+      overrides: { requiredContractVersion?: number } = {},
     ): Promise<void> {
       await withCommittedFixture(
         WORKER_DATABASE,
@@ -194,7 +195,7 @@ describe('claiming', () => {
           for (let index = 0; index < count; index++) {
             const report = await insertReport(transaction, { organizationId: organization.id });
             await insertInputFile(transaction, { reportId: report.id });
-            await insertAnalysisAttempt(transaction, { reportId: report.id });
+            await insertAnalysisAttempt(transaction, { reportId: report.id, ...overrides });
             reportIds.push(report.id);
           }
           return reportIds;
@@ -272,6 +273,40 @@ describe('claiming', () => {
         expect(claimed.filter((id) => id !== undefined)).toHaveLength(2);
         expect(claimed[0]).not.toBe(claimed[1]);
       });
+    });
+
+    // Real concurrency, not `withRollback`, is the point: an old worker's claim has to leave the
+    // row for a new one to take, not merely fail if run alone.
+    test('leaves an attempt above its version pending, for a worker at that version to claim', async () => {
+      await withPendingAttempts(
+        1,
+        async (candidateReports) => {
+          await withConcurrentTransactions(WORKER_DATABASE, async (alpha, beta) => {
+            expect(
+              await claimNextAttempt(alpha.transaction, 'worker-old', {
+                candidateReports,
+                contractVersion: 1,
+              }),
+            ).toBeUndefined();
+
+            expect(
+              await claimNextAttempt(beta.transaction, 'worker-new', {
+                candidateReports,
+                contractVersion: 2,
+              }),
+            ).toBeDefined();
+
+            await beta.transaction.commit().execute();
+          });
+
+          const workers = await WORKER_DATABASE.selectFrom('analysisAttempt')
+            .select('workerId')
+            .where('reportId', 'in', candidateReports)
+            .execute();
+          expect(workers.map((row) => row.workerId)).toEqual(['worker-new']);
+        },
+        { requiredContractVersion: 2 },
+      );
     });
   });
 });

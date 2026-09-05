@@ -208,6 +208,8 @@ export async function insertAnalysisAttempt(
      * one there and forbids one everywhere else. Defaults to `'child_crashed'`, an arbitrary member of
      * `analysis_failure_reason`; set this to exercise a specific reason's copy. */
     failureReason?: AnalysisFailureReason;
+    /** Defaults to 1. Set higher to build a row an older worker must leave in the queue. */
+    requiredContractVersion?: number;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -224,6 +226,7 @@ export async function insertAnalysisAttempt(
       attemptNumber: overrides.attemptNumber ?? 1,
       status,
       requestedByUserId: overrides.requestedByUserId ?? null,
+      requiredContractVersion: overrides.requiredContractVersion ?? 1,
       ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
       // A backdated finishedAt still has to satisfy analysis_attempt_finished_at_after_lease_renewed,
       // so a claim added on the caller's behalf must not be later than it — hence claimedAt falling
