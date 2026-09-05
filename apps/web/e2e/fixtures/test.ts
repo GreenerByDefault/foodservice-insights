@@ -4,14 +4,13 @@
  * pool at import time, and the config-loading process has no worker fixture to close it again.
  */
 
-import type { Database, OrganizationId, ReportId } from '@gbd/db';
+import type { Database, OrganizationId, OrganizationRole, ReportId } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { test as base } from '@playwright/test';
 import type { Kysely } from 'kysely';
 import {
   clearOrganizationFixture,
   insertOrganizationFixture,
-  insertOrganizationMembershipFixture,
   type OrganizationReportSpec,
 } from './organizations.ts';
 import { insertReportFixture, type ReportState } from './reports.ts';
@@ -24,28 +23,22 @@ export interface ReportFactory {
 }
 
 export interface OrganizationFactory {
-  /** Commit a private organization, with the placeholder user as its only member, and return its
-   * id. Deleted when this test ends, whether it passed or failed. */
-  create(spec: { name: string; reports?: OrganizationReportSpec[] }): Promise<OrganizationId>;
-}
-
-export interface OrganizationMembershipFactory {
-  /** Commit a private organization admin'd by a disposable user, add the placeholder user as a
-   * plain member, and return the organization's id. Deleted when this test ends, whether it
-   * passed or failed.
+  /** Commit a private organization the placeholder user belongs to, and return its id. Deleted
+   * when this test ends, whether it passed or failed.
    *
-   * Use this, not `organizations.create`, for a spec that puts the placeholder user in several
-   * organizations at once as a plain member — see `insertOrganizationMembershipFixture`'s doc
-   * comment for why that needs a disposable admin rather than reusing `organizations.create`.
-   */
-  create(spec: { name: string }): Promise<OrganizationId>;
+   * `role` defaults to `admin`, which also makes the placeholder its creator and sole member;
+   * `member` puts a disposable admin above it instead. See `insertOrganizationFixture`. */
+  create(spec: {
+    name: string;
+    reports?: OrganizationReportSpec[];
+    role?: OrganizationRole;
+  }): Promise<OrganizationId>;
 }
 
 export const test = base.extend<
   {
     reports: ReportFactory;
     organizations: OrganizationFactory;
-    organizationMemberships: OrganizationMembershipFactory;
   },
   { db: Kysely<Database> }
 >({
@@ -84,20 +77,6 @@ export const test = base.extend<
     await use({
       create: async (spec) => {
         const organizationId = await insertOrganizationFixture(db, spec);
-        createdIds.push(organizationId);
-        return organizationId;
-      },
-    });
-
-    await Promise.all(createdIds.map((id) => clearOrganizationFixture(db, id)));
-  },
-
-  organizationMemberships: async ({ db }, use) => {
-    const createdIds: OrganizationId[] = [];
-
-    await use({
-      create: async (spec) => {
-        const organizationId = await insertOrganizationMembershipFixture(db, spec);
         createdIds.push(organizationId);
         return organizationId;
       },

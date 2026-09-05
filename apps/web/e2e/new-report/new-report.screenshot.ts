@@ -2,6 +2,7 @@ import { ensureHydrated } from '@gbd/browser-testing';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import { expect, test } from '@playwright/test';
 import { expectScreenshots } from '../lib/screenshots.ts';
+import { chooseCsv } from '../lib/upload.ts';
 
 test('the new report form, before any file is chosen', async ({ page }) => {
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
@@ -26,11 +27,7 @@ test('the new report form, with the monthly counts component partway filled in',
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
   await ensureHydrated(page);
 
-  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
-    name: 'procurement.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(CSV),
-  });
+  await chooseCsv(page, 'procurement.csv', CSV);
 
   // Fills three of the four months and leaves one untouched — a mid-progress state exercises
   // the progress line and the filled/empty input contrast that an all-empty or all-filled shot
@@ -85,11 +82,7 @@ test('the rejection view, with a file dense enough to trigger every kind of prob
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
   await ensureHydrated(page);
 
-  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
-    name: 'worst-case.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(WORST_CASE_REJECTION_CSV),
-  });
+  await chooseCsv(page, 'worst-case.csv', WORST_CASE_REJECTION_CSV);
 
   await expect(page.getByText('Showing 20 of 22 things to fix.', { exact: false })).toBeVisible();
   await expect(page.getByText('4 rows: 2–4, 9', { exact: false })).toBeVisible();
@@ -110,11 +103,7 @@ test('the rejection view, with a rule that fails on every row', async ({ page })
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
   await ensureHydrated(page);
 
-  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
-    name: 'every-row.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(EVERY_ROW_REJECTION_CSV),
-  });
+  await chooseCsv(page, 'every-row.csv', EVERY_ROW_REJECTION_CSV);
 
   await expect(page.getByText('all 3 rows', { exact: false })).toBeVisible();
   await expectScreenshots(page, 'rejection-every-row.png');
@@ -131,11 +120,7 @@ test('the rejection view, with only a bare summary and no row list', async ({ pa
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
   await ensureHydrated(page);
 
-  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
-    name: 'missing-column.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(MISSING_COLUMN_CSV),
-  });
+  await chooseCsv(page, 'missing-column.csv', MISSING_COLUMN_CSV);
 
   await expect(page.getByText('Your file needs a column for weight.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to the form' })).toHaveCount(1);

@@ -17,7 +17,7 @@
  */
 
 import { HOUR_MS, SECOND_MS } from '@gbd/core';
-import type { AnalysisFailureReason, Database, ReportId, UserId } from '@gbd/db';
+import type { AnalysisFailureReason, Database, OrganizationId, ReportId, UserId } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import {
@@ -28,7 +28,7 @@ import {
   insertReport,
   insertResultFile,
 } from '@gbd/db/testing';
-import type { Kysely, Transaction } from 'kysely';
+import { type Kysely, sql, type Transaction } from 'kysely';
 import { ANALYSIS_WARNING_AFTER_MS, QUEUE_WARNING_AFTER_MS } from '../../src/lib/reports/limits.ts';
 
 const ANCHOR = new Date('2026-01-15T09:00:00Z');
@@ -219,12 +219,36 @@ export async function insertReportFixture(
   return await withTransaction(db, BUILDERS[state]);
 }
 
-/** Every fixture report, and everything hanging off it. Cascades handle the children:
- * `input_file`, `analysis_attempt` and `result_file` are all `ON DELETE CASCADE`. */
-export async function clearReportFixtures(db: Kysely<Database>): Promise<void> {
-  await db.deleteFrom('report').where('organizationId', '=', PLACEHOLDER_ORGANIZATION_ID).execute();
+/** Finish the report's newest attempt from underneath an open page, as the worker would.
+ *
+ * Ordering by `attemptNumber` is what makes this safe on a retried report, where the attempt the
+ * page is watching is not the only one — the same ordering the route's own load uses.
+ */
+export async function succeedLatestAttempt(
+  db: Kysely<Database>,
+  reportId: ReportId,
+): Promise<void> {
+  const attempt = await db
+    .selectFrom('analysisAttempt')
+    .select('id')
+    .where('reportId', '=', reportId)
+    .orderBy('attemptNumber', 'desc')
+    .executeTakeFirstOrThrow();
+
+  await withTransaction(db, async (transaction) => {
+    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
+    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
+    await transaction
+      .updateTable('analysisAttempt')
+      .set({ status: 'succeeded', claimedAt: sql<Date>`now()`, finishedAt: sql<Date>`now()` })
+      .where('id', '=', attempt.id)
+      .execute();
+  });
 }
 
-export function reportUrl(reportId: ReportId): string {
-  return `/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/${reportId}`;
+export function reportUrl(
+  reportId: ReportId,
+  organizationId: OrganizationId = PLACEHOLDER_ORGANIZATION_ID,
+): string {
+  return `/orgs/${organizationId}/reports/${reportId}`;
 }

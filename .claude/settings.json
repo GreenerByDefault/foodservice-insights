@@ -89,6 +89,7 @@
       "Bash(gh release list *)",
 
       "Bash(cat *)",
+      "Bash(echo *)",
       "Bash(grep *)",
       "Bash(rg *)",
       "Bash(sd *)",

@@ -188,7 +188,7 @@ on any visual change.
 | Spec | The thing no other layer can check |
 | --- | --- |
 | `e2e/organizations/create-organization.e2e.ts` | The whole real path: fill the form, submit through the real handler, land on the new organization, and see the shell and switcher name it. A second test submits a name that already exists and asserts the inline error appears *and the typed value survives*. Uses `organizations.create` for the colliding name; the one the UI made needs its own teardown since it wasn't made through the fixture. |
-| `e2e/organizations/settings.e2e.ts` | Two tests, one per role — the only tier where a real `role` flows from the layout load into the page. **Admin** (`organizations.create`): rename, then the heading *and* the switcher change after `invalidateAll()` while the URL stays put. **Member** (`organizationMemberships.create`): the name is read-only, with no rename form and no delete affordance present at all. |
+| `e2e/organizations/settings.e2e.ts` | Two tests, one per role — the only tier where a real `role` flows from the layout load into the page. **Admin** (`organizations.create`, default role): rename, then the heading *and* the switcher change after `invalidateAll()` while the URL stays put. **Member** (`organizations.create({ ..., role: 'member' })`): the name is read-only, with no rename form and no delete affordance present at all. |
 | `e2e/organizations/delete-organization.e2e.ts` | The confirm button stays disabled until the organization's name is typed; confirming lands on `/orgs`, drops it from the switcher, and its reports are gone. |
 
 **No members e2e.** The roster is a pure read: the query is covered by `load-members.test.ts`, the
@@ -205,7 +205,7 @@ Six screens, so eighteen PNGs under `e2e/__screenshots__/organizations/`.
 | `members.png` | `organizations.create({ name, members: [...] })` with several people — both roles, and one with a null `displayName` so the email-only row is in the picture. Hover one row for the affordance. |
 | `orgs-new.png` | Navigate `/orgs/new`. The empty form. |
 | `settings.png` | Admin: the rename form and the delete section below it. |
-| `settings-member.png` | `organizationMemberships.create`: the read-only name, no delete section. |
+| `settings-member.png` | `organizations.create({ ..., role: 'member' })`: the read-only name, no delete section. |
 | `delete-organization.png` | Click the trigger; capture the open dialog with its phrase field empty and the confirm button disabled. |
 
 One mechanic the implementer will otherwise get wrong:
@@ -225,7 +225,7 @@ The stub identity is workable for all of this, but two constraints shaped the ta
 **One identity per Playwright run.** `identifyUser` always returns the placeholder user, so no e2e can
 be a bystander or signed out — 401/403 paths stay at the unit tier with `anAuthContext` /
 `anOrganizationAccess`, as `e2e/README.md` § Pending already records. What *does* work is both roles:
-`organizations.create` makes the placeholder the org's admin, `organizationMemberships.create` makes
+`organizations.create` makes the placeholder the org's admin by default, `role: 'member'` makes
 them a plain member. That is what makes `settings.e2e.ts` and `settings-member.png` possible, and the
 role branch is the difference most worth seeing.
 

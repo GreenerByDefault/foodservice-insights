@@ -33,7 +33,7 @@ its suites.
 shot's name only has to be unique within its feature — `reports/failed.png`, not
 `reports-failed.png`. It's still browsed as a gallery, one folder per feature.
 
-Every spec is captured at each viewport in [`lib/viewports.ts`](lib/viewports.ts).g
+Every spec is captured at each viewport in [`lib/viewports.ts`](lib/viewports.ts).
 
 ## Screenshots
 
