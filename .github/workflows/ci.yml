@@ -258,6 +258,16 @@ jobs:
       - name: Resolve host.docker.internal on the runner
         run: echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts
 
+      # Chromium aborts every request still queued for a socket with `net::ERR_NETWORK_CHANGED`
+      # whenever an IP address on any host interface changes. Starting a container adds a veth
+      # to the Docker bridge, and that veth's IPv6 link-local address finishes duplicate-address
+      # detection 1–2s later — which is when the browser is fetching the first page's JS modules
+      # from the web container Playwright just started. The page renders but never hydrates, and
+      # the first spec times out. Only `default` (interfaces created from now on), so the
+      # runner's own IPv6 is untouched.
+      - name: Keep IPv6 off the interfaces Docker will create
+        run: sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
       - run: pnpm exec turbo run test:system
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
