@@ -229,7 +229,7 @@ jobs:
       - run: just test
 
   py-lab:
-    name: 'Python: lab tests'
+    name: 'Python: lab lint + tests'
     needs: changes
     if: needs.changes.outputs.python_lab == 'true'
     runs-on: ubuntu-latest
@@ -237,6 +237,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
+      - run: just lint
       - run: just test-lab
 
   # Runs both services as the Docker images they deploy as.

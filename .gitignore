@@ -38,6 +38,12 @@ __pycache__/
 .ty_cache/
 *.egg-info/
 
+# Handed out privately; see the data_files READMEs. Never committed.
+python/insights/gbd_foodservice_insights/data_files/previously_categorized_items.csv
+python/lab/gbd_foodservice_insights_lab/data_files/previously_classified_entrees.csv
+python/lab/gbd_foodservice_insights_lab/data_files/previously_classified_weights.csv
+.ipynb_checkpoints/
+
 # Local agent state
 /.claude/settings.local.json
 /.playwright-mcp/

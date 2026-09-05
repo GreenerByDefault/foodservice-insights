@@ -8,6 +8,7 @@ members = ["python/*"]
 # should go in projects' pyproject.toml.
 [dependency-groups]
 dev = [
+    "nbstripout>=0.8.1",
     "pytest>=9.1.1",
     "pytest-xdist>=3.8",
     "ruff>=0.16.1",
