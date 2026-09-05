@@ -29,6 +29,7 @@ export {
   type CountsBasis,
   type InputFileId,
   MAX_ANALYSIS_ATTEMPTS,
+  MAX_ORGANIZATION_NAME_LENGTH,
   newInputFileId,
   newRejectedUploadId,
   newReportId,

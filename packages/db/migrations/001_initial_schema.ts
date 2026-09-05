@@ -127,6 +127,20 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     )
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
+    // Callers must trim before writing, same as the invite email's lowercase check — a name with
+    // leading or trailing whitespace is indistinguishable from its trimmed form to a reader, so
+    // there is no reason to store both.
+    .addCheckConstraint('organization_name_trimmed', sql`name = btrim(name)`)
+    .addCheckConstraint(
+      // Pinned to MAX_ORGANIZATION_NAME_LENGTH (types.ts) by a pair of tests in
+      // organization.test.ts, not imported here: a value imported into the migration only affects
+      // databases created from now on, so it could silently stop matching an already-applied
+      // constraint. A pair of tests exercising both sides of the boundary catches that drift
+      // instead — the same pattern MAX_ANALYSIS_ATTEMPTS uses against
+      // analysis_attempt_attempt_number_range in analysis-attempt.test.ts.
+      'organization_name_length',
+      sql`char_length(name) BETWEEN 1 AND 100`,
+    )
     .execute();
 
   // A unique index on lower(name) rather than a plain unique constraint, so "Acme" and "acme"
