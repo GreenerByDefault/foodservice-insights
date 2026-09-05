@@ -127,6 +127,14 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     )
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
+    .addCheckConstraint('organization_name_trimmed', sql`name = btrim(name)`)
+    .addCheckConstraint(
+      // Not imported from MAX_ORGANIZATION_NAME_LENGTH (types.ts): a value imported into the
+      // migration only affects databases created from now on, so it could silently stop matching
+      // an already-applied constraint. organization.test.ts pins the two together instead.
+      'organization_name_length',
+      sql`char_length(name) BETWEEN 1 AND 100`,
+    )
     .execute();
 
   // A unique index on lower(name) rather than a plain unique constraint, so "Acme" and "acme"

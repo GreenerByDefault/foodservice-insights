@@ -12,6 +12,7 @@ import {
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '../src/postgres-codes.ts';
 import {
+  fixtureOrganizationName,
   insertFixtureOrganization,
   sendBlockingStatement,
   withCommittedFixture,
@@ -19,6 +20,7 @@ import {
 } from '../src/testing/concurrency.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
+import { MAX_ORGANIZATION_NAME_LENGTH } from '../src/types.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 
@@ -79,6 +81,50 @@ describe('organization', () => {
     });
 
     await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
+  });
+
+  test('rejects a name with leading or trailing whitespace', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { name: ` ${fixtureOrganizationName()} ` });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'organization_name_trimmed',
+    });
+  });
+
+  test('rejects an empty name', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { name: '' });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'organization_name_length',
+    });
+  });
+
+  // Together, these two tests pin MAX_ORGANIZATION_NAME_LENGTH to the `organization_name_length`
+  // CHECK constraint it mirrors: either side drifting from the other fails one of them.
+
+  test('accepts a name exactly at the cap', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { name: 'a'.repeat(MAX_ORGANIZATION_NAME_LENGTH) });
+    });
+
+    await expect(insert).resolves.toBeUndefined();
+  });
+
+  test('rejects a name one character over the cap', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { name: 'a'.repeat(MAX_ORGANIZATION_NAME_LENGTH + 1) });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'organization_name_length',
+    });
   });
 
   test('cannot be created with no members at all', async () => {

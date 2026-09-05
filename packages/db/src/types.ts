@@ -24,6 +24,11 @@ export type { InputFileId, RejectedUploadId, ReportId, ResultFileId };
  * call sites (route handlers, tests) that need the number without a query. */
 export const MAX_ANALYSIS_ATTEMPTS = 5;
 
+/** How long an organization's name may be, enforced by the `organization_name_length` CHECK
+ * constraint (`packages/db/public-schema.sql`). Mirrored here, not read from the DB, for the
+ * create/rename forms and their tests. */
+export const MAX_ORGANIZATION_NAME_LENGTH = 100;
+
 export function newInputFileId(): InputFileId {
   return crypto.randomUUID() as InputFileId;
 }

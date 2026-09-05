@@ -737,7 +737,9 @@ CREATE TABLE IF NOT EXISTS "public"."organization" (
     "name" "text" NOT NULL,
     "created_by_user_id" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "organization_name_length" CHECK ((("char_length"("name") >= 1) AND ("char_length"("name") <= 100))),
+    CONSTRAINT "organization_name_trimmed" CHECK (("name" = "btrim"("name")))
 );
 
 
