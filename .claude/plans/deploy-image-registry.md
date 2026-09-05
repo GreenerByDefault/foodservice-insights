@@ -2,10 +2,10 @@
 
 ## Context
 
-`deploy-docker-images.md` used to record a different decision: the provider builds the image from
-a git checkout, and CI never pushes one — rejecting a registry as a second place a deploy can fail,
-for a pipeline whose point was one call per service. That plan now points here instead. Three
-things the old rejection did not weigh:
+Both Dockerfiles landed with #252; `deploy-service` is still a stub, so nothing pushes an image
+anywhere yet. The pipeline's earlier design had the provider build the image from a git checkout
+and CI never push one — rejecting a registry as a second place a deploy can fail, for a pipeline
+whose point was one call per service. Three things that rejection did not weigh:
 
 - **The credential cost it priced in is close to zero here.** `GreenerByDefault/foodservice-insights`
   is public, so its GHCR packages can be public: free storage, free bandwidth, and *anonymous pull*
@@ -19,15 +19,33 @@ things the old rejection did not weigh:
   that already ran*. A provider that builds from a git checkout cannot do that by construction: it
   has only a commit, so it must rebuild.
 
-**Rebuilds are not reproducible, and making them so is not worth it.** `deploy-docker-images.md`
-pins the UBI bases and uv by digest — good — but the worker runtime still does
-`microdnf install python3.14` against Red Hat's errata stream and `npm install -g pnpm@…` against
-the npm registry, and the plan says so itself: "Base images and RPM streams move; re-check before
-trusting a version number." So a rebuild of last month's commit is a *different image*. Deploying
-a digest sidesteps the question rather than answering it.
+**Rebuilds are not reproducible, and making them so is not worth it.** Only uv is pinned by digest
+in the two Dockerfiles. Both UBI bases float on `:latest`, the worker runtime does `microdnf
+install -y python3.14` against Red Hat's errata stream, and both images `npm install -g pnpm@…`
+against the npm registry. [`containers.ts`](../../tests/e2e/scripts/containers.ts) builds with
+`--pull` under CI for precisely this reason — "every base image floats on `:latest`, so CI
+resolves today's and would drift from a months-old local cache." A rebuild of last month's commit
+is therefore a *different image*. Deploying a digest sidesteps the question rather than answering
+it.
 
-*Rejected: making the builds reproducible instead — pinning the RPM stream, vendoring pnpm. A lot
-of machinery to make a rebuild safe, when not rebuilding is simpler and total.*
+*Rejected: making the builds reproducible instead — pinning the bases and the RPM stream,
+vendoring pnpm. A lot of machinery to make a rebuild safe, when not rebuilding is simpler and
+total.*
+
+**A broken Dockerfile already fails at PR time, and no PR ever pushes.** `pnpm test:system` builds
+both images from the repo root and runs the whole tier through them, and `ci.yml`'s `system-e2e`
+job runs it on every PR the `system` filter matches — which is every Dockerfile change, since
+`system` is the one filter in [`filters.yml`](../../.github/filters.yml) that does not alias
+`docker_files`. That is stronger than a `push: false` build job would have been: the images are
+*run*, not merely built. Two consequences to keep in view:
+
+- **Nothing needs to stop a PR from pushing a tag, and nothing should start.** Those builds are
+  run-scoped local tags (`gbd-web:<run>`), swept by the harness. On `pull_request`, `github.sha`
+  is a merge commit that exists on no branch, so a tag written for it would be permanent garbage
+  no rollback can name — and a fork PR's token has no `packages` scope anyway.
+- **A push to `main` builds each image twice** — once in `ci.yml` to run it, once in `deploy.yml`
+  to push it. Accepted: the two want different things (a `--load`ed local tag versus a registry
+  push with a shared cache), and `deploy.yml` does not wait on CI.
 
 ## One image per commit, promoted everywhere
 
@@ -37,15 +55,16 @@ environment runs that digest. Promotion is a pointer move, and so is a revert.
 This works because the image is already environment-agnostic, and that is a *recorded* decision
 rather than luck — `ARCHITECTURE.md` § Secrets: "Server config is read at runtime, not inlined at
 build time — `$env/dynamic/private` rather than `$env/static/private`. One build artifact
-therefore runs against any environment." **Verified** on 2026-09-03: no `PUBLIC_*` variable and no
-`$env/static/*` import exists anywhere in `apps/` or `packages/`, so nothing is baked in at build
-time today. Everything below depends on that staying true.
+therefore runs against any environment." **Verified** again on 2026-09-05: no `PUBLIC_*` variable
+and no `$env/static/*` import exists anywhere in `apps/` or `packages/` outside SvelteKit's
+generated `.svelte-kit/ambient.d.ts`, so nothing is baked in at build time today. Everything below
+depends on that staying true.
 
 | | Today | After |
 | --- | --- | --- |
 | Deploy | provider builds from a commit | provider runs `…/web@sha256:…` |
 | Rollback | rebuild an old commit | redeploy the digest that already ran |
-| Broken Dockerfile | fails the deploy | fails the build, at merge |
+| Broken Dockerfile | fails the deploy | fails `system-e2e`, on the PR |
 
 Migrations are untouched by any of this: [`deploy-migrations.md`](deploy-migrations.md) runs
 `turbo run migrate` from the workspace checkout `deploy-web` already has, and that stays true
@@ -129,9 +148,8 @@ Three registry-housekeeping decisions follow:
 
 ## PR 1 — Build and push both images on every push to `main`
 
-Depends on `deploy-docker-images.md` PR 2 and PR 3, the two Dockerfiles. Deploys stay stubbed — the
-images can sit unused for weeks while the provider question resolves, and every day they sit there
-they extend the rollback history.
+Deploys stay stubbed — the images can sit unused for weeks while the provider question resolves,
+and every day they sit there they extend the rollback history.
 
 - New `.github/actions/build-image/action.yml`: `docker/setup-buildx-action`,
   `docker/login-action` against `ghcr.io` with `GITHUB_TOKEN`, then `docker/build-push-action` with
@@ -165,6 +183,13 @@ default branch's copy of the workflow, has an awkward context, and buys nothing 
 it shares the repo's 10GB cache budget with `setup-node`, `setup-python`, and
 `playwright-browsers`, so multi-GB layer caches would make every other job slower.
 
+*Considered, not done: pointing `system-e2e`'s build at the same `…/cache` package.* The package is
+public, so a PR build could `cache-from` it anonymously — but never `cache-to`, since a fork PR's
+token cannot write it, and a cache only one side fills is a cache that quietly rots. The build costs
+roughly 30s in that job today; revisit if it grows, not before. `containers.ts` also passes
+`--pull` under CI, which a warm layer cache would partly defeat — the drift it surfaces is the
+point.
+
 ## PR 2 — Deploy by digest, never by rebuild
 
 Manual first, and it will 401 otherwise: flip both packages to public, then confirm from a laptop
@@ -191,27 +216,14 @@ with `docker logout ghcr.io && docker buildx imagetools inspect …`.
   Keep it immediately beside the existing forward-only migration sentence — **a rollback is fast
   and reproducible, not safe**, and that distinction is what someone reads at 2am.
 
-## PR 3 — Build both images on PRs (optional)
-
-A broken Dockerfile currently surfaces only after merge, where `build-web` fails, `deploy-web` is
-blocked, and that commit has no image and no rollback target. Add a `docker` filter to
-`.github/filters.yml` — `'**'`, `'!python/lab/**'`, `*docs_and_agent_files`, the same shape as
-`system` — and a `pull_request`-only job in `ci.yml` that builds both with `push: false` and
-`cache-from` only. Four touch points in `ci.yml`: `changes.outputs`, the `affected` step's `env`, an
-`area docker` line, and the aggregate `CI` job's `needs`.
-
-**Never push from a PR build.** On `pull_request`, `github.sha` is the merge commit, which exists on
-no branch — its tag would be permanent garbage no rollback can name. Fork PRs also get a read-only
-token with no `packages` scope.
-
 ## Verification
 
-Each PR's own check is `pnpm lint && pnpm check && pnpm test` from the repo root, but the pipeline
-is only proven by running it:
+Each PR's own check is `pnpm lint && pnpm check && pnpm test` from the repo root. That the images
+*build and run* is already `system-e2e`'s job, on the PR — what is unproven here is the registry
+mechanics, and only running the pipeline proves those:
 
 - **PR 1.** Push to `main`; confirm two packages appear and `docker buildx imagetools inspect` both.
-  Re-run the same workflow run and confirm the build skips with its notice. Pull the web image
-  locally by digest and `docker run` it.
+  Re-run the same workflow run and confirm the build skips with its notice.
 - **PR 2.** After the visibility flip, `docker logout ghcr.io` and inspect anonymously — that is
   what proves the provider will not need a credential. Then dispatch a deploy at an *older* SHA and
   confirm from the log that it resolved a digest and never built. Dispatch a SHA that was never on
