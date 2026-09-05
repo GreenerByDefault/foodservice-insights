@@ -10,9 +10,12 @@ stub until a provider is chosen. The question is where they run when it stops be
 workflow already checks out the SHA it is deploying, which is a pnpm workspace — everything
 migrating needs — whereas an image is the one place `@gbd/db` is *not* a workspace package.
 
-This lands independently of [`deploy-docker-images.md`](deploy-docker-images.md) and before it: it
-touches no Dockerfile, and the stubbed `deploy-service` means the only thing missing is a real
-deploy call after the migrate step. One PR.
+This lands independently of the image work, which has since gone ahead of it: it touches no
+Dockerfile and no build job, and the stubbed `deploy-service` means the only thing missing is a
+real deploy call after the migrate step. One PR. The one ordering constraint is against
+[`deploy-image-registry.md`](deploy-image-registry.md), whose supersession guard has to sit
+*above* this step — whichever lands second puts them adjacent, since a superseded run must not
+migrate and then decline to deploy.
 
 Facts marked **verified** were checked on 2026-09-03.
 

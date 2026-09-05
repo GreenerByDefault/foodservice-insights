@@ -1,5 +1,9 @@
 name: Deploy
 
+# Every push to main builds *both* images, whichever service ends up deploying. One image per
+# commit is what allows promotion and rollbacks to simply point at a commit SHA to move the
+# pointer to the pre-built image.
+#
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
@@ -7,7 +11,7 @@ name: Deploy
 # the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
 #
 # We also use workflow_dispatch for rollbacks of either service: dispatch it again naming an
-# older SHA.
+# older commit SHA.
 on:
   push:
     branches: [main]
@@ -22,26 +26,77 @@ on:
         description: Commit SHA to deploy (defaults to the branch tip)
         type: string
         required: false
-
-concurrency:
-  # Serializes same-service deploys; a web push and a worker dispatch never contend.
-  group: deploy-${{ inputs.service || 'web' }}
-  cancel-in-progress: false
+      force_rebuild:
+        description: Rebuild the chosen service's image even if this commit already has one
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 jobs:
-  deploy-web:
-    name: Deploy web
-    if: github.event_name == 'push' || inputs.service == 'web'
+  build-web:
+    name: Build web image
+    if: >-
+      github.event_name == 'push'
+      || (inputs.force_rebuild == true && inputs.service == 'web')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: build-web-${{ inputs.sha || github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
+      - uses: ./.github/actions/build-image
+        with:
+          service: web
+          sha: ${{ inputs.sha || github.sha }}
+          force_rebuild: ${{ inputs.force_rebuild }}
 
+  build-worker:
+    name: Build worker image
+    if: >-
+      github.event_name == 'push'
+      || (inputs.force_rebuild == true && inputs.service == 'worker')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: build-worker-${{ inputs.sha || github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: ./.github/actions/build-image
+        with:
+          service: worker
+          sha: ${{ inputs.sha || github.sha }}
+          force_rebuild: ${{ inputs.force_rebuild }}
+
+  deploy-web:
+    name: Deploy web
+    needs: build-web
+    if: >-
+      !cancelled() && needs.build-web.result != 'failure' && needs.build-web.result != 'cancelled'
+      && (github.event_name == 'push' || inputs.service == 'web')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
       - uses: ./.github/actions/deploy-service
         with:
           service: web
@@ -49,9 +104,16 @@ jobs:
 
   deploy-worker:
     name: Deploy worker
-    if: github.event_name == 'workflow_dispatch' && inputs.service == 'worker'
+    needs: build-worker
+    if: >-
+      !cancelled() && needs.build-worker.result != 'failure'
+      && needs.build-worker.result != 'cancelled'
+      && github.event_name == 'workflow_dispatch' && inputs.service == 'worker'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: deploy-worker
+      cancel-in-progress: false
     permissions:
       contents: write # to move the deploy/worker tag on success
     steps:
