@@ -3,11 +3,8 @@ import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
-test('the account menu, open', async ({ page, organizationMemberships }) => {
-  // `organizationMemberships`, not `organizations`: the latter would make the placeholder the
-  // org's creating admin, and this only needs it as a member — see
-  // `insertOrganizationMembershipFixture`'s doc comment.
-  const organizationId = await organizationMemberships.create({ name: 'Riverside Foods' });
+test('the account menu, open', async ({ page, organizations }) => {
+  const organizationId = await organizations.create({ name: 'Riverside Foods' });
 
   await page.goto(`/orgs/${organizationId}`);
   await ensureHydrated(page);
