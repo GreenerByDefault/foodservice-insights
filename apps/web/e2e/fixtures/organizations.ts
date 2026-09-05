@@ -1,13 +1,19 @@
 /** A private organization, for anything that needs to control the *whole* reports list rather
  * than one report inside it — the empty state, pagination, or a screenshot whose contents must be
- * fully known.
+ * fully known — or that needs the placeholder user in several organizations at once.
  *
  * Names collide on `organization_name_unique_ci`, so every caller passes its own unique one — a
  * random suffix for a behavioural spec, a fixed name for a screenshot whose committed image
  * renders it.
  */
 
-import type { AnalysisAttemptStatus, Database, OrganizationId, UserId } from '@gbd/db';
+import type {
+  AnalysisAttemptStatus,
+  Database,
+  OrganizationId,
+  OrganizationRole,
+  UserId,
+} from '@gbd/db';
 import { withTransaction } from '@gbd/db';
 import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import {
@@ -62,63 +68,59 @@ async function insertOrganizationReport(
   }
 }
 
-/** Commit a private organization with the placeholder user as its only (admin) member — the only
- * identity `identifyUser` can ever produce — and, optionally, its reports. Returns the
- * organization's id.
+/** Commit a private organization the placeholder user belongs to — the only identity
+ * `identifyUser` can ever produce — with, optionally, its reports. Returns the organization's id.
+ *
+ * `role` decides who *else* is in it. As an `admin` the placeholder is also the creator and the
+ * sole member. As a `member` the organization is created and admin'd by a fresh, disposable user
+ * instead, which a spec needs whenever it looks at the app through non-admin eyes: a member's
+ * view of settings or the roster only proves anything with a real admin sitting elsewhere.
+ *
+ * Everything commits in one transaction either way. For `member` that is load-bearing rather
+ * than tidy: `organization_check_has_member` is `DEFERRABLE INITIALLY DEFERRED`, checked at
+ * `COMMIT`, so `insertOrganization`'s own admin-membership insert has to still be uncommitted
+ * when the placeholder's runs — two separate auto-committed statements would let the
+ * organization row commit with zero members and fail that constraint before this ever adds one.
  */
 export async function insertOrganizationFixture(
   db: Kysely<Database>,
-  spec: { name: string; reports?: OrganizationReportSpec[] },
+  spec: { name: string; reports?: OrganizationReportSpec[]; role?: OrganizationRole },
 ): Promise<OrganizationId> {
+  const role = spec.role ?? 'admin';
+
   return await withTransaction(db, async (tx) => {
-    const organization = await tx
-      .insertInto('organization')
-      .values({ name: spec.name, createdByUserId: PLACEHOLDER_USER_ID })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    const organizationId = await insertOrganizationFor(tx, spec.name, role);
 
     await tx
       .insertInto('organizationMember')
-      .values({ userId: PLACEHOLDER_USER_ID, organizationId: organization.id, role: 'admin' })
+      .values({ userId: PLACEHOLDER_USER_ID, organizationId, role })
       .execute();
 
     for (const report of spec.reports ?? []) {
-      await insertOrganizationReport(tx, organization.id, report);
+      await insertOrganizationReport(tx, organizationId, report);
     }
 
-    return organization.id;
+    return organizationId;
   });
 }
 
-/** Commit a private organization admin'd by a fresh, disposable user, with the placeholder user
- * added as a plain member. Returns the organization's id.
- *
- * For a spec that needs the placeholder user in *several* organizations at once — the org
- * switcher, `/orgs` — rather than one, or for a spec that needs the placeholder as a plain
- * *member* rather than the admin `insertOrganizationFixture` always makes it. The two are not
- * interchangeable: a member-only view of settings or the roster needs a real admin sitting
- * elsewhere, which only a disposable creator can stand in for.
- *
- * Both inserts have to share one transaction, like `insertOrganizationFixture`'s do:
- * `organization_check_has_member` is `DEFERRABLE INITIALLY DEFERRED`, checked at `COMMIT`, so
- * `insertOrganization`'s own admin-membership insert has to still be uncommitted when this one
- * runs — two separate auto-committed statements would let its organization row commit with zero
- * members and fail that constraint before this ever adds one.
- */
-export async function insertOrganizationMembershipFixture(
-  db: Kysely<Database>,
-  spec: { name: string },
+/** The organization row, plus — for `member` — the disposable admin that has to own it. */
+async function insertOrganizationFor(
+  tx: Transaction<Database>,
+  name: string,
+  role: OrganizationRole,
 ): Promise<OrganizationId> {
-  return await withTransaction(db, async (tx) => {
-    const { organization } = await insertOrganization(tx, { name: spec.name });
-
-    await tx
-      .insertInto('organizationMember')
-      .values({ userId: PLACEHOLDER_USER_ID, organizationId: organization.id, role: 'member' })
-      .execute();
-
+  if (role === 'member') {
+    const { organization } = await insertOrganization(tx, { name });
     return organization.id;
-  });
+  }
+
+  const organization = await tx
+    .insertInto('organization')
+    .values({ name, createdByUserId: PLACEHOLDER_USER_ID })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return organization.id;
 }
 
 /** Deletes the organization and everything hanging off it: `organization_member` and `report`

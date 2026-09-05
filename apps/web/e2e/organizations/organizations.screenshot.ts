@@ -27,8 +27,8 @@ import { stubOrganizationsAsEmpty } from '../lib/stub-page-data.ts';
 // keeps this file's fixtures fully torn down before the next test's are created.
 test.describe.configure({ mode: 'serial' });
 
-test('the full switcher, past the cap', async ({ page, organizationMemberships }) => {
-  // Nine names, one past `_SWITCHER_LIMIT`, so the menu offers "View all organizations". The
+test('the full switcher, past the cap', async ({ page, organizations }) => {
+  // Nine names, one past `SWITCHER_LIMIT`, so the menu offers "View all organizations". The
   // navigated-to one sorts *last* of the nine, which puts it outside the server's own first-eight
   // slice — the case where `current` is pinned to the top of the menu by the component alone.
   const names = [
@@ -43,7 +43,7 @@ test('the full switcher, past the cap', async ({ page, organizationMemberships }
     '24/7 Switcher Harborview Foods',
   ];
   const [currentId] = await Promise.all(
-    names.map((name) => organizationMemberships.create({ name })),
+    names.map((name) => organizations.create({ name, role: 'member' })),
   );
 
   await page.goto(`/orgs/${currentId}`);
@@ -58,7 +58,7 @@ test('the full switcher, past the cap', async ({ page, organizationMemberships }
   await expectScreenshots(page, 'organization-switcher.png');
 });
 
-test('the /orgs list, past eight organizations', async ({ page, organizationMemberships }) => {
+test('the /orgs list, past eight organizations', async ({ page, organizations }) => {
   // Already alphabetical, so the last name here is also the last row on the page — the one
   // `expectScreenshots` crops the capture against (see its `clipBelow` doc comment).
   const names = [
@@ -72,7 +72,7 @@ test('the /orgs list, past eight organizations', async ({ page, organizationMemb
     '24/7 List Harborview Foods',
     '24/7 List Ivywood Catering',
   ];
-  await Promise.all(names.map((name) => organizationMemberships.create({ name })));
+  await Promise.all(names.map((name) => organizations.create({ name, role: 'member' })));
 
   await page.goto('/orgs');
   await ensureHydrated(page);
@@ -85,11 +85,11 @@ test('the /orgs list, past eight organizations', async ({ page, organizationMemb
   await expectScreenshots(page, 'orgs-list.png', { clipBelow: lastRow });
 });
 
-test('the /orgs list, empty', async ({ page, organizationMemberships }) => {
+test('the /orgs list, empty', async ({ page, organizations }) => {
   // A letter-led name is fine here, unlike the two tests above: this list is stubbed empty before
   // it's captured, so there is no sort order of real rows to defend against other specs'.
   const name = 'Waypoint Foodservice';
-  await organizationMemberships.create({ name });
+  await organizations.create({ name, role: 'member' });
 
   await page.goto('/orgs');
   await ensureHydrated(page);

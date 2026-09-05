@@ -6,11 +6,8 @@
  */
 
 import { advancePoll, ensureHydrated } from '@gbd/browser-testing';
-import { withTransaction } from '@gbd/db';
-import { insertResultFile } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
-import { sql } from 'kysely';
-import { reportUrl } from '../fixtures/reports.ts';
+import { reportUrl, succeedLatestAttempt } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
 import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
@@ -29,21 +26,7 @@ test('a report that finishes while the page is open updates in place, without a 
 
   const loads = watchPageLoads(page);
 
-  const attempt = await db
-    .selectFrom('analysisAttempt')
-    .select('id')
-    .where('reportId', '=', reportId)
-    .executeTakeFirstOrThrow();
-
-  await withTransaction(db, async (transaction) => {
-    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
-    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-    await transaction
-      .updateTable('analysisAttempt')
-      .set({ status: 'succeeded', claimedAt: sql<Date>`now()`, finishedAt: sql<Date>`now()` })
-      .where('id', '=', attempt.id)
-      .execute();
-  });
+  await succeedLatestAttempt(db, reportId);
 
   await advancePoll(page, POLL_INTERVAL_MS);
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
