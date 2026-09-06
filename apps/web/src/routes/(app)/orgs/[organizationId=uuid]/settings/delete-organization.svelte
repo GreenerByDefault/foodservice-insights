@@ -1,4 +1,5 @@
 <script lang="ts">
+import Trash2Icon from '@lucide/svelte/icons/trash-2';
 import { goto } from '$app/navigation';
 import ConfirmAction from '$lib/components/confirm-action.svelte';
 import * as Field from '$lib/components/ui/field';
@@ -21,6 +22,7 @@ async function confirm() {
 </script>
 
 {#snippet trigger()}
+  <Trash2Icon aria-hidden="true" />
   Delete organization
 {/snippet}
 
