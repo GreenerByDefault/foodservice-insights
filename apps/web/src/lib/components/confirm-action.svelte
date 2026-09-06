@@ -16,8 +16,7 @@ import * as Field from '$lib/components/ui/field';
 import { Input } from '$lib/components/ui/input';
 import type { ActionState } from '$lib/forms/action-state';
 
-/** The confirm dialog behind every destructive action that needs an "are you sure" step: report
- * delete and cancel, and — with `confirmPhrase` set — organization delete. Handles the trigger,
+/** The confirm dialog behind a destructive action that needs an "are you sure" step: the trigger,
  * the copy, and the loading/error state around one irreversible request.
  *
  * `open` is bindable so a caller that wants to close the dialog itself — cancel-button.svelte
@@ -35,8 +34,7 @@ interface Props {
   errorMessage: string;
   onConfirm: () => Promise<void>;
   /** When set, the destructive action stays disabled until the typed text exactly matches this —
-   * on top of the existing `loading`-disables-it rule. Unset, the dialog renders no text input
-   * and behaves exactly as it did before this prop existed. */
+   * on top of the existing `loading`-disables-it rule. Unset, the dialog renders no text input. */
   confirmPhrase?: string;
 }
 
