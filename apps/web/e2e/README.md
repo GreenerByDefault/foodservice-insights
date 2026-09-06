@@ -80,10 +80,10 @@ instead — a temporary stand-in for real sign-in, same as `identifyUser`.
 
 ## Pending
 
-`requireAuth`/`requireOrganizationAccess` guard every route below, but `identifyUser` always
-resolves to one seeded user (see `auth.e2e.ts`) — there's no way yet to drive a bystander or
-signed-out request through a real route to see its 401/403. Add one e2e per row once real
-sign-in lands.
+`identifyUser` always resolves to one seeded user (see `auth.e2e.ts`) — there's no way yet to
+drive a signed-out request through a real route to see its 401. Add one e2e per row once real
+sign-in lands. An admin-gated route's 403 is already drivable, though: the `organizations` fixture
+can create an org where the placeholder is only a `member` (see `organizations/settings.e2e.ts`).
 
 | Route | Unit coverage today |
 | --- | --- |

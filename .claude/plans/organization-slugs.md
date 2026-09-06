@@ -154,8 +154,9 @@ At our user count the submit-time error will fire approximately never.
 
 ### Settings — `/orgs/[organizationSlug]/settings`
 
-Rename is a form identical in shape to the create form's, minus the preview, with the same 409
-handling. The address sits above it, read-only, explaining itself:
+Admin-only screen, tab included — a member never reaches it. Rename is a form identical in shape
+to the create form's, minus the preview, with the same 409 handling. The address sits above it,
+read-only, explaining itself:
 
 ```
 Web address
@@ -164,7 +165,7 @@ Set when the organization was created and fixed since, so links people already
 have keep working. Renaming below does not move it.
 ```
 
-Delete and leave stay stubs.
+Delete stays a stub. Leaving an organization lives on the Members page instead, not here.
 
 ---
 
@@ -249,7 +250,7 @@ with `TEST_DB=1`.
 
 - `PATCH /api/orgs/[organizationSlug]` implementing rename only, behind `requireOrganizationAdmin`,
   reusing the same schema and the same 409 mapping.
-- The settings page: read-only address block, rename form. Delete and leave stay stubs.
+- The settings page: read-only address block, rename form. Delete stays a stub.
 - Deletes the plan file — it is the last PR.
 
 ---

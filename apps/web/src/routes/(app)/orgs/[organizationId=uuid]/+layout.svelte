@@ -5,12 +5,15 @@ import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();
 
-/** Root first, then each nested section — `currentSection` relies on that order. */
-const sections = $derived([
-  { label: 'Reports', href: organizationHref(data.organization.id) },
-  { label: 'Members', href: organizationMembersHref(data.organization.id) },
-  { label: 'Settings', href: organizationSettingsHref(data.organization.id) },
-]);
+/** Root first, then each nested section — `currentSection` relies on that order. Settings holds
+ * nothing a member can act on, so it's admin-only. */
+const sections = $derived(
+  [
+    { label: 'Reports', href: organizationHref(data.organization.id), adminOnly: false },
+    { label: 'Members', href: organizationMembersHref(data.organization.id), adminOnly: false },
+    { label: 'Settings', href: organizationSettingsHref(data.organization.id), adminOnly: true },
+  ].filter((section) => !section.adminOnly || data.role === 'admin'),
+);
 
 /** The most specific section the path falls under. Reports live at the organization's root rather
  * than under `reports/`, so its href prefixes every other section's — the last match wins. */

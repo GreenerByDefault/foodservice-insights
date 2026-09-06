@@ -49,6 +49,9 @@ test('the full switcher, past the cap', async ({ page, organizations }) => {
   await page.goto(`/orgs/${currentId}`);
   await ensureHydrated(page);
 
+  // `role: 'member'` above now does double duty: besides keeping the placeholder from being
+  // these organizations' sole member, this is the only committed image proving a member's nav
+  // has two tabs, not three.
   await page.getByRole('button', { name: 'Switch organization' }).click();
   await expect(page.getByRole('menuitem', { name: 'View all organizations' })).toBeVisible();
 
