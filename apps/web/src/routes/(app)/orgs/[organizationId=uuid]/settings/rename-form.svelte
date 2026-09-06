@@ -8,13 +8,18 @@ import { FIELD, MAX_ORGANIZATION_NAME_LENGTH } from '$lib/orgs/name';
 
 interface Props {
   organizationId: string;
-  name: string;
+  initialName: string;
 }
 
-// Reassigning `name` below temporarily overrides the prop with the user's in-progress edit — the
-// documented pattern for unsaved, ephemeral state — rather than seeding a separate `$state` from
-// it, which the compiler would (rightly) flag as capturing only the initial value.
-let { organizationId, name }: Props = $props();
+let { organizationId, initialName }: Props = $props();
+
+// Seeded once and never re-synced to `initialName`. Reassigning a destructured prop directly is
+// Svelte's documented pattern for unsaved, ephemeral state, but the override only survives until
+// the *next* unrelated parent re-render — even one where the org's name hasn't actually changed,
+// such as a background `invalidateAll()` — at which point it's silently clobbered back to the
+// prop. A local `$state` frozen at mount can't lose an in-progress edit that way.
+// svelte-ignore state_referenced_locally
+let name = $state(initialName);
 
 type FormState =
   | { status: 'idle' }

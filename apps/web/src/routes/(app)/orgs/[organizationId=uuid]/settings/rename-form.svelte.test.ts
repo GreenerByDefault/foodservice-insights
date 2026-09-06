@@ -18,16 +18,38 @@ afterEach(() => {
 
 describe('RenameForm', () => {
   test('is seeded with the current name', async () => {
-    const screen = await render(RenameForm, { organizationId: 'org-1', name: 'Acme Foodservice' });
+    const screen = await render(RenameForm, {
+      organizationId: 'org-1',
+      initialName: 'Acme Foodservice',
+    });
 
     await expect
       .element(screen.getByLabelText('Organization name'))
       .toHaveValue('Acme Foodservice');
   });
 
+  test('an unrelated re-render — e.g. a background invalidateAll() — does not clobber an in-progress edit', async () => {
+    const screen = await render(RenameForm, {
+      organizationId: 'org-1',
+      initialName: 'Acme Foodservice',
+    });
+    const input = screen.getByLabelText('Organization name');
+
+    await input.fill('Unsaved Draft');
+    // The parent re-rendering with the same `initialName` it already had — not a save, and not a
+    // real rename — is what a reassigned prop would have silently reverted to. See the comment on
+    // `let name = $state(initialName)` in rename-form.svelte.
+    await screen.rerender({ initialName: 'Acme Foodservice' });
+
+    await expect.element(input).toHaveValue('Unsaved Draft');
+  });
+
   test('PATCHes the trimmed name and refreshes on success', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
-    const screen = await render(RenameForm, { organizationId: 'org-1', name: 'Acme Foodservice' });
+    const screen = await render(RenameForm, {
+      organizationId: 'org-1',
+      initialName: 'Acme Foodservice',
+    });
 
     await screen.getByLabelText('Organization name').fill('  Riverside Foods  ');
     await screen.getByRole('button', { name: 'Save' }).click();
@@ -44,7 +66,10 @@ describe('RenameForm', () => {
     stubFetch(
       new Response(JSON.stringify({ message: 'Taken', code: 'name-taken' }), { status: 409 }),
     );
-    const screen = await render(RenameForm, { organizationId: 'org-1', name: 'Acme Foodservice' });
+    const screen = await render(RenameForm, {
+      organizationId: 'org-1',
+      initialName: 'Acme Foodservice',
+    });
 
     await screen.getByLabelText('Organization name').fill('Riverside Foods');
     await screen.getByRole('button', { name: 'Save' }).click();
@@ -59,7 +84,10 @@ describe('RenameForm', () => {
 
   test('an unreachable server shows the unknown-outcome message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-    const screen = await render(RenameForm, { organizationId: 'org-1', name: 'Acme Foodservice' });
+    const screen = await render(RenameForm, {
+      organizationId: 'org-1',
+      initialName: 'Acme Foodservice',
+    });
 
     await screen.getByLabelText('Organization name').fill('Riverside Foods');
     await screen.getByRole('button', { name: 'Save' }).click();
@@ -76,7 +104,10 @@ describe('RenameForm', () => {
       'fetch',
       vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
     );
-    const screen = await render(RenameForm, { organizationId: 'org-1', name: 'Acme Foodservice' });
+    const screen = await render(RenameForm, {
+      organizationId: 'org-1',
+      initialName: 'Acme Foodservice',
+    });
 
     await screen.getByLabelText('Organization name').fill('Riverside Foods');
     await screen.getByRole('button', { name: 'Save' }).click();

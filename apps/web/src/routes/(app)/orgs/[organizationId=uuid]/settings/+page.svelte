@@ -8,4 +8,4 @@ let { data }: PageProps = $props();
 
 <PageHeading>Settings</PageHeading>
 
-<RenameForm organizationId={data.organization.id} name={data.organization.name} />
+<RenameForm organizationId={data.organization.id} initialName={data.organization.name} />
