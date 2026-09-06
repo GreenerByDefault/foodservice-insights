@@ -1,8 +1,8 @@
 <script lang="ts">
 import Trash2Icon from '@lucide/svelte/icons/trash-2';
 import { goto } from '$app/navigation';
+import ConfirmAction from '$lib/components/confirm-action.svelte';
 import { deleteReport } from '$lib/reports/api/delete-report';
-import ConfirmAction from './confirm-action.svelte';
 import type { DeleteAction } from './+page.server.ts';
 
 let { action }: { action: DeleteAction } = $props();
