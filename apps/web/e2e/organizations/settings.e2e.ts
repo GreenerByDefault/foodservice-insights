@@ -1,5 +1,24 @@
+import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
+
+test('admin: renaming updates the switcher while the URL stays put', async ({
+  page,
+  organizations,
+}) => {
+  const name = `Settings Rename ${crypto.randomUUID()}`;
+  const renamed = `${name} Renamed`;
+  const organizationId = await organizations.create({ name });
+
+  await page.goto(`/orgs/${organizationId}/settings`);
+  await ensureHydrated(page);
+
+  await page.getByLabel('Organization name').fill(renamed);
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.getByRole('button', { name: 'Switch organization' })).toContainText(renamed);
+  await expect(page).toHaveURL(`/orgs/${organizationId}/settings`);
+});
 
 test('member: settings is neither linked from the nav nor reachable directly', async ({
   page,
