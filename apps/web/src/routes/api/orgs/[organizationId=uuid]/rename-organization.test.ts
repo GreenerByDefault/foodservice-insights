@@ -50,14 +50,9 @@ describe('a valid name', () => {
 });
 
 describe('a name already taken', () => {
-  // The unique violation comes from the update itself, which leaves the transaction aborted —
-  // see withTransaction's documented join-not-nest trade-off — so this doesn't try to read
-  // anything back afterward, the same trade-off create-organization.test.ts's own 409 test
-  // documents. That abort is also what proves the rest of the "Test note" in the plan: Postgres
-  // aborts the whole transaction on the failed `UPDATE` statement itself, before it changes any
-  // row, so the stored name cannot end up partially applied and `recordOrganizationAuditEvent` —
-  // which only runs after the `UPDATE` succeeds — never runs either. withRollback discards the
-  // attempt either way.
+  // The UPDATE's unique violation aborts the transaction (see withTransaction's documented
+  // join-not-nest trade-off), so nothing is read back afterward — the abort also means the
+  // name is never partially applied and the audit event is never recorded.
   test('answers 409 name-taken, case-insensitively', async () => {
     await withRollback(database(), async (transaction) => {
       await insertOrganization(transaction, { name: 'Acme Foodservice' });
