@@ -20,43 +20,16 @@ Two decisions already taken with the user:
   README rule.
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
-done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable;
-1 is the one that most directly unblocks invites/memberships.
+done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable.
+
+The client's organization-name form (create and rename) and its name-write failure
+classification are already shared (`lib/components/orgs/organization-name-form.svelte`,
+`lib/orgs/api/failure.ts`); an invite form that also writes a name has a pattern to follow rather
+than a second copy to reconcile.
 
 ---
 
-## PR 1 — Client: shared organization-name form, shared failure classification, `delete-button`
-
-- New `apps/web/src/lib/components/orgs/organization-name-form.svelte`. Props:
-  `initialName`, `legend?`, `submitLabel`, `submittingLabel`, `unknownNotice: Snippet`,
-  `onSubmit: (name: string) => Promise<'done' | 'name-taken' | 'unknown'>`. Owns the
-  `FormState` union, `handleSubmit`, the input (`id={FIELD.name}` — no `organization-name`
-  literal), the name-taken `<Field.Error>`, the `role="alert"` unknown paragraph, and the busy
-  button. On `'done'` it returns to idle after `onSubmit` resolves (create navigates away first;
-  rename `invalidateAll`s inside its `onSubmit`). Keep the `$state(initialName)` comment — it's
-  the one non-obvious thing in either form.
-- `orgs/new/create-organization-form.svelte` and `settings/rename-form.svelte` become thin
-  wrappers holding only what differs (API call, success action, unknown copy). Their tests
-  shrink to those differences; the shared behaviors (409 focus, busy button, trimming) get
-  tested once on the shared form.
-- `lib/orgs/api/`: extract the identical catch blocks of `create-organization.ts` and
-  `rename-organization.ts` into `classifyNameWriteFailure(error): { kind: 'name-taken' } | { kind: 'unknown' }`
-  (rethrows non-API errors) in `lib/orgs/api/failure.ts`, with its own test; the client tests
-  then only assert the request shape. Add the missing `rename-organization.test.ts` and
-  `delete-organization.test.ts` for parity with `lib/reports/api/*` (each is a few lines).
-- Rename `settings/delete-organization.svelte` → `settings/delete-button.svelte` (matches
-  `reports/[reportId=uuid]/delete-button.svelte`; "delete organization" currently names three
-  different things across client, component, and server).
-- `confirm-action.svelte`: `id="confirm-phrase"` → `$props.id()` (Svelte 5) so two dialogs on a
-  page can't collide; drop the caller names from its doc comment (three callers now, and one is
-  already missing).
-- Fix the `FIELD` comment in `lib/orgs/name.ts`: the iOS-autofill reason stands; "so the form and
-  the parser cannot drift apart" is false here (the body is JSON keyed `name`). Use `FIELD.name`
-  for `id`/`for` too, here and in `upload-form.svelte` (`report-name` literals).
-
----
-
-## PR 2 — Reports adopt the client-builds-hrefs convention
+## PR 1 — Reports adopt the client-builds-hrefs convention
 
 - `reports/[reportId=uuid]/+page.server.ts`: drop `cancelButtonHref`, `retryButtonHref`,
   `deleteAction` (and the `DeleteAction` type) from `ReportPageData`. Keep page-navigation hrefs
@@ -77,7 +50,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 3 — Shared pieces with a second caller now
+## PR 2 — Shared pieces with a second caller now
 
 - `lib/server/orgs/list.ts`: one `listOrganizations(db, auth, { limit? })` with the
   superadmin-reads-table / member-reads-memberships rule in one place. `_loadAllOrganizations`
@@ -105,7 +78,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 4 — Browser test helpers
+## PR 3 — Browser test helpers
 
 - `apps/web/src/lib/testing/fetch.ts`: `stubFetch(response)` (returns the mock),
   `stubUnreachableFetch()`, `stubPendingFetch()` → `{ resolve }`, `jsonResponse(body, status?)`,
@@ -122,7 +95,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 5 — e2e fixtures and README
+## PR 4 — e2e fixtures and README
 
 - `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
   `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
@@ -146,14 +119,14 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 6 — Docs and comments
+## PR 5 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
   (`/account`, `/invites`, `/sign-in`, the marketing page, and the invite/member/account API
   handlers)". Keep the `**Stub:**` grep; make `sign-in/+page.server.ts` use the marker.
 - Routes: add the `/orgs` redirect behavior (invites → single org → `/orgs/new`), and that API
-  URLs are built by the API client (PR 2).
+  URLs are built by the API client (PR 1).
 - Errors: "A 401 is not a redirect" → say what is true today (the error page renders a message;
   it will offer sign-in in place once auth lands, which is why there is no `?next=`). Same fix
   to the comment in `routes/(app)/+layout.server.ts`.
@@ -207,8 +180,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
 the diff is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 5's screenshot renames need
+`pnpm --filter @gbd/web test:e2e -- <path>`. PR 4's screenshot renames need
 `pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
-actually changed (renames only). After PR 2, click through a report page in the running app
-(`/run`) to confirm cancel, retry and delete still hit the right URLs; after PR 1, create and
-rename an organization once each.
+actually changed (renames only). After PR 1, click through a report page in the running app
+(`/run`) to confirm cancel, retry and delete still hit the right URLs.

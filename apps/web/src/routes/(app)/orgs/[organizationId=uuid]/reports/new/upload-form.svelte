@@ -200,9 +200,9 @@ function backToForm() {
       <Field.Legend>Report details</Field.Legend>
 
       <Field.Field>
-        <Field.Label for="report-name">Report name</Field.Label>
+        <Field.Label for={FIELD.name}>Report name</Field.Label>
         <Input
-          id="report-name"
+          id={FIELD.name}
           name={FIELD.name}
           maxlength={MAX_FREE_TEXT_LENGTH}
           required

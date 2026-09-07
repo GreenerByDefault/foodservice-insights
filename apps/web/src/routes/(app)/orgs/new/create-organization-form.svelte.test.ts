@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe('CreateOrganizationForm', () => {
-  test('posts the name and follows the location header', async () => {
+  test('posts the name to /api/orgs and follows the location header', async () => {
     const fetchMock = stubFetch(
       new Response(JSON.stringify({ organizationId: 'org-1' }), {
         status: 201,
@@ -37,25 +37,6 @@ describe('CreateOrganizationForm', () => {
     expect(gotoMock).toHaveBeenCalledWith('/orgs/org-1');
   });
 
-  test('a 409 shows the inline error under the field, with focus moved there, and keeps the typed name', async () => {
-    stubFetch(
-      new Response(JSON.stringify({ message: 'Taken', code: 'name-taken' }), { status: 409 }),
-    );
-    const screen = await render(CreateOrganizationForm);
-
-    await screen.getByLabelText('Organization name').fill('Acme Foodservice');
-    await screen.getByRole('button', { name: 'Create organization' }).click();
-
-    await expect
-      .element(screen.getByText('An organization with that name already exists.'))
-      .toBeInTheDocument();
-    await expect
-      .element(screen.getByLabelText('Organization name'))
-      .toHaveValue('Acme Foodservice');
-    await expect.element(screen.getByLabelText('Organization name')).toHaveFocus();
-    expect(gotoMock).not.toHaveBeenCalled();
-  });
-
   test('an unreachable server shows the unknown-outcome message and a link to the organization list', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const screen = await render(CreateOrganizationForm);
@@ -70,21 +51,5 @@ describe('CreateOrganizationForm', () => {
       .element(screen.getByRole('link', { name: 'your organizations' }))
       .toHaveAttribute('href', '/orgs');
     expect(gotoMock).not.toHaveBeenCalled();
-  });
-
-  test('the button disables while the request is in flight', async () => {
-    let resolveFetch!: (response: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
-    );
-    const screen = await render(CreateOrganizationForm);
-
-    await screen.getByLabelText('Organization name').fill('Acme Foodservice');
-    await screen.getByRole('button', { name: 'Create organization' }).click();
-
-    await expect.element(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
-
-    resolveFetch(new Response(JSON.stringify({ organizationId: 'org-1' }), { status: 201 }));
   });
 });

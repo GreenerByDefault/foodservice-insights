@@ -1,6 +1,7 @@
 /** The client-side call behind the new-organization form. */
 
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
+import { apiCall } from '$lib/api/fetch';
+import { classifyNameWriteFailure } from './failure.ts';
 
 export type CreateOrganizationOutcome =
   | { kind: 'created'; location: string }
@@ -15,12 +16,6 @@ export async function createOrganization(name: string): Promise<CreateOrganizati
     });
     return { kind: 'created', location: response.headers.get('location') ?? '/orgs' };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 409) return { kind: 'name-taken' };
-    // Everything else — `ApiUnreachableError`, a 5xx, and a 400 we don't otherwise handle — is
-    // answered the same way: we don't know whether the organization was created, so the safe
-    // advice is to go check the organization list.
-    if (error instanceof ApiError || error instanceof ApiUnreachableError)
-      return { kind: 'unknown' };
-    throw error;
+    return classifyNameWriteFailure(error);
   }
 }

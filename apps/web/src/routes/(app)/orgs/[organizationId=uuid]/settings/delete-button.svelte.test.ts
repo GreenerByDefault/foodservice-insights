@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import DeleteOrganization from './delete-organization.svelte';
+import DeleteButton from './delete-button.svelte';
 
 const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: gotoMock }));
@@ -16,9 +16,9 @@ afterEach(() => {
   gotoMock.mockClear();
 });
 
-describe('DeleteOrganization', () => {
+describe('DeleteButton', () => {
   test('names the organization in the trigger dialog and keeps confirm disabled until the name is typed', async () => {
-    const screen = await render(DeleteOrganization, {
+    const screen = await render(DeleteButton, {
       organizationId: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -36,7 +36,7 @@ describe('DeleteOrganization', () => {
   });
 
   test('a partially typed name keeps confirm disabled', async () => {
-    const screen = await render(DeleteOrganization, {
+    const screen = await render(DeleteButton, {
       organizationId: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -51,7 +51,7 @@ describe('DeleteOrganization', () => {
 
   test('confirming DELETEs the organization and navigates to /orgs', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
-    const screen = await render(DeleteOrganization, {
+    const screen = await render(DeleteButton, {
       organizationId: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -70,7 +70,7 @@ describe('DeleteOrganization', () => {
 
   test('an unreachable server shows the inline error and does not navigate', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-    const screen = await render(DeleteOrganization, {
+    const screen = await render(DeleteButton, {
       organizationId: 'org-1',
       organizationName: 'Acme Foodservice',
     });
