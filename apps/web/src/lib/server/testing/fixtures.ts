@@ -19,6 +19,10 @@ import type { Actor, AuthContext, AuthenticatedUser, OrganizationAccess } from '
 import { database } from '../db.ts';
 import { blobStore } from '../storage.ts';
 
+// -----------------------------------------------------
+// Auth
+// -----------------------------------------------------
+
 /** An `AuthContext` with no database behind it. */
 export function anAuthContext(
   overrides: {
@@ -47,6 +51,10 @@ export function anOrganizationAccess(
 ): OrganizationAccess {
   return { organizationId, organizationName: name, role };
 }
+
+// -----------------------------------------------------
+// Organizations
+// -----------------------------------------------------
 
 /** A user inserted for use as an organization's creator. */
 export async function anOrganizationCreator(
@@ -79,52 +87,6 @@ export async function anOrganizationWithMembers(
   return { organizationId: organization.id, admin: admin.id as UserId, members };
 }
 
-/** An invite for `email` that runs out at `expiresAt`.
- *
- * `created_at` is backdated a full invite lifetime rather than left to default, because
- * `organization_invite_expires_at_after_created_at` refuses a row that is already expired the
- * moment it is written — so this is also the only way to build the expired case.
- */
-export async function inviteExpiring(
-  transaction: Transaction<Database>,
-  email: string,
-  expiresAt: Date,
-  status: OrganizationInviteStatus = 'pending',
-): Promise<void> {
-  const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
-  const { organization } = await insertOrganization(transaction);
-
-  await transaction
-    .insertInto('organizationInvite')
-    .values({
-      organizationId: organization.id,
-      email,
-      role: 'member',
-      status,
-      createdAt: new Date(expiresAt.getTime() - INVITE_LIFETIME_MS),
-      expiresAt,
-    })
-    .execute();
-}
-
-/** A unique address per call, so no test can see another's invite. */
-export function anEmail(): string {
-  return `${crypto.randomUUID()}@example.test`;
-}
-
-/** A `vi.mock('$lib/server/email', ...)` factory aimed at a port nothing listens on, so a test
- * proves `notifyGbd`'s own catch rather than depending on whatever Mailpit happens to be doing
- * locally.
- *
- * Use as `vi.mock('$lib/server/email', (importOriginal) => mockUnreachableEmailer(importOriginal))`
- * — not a bare reference, which vi.mock's hoisting evaluates before this import is initialized. */
-export async function mockUnreachableEmailer(
-  importOriginal: () => Promise<typeof import('../email.ts')>,
-): Promise<typeof import('../email.ts')> {
-  const actual = await importOriginal();
-  return { ...actual, emailer: () => unreachableEmailer() };
-}
-
 export type OrganizationFixtures = {
   transaction: Transaction<Database>;
   store: BlobStore;
@@ -154,4 +116,58 @@ export async function withOrganizationFixtures<T>(
       await deletePrefix(blobStore(), organizationPrefix(organization.id));
     }
   });
+}
+
+// -----------------------------------------------------
+// Invites
+// -----------------------------------------------------
+
+/** An invite for `email` that runs out at `expiresAt`.
+ *
+ * `created_at` is backdated a full invite lifetime rather than left to default, because
+ * `organization_invite_expires_at_after_created_at` refuses a row that is already expired the
+ * moment it is written — so this is also the only way to build the expired case.
+ */
+export async function inviteExpiring(
+  transaction: Transaction<Database>,
+  email: string,
+  expiresAt: Date,
+  status: OrganizationInviteStatus = 'pending',
+): Promise<void> {
+  const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
+  const { organization } = await insertOrganization(transaction);
+
+  await transaction
+    .insertInto('organizationInvite')
+    .values({
+      organizationId: organization.id,
+      email,
+      role: 'member',
+      status,
+      createdAt: new Date(expiresAt.getTime() - INVITE_LIFETIME_MS),
+      expiresAt,
+    })
+    .execute();
+}
+
+// -----------------------------------------------------
+// Email
+// -----------------------------------------------------
+
+/** A unique address per call, so no test can see another's invite. */
+export function anEmail(): string {
+  return `${crypto.randomUUID()}@example.test`;
+}
+
+/** A `vi.mock('$lib/server/email', ...)` factory aimed at a port nothing listens on, so a test
+ * proves `notifyGbd`'s own catch rather than depending on whatever Mailpit happens to be doing
+ * locally.
+ *
+ * Use as `vi.mock('$lib/server/email', (importOriginal) => mockUnreachableEmailer(importOriginal))`
+ * — not a bare reference, which vi.mock's hoisting evaluates before this import is initialized. */
+export async function mockUnreachableEmailer(
+  importOriginal: () => Promise<typeof import('../email.ts')>,
+): Promise<typeof import('../email.ts')> {
+  const actual = await importOriginal();
+  return { ...actual, emailer: () => unreachableEmailer() };
 }
