@@ -17,9 +17,6 @@ export type ReportAuditAction =
   | 'report.cancel_requested'
   | 'report.retry_requested';
 
-/** Discriminating on `action` keeps the action↔target pairing type-checked: an organization
- * action can't be recorded with a `reportId`, and vice versa. Invites and memberships add a
- * branch each, not a new function. */
 type AuditEvent =
   | { action: OrganizationAuditAction; actor: Actor; organizationId: OrganizationId }
   | {
