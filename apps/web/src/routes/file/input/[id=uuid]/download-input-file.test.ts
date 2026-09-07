@@ -3,14 +3,14 @@ import { newInputFileId } from '@gbd/db';
 import { insertInputFile, insertReport } from '@gbd/db/testing';
 import { putInputFile } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
-import { withFileFixtures } from '$lib/server/tests/fixtures';
+import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
 import { _downloadInputFile } from './+server.ts';
 
 const CSV = new TextEncoder().encode('product name,date ordered,weight\n');
 
 describe('_downloadInputFile', () => {
   test('redirects to a URL that actually serves the bytes', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
       const report = await insertReport(transaction, { organizationId });
       const inputFileId = newInputFileId();
       const stored = await putInputFile(
@@ -49,7 +49,7 @@ describe('_downloadInputFile', () => {
 
   describe('404s for', () => {
     test('a file that does not exist', async () => {
-      await withFileFixtures(async ({ transaction, store }) => {
+      await withOrganizationFixtures(async ({ transaction, store }) => {
         const missing = crypto.randomUUID() as InputFileId;
 
         await expect(_downloadInputFile(transaction, store, missing)).rejects.toMatchObject({
@@ -59,7 +59,7 @@ describe('_downloadInputFile', () => {
     });
 
     test('a file whose report was soft-deleted', async () => {
-      await withFileFixtures(async ({ transaction, store, organizationId }) => {
+      await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
         const report = await insertReport(transaction, { organizationId });
         const inputFile = await insertInputFile(transaction, { reportId: report.id });
         await transaction
@@ -75,7 +75,7 @@ describe('_downloadInputFile', () => {
     });
 
     test('a row pointing at an object that is not there', async () => {
-      await withFileFixtures(async ({ transaction, store, organizationId }) => {
+      await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
         const report: { id: ReportId } = await insertReport(transaction, { organizationId });
         // A row with a plausible key and nothing behind it, which is what an interrupted upload
         // would leave if the object write had failed after the row was written.

@@ -21,36 +21,11 @@ Two decisions already taken with the user:
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
 done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable;
-1–2 are the ones that most directly unblock invites/memberships.
+1 is the one that most directly unblocks invites/memberships.
 
 ---
 
-## PR 1 — Server test helpers: `lib/server/testing/`, one audit reader, missing fixtures
-
-- Rename `apps/web/src/lib/server/tests/` → `lib/server/testing/` (every other test-support folder
-  in the repo is `testing/`). Mechanical import update.
-- Collapse `audit.ts` + `audit-event.ts` + `organization-audit.ts` into one `testing/audit.ts`:
-  `auditEventsFor(transaction, targetId)` (exists) and one generic
-  `expectedAuditEvent({ action, actorUserId, organizationId, targetType, targetId })`. Delete
-  the two `*AuditEventRow` aliases (zero consumers) and the never-called
-  `expectedOrganizationAuditEvent`. Then actually use the helper in `rename-organization.test.ts`,
-  `delete-organization.test.ts`, and `create-organization.test.ts` (the last hand-writes the
-  whole `selectFrom('auditEvent')` query that `AUDIT_EVENT_COLUMNS` exists to own). Keep the
-  one test that deliberately spells the row out (`audit.test.ts` pins the shape).
-- `withFileFixtures` → `withOrganizationFixtures` (`fixtures.ts`); four org-deletion tests already
-  use it for nothing file-related.
-- `anOrganizationAccess(name, role, organizationId?)` so `guards.test.ts` stops hand-rolling one.
-- Move into `testing/fixtures.ts`, ahead of invites/memberships:
-  - `inviteExpiring(...)` and `anEmail()` out of `resolve-post-sign-in-destination.test.ts`
-    (the only invite-row builder in the repo, with the non-obvious `created_at` backdating).
-  - `anOrganizationWithMembers(transaction, roles)` replacing the three copies of
-    `insertOrganization` + `insertAppUser` + `insertOrganizationMember` in `load-members.test.ts`.
-  - `mockUnreachableEmailer()` for the `vi.mock('$lib/server/email', …)` block duplicated in
-    `create-organization.test.ts` and `delete-organization.test.ts` (invites will be the third).
-
----
-
-## PR 2 — Client: shared organization-name form, shared failure classification, `delete-button`
+## PR 1 — Client: shared organization-name form, shared failure classification, `delete-button`
 
 - New `apps/web/src/lib/components/orgs/organization-name-form.svelte`. Props:
   `initialName`, `legend?`, `submitLabel`, `submittingLabel`, `unknownNotice: Snippet`,
@@ -81,7 +56,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 3 — Reports adopt the client-builds-hrefs convention
+## PR 2 — Reports adopt the client-builds-hrefs convention
 
 - `reports/[reportId=uuid]/+page.server.ts`: drop `cancelButtonHref`, `retryButtonHref`,
   `deleteAction` (and the `DeleteAction` type) from `ReportPageData`. Keep page-navigation hrefs
@@ -102,7 +77,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 4 — Shared pieces with a second caller now
+## PR 3 — Shared pieces with a second caller now
 
 - `lib/server/orgs/list.ts`: one `listOrganizations(db, auth, { limit? })` with the
   superadmin-reads-table / member-reads-memberships rule in one place. `_loadAllOrganizations`
@@ -130,7 +105,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 5 — Browser test helpers
+## PR 4 — Browser test helpers
 
 - `apps/web/src/lib/testing/fetch.ts`: `stubFetch(response)` (returns the mock),
   `stubUnreachableFetch()`, `stubPendingFetch()` → `{ resolve }`, `jsonResponse(body, status?)`,
@@ -147,7 +122,7 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 6 — e2e fixtures and README
+## PR 5 — e2e fixtures and README
 
 - `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
   `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
@@ -171,14 +146,14 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 
 ---
 
-## PR 7 — Docs and comments
+## PR 6 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
   (`/account`, `/invites`, `/sign-in`, the marketing page, and the invite/member/account API
   handlers)". Keep the `**Stub:**` grep; make `sign-in/+page.server.ts` use the marker.
 - Routes: add the `/orgs` redirect behavior (invites → single org → `/orgs/new`), and that API
-  URLs are built by the API client (PR 3).
+  URLs are built by the API client (PR 2).
 - Errors: "A 401 is not a redirect" → say what is true today (the error page renders a message;
   it will offer sign-in in place once auth lands, which is why there is no `?next=`). Same fix
   to the comment in `routes/(app)/+layout.server.ts`.
@@ -232,8 +207,8 @@ done, and `/prune-comments` over the diff. PRs are ordered so each is independen
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
 the diff is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 6's screenshot renames need
+`pnpm --filter @gbd/web test:e2e -- <path>`. PR 5's screenshot renames need
 `pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
-actually changed (renames only). After PR 3, click through a report page in the running app
-(`/run`) to confirm cancel, retry and delete still hit the right URLs; after PR 2, create and
+actually changed (renames only). After PR 2, click through a report page in the running app
+(`/run`) to confirm cancel, retry and delete still hit the right URLs; after PR 1, create and
 rename an organization once each.

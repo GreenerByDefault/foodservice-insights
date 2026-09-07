@@ -1,17 +1,12 @@
 import type { OrganizationId } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
-import { unreachableEmailer } from '@gbd/email/testing';
 import { describe, expect, test, vi } from 'vitest';
 import { database } from '$lib/server/db';
-import { anOrganizationCreator } from '$lib/server/tests/fixtures';
+import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
+import { anOrganizationCreator, mockUnreachableEmailer } from '$lib/server/testing/fixtures';
 import { _createOrganization } from './+server.ts';
 
-// Aimed at a port nothing listens on, so every test proves `notifyGbd`'s own catch rather than
-// depending on whatever Mailpit happens to be doing locally.
-vi.mock('$lib/server/email', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('$lib/server/email')>();
-  return { ...actual, emailer: () => unreachableEmailer() };
-});
+vi.mock('$lib/server/email', (importOriginal) => mockUnreachableEmailer(importOriginal));
 
 describe('a valid name', () => {
   test('answers 201 with a location header', async () => {
@@ -67,20 +62,14 @@ describe('a valid name', () => {
       });
       const { organizationId } = (await response.json()) as { organizationId: OrganizationId };
 
-      const events = await transaction
-        .selectFrom('auditEvent')
-        .select(['action', 'actorUserId', 'actorKind', 'organizationId', 'targetType', 'targetId'])
-        .where('targetId', '=', organizationId)
-        .execute();
-      expect(events).toEqual([
-        {
+      expect(await auditEventsFor(transaction, organizationId)).toEqual([
+        expectedAuditEvent({
           action: 'organization.created',
           actorUserId: creator.actor.userId,
-          actorKind: 'user',
           organizationId,
           targetType: 'organization',
           targetId: organizationId,
-        },
+        }),
       ]);
     });
   });

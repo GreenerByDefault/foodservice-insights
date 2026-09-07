@@ -1,44 +1,13 @@
-import type { Database, OrganizationInviteStatus } from '@gbd/db';
-import { insertOrganization, withRollback } from '@gbd/db/testing';
-import type { Transaction } from 'kysely';
+import { withRollback } from '@gbd/db/testing';
 import { expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { anAuthContext, anOrganizationAccess } from '$lib/server/tests/fixtures';
+import {
+  anAuthContext,
+  anEmail,
+  anOrganizationAccess,
+  inviteExpiring,
+} from '$lib/server/testing/fixtures';
 import { _resolvePostSignInDestination } from './+page.server.ts';
-
-function anEmail(): string {
-  // A unique address per test, so no test can see another's invite.
-  return `${crypto.randomUUID()}@example.test`;
-}
-
-const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
-
-/** An invite for `email` that runs out at `expiresAt`.
- *
- * `created_at` is backdated a full invite lifetime rather than left to default, because
- * `organization_invite_expires_at_after_created_at` refuses a row that is already expired the
- * moment it is written — so this is also the only way to build the expired case.
- */
-async function inviteExpiring(
-  transaction: Transaction<Database>,
-  email: string,
-  expiresAt: Date,
-  status: OrganizationInviteStatus = 'pending',
-): Promise<void> {
-  const { organization } = await insertOrganization(transaction);
-
-  await transaction
-    .insertInto('organizationInvite')
-    .values({
-      organizationId: organization.id,
-      email,
-      role: 'member',
-      status,
-      createdAt: new Date(expiresAt.getTime() - INVITE_LIFETIME_MS),
-      expiresAt,
-    })
-    .execute();
-}
 
 const IN_A_WEEK = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 const A_WEEK_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

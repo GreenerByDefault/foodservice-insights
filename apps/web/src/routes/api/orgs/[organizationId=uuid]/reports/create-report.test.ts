@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_BYTES } from '$lib/reports/limits';
 import { FIELD } from '$lib/reports/metadata';
 import { lockAndCheckReportRateLimit } from '$lib/server/reports/rate-limit';
-import { withFileFixtures } from '$lib/server/tests/fixtures';
+import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
 import { _createReport } from './+server.ts';
 
 // A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
@@ -59,7 +59,7 @@ function createUploadRequest(overrides: SubmissionOverrides = {}): Request {
 
 describe('a valid upload', () => {
   test('answers 201 with the new report', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const response = await _createReport(
         transaction,
         store,
@@ -76,7 +76,7 @@ describe('a valid upload', () => {
   });
 
   test('writes the report, its input file, and an attempt for a worker to claim', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const response = await _createReport(
         transaction,
         store,
@@ -131,7 +131,7 @@ describe('a valid upload', () => {
   });
 
   test('stores the bytes where the row says they are', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       const response = await _createReport(
         transaction,
         store,
@@ -160,33 +160,35 @@ describe('a valid upload', () => {
 
 describe('a rejected upload', () => {
   async function reject(overrides: SubmissionOverrides) {
-    return await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
-      const response = await _createReport(
-        transaction,
-        store,
-        { organizationId, userId: adminUserId },
-        createUploadRequest(overrides),
-      );
-      const refusal = { status: response.status, body: await response.json() };
+    return await withOrganizationFixtures(
+      async ({ transaction, store, organizationId, adminUserId }) => {
+        const response = await _createReport(
+          transaction,
+          store,
+          { organizationId, userId: adminUserId },
+          createUploadRequest(overrides),
+        );
+        const refusal = { status: response.status, body: await response.json() };
 
-      const recorded = await transaction
-        .selectFrom('rejectedUpload')
-        .selectAll()
-        .where('organizationId', '=', organizationId)
-        .executeTakeFirst();
+        const recorded = await transaction
+          .selectFrom('rejectedUpload')
+          .selectAll()
+          .where('organizationId', '=', organizationId)
+          .executeTakeFirst();
 
-      const bytes = recorded?.inputFileStorageKey
-        ? await getObject(store, recorded.inputFileStorageKey)
-        : undefined;
+        const bytes = recorded?.inputFileStorageKey
+          ? await getObject(store, recorded.inputFileStorageKey)
+          : undefined;
 
-      const reports = await transaction
-        .selectFrom('report')
-        .selectAll()
-        .where('organizationId', '=', organizationId)
-        .execute();
+        const reports = await transaction
+          .selectFrom('report')
+          .selectAll()
+          .where('organizationId', '=', organizationId)
+          .execute();
 
-      return { refusal, recorded, bytes, reports };
-    });
+        return { refusal, recorded, bytes, reports };
+      },
+    );
   }
 
   test.for([
@@ -270,7 +272,7 @@ describe('a rejected upload', () => {
 // the weekly limit.
 describe('the hourly report limit', () => {
   test('still accepts the upload one report under the limit', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       for (let i = 0; i < HOURLY_REPORT_LIMIT - 1; i++) {
         await insertReport(transaction, { organizationId, createdByUserId: adminUserId });
       }
@@ -287,7 +289,7 @@ describe('the hourly report limit', () => {
   });
 
   test('refuses the upload once the organization has reached the limit, before ever writing the accepted input file', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       // Other members' reports count against the organization too — the admin's own count stays
       // at zero, so this exercises the organization check specifically.
       for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
@@ -330,7 +332,7 @@ describe('the hourly report limit', () => {
   });
 
   test('still refuses with 429 when the limit is only hit on the recheck inside the write transaction', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId, adminUserId }) => {
       // The initial check (outside the write transaction) sees room; the recheck (inside it, see
       // `_createReport`'s comment on why it exists) is what actually catches this upload.
       const mocked = vi.mocked(lockAndCheckReportRateLimit);

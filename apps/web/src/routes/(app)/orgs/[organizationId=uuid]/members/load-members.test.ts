@@ -1,32 +1,19 @@
 import type { UserId } from '@gbd/db';
-import {
-  insertAppUser,
-  insertOrganization,
-  insertOrganizationMember,
-  withRollback,
-} from '@gbd/db/testing';
+import { insertAppUser, withRollback } from '@gbd/db/testing';
 import { expect, test } from 'vitest';
 import { database } from '$lib/server/db';
+import { anOrganizationWithMembers } from '$lib/server/testing/fixtures';
 import { _loadMembers } from './+page.server.ts';
 
 test('lists admins before members, then by email, and marks the viewer’s own row', async () => {
   await withRollback(database(), async (transaction) => {
-    const { organization } = await insertOrganization(transaction, {
-      name: `Members test ${crypto.randomUUID()}`,
-    });
-    const member = await insertAppUser(transaction, {
-      displayName: 'Ana Ruiz',
-      email: 'ana@example.test',
-    });
-    await insertOrganizationMember(transaction, {
-      organizationId: organization.id,
-      userId: member.id,
-      role: 'member',
-    });
+    const { organizationId, members } = await anOrganizationWithMembers(transaction, [
+      { role: 'member', displayName: 'Ana Ruiz', email: 'ana@example.test' },
+    ]);
 
     const rows = await _loadMembers(transaction, {
-      organizationId: organization.id,
-      viewerId: member.id,
+      organizationId,
+      viewerId: members[0] as UserId,
     });
 
     expect(rows).toEqual([
@@ -39,18 +26,12 @@ test('lists admins before members, then by email, and marks the viewer’s own r
 
 test('shows email only, with no name, for a member with no display name', async () => {
   await withRollback(database(), async (transaction) => {
-    const { organization } = await insertOrganization(transaction, {
-      name: `Members test ${crypto.randomUUID()}`,
-    });
-    const member = await insertAppUser(transaction, { email: 'no-name@example.test' });
-    await insertOrganizationMember(transaction, {
-      organizationId: organization.id,
-      userId: member.id,
-      role: 'member',
-    });
+    const { organizationId } = await anOrganizationWithMembers(transaction, [
+      { role: 'member', email: 'no-name@example.test' },
+    ]);
 
     const rows = await _loadMembers(transaction, {
-      organizationId: organization.id,
+      organizationId,
       viewerId: crypto.randomUUID() as UserId,
     });
 
@@ -65,14 +46,12 @@ test('shows email only, with no name, for a member with no display name', async 
 
 test('omits a superadmin, who has access but holds no organization_member row', async () => {
   await withRollback(database(), async (transaction) => {
-    const { organization, admin } = await insertOrganization(transaction, {
-      name: `Members test ${crypto.randomUUID()}`,
-    });
+    const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
     await insertAppUser(transaction, { isSuperadmin: true });
 
     const rows = await _loadMembers(transaction, {
-      organizationId: organization.id,
-      viewerId: admin.id,
+      organizationId,
+      viewerId: admin,
     });
 
     expect(rows).toEqual([

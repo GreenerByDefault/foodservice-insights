@@ -18,7 +18,7 @@ import {
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { statusOf } from '$lib/server/tests/http-error';
+import { statusOf } from '$lib/server/testing/http-error';
 import { _loadReport } from './+page.server.ts';
 
 const SUPPORT_EMAIL = 'support@foodservice-insights.test';

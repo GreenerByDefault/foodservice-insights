@@ -4,7 +4,7 @@ import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltej
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
-import { anAuthContext } from '$lib/server/tests/fixtures';
+import { anAuthContext } from '$lib/server/testing/fixtures';
 import { handle, handleError } from './hooks.server.ts';
 
 // This file tests only the hook's wiring, so identification and authorization are stubbed.

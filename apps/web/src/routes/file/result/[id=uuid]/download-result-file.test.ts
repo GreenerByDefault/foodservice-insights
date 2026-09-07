@@ -3,14 +3,14 @@ import { newResultFileId } from '@gbd/db';
 import { insertAnalysisAttempt, insertReport, insertResultFile } from '@gbd/db/testing';
 import { putResultFile } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
-import { withFileFixtures } from '$lib/server/tests/fixtures';
+import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
 import { _downloadResultFile } from './+server.ts';
 
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7 fake');
 
 describe('_downloadResultFile', () => {
   test('a PDF redirects to a URL that downloads under a name built from the report', async () => {
-    await withFileFixtures(async ({ transaction, store, organizationId }) => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
       const report = await insertReport(transaction, { organizationId, name: 'Q1 procurement' });
       const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
       const resultFileId = newResultFileId();
@@ -51,7 +51,7 @@ describe('_downloadResultFile', () => {
 
   describe('404s for', () => {
     test('a file that does not exist', async () => {
-      await withFileFixtures(async ({ transaction, store }) => {
+      await withOrganizationFixtures(async ({ transaction, store }) => {
         const missing = crypto.randomUUID() as ResultFileId;
 
         await expect(_downloadResultFile(transaction, store, missing)).rejects.toMatchObject({
@@ -61,7 +61,7 @@ describe('_downloadResultFile', () => {
     });
 
     test('a file whose report was soft-deleted', async () => {
-      await withFileFixtures(async ({ transaction, store, organizationId }) => {
+      await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
         const report = await insertReport(transaction, { organizationId });
         const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
         const resultFile = await insertResultFile(transaction, { analysisAttemptId: attempt.id });
@@ -78,7 +78,7 @@ describe('_downloadResultFile', () => {
     });
 
     test('a row pointing at an object that is not there', async () => {
-      await withFileFixtures(async ({ transaction, store, organizationId }) => {
+      await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
         const report: { id: ReportId } = await insertReport(transaction, { organizationId });
         const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
         // A row with a plausible key and nothing behind it, which is what an interrupted worker
