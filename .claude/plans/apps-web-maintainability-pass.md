@@ -21,75 +21,11 @@ Two decisions already taken with the user:
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
 done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable;
-1–3 are the ones that most directly unblock invites/memberships.
+1–2 are the ones that most directly unblock invites/memberships.
 
 ---
 
-## PR 1 — Server: one organization route context, one audit recorder
-
-**Guards** (`apps/web/src/lib/server/auth/guards.ts`)
-- `requireOrganizationAdmin` returns the `OrganizationAccess` it computed instead of `void`, so
-  callers stop hand-writing `role: 'admin'`.
-
-**Route context** — new `apps/web/src/lib/server/auth/route-context.ts`, replacing
-`lib/server/reports/route-context.ts`:
-- `requireOrganizationRouteContext(db, event, { admin?: true })` → `{ organizationId, actor }`.
-  Does `requireAuth` → cast id → `requireOrganizationAccess` (or `requireOrganizationAdmin` when
-  `admin`) → build `Actor` from the returned access.
-- `requireReportRouteContext` moves here and composes the above, adding `reportId`.
-- Use it in: `routes/api/orgs/[organizationId=uuid]/+server.ts` (PATCH, DELETE — currently
-  byte-identical prologues), `routes/api/orgs/[organizationId=uuid]/reports/+server.ts`,
-  `routes/(app)/orgs/[organizationId=uuid]/poll/+server.ts` (delete the comment there explaining
-  why it *couldn't* use the helper), `settings/+page.server.ts`. The org `+layout.server.ts`
-  keeps `requireOrganizationAccess` because it also needs `organizationName`.
-- Add a one-line note where `Actor.role` is `'admin'` for a superadmin with no membership row —
-  that is what the audit row will say, and it's deliberate.
-
-**Audit** — collapse `lib/server/orgs/audit.ts` + `lib/server/reports/audit.ts` into
-`apps/web/src/lib/server/audit.ts`:
-```ts
-export type OrganizationAuditAction = 'organization.created' | 'organization.renamed' | 'organization.deleted';
-export type ReportAuditAction = 'report.deleted' | 'report.cancel_requested' | 'report.retry_requested';
-type AuditEvent =
-  | { action: OrganizationAuditAction; actor: Actor; organizationId: OrganizationId }
-  | { action: ReportAuditAction; actor: Actor; organizationId: OrganizationId; reportId: ReportId };
-export async function recordAuditEvent(transaction: Transaction<Database>, event: AuditEvent): Promise<void>
-```
-`targetType`/`targetId` are derived from the branch. Discriminating on `action` keeps the
-action↔target pairing type-checked; invites/members add a branch each. Keep the single
-"Takes a `Transaction`…" paragraph (currently duplicated verbatim in both files).
-
-**Handler bodies** (`routes/api/orgs/+server.ts`, `routes/api/orgs/[organizationId=uuid]/+server.ts`)
-- New `apps/web/src/lib/server/orgs/name.ts`: `parseOrganizationNameBody(body)` returning
-  `{ ok: true; name } | { ok: false; response: Response }` (the 400), and `nameTakenResponse()`
-  (the 409). Drop the `fields` array from the 400 — no client reads it, and the key it would
-  name (`name`) matches nothing in the markup.
-- `isUniqueViolation(cause)` in `lib/server/db.ts`, replacing the three-line
-  `isPermanentDatabaseError && code === POSTGRES_CODE_UNIQUE_VIOLATION` in create, rename (and
-  reuse in `retry/+server.ts` alongside its CHECK case).
-- Unify parameter bags: `params`, not `target`/`creator`. `_createOrganization` takes
-  `{ actor: Actor; actorEmail: string }` (role `'admin'`, which the audit row already records);
-  `_deleteOrganization` keeps `{ organizationId; actor; actorEmail }`. Delete the exported
-  `OrganizationCreator` type; update `anOrganizationCreator` in the test fixtures accordingly.
-- Delete the DELETE handler's 4-line doc (a lossy paraphrase of `_deleteOrganization`'s). Give
-  PATCH and DELETE the same one-liner shape the report handlers use.
-- `withDbErrorHandling` placement: the org `_` functions wrap internally (they must — blob
-  delete and `notifyGbd` follow the transaction); `_deleteReport`/`_retryReport` are wrapped by
-  their handlers. Move the wrap *into* `_deleteReport` and `_retryReport` so every `_` function
-  owns its own mapping and its tests can cover the 503/500 path. Update the rule in
-  `.claude/rules/typescript.md` ("Route handlers wrap DB calls…" → the exported `_` function
-  does, or the handler when there is no `_` function).
-- Fix the header of `lib/server/reports/cancel.ts`: `cancelActiveAttempt` is the shared export,
-  not `requestCancellation`.
-
-**Tests touched:** `create-organization.test.ts`, `rename-organization.test.ts`,
-`delete-organization.test.ts`, `delete-report.test.ts`, `retry-report.test.ts`,
-`lib/server/orgs/audit.test.ts` + `lib/server/reports/audit.test.ts` → one `audit.test.ts`,
-`guards.test.ts`. Test-helper consolidation is PR 2, so here just re-point imports.
-
----
-
-## PR 2 — Server test helpers: `lib/server/testing/`, one audit reader, missing fixtures
+## PR 1 — Server test helpers: `lib/server/testing/`, one audit reader, missing fixtures
 
 - Rename `apps/web/src/lib/server/tests/` → `lib/server/testing/` (every other test-support folder
   in the repo is `testing/`). Mechanical import update.
@@ -114,7 +50,7 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 
 ---
 
-## PR 3 — Client: shared organization-name form, shared failure classification, `delete-button`
+## PR 2 — Client: shared organization-name form, shared failure classification, `delete-button`
 
 - New `apps/web/src/lib/components/orgs/organization-name-form.svelte`. Props:
   `initialName`, `legend?`, `submitLabel`, `submittingLabel`, `unknownNotice: Snippet`,
@@ -145,7 +81,7 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 
 ---
 
-## PR 4 — Reports adopt the client-builds-hrefs convention
+## PR 3 — Reports adopt the client-builds-hrefs convention
 
 - `reports/[reportId=uuid]/+page.server.ts`: drop `cancelButtonHref`, `retryButtonHref`,
   `deleteAction` (and the `DeleteAction` type) from `ReportPageData`. Keep page-navigation hrefs
@@ -166,7 +102,7 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 
 ---
 
-## PR 5 — Shared pieces with a second caller now
+## PR 4 — Shared pieces with a second caller now
 
 - `lib/server/orgs/list.ts`: one `listOrganizations(db, auth, { limit? })` with the
   superadmin-reads-table / member-reads-memberships rule in one place. `_loadAllOrganizations`
@@ -194,7 +130,7 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 
 ---
 
-## PR 6 — Browser test helpers
+## PR 5 — Browser test helpers
 
 - `apps/web/src/lib/testing/fetch.ts`: `stubFetch(response)` (returns the mock),
   `stubUnreachableFetch()`, `stubPendingFetch()` → `{ resolve }`, `jsonResponse(body, status?)`,
@@ -211,7 +147,7 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 
 ---
 
-## PR 7 — e2e fixtures and README
+## PR 6 — e2e fixtures and README
 
 - `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
   `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
@@ -235,14 +171,14 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 
 ---
 
-## PR 8 — Docs and comments
+## PR 7 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
   (`/account`, `/invites`, `/sign-in`, the marketing page, and the invite/member/account API
   handlers)". Keep the `**Stub:**` grep; make `sign-in/+page.server.ts` use the marker.
 - Routes: add the `/orgs` redirect behavior (invites → single org → `/orgs/new`), and that API
-  URLs are built by the API client (PR 4).
+  URLs are built by the API client (PR 3).
 - Errors: "A 401 is not a redirect" → say what is true today (the error page renders a message;
   it will offer sign-in in place once auth lands, which is why there is no `?next=`). Same fix
   to the comment in `routes/(app)/+layout.server.ts`.
@@ -296,8 +232,8 @@ action↔target pairing type-checked; invites/members add a branch each. Keep th
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
 the diff is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 7's screenshot renames need
+`pnpm --filter @gbd/web test:e2e -- <path>`. PR 6's screenshot renames need
 `pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
-actually changed (renames only). After PR 4, click through a report page in the running app
-(`/run`) to confirm cancel, retry and delete still hit the right URLs; after PR 3, create and
+actually changed (renames only). After PR 3, click through a report page in the running app
+(`/run`) to confirm cancel, retry and delete still hit the right URLs; after PR 2, create and
 rename an organization once each.

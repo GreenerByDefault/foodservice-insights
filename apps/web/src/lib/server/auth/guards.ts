@@ -59,8 +59,10 @@ export async function requireOrganizationAdmin(
   db: DatabaseExecutor,
   auth: AuthContext,
   organizationId: OrganizationId,
-): Promise<void> {
-  if ((await requireOrganizationAccess(db, auth, organizationId)).role !== 'admin') {
+): Promise<OrganizationAccess> {
+  const access = await requireOrganizationAccess(db, auth, organizationId);
+  if (access.role !== 'admin') {
     error(403, { message: 'Only an admin can do that', code: 'forbidden' });
   }
+  return access;
 }

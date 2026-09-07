@@ -1,4 +1,8 @@
-import { isPermanentDatabaseError, isTransientDatabaseError } from '@gbd/db';
+import {
+  isPermanentDatabaseError,
+  isTransientDatabaseError,
+  POSTGRES_CODE_UNIQUE_VIOLATION,
+} from '@gbd/db';
 import {
   aDatabaseError,
   anUnreachableDatabaseError,
@@ -8,7 +12,7 @@ import {
 } from '@gbd/db/testing';
 import { error, isHttpError } from '@sveltejs/kit';
 import { expect, test, vi } from 'vitest';
-import { database, withDbErrorHandling } from './db.ts';
+import { database, isUniqueViolation, withDbErrorHandling } from './db.ts';
 
 test('queries the database through the app handle, rolling back after', async () => {
   const id = await withRollback(database(), async (transaction) => {
@@ -132,4 +136,20 @@ test('withDbErrorHandling rethrows a failure that is not from the database', asy
   } finally {
     logged.mockRestore();
   }
+});
+
+test('isUniqueViolation recognizes a unique-constraint violation', () => {
+  expect(isUniqueViolation(aDatabaseError('duplicate key', POSTGRES_CODE_UNIQUE_VIOLATION))).toBe(
+    true,
+  );
+});
+
+test('isUniqueViolation is false for a database failure that is not a unique violation', () => {
+  expect(isUniqueViolation(aDatabaseError('canceling statement due to timeout', '57014'))).toBe(
+    false,
+  );
+});
+
+test('isUniqueViolation is false for something that is not a database error at all', () => {
+  expect(isUniqueViolation(new Error('unrelated'))).toBe(false);
 });

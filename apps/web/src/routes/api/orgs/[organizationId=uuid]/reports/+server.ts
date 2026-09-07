@@ -20,7 +20,7 @@ import type { ReportMetadata } from '$lib/reports/metadata';
 import { type RejectedUploadRecord, userFacingRejection } from '$lib/reports/rejection';
 import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
-import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
+import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import {
   describeRateLimitExceeded,
@@ -32,16 +32,14 @@ import type { RequestHandler } from './$types';
 
 export type Uploader = { organizationId: OrganizationId; userId: UserId };
 
-export const POST: RequestHandler = async ({ request, params, locals }) => {
-  const auth = requireAuth(locals);
-  const organizationId = params.organizationId as OrganizationId;
-  await requireOrganizationAccess(database(), auth, organizationId);
+export const POST: RequestHandler = async (event) => {
+  const { organizationId, actor } = await requireOrganizationRouteContext(database(), event);
 
   return await _createReport(
     database(),
     blobStore(),
-    { organizationId, userId: auth.user.id },
-    request,
+    { organizationId, userId: actor.userId },
+    event.request,
   );
 };
 

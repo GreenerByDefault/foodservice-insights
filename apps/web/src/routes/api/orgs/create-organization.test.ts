@@ -44,7 +44,7 @@ describe('a valid name', () => {
         .executeTakeFirstOrThrow();
       expect(organization).toMatchObject({
         name: 'Acme Foodservice',
-        createdByUserId: creator.userId,
+        createdByUserId: creator.actor.userId,
       });
 
       const members = await transaction
@@ -53,7 +53,7 @@ describe('a valid name', () => {
         .where('organizationId', '=', organizationId)
         .execute();
       expect(members).toEqual([
-        expect.objectContaining({ userId: creator.userId, organizationId, role: 'admin' }),
+        expect.objectContaining({ userId: creator.actor.userId, organizationId, role: 'admin' }),
       ]);
     });
   });
@@ -75,7 +75,7 @@ describe('a valid name', () => {
       expect(events).toEqual([
         {
           action: 'organization.created',
-          actorUserId: creator.userId,
+          actorUserId: creator.actor.userId,
           actorKind: 'user',
           organizationId,
           targetType: 'organization',

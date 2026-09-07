@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
+import { requireReportRouteContext } from '$lib/server/auth/route-context';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { requireReportRouteContext } from '$lib/server/reports/route-context';
 import { _loadReport, _reportEnvironment } from '../+page.server.ts';
 import type { RequestHandler } from './$types';
 

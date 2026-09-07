@@ -9,8 +9,8 @@ import {
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import { sql, type Transaction } from 'kysely';
+import { recordAuditEvent } from '$lib/server/audit';
 import type { Actor } from '$lib/server/auth/types';
-import { recordReportAuditEvent } from '$lib/server/reports/audit';
 import { requireReportAccess } from '$lib/server/reports/guards';
 
 /** Request cancellation of `reportId`'s in-flight attempt.
@@ -36,7 +36,7 @@ export async function requestCancellation(
       error(409, { message: 'This report already finished' });
     }
 
-    await recordReportAuditEvent(transaction, {
+    await recordAuditEvent(transaction, {
       action: 'report.cancel_requested',
       actor,
       organizationId,

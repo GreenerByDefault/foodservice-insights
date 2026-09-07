@@ -1,7 +1,7 @@
-import type { OrganizationId, ReportId } from '@gbd/db';
+import type { ReportId } from '@gbd/db';
 import { error, json } from '@sveltejs/kit';
 import * as v from 'valibot';
-import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
+import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { _loadReportsByIds } from '../+page.server.ts';
 import type { RequestHandler } from './$types';
@@ -14,12 +14,9 @@ const BodySchema = v.object({ ids: v.array(v.pipe(v.string(), v.uuid())) });
  * POST, not GET: the ids being refreshed are the client's own screen state, not a resource
  * this URL names, so they travel as a body rather than a query string — see
  * `_loadReportsByIds`'s doc comment for why that list never changes what's on screen.
- *
- * `requireReportRouteContext` is typed for a `reportId` this route doesn't have, so the
- * auth + org-access prologue is inlined here instead. */
+ */
 export const POST: RequestHandler = async (event) => {
-  const organizationId = event.params.organizationId as OrganizationId;
-  await requireOrganizationAccess(database(), requireAuth(event.locals), organizationId);
+  const { organizationId } = await requireOrganizationRouteContext(database(), event);
 
   const body = v.safeParse(BodySchema, await event.request.json());
   if (!body.success) {

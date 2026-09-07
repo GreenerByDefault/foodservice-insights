@@ -1,23 +1,13 @@
-import {
-  type DatabaseExecutor,
-  isPermanentDatabaseError,
-  type OrganizationId,
-  POSTGRES_CODE_UNIQUE_VIOLATION,
-  type UserId,
-  withTransaction,
-} from '@gbd/db';
+import { type DatabaseExecutor, type OrganizationId, withTransaction } from '@gbd/db';
 import { json } from '@sveltejs/kit';
-import * as v from 'valibot';
-import { fieldsWithIssues } from '$lib/forms/validation';
 import { organizationHref } from '$lib/hrefs';
-import { OrganizationNameSchema } from '$lib/orgs/name';
+import { recordAuditEvent } from '$lib/server/audit';
 import { requireAuth } from '$lib/server/auth/guards';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import type { Actor } from '$lib/server/auth/types';
+import { database, isUniqueViolation, withDbErrorHandling } from '$lib/server/db';
 import { notifyGbd } from '$lib/server/email';
-import { recordOrganizationAuditEvent } from '$lib/server/orgs/audit';
+import { nameTakenResponse, parseOrganizationNameBody } from '$lib/server/orgs/name';
 import type { RequestHandler } from './$types';
-
-export type OrganizationCreator = { userId: UserId; actorEmail: string };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   const auth = requireAuth(locals);
@@ -25,7 +15,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   return await _createOrganization(
     database(),
-    { userId: auth.user.id, actorEmail: auth.user.email },
+    { actor: { userId: auth.user.id, role: 'admin' }, actorEmail: auth.user.email },
     body,
   );
 };
@@ -41,17 +31,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
  */
 export async function _createOrganization(
   db: DatabaseExecutor,
-  creator: OrganizationCreator,
+  params: { actor: Actor; actorEmail: string },
   body: unknown,
 ): Promise<Response> {
-  const parsed = v.safeParse(v.object({ name: OrganizationNameSchema }), body);
-  if (!parsed.success) {
-    return json(
-      { message: 'Fix the highlighted field.', fields: fieldsWithIssues(parsed.issues) },
-      { status: 400 },
-    );
-  }
-  const { name } = parsed.output;
+  const { actor, actorEmail } = params;
+
+  const parsedName = parseOrganizationNameBody(body);
+  if (!parsedName.ok) return parsedName.response;
+  const { name } = parsedName;
 
   const outcome = await withDbErrorHandling(
     () =>
@@ -60,25 +47,23 @@ export async function _createOrganization(
         try {
           const organization = await transaction
             .insertInto('organization')
-            .values({ name, createdByUserId: creator.userId })
+            .values({ name, createdByUserId: actor.userId })
             .returning('id')
             .executeTakeFirstOrThrow();
           organizationId = organization.id;
         } catch (cause) {
-          if (isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_UNIQUE_VIOLATION) {
-            return { ok: false as const };
-          }
+          if (isUniqueViolation(cause)) return { ok: false as const };
           throw cause;
         }
 
         await transaction
           .insertInto('organizationMember')
-          .values({ organizationId, userId: creator.userId, role: 'admin' })
+          .values({ organizationId, userId: actor.userId, role: 'admin' })
           .execute();
 
-        await recordOrganizationAuditEvent(transaction, {
+        await recordAuditEvent(transaction, {
           action: 'organization.created',
-          actor: { userId: creator.userId, role: 'admin' },
+          actor,
           organizationId,
         });
 
@@ -87,17 +72,12 @@ export async function _createOrganization(
     { action: 'create an organization', context: { name } },
   );
 
-  if (!outcome.ok) {
-    return json(
-      { message: 'An organization with that name already exists.', code: 'name-taken' },
-      { status: 409 },
-    );
-  }
+  if (!outcome.ok) return nameTakenResponse();
 
   await notifyGbd({
     kind: 'gbd-organization-created',
     organizationName: name,
-    actorEmail: creator.actorEmail,
+    actorEmail,
   });
 
   return json(
