@@ -1,7 +1,8 @@
 /** The client-side call behind the settings page's rename form. */
 
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
+import { apiCall } from '$lib/api/fetch';
 import { organizationApiHref } from '$lib/hrefs';
+import { classifyNameWriteFailure } from './failure.ts';
 
 export type RenameOrganizationOutcome =
   | { kind: 'renamed' }
@@ -19,12 +20,6 @@ export async function renameOrganization(
     });
     return { kind: 'renamed' };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 409) return { kind: 'name-taken' };
-    // Everything else — `ApiUnreachableError`, a 5xx, and a 400 we don't otherwise handle — is
-    // answered the same way: we don't know whether the rename went through, so the safe advice is
-    // to check the current name before trying again.
-    if (error instanceof ApiError || error instanceof ApiUnreachableError)
-      return { kind: 'unknown' };
-    throw error;
+    return classifyNameWriteFailure(error);
   }
 }

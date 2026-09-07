@@ -6,7 +6,6 @@
 
 import { requiredText } from '$lib/forms/validation';
 
-/** The form field name, so the form and the parser cannot drift apart. */
 export const FIELD = {
   // We use `organization-name` rather than `name` so that iOS does not offer to autofill a
   // person's name — the same reason `report-name` does.

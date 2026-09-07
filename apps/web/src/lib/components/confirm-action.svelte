@@ -19,10 +19,9 @@ import type { ActionState } from '$lib/forms/action-state';
 /** The confirm dialog behind a destructive action that needs an "are you sure" step: the trigger,
  * the copy, and the loading/error state around one irreversible request.
  *
- * `open` is bindable so a caller that wants to close the dialog itself — cancel-button.svelte
- * does, right after its request succeeds and before it awaits a refresh that might be slow — can.
- * A caller with nothing to do once `onConfirm` resolves (delete-button.svelte navigates away
- * instead) can leave it unbound.
+ * `open` is bindable so a caller that wants to close the dialog itself, right after its request
+ * succeeds and before it awaits a refresh that might be slow, can. A caller with nothing to do
+ * once `onConfirm` resolves (one that navigates away instead) can leave it unbound.
  */
 interface Props {
   open?: boolean;
@@ -52,6 +51,7 @@ let {
 
 let actionState = $state<ActionState>({ status: 'idle' });
 let typedPhrase = $state('');
+const confirmPhraseId = $props.id();
 
 const confirmDisabled = $derived(
   actionState.status === 'loading' ||
@@ -80,8 +80,8 @@ async function confirm() {
     </AlertDialogHeader>
     {#if confirmPhrase !== undefined}
       <Field.Field>
-        <Field.Label for="confirm-phrase">Type "{confirmPhrase}" to confirm</Field.Label>
-        <Input id="confirm-phrase" autocomplete="off" bind:value={typedPhrase} />
+        <Field.Label for={confirmPhraseId}>Type "{confirmPhrase}" to confirm</Field.Label>
+        <Input id={confirmPhraseId} autocomplete="off" bind:value={typedPhrase} />
       </Field.Field>
     {/if}
     {#if actionState.status === 'error'}
