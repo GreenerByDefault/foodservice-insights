@@ -125,10 +125,11 @@ Applies to `packages/storage` and every app or package that imports it.
   scope. Name that function's test file without a `+` prefix (e.g. `check-health.test.ts`,
   not `+server.test.ts`) — SvelteKit reserves `+` names, and the build fails on one it
   doesn't recognize.
-- **Route handlers wrap DB calls in `withDbErrorHandling`** (`apps/web/src/lib/server/db.ts`),
-  so a failure is logged with context instead of leaking to the client. It splits three ways —
-  a statement we could not complete is a 503, one Postgres refused is a 500, anything else is
-  rethrown — and the status is not the caller's to pass in.
+- **The exported `_`-prefixed function wraps its own DB calls in `withDbErrorHandling`**
+  (`apps/web/src/lib/server/db.ts`), so a failure is logged with context instead of leaking to
+  the client — or the route handler does, when there is no `_` function to own it. It splits
+  three ways — a statement we could not complete is a 503, one Postgres refused is a 500,
+  anything else is rethrown — and the status is not the caller's to pass in.
 - **A violation a caller *expects* is handled inside the callback, not by the wrapper.** Answer it
   with `error()` there; an `HttpError` is no kind of database failure, so it passes back out
   untouched. Checking for the condition beforehand instead duplicates the constraint and still

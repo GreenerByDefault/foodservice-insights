@@ -1,50 +1,33 @@
-import {
-  type DatabaseExecutor,
-  isPermanentDatabaseError,
-  type OrganizationId,
-  POSTGRES_CODE_UNIQUE_VIOLATION,
-  withTransaction,
-} from '@gbd/db';
+import { type DatabaseExecutor, type OrganizationId, withTransaction } from '@gbd/db';
 import { deletePrefix, isBlobStoreError, organizationPrefix } from '@gbd/storage';
-import { json } from '@sveltejs/kit';
-import * as v from 'valibot';
-import { fieldsWithIssues } from '$lib/forms/validation';
-import { OrganizationNameSchema } from '$lib/orgs/name';
-import { requireAuth, requireOrganizationAdmin } from '$lib/server/auth/guards';
+import { recordAuditEvent } from '$lib/server/audit';
+import { requireAuth } from '$lib/server/auth/guards';
+import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
 import type { Actor } from '$lib/server/auth/types';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { database, isUniqueViolation, withDbErrorHandling } from '$lib/server/db';
 import { notifyGbd } from '$lib/server/email';
-import { recordOrganizationAuditEvent } from '$lib/server/orgs/audit';
+import { nameTakenResponse, parseOrganizationNameBody } from '$lib/server/orgs/name';
 import { blobStore } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
-export const PATCH: RequestHandler = async ({ request, locals, params }) => {
-  const organizationId = params.organizationId as OrganizationId;
-  const auth = requireAuth(locals);
-  await requireOrganizationAdmin(database(), auth, organizationId);
+/** Rename `organizationId`. Admin only. */
+export const PATCH: RequestHandler = async (event) => {
+  const { organizationId, actor } = await requireOrganizationRouteContext(database(), event, {
+    admin: true,
+  });
 
-  const body = await request.json();
-  return await _renameOrganization(
-    database(),
-    { organizationId, actor: { userId: auth.user.id, role: 'admin' } },
-    body,
-  );
+  const body = await event.request.json();
+  return await _renameOrganization(database(), { organizationId, actor }, body);
 };
 
-/** Hard delete the organization: its reports and attempts cascade, and its files go with one
- * `deletePrefix` over `organizationPrefix(id)`. User accounts are untouched. Admin only.
- * Notify GBD, and audit it.
- */
-export const DELETE: RequestHandler = async ({ locals, params }) => {
-  const organizationId = params.organizationId as OrganizationId;
-  const auth = requireAuth(locals);
-  await requireOrganizationAdmin(database(), auth, organizationId);
-
-  await _deleteOrganization(database(), {
-    organizationId,
-    actor: { userId: auth.user.id, role: 'admin' },
-    actorEmail: auth.user.email,
+/** Delete `organizationId`. Admin only. */
+export const DELETE: RequestHandler = async (event) => {
+  const { organizationId, actor } = await requireOrganizationRouteContext(database(), event, {
+    admin: true,
   });
+  const actorEmail = requireAuth(event.locals).user.email;
+
+  await _deleteOrganization(database(), { organizationId, actor, actorEmail });
 
   return new Response(null, { status: 204 });
 };
@@ -57,19 +40,14 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
  */
 export async function _renameOrganization(
   db: DatabaseExecutor,
-  target: { organizationId: OrganizationId; actor: Actor },
+  params: { organizationId: OrganizationId; actor: Actor },
   body: unknown,
 ): Promise<Response> {
-  const { organizationId, actor } = target;
+  const { organizationId, actor } = params;
 
-  const parsed = v.safeParse(v.object({ name: OrganizationNameSchema }), body);
-  if (!parsed.success) {
-    return json(
-      { message: 'Fix the highlighted field.', fields: fieldsWithIssues(parsed.issues) },
-      { status: 400 },
-    );
-  }
-  const { name } = parsed.output;
+  const parsedName = parseOrganizationNameBody(body);
+  if (!parsedName.ok) return parsedName.response;
+  const { name } = parsedName;
 
   const outcome = await withDbErrorHandling(
     () =>
@@ -81,13 +59,11 @@ export async function _renameOrganization(
             .where('id', '=', organizationId)
             .execute();
         } catch (cause) {
-          if (isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_UNIQUE_VIOLATION) {
-            return { ok: false as const };
-          }
+          if (isUniqueViolation(cause)) return { ok: false as const };
           throw cause;
         }
 
-        await recordOrganizationAuditEvent(transaction, {
+        await recordAuditEvent(transaction, {
           action: 'organization.renamed',
           actor,
           organizationId,
@@ -98,12 +74,7 @@ export async function _renameOrganization(
     { action: 'rename an organization', context: { organizationId, name } },
   );
 
-  if (!outcome.ok) {
-    return json(
-      { message: 'An organization with that name already exists.', code: 'name-taken' },
-      { status: 409 },
-    );
-  }
+  if (!outcome.ok) return nameTakenResponse();
 
   return new Response(null, { status: 204 });
 }
@@ -124,14 +95,14 @@ export async function _renameOrganization(
  */
 export async function _deleteOrganization(
   db: DatabaseExecutor,
-  target: { organizationId: OrganizationId; actor: Actor; actorEmail: string },
+  params: { organizationId: OrganizationId; actor: Actor; actorEmail: string },
 ): Promise<void> {
-  const { organizationId, actor, actorEmail } = target;
+  const { organizationId, actor, actorEmail } = params;
 
   const { name } = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction) => {
-        await recordOrganizationAuditEvent(transaction, {
+        await recordAuditEvent(transaction, {
           action: 'organization.deleted',
           actor,
           organizationId,

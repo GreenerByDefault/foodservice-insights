@@ -2,7 +2,7 @@ import type { Database, OrganizationId, OrganizationRole, UserId } from '@gbd/db
 import { insertAppUserWithEmail, insertOrganization, withRollback } from '@gbd/db/testing';
 import { type BlobStore, deletePrefix, organizationPrefix } from '@gbd/storage';
 import type { Transaction } from 'kysely';
-import type { AuthContext, AuthenticatedUser, OrganizationAccess } from '../auth/types.ts';
+import type { Actor, AuthContext, AuthenticatedUser, OrganizationAccess } from '../auth/types.ts';
 import { database } from '../db.ts';
 import { blobStore } from '../storage.ts';
 
@@ -41,9 +41,9 @@ export function anOrganizationAccess(
 /** A user inserted for use as an organization's creator. */
 export async function anOrganizationCreator(
   transaction: Parameters<typeof insertAppUserWithEmail>[0],
-): Promise<{ userId: UserId; actorEmail: string }> {
+): Promise<{ actor: Actor; actorEmail: string }> {
   const user = await insertAppUserWithEmail(transaction);
-  return { userId: user.id, actorEmail: user.email };
+  return { actor: { userId: user.id, role: 'admin' }, actorEmail: user.email };
 }
 
 export type FileFixtures = {

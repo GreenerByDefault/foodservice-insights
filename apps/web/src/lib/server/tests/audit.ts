@@ -5,7 +5,7 @@
 
 import type { Database, OrganizationId, ReportId, UserId } from '@gbd/db';
 import type { Transaction } from 'kysely';
-import type { ReportAuditAction } from '../reports/audit.ts';
+import type { ReportAuditAction } from '../audit.ts';
 import { type AuditEventRow, auditEventsFor } from './audit-event.ts';
 
 export type ReportAuditEventRow = AuditEventRow;

@@ -98,10 +98,14 @@ describe('requireOrganizationAccess', () => {
 });
 
 describe('requireOrganizationAdmin', () => {
-  test('lets an admin through', async () => {
+  test('lets an admin through, returning their access', async () => {
     await expect(
       requireOrganizationAdmin(database(), withRoleIn('admin'), ORGANIZATION_ID),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      organizationId: ORGANIZATION_ID,
+      organizationName: 'Acme Foods',
+      role: 'admin',
+    });
   });
 
   test('403s a plain member', async () => {

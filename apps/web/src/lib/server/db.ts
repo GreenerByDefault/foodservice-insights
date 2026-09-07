@@ -3,6 +3,7 @@ import {
   initializeDatabase,
   isPermanentDatabaseError,
   isTransientDatabaseError,
+  POSTGRES_CODE_UNIQUE_VIOLATION,
   shutdownDatabase,
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
@@ -66,4 +67,10 @@ export async function withDbErrorHandling<T>(
     console.error(`Unexpected failure to ${options.action}`, { ...options.context, error: cause });
     error(500, { message: UNEXPECTED_ERROR_MESSAGE });
   }
+}
+
+/** Whether `cause` is the unique-constraint violation a write expected as one of its possible
+ * outcomes — a name already taken, most often — rather than some other permanent failure. */
+export function isUniqueViolation(cause: unknown): boolean {
+  return isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_UNIQUE_VIOLATION;
 }

@@ -1,4 +1,4 @@
-/** The shape both `reports/audit.ts` and `orgs/audit.ts`'s test helpers read back — factored out
+/** The shape both `tests/audit.ts` and `tests/organization-audit.ts` read back — factored out
  * so the column list and the query it drives are pinned in one place, not two.
  */
 

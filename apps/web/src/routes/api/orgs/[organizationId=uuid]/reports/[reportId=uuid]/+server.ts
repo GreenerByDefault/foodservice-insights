@@ -5,22 +5,19 @@ import {
   withTransaction,
 } from '@gbd/db';
 import { sql } from 'kysely';
+import { recordAuditEvent } from '$lib/server/audit';
+import { requireReportRouteContext } from '$lib/server/auth/route-context';
 import type { Actor } from '$lib/server/auth/types';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { recordReportAuditEvent } from '$lib/server/reports/audit';
 import { cancelActiveAttempt } from '$lib/server/reports/cancel';
 import { requireReportAccess } from '$lib/server/reports/guards';
-import { requireReportRouteContext } from '$lib/server/reports/route-context';
 import type { RequestHandler } from './$types';
 
 /** Delete a report; requests cancellation of its in-flight attempt too. */
 export const DELETE: RequestHandler = async (event) => {
   const { organizationId, reportId, actor } = await requireReportRouteContext(database(), event);
 
-  await withDbErrorHandling(() => _deleteReport(database(), { organizationId, reportId, actor }), {
-    action: 'delete a report',
-    context: { organizationId, reportId },
-  });
+  await _deleteReport(database(), { organizationId, reportId, actor });
 
   return new Response(null, { status: 204 });
 };
@@ -38,31 +35,35 @@ export async function _deleteReport(
 ): Promise<void> {
   const { organizationId, actor } = params;
 
-  await withTransaction(db, async (transaction) => {
-    const report = await requireReportAccess(transaction, params, 'delete it');
+  await withDbErrorHandling(
+    () =>
+      withTransaction(db, async (transaction) => {
+        const report = await requireReportAccess(transaction, params, 'delete it');
 
-    const canceled = await cancelActiveAttempt(transaction, report.id);
+        const canceled = await cancelActiveAttempt(transaction, report.id);
 
-    await transaction
-      .updateTable('report')
-      .set({ deletedAt: sql<Date>`now()` })
-      .where('id', '=', report.id)
-      .execute();
+        await transaction
+          .updateTable('report')
+          .set({ deletedAt: sql<Date>`now()` })
+          .where('id', '=', report.id)
+          .execute();
 
-    await recordReportAuditEvent(transaction, {
-      action: 'report.deleted',
-      actor,
-      organizationId,
-      reportId: report.id,
-    });
+        await recordAuditEvent(transaction, {
+          action: 'report.deleted',
+          actor,
+          organizationId,
+          reportId: report.id,
+        });
 
-    if (canceled) {
-      await recordReportAuditEvent(transaction, {
-        action: 'report.cancel_requested',
-        actor,
-        organizationId,
-        reportId: report.id,
-      });
-    }
-  });
+        if (canceled) {
+          await recordAuditEvent(transaction, {
+            action: 'report.cancel_requested',
+            actor,
+            organizationId,
+            reportId: report.id,
+          });
+        }
+      }),
+    { action: 'delete a report', context: { organizationId, reportId: params.reportId } },
+  );
 }
