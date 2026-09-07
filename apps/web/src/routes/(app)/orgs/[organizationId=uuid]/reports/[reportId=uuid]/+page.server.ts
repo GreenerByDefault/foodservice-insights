@@ -13,16 +13,7 @@ import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { env } from '$env/dynamic/private';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
-import {
-  cancelReportApiHref,
-  inputFileHref,
-  newReportHref,
-  organizationHref,
-  reportApiHref,
-  reportPollHref,
-  resultFileHref,
-  retryReportApiHref,
-} from '$lib/hrefs';
+import { inputFileHref, newReportHref, reportPollHref, resultFileHref } from '$lib/hrefs';
 import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { screenStatus } from '$lib/reports/attempt-status';
 import type { Creator } from '$lib/reports/subheading';
@@ -53,10 +44,6 @@ export function _reportEnvironment(): { supportEmail: string; pollIntervalMs: nu
 
 export type FileLink = { href: string };
 
-/** The delete button's two halves. `afterHref` is where the user lands once the report is gone,
- * since this page 404s the moment it is. */
-export type DeleteAction = { href: string; afterHref: string };
-
 export type ResultFiles = {
   pdf: FileLink;
   xlsx: FileLink;
@@ -81,16 +68,14 @@ export type Attempt =
   | { status: 'canceled'; stoppedAt: Date };
 
 export type ReportPageData = {
+  organizationId: OrganizationId;
   report: {
     id: ReportId;
     name: string;
     siteName: string | null;
     creator: Creator;
   };
-  cancelButtonHref: string;
-  retryButtonHref: string;
   newReportHref: string;
-  deleteAction: DeleteAction;
   pollHref: string;
   pollIntervalMs: number;
   inputFile: { href: string; originalFilename: string; byteSize: number };
@@ -180,6 +165,7 @@ export async function _loadReport(
   if (!row) return await failNotFoundOrBug(db, params);
 
   return {
+    organizationId: params.organizationId,
     report: {
       id: row.reportId,
       name: row.reportName,
@@ -188,13 +174,7 @@ export async function _loadReport(
         ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
         : null,
     },
-    cancelButtonHref: cancelReportApiHref(params.organizationId, row.reportId),
-    retryButtonHref: retryReportApiHref(params.organizationId, row.reportId),
     newReportHref: newReportHref(params.organizationId),
-    deleteAction: {
-      href: reportApiHref(params.organizationId, row.reportId),
-      afterHref: organizationHref(params.organizationId),
-    },
     pollHref: reportPollHref(params.organizationId, row.reportId),
     pollIntervalMs: params.pollIntervalMs,
     inputFile: {

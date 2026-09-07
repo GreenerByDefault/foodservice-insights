@@ -6,8 +6,8 @@ import FailureView from './failure-view.svelte';
 /** Stands in for the polling view's `poll`, which is what the retry button asks for a refresh. */
 const onReportChanged = vi.fn(() => Promise.resolve());
 
-const RETRY_HREF = '/api/orgs/org-1/reports/report-1/retry';
-const DELETE_ACTION = { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' };
+const ORGANIZATION_ID = 'org-1';
+const REPORT_ID = 'report-1';
 
 const RETRYABLE = retryableFailure();
 const NOT_RETRYABLE = notRetryableFailure();
@@ -27,8 +27,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -43,8 +43,8 @@ describe('FailureView', () => {
     const oneAttempt = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
     await expect
@@ -54,8 +54,8 @@ describe('FailureView', () => {
     const thirdAttempt = await render(FailureView, {
       attemptNumber: 3,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
     await expect.element(thirdAttempt.getByText('This was attempt 3.')).toBeVisible();
@@ -65,8 +65,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 5,
       failure: AT_RETRY_CAP,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -80,8 +80,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
     await expect.element(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
@@ -91,8 +91,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: NOT_RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
     await expect.element(screen.getByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
@@ -103,8 +103,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -122,8 +122,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -144,8 +144,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -161,8 +161,8 @@ describe('FailureView', () => {
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
-      retryButtonHref: RETRY_HREF,
-      deleteAction: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 

@@ -1,6 +1,5 @@
-/** The client-side call behind the waiting view's cancel button. */
-
 import { ApiError, apiCall } from '$lib/api/fetch';
+import { cancelReportApiHref } from '$lib/hrefs';
 
 /** What happened when the user asked to cancel.
  *
@@ -10,9 +9,12 @@ import { ApiError, apiCall } from '$lib/api/fetch';
  */
 export type CancelOutcome = 'canceled' | 'already-settled';
 
-export async function cancelReport(cancelHref: string): Promise<CancelOutcome> {
+export async function cancelReport(
+  organizationId: string,
+  reportId: string,
+): Promise<CancelOutcome> {
   try {
-    await apiCall(cancelHref, { method: 'POST' });
+    await apiCall(cancelReportApiHref(organizationId, reportId), { method: 'POST' });
     return 'canceled';
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) return 'already-settled';

@@ -4,7 +4,7 @@ import FileSpreadsheetIcon from '@lucide/svelte/icons/file-spreadsheet';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import { Button } from '$lib/components/ui/button';
 import RelativeTime from '$lib/components/reports/relative-time.svelte';
-import type { DeleteAction, ResultFiles } from './+page.server.ts';
+import type { ResultFiles } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
 import StatusLine from './status-line.svelte';
 
@@ -13,10 +13,11 @@ interface Props {
   now: Date;
   files: ResultFiles;
   inputFile: { href: string; originalFilename: string; byteSize: number };
-  deleteAction: DeleteAction;
+  organizationId: string;
+  reportId: string;
 }
 
-let { finishedAt, now, files, inputFile, deleteAction }: Props = $props();
+let { finishedAt, now, files, inputFile, organizationId, reportId }: Props = $props();
 </script>
 
 <div class="space-y-6">
@@ -33,7 +34,7 @@ let { finishedAt, now, files, inputFile, deleteAction }: Props = $props();
       <FileSpreadsheetIcon aria-hidden="true" />
       Download Excel
     </Button>
-    <DeleteButton action={deleteAction} />
+    <DeleteButton {organizationId} {reportId} />
   </div>
 
   <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

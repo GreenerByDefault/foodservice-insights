@@ -14,7 +14,7 @@ describe('cancelReport', () => {
   test('a 204 is "canceled"', async () => {
     stubFetch(new Response(null, { status: 204 }));
 
-    await expect(cancelReport('/api/orgs/org-1/reports/report-1/cancel')).resolves.toBe('canceled');
+    await expect(cancelReport('org-1', 'report-1')).resolves.toBe('canceled');
   });
 
   test('a 409 — the attempt finished first — is "already-settled", not a thrown error', async () => {
@@ -24,15 +24,13 @@ describe('cancelReport', () => {
       }),
     );
 
-    await expect(cancelReport('/api/orgs/org-1/reports/report-1/cancel')).resolves.toBe(
-      'already-settled',
-    );
+    await expect(cancelReport('org-1', 'report-1')).resolves.toBe('already-settled');
   });
 
   test('any other status rethrows', async () => {
     stubFetch(new Response(JSON.stringify({ message: 'Not found' }), { status: 404 }));
 
-    await expect(cancelReport('/api/orgs/org-1/reports/report-1/cancel')).rejects.toMatchObject({
+    await expect(cancelReport('org-1', 'report-1')).rejects.toMatchObject({
       constructor: ApiError,
       status: 404,
       message: 'Not found',
@@ -42,8 +40,6 @@ describe('cancelReport', () => {
   test('an unreachable server rethrows', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
-    await expect(cancelReport('/api/orgs/org-1/reports/report-1/cancel')).rejects.toBeInstanceOf(
-      ApiUnreachableError,
-    );
+    await expect(cancelReport('org-1', 'report-1')).rejects.toBeInstanceOf(ApiUnreachableError);
   });
 });

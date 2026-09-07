@@ -1,5 +1,3 @@
-/** The client-side call behind the new-report form. */
-
 import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
 import { createReportApiHref, organizationHref } from '$lib/hrefs';
 import { parseUploadRejection, type UploadRejection } from '../rejection.ts';

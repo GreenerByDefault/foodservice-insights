@@ -1,5 +1,3 @@
-/** The client-side call behind the settings page's rename form. */
-
 import { apiCall } from '$lib/api/fetch';
 import { organizationApiHref } from '$lib/hrefs';
 import { classifyNameWriteFailure } from './failure.ts';

@@ -20,10 +20,8 @@ afterEach(() => {
 });
 
 const BASE = {
+  organizationId: 'org-1',
   report: { id: 'report-1', name: 'Riverside Diner' },
-  cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
-  retryButtonHref: '/api/orgs/org-1/reports/report-1/retry',
-  deleteAction: { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' },
   newReportHref: '/orgs/org-1/reports/new',
   pollHref: POLL_HREF,
   inputFile: { href: '/file/input/1', originalFilename: 'orders.csv', byteSize: 100 },
