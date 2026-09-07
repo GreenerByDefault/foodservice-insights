@@ -2,8 +2,8 @@ import type { OrganizationId } from '@gbd/db';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { anAuthContext } from '$lib/server/tests/fixtures';
-import { statusOf } from '$lib/server/tests/http-error';
+import { anAuthContext, anOrganizationAccess } from '$lib/server/testing/fixtures';
+import { statusOf } from '$lib/server/testing/http-error';
 import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
 import type { AuthContext } from './types.ts';
 
@@ -11,7 +11,7 @@ const ORGANIZATION_ID = crypto.randomUUID() as OrganizationId;
 
 function withRoleIn(role: 'member' | 'admin'): AuthContext {
   return anAuthContext({
-    memberships: [{ organizationId: ORGANIZATION_ID, organizationName: 'Acme Foods', role }],
+    memberships: [anOrganizationAccess('Acme Foods', role, ORGANIZATION_ID)],
   });
 }
 
@@ -73,9 +73,7 @@ describe('requireOrganizationAccess', () => {
         .execute();
       const auth = anAuthContext({
         user: { id: admin.id, isSuperadmin: true },
-        memberships: [
-          { organizationId: organization.id, organizationName: 'Acme Foods', role: 'admin' },
-        ],
+        memberships: [anOrganizationAccess('Acme Foods', 'admin', organization.id)],
       });
 
       await expect(requireOrganizationAccess(transaction, auth, organization.id)).resolves.toEqual({

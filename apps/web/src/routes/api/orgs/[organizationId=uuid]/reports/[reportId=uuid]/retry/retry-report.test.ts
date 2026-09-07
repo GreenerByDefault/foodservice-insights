@@ -9,8 +9,8 @@ import {
 import { describe, expect, test } from 'vitest';
 import type { Actor } from '$lib/server/auth/types';
 import { database } from '$lib/server/db';
-import { expectedReportAuditEvent, reportAuditEvents } from '$lib/server/tests/audit';
-import { statusOf } from '$lib/server/tests/http-error';
+import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
+import { statusOf } from '$lib/server/testing/http-error';
 import { _retryReport } from './+server.ts';
 
 // The 404/403 access checks are `requireReportAccess`'s own guarantee (see guards.test.ts), and the
@@ -46,12 +46,13 @@ describe('_retryReport', () => {
         { attemptNumber: 2, status: 'pending', requestedByUserId: admin.id },
       ]);
 
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.retry_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -80,12 +81,13 @@ describe('_retryReport', () => {
       expect(newest).toEqual({ attemptNumber: 2, requestedByUserId: admin.id });
 
       // The audit trail names the admin who acted, not the creator whose report it is.
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.retry_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -117,7 +119,7 @@ describe('_retryReport', () => {
         .where('reportId', '=', report.id)
         .execute();
       expect(attempts).toEqual([{ attemptNumber: 1 }]);
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
+      expect(await auditEventsFor(transaction, report.id)).toEqual([]);
     });
   });
 

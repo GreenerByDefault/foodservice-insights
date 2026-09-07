@@ -8,8 +8,8 @@ import {
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { expectedReportAuditEvent, reportAuditEvents } from '$lib/server/tests/audit';
-import { statusOf } from '$lib/server/tests/http-error';
+import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
+import { statusOf } from '$lib/server/testing/http-error';
 import { cancelActiveAttempt, requestCancellation } from './cancel';
 
 describe('cancelActiveAttempt', () => {
@@ -106,12 +106,13 @@ describe('requestCancellation', () => {
       expect(updated.status).toBe('pending');
       expect(updated.cancelRequestedAt).toBeInstanceOf(Date);
 
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.cancel_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -141,12 +142,13 @@ describe('requestCancellation', () => {
       expect(updated.cancelRequestedAt).toBeInstanceOf(Date);
 
       // The audit trail names the admin who acted, not the creator whose report it is.
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.cancel_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -178,7 +180,7 @@ describe('requestCancellation', () => {
         .where('id', '=', attempt.id)
         .executeTakeFirstOrThrow();
       expect(untouched.cancelRequestedAt).toBeNull();
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
+      expect(await auditEventsFor(transaction, report.id)).toEqual([]);
     });
   });
 
@@ -203,7 +205,7 @@ describe('requestCancellation', () => {
           }),
         ),
       ).resolves.toEqual({ status: 409 });
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
+      expect(await auditEventsFor(transaction, report.id)).toEqual([]);
     });
   });
 });

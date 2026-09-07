@@ -6,8 +6,8 @@ import {
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { expectedReportAuditEvent, reportAuditEvents } from '$lib/server/tests/audit';
-import { statusOf } from '$lib/server/tests/http-error';
+import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
+import { statusOf } from '$lib/server/testing/http-error';
 import { _deleteReport } from './+server.ts';
 
 // The 404/403 access checks are `requireReportAccess`'s own guarantee (see guards.test.ts) — these
@@ -43,18 +43,20 @@ describe('_deleteReport', () => {
       expect(updatedAttempt.status).toBe('pending');
       expect(updatedAttempt.cancelRequestedAt).toBeInstanceOf(Date);
 
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
-        expectedReportAuditEvent({
+        expectedAuditEvent({
           action: 'report.cancel_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -84,12 +86,13 @@ describe('_deleteReport', () => {
         .executeTakeFirstOrThrow();
       expect(updatedReport.deletedAt).toBeInstanceOf(Date);
 
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -127,12 +130,13 @@ describe('_deleteReport', () => {
         .executeTakeFirstOrThrow();
       expect(untouchedAttempt.cancelRequestedAt).toBeNull();
 
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
-        expectedReportAuditEvent({
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
+        expectedAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
           organizationId: organization.id,
-          reportId: report.id,
+          targetType: 'report',
+          targetId: report.id,
         }),
       ]);
     });
@@ -172,7 +176,7 @@ describe('_deleteReport', () => {
         .executeTakeFirstOrThrow();
       expect(untouchedAttempt.cancelRequestedAt).toBeNull();
 
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([]);
+      expect(await auditEventsFor(transaction, report.id)).toEqual([]);
     });
   });
 });

@@ -1,7 +1,7 @@
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { organizationAuditEvents } from '$lib/server/tests/organization-audit';
+import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
 import { _renameOrganization } from './+server.ts';
 
 describe('a valid name', () => {
@@ -35,15 +35,14 @@ describe('a valid name', () => {
         { name: 'Acme Foodservice' },
       );
 
-      expect(await organizationAuditEvents(transaction, organization.id)).toEqual([
-        {
+      expect(await auditEventsFor(transaction, organization.id)).toEqual([
+        expectedAuditEvent({
           action: 'organization.renamed',
           actorUserId: admin.id,
-          actorKind: 'user',
           organizationId: organization.id,
           targetType: 'organization',
           targetId: organization.id,
-        },
+        }),
       ]);
     });
   });

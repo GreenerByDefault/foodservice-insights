@@ -1,8 +1,7 @@
 import { insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { reportAuditEvents } from '$lib/server/tests/audit';
-import { organizationAuditEvents } from '$lib/server/tests/organization-audit';
+import { auditEventsFor } from '$lib/server/testing/audit';
 import { recordAuditEvent } from './audit';
 
 describe('recordAuditEvent', () => {
@@ -16,9 +15,9 @@ describe('recordAuditEvent', () => {
         organizationId: organization.id,
       });
 
-      // Spelled out rather than built with `expectedOrganizationAuditEvent`: this is the test that
-      // pins the shape that helper claims, so asserting against the helper here would prove nothing.
-      expect(await organizationAuditEvents(transaction, organization.id)).toEqual([
+      // Spelled out rather than built with `expectedAuditEvent`: this is the test that pins the
+      // shape that helper claims, so asserting against the helper here would prove nothing.
+      expect(await auditEventsFor(transaction, organization.id)).toEqual([
         {
           action: 'organization.renamed',
           actorUserId: admin.id,
@@ -43,9 +42,9 @@ describe('recordAuditEvent', () => {
         reportId: report.id,
       });
 
-      // Spelled out rather than built with `expectedReportAuditEvent`: this is the test that pins the
+      // Spelled out rather than built with `expectedAuditEvent`: this is the test that pins the
       // shape that helper claims, so asserting against the helper here would prove nothing.
-      expect(await reportAuditEvents(transaction, report.id)).toEqual([
+      expect(await auditEventsFor(transaction, report.id)).toEqual([
         {
           action: 'report.deleted',
           actorUserId: admin.id,
