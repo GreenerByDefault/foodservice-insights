@@ -10,7 +10,11 @@ import type { ReportId } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { expect } from '@playwright/test';
 import { UNEXPECTED_ERROR_MESSAGE } from '../src/lib/errors/messages';
-import { MAX_UPLOAD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_WORKBOOK_BYTES,
+  TRANSPORT_MARGIN_BYTES,
+} from '../src/lib/reports/upload-limit.js';
 import { test } from './fixtures/test.ts';
 
 const ENDPOINT = `/api/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports`;
@@ -69,11 +73,29 @@ test('rejects a file over the product limit as our own 400, not the transport 41
   });
 });
 
+test('accepts a body past the old transport limit, now that the workbook side-car has room', async ({
+  request,
+  baseURL,
+}) => {
+  // `BODY_SIZE_LIMIT` grew by `MAX_WORKBOOK_BYTES` to leave room for the workbook field; this
+  // size used to sit past the old limit and get the transport's own 413. It still exceeds our
+  // own CSV field cap, so it is refused — just not by the transport.
+  const csv = csvOfAtLeast(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES + 512 * 1024);
+  const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
+
+  expect(response.status()).toBe(400);
+  expect(await response.json()).toEqual({
+    summary: 'That file is larger than 10MB.',
+  });
+});
+
 test('rejects a file over the transport limit as adapter-node, not our own validation', async ({
   request,
   baseURL,
 }) => {
-  const csv = csvOfAtLeast(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES + 512 * 1024);
+  const csv = csvOfAtLeast(
+    MAX_UPLOAD_BYTES + MAX_WORKBOOK_BYTES + TRANSPORT_MARGIN_BYTES + 512 * 1024,
+  );
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(413);

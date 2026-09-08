@@ -4,9 +4,17 @@
  * env var we are setting here, and without it falls back to adapter-node's 512KB default.
  */
 
-import { MAX_UPLOAD_BYTES, TRANSPORT_MARGIN_BYTES } from './src/lib/reports/upload-limit.js';
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_WORKBOOK_BYTES,
+  TRANSPORT_MARGIN_BYTES,
+} from './src/lib/reports/upload-limit.js';
 
-process.env.BODY_SIZE_LIMIT = String(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES);
+// Both files travel in one request: the converted CSV plus, when the upload was a workbook, the
+// untouched original alongside it.
+process.env.BODY_SIZE_LIMIT = String(
+  MAX_UPLOAD_BYTES + MAX_WORKBOOK_BYTES + TRANSPORT_MARGIN_BYTES,
+);
 
 // Dynamic, and below the assignment: `build/index.js` reads `BODY_SIZE_LIMIT` at module scope, so
 // a static import would hoist above it and read the default instead.

@@ -27,7 +27,7 @@ let { organizationSlug, rateLimitWarning }: Props = $props();
 
 // Every field's value lives here, in the component's own state, rather than only in the DOM —
 // so swapping to the rejection view and back never loses what the user already typed.
-let file: File | undefined = $state();
+let upload: { file: File; workbook?: File } | undefined = $state();
 let months: readonly string[] | undefined = $state();
 let counts: CountDraft = $state({});
 let name = $state('');
@@ -70,7 +70,8 @@ async function inspectChosenFile(files: File[]) {
   const chosen = files[0];
   if (!chosen) return;
 
-  file = chosen;
+  // Shown during "Checking your file…" before inspection names the actual upload.
+  upload = { file: chosen };
   fileError = undefined;
   formState = { status: 'checking' };
   // Yields once so the "Checking your file…" state paints before the normalizer locks the main
@@ -80,18 +81,19 @@ async function inspectChosenFile(files: File[]) {
   const inspection = await inspectFile(chosen);
   if (!inspection.ok) {
     formState = { status: 'rejected', rejection: userFacingRejection(inspection.rejection) };
-    file = undefined;
+    upload = undefined;
     months = undefined;
     return;
   }
 
+  upload = inspection.upload;
   months = inspection.months;
   counts = reconcileDraft(counts, months);
   formState = { status: 'idle' };
 }
 
 function replaceFile() {
-  file = undefined;
+  upload = undefined;
   months = undefined;
   fileError = undefined;
   formState = { status: 'idle' };
@@ -107,11 +109,11 @@ async function handleSubmit(event: SubmitEvent) {
   // there produces a console error and no visible message), and a `RadioGroup` submits through
   // a hidden input (`required` on it is a no-op). Both need a hand-written check, an inline
   // message, and a manual focus/scroll — a failed submit otherwise gives the user no locator.
-  const chosenFile = file;
-  fileError = chosenFile ? undefined : 'Choose a CSV file to upload.';
+  const chosenUpload = upload;
+  fileError = chosenUpload ? undefined : 'Choose a CSV file to upload.';
   unitSystemError = unitSystem ? undefined : 'Choose lb or kg.';
 
-  if (!chosenFile) {
+  if (!chosenUpload) {
     dropZoneTriggerElement?.scrollIntoView({ block: 'center' });
     dropZoneTriggerElement?.focus();
     return;
@@ -128,7 +130,7 @@ async function handleSubmit(event: SubmitEvent) {
   if (serialized === null) return;
 
   const formData = new FormData(form);
-  formData.set(FIELD.file, chosenFile);
+  formData.set(FIELD.file, chosenUpload.file);
   formData.set(FIELD.monthlyCounts, serialized);
 
   formState = { status: 'submitting' };
@@ -170,9 +172,9 @@ function backToForm() {
         {MAX_UPLOAD_MEGABYTES}MB.
       </Field.Description>
 
-      {#if file}
+      {#if upload}
         <div class="flex items-center justify-between gap-4 rounded-md border p-3">
-          <p class="min-w-0 truncate font-medium">{file.name}</p>
+          <p class="min-w-0 truncate font-medium">{upload.workbook?.name ?? upload.file.name}</p>
           <Button type="button" variant="outline" onclick={replaceFile}>Replace</Button>
         </div>
         {#if formState.status === 'checking'}

@@ -1,10 +1,20 @@
 /** Caps on an upload's size and the free text and metadata it carries. */
 
 import { MINUTE_MS } from '@gbd/core';
-import { MAX_UPLOAD_BYTES } from './upload-limit.js';
+import { MAX_UPLOAD_BYTES, MAX_WORKBOOK_BYTES } from './upload-limit.js';
 
-export { MAX_UPLOAD_BYTES };
+export { MAX_UPLOAD_BYTES, MAX_WORKBOOK_BYTES };
 export const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / 1024 / 1024;
+
+/** How much declared-uncompressed XML a workbook's zip entries may total before we refuse to
+ * unzip it — checked against the central directory before anything is inflated, so an oversize
+ * declaration never reaches the decompressor.
+ *
+ * XML runs roughly 4× wordier than the CSV it represents, so 100MB of XML is about 25MB of CSV —
+ * comfortably past `MAX_UPLOAD_BYTES`, which is what keeps this from ever refusing a workbook
+ * whose CSV would have passed. It only bounds what a single sheet can make us inflate.
+ */
+export const MAX_WORKBOOK_UNPACKED_BYTES = 100 * 1024 * 1024;
 
 /** Caps on the free text and the metadata an upload carries. */
 export const MAX_FREE_TEXT_LENGTH = 200;

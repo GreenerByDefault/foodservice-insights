@@ -10,7 +10,7 @@ function aFile(text: string, name = 'procurement.csv'): File {
 }
 
 describe('inspectFile', () => {
-  test('yields the months a valid CSV covers, ascending and deduplicated', async () => {
+  test('yields the months a valid CSV covers, ascending and deduplicated, and the file to upload', async () => {
     const text = [
       HEADER,
       'beef,2026-03-02,1',
@@ -18,10 +18,12 @@ describe('inspectFile', () => {
       'beef,2026-03-28,1',
       'beef,2026-01-31,1',
     ].join('\n');
+    const file = aFile(text);
 
-    await expect(inspectFile(aFile(text))).resolves.toEqual({
+    await expect(inspectFile(file)).resolves.toEqual({
       ok: true,
       months: ['2026-01', '2026-03'],
+      upload: { file },
     });
   });
 
