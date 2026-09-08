@@ -29,6 +29,34 @@ export const MAX_ANALYSIS_ATTEMPTS = 5;
  * create/rename forms and their tests. */
 export const MAX_ORGANIZATION_NAME_LENGTH = 100;
 
+/** How long an organization's slug may be, enforced by the `organization_slug_length` CHECK
+ * constraint (`packages/db/public-schema.sql`). Mirrored here, not read from the DB, for
+ * `deriveOrganizationSlug` and its tests. */
+export const MAX_ORGANIZATION_SLUG_LENGTH = 48;
+
+/** What an organization's slug may look like, enforced by the `organization_slug_format` CHECK
+ * constraint (`packages/db/public-schema.sql`): lowercase alphanumerics, hyphen-separated, no
+ * leading, trailing, or doubled hyphen. Mirrored here, not read from the DB, for
+ * `deriveOrganizationSlug`, `apps/web/src/params/slug.ts`, and their tests. */
+export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Slugs no organization may take, enforced by the `organization_slug_not_reserved` CHECK
+ * constraint (`packages/db/public-schema.sql`) — every static directory under
+ * `apps/web/src/routes/(app)/orgs/`, which SvelteKit routes ahead of the dynamic
+ * `[organizationSlug=slug]` segment. A slug in this set would be a real route and so
+ * unreachable as an organization. Mirrored here, not read from the DB, for the create endpoint
+ * and its tests. */
+export const RESERVED_ORGANIZATION_SLUGS = [
+  'new',
+  'all',
+  'api',
+  'create',
+  'invites',
+  'settings',
+  'admin',
+  'account',
+] as const;
+
 export function newInputFileId(): InputFileId {
   return crypto.randomUUID() as InputFileId;
 }

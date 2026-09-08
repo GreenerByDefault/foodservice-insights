@@ -10,6 +10,8 @@ export default interface OrganizationTable {
 
   name: ColumnType<string, string, string>;
 
+  slug: ColumnType<string, string, string>;
+
   createdByUserId: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 
   createdAt: ColumnType<Date, Date | string | undefined, Date | string>;

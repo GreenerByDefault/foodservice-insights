@@ -19,6 +19,10 @@ export const PLACEHOLDER_ORGANIZATION_ID = '00000000-0000-7000-8000-000000000002
 
 export const PLACEHOLDER_USER_EMAIL = 'phase-one@example.test';
 export const PLACEHOLDER_ORGANIZATION_NAME = 'Phase One Foodservice';
+// What `deriveOrganizationSlug` (apps/web/src/lib/server/orgs/slug.ts) would produce for
+// PLACEHOLDER_ORGANIZATION_NAME — hardcoded rather than derived, since this package cannot import
+// apps/web and the slug must not drift from a name that itself never changes.
+export const PLACEHOLDER_ORGANIZATION_SLUG = 'phase-one-foodservice';
 
 /** Create the placeholder rows, or leave them exactly as they are.
  *
@@ -40,6 +44,7 @@ export async function seedPlaceholderIdentity(db: DatabaseExecutor): Promise<voi
       .values({
         id: PLACEHOLDER_ORGANIZATION_ID,
         name: PLACEHOLDER_ORGANIZATION_NAME,
+        slug: PLACEHOLDER_ORGANIZATION_SLUG,
         createdByUserId: PLACEHOLDER_USER_ID,
       })
       .onConflict((conflict) => conflict.doNothing())

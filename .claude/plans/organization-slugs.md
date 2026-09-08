@@ -55,7 +55,30 @@ Two pieces of the original plan are already done and drop out entirely: the `org
 and `organization_name_length` CHECKs, and the create/rename forms with their 409 handling
 ([`organization-name-form.svelte`](apps/web/src/lib/components/orgs/organization-name-form.svelte)).
 
-What is left is the slug itself, and it is now **one PR**.
+The slug itself landed in two PRs. The first is in: the schema (`slug text not null`, its unique
+index, and the `organization_slug_format` / `organization_slug_length` / `organization_slug_not_reserved`
+CHECKs), `deriveOrganizationSlug` (`apps/web/src/lib/server/orgs/slug.ts`), and the create endpoint
+deriving a slug and writing it, with its own 422s (`slug-underivable`, `slug-reserved`) and 409
+(`slug-taken`, alongside the existing `name-taken`). The response helpers for all three live in
+`server/orgs/name.ts` beside the existing ones — it was not renamed, since nothing yet reads the
+column enough to justify it. Every insert site writes a real slug: `seed.ts`'s
+`PLACEHOLDER_ORGANIZATION_SLUG`, `fixtures.ts`'s `insertOrganization` (a random one, defaulted),
+and the e2e organization fixture, which derives one from the name it's already given and returns
+it alongside the id.
+
+That PR edited an already-applied migration, so anyone who had run this repo before it landed has
+to recreate their local dev and test databases the first time they pull it —
+`scripts/supabase stop --no-backup && scripts/supabase start` for each stack, `TEST_DB=1` for the
+second — rather than just migrate; a database that only migrates keeps `001_initial_schema` marked
+applied and never picks up the new column.
+
+Until the second PR lands, the client doesn't yet know about the three new codes:
+`classifyNameWriteFailure` still special-cases only a plain 409, so a name that fails to derive a
+slug shows the generic unknown-outcome message rather than its own inline copy. Rare in practice —
+it takes a punctuation-only name, or one that derives to a reserved word — and it fails safe, so
+it was left for the PR below rather than blocking on it.
+
+What is left is the slug actually reaching a URL, and it is one PR.
 
 ---
 
@@ -109,9 +132,10 @@ not names a foodservice company has.
 in the migration's CHECK per the mirror-and-pin convention. Nothing in the browser needs it, so
 there is no third copy. Two tests chain the guarantee:
 
-- `packages/db` asserts every member of the constant is refused by the CHECK.
+- `packages/db` asserts every member of the constant is refused by the CHECK. **Done** —
+  `organization.test.ts`.
 - An apps/web test reads `src/routes/(app)/orgs/` and asserts every static directory name is in
-  the constant.
+  the constant — the drift test in "1. The slug in the URL" below.
 
 ---
 
@@ -162,64 +186,12 @@ At our user count the submit-time errors will fire approximately never.
 
 ## One PR
 
-The original four-PR split assumed the create form, the rename form and the settings page all had
-to be built. They exist. What is left does not divide cleanly: `slug` is `NOT NULL`, so the
-migration cannot land without every insert site; the route rename cannot land without the guards
-keyed on the slug; and a slug written but not yet in any URL produces a 409 the copy cannot
-honestly explain ("that address is taken" — which address? none is on screen). One PR, ordered
-in commits so a reviewer can walk it.
+The route rename cannot land without the guards keyed on the slug, and a slug written but not yet
+in any URL produces a 409 the copy cannot honestly explain ("that address is taken" — which
+address? none is on screen). So the rest lands together, ordered in commits so a reviewer can walk
+it.
 
-**The one seam, if it reads too big:** the schema commit plus the create endpoint writing a slug is
-independently landable and green, with nothing reading the column. Split there and nowhere else.
-
-### 1. Schema
-
-- [`001_initial_schema.ts`](packages/db/migrations/001_initial_schema.ts): `slug text not null`,
-  `CREATE UNIQUE INDEX organization_slug_unique`, and CHECKs `organization_slug_format`,
-  `organization_slug_length`, `organization_slug_not_reserved` — each hardcoded, with the same
-  comment `organization_name_length` already carries about why. Comment why the slug is separate
-  from the name and why it never moves.
-- `packages/db/src/types.ts`: `MAX_ORGANIZATION_SLUG_LENGTH`, `ORGANIZATION_SLUG_PATTERN`,
-  `RESERVED_ORGANIZATION_SLUGS`, beside `MAX_ORGANIZATION_NAME_LENGTH`.
-- `pnpm --filter @gbd/db gen-types` → `src/generated/public/Organization.ts` and `schema.sql`.
-- Insert sites, all five: [`seed.ts`](packages/db/src/seed.ts) gains
-  `PLACEHOLDER_ORGANIZATION_SLUG = 'phase-one-foodservice'`;
-  [`fixtures.ts`](packages/db/src/testing/fixtures.ts) `insertOrganization` accepts and defaults a
-  unique slug (`test-org-${crypto.randomUUID().slice(0, 8)}` is already slug-legal), which also
-  covers `insertFixtureOrganization` in [`concurrency.ts`](packages/db/src/testing/concurrency.ts);
-  [`e2e/fixtures/organizations.ts`](apps/web/e2e/fixtures/organizations.ts) derives one from the
-  name it is already given and returns `{ id, slug }` instead of the bare id; and the create
-  endpoint, below.
-- [`organization.test.ts`](packages/db/tests/organization.test.ts): duplicate slug; format
-  rejections (uppercase, leading/trailing/doubled hyphen, underscore, empty); the 48 cap; every
-  member of `RESERVED_ORGANIZATION_SLUGS`. **Each unique violation must name its own constraint**,
-  since the endpoint tells the two 409s apart by `constraint` alone.
-
-**If [`deploy-migrations`](deploy-migrations.md) has landed first, this is `002_organization_slug.ts`,
-not an edit to 001** — that plan forbids editing an applied migration once the hosted database is
-migrated on deploy. As a forward migration it is: add the column nullable, backfill from
-`lower(name)` through the same derivation, `SET NOT NULL`, then add the index and CHECKs. Check
-`ls .claude/plans/` before starting; if the file is gone, the plan landed.
-
-Rewriting an applied migration means local databases must be **recreated, not migrated**:
-`scripts/supabase stop --no-backup && scripts/supabase start && pnpm -r run migrate`, and the same
-with `TEST_DB=1`.
-
-### 2. `deriveOrganizationSlug`
-
-- **New** `apps/web/src/lib/server/orgs/slug.ts` (+ test), beside
-  [`name.ts`](apps/web/src/lib/server/orgs/name.ts). Server-only, so it imports
-  `RESERVED_ORGANIZATION_SLUGS` and `MAX_ORGANIZATION_SLUG_LENGTH` from `@gbd/db` rather than
-  mirroring them, and `$lib/server` makes that a rule SvelteKit enforces rather than one a comment
-  asks for.
-- **Keep it free of `$lib` and `$env`.** The e2e fixture imports it by relative path from a plain
-  Playwright runtime where neither resolves — the constraint
-  [`pagination.e2e.ts:10-12`](apps/web/e2e/reports-list/pagination.e2e.ts) already documents.
-- Test the derivation against the cases the copy promises: accents, punctuation runs, leading and
-  trailing separators, the 48-character truncation landing on a hyphen boundary, and `null` for a
-  name with no `a–z0–9` in it.
-
-### 3. The slug in the URL
+### 1. The slug in the URL
 
 - **New** `apps/web/src/params/slug.ts` (+ test), same shape and rationale as
   [`uuid.ts`](apps/web/src/params/uuid.ts) — a non-slug segment must 404, not reach Postgres.
@@ -264,17 +236,8 @@ with `TEST_DB=1`.
   `ARCHITECTURE.md:89` points at `polling/schedule.ts`, which no longer exists — the file is
   `polling/poll-report.ts`. Pre-existing, one line, fix it in passing.
 
-### 4. Create endpoint and form
+### 2. The create form
 
-- [`api/orgs/+server.ts`](apps/web/src/routes/api/orgs/+server.ts): derive inside
-  `_createOrganization`, 422 on `null` or a reserved slug, insert `{ name, slug, createdByUserId }`.
-  The insert already catches `isUniqueViolation`; it must now branch on the constraint name —
-  `organization_name_unique_ci` → the existing `nameTakenResponse()`,
-  `organization_slug_unique` → a 409 whose body carries the derived slug so the message can name
-  the address. Extend [`server/orgs/name.ts`](apps/web/src/lib/server/orgs/name.ts) with the new
-  responses, or rename it `organization.ts` if it stops being only about the name.
-  `create-organization.test.ts` covers both 409s separately and both 422s — mapping the wrong
-  constraint to the wrong message is the likely bug here.
 - [`failure.ts`](apps/web/src/lib/orgs/api/failure.ts) currently maps *any* 409 to `name-taken`.
   It must read `code` off the body. Rename is slug-free, so widen the create client's outcome type
   rather than the shared classifier — `classifyNameWriteFailure` keeps its two-case return for
@@ -292,8 +255,6 @@ with `TEST_DB=1`.
 ## Verification
 
 ```
-scripts/supabase stop --no-backup && scripts/supabase start
-TEST_DB=1 scripts/supabase stop --no-backup && TEST_DB=1 scripts/supabase start
 pnpm -r run migrate && TEST_DB=1 pnpm -r run migrate && pnpm -r run seed:identity
 pnpm lint && pnpm check && pnpm test
 ```

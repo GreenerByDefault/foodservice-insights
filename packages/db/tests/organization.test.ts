@@ -20,7 +20,11 @@ import {
 } from '../src/testing/concurrency.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
-import { MAX_ORGANIZATION_NAME_LENGTH } from '../src/types.ts';
+import {
+  MAX_ORGANIZATION_NAME_LENGTH,
+  MAX_ORGANIZATION_SLUG_LENGTH,
+  RESERVED_ORGANIZATION_SLUGS,
+} from '../src/types.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 
@@ -127,11 +131,78 @@ describe('organization', () => {
     });
   });
 
+  test('rejects a duplicate slug', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      const slug = `dup-${crypto.randomUUID().slice(0, 8)}`;
+      await insertOrganization(transaction, { slug });
+      await insertOrganization(transaction, { slug });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_UNIQUE_VIOLATION,
+      constraint: 'organization_slug_unique',
+    });
+  });
+
+  test.each([
+    ['uppercase', 'Acme'],
+    ['a leading hyphen', '-acme'],
+    ['a trailing hyphen', 'acme-'],
+    ['a doubled hyphen', 'acme--inc'],
+    ['an underscore', 'acme_inc'],
+    ['empty', ''],
+  ])('rejects a slug that is %s', async (_description, slug) => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { slug });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'organization_slug_format',
+    });
+  });
+
+  // Together, these two tests pin MAX_ORGANIZATION_SLUG_LENGTH to the `organization_slug_length`
+  // CHECK constraint it mirrors: either side drifting from the other fails one of them.
+
+  test('accepts a slug exactly at the cap', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { slug: 'a'.repeat(MAX_ORGANIZATION_SLUG_LENGTH) });
+    });
+
+    await expect(insert).resolves.toBeUndefined();
+  });
+
+  test('rejects a slug one character over the cap', async () => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, {
+        slug: 'a'.repeat(MAX_ORGANIZATION_SLUG_LENGTH + 1),
+      });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'organization_slug_length',
+    });
+  });
+
+  test.each(RESERVED_ORGANIZATION_SLUGS)('rejects the reserved slug %s', async (slug) => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertOrganization(transaction, { slug });
+    });
+
+    await expect(insert).rejects.toMatchObject({
+      code: POSTGRES_CODE_CHECK_VIOLATION,
+      constraint: 'organization_slug_not_reserved',
+    });
+  });
+
   test('cannot be created with no members at all', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
+      const suffix = crypto.randomUUID();
       await transaction
         .insertInto('organization')
-        .values({ name: `Empty ${crypto.randomUUID()}` })
+        .values({ name: `Empty ${suffix}`, slug: `empty-${suffix}` })
         .execute();
       await checkDeferredConstraints(transaction);
     });
@@ -145,9 +216,10 @@ describe('organization', () => {
   test('cannot be created with members but no admin among them', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const user = await insertAppUser(transaction);
+      const suffix = crypto.randomUUID();
       const organization = await transaction
         .insertInto('organization')
-        .values({ name: `Leaderless ${crypto.randomUUID()}` })
+        .values({ name: `Leaderless ${suffix}`, slug: `leaderless-${suffix}` })
         .returning('id')
         .executeTakeFirstOrThrow();
       await transaction

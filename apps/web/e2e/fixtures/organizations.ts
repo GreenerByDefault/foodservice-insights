@@ -18,6 +18,11 @@ import { withTransaction } from '@gbd/db';
 import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { insertAppUser, insertOrganization, insertOrganizationMember } from '@gbd/db/testing';
 import { type Kysely, sql, type Transaction } from 'kysely';
+// By relative path, not `$lib/server/orgs/slug`: this file runs under plain Playwright, where
+// `$lib` and `$env` resolve only inside the SvelteKit app — the same constraint
+// `pagination.e2e.ts:10-12` documents for `polling/schedule.ts`. `deriveOrganizationSlug` is kept
+// free of both for exactly this reason.
+import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
 export type OrganizationMemberSpec = {
@@ -61,11 +66,17 @@ export async function insertOrganizationFixture(
     members?: OrganizationMemberSpec[];
     invites?: OrganizationInviteSpec[];
   },
-): Promise<{ organizationId: OrganizationId; reportIds: ReportId[] }> {
+): Promise<{ organizationId: OrganizationId; organizationSlug: string; reportIds: ReportId[] }> {
   const role = spec.role ?? 'admin';
+  // Fixture names are always real text a spec chose, never punctuation-only, so this never sees
+  // the `null` a caller-supplied name could produce — that path is the create endpoint's alone.
+  const slug = deriveOrganizationSlug(spec.name);
+  if (slug === null) {
+    throw new Error(`insertOrganizationFixture: "${spec.name}" has no slug-legal characters`);
+  }
 
   return await withTransaction(db, async (tx) => {
-    const organizationId = await insertOrganizationFor(tx, spec.name, role);
+    const organizationId = await insertOrganizationFor(tx, spec.name, slug, role);
 
     await tx
       .insertInto('organizationMember')
@@ -98,7 +109,7 @@ export async function insertOrganizationFixture(
         .execute();
     }
 
-    return { organizationId, reportIds };
+    return { organizationId, organizationSlug: slug, reportIds };
   });
 }
 
@@ -106,16 +117,17 @@ export async function insertOrganizationFixture(
 async function insertOrganizationFor(
   tx: Transaction<Database>,
   name: string,
+  slug: string,
   role: OrganizationRole,
 ): Promise<OrganizationId> {
   if (role === 'member') {
-    const { organization } = await insertOrganization(tx, { name });
+    const { organization } = await insertOrganization(tx, { name, slug });
     return organization.id;
   }
 
   const organization = await tx
     .insertInto('organization')
-    .values({ name, createdByUserId: PLACEHOLDER_USER_ID })
+    .values({ name, slug, createdByUserId: PLACEHOLDER_USER_ID })
     .returning('id')
     .executeTakeFirstOrThrow();
   return organization.id;

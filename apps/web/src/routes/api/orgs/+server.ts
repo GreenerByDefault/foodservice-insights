@@ -1,12 +1,26 @@
-import { type DatabaseExecutor, type OrganizationId, withTransaction } from '@gbd/db';
+import {
+  type DatabaseExecutor,
+  isPermanentDatabaseError,
+  type OrganizationId,
+  POSTGRES_CODE_UNIQUE_VIOLATION,
+  RESERVED_ORGANIZATION_SLUGS,
+  withTransaction,
+} from '@gbd/db';
 import { json } from '@sveltejs/kit';
 import { organizationHref } from '$lib/hrefs';
 import { recordAuditEvent } from '$lib/server/audit';
 import { requireAuth } from '$lib/server/auth/guards';
 import type { Actor } from '$lib/server/auth/types';
-import { database, isUniqueViolation, withDbErrorHandling } from '$lib/server/db';
+import { database, withDbErrorHandling } from '$lib/server/db';
 import { notifyGbd } from '$lib/server/email';
-import { nameTakenResponse, parseOrganizationNameBody } from '$lib/server/orgs/name';
+import {
+  nameTakenResponse,
+  parseOrganizationNameBody,
+  slugReservedResponse,
+  slugTakenResponse,
+  slugUnderivableResponse,
+} from '$lib/server/orgs/name';
+import { deriveOrganizationSlug } from '$lib/server/orgs/slug';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -27,7 +41,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
  * `notifyGbd` is best-effort: the organization exists either way, so its failure is logged, not
  * raised.
  *
- * 409 `name-taken` if another organization already holds the name, case-insensitively.
+ * The slug is derived from the name and never taken as its own field — see
+ * `deriveOrganizationSlug` and `.claude/plans/organization-slugs.md`. Every way that can fail
+ * resolves to picking a different name; see `server/orgs/name.ts` for what each response means:
+ *   - 422 `slug-underivable` or `slug-reserved`.
+ *   - 409 `name-taken` or `slug-taken`.
  */
 export async function _createOrganization(
   db: DatabaseExecutor,
@@ -40,6 +58,12 @@ export async function _createOrganization(
   if (!parsedName.ok) return parsedName.response;
   const { name } = parsedName;
 
+  const slug = deriveOrganizationSlug(name);
+  if (slug === null) return slugUnderivableResponse();
+  if ((RESERVED_ORGANIZATION_SLUGS as readonly string[]).includes(slug)) {
+    return slugReservedResponse();
+  }
+
   const outcome = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction) => {
@@ -47,12 +71,16 @@ export async function _createOrganization(
         try {
           const organization = await transaction
             .insertInto('organization')
-            .values({ name, createdByUserId: actor.userId })
+            .values({ name, slug, createdByUserId: actor.userId })
             .returning('id')
             .executeTakeFirstOrThrow();
           organizationId = organization.id;
         } catch (cause) {
-          if (isUniqueViolation(cause)) return { ok: false as const };
+          // The insert catches only its own two unique constraints; anything else propagates as
+          // a genuine database failure for withDbErrorHandling to classify.
+          if (isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_UNIQUE_VIOLATION) {
+            return { ok: false as const, constraint: cause.constraint };
+          }
           throw cause;
         }
 
@@ -69,10 +97,14 @@ export async function _createOrganization(
 
         return { ok: true as const, organizationId };
       }),
-    { action: 'create an organization', context: { name } },
+    { action: 'create an organization', context: { name, slug } },
   );
 
-  if (!outcome.ok) return nameTakenResponse();
+  if (!outcome.ok) {
+    return outcome.constraint === 'organization_slug_unique'
+      ? slugTakenResponse(slug)
+      : nameTakenResponse();
+  }
 
   await notifyGbd({
     kind: 'gbd-organization-created',

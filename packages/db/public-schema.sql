@@ -735,11 +735,15 @@ ALTER TABLE "public"."kysely_migration_lock" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."organization" (
     "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
     "name" "text" NOT NULL,
+    "slug" "text" NOT NULL,
     "created_by_user_id" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     CONSTRAINT "organization_name_length" CHECK ((("char_length"("name") >= 1) AND ("char_length"("name") <= 100))),
-    CONSTRAINT "organization_name_trimmed" CHECK (("name" = "btrim"("name")))
+    CONSTRAINT "organization_name_trimmed" CHECK (("name" = "btrim"("name"))),
+    CONSTRAINT "organization_slug_format" CHECK (("slug" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::"text")),
+    CONSTRAINT "organization_slug_length" CHECK (("char_length"("slug") <= 48)),
+    CONSTRAINT "organization_slug_not_reserved" CHECK (("slug" <> ALL (ARRAY['new'::"text", 'all'::"text", 'api'::"text", 'create'::"text", 'invites'::"text", 'settings'::"text", 'admin'::"text", 'account'::"text"])))
 );
 
 
@@ -1078,6 +1082,13 @@ CREATE INDEX "organization_member_organization_id_user_id" ON "public"."organiza
 --
 
 CREATE UNIQUE INDEX "organization_name_unique_ci" ON "public"."organization" USING "btree" ("lower"("name"));
+
+
+--
+-- Name: organization_slug_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX "organization_slug_unique" ON "public"."organization" USING "btree" ("slug");
 
 
 --

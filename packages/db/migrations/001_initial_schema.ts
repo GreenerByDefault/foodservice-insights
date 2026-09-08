@@ -122,6 +122,13 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     .createTable('organization')
     .addColumn('id', 'uuid', (column) => column.primaryKey().defaultTo(sql`uuidv7()`))
     .addColumn('name', 'text', (column) => column.notNull())
+    // The URL alias for `id`, derived from `name` at creation and never touched again — see
+    // `deriveOrganizationSlug` (`apps/web/src/lib/server/orgs/slug.ts`). It is a separate column
+    // rather than a function of `name` because `name` is mutable (an admin can rename) and the
+    // slug must not move with it: a link a customer has already shared has to keep resolving.
+    // Nothing here enforces immutability — there is no trigger forbidding an UPDATE — because
+    // nothing in the app ever issues one; see `.claude/plans/organization-slugs.md`.
+    .addColumn('slug', 'text', (column) => column.notNull())
     .addColumn('created_by_user_id', 'uuid', (column) =>
       column.references('app_user.id').onDelete('set null'),
     )
@@ -135,12 +142,40 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
       'organization_name_length',
       sql`char_length(name) BETWEEN 1 AND 100`,
     )
+    .addCheckConstraint(
+      // Not imported from ORGANIZATION_SLUG_PATTERN (types.ts), same reasoning as
+      // organization_name_length above. Lowercase alphanumerics, hyphen-separated, no leading,
+      // trailing or doubled hyphen — what deriveOrganizationSlug produces and nothing else.
+      'organization_slug_format',
+      sql`slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`,
+    )
+    .addCheckConstraint(
+      // Mirrors MAX_ORGANIZATION_SLUG_LENGTH (types.ts), not imported, same reasoning as
+      // organization_name_length above.
+      'organization_slug_length',
+      sql`char_length(slug) <= 48`,
+    )
+    .addCheckConstraint(
+      // Mirrors RESERVED_ORGANIZATION_SLUGS (types.ts), not imported, same reasoning as
+      // organization_name_length above. These are the static directories SvelteKit routes ahead
+      // of the dynamic `[organizationSlug=slug]` segment — an organization slugged `new` would be
+      // a real route and so unreachable. See "Why some slugs are reserved" in
+      // .claude/plans/organization-slugs.md.
+      'organization_slug_not_reserved',
+      sql`slug NOT IN ('new', 'all', 'api', 'create', 'invites', 'settings', 'admin', 'account')`,
+    )
     .execute();
 
   // A unique index on lower(name) rather than a plain unique constraint, so "Acme" and "acme"
   // are treated as the same organization while the row keeps its original display casing.
   await sql`
     CREATE UNIQUE INDEX organization_name_unique_ci ON organization (lower(name))
+  `.execute(database);
+
+  // Plain unique, unlike name above: slug is already lowercase by construction (organization_slug_format),
+  // so there is no casing question for it to answer.
+  await sql`
+    CREATE UNIQUE INDEX organization_slug_unique ON organization (slug)
   `.execute(database);
 
   await database.schema
