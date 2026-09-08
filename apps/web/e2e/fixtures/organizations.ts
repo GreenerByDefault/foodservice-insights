@@ -8,24 +8,17 @@
  */
 
 import type {
-  AnalysisAttemptStatus,
   Database,
   OrganizationId,
+  OrganizationInviteStatus,
   OrganizationRole,
-  UserId,
+  ReportId,
 } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
 import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
-import {
-  insertAnalysisAttempt,
-  insertAppUser,
-  insertInputFile,
-  insertOrganization,
-  insertOrganizationMember,
-  insertReport,
-  insertResultFile,
-} from '@gbd/db/testing';
-import type { Kysely, RawBuilder, Transaction } from 'kysely';
+import { insertAppUser, insertOrganization, insertOrganizationMember } from '@gbd/db/testing';
+import { type Kysely, sql, type Transaction } from 'kysely';
+import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
 export type OrganizationMemberSpec = {
   displayName?: string;
@@ -35,51 +28,18 @@ export type OrganizationMemberSpec = {
   role?: OrganizationRole;
 };
 
-export type OrganizationReportSpec = {
-  name: string;
-  siteName?: string;
-  createdByUserId?: UserId | null;
-  createdAt: Date | RawBuilder<Date>;
-  status: AnalysisAttemptStatus;
-  claimedAt?: Date | RawBuilder<Date>;
-  finishedAt?: Date | RawBuilder<Date>;
-  cancelRequestedAt?: Date | RawBuilder<Date>;
+export type OrganizationReportSpec = Omit<ReportWithAttemptSpec, 'organizationId'>;
+
+export type OrganizationInviteSpec = {
+  /** Defaults to a random address, the same rationale as `OrganizationMemberSpec.email`. */
+  email?: string;
+  role?: OrganizationRole;
+  status?: OrganizationInviteStatus;
 };
 
-/** One committed report: the input file (and, for `succeeded`, both result files) have to land
- * in the same transaction as the report — `report_has_an_input_file` and
- * `analysis_attempt_succeeded_has_result_files` are both `DEFERRABLE INITIALLY DEFERRED`, so they
- * only fire at `COMMIT`.
- */
-async function insertOrganizationReport(
-  tx: Transaction<Database>,
-  organizationId: OrganizationId,
-  spec: OrganizationReportSpec,
-): Promise<void> {
-  const report = await insertReport(tx, {
-    organizationId,
-    name: spec.name,
-    siteName: spec.siteName ?? null,
-    createdByUserId: spec.createdByUserId ?? null,
-    createdAt: spec.createdAt,
-  });
-  await insertInputFile(tx, { reportId: report.id });
-  const attempt = await insertAnalysisAttempt(tx, {
-    reportId: report.id,
-    status: spec.status,
-    createdAt: spec.createdAt,
-    claimedAt: spec.claimedAt,
-    finishedAt: spec.finishedAt,
-    cancelRequestedAt: spec.cancelRequestedAt,
-  });
-  if (spec.status === 'succeeded') {
-    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
-    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-  }
-}
-
 /** Commit a private organization the placeholder user belongs to — the only identity
- * `identifyUser` can ever produce — with, optionally, its reports. Returns the organization's id.
+ * `identifyUser` can ever produce — with, optionally, its reports. Returns the organization's id
+ * and the ids of the reports it minted, in the order given.
  *
  * `role` decides who *else* is in it. As an `admin` the placeholder is also the creator and the
  * sole member. As a `member` the organization is created and admin'd by a fresh, disposable user
@@ -99,8 +59,9 @@ export async function insertOrganizationFixture(
     reports?: OrganizationReportSpec[];
     role?: OrganizationRole;
     members?: OrganizationMemberSpec[];
+    invites?: OrganizationInviteSpec[];
   },
-): Promise<OrganizationId> {
+): Promise<{ organizationId: OrganizationId; reportIds: ReportId[] }> {
   const role = spec.role ?? 'admin';
 
   return await withTransaction(db, async (tx) => {
@@ -111,8 +72,9 @@ export async function insertOrganizationFixture(
       .values({ userId: PLACEHOLDER_USER_ID, organizationId, role })
       .execute();
 
+    const reportIds: ReportId[] = [];
     for (const report of spec.reports ?? []) {
-      await insertOrganizationReport(tx, organizationId, report);
+      reportIds.push(await insertReportWithAttempt(tx, { organizationId, ...report }));
     }
 
     for (const member of spec.members ?? []) {
@@ -123,7 +85,20 @@ export async function insertOrganizationFixture(
       await insertOrganizationMember(tx, { organizationId, userId: user.id, role: member.role });
     }
 
-    return organizationId;
+    for (const invite of spec.invites ?? []) {
+      await tx
+        .insertInto('organizationInvite')
+        .values({
+          organizationId,
+          email: invite.email ?? `${crypto.randomUUID()}@example.test`,
+          role: invite.role ?? 'member',
+          status: invite.status ?? 'pending',
+          expiresAt: sql`now() + interval '14 days'`,
+        })
+        .execute();
+    }
+
+    return { organizationId, reportIds };
   });
 }
 

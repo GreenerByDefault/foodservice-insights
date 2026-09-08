@@ -12,7 +12,7 @@ test('confirm stays disabled until the name is typed; confirming lands on /orgs,
   // switcher's accessible name once this organization is current.
   const name = `Org To Delete ${crypto.randomUUID()}`;
   const reportName = 'Q1 procurement';
-  const organizationId = await organizations.create({
+  const { id: organizationId } = await organizations.create({
     name,
     reports: [{ name: reportName, createdAt: dbMsAgo(0), status: 'succeeded' }],
   });

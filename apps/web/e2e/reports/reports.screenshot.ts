@@ -1,9 +1,8 @@
-import { advanceThroughPollFailures, ensureHydrated } from '@gbd/browser-testing';
 import { MAX_ANALYSIS_ATTEMPTS, newReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
-import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
+import { makeReportUnreachable } from '../lib/reconnecting.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('a report waiting to start', async ({ page, reports }) => {
@@ -93,17 +92,7 @@ test('a report that was canceled', async ({ page, reports }) => {
 });
 
 test('a report whose poll cannot reach the server', async ({ page, reports }) => {
-  // Installed before navigation so it is in place before the page's own timer is armed on mount.
-  await page.clock.install();
-
-  const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId));
-  await ensureHydrated(page);
-
-  await page.route('**/poll', (route) => route.abort());
-
-  // Two consecutive failures: the base interval, then double it — see `nextPollDelayMs`.
-  await advanceThroughPollFailures(page, '/poll', [POLL_INTERVAL_MS, POLL_INTERVAL_MS * 2]);
+  await makeReportUnreachable(page, reports);
 
   await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
   await expectScreenshots(page, 'reconnecting.png');

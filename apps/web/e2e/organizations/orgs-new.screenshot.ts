@@ -7,5 +7,5 @@ test('the new organization form, before anything is typed', async ({ page }) => 
   await ensureHydrated(page);
 
   await expect(page.getByLabel('Organization name')).toBeVisible();
-  await expectScreenshots(page, 'orgs-new.png');
+  await expectScreenshots(page, 'new.png');
 });

@@ -17,7 +17,14 @@
  */
 
 import { HOUR_MS, SECOND_MS } from '@gbd/core';
-import type { AnalysisFailureReason, Database, OrganizationId, ReportId, UserId } from '@gbd/db';
+import type {
+  AnalysisAttemptStatus,
+  AnalysisFailureReason,
+  Database,
+  OrganizationId,
+  ReportId,
+  UserId,
+} from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
 import {
@@ -28,7 +35,7 @@ import {
   insertReport,
   insertResultFile,
 } from '@gbd/db/testing';
-import { type Kysely, sql, type Transaction } from 'kysely';
+import { type Kysely, type RawBuilder, sql, type Transaction } from 'kysely';
 import { ANALYSIS_WARNING_AFTER_MS, QUEUE_WARNING_AFTER_MS } from '../../src/lib/reports/limits.ts';
 
 const ANCHOR = new Date('2026-01-15T09:00:00Z');
@@ -244,6 +251,48 @@ export async function succeedLatestAttempt(
       .where('id', '=', attempt.id)
       .execute();
   });
+}
+
+export type ReportWithAttemptSpec = {
+  organizationId: OrganizationId;
+  name: string;
+  siteName?: string | null;
+  createdByUserId?: UserId | null;
+  createdAt: Date | RawBuilder<Date>;
+  status: AnalysisAttemptStatus;
+  claimedAt?: Date | RawBuilder<Date>;
+  finishedAt?: Date | RawBuilder<Date>;
+  cancelRequestedAt?: Date | RawBuilder<Date>;
+};
+
+/** One committed report: the input file (and, when `status` is `succeeded`, both result files)
+ * land in the same transaction as the report — see the file header for why. Returns its id.
+ */
+export async function insertReportWithAttempt(
+  tx: Transaction<Database>,
+  spec: ReportWithAttemptSpec,
+): Promise<ReportId> {
+  const report = await insertReport(tx, {
+    organizationId: spec.organizationId,
+    name: spec.name,
+    siteName: spec.siteName ?? null,
+    createdByUserId: spec.createdByUserId ?? null,
+    createdAt: spec.createdAt,
+  });
+  await insertInputFile(tx, { reportId: report.id });
+  const attempt = await insertAnalysisAttempt(tx, {
+    reportId: report.id,
+    status: spec.status,
+    createdAt: spec.createdAt,
+    claimedAt: spec.claimedAt,
+    finishedAt: spec.finishedAt,
+    cancelRequestedAt: spec.cancelRequestedAt,
+  });
+  if (spec.status === 'succeeded') {
+    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
+    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
+  }
+  return report.id;
 }
 
 export function reportUrl(

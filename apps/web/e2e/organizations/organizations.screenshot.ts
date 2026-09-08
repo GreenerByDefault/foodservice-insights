@@ -42,11 +42,11 @@ test('the full switcher, past the cap', async ({ page, organizations }) => {
     '24/7 Switcher Grovemont Catering',
     '24/7 Switcher Harborview Foods',
   ];
-  const [currentId] = await Promise.all(
+  const [current] = await Promise.all(
     names.map((name) => organizations.create({ name, role: 'member' })),
   );
 
-  await page.goto(`/orgs/${currentId}`);
+  await page.goto(`/orgs/${current.id}`);
   await ensureHydrated(page);
 
   // `role: 'member'` above now does double duty: besides keeping the placeholder from being
@@ -85,7 +85,7 @@ test('the /orgs list, past eight organizations', async ({ page, organizations })
 
   // Hover one row so the committed image also shows the hover affordance.
   await page.getByRole('link', { name: '24/7 List Cedar Grove Dining' }).hover();
-  await expectScreenshots(page, 'orgs-list.png', { clipBelow: lastRow });
+  await expectScreenshots(page, 'list.png', { clipBelow: lastRow });
 });
 
 test('the /orgs list, empty', async ({ page, organizations }) => {
@@ -108,5 +108,5 @@ test('the /orgs list, empty', async ({ page, organizations }) => {
 
   await expect(page.getByText('No organizations yet.')).toBeVisible();
   await expect(page.getByRole('link', { name })).toHaveCount(0);
-  await expectScreenshots(page, 'orgs-list-empty.png');
+  await expectScreenshots(page, 'list-empty.png');
 });

@@ -12,7 +12,7 @@ function organizationIdFromUrl(url: string): OrganizationId {
 
 test('filling in a name creates the organization and lands on it, named in the shell', async ({
   page,
-  db,
+  organizations,
 }) => {
   const name = `Acme Foodservice ${crypto.randomUUID()}`;
 
@@ -25,9 +25,9 @@ test('filling in a name creates the organization and lands on it, named in the s
   await expect(page.getByRole('button', { name: 'Switch organization' })).toContainText(name);
 
   // Playwright runs every e2e spec against one shared run database (fullyParallel), so this
-  // organization must not outlive the test — and it wasn't made through the `organizations`
-  // fixture, so its teardown doesn't know about it either.
-  await db.deleteFrom('organization').where('id', '=', organizationIdFromUrl(page.url())).execute();
+  // organization must not outlive the test — adopted, since the form created it rather than
+  // the `organizations` fixture.
+  organizations.adopt(organizationIdFromUrl(page.url()));
 });
 
 test('a name already taken shows the inline error, and keeps the typed name', async ({

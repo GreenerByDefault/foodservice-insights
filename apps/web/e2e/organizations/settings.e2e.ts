@@ -8,7 +8,7 @@ test('admin: renaming updates the switcher while the URL stays put', async ({
 }) => {
   const name = `Settings Rename ${crypto.randomUUID()}`;
   const renamed = `${name} Renamed`;
-  const organizationId = await organizations.create({ name });
+  const { id: organizationId } = await organizations.create({ name });
 
   await page.goto(`/orgs/${organizationId}/settings`);
   await ensureHydrated(page);
@@ -24,7 +24,7 @@ test('member: settings is neither linked from the nav nor reachable directly', a
   page,
   organizations,
 }) => {
-  const organizationId = await organizations.create({
+  const { id: organizationId } = await organizations.create({
     name: `Settings 403 ${crypto.randomUUID()}`,
     role: 'member',
   });

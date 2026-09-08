@@ -19,8 +19,8 @@ other axis: **what part of the product a spec covers.**
 
 | | |
 | --- | --- |
-| `lib/` | Helpers a spec imports. No tests, no side effects at import. |
-| `fixtures/` | The report-state catalogue and the extended `test` that commits and cleans up a report. |
+| `lib/` | Helpers a spec imports. No tests, no side effects at import — except `lib/poll-interval.ts`, which reads `WORKER_MODE` at import, the same caveat `fixtures/test.ts` calls out for `@gbd/db/env`. |
+| `fixtures/` | The report-state catalogue, the dedicated-organization builder, and the extended `test` that commits and cleans up both. |
 | `setup/` | Getting the containerized browser up, taking it down, and optimizing screenshots afterward. Not tests of the app. |
 | `__screenshots__/` | The committed PNGs, nested to match the spec that captures them, and by viewport. |
 | everything else | Specs, both suites. |
@@ -61,13 +61,14 @@ visual change. Capture screens that carry real visual risk, not every route.
 
 ## Database state
 
-Most fixtures live in the placeholder organization (`@gbd/db/seed`). `e2e/fixtures/reports.ts` is
-the source of truth for what each report state contains.
+`e2e/fixtures/reports.ts` is the source of truth for what each report state contains.
 
-There's no shared reset: every test mints its own report via the `reports` fixture
-(`e2e/fixtures/test.ts`) and deletes it when it ends, whether it passed or failed. Screenshots and
-e2e share the catalogue of states, not any rows, so a behavioural spec is free to mutate what it
-created without affecting another test.
+There's no shared reset: every test mints its own report or organization via the `reports` /
+`organizations` fixture (`e2e/fixtures/test.ts`) and deletes it when it ends, whether it passed or
+failed. A spec that creates one some other way — through the UI, or the API directly — registers
+it with `reports.adopt(id)` / `organizations.adopt(id)` instead, for the same cleanup. Screenshots
+and e2e share the catalogue of states, not any rows, so a behavioural spec is free to mutate what
+it created without affecting another test.
 
 A spec that needs to control an organization's *entire* contents — rather than one report of its
 own — grants the placeholder user membership in a second, dedicated organization for the test's
@@ -87,6 +88,14 @@ can create an org where the placeholder is only a `member` (see `organizations/s
 
 | Route | Unit coverage today |
 | --- | --- |
+| `POST orgs` (create) | `create-organization.test.ts` |
+| `PATCH orgs/:id` (rename) | `rename-organization.test.ts` |
+| `DELETE orgs/:id` | `delete-organization.test.ts` |
 | `POST orgs/:id/reports` (create) | `create-report.test.ts` |
 | `GET orgs/:id/reports/:id` (view) | `load-report.test.ts` |
 | `DELETE orgs/:id/reports/:id` | `delete-report.test.ts` |
+| `POST orgs/:id/invites` (create) | none |
+| `DELETE orgs/:id/invites/:id` (revoke) | none |
+| `POST invites/:id/accept` | none |
+| `POST invites/:id/decline` | none |
+| `GET sign-in` | none |

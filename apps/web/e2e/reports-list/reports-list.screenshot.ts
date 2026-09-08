@@ -17,7 +17,7 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   const processingCreatedAt = dbMsAgo(12 * MINUTE_MS + 30 * SECOND_MS);
   const succeededCreatedAt = dbMsAgo(3 * DAY_MS + 2 * HOUR_MS);
 
-  const organizationId = await organizations.create({
+  const { id: organizationId } = await organizations.create({
     name: 'Riverside Foods',
     reports: [
       {
@@ -62,16 +62,16 @@ test('a mix of report states', async ({ page, organizations, db }) => {
 
   // Hover one row so the committed image also shows the hover affordance.
   await page.getByText('Q1 procurement').first().hover();
-  await expectScreenshots(page, 'reports-list.png');
+  await expectScreenshots(page, 'list.png');
 });
 
 test('the empty state', async ({ page, organizations }) => {
-  const organizationId = await organizations.create({ name: 'New Foodservice Co' });
+  const { id: organizationId } = await organizations.create({ name: 'New Foodservice Co' });
 
   await page.goto(`/orgs/${organizationId}`);
 
   await expect(page.getByText('No reports yet', { exact: false })).toBeVisible();
-  await expectScreenshots(page, 'reports-list-empty.png');
+  await expectScreenshots(page, 'empty.png');
 });
 
 test('the pagination nav, with both Newer and Older visible', async ({ page, organizations }) => {
@@ -84,12 +84,12 @@ test('the pagination nav, with both Newer and Older visible', async ({ page, org
     status: 'succeeded',
   }));
 
-  const organizationId = await organizations.create({ name: 'Pagination Nav Co', reports });
+  const { id: organizationId } = await organizations.create({ name: 'Pagination Nav Co', reports });
 
   await page.goto(`/orgs/${organizationId}`);
   await page.getByRole('link', { name: 'Older' }).click();
 
   await expect(page.getByRole('link', { name: 'Newer' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Older' })).toBeVisible();
-  await expectScreenshots(page, 'reports-list-pagination.png');
+  await expectScreenshots(page, 'pagination.png');
 });
