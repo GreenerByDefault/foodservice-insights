@@ -58,11 +58,22 @@ const confirmDisabled = $derived(
     (confirmPhrase !== undefined && typedPhrase !== confirmPhrase),
 );
 
+// Closing never re-renders this state on its own — the dialog unmounts its content — so without
+// this it survives to the next open: a stale typed phrase pre-satisfies `confirmDisabled`, and a
+// stale error banner flashes before the user has done anything.
+$effect(() => {
+  if (!open) {
+    typedPhrase = '';
+    actionState = { status: 'idle' };
+  }
+});
+
 async function confirm() {
   actionState = { status: 'loading' };
   try {
     await onConfirm();
-    actionState = { status: 'success' };
+    // No success UI to show, so just close — the caller may have already done this itself.
+    open = false;
   } catch {
     actionState = { status: 'error', message: errorMessage };
   }

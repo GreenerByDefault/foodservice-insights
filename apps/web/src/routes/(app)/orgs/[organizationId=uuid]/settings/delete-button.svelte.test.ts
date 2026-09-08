@@ -31,6 +31,26 @@ describe('DeleteButton', () => {
     await expect.element(confirmButton).toBeEnabled();
   });
 
+  test('canceling and reopening clears the typed name, so confirm is disabled again', async () => {
+    const screen = await render(DeleteButton, {
+      organizationId: 'org-1',
+      organizationName: 'Acme Foodservice',
+    });
+
+    await screen.getByRole('button', { name: 'Delete organization' }).click();
+    await screen.getByLabelText('Type "Acme Foodservice" to confirm').fill('Acme Foodservice');
+    await screen.getByRole('button', { name: 'Keep it' }).click();
+
+    await screen.getByRole('button', { name: 'Delete organization' }).click();
+
+    await expect
+      .element(screen.getByLabelText('Type "Acme Foodservice" to confirm'))
+      .toHaveValue('');
+    await expect
+      .element(screen.getByRole('button', { name: 'Yes, delete organization' }))
+      .toBeDisabled();
+  });
+
   test('a partially typed name keeps confirm disabled', async () => {
     const screen = await render(DeleteButton, {
       organizationId: 'org-1',
