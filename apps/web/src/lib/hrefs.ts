@@ -2,18 +2,13 @@
  * independently by the loader that hands it out and the component that follows it. A URL with no
  * id in it — `/account`, `/orgs/new` — stays a literal where it is used; there is nothing to get
  * wrong and nothing to keep in step.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 // -----------------------------------------------------
 // Organization pages
 // -----------------------------------------------------
 
-/** An organization's report list — its home, since reports live at the organization's root. Also
- * where an upload lands the user if the server's `created` response carries no `location` header,
- * and the "unsure whether that went through" fallback. */
+/** An organization's report list — its home, since reports live at the organization's root. */
 export function organizationHref(organizationId: string): string {
   return `/orgs/${organizationId}`;
 }
@@ -80,19 +75,16 @@ export function resultFileHref(resultFileId: string): string {
 // API writes
 // -----------------------------------------------------
 
-/** The organization itself, which the rename form `PATCH`es and the delete button `DELETE`s. */
 export function organizationApiHref(organizationId: string): string {
   return `/api/orgs/${organizationId}`;
 }
 
-/** Where the new-report form POSTs an upload. */
-export function createReportApiHref(organizationId: string): string {
+export function reportsApiHref(organizationId: string): string {
   return `${organizationApiHref(organizationId)}/reports`;
 }
 
-/** The report itself, which the delete button sends `DELETE` to. */
 export function reportApiHref(organizationId: string, reportId: string): string {
-  return `${createReportApiHref(organizationId)}/${reportId}`;
+  return `${reportsApiHref(organizationId)}/${reportId}`;
 }
 
 export function cancelReportApiHref(organizationId: string, reportId: string): string {

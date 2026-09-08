@@ -1,8 +1,5 @@
 /** A file refused before a report was ever written: too large or empty before any parsing, or
  * unreadable by the decode / layout / header / parse-error rejections once parsing starts.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import { MAX_COLUMNS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';

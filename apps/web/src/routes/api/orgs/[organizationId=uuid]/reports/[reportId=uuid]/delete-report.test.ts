@@ -69,7 +69,6 @@ describe('_deleteReport', () => {
       const { report } = await insertReportWithAttempt(transaction, {
         organizationId: organization.id,
         createdByUserId: creator.id,
-        // Uses a completed report so that there is nothing to cancel.
         status: 'succeeded',
       });
 

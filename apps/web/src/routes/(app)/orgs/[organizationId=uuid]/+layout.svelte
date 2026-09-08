@@ -6,7 +6,8 @@ import type { LayoutProps } from './$types';
 let { data, children }: LayoutProps = $props();
 
 /** Root first, then each nested section — `currentSection` relies on that order. Settings holds
- * nothing a member can act on, so it's admin-only. */
+ * nothing a member can act on, so it's admin-only. The filter here is cosmetic; `settings/
+ * +page.server.ts` is what actually enforces it. */
 const sections = $derived(
   [
     { label: 'Reports', href: organizationHref(data.organization.id), adminOnly: false },

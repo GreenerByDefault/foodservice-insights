@@ -20,7 +20,6 @@ export type MemberRow = {
   displayName: string | null;
   email: string;
   role: OrganizationRole;
-  /** Whether this row is the signed-in user's own membership. */
   isYou: boolean;
 };
 

@@ -321,7 +321,6 @@ describe('the hourly report limit', () => {
         inputFileStorageKey: null,
       });
 
-      // Still just the seeded reports at the limit — the refused upload added none.
       const reports = await transaction
         .selectFrom('report')
         .select((eb) => eb.fn.countAll<string>().as('count'))

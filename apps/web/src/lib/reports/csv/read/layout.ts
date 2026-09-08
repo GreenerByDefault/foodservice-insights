@@ -1,8 +1,4 @@
-/** Choosing the delimiter and finding the header, before anything about individual rows matters.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Choosing the delimiter and finding the header, before anything about individual rows matters. */
 
 import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../../limits.ts';
 import { type ColumnIndexes, type HeaderFault, resolveHeader } from './columns.ts';

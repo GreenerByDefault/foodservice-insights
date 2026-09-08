@@ -6,9 +6,6 @@
  *   `Date.parse('03/04/2025')` returns March 4 with no hint that April 3 was as good a reading.
  * - **`new Date(y, m, d)`** is timezone-dependent, so the browser and the server would disagree
  *   about the same file.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import { DAY_MS } from '@gbd/core';

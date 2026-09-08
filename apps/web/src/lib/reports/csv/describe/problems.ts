@@ -1,8 +1,5 @@
 /** The structured payload a customer reads about a finding, and rendering it back to one line of
  * `rejectionDetail` text.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import type { RowRange } from '../findings.ts';

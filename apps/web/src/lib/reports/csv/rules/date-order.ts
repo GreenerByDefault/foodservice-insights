@@ -3,9 +3,6 @@
  * Deciding per value is what lets `01/13/2025` and `13/01/2025` in one column silently become the
  * same date. Deciding for the column also means a single typo cannot quietly flip the reading of
  * every other row: it makes both readings provable, and that is a rejection.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import type { DateBounds, ResolvedDate } from './calendar.ts';

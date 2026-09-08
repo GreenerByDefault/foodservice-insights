@@ -1,8 +1,5 @@
 /** A whole `Findings` into the `RejectedUploadRecord` a customer sees: the summary, the reason,
  * and the detail — the assembly that budgets row problems against the date-order problem.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import { MAX_PROBLEMS_REPORTED } from '../../limits.ts';

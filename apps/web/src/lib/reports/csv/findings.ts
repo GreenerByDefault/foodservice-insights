@@ -1,9 +1,6 @@
 /** Grouping many failing rows into a few findings.
  *
  * The accumulator has to stay streaming to reduce memory consumption.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';

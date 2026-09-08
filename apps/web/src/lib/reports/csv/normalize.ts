@@ -2,9 +2,6 @@
  *
  * The order of the steps below is also their precedence: a file that fails two of them is
  * rejected for the first one it fails.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_FREE_TEXT_LENGTH } from '../limits.ts';

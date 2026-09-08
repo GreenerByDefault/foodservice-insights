@@ -55,7 +55,6 @@ describe('RejectionView', () => {
       expect(items[0]?.className).toContain('bg-muted/50');
       expect(items[1]?.className).not.toContain('bg-muted/50');
 
-      // Sanity check the fixture still models what this test is about.
       expect(everyRowProblem.rows.everyRow).toBe(true);
       expect(oneRowProblem?.rows.everyRow).toBe(false);
     });

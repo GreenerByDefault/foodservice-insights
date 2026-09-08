@@ -1,8 +1,4 @@
-/** Why an upload never became a report.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Why an upload never became a report. */
 
 import type { RejectedUploadReason } from '@gbd/db';
 import type { ApiError } from '$lib/api/fetch';
@@ -29,20 +25,16 @@ export type UploadRejection = Pick<
 /** Drops `rowProblems`/`dateOrderProblem` rather than carrying them through as `undefined`, so a
  * component can tell "no row problems" apart from "the key was never set" with a plain `in`/
  * truthiness check instead of having to compare against `undefined` explicitly. */
-function toUploadRejection({
+export function userFacingRejection({
   summary,
   rowProblems,
   dateOrderProblem,
-}: Pick<RejectedUploadRecord, 'summary' | 'rowProblems' | 'dateOrderProblem'>): UploadRejection {
+}: RejectedUploadRecord): UploadRejection {
   return {
     summary,
     ...(rowProblems && { rowProblems }),
     ...(dateOrderProblem && { dateOrderProblem }),
   };
-}
-
-export function userFacingRejection(record: RejectedUploadRecord): UploadRejection {
-  return toUploadRejection(record);
 }
 
 export function parseUploadRejection(error: ApiError): UploadRejection | undefined {
@@ -57,11 +49,5 @@ export function parseUploadRejection(error: ApiError): UploadRejection | undefin
   )
     return undefined;
 
-  return toUploadRejection(
-    jsonBody as unknown as {
-      summary: string;
-      rowProblems?: readonly Problem[];
-      dateOrderProblem?: string;
-    },
-  );
+  return userFacingRejection(jsonBody as unknown as RejectedUploadRecord);
 }

@@ -1,8 +1,4 @@
-/** Shared prose helpers: quoting, joining, pluralizing, and formatting numbers.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Shared prose helpers: quoting, joining, pluralizing, and formatting numbers. */
 
 import { MAX_QUOTED_CHARS } from '../../limits.ts';
 

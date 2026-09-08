@@ -1,8 +1,5 @@
 /** Turning a submitted form into either a report to write or a rejection to record.
  *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- *
  * The report metadata is validated again, independently, by
  * `apps/worker/src/contract/messages.ts` on its way to the analysis child. That duplication is
  * deliberate: this file decides what the app will accept from a stranger, and that one asserts

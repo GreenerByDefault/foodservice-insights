@@ -1,7 +1,6 @@
 /** Uploaded bytes into text a CSV parser can work on.
  *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only. In particular `TextDecoder`, not `Buffer`.
+ * Uses `TextDecoder`, never `Buffer` — this runs in the browser too.
  */
 
 export type DecodeFault =

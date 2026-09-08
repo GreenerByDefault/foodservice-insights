@@ -1,8 +1,4 @@
-/** A column-wide date-order failure, which is prose rather than a row problem.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** A column-wide date-order failure, which is prose rather than a row problem. */
 
 import type { DateOrderFinding } from '../findings.ts';
 import type { DateReading, ResolvedDate } from '../rules/index.ts';

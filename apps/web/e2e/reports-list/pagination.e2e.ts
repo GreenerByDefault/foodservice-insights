@@ -36,7 +36,6 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
   await expect(page.getByText('Pagination report 1', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Pagination report 0', { exact: true })).not.toBeVisible();
   await expect(page.getByRole('link', { name: 'Newer' })).not.toBeVisible();
-  // `.click()` auto-waits for visibility, so no separate assertion is needed before it.
   await page.getByRole('link', { name: 'Older' }).click();
 
   await expect(page.getByText('Pagination report 0', { exact: true }).first()).toBeVisible();

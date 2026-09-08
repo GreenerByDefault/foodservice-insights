@@ -2,9 +2,6 @@
  *
  * Every field is optional here — "missing" is a validation outcome, not a read error, so a form
  * can report all of its problems at once instead of the first one.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 export function readText(form: FormData, field: string): string | null {

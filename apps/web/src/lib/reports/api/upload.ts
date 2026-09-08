@@ -1,5 +1,5 @@
 import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
-import { createReportApiHref, organizationHref } from '$lib/hrefs';
+import { organizationHref, reportsApiHref } from '$lib/hrefs';
 import { parseUploadRejection, type UploadRejection } from '../rejection.ts';
 
 export type UploadOutcome =
@@ -13,7 +13,7 @@ export async function uploadReport(
   signal?: AbortSignal,
 ): Promise<UploadOutcome> {
   try {
-    const response = await apiCall(createReportApiHref(organizationId), {
+    const response = await apiCall(reportsApiHref(organizationId), {
       method: 'POST',
       body: form,
       signal,

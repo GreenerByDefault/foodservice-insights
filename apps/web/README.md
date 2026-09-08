@@ -24,8 +24,8 @@ URL is handed out by the loader that renders it; an API URL is built by the API 
 it, from the ids the loader already gave the page. One with no id in it stays a literal where it
 is used.
 
-**A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in where the user
-already is, so there is no `?next=` to carry anywhere.
+**A 401 is not a redirect.** `src/lib/components/error-page.svelte` renders a message; it will
+offer sign-in in place once auth lands, which is why there is no `?next=` to carry anywhere.
 
 **When a page's data has multiple meaningfully different shapes, its `load` narrows them into a
 discriminated union rather than leaving the view to branch on nullable columns.** See
@@ -36,8 +36,14 @@ Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler,
 code harder for newcomers to follow without a strong enough payoff. See
 [Calling the API from the browser](#calling-the-api-from-the-browser) for how the client calls it.
 
-Most routes exist only as scaffolding so far. Each one says so with a `**Stub:**` marker naming
-what belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
+A few routes are still scaffolding (`/account`, `/invites`, `/sign-in`, the marketing page, and
+the invite/member/account API handlers). Each one says so with a `**Stub:**` marker naming what
+belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
+
+**`/orgs` redirects rather than always showing the picker**: to `/invites` if one is waiting, to
+the user's one organization if they belong to exactly one, or to `/orgs/new` if they belong to
+none. A superadmin always sees the full picker, since it doubles as their view of every
+organization.
 
 ## Calling the API from the browser
 
@@ -54,6 +60,9 @@ outcome.
 (`uploadReport`).** It returns one when a non-2xx is an answer the UI renders, not a failure.
 
 ## UI components
+
+**Anything under `src/lib` outside `server/` is imported by the browser.** The build rejects
+`$lib/server` and `$env/*/private` there, and nothing Node-only may go in either.
 
 Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
 is purely vendored shadcn** — nothing hand-written goes there — so we own the components outright
@@ -100,8 +109,9 @@ flight or a navigation is pending, with the reason in its label.
 
 **A field name always comes from a `FIELD` map**, never a literal in markup.
 
-**State:** a button-shaped mutation uses `ActionState`; a form whose failure is more than one
-sentence declares its own outcome union. Both render a failure the same way.
+**State:** a button-shaped mutation uses `ActionState`; a form that has to move focus to a field
+on failure declares its own outcome union instead — `ActionState` has nowhere to hang that. Both
+render a failure the same way.
 
 **A form's values live in the component's state, not only in the DOM**, so a form that swaps its
 own view cannot lose typed work.
@@ -160,3 +170,10 @@ request instead, which is simpler and avoids stale-claim problems.
 **Superadmin status lives solely on `app_user.is_superadmin`**, not as an `organization_member`
 row. All superadmin behavior is a separate computed path (`is_superadmin OR role = 'admin'`)
 rather than a variant of membership-table logic.
+
+## Writes
+
+A write that changes something worth a record does two more things: it records an audit event in
+the same transaction as the change (`$lib/server/audit.ts`), and once that transaction commits, it
+notifies GBD (`notifyGbd` in `$lib/server/email.ts`) — never before, so a notification never
+outlives a change that got rolled back.
