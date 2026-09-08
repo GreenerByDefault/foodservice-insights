@@ -26,7 +26,7 @@ import type {
   UserId,
 } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
-import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
+import { PLACEHOLDER_ORGANIZATION_ID, PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import {
   dbMsAgo,
   insertAnalysisAttempt,
@@ -297,7 +297,7 @@ export async function insertReportWithAttempt(
 
 export function reportUrl(
   reportId: ReportId,
-  organizationId: OrganizationId = PLACEHOLDER_ORGANIZATION_ID,
+  organizationSlug: string = PLACEHOLDER_ORGANIZATION_SLUG,
 ): string {
-  return `/orgs/${organizationId}/reports/${reportId}`;
+  return `/orgs/${organizationSlug}/reports/${reportId}`;
 }

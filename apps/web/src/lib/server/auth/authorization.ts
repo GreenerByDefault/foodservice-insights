@@ -50,6 +50,7 @@ async function memberOrganizations(
     .innerJoin('organization', 'organization.id', 'organizationMember.organizationId')
     .select([
       'organization.id as organizationId',
+      'organization.slug as organizationSlug',
       'organization.name as organizationName',
       'organizationMember.role as role',
     ])

@@ -10,9 +10,11 @@ import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('admin: the rename form and the delete section below it', async ({ page, organizations }) => {
-  const { id: organizationId } = await organizations.create({ name: 'Settings Screenshot Admin' });
+  const { slug: organizationSlug } = await organizations.create({
+    name: 'Settings Screenshot Admin',
+  });
 
-  await page.goto(`/orgs/${organizationId}/settings`);
+  await page.goto(`/orgs/${organizationSlug}/settings`);
   await ensureHydrated(page);
 
   await expect(page.getByLabel('Organization name')).toHaveValue('Settings Screenshot Admin');
@@ -23,9 +25,11 @@ test('admin: the delete confirm dialog, phrase field empty and confirm disabled'
   page,
   organizations,
 }) => {
-  const { id: organizationId } = await organizations.create({ name: 'Settings Screenshot Delete' });
+  const { slug: organizationSlug } = await organizations.create({
+    name: 'Settings Screenshot Delete',
+  });
 
-  await page.goto(`/orgs/${organizationId}/settings`);
+  await page.goto(`/orgs/${organizationSlug}/settings`);
   await ensureHydrated(page);
 
   await page.getByRole('button', { name: 'Delete organization' }).click();

@@ -5,8 +5,9 @@ The SvelteKit app: frontend and backend together. For how it fits into the wider
 
 ## Routes
 
-**An organization is a path segment**, `/orgs/[organizationId]`. The layout there settles which
-organization the request acts on, and every query below it filters on that organization.
+**An organization is a path segment**, `/orgs/[organizationSlug]` — its permanent, immutable
+slug, never the database id. The layout there settles which organization the request acts on, and
+every query below it filters on that organization.
 
 **Reads are `load` functions; `/api` holds only writes.** A page's data comes from its own
 `+page.server.ts` querying the database, never from `fetch`ing an endpoint of ours — so no `GET`

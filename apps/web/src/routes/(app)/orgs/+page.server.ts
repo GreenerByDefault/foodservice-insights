@@ -43,7 +43,7 @@ export async function _organizationsPageRedirect(
   if (auth.memberships.length === 0) return '/orgs/new';
 
   const singleOrg = auth.memberships.length === 1 ? auth.memberships[0] : undefined;
-  return singleOrg ? organizationHref(singleOrg.organizationId) : null;
+  return singleOrg ? organizationHref(singleOrg.organizationSlug) : null;
 }
 
 /** Whether an invite is waiting that has not run out. */

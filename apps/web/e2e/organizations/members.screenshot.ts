@@ -13,7 +13,7 @@ test('a mix of roles and both name shapes, the viewer among them', async ({
   page,
   organizations,
 }) => {
-  const { id: organizationId } = await organizations.create({
+  const { slug: organizationSlug } = await organizations.create({
     name: 'Members Screenshot Foodservice',
     members: [
       { displayName: 'Priya Shah', email: 'members-screenshot-admin@example.test', role: 'admin' },
@@ -22,7 +22,7 @@ test('a mix of roles and both name shapes, the viewer among them', async ({
     ],
   });
 
-  await page.goto(`/orgs/${organizationId}/members`);
+  await page.goto(`/orgs/${organizationSlug}/members`);
 
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
   await expect(page.getByText('Priya Shah')).toBeVisible();

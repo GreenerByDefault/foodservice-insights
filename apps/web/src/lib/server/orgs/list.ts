@@ -2,7 +2,7 @@ import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
 import type { AuthContext } from '$lib/server/auth/types';
 import { withDbErrorHandling } from '$lib/server/db';
 
-export type OrganizationRow = { id: OrganizationId; name: string };
+export type OrganizationRow = { id: OrganizationId; slug: string; name: string };
 
 /** Every organization this user may pick, name-ordered.
  *
@@ -18,6 +18,7 @@ export async function listOrganizations(
   if (!auth.user.isSuperadmin) {
     const rows = auth.memberships.map((membership) => ({
       id: membership.organizationId,
+      slug: membership.organizationSlug,
       name: membership.organizationName,
     }));
     return limit === undefined ? rows : rows.slice(0, limit);
@@ -25,7 +26,7 @@ export async function listOrganizations(
 
   return await withDbErrorHandling(
     () => {
-      const query = db.selectFrom('organization').select(['id', 'name']).orderBy('name');
+      const query = db.selectFrom('organization').select(['id', 'slug', 'name']).orderBy('name');
       return (limit === undefined ? query : query.limit(limit)).execute();
     },
     { action: 'list organizations', context: { userId: auth.user.id } },

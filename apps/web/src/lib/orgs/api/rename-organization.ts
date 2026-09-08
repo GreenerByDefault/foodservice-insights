@@ -8,11 +8,11 @@ export type RenameOrganizationOutcome =
   | { kind: 'unknown' };
 
 export async function renameOrganization(
-  organizationId: string,
+  organizationSlug: string,
   name: string,
 ): Promise<RenameOrganizationOutcome> {
   try {
-    await apiCall(organizationApiHref(organizationId), {
+    await apiCall(organizationApiHref(organizationSlug), {
       method: 'PATCH',
       body: JSON.stringify({ name }),
     });

@@ -22,10 +22,11 @@ declare global {
     }
     interface PageData {
       /** The organization the current route acts on, returned by the layout under
-       * `orgs/[organizationId]`. Declared here so the `(app)` shell above that layout can read it
-       * off `page.data` and show it in the switcher; absent on routes that act on no organization.
+       * `orgs/[organizationSlug]`. Declared here so the `(app)` shell above that layout can read
+       * it off `page.data` and show it in the switcher; absent on routes that act on no
+       * organization.
        */
-      organization?: { id: OrganizationId; name: string };
+      organization?: { id: OrganizationId; slug: string; name: string };
     }
     // interface PageState {}
     // interface Platform {}

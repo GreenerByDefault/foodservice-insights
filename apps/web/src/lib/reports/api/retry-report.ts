@@ -9,9 +9,12 @@ import { retryReportApiHref } from '$lib/hrefs';
  */
 export type RetryOutcome = 'retried' | 'already-retried';
 
-export async function retryReport(organizationId: string, reportId: string): Promise<RetryOutcome> {
+export async function retryReport(
+  organizationSlug: string,
+  reportId: string,
+): Promise<RetryOutcome> {
   try {
-    await apiCall(retryReportApiHref(organizationId, reportId), { method: 'POST' });
+    await apiCall(retryReportApiHref(organizationSlug, reportId), { method: 'POST' });
     return 'retried';
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) return 'already-retried';

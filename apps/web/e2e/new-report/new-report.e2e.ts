@@ -1,6 +1,6 @@
 import { ensureHydrated } from '@gbd/browser-testing';
 import type { ReportId } from '@gbd/db';
-import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
+import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 import { chooseCsv } from '../lib/upload.ts';
@@ -17,7 +17,7 @@ function reportIdFromUrl(url: string): ReportId {
 }
 
 test('uploading a good CSV creates a report and lands on its page', async ({ page, reports }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}`);
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}`);
   await ensureHydrated(page);
   await page.getByRole('link', { name: 'New report' }).click();
 
@@ -30,7 +30,7 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
   await page.getByRole('button', { name: 'Upload report' }).click();
 
   await expect(page).toHaveURL(
-    new RegExp(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/[0-9a-f-]+$`),
+    new RegExp(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/[0-9a-f-]+$`),
   );
   await expect(page).toHaveTitle('Q1 procurement');
 
@@ -44,7 +44,7 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
 test('uploading a CSV with bad rows shows the rejection view, naming them, without ever submitting', async ({
   page,
 }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
   await ensureHydrated(page);
 
   await chooseCsv(page, 'procurement.csv', BAD_ROWS_CSV);

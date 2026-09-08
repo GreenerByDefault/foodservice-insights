@@ -4,9 +4,9 @@ import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('the account menu, open', async ({ page, organizations }) => {
-  const { id: organizationId } = await organizations.create({ name: 'Riverside Foods' });
+  const { slug: organizationSlug } = await organizations.create({ name: 'Riverside Foods' });
 
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
   await ensureHydrated(page);
 
   await page.getByRole('button', { name: 'Account menu' }).click();

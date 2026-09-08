@@ -9,40 +9,40 @@
 // -----------------------------------------------------
 
 /** An organization's report list — its home, since reports live at the organization's root. */
-export function organizationHref(organizationId: string): string {
-  return `/orgs/${organizationId}`;
+export function organizationHref(organizationSlug: string): string {
+  return `/orgs/${organizationSlug}`;
 }
 
-export function organizationMembersHref(organizationId: string): string {
-  return `${organizationHref(organizationId)}/members`;
+export function organizationMembersHref(organizationSlug: string): string {
+  return `${organizationHref(organizationSlug)}/members`;
 }
 
-export function organizationSettingsHref(organizationId: string): string {
-  return `${organizationHref(organizationId)}/settings`;
+export function organizationSettingsHref(organizationSlug: string): string {
+  return `${organizationHref(organizationSlug)}/settings`;
 }
 
 // -----------------------------------------------------
 // Report pages
 // -----------------------------------------------------
 
-export function newReportHref(organizationId: string): string {
-  return `${organizationHref(organizationId)}/reports/new`;
+export function newReportHref(organizationSlug: string): string {
+  return `${organizationHref(organizationSlug)}/reports/new`;
 }
 
-export function reportHref(organizationId: string, reportId: string): string {
-  return `${organizationHref(organizationId)}/reports/${reportId}`;
+export function reportHref(organizationSlug: string, reportId: string): string {
+  return `${organizationHref(organizationSlug)}/reports/${reportId}`;
 }
 
 /** The reports list, paged to the reports older than `reportId` — the last report on the page
  * being left. See `pagination.ts`. */
-export function olderReportsHref(organizationId: string, reportId: string): string {
-  return `${organizationHref(organizationId)}?older=${reportId}`;
+export function olderReportsHref(organizationSlug: string, reportId: string): string {
+  return `${organizationHref(organizationSlug)}?older=${reportId}`;
 }
 
 /** The reports list, paged to the reports newer than `reportId` — the first report on the page
  * being left. See `pagination.ts`. */
-export function newerReportsHref(organizationId: string, reportId: string): string {
-  return `${organizationHref(organizationId)}?newer=${reportId}`;
+export function newerReportsHref(organizationSlug: string, reportId: string): string {
+  return `${organizationHref(organizationSlug)}?newer=${reportId}`;
 }
 
 // -----------------------------------------------------
@@ -51,12 +51,12 @@ export function newerReportsHref(organizationId: string, reportId: string): stri
 // Each sits beside the page it refreshes rather than under `/api`, which holds only writes — see
 // `README.md` § Routes.
 
-export function reportsPollHref(organizationId: string): string {
-  return `${organizationHref(organizationId)}/poll`;
+export function reportsPollHref(organizationSlug: string): string {
+  return `${organizationHref(organizationSlug)}/poll`;
 }
 
-export function reportPollHref(organizationId: string, reportId: string): string {
-  return `${reportHref(organizationId, reportId)}/poll`;
+export function reportPollHref(organizationSlug: string, reportId: string): string {
+  return `${reportHref(organizationSlug, reportId)}/poll`;
 }
 
 // -----------------------------------------------------
@@ -75,22 +75,22 @@ export function resultFileHref(resultFileId: string): string {
 // API writes
 // -----------------------------------------------------
 
-export function organizationApiHref(organizationId: string): string {
-  return `/api/orgs/${organizationId}`;
+export function organizationApiHref(organizationSlug: string): string {
+  return `/api/orgs/${organizationSlug}`;
 }
 
-export function reportsApiHref(organizationId: string): string {
-  return `${organizationApiHref(organizationId)}/reports`;
+export function reportsApiHref(organizationSlug: string): string {
+  return `${organizationApiHref(organizationSlug)}/reports`;
 }
 
-export function reportApiHref(organizationId: string, reportId: string): string {
-  return `${reportsApiHref(organizationId)}/${reportId}`;
+export function reportApiHref(organizationSlug: string, reportId: string): string {
+  return `${reportsApiHref(organizationSlug)}/${reportId}`;
 }
 
-export function cancelReportApiHref(organizationId: string, reportId: string): string {
-  return `${reportApiHref(organizationId, reportId)}/cancel`;
+export function cancelReportApiHref(organizationSlug: string, reportId: string): string {
+  return `${reportApiHref(organizationSlug, reportId)}/cancel`;
 }
 
-export function retryReportApiHref(organizationId: string, reportId: string): string {
-  return `${reportApiHref(organizationId, reportId)}/retry`;
+export function retryReportApiHref(organizationSlug: string, reportId: string): string {
+  return `${reportApiHref(organizationSlug, reportId)}/retry`;
 }
