@@ -6,11 +6,12 @@ import Timeline from './timeline.svelte';
 interface Props {
   attempt: WaitingAttempt;
   now: Date;
-  cancelButtonHref: string;
+  organizationId: string;
+  reportId: string;
   onReportChanged: () => Promise<void>;
 }
 
-let { attempt, now, cancelButtonHref, onReportChanged }: Props = $props();
+let { attempt, now, organizationId, reportId, onReportChanged }: Props = $props();
 
 let progress = $derived(describeProgress(attempt, now));
 </script>
@@ -22,5 +23,5 @@ let progress = $derived(describeProgress(attempt, now));
     You can close this page. We will email you when your report is ready.
   </p>
 
-  <CancelButton {cancelButtonHref} {onReportChanged} />
+  <CancelButton {organizationId} {reportId} {onReportChanged} />
 </div>

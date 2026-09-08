@@ -1,4 +1,4 @@
-import type { ReportId } from '@gbd/db';
+import type { OrganizationId, ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
@@ -7,19 +7,18 @@ import type { ReportPageData } from './+page.server.ts';
 import ReportView from './report-view.svelte';
 import { retryableFailure } from './testing/fixtures.ts';
 
+const ORGANIZATION_ID = 'org-1' as OrganizationId;
 const REPORT_ID = 'report-1' as ReportId;
 const POLL_HREF = `/orgs/org-1/reports/${REPORT_ID}/poll`;
 
 const BASE = {
+  organizationId: ORGANIZATION_ID,
   report: {
     id: REPORT_ID,
     name: 'Riverside Diner',
     siteName: null,
     creator: { displayName: 'Dana Cook', email: 'dana@example.test' },
   },
-  cancelButtonHref: '/api/orgs/org-1/reports/report-1/cancel',
-  retryButtonHref: '/api/orgs/org-1/reports/report-1/retry',
-  deleteAction: { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' },
   newReportHref: '/orgs/org-1/reports/new',
   pollHref: POLL_HREF,
   pollIntervalMs: BASE_POLL_INTERVAL_MS,

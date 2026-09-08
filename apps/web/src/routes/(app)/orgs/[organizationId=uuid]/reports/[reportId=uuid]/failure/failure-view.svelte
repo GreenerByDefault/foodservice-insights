@@ -5,7 +5,6 @@ import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 import { Button } from '$lib/components/ui/button';
 import { retryReport } from '$lib/reports/api/retry-report';
 import type { ActionState } from '$lib/forms/action-state';
-import type { DeleteAction } from '../+page.server.ts';
 import DeleteButton from '../delete-button.svelte';
 import type { FailureCopy } from './failure-copy.ts';
 import StatusLine from '../status-line.svelte';
@@ -13,19 +12,19 @@ import StatusLine from '../status-line.svelte';
 interface Props {
   attemptNumber: number;
   failure: FailureCopy;
-  retryButtonHref: string;
-  deleteAction: DeleteAction;
+  organizationId: string;
+  reportId: string;
   onReportChanged: () => Promise<void>;
 }
 
-let { attemptNumber, failure, retryButtonHref, deleteAction, onReportChanged }: Props = $props();
+let { attemptNumber, failure, organizationId, reportId, onReportChanged }: Props = $props();
 
 let actionState = $state<ActionState>({ status: 'idle' });
 
 async function retry() {
   actionState = { status: 'loading' };
   try {
-    await retryReport(retryButtonHref);
+    await retryReport(organizationId, reportId);
 
     // Both outcomes mean a new attempt exists (or one already did), so refresh either way. The
     // refresh cannot fail the retry — see the same note in `waiting/cancel-button.svelte`.
@@ -63,6 +62,6 @@ async function retry() {
       <MailIcon aria-hidden="true" />
       Contact us
     </Button>
-    <DeleteButton action={deleteAction} />
+    <DeleteButton {organizationId} {reportId} />
   </div>
 </div>

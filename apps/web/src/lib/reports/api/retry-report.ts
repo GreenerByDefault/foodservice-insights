@@ -1,6 +1,5 @@
-/** The client-side call behind the failure view's retry button. */
-
 import { ApiError, apiCall } from '$lib/api/fetch';
+import { retryReportApiHref } from '$lib/hrefs';
 
 /** What happened when the user asked to retry.
  *
@@ -10,9 +9,9 @@ import { ApiError, apiCall } from '$lib/api/fetch';
  */
 export type RetryOutcome = 'retried' | 'already-retried';
 
-export async function retryReport(retryHref: string): Promise<RetryOutcome> {
+export async function retryReport(organizationId: string, reportId: string): Promise<RetryOutcome> {
   try {
-    await apiCall(retryHref, { method: 'POST' });
+    await apiCall(retryReportApiHref(organizationId, reportId), { method: 'POST' });
     return 'retried';
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) return 'already-retried';

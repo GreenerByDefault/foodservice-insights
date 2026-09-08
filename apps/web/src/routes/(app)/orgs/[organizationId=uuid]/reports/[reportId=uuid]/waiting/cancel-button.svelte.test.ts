@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import CancelButton from './cancel-button.svelte';
 
-const CANCEL_HREF = '/api/orgs/org-1/reports/report-1/cancel';
+const ORGANIZATION_ID = 'org-1';
+const REPORT_ID = 'report-1';
 
 /** Stands in for the polling view's `poll`, which is what the button asks for a refresh. */
 const onReportChanged = vi.fn(() => Promise.resolve());
@@ -21,7 +22,8 @@ describe('CancelButton', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const screen = await render(CancelButton, {
-      cancelButtonHref: CANCEL_HREF,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -42,7 +44,8 @@ describe('CancelButton', () => {
   test('confirming calls the endpoint, closes the dialog, and refreshes just this report', async () => {
     stubFetch(new Response(null, { status: 204 }));
     const screen = await render(CancelButton, {
-      cancelButtonHref: CANCEL_HREF,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -62,7 +65,8 @@ describe('CancelButton', () => {
       }),
     );
     const screen = await render(CancelButton, {
-      cancelButtonHref: CANCEL_HREF,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -82,7 +86,8 @@ describe('CancelButton', () => {
       vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
     );
     const screen = await render(CancelButton, {
-      cancelButtonHref: CANCEL_HREF,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 
@@ -98,7 +103,8 @@ describe('CancelButton', () => {
   test('an unreachable server keeps the dialog open and shows a retry message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const screen = await render(CancelButton, {
-      cancelButtonHref: CANCEL_HREF,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
       onReportChanged,
     });
 

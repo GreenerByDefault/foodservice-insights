@@ -3,16 +3,17 @@ import ConfirmAction from '$lib/components/confirm-action.svelte';
 import { cancelReport } from '$lib/reports/api/cancel-report';
 
 interface Props {
-  cancelButtonHref: string;
+  organizationId: string;
+  reportId: string;
   onReportChanged: () => Promise<void>;
 }
 
-let { cancelButtonHref, onReportChanged }: Props = $props();
+let { organizationId, reportId, onReportChanged }: Props = $props();
 
 let open = $state(false);
 
 async function confirm() {
-  await cancelReport(cancelButtonHref);
+  await cancelReport(organizationId, reportId);
 
   // Both outcomes close the dialog and refresh — see `CancelOutcome`.
   open = false;

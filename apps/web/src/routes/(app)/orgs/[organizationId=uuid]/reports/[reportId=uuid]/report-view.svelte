@@ -68,7 +68,8 @@ function screenHeadline(report: ReportPageData): string {
   <WaitingView
     attempt={current.attempt}
     now={current.now}
-    cancelButtonHref={current.cancelButtonHref}
+    organizationId={current.organizationId}
+    reportId={current.report.id}
     onReportChanged={poller.pollNow}
   />
 {:else if current.attempt.status === 'succeeded'}
@@ -77,14 +78,15 @@ function screenHeadline(report: ReportPageData): string {
     now={current.now}
     files={current.attempt.files}
     inputFile={current.inputFile}
-    deleteAction={current.deleteAction}
+    organizationId={current.organizationId}
+    reportId={current.report.id}
   />
 {:else if current.attempt.status === 'failed'}
   <FailureView
     attemptNumber={current.attempt.attemptNumber}
     failure={current.attempt.failure}
-    retryButtonHref={current.retryButtonHref}
-    deleteAction={current.deleteAction}
+    organizationId={current.organizationId}
+    reportId={current.report.id}
     onReportChanged={poller.pollNow}
   />
 {:else if current.attempt.status === 'canceled'}
@@ -92,6 +94,7 @@ function screenHeadline(report: ReportPageData): string {
     stoppedAt={current.attempt.stoppedAt}
     now={current.now}
     newReportHref={current.newReportHref}
-    deleteAction={current.deleteAction}
+    organizationId={current.organizationId}
+    reportId={current.report.id}
   />
 {/if}

@@ -14,7 +14,7 @@ describe('retryReport', () => {
   test('a 204 is "retried"', async () => {
     stubFetch(new Response(null, { status: 204 }));
 
-    await expect(retryReport('/api/orgs/org-1/reports/report-1/retry')).resolves.toBe('retried');
+    await expect(retryReport('org-1', 'report-1')).resolves.toBe('retried');
   });
 
   test('a 409 — another attempt already exists — is "already-retried", not a thrown error', async () => {
@@ -24,15 +24,13 @@ describe('retryReport', () => {
       }),
     );
 
-    await expect(retryReport('/api/orgs/org-1/reports/report-1/retry')).resolves.toBe(
-      'already-retried',
-    );
+    await expect(retryReport('org-1', 'report-1')).resolves.toBe('already-retried');
   });
 
   test('any other status rethrows', async () => {
     stubFetch(new Response(JSON.stringify({ message: 'Not found' }), { status: 404 }));
 
-    await expect(retryReport('/api/orgs/org-1/reports/report-1/retry')).rejects.toMatchObject({
+    await expect(retryReport('org-1', 'report-1')).rejects.toMatchObject({
       constructor: ApiError,
       status: 404,
       message: 'Not found',
@@ -42,8 +40,6 @@ describe('retryReport', () => {
   test('an unreachable server rethrows', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
-    await expect(retryReport('/api/orgs/org-1/reports/report-1/retry')).rejects.toBeInstanceOf(
-      ApiUnreachableError,
-    );
+    await expect(retryReport('org-1', 'report-1')).rejects.toBeInstanceOf(ApiUnreachableError);
   });
 });

@@ -1,5 +1,3 @@
-/** The client-side call behind the new-organization form. */
-
 import { apiCall } from '$lib/api/fetch';
 import { classifyNameWriteFailure } from './failure.ts';
 

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import DeleteButton from './delete-button.svelte';
 
-const DELETE_ACTION = { href: '/api/orgs/org-1/reports/report-1', afterHref: '/orgs/org-1' };
+const ORGANIZATION_ID = 'org-1';
+const REPORT_ID = 'report-1';
 
 const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: gotoMock }));
@@ -21,7 +22,8 @@ describe('DeleteButton', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const screen = await render(DeleteButton, {
-      action: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
     });
 
     await screen.getByRole('button', { name: 'Delete report' }).click();
@@ -41,14 +43,15 @@ describe('DeleteButton', () => {
   test('confirming calls the endpoint and navigates to the organization', async () => {
     stubFetch(new Response(null, { status: 204 }));
     const screen = await render(DeleteButton, {
-      action: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
     });
 
     await screen.getByRole('button', { name: 'Delete report' }).click();
     await screen.getByRole('button', { name: 'Yes, delete report' }).click();
 
     await expect.poll(() => gotoMock.mock.calls.length).toBe(1);
-    expect(gotoMock).toHaveBeenCalledWith(DELETE_ACTION.afterHref);
+    expect(gotoMock).toHaveBeenCalledWith(`/orgs/${ORGANIZATION_ID}`);
   });
 
   test('while the request is in flight, the confirm button is disabled', async () => {
@@ -58,7 +61,8 @@ describe('DeleteButton', () => {
       vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
     );
     const screen = await render(DeleteButton, {
-      action: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
     });
 
     await screen.getByRole('button', { name: 'Delete report' }).click();
@@ -73,7 +77,8 @@ describe('DeleteButton', () => {
   test('an unreachable server keeps the dialog open and shows a retry message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const screen = await render(DeleteButton, {
-      action: DELETE_ACTION,
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
     });
 
     await screen.getByRole('button', { name: 'Delete report' }).click();

@@ -1,7 +1,6 @@
 <script lang="ts">
 import CircleStopIcon from '@lucide/svelte/icons/circle-stop';
 import RelativeTime from '$lib/components/reports/relative-time.svelte';
-import type { DeleteAction } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
 import StatusLine from './status-line.svelte';
 
@@ -9,10 +8,11 @@ interface Props {
   stoppedAt: Date;
   now: Date;
   newReportHref: string;
-  deleteAction: DeleteAction;
+  organizationId: string;
+  reportId: string;
 }
 
-let { stoppedAt, now, newReportHref, deleteAction }: Props = $props();
+let { stoppedAt, now, newReportHref, organizationId, reportId }: Props = $props();
 </script>
 
 <div class="space-y-4">
@@ -24,5 +24,5 @@ let { stoppedAt, now, newReportHref, deleteAction }: Props = $props();
     </p>
   </StatusLine>
 
-  <DeleteButton action={deleteAction} />
+  <DeleteButton {organizationId} {reportId} />
 </div>

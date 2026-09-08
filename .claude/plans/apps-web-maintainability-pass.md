@@ -12,45 +12,23 @@ feature will be its second (the user said so explicitly).
 Correctness is not the focus (tests are good). Focus: DRY, naming, file organization, and docs
 that have drifted from the code or sit far from what they explain.
 
-Two decisions already taken with the user:
-
-- **API URLs are built by the client from ids**, not handed out by loaders. Reports move to the
-  org convention.
-- **The 30-copy "imported by the browser as well as the server" header goes**, replaced by one
-  README rule.
+API URLs are now built by the client from ids, everywhere — reports followed the org convention
+already established by `deleteOrganization`/`renameOrganization`. A loader only ever hands out a
+page URL; an API client builds its own URL from `lib/hrefs.ts` and the ids the page already has.
+The one decision still ahead: the 30-copy "imported by the browser as well as the server" header
+goes, replaced by one README rule (PR 4).
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
 done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable.
 
-The client's organization-name form (create and rename) and its name-write failure
-classification are already shared (`lib/components/orgs/organization-name-form.svelte`,
-`lib/orgs/api/failure.ts`); an invite form that also writes a name has a pattern to follow rather
-than a second copy to reconcile.
+The client's organization-name form (create and rename) and its name-write failure classification
+are already shared (`lib/components/orgs/organization-name-form.svelte`, `lib/orgs/api/failure.ts`);
+an invite form that also writes a name has a pattern to follow rather than a second copy to
+reconcile.
 
 ---
 
-## PR 1 — Reports adopt the client-builds-hrefs convention
-
-- `reports/[reportId=uuid]/+page.server.ts`: drop `cancelButtonHref`, `retryButtonHref`,
-  `deleteAction` (and the `DeleteAction` type) from `ReportPageData`. Keep page-navigation hrefs
-  (`pollHref`, `newReportHref`, file hrefs) — those are still "the loader hands out a URL".
-- `lib/reports/api/{delete,cancel,retry}-report.ts` take `(organizationId, reportId)` and call
-  `reportApiHref` / `cancelReportApiHref` / `retryReportApiHref` themselves, like the org clients.
-- `delete-button.svelte`, `waiting/cancel-button.svelte`, `failure/failure-view.svelte`,
-  `report-view.svelte` take ids. `afterHref` becomes `organizationHref(organizationId)` in
-  `delete-button.svelte`.
-- Extract the duplicated 409-only catch in `cancel-report.ts`/`retry-report.ts` into a tiny
-  `outcomeOn409(error, outcome)` in `lib/api/fetch.ts`? — **No.** Two five-line functions with
-  distinct outcome names read fine; leave them. Just drop the doc headers that name their
-  single caller ("The client-side call behind the waiting view's cancel button") on all seven
-  API clients — the module names say it and the caller list rots.
-- Update `load-report.test.ts` and the affected component tests. Update README § Routes
-  ("A URL that carries an id…") to say API URLs are built by the API client, page URLs by the
-  loader.
-
----
-
-## PR 2 — Shared pieces with a second caller now
+## PR 1 — Shared pieces with a second caller now
 
 - `lib/server/orgs/list.ts`: one `listOrganizations(db, auth, { limit? })` with the
   superadmin-reads-table / member-reads-memberships rule in one place. `_loadAllOrganizations`
@@ -78,7 +56,7 @@ than a second copy to reconcile.
 
 ---
 
-## PR 3 — Browser test helpers
+## PR 2 — Browser test helpers
 
 - `apps/web/src/lib/testing/fetch.ts`: `stubFetch(response)` (returns the mock),
   `stubUnreachableFetch()`, `stubPendingFetch()` → `{ resolve }`, `jsonResponse(body, status?)`,
@@ -95,7 +73,7 @@ than a second copy to reconcile.
 
 ---
 
-## PR 4 — e2e fixtures and README
+## PR 3 — e2e fixtures and README
 
 - `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
   `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
@@ -119,14 +97,13 @@ than a second copy to reconcile.
 
 ---
 
-## PR 5 — Docs and comments
+## PR 4 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
   (`/account`, `/invites`, `/sign-in`, the marketing page, and the invite/member/account API
   handlers)". Keep the `**Stub:**` grep; make `sign-in/+page.server.ts` use the marker.
-- Routes: add the `/orgs` redirect behavior (invites → single org → `/orgs/new`), and that API
-  URLs are built by the API client (PR 1).
+- Routes: add the `/orgs` redirect behavior (invites → single org → `/orgs/new`).
 - Errors: "A 401 is not a redirect" → say what is true today (the error page renders a message;
   it will offer sign-in in place once auth lands, which is why there is no `?next=`). Same fix
   to the comment in `routes/(app)/+layout.server.ts`.
@@ -180,7 +157,6 @@ than a second copy to reconcile.
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
 the diff is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 4's screenshot renames need
+`pnpm --filter @gbd/web test:e2e -- <path>`. PR 3's screenshot renames need
 `pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
-actually changed (renames only). After PR 1, click through a report page in the running app
-(`/run`) to confirm cancel, retry and delete still hit the right URLs.
+actually changed (renames only).
