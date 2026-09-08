@@ -14,10 +14,6 @@ import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../src/generated/public/AnalysisAttemptStatus.ts';
 import type { Report } from '../src/generated/public/Report.ts';
-import {
-  POSTGRES_CODE_CHECK_VIOLATION,
-  POSTGRES_CODE_UNIQUE_VIOLATION,
-} from '../src/postgres-codes.ts';
 import type { DatabaseExecutor } from '../src/schema.ts';
 import {
   insertFixtureOrganization,
@@ -25,13 +21,9 @@ import {
   withCommittedFixture,
   withConcurrentTransactions,
 } from '../src/testing/concurrency.ts';
-import {
-  aChecksum,
-  insertAnalysisAttempt,
-  insertInputFile,
-  insertReport,
-} from '../src/testing/fixtures.ts';
-import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
+import { expectConstraintViolation } from '../src/testing/constraints.ts';
+import { insertAnalysisAttempt, insertInputFile, insertReport } from '../src/testing/fixtures.ts';
+import { withRollback } from '../src/testing/transactions.ts';
 import { MAX_ANALYSIS_ATTEMPTS } from '../src/types.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
@@ -64,313 +56,286 @@ async function softDelete(database: DatabaseExecutor, reportId: Report['id']): P
 }
 
 describe('analysis_attempt column invariants', () => {
-  test('rejects a pending attempt that is already claimed', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction);
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ workerId: 'w1', claimedAt: new Date() })
-        .where('id', '=', attempt.id)
-        .execute();
+  describe('status and timestamp constraints', () => {
+    test('rejects a pending attempt that is already claimed', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction);
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ workerId: 'w1', claimedAt: new Date() })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(insert, 'analysis_attempt_pending_is_unclaimed');
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_pending_is_unclaimed',
+    test('rejects a processing attempt with no worker', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction);
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'processing' })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_processing_is_claimed');
+    });
+
+    test('rejects finishing without a finished_at', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'succeeded' })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_finished_at_iff_terminal');
+    });
+
+    test('rejects a failure with no reason, and a reason without a failure', async () => {
+      const withoutReason = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'failed', finishedAt: new Date() })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+      await expectConstraintViolation(withoutReason, 'analysis_attempt_failure_reason_iff_failed');
+
+      const withoutFailure = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'succeeded', finishedAt: new Date(), failureReason: 'unknown' })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+      await expectConstraintViolation(withoutFailure, 'analysis_attempt_failure_reason_iff_failed');
+    });
+
+    test('rejects a canceled attempt with no cancel_requested_at', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction);
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'canceled', finishedAt: new Date() })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_canceled_requires_request');
+    });
+
+    test('rejects finishing before the work started', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'succeeded', finishedAt: new Date('2020-01-01T00:00:00Z') })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_finished_at_after_created_at');
+    });
+
+    // The timestamps must satisfy finished_at >= lease_renewed_at >= claimed_at >= created_at, and
+    // each is pinned to created_at directly as well. Every case below is built so that exactly one
+    // of those checks is violated — otherwise the constraint that reports is whichever Postgres
+    // happens to evaluate first, and the test would be asserting nothing in particular.
+    // `patch` is a thunk, not a literal: a `new Date()` in the table would be evaluated when the
+    // module loads, which is before any transaction starts — and so before the `created_at` it is
+    // supposed to be compared against.
+    const LONG_AGO = new Date('2020-01-01T00:00:00Z');
+    const anHourFromNow = () => new Date(Date.now() + 60 * 60 * 1000);
+
+    test.each([
+      {
+        description: 'a claim that predates the attempt',
+        from: 'processing' as const,
+        patch: () => ({ claimedAt: LONG_AGO }),
+        constraint: 'analysis_attempt_claimed_at_after_created_at',
+      },
+      {
+        description: 'a lease renewal older than the claim it belongs to',
+        from: 'processing' as const,
+        patch: () => ({ claimedAt: anHourFromNow() }),
+        constraint: 'analysis_attempt_lease_renewed_after_claimed_at',
+      },
+      {
+        description: 'a lease renewal that predates the attempt',
+        from: 'pending' as const,
+        patch: () => ({
+          status: 'canceled' as const,
+          finishedAt: new Date(),
+          cancelRequestedAt: new Date(),
+          leaseRenewedAt: LONG_AGO,
+        }),
+        constraint: 'analysis_attempt_lease_renewed_after_created_at',
+      },
+      {
+        description: 'finishing before the last lease renewal',
+        from: 'processing' as const,
+        patch: () => ({
+          status: 'succeeded' as const,
+          finishedAt: new Date(),
+          leaseRenewedAt: anHourFromNow(),
+        }),
+        constraint: 'analysis_attempt_finished_at_after_lease_renewed',
+      },
+      {
+        description: 'a cancellation that predates the attempt',
+        from: 'pending' as const,
+        patch: () => ({ cancelRequestedAt: LONG_AGO }),
+        constraint: 'analysis_attempt_cancel_requested_at_after_created_at',
+      },
+    ])('rejects $description', async ({ from, patch, constraint }) => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: from });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set(patch())
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, constraint);
     });
   });
 
-  test('rejects a processing attempt with no worker', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction);
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'processing' })
-        .where('id', '=', attempt.id)
-        .execute();
+  describe('notification columns', () => {
+    test('rejects an email recorded against an unfinished attempt', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ notificationEmailSentAt: new Date() })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_notification_requires_finished');
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_processing_is_claimed',
-    });
-  });
+    test('rejects a notification claim recorded against an unfinished attempt', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        await transaction
+          .updateTable('analysisAttempt')
+          // notificationAttempts too, so this doesn't trip _notification_attempts_iff_claimed instead.
+          .set({
+            notificationClaimedAt: new Date(),
+            notificationClaimedByWorkerId: 'w1',
+            notificationAttempts: 1,
+          })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
 
-  test('rejects finishing without a finished_at', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'succeeded' })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_finished_at_iff_terminal',
-    });
-  });
-
-  test('rejects a failure with no reason, and a reason without a failure', async () => {
-    const withoutReason = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'failed', finishedAt: new Date() })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-    await expect(withoutReason).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_failure_reason_iff_failed',
+      await expectConstraintViolation(
+        update,
+        'analysis_attempt_notification_claim_requires_finished',
+      );
     });
 
-    const withoutFailure = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'succeeded', finishedAt: new Date(), failureReason: 'unknown' })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-    await expect(withoutFailure).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_failure_reason_iff_failed',
-    });
-  });
-
-  test('rejects a canceled attempt with no cancel_requested_at', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction);
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'canceled', finishedAt: new Date() })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_canceled_requires_request',
-    });
-  });
-
-  test('rejects finishing before the work started', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'succeeded', finishedAt: new Date('2020-01-01T00:00:00Z') })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_finished_at_after_created_at',
-    });
-  });
-
-  test('rejects an email recorded against an unfinished attempt', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ notificationEmailSentAt: new Date() })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_notification_requires_finished',
-    });
-  });
-
-  test('rejects a notification claim recorded against an unfinished attempt', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
-      await transaction
-        .updateTable('analysisAttempt')
+    test.each([
+      {
+        description: 'a claim timestamp without a claiming worker',
         // notificationAttempts too, so this doesn't trip _notification_attempts_iff_claimed instead.
-        .set({
-          notificationClaimedAt: new Date(),
-          notificationClaimedByWorkerId: 'w1',
-          notificationAttempts: 1,
-        })
-        .where('id', '=', attempt.id)
-        .execute();
+        patch: () => ({ notificationClaimedAt: new Date(), notificationAttempts: 1 }),
+      },
+      {
+        description: 'a claiming worker without a claim timestamp',
+        patch: () => ({ notificationClaimedByWorkerId: 'w1' }),
+      },
+    ])('rejects $description', async ({ patch }) => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set(patch())
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(
+        update,
+        'analysis_attempt_notification_claimed_by_iff_claimed',
+      );
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_notification_claim_requires_finished',
-    });
-  });
+    test('rejects stamping the notification sent without a claim', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ notificationEmailSentAt: new Date() })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
 
-  test.each([
-    {
-      description: 'a claim timestamp without a claiming worker',
-      // notificationAttempts too, so this doesn't trip _notification_attempts_iff_claimed instead.
-      patch: () => ({ notificationClaimedAt: new Date(), notificationAttempts: 1 }),
-    },
-    {
-      description: 'a claiming worker without a claim timestamp',
-      patch: () => ({ notificationClaimedByWorkerId: 'w1' }),
-    },
-  ])('rejects $description', async ({ patch }) => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set(patch())
-        .where('id', '=', attempt.id)
-        .execute();
+      await expectConstraintViolation(update, 'analysis_attempt_notification_sent_requires_claim');
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_notification_claimed_by_iff_claimed',
-    });
-  });
+    test('rejects a negative notification attempt count', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ notificationAttempts: -1 })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
 
-  test('rejects stamping the notification sent without a claim', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ notificationEmailSentAt: new Date() })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_notification_sent_requires_claim',
-    });
-  });
-
-  test('rejects a negative notification attempt count', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ notificationAttempts: -1 })
-        .where('id', '=', attempt.id)
-        .execute();
+      await expectConstraintViolation(
+        update,
+        'analysis_attempt_notification_attempts_non_negative',
+      );
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_notification_attempts_non_negative',
-    });
-  });
+    test.each([
+      {
+        description: 'a positive attempt count without a claim',
+        patch: () => ({ notificationAttempts: 1 }),
+      },
+      {
+        description: 'a claim without incrementing the attempt count',
+        patch: () => ({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' }),
+      },
+    ])('rejects $description', async ({ patch }) => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set(patch())
+          .where('id', '=', attempt.id)
+          .execute();
+      });
 
-  test('rejects a required_contract_version below 1', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction);
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ requiredContractVersion: 0 })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_required_contract_version_positive',
+      await expectConstraintViolation(update, 'analysis_attempt_notification_attempts_iff_claimed');
     });
   });
 
-  test.each([
-    {
-      description: 'a positive attempt count without a claim',
-      patch: () => ({ notificationAttempts: 1 }),
-    },
-    {
-      description: 'a claim without incrementing the attempt count',
-      patch: () => ({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' }),
-    },
-  ])('rejects $description', async ({ patch }) => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set(patch())
-        .where('id', '=', attempt.id)
-        .execute();
-    });
+  describe('contract version', () => {
+    test('rejects a required_contract_version below 1', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction);
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ requiredContractVersion: 0 })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_notification_attempts_iff_claimed',
-    });
-  });
-
-  // The timestamps must satisfy finished_at >= lease_renewed_at >= claimed_at >= created_at, and
-  // each is pinned to created_at directly as well. Every case below is built so that exactly one
-  // of those checks is violated — otherwise the constraint that reports is whichever Postgres
-  // happens to evaluate first, and the test would be asserting nothing in particular.
-  // `patch` is a thunk, not a literal: a `new Date()` in the table would be evaluated when the
-  // module loads, which is before any transaction starts — and so before the `created_at` it is
-  // supposed to be compared against.
-  const LONG_AGO = new Date('2020-01-01T00:00:00Z');
-  const anHourFromNow = () => new Date(Date.now() + 60 * 60 * 1000);
-
-  test.each([
-    {
-      description: 'a claim that predates the attempt',
-      from: 'processing' as const,
-      patch: () => ({ claimedAt: LONG_AGO }),
-      constraint: 'analysis_attempt_claimed_at_after_created_at',
-    },
-    {
-      description: 'a lease renewal older than the claim it belongs to',
-      from: 'processing' as const,
-      patch: () => ({ claimedAt: anHourFromNow() }),
-      constraint: 'analysis_attempt_lease_renewed_after_claimed_at',
-    },
-    {
-      description: 'a lease renewal that predates the attempt',
-      from: 'pending' as const,
-      patch: () => ({
-        status: 'canceled' as const,
-        finishedAt: new Date(),
-        cancelRequestedAt: new Date(),
-        leaseRenewedAt: LONG_AGO,
-      }),
-      constraint: 'analysis_attempt_lease_renewed_after_created_at',
-    },
-    {
-      description: 'finishing before the last lease renewal',
-      from: 'processing' as const,
-      patch: () => ({
-        status: 'succeeded' as const,
-        finishedAt: new Date(),
-        leaseRenewedAt: anHourFromNow(),
-      }),
-      constraint: 'analysis_attempt_finished_at_after_lease_renewed',
-    },
-    {
-      description: 'a cancellation that predates the attempt',
-      from: 'pending' as const,
-      patch: () => ({ cancelRequestedAt: LONG_AGO }),
-      constraint: 'analysis_attempt_cancel_requested_at_after_created_at',
-    },
-  ])('rejects $description', async ({ from, patch, constraint }) => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: from });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set(patch())
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint,
+      await expectConstraintViolation(
+        update,
+        'analysis_attempt_required_contract_version_positive',
+      );
     });
   });
 });
@@ -381,10 +346,7 @@ describe('starting a new attempt', () => {
       await insertAnalysisAttempt(transaction, { attemptNumber: 2 });
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_new_attempt_only_after_failure',
-    });
+    await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
   });
 
   test.each<AnalysisAttemptStatus>(['pending', 'processing', 'succeeded', 'canceled'])(
@@ -396,10 +358,7 @@ describe('starting a new attempt', () => {
         await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
       });
 
-      await expect(insert).rejects.toMatchObject({
-        code: POSTGRES_CODE_CHECK_VIOLATION,
-        constraint: 'analysis_attempt_new_attempt_only_after_failure',
-      });
+      await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
     },
   );
 
@@ -427,10 +386,7 @@ describe('starting a new attempt', () => {
       await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 3 });
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_new_attempt_only_after_failure',
-    });
+    await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
   });
 
   test('refuses a retry on a soft-deleted report', async () => {
@@ -441,10 +397,7 @@ describe('starting a new attempt', () => {
       await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_no_attempt_for_deleted_report',
-    });
+    await expectConstraintViolation(insert, 'analysis_attempt_no_attempt_for_deleted_report');
   });
 
   test('refuses a retry racing a soft delete', async () => {
@@ -472,10 +425,10 @@ describe('starting a new attempt', () => {
 
           await alpha.transaction.commit().execute();
 
-          await expect(blocked.result).rejects.toMatchObject({
-            code: POSTGRES_CODE_CHECK_VIOLATION,
-            constraint: 'analysis_attempt_no_attempt_for_deleted_report',
-          });
+          await expectConstraintViolation(
+            blocked.result,
+            'analysis_attempt_no_attempt_for_deleted_report',
+          );
         });
 
         const attempts = await DATABASE.selectFrom('analysisAttempt')
@@ -554,10 +507,10 @@ describe('starting a new attempt', () => {
 
           await alpha.transaction.commit().execute();
 
-          await expect(blocked.result).rejects.toMatchObject({
-            code: POSTGRES_CODE_CHECK_VIOLATION,
-            constraint: 'analysis_attempt_new_attempt_only_after_failure',
-          });
+          await expectConstraintViolation(
+            blocked.result,
+            'analysis_attempt_new_attempt_only_after_failure',
+          );
         });
 
         const attempts = await DATABASE.selectFrom('analysisAttempt')
@@ -610,10 +563,7 @@ describe('starting a new attempt', () => {
       });
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_attempt_number_range',
-    });
+    await expectConstraintViolation(insert, 'analysis_attempt_attempt_number_range');
   });
 });
 
@@ -651,10 +601,7 @@ describe('a terminal attempt is final', () => {
         .execute();
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_terminal_is_final',
-    });
+    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
   });
 
   test('permits claiming, sending, and stamping the notification together', async () => {
@@ -696,10 +643,7 @@ describe('a terminal attempt is final', () => {
         .execute();
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_canceled_is_not_notified',
-    });
+    await expectConstraintViolation(update, 'analysis_attempt_canceled_is_not_notified');
   });
 
   test('rejects smuggling another column alongside the notification timestamp', async () => {
@@ -714,10 +658,7 @@ describe('a terminal attempt is final', () => {
         .execute();
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_terminal_is_final',
-    });
+    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
   });
 
   test('rejects smuggling another column alongside the notification attempt count', async () => {
@@ -741,10 +682,7 @@ describe('a terminal attempt is final', () => {
         .execute();
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'analysis_attempt_terminal_is_final',
-    });
+    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
   });
 
   test('permits an update that changes nothing', async () => {
@@ -862,186 +800,8 @@ describe('a terminal attempt is final', () => {
           // violating `analysis_attempt_failure_reason_iff_failed`. Both are 23514, and the
           // trigger only wins the race because BEFORE ROW triggers run ahead of constraint
           // evaluation.
-          await expect(blocked.result).rejects.toMatchObject({
-            code: POSTGRES_CODE_CHECK_VIOLATION,
-            constraint: 'analysis_attempt_terminal_is_final',
-          });
+          await expectConstraintViolation(blocked.result, 'analysis_attempt_terminal_is_final');
         });
-      });
-    });
-  });
-});
-
-describe('result_file', () => {
-  async function aResultFile(
-    transaction: Transaction,
-    attemptId: AnalysisAttempt['id'],
-    kind: 'pdf' | 'xlsx',
-  ) {
-    return await transaction
-      .insertInto('resultFile')
-      .values({
-        analysisAttemptId: attemptId,
-        kind,
-        storageKey: `org/test/${crypto.randomUUID()}.${kind}`,
-        byteSize: 2048,
-        contentType: 'application/octet-stream',
-        checksumSha256: aChecksum(),
-      })
-      .execute();
-  }
-
-  async function aSucceededAttempt(transaction: Transaction, reportId?: Report['id']) {
-    return await insertAnalysisAttempt(transaction, { reportId, status: 'succeeded' });
-  }
-
-  test('rejects an empty file', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const attempt = await aSucceededAttempt(transaction);
-      await transaction
-        .insertInto('resultFile')
-        .values({
-          analysisAttemptId: attempt.id,
-          kind: 'pdf',
-          storageKey: `org/test/${crypto.randomUUID()}.pdf`,
-          byteSize: 0,
-          contentType: 'application/pdf',
-          checksumSha256: aChecksum(),
-        })
-        .execute();
-    });
-
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'result_file_byte_size_positive',
-    });
-  });
-
-  test.each(['pdf' as const, 'xlsx' as const])('allows only one %s per attempt', async (kind) => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, kind);
-      await aResultFile(transaction, attempt.id, kind);
-    });
-
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_UNIQUE_VIOLATION,
-      constraint: `result_file_one_${kind}_per_attempt`,
-    });
-  });
-
-  test('is deleted with the attempt that produced it', async () => {
-    const remaining = await withRollback(DATABASE, async (transaction) => {
-      const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, 'pdf');
-
-      await transaction.deleteFrom('analysisAttempt').where('id', '=', attempt.id).execute();
-
-      return await transaction
-        .selectFrom('resultFile')
-        .select('id')
-        .where('analysisAttemptId', '=', attempt.id)
-        .execute();
-    });
-
-    expect(remaining).toEqual([]);
-  });
-
-  describe('a succeeded attempt has a pdf and an xlsx', () => {
-    // checkDeferredConstraints also re-checks report_has_an_input_file, since insertReport
-    // (which insertAnalysisAttempt falls back on) doesn't attach one — so every test below needs
-    // its own report with an input file, not the bare one insertAnalysisAttempt would create.
-    async function aReportId(transaction: Transaction): Promise<Report['id']> {
-      const report = await insertReport(transaction);
-      await insertInputFile(transaction, { reportId: report.id });
-      return report.id;
-    }
-
-    test('rejects succeeding with neither', async () => {
-      const insert = withRollback(DATABASE, async (transaction) => {
-        await aSucceededAttempt(transaction, await aReportId(transaction));
-        await checkDeferredConstraints(transaction);
-      });
-
-      await expect(insert).rejects.toMatchObject({
-        code: POSTGRES_CODE_CHECK_VIOLATION,
-        constraint: 'analysis_attempt_succeeded_has_pdf',
-      });
-    });
-
-    test('rejects succeeding with a pdf but no xlsx', async () => {
-      const insert = withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await aResultFile(transaction, attempt.id, 'pdf');
-        await checkDeferredConstraints(transaction);
-      });
-
-      await expect(insert).rejects.toMatchObject({
-        code: POSTGRES_CODE_CHECK_VIOLATION,
-        constraint: 'analysis_attempt_succeeded_has_xlsx',
-      });
-    });
-
-    test('rejects succeeding with an xlsx but no pdf', async () => {
-      const insert = withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await aResultFile(transaction, attempt.id, 'xlsx');
-        await checkDeferredConstraints(transaction);
-      });
-
-      await expect(insert).rejects.toMatchObject({
-        code: POSTGRES_CODE_CHECK_VIOLATION,
-        constraint: 'analysis_attempt_succeeded_has_pdf',
-      });
-    });
-
-    test('passes once both are attached', async () => {
-      await withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await aResultFile(transaction, attempt.id, 'pdf');
-        await aResultFile(transaction, attempt.id, 'xlsx');
-
-        await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
-      });
-    });
-
-    test('does not require a pdf or xlsx while pending', async () => {
-      await withRollback(DATABASE, async (transaction) => {
-        await insertAnalysisAttempt(transaction, { reportId: await aReportId(transaction) });
-
-        await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
-      });
-    });
-
-    test('is not retroactively required once the attempt is deleted', async () => {
-      await withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await transaction.deleteFrom('analysisAttempt').where('id', '=', attempt.id).execute();
-
-        await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
-      });
-    });
-
-    test('is enforced on an UPDATE to succeeded, not just an INSERT', async () => {
-      // The tests above insert directly as 'succeeded'; this pins down that the trigger fires
-      // AFTER UPDATE too, since the real worker path (markAttemptSucceeded) reaches 'succeeded'
-      // by updating a 'processing' row.
-      const insert = withRollback(DATABASE, async (transaction) => {
-        const attempt = await insertAnalysisAttempt(transaction, {
-          reportId: await aReportId(transaction),
-          status: 'processing',
-        });
-        await transaction
-          .updateTable('analysisAttempt')
-          .set({ status: 'succeeded', finishedAt: new Date() })
-          .where('id', '=', attempt.id)
-          .execute();
-        await checkDeferredConstraints(transaction);
-      });
-
-      await expect(insert).rejects.toMatchObject({
-        code: POSTGRES_CODE_CHECK_VIOLATION,
-        constraint: 'analysis_attempt_succeeded_has_pdf',
       });
     });
   });

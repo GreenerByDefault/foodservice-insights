@@ -45,6 +45,21 @@ change is ready, rather than blocking on it — Claude Code notifies on completi
 overlaps with re-reading the diff, `/prune-comments`, and drafting the PR body instead of
 costing wall clock on top of it.
 
+## Test organization
+
+- **The top-level `describe` names the subject** — the exported symbol for a unit test
+  (`classifyVerdict`), the table for a database invariant test (`analysis_attempt`), the
+  component for a component test (`UploadForm`). One per subject; a file covering three
+  exports has three.
+- **A nested `describe` names the situation**, so the full path reads as a sentence:
+  `finishing > losing the race > a success returns false`. Reach for one when tests share a
+  precondition, a helper, or a preamble — the helper then lives inside the block rather than
+  at module scope.
+- **Never spell the group into the test title.** A `rule:` prefix repeated across siblings, or
+  a function name typed in front of every test, is a `describe` written the long way.
+- **Two levels is the working depth.** Wanting a third usually means the file covers more than
+  one subject.
+
 ## General TypeScript
 
 - **Use `async`/`await`**, not raw promise chains.
