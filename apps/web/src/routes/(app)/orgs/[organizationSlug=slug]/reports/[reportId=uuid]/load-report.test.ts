@@ -138,10 +138,8 @@ describe('a report the caller may see', () => {
       ).resolves.toEqual({ status: 500 });
     });
   });
-});
 
-describe('report.siteName', () => {
-  test('is passed through when set', async () => {
+  test('report.siteName is passed through when set', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, report } = await anOrgAndReport(transaction, {
         siteName: 'Riverside Diner',

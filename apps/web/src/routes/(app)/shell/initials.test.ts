@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { initials } from './initials.ts';
 
 // `fromCharCode` rather than escapes so these don't sit as literal invisible bytes in the file.
@@ -7,59 +7,67 @@ const NUL = String.fromCharCode(0x0);
 const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
 const LONE_HIGH_SURROGATE = String.fromCharCode(0xd800);
 
-test('takes the first and last word initials', () => {
-  expect(initials('Ana Ruiz')).toBe('AR');
-});
+describe('initials', () => {
+  describe('normal names', () => {
+    test('takes the first and last word initials', () => {
+      expect(initials('Ana Ruiz')).toBe('AR');
+    });
 
-test('takes the single initial for a one-word name', () => {
-  expect(initials('Cher')).toBe('C');
-});
+    test('takes the single initial for a one-word name', () => {
+      expect(initials('Cher')).toBe('C');
+    });
 
-test('ignores middle words', () => {
-  expect(initials('María del Carmen García')).toBe('MG');
-});
+    test('ignores middle words', () => {
+      expect(initials('María del Carmen García')).toBe('MG');
+    });
 
-test('trims and collapses surrounding and repeated whitespace', () => {
-  expect(initials('  Ana   Ruiz  ')).toBe('AR');
-});
+    test('trims and collapses surrounding and repeated whitespace', () => {
+      expect(initials('  Ana   Ruiz  ')).toBe('AR');
+    });
 
-test('uppercases lowercase input', () => {
-  expect(initials('ana ruiz')).toBe('AR');
-});
+    test('uppercases lowercase input', () => {
+      expect(initials('ana ruiz')).toBe('AR');
+    });
 
-test('handles a non-ASCII letter', () => {
-  expect(initials('Émile Zola')).toBe('ÉZ');
-});
+    test('handles a non-ASCII letter', () => {
+      expect(initials('Émile Zola')).toBe('ÉZ');
+    });
 
-test('does not split an astral-plane character in the first word', () => {
-  expect(initials('𝕏 Corp')).toBe('𝕏C');
-});
+    test.each([null, '', '   '])('returns null when there is nothing usable (%j)', (input) => {
+      expect(initials(input)).toBeNull();
+    });
 
-test.each([null, '', '   '])('returns null when there is nothing usable (%j)', (input) => {
-  expect(initials(input)).toBeNull();
-});
+    test('resolves a very long single word without materializing it into an array', () => {
+      expect(initials(`${'A'.repeat(50_000)} ${'B'.repeat(50_000)}`)).toBe('AB');
+    });
+  });
 
-test('skips a leading bidi-override character rather than rendering it', () => {
-  expect(initials(`${RIGHT_TO_LEFT_OVERRIDE}Ana Ruiz`)).toBe('AR');
-});
+  describe('astral-plane and malformed Unicode', () => {
+    test('does not split an astral-plane character in the first word', () => {
+      expect(initials('𝕏 Corp')).toBe('𝕏C');
+    });
 
-test('skips a leading NUL byte rather than rendering it', () => {
-  expect(initials(`${NUL}Ana`)).toBe('A');
-});
+    test('does not throw for a lone, malformed surrogate half', () => {
+      expect(initials(`${LONE_HIGH_SURROGATE} Ruiz`)).toBe(`${LONE_HIGH_SURROGATE}R`);
+    });
+  });
 
-test('falls back to the last word when the first is only control characters', () => {
-  expect(initials(`${NUL}${NUL} Ruiz`)).toBe('R');
-});
+  describe('invisible and control characters', () => {
+    test('skips a leading bidi-override character rather than rendering it', () => {
+      expect(initials(`${RIGHT_TO_LEFT_OVERRIDE}Ana Ruiz`)).toBe('AR');
+    });
 
-test('returns null when every word is only invisible characters', () => {
-  // Not `\s`, so it survives as a "word"; long enough to prove the scan terminates.
-  expect(initials(ZERO_WIDTH_SPACE.repeat(10_000))).toBeNull();
-});
+    test('skips a leading NUL byte rather than rendering it', () => {
+      expect(initials(`${NUL}Ana`)).toBe('A');
+    });
 
-test('does not throw for a lone, malformed surrogate half', () => {
-  expect(initials(`${LONE_HIGH_SURROGATE} Ruiz`)).toBe(`${LONE_HIGH_SURROGATE}R`);
-});
+    test('falls back to the last word when the first is only control characters', () => {
+      expect(initials(`${NUL}${NUL} Ruiz`)).toBe('R');
+    });
 
-test('resolves a very long single word without materializing it into an array', () => {
-  expect(initials(`${'A'.repeat(50_000)} ${'B'.repeat(50_000)}`)).toBe('AB');
+    test('returns null when every word is only invisible characters', () => {
+      // Not `\s`, so it survives as a "word"; long enough to prove the scan terminates.
+      expect(initials(ZERO_WIDTH_SPACE.repeat(10_000))).toBeNull();
+    });
+  });
 });
