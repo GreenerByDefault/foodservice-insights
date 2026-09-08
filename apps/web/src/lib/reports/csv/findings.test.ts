@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { weightFinding } from '$lib/reports/csv/testing';
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
 import {
   type DateOrderFinding,
@@ -10,7 +11,6 @@ import {
   type RowFinding,
   seal,
 } from './findings.ts';
-import { weightFinding } from './testing/index.ts';
 
 /** The expected shape of a group that a single row reached, covering exactly `line`. */
 function singleRowGroup(finding: RowFinding, line: number, examples: string[] = []) {

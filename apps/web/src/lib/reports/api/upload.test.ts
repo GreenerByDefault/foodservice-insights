@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import type { Problem } from '../csv/describe/index.ts';
 import { uploadReport } from './upload.ts';
 
@@ -8,10 +9,6 @@ const PROBLEM: Problem = {
   rows: { ranges: [{ start: 2, end: 4 }], total: 3, everyRow: false },
   examples: ['"5 oz"'],
 };
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -66,7 +63,7 @@ describe('uploadReport', () => {
   });
 
   test('a rejecting fetch yields unknown', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
 
     await expect(uploadReport('org-1', new FormData())).resolves.toEqual({ kind: 'unknown' });
   });

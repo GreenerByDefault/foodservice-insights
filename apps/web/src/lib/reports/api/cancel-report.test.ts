@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
+import { stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { cancelReport } from './cancel-report.ts';
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -38,7 +35,7 @@ describe('cancelReport', () => {
   });
 
   test('an unreachable server rethrows', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
 
     await expect(cancelReport('org-1', 'report-1')).rejects.toBeInstanceOf(ApiUnreachableError);
   });

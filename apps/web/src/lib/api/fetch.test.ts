@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { ApiError, ApiUnreachableError, apiCall } from './fetch.ts';
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,12 +71,11 @@ describe('apiCall', () => {
   });
 
   test('a rejecting fetch becomes an ApiUnreachableError', async () => {
-    const cause = new TypeError('Failed to fetch');
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(cause));
+    stubUnreachableFetch();
 
     await expect(apiCall('/api/orgs/org-1/reports')).rejects.toMatchObject({
       constructor: ApiUnreachableError,
-      cause,
+      cause: expect.any(TypeError),
     });
   });
 

@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { lastFetchCall, stubFetch } from '$lib/testing/fetch';
 import { renameOrganization } from './rename-organization.ts';
-
-function stubFetch(response: Response) {
-  const fetchMock = vi.fn().mockResolvedValue(response);
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -20,7 +15,7 @@ describe('renameOrganization', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe('/api/orgs/org-1');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body as string)).toEqual({ name: 'Riverside Foods' });

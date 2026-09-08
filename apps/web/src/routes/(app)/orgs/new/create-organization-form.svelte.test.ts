@@ -1,19 +1,15 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { goto } from '$app/navigation';
+import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { resetNavigationMocks } from '$lib/testing/navigation';
 import CreateOrganizationForm from './create-organization-form.svelte';
 
-const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: gotoMock }));
-
-function stubFetch(response: Response) {
-  const fetchMock = vi.fn().mockResolvedValue(response);
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
+vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  gotoMock.mockClear();
+  resetNavigationMocks();
 });
 
 describe('CreateOrganizationForm', () => {
@@ -29,16 +25,16 @@ describe('CreateOrganizationForm', () => {
     await screen.getByLabelText('Organization name').fill('Acme Foodservice');
     await screen.getByRole('button', { name: 'Create organization' }).click();
 
-    await expect.poll(() => gotoMock.mock.calls.length).toBe(1);
+    await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe('/api/orgs');
     expect(JSON.parse(options.body as string)).toEqual({ name: 'Acme Foodservice' });
-    expect(gotoMock).toHaveBeenCalledWith('/orgs/org-1');
+    expect(goto).toHaveBeenCalledWith('/orgs/org-1');
   });
 
   test('an unreachable server shows the unknown-outcome message and a link to the organization list', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
     const screen = await render(CreateOrganizationForm);
 
     await screen.getByLabelText('Organization name').fill('Acme Foodservice');
@@ -50,6 +46,6 @@ describe('CreateOrganizationForm', () => {
     await expect
       .element(screen.getByRole('link', { name: 'your organizations' }))
       .toHaveAttribute('href', '/orgs');
-    expect(gotoMock).not.toHaveBeenCalled();
+    expect(goto).not.toHaveBeenCalled();
   });
 });

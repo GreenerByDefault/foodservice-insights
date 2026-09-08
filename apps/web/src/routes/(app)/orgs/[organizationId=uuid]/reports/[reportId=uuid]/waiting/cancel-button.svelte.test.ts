@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { stubFetch, stubPendingFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import CancelButton from './cancel-button.svelte';
 
 const ORGANIZATION_ID = 'org-1';
@@ -7,10 +8,6 @@ const REPORT_ID = 'report-1';
 
 /** Stands in for the polling view's `poll`, which is what the button asks for a refresh. */
 const onReportChanged = vi.fn(() => Promise.resolve());
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -80,11 +77,7 @@ describe('CancelButton', () => {
   });
 
   test('while the request is in flight, the confirm button is disabled', async () => {
-    let resolveFetch!: (response: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
-    );
+    const { resolve } = stubPendingFetch();
     const screen = await render(CancelButton, {
       organizationId: ORGANIZATION_ID,
       reportId: REPORT_ID,
@@ -96,12 +89,12 @@ describe('CancelButton', () => {
 
     await expect.element(screen.getByRole('button', { name: 'Yes, cancel report' })).toBeDisabled();
 
-    resolveFetch(new Response(null, { status: 204 }));
+    resolve(new Response(null, { status: 204 }));
     await expect.poll(() => onReportChanged.mock.calls.length).toBe(1);
   });
 
   test('an unreachable server keeps the dialog open and shows a retry message', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
     const screen = await render(CancelButton, {
       organizationId: ORGANIZATION_ID,
       reportId: REPORT_ID,
