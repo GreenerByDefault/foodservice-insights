@@ -21,32 +21,22 @@ reads as behaviour — and the file layout is deliberate and documented ([`READM
 Good instances already exist to standardize on, so this is codifying a house style that is
 already half-present, not inventing one.
 
-Outcome: a documented convention, a second `describe` level where tests cluster, one shared
-DB assertion helper, and one oversized file split. **No behaviour changes and no coverage
-changes** — the test count must be identical before and after.
+Outcome: a second `describe` level where tests cluster, one shared DB assertion helper, and
+one oversized file split. **No behaviour changes and no coverage changes** — the test count
+must be identical before and after.
 
-## The convention to document
+## The convention
 
-Add a short `## Test organization` section to
-[`.claude/rules/typescript.md`](.claude/rules/typescript.md), after `## Verifying a change`.
-That file is scoped to `apps/**` and `packages/**`, which is exactly the code it governs.
-Keep it to four bullets — [`writing-docs`](.claude/skills/writing-docs/SKILL.md) says state
-the rule and stop:
+`## Test organization` in [`.claude/rules/typescript.md`](.claude/rules/typescript.md) is
+already documented (landed with the doc's own PR, alongside `packages/storage` and
+`packages/core` as the first files nested under it). Four bullets, kept short per
+[`writing-docs`](.claude/skills/writing-docs/SKILL.md): the top-level `describe` names the
+subject (an exported symbol, a table, a component — one per subject), a nested `describe`
+names the situation so the full path reads as a sentence, never spell the group into the test
+title, and two levels is the working depth. Everything below applies that convention to the
+remaining packages.
 
-- **The top-level `describe` names the subject** — the exported symbol for a unit test
-  (`classifyVerdict`), the table for a database invariant test (`analysis_attempt`), the
-  component for a component test (`UploadForm`). One per subject; a file covering three
-  exports has three.
-- **A nested `describe` names the situation**, so the full path reads as a sentence:
-  `finishing > losing the race > a success returns false`. Reach for one when tests share a
-  precondition, a helper, or a preamble — the helper then lives inside the block rather than
-  at module scope.
-- **Never spell the group into the test title.** A `rule:` prefix repeated across siblings, or
-  a function name typed in front of every test, is a `describe` written the long way.
-- **Two levels is the working depth.** Wanting a third usually means the file covers more than
-  one subject.
-
-Not every flat file is wrong, and the rule should say so implicitly by the "when tests share
+Not every flat file is wrong, and the rule says so implicitly by the "when tests share
 a precondition" clause. [`apps/worker/src/worker.test.ts`](apps/worker/src/worker.test.ts) is
 correctly flat: its seven top-level describes group by worker method, a genuinely
 one-dimensional axis, and all setup is externalized to `testing/worker-harness.ts`.
@@ -64,27 +54,15 @@ one-dimensional axis, and all setup is externalized to `testing/worker-harness.t
 
 ## PR stack
 
-**PR 0 and PR 5 land directly on `improve-test-org`** (this branch) — both are small and
-don't need review isolation. PRs 2-4 (`packages/db`, `apps/worker`, `apps/web`) are big enough
-to want independent review, so they go out as three separate branches/PRs off `main`, each
-built on top of what PR 0 adds — not a `gh-stack` chain, just three ordinary branches that all
-start from `main` post-PR-0. Rebase each on `main` before pushing: this is a pure-reorganization
-stack, so an upstream test added to a block being restructured (as `#291` just did to
-`organization.test.ts`) is a conflict every time.
+**This PR (the last one) lands directly on `improve-test-org`** (this branch) — it's small and
+doesn't need review isolation. PRs 1-3 (`packages/db`, `apps/worker`, `apps/web`) are big enough
+to want independent review, so they go out as three separate branches/PRs off `main` — not a
+`gh-stack` chain, just three ordinary branches that all start from `main` post-convention.
+Rebase each on `main` before pushing: this is a pure-reorganization stack, so an upstream test
+added to a block being restructured (as `#291` did to `organization.test.ts`, already reflected
+below) is a conflict every time.
 
-### PR 0 — Document the convention, plus `packages/storage` and `packages/core`
-
-Lands directly on this branch. Two independent, low-risk pieces bundled together because
-neither needs its own review cycle:
-
-**The convention.** Only [`.claude/rules/typescript.md`](.claude/rules/typescript.md). No code
-churn elsewhere in this piece.
-
-**`packages/storage` and `packages/core`.** Small, independent of the convention doc:
-[`objects.test.ts`](packages/storage/src/objects.test.ts) (11 flat) and
-[`time.test.ts`](packages/core/src/time.test.ts) (`formatWhen`, 10 flat).
-
-### PR 2 — `packages/db`
+### PR 1 — `packages/db`
 
 **Add the shared constraint assertion.** There are 62 near-identical assertions across
 `packages/db/tests/` (54 check, 7 unique, 1 foreign key) and no helper, despite a well-built
@@ -131,7 +109,7 @@ subjects; move `describe('result_file')` (L875-1047, ~10 tests) to
 `packages/db/tests/result-file.test.ts`, carrying its nested
 `'a succeeded attempt has a pdf and an xlsx'` block intact.
 
-### PR 3 — `apps/worker`
+### PR 2 — `apps/worker`
 
 - [`converge.test.ts`](apps/worker/src/sweeps/converge.test.ts) — the worst ratio in the repo
   (17 flat tests under `reapExpiredAttempts`). Split into which attempts it catches (L68-149),
@@ -161,7 +139,7 @@ subjects; move `describe('result_file')` (L875-1047, ~10 tests) to
   six tests share an 8-line `withBreakable`/`withWorker`/`parkAtUpload` preamble and one uses
   a different store. Do **not** split this file; it is the reference for correct flatness.
 
-### PR 4 — `apps/web`
+### PR 3 — `apps/web`
 
 - [`db.test.ts`](apps/web/src/lib/server/db.test.ts) — no `describe` at all, and 9 of 10 titles
   type the function name as a prefix (6 × `withDbErrorHandling`, 3 × `isUniqueViolation`). Add
@@ -195,7 +173,7 @@ subjects; move `describe('result_file')` (L875-1047, ~10 tests) to
   (~30 files), `apps/worker` and `packages/db` use `test.each` (~22 sites), and two files use
   `it.each` ([`failures.test.ts`](apps/worker/src/failures.test.ts),
   [`retry.test.ts`](apps/worker/src/retry.test.ts)) — the only `it` in a repo that otherwise
-  uses `test`. The two `for`-loop-to-`test.each` conversions in PR 3 are included only because
+  uses `test`. The two `for`-loop-to-`test.each` conversions in PR 2 are included only because
   they sit inside blocks being restructured anyway.
 
 ## Verification
@@ -208,7 +186,7 @@ The safety property for a pure reorganization is that the same tests still run a
    and pass/fail, not name lists:
    `pnpm --filter @gbd/<pkg> test:unit -- --reporter=json`
    Take the baseline per PR rather than hardcoding a number: `main` moved once already during
-   planning (`2fe6f45` → `e09da86`, which added five tests to a PR 2 target file), so any
+   planning (`2fe6f45` → `e09da86`, which added five tests to a PR 1 target file), so any
    absolute count goes stale between PRs in the stack.
 3. The gate, run in the background per
    [`.claude/rules/typescript.md`](.claude/rules/typescript.md):
