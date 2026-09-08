@@ -280,212 +280,214 @@ describe('_loadReports', () => {
       });
     });
   });
-});
 
-describe('_loadReports pagination', () => {
-  describe('page boundaries', () => {
-    test('a page of exactly _REPORTS_PAGE_SIZE reports has no Older or Newer link', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE);
+  describe('pagination', () => {
+    describe('page boundaries', () => {
+      test('a page of exactly _REPORTS_PAGE_SIZE reports has no Older or Newer link', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE);
 
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'newest' },
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'newest' },
+          });
+
+          expect(data.reports).toHaveLength(_REPORTS_PAGE_SIZE);
+          expect(data.olderHref).toBeNull();
+          expect(data.newerHref).toBeNull();
         });
+      });
 
-        expect(data.reports).toHaveLength(_REPORTS_PAGE_SIZE);
-        expect(data.olderHref).toBeNull();
-        expect(data.newerHref).toBeNull();
+      test('more than a page shows Older but not Newer on the newest page', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 1);
+          const newestFirst = [...ids].reverse();
+
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'newest' },
+          });
+
+          expect(data.reports.map((row) => row.id)).toEqual(
+            newestFirst.slice(0, _REPORTS_PAGE_SIZE),
+          );
+          expect(data.newerHref).toBeNull();
+          expect(data.olderHref).toBe(
+            olderReportsHref(organization.slug, newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId),
+          );
+        });
+      });
+
+      test('a partial last page has no further Older link', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
+          const newestFirst = [...ids].reverse();
+          const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
+
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'older', cursor: firstPageLast },
+          });
+
+          expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(_REPORTS_PAGE_SIZE));
+          expect(data.reports).toHaveLength(5);
+          expect(data.olderHref).toBeNull();
+          expect(data.newerHref).not.toBeNull();
+        });
+      });
+
+      test('an older page with a further older page shows both links', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE * 2 + 1);
+          const newestFirst = [...ids].reverse();
+          const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
+
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'older', cursor: firstPageLast },
+          });
+
+          expect(data.reports.map((row) => row.id)).toEqual(
+            newestFirst.slice(_REPORTS_PAGE_SIZE, _REPORTS_PAGE_SIZE * 2),
+          );
+          expect(data.newerHref).toBe(
+            newerReportsHref(organization.slug, data.reports[0]?.id as ReportId),
+          );
+          expect(data.olderHref).toBe(
+            olderReportsHref(
+              organization.slug,
+              data.reports[data.reports.length - 1]?.id as ReportId,
+            ),
+          );
+        });
+      });
+
+      test('paging older then newer returns to the same rows', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
+
+          const firstPage = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'newest' },
+          });
+          const lastOfFirstPage = firstPage.reports[firstPage.reports.length - 1]?.id as ReportId;
+
+          const olderPage = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'older', cursor: lastOfFirstPage },
+          });
+          const firstOfOlderPage = olderPage.reports[0]?.id as ReportId;
+
+          const newerPage = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'newer', cursor: firstOfOlderPage },
+          });
+
+          expect(newerPage.reports.map((row) => row.id)).toEqual(
+            firstPage.reports.map((row) => row.id),
+          );
+        });
       });
     });
 
-    test('more than a page shows Older but not Newer on the newest page', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 1);
-        const newestFirst = [...ids].reverse();
+    describe('paging past the ends of the list', () => {
+      test('paging older past the last report gives an empty page with only a Newer link', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, 3);
+          const oldest = ids[0] as ReportId;
 
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'newest' },
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'older', cursor: oldest },
+          });
+
+          expect(data.reports).toEqual([]);
+          expect(data.olderHref).toBeNull();
+          expect(data.newerHref).toBe(newerReportsHref(organization.slug, oldest));
         });
+      });
 
-        expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(0, _REPORTS_PAGE_SIZE));
-        expect(data.newerHref).toBeNull();
-        expect(data.olderHref).toBe(
-          olderReportsHref(organization.slug, newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId),
-        );
+      test('paging newer past the first report gives an empty page with only an Older link', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, 3);
+          const newest = ids[ids.length - 1] as ReportId;
+
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'newer', cursor: newest },
+          });
+
+          expect(data.reports).toEqual([]);
+          expect(data.olderHref).toBe(olderReportsHref(organization.slug, newest));
+          expect(data.newerHref).toBeNull();
+        });
       });
     });
 
-    test('a partial last page has no further Older link', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
-        const newestFirst = [...ids].reverse();
-        const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
+    describe('cursor resolution', () => {
+      test('a cursor naming a report that does not exist falls back to the newest page', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 1);
+          const newestFirst = [...ids].reverse();
+          const missingCursor = crypto.randomUUID() as ReportId;
 
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'older', cursor: firstPageLast },
+          const olderPage = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'older', cursor: missingCursor },
+          });
+          const newerPage = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'newer', cursor: missingCursor },
+          });
+
+          expect(olderPage.reports.map((row) => row.id)).toEqual(
+            newestFirst.slice(0, _REPORTS_PAGE_SIZE),
+          );
+          expect(newerPage.reports.map((row) => row.id)).toEqual(
+            newestFirst.slice(0, _REPORTS_PAGE_SIZE),
+          );
         });
-
-        expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(_REPORTS_PAGE_SIZE));
-        expect(data.reports).toHaveLength(5);
-        expect(data.olderHref).toBeNull();
-        expect(data.newerHref).not.toBeNull();
       });
-    });
 
-    test('an older page with a further older page shows both links', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE * 2 + 1);
-        const newestFirst = [...ids].reverse();
-        const firstPageLast = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
+      test('a cursor whose report has been soft-deleted still pages', async () => {
+        await withRollback(database(), async (transaction) => {
+          const { organization } = await insertOrganization(transaction);
+          const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
+          const newestFirst = [...ids].reverse();
+          const cursorId = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
+          await transaction
+            .updateTable('report')
+            .set({ deletedAt: new Date() })
+            .where('id', '=', cursorId)
+            .execute();
 
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'older', cursor: firstPageLast },
+          const data = await loadReports(transaction, {
+            organizationId: organization.id,
+            organizationSlug: organization.slug,
+            cursor: { direction: 'older', cursor: cursorId },
+          });
+
+          expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(_REPORTS_PAGE_SIZE));
         });
-
-        expect(data.reports.map((row) => row.id)).toEqual(
-          newestFirst.slice(_REPORTS_PAGE_SIZE, _REPORTS_PAGE_SIZE * 2),
-        );
-        expect(data.newerHref).toBe(
-          newerReportsHref(organization.slug, data.reports[0]?.id as ReportId),
-        );
-        expect(data.olderHref).toBe(
-          olderReportsHref(
-            organization.slug,
-            data.reports[data.reports.length - 1]?.id as ReportId,
-          ),
-        );
-      });
-    });
-
-    test('paging older then newer returns to the same rows', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
-
-        const firstPage = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'newest' },
-        });
-        const lastOfFirstPage = firstPage.reports[firstPage.reports.length - 1]?.id as ReportId;
-
-        const olderPage = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'older', cursor: lastOfFirstPage },
-        });
-        const firstOfOlderPage = olderPage.reports[0]?.id as ReportId;
-
-        const newerPage = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'newer', cursor: firstOfOlderPage },
-        });
-
-        expect(newerPage.reports.map((row) => row.id)).toEqual(
-          firstPage.reports.map((row) => row.id),
-        );
-      });
-    });
-  });
-
-  describe('paging past the ends of the list', () => {
-    test('paging older past the last report gives an empty page with only a Newer link', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, 3);
-        const oldest = ids[0] as ReportId;
-
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'older', cursor: oldest },
-        });
-
-        expect(data.reports).toEqual([]);
-        expect(data.olderHref).toBeNull();
-        expect(data.newerHref).toBe(newerReportsHref(organization.slug, oldest));
-      });
-    });
-
-    test('paging newer past the first report gives an empty page with only an Older link', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, 3);
-        const newest = ids[ids.length - 1] as ReportId;
-
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'newer', cursor: newest },
-        });
-
-        expect(data.reports).toEqual([]);
-        expect(data.olderHref).toBe(olderReportsHref(organization.slug, newest));
-        expect(data.newerHref).toBeNull();
-      });
-    });
-  });
-
-  describe('cursor resolution', () => {
-    test('a cursor naming a report that does not exist falls back to the newest page', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 1);
-        const newestFirst = [...ids].reverse();
-        const missingCursor = crypto.randomUUID() as ReportId;
-
-        const olderPage = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'older', cursor: missingCursor },
-        });
-        const newerPage = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'newer', cursor: missingCursor },
-        });
-
-        expect(olderPage.reports.map((row) => row.id)).toEqual(
-          newestFirst.slice(0, _REPORTS_PAGE_SIZE),
-        );
-        expect(newerPage.reports.map((row) => row.id)).toEqual(
-          newestFirst.slice(0, _REPORTS_PAGE_SIZE),
-        );
-      });
-    });
-
-    test('a cursor whose report has been soft-deleted still pages', async () => {
-      await withRollback(database(), async (transaction) => {
-        const { organization } = await insertOrganization(transaction);
-        const ids = await insertReports(transaction, organization.id, _REPORTS_PAGE_SIZE + 5);
-        const newestFirst = [...ids].reverse();
-        const cursorId = newestFirst[_REPORTS_PAGE_SIZE - 1] as ReportId;
-        await transaction
-          .updateTable('report')
-          .set({ deletedAt: new Date() })
-          .where('id', '=', cursorId)
-          .execute();
-
-        const data = await loadReports(transaction, {
-          organizationId: organization.id,
-          organizationSlug: organization.slug,
-          cursor: { direction: 'older', cursor: cursorId },
-        });
-
-        expect(data.reports.map((row) => row.id)).toEqual(newestFirst.slice(_REPORTS_PAGE_SIZE));
       });
     });
   });
