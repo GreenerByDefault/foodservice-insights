@@ -29,6 +29,11 @@ describe('deriveOrganizationSlug', () => {
     expect(slug).toBe('a'.repeat(MAX_ORGANIZATION_SLUG_LENGTH));
   });
 
+  test('leaves a slug landing exactly at the cap untouched', () => {
+    const name = 'a'.repeat(MAX_ORGANIZATION_SLUG_LENGTH);
+    expect(deriveOrganizationSlug(name)).toBe(name);
+  });
+
   test('returns null for a name with no a-z0-9 to build an address from', () => {
     expect(deriveOrganizationSlug('———')).toBeNull();
     expect(deriveOrganizationSlug('日本語')).toBeNull();

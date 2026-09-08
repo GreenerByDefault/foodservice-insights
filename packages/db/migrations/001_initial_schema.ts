@@ -127,7 +127,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     // rather than a function of `name` because `name` is mutable (an admin can rename) and the
     // slug must not move with it: a link a customer has already shared has to keep resolving.
     // Nothing here enforces immutability — there is no trigger forbidding an UPDATE — because
-    // nothing in the app ever issues one; see `.claude/plans/organization-slugs.md`.
+    // nothing in the app ever issues one.
     .addColumn('slug', 'text', (column) => column.notNull())
     .addColumn('created_by_user_id', 'uuid', (column) =>
       column.references('app_user.id').onDelete('set null'),
@@ -159,8 +159,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
       // Mirrors RESERVED_ORGANIZATION_SLUGS (types.ts), not imported, same reasoning as
       // organization_name_length above. These are the static directories SvelteKit routes ahead
       // of the dynamic `[organizationSlug=slug]` segment — an organization slugged `new` would be
-      // a real route and so unreachable. See "Why some slugs are reserved" in
-      // .claude/plans/organization-slugs.md.
+      // a real route and so unreachable.
       'organization_slug_not_reserved',
       sql`slug NOT IN ('new', 'all', 'api', 'create', 'invites', 'settings', 'admin', 'account')`,
     )

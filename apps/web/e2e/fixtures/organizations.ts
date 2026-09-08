@@ -18,10 +18,6 @@ import { withTransaction } from '@gbd/db';
 import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { insertAppUser, insertOrganization, insertOrganizationMember } from '@gbd/db/testing';
 import { type Kysely, sql, type Transaction } from 'kysely';
-// By relative path, not `$lib/server/orgs/slug`: this file runs under plain Playwright, where
-// `$lib` and `$env` resolve only inside the SvelteKit app — the same constraint
-// `pagination.e2e.ts:10-12` documents for `polling/schedule.ts`. `deriveOrganizationSlug` is kept
-// free of both for exactly this reason.
 import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
@@ -68,8 +64,6 @@ export async function insertOrganizationFixture(
   },
 ): Promise<{ organizationId: OrganizationId; organizationSlug: string; reportIds: ReportId[] }> {
   const role = spec.role ?? 'admin';
-  // Fixture names are always real text a spec chose, never punctuation-only, so this never sees
-  // the `null` a caller-supplied name could produce — that path is the create endpoint's alone.
   const slug = deriveOrganizationSlug(spec.name);
   if (slug === null) {
     throw new Error(`insertOrganizationFixture: "${spec.name}" has no slug-legal characters`);

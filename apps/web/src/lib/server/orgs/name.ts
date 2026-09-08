@@ -1,7 +1,9 @@
 /** Parsing the `{ name }` body shared by create and rename, the 409 both answer with when the
- * name they parsed out is already taken, and the failures specific to create — a slug is derived
- * from the name and never from a field of its own, so every way that derivation can fail is
- * answered in terms of the name too. See `.claude/plans/organization-slugs.md`. */
+ * name they parsed out is already taken, and the failures specific to create.
+ *
+ * A slug is derived from the name, so every way that derivation can fail is
+ * answered in terms of the name too.
+ */
 
 import { json } from '@sveltejs/kit';
 import * as v from 'valibot';

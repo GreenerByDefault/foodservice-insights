@@ -42,8 +42,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
  * raised.
  *
  * The slug is derived from the name and never taken as its own field — see
- * `deriveOrganizationSlug` and `.claude/plans/organization-slugs.md`. Every way that can fail
- * resolves to picking a different name; see `server/orgs/name.ts` for what each response means:
+ * `deriveOrganizationSlug`. Every way that can fail resolves to picking a different name;
+ * see `server/orgs/name.ts` for what each response means:
  *   - 422 `slug-underivable` or `slug-reserved`.
  *   - 409 `name-taken` or `slug-taken`.
  */

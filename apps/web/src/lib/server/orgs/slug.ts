@@ -1,5 +1,4 @@
-/** Deriving an organization's permanent URL slug from its name — see
- * `.claude/plans/organization-slugs.md`. Pure, standard library only.
+/** Deriving an organization's permanent URL slug from its name. Pure, standard library only.
  *
  * `null` is a real outcome: a name of only punctuation, or only a non-Latin script with no
  * transliteration to strip, leaves nothing behind. The caller (the create endpoint) answers that
