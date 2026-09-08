@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { stubFetch, stubPendingFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { atRetryCapFailure, notRetryableFailure, retryableFailure } from '../testing/fixtures.ts';
 import FailureView from './failure-view.svelte';
 
@@ -12,10 +13,6 @@ const REPORT_ID = 'report-1';
 const RETRYABLE = retryableFailure();
 const NOT_RETRYABLE = notRetryableFailure();
 const AT_RETRY_CAP = atRetryCapFailure();
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -136,11 +133,7 @@ describe('FailureView', () => {
   });
 
   test('while the request is in flight, the retry button is disabled', async () => {
-    let resolveFetch!: (response: Response) => void;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveFetch = resolve))),
-    );
+    const { resolve } = stubPendingFetch();
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,
@@ -152,12 +145,12 @@ describe('FailureView', () => {
     await screen.getByRole('button', { name: 'Retry' }).click();
     await expect.element(screen.getByRole('button', { name: 'Retry' })).toBeDisabled();
 
-    resolveFetch(new Response(null, { status: 204 }));
+    resolve(new Response(null, { status: 204 }));
     await expect.poll(() => onReportChanged.mock.calls.length).toBe(1);
   });
 
   test('an unreachable server shows an error and does not refresh', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
     const screen = await render(FailureView, {
       attemptNumber: 1,
       failure: RETRYABLE,

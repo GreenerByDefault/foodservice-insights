@@ -1,19 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
+import { jsonResponse, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { pollReport } from './poll-report.ts';
 
 const POLL_HREF = '/orgs/org-1/reports/report-1/poll';
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -153,7 +143,7 @@ describe('pollReport', () => {
   });
 
   test('no response at all throws ApiUnreachableError', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
 
     await expect(pollReport(POLL_HREF)).rejects.toBeInstanceOf(ApiUnreachableError);
   });

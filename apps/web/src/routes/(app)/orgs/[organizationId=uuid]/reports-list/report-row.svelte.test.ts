@@ -1,21 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { ReportListRow } from '../+page.server.ts';
 import ReportRow from './report-row.svelte';
-
-function aReport(overrides: Partial<ReportListRow> = {}): ReportListRow {
-  return {
-    id: 'a4f8e2b0-1111-4a11-8111-000000000001' as ReportListRow['id'],
-    href: '/orgs/org-1/reports/a4f8e2b0-1111-4a11-8111-000000000001',
-    name: 'Q1 procurement',
-    siteName: 'Riverside Cafeteria',
-    creator: { displayName: 'Ana Ruiz', email: 'ana@example.test' },
-    createdAt: new Date('2026-01-15T09:48:00Z'),
-    status: 'succeeded',
-    now: new Date('2026-01-15T10:00:00Z'),
-    ...overrides,
-  };
-}
+import { aReport } from './testing/fixtures.ts';
 
 describe('ReportRow', () => {
   // The same elements are repeated in the DOM for mobile vs desktop, so we use `.first()`.

@@ -1,19 +1,15 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { goto } from '$app/navigation';
+import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { resetNavigationMocks } from '$lib/testing/navigation';
 import DeleteButton from './delete-button.svelte';
 
-const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: gotoMock }));
-
-function stubFetch(response: Response) {
-  const fetchMock = vi.fn().mockResolvedValue(response);
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
+vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  gotoMock.mockClear();
+  resetNavigationMocks();
 });
 
 describe('DeleteButton', () => {
@@ -60,16 +56,16 @@ describe('DeleteButton', () => {
     await screen.getByLabelText('Type "Acme Foodservice" to confirm').fill('Acme Foodservice');
     await screen.getByRole('button', { name: 'Yes, delete organization' }).click();
 
-    await expect.poll(() => gotoMock.mock.calls.length).toBe(1);
+    await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe('/api/orgs/org-1');
     expect(options.method).toBe('DELETE');
-    expect(gotoMock).toHaveBeenCalledWith('/orgs', { invalidateAll: true });
+    expect(goto).toHaveBeenCalledWith('/orgs', { invalidateAll: true });
   });
 
   test('an unreachable server shows the inline error and does not navigate', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
     const screen = await render(DeleteButton, {
       organizationId: 'org-1',
       organizationName: 'Acme Foodservice',
@@ -82,6 +78,6 @@ describe('DeleteButton', () => {
     await expect
       .element(screen.getByText('Could not delete this organization. Please try again.'))
       .toBeInTheDocument();
-    expect(gotoMock).not.toHaveBeenCalled();
+    expect(goto).not.toHaveBeenCalled();
   });
 });

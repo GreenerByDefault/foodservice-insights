@@ -17,7 +17,7 @@ already established by `deleteOrganization`/`renameOrganization`. A loader only 
 page URL; an API client builds its own URL from `lib/hrefs.ts` and the ids the page already has.
 The one decision still ahead: the "imported by the browser as well as the server" header, now down
 to 29 copies (`grep -rl 'keep it free of'` — `switcher-limit.ts`'s was replaced with its own real
-reason rather than counted here), goes, replaced by one README rule (PR 3).
+reason rather than counted here), goes, replaced by one README rule (PR 2).
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
 done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable.
@@ -36,26 +36,21 @@ grouping for `organization-switcher.svelte`, `user-menu.svelte`, `initials.ts`, 
 `switcher-limit.ts`; and the `_organizationsPageRedirect` rename (from
 `_resolvePostSignInDestination`, since it runs on every `/orgs` visit, not after sign-in).
 
----
-
-## PR 1 — Browser test helpers
-
-- `apps/web/src/lib/testing/fetch.ts`: `stubFetch(response)` (returns the mock),
-  `stubUnreachableFetch()`, `stubPendingFetch()` → `{ resolve }`, `jsonResponse(body, status?)`,
-  `lastFetchCall(fetchMock)` → `[url, RequestInit]`. Replaces 15 `stubFetch` copies (two drifted
-  variants), 5 deferred-fetch blocks, 3 `jsonResponse`, 4 request-assertion casts.
-- `apps/web/src/lib/testing/navigation.ts` exporting `goto = vi.fn()`, `invalidateAll = vi.fn()`
-  and `resetNavigationMocks()`. Each test keeps a single
-  `vi.mock('$app/navigation', () => import('$lib/testing/navigation'))` line — this also mocks
-  *all* navigation exports at once, so a component that starts calling both stops failing with
-  `undefined is not a function`.
-- `reports-list/testing/fixtures.ts` with one `aReport(overrides)`; replaces three near-identical
-  copies in that folder (same pattern as `reports/[reportId=uuid]/testing/fixtures.ts`).
-- Fix `csv/testing` imports to one style (`$lib/reports/csv/testing`).
+Browser test helpers have also landed: `lib/testing/fetch.ts` (`stubFetch`, `stubUnreachableFetch`,
+`stubPendingFetch`, `jsonResponse`, `lastFetchCall`) and `lib/testing/navigation.ts` (`goto`,
+`invalidateAll`, `resetNavigationMocks`, mocked in one line per file via
+`vi.mock('$app/navigation', () => import('$lib/testing/navigation'))`), replacing the local copies
+across every fetch-mocking and navigation-mocking test in `apps/web`. `reports-list/testing/
+fixtures.ts` now has the one `aReport(overrides)` used by `reports-list.svelte.test.ts`,
+`report-row.svelte.test.ts`, and `reports-view.svelte.test.ts` (defaulting to a pending report with
+a site name and creator, matching `report-row`'s own defaults — the only file that renders one
+unoverridden). `csv/findings.test.ts`, `csv/describe/findings.test.ts`, and
+`csv/describe/rows.test.ts` import `csv/testing` fixtures via `$lib/reports/csv/testing` rather
+than a relative path.
 
 ---
 
-## PR 2 — e2e fixtures and README
+## PR 1 — e2e fixtures and README
 
 - `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
   `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
@@ -79,7 +74,7 @@ grouping for `organization-switcher.svelte`, `user-menu.svelte`, `initials.ts`, 
 
 ---
 
-## PR 3 — Docs and comments
+## PR 2 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
@@ -140,6 +135,6 @@ grouping for `organization-switcher.svelte`, `user-menu.svelte`, `initials.ts`, 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
 the diff is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 2's screenshot renames need
+`pnpm --filter @gbd/web test:e2e -- <path>`. PR 1's screenshot renames need
 `pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
 actually changed (renames only).

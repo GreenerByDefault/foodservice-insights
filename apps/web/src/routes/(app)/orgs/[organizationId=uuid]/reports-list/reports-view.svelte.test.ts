@@ -2,24 +2,12 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
 import { triggerImmediatePoll } from '$lib/polling/testing/trigger-immediate-poll';
+import { jsonResponse } from '$lib/testing/fetch';
 import type { ReportListRow, ReportsPageData } from '../+page.server.ts';
 import ReportsView from './reports-view.svelte';
+import { aReport } from './testing/fixtures.ts';
 
 const POLL_HREF = '/orgs/org-1/poll';
-
-function aReport(overrides: Partial<ReportListRow> = {}): ReportListRow {
-  return {
-    id: 'a4f8e2b0-1111-4a11-8111-000000000001' as ReportListRow['id'],
-    href: '/orgs/org-1/reports/a4f8e2b0-1111-4a11-8111-000000000001',
-    name: 'Q1 procurement',
-    siteName: null,
-    creator: null,
-    createdAt: new Date('2026-01-15T09:48:00Z'),
-    status: 'pending',
-    now: new Date('2026-01-15T10:00:00Z'),
-    ...overrides,
-  };
-}
 
 function aPageData(reports: ReportListRow[]): ReportsPageData {
   return {
@@ -30,13 +18,6 @@ function aPageData(reports: ReportListRow[]): ReportsPageData {
     pollHref: POLL_HREF,
     pollIntervalMs: BASE_POLL_INTERVAL_MS,
   };
-}
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
 }
 
 function wireReport(report: ReportListRow) {

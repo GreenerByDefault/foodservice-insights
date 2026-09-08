@@ -1,21 +1,11 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
+import { jsonResponse, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { pollReports } from './poll-reports.ts';
 
 const POLL_HREF = '/orgs/org-1/poll';
 const IDS = ['report-1' as ReportId];
-
-function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
-}
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -83,7 +73,7 @@ describe('pollReports', () => {
   });
 
   test('no response at all throws ApiUnreachableError', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
 
     await expect(pollReports(POLL_HREF, IDS)).rejects.toBeInstanceOf(ApiUnreachableError);
   });

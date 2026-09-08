@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
 import { triggerImmediatePoll } from '$lib/polling/testing/trigger-immediate-poll';
+import { jsonResponse } from '$lib/testing/fetch';
 import type { ReportPageData } from './+page.server.ts';
 import ReportView from './report-view.svelte';
 import { retryableFailure } from './testing/fixtures.ts';
@@ -49,13 +50,6 @@ function succeededWireBody() {
       },
     },
   };
-}
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
 }
 
 function liveRegionText(screen: Awaited<ReturnType<typeof render>>): string | null | undefined {

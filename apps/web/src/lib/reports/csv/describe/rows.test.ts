@@ -4,9 +4,9 @@
  */
 
 import { describe, expect, test } from 'vitest';
+import { findingGroup, weightFinding } from '$lib/reports/csv/testing';
 import { EARLIEST_DATE, MAX_FREE_TEXT_LENGTH, MAX_FUTURE_DAYS } from '../../limits.ts';
 import type { FindingGroup } from '../findings.ts';
-import { findingGroup, weightFinding } from '../testing/index.ts';
 import type { Problem } from './problems.ts';
 import { toProblem, toRowSpan } from './rows.ts';
 

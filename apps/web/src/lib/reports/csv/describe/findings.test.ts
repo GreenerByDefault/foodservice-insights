@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, test } from 'vitest';
+import { findingGroup, sealedFindings } from '$lib/reports/csv/testing';
 import { MAX_PROBLEMS_REPORTED } from '../../limits.ts';
 import type { DateOrderFinding, FindingGroup, Findings } from '../findings.ts';
-import { findingGroup, sealedFindings } from '../testing/index.ts';
 import { describeFindings } from './findings.ts';
 
 function rejectionFor(overrides: Partial<Findings> = {}) {

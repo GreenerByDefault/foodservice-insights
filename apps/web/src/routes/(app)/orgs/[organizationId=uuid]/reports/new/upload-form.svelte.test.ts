@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { goto } from '$app/navigation';
+import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { resetNavigationMocks } from '$lib/testing/navigation';
 import UploadForm from './upload-form.svelte';
 
-const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: gotoMock }));
+vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
 
 const ORGANIZATION_ID = 'org-1';
 const CSV = 'product,date,weight\nbeef,2026-01-05,12\n';
@@ -12,15 +14,9 @@ function csvFile(text = CSV): File {
   return new File([text], 'procurement.csv', { type: 'text/csv' });
 }
 
-function stubFetch(response: Response) {
-  const fetchMock = vi.fn().mockResolvedValue(response);
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
-
 afterEach(() => {
   vi.unstubAllGlobals();
-  gotoMock.mockClear();
+  resetNavigationMocks();
 });
 
 async function fillRequiredFields(
@@ -49,9 +45,9 @@ describe('UploadForm', () => {
     await screen.getByRole('radio', { name: 'Meals' }).click();
     await screen.getByRole('button', { name: 'Upload report' }).click();
 
-    await expect.poll(() => gotoMock.mock.calls.length).toBe(1);
+    await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe(`/api/orgs/${ORGANIZATION_ID}/reports`);
     const body = options.body as FormData;
     expect(body.get('report-name')).toBe('Q1 procurement');
@@ -61,7 +57,7 @@ describe('UploadForm', () => {
     expect(JSON.parse(body.get('monthly-counts') as string)).toEqual({ '2026-01': 100 });
     expect(body.get('file')).toBeInstanceOf(File);
 
-    expect(gotoMock).toHaveBeenCalledWith('/orgs/org-1/reports/report-1');
+    expect(goto).toHaveBeenCalledWith('/orgs/org-1/reports/report-1');
   });
 
   test('a 400 shows the rejection view', async () => {
@@ -114,7 +110,7 @@ describe('UploadForm', () => {
   });
 
   test('a rejecting fetch renders the unknown-outcome message and the report-list link', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    stubUnreachableFetch();
     const screen = await render(UploadForm, { organizationId: ORGANIZATION_ID });
 
     await fillRequiredFields(screen);
@@ -126,7 +122,7 @@ describe('UploadForm', () => {
     await expect
       .element(screen.getByRole('link', { name: 'your reports' }))
       .toHaveAttribute('href', `/orgs/${ORGANIZATION_ID}`);
-    expect(gotoMock).not.toHaveBeenCalled();
+    expect(goto).not.toHaveBeenCalled();
   });
 
   test('an empty file is rejected by inspection before ever reaching the network, and shows the rejection view', async () => {
