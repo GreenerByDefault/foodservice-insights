@@ -1,19 +1,22 @@
-/** A list of all organizations the user belongs to, in alphabetical order. */
+/** The `/orgs` picker: redirects on to an invite, a single organization, or the new-organization
+ * flow before falling back to the full list — which, for a superadmin, is every organization in
+ * the table, not just ones they belong to. */
 
-import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
+import type { DatabaseExecutor } from '@gbd/db';
 import { redirect } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { organizationHref } from '$lib/hrefs';
 import { requireAuth } from '$lib/server/auth/guards';
 import type { AuthContext } from '$lib/server/auth/types';
 import { database, withDbErrorHandling } from '$lib/server/db';
+import { listOrganizations, type OrganizationRow } from '$lib/server/orgs/list';
 import type { PageServerLoad } from './$types';
 
-export type OrganizationListRow = { id: OrganizationId; name: string };
+export type OrganizationListRow = OrganizationRow;
 
 export const load: PageServerLoad = async ({ locals }) => {
   const auth = requireAuth(locals);
-  const destination = await _resolvePostSignInDestination(database(), auth);
+  const destination = await _organizationsPageRedirect(database(), auth);
   if (destination) redirect(303, destination);
   return { organizations: await _loadAllOrganizations(database(), auth) };
 };
@@ -23,21 +26,11 @@ export async function _loadAllOrganizations(
   db: DatabaseExecutor,
   auth: AuthContext,
 ): Promise<readonly OrganizationListRow[]> {
-  if (!auth.user.isSuperadmin) {
-    return auth.memberships.map((membership) => ({
-      id: membership.organizationId,
-      name: membership.organizationName,
-    }));
-  }
-
-  return await withDbErrorHandling(
-    () => db.selectFrom('organization').select(['id', 'name']).orderBy('name').execute(),
-    { action: 'list all organizations', context: { userId: auth.user.id } },
-  );
+  return await listOrganizations(db, auth);
 }
 
 /** The next page, or null to stay here and pick one. */
-export async function _resolvePostSignInDestination(
+export async function _organizationsPageRedirect(
   db: DatabaseExecutor,
   auth: AuthContext,
 ): Promise<string | null> {
