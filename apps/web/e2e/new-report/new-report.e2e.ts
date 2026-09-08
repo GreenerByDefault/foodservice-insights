@@ -1,6 +1,4 @@
 import { ensureHydrated } from '@gbd/browser-testing';
-import type { ReportId } from '@gbd/db';
-import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 import { chooseCsv } from '../lib/upload.ts';
@@ -9,15 +7,8 @@ const GOOD_CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 
 const BAD_ROWS_CSV = ['product,date,weight', 'beef,2026-01-05,5 oz'].join('\n');
 
-/** Extracts the id this test's own upload created, from the URL it lands on. */
-function reportIdFromUrl(url: string): ReportId {
-  const match = /\/reports\/([0-9a-f-]+)$/.exec(url);
-  if (!match) throw new Error(`expected a report URL, got ${url}`);
-  return match[1] as ReportId;
-}
-
-test('uploading a good CSV creates a report and lands on its page', async ({ page, reports }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}`);
+test('uploading a good CSV creates a report and lands on its page', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}`);
   await ensureHydrated(page);
   await page.getByRole('link', { name: 'New report' }).click();
 
@@ -29,22 +20,15 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
 
   await page.getByRole('button', { name: 'Upload report' }).click();
 
-  await expect(page).toHaveURL(
-    new RegExp(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/[0-9a-f-]+$`),
-  );
+  await expect(page).toHaveURL(new RegExp(`/orgs/${org.slug}/reports/[0-9a-f-]+$`));
   await expect(page).toHaveTitle('Q1 procurement');
-
-  // Playwright runs every e2e spec against one shared run database (fullyParallel), so this
-  // report must not outlive the test: left behind, it'd skew another test's report-list count
-  // or eat into the placeholder org's rate limit. Adopted, since the upload form created it
-  // rather than the `reports` fixture.
-  reports.adopt(reportIdFromUrl(page.url()));
 });
 
 test('uploading a CSV with bad rows shows the rejection view, naming them, without ever submitting', async ({
   page,
+  org,
 }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+  await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
   await chooseCsv(page, 'procurement.csv', BAD_ROWS_CSV);

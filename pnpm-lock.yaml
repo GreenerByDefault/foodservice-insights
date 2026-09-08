@@ -289,6 +289,9 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.1
+      kysely:
+        specifier: 'catalog:'
+        version: 0.29.5
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

@@ -7,7 +7,10 @@ Every request today runs as one seeded placeholder user: `identifyUser` in
 everything downstream — `loadAuthorization`, `AuthContext`, `requireAuth`, the `(app)` layout gate,
 `_resolvePostSignInDestination` — is already the real design. This plan replaces the stub with
 Supabase Auth email OTP, adds a one-question onboarding step (display name, required), gives
-`/account` a working rename, and moves the test suites off the seeded identity onto per-test users.
+`/account` a working rename, and moves the test suites off that identity onto per-test users.
+
+The prefactor for that last part has landed: both browser suites now get their identity and their
+organization from fixtures rather than from a seeded row. See § Where a test identity comes from.
 
 Invites, memberships, change-email, delete-account, and CSP are out of scope. Change-email and
 delete-account stay `**Stub:**`; CSP becomes an Open item in `ARCHITECTURE.md`.
@@ -48,6 +51,29 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 - Account-enumeration protection and `returnTo`: not applicable. Sign-up is open (anyone may create an
   organization), and `apps/web/README.md` already settled "a 401 is not a redirect".
 
+### Where a test identity comes from
+
+`packages/browser-testing/src/identity.ts` is the only place either browser suite names the
+phase-one placeholder. `prepareRunIdentity(connectionString, email?)` writes one `auth.users` row
+per run — called from `runAgainstFreshStack`, which takes an `identityEmail` — and
+`readRunIdentity(db)` is what the `user` fixture reads back. `@gbd/browser-testing/fixtures`
+beside it is the `test` both suites extend: worker-scoped `db`, `user: { id, email }`, and a
+per-test `org` the user administers, named by the `orgName` option or `Test org <uuid>`. The `org`
+is deleted at teardown and `report`/`organization_member` cascade from it, which is why there is no
+`reports.adopt` any more.
+
+Deliberately *not* there yet, because nothing could implement them until GoTrue is in the picture:
+the `identity: 'onboarded' | 'new' | 'anonymous'` option, `users.create`, `users.contextFor`, and
+overriding `request` to `context.request`. They arrive with PR 2.
+
+`apps/web/e2e` extends that shared `test` with `reports.create(state)` — into `org` — and
+`organizations.create(spec)` for an organization built to a spec (members, invites, a whole list of
+reports, or a `member`-role view). `insertReportFixture(db, state, organizationId)`,
+`reportUrl(reportId, organizationSlug)` and `insertOrganizationFixture(db, userId, spec)` all take
+what they used to default to the placeholder; `@gbd/db/testing`'s `insertOrganization` gained
+`adminUserId?`. `packages/db/src/seed.ts` survives only for `pnpm seed:identity`, which a dev
+database still needs.
+
 ### Two facts that shape the design
 
 1. **GoTrue v2.195.0's built-in email templates carry no code.** Verified by grepping the running
@@ -55,7 +81,7 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
    `{{ .ConfirmationURL }}` only; `{{ .Token }}` appears solely in the reauthentication template.
    `signInWithOtp` therefore sends a link unless we commit templates. (cfa-web-app's README note that
    "the code is at the end of the email" was true of an older GoTrue.) Its "customizing the template
-   locally failed" remark is a risk to retire in PR 3's first commit.
+   locally failed" remark is a risk to retire in PR 2's first commit.
 2. **GoTrue writes to the stack's main `postgres` database; Playwright runs the app against a per-run
    clone** (`packages/db/src/testing/run-database.ts`). A user created through GoTrue exists in main
    `auth.users` only; `loadAuthorization` reads the clone. So e2e fixtures create the GoTrue user
@@ -83,51 +109,14 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 | OTP input | Plain `<input inputmode="numeric" autocomplete="one-time-code" pattern maxlength>` | Native constraint validation per `apps/web/README.md` § Forms; no new dependency |
 | Env vars | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public`; `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable. The staging plan's "no `PUBLIC_*`" sentence means `$env/static/*`; fix its wording |
 | Dependencies | `@supabase/ssr` 0.12.x, `@supabase/supabase-js` 2.115.x, both in the catalog | Latest; cfa-app runs 0.12 |
+| Screenshot text the identity owns | A screenshot spec pins what the shell renders — `test.use({ orgName })` today, a `userEmail` equivalent once identities are per-test — and a pinned value is *shared* across the run, never per-test | `organization_name_unique_ci` and `auth.users.email` are globally unique, so two tests holding one pinned value at once collide. Sharing the row is what keeps those specs `fullyParallel`; serializing them behind a name is not an acceptable price for one string. Nothing pinned may be mutated, and nothing is deleted — the run's database is dropped wholesale. `account/menu.png` renders the signed-in address, which is why `identityEmail` defaults to a fixed one and only `tests/e2e` (which asserts on delivered mail, against a shared Mailpit) passes a unique one |
 | Local keys | Fixed CLI defaults committed in `.env.example`/`.env.test`: `sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`, `sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz` | Same on every machine and in CI |
 
 ---
 
-## PR 1 — Prefactor: the fixtures own the identity and the organization
+## PR 1 — Sign-in UI, unmounted
 
-No behaviour change; every spec stays green against the placeholder. Goal: after this PR,
-`grep PLACEHOLDER_ apps/web/e2e tests/e2e` returns nothing, and one file knows how a test identity is
-made.
-
-- **New `packages/browser-testing/src/identity.ts`** — the one place that materializes an identity.
-  Today: `prepareRunIdentity(connectionString)` seeds the placeholder (replacing `seedRunDatabase` in
-  `test-run.ts`) and sets it a per-run unique email via `aTestEmailAddress`, absorbing
-  `useAFreshNotificationAddress` from `tests/e2e/scripts/test-run.ts`. `identity: 'new'` and a second
-  signed-in context throw `not supported until real sign-in lands` — never silently ignored.
-- **New `packages/browser-testing/src/fixtures.ts`**, exported as `@gbd/browser-testing/fixtures`
-  (separate entry so `playwright.config.ts` never loads `@gbd/db/env`, per the pool-at-import note in
-  `apps/web/e2e/fixtures/test.ts`). Extends `@playwright/test` with: worker-scoped `db` (moved from
-  apps/web); test-scoped `user: { id, email, displayName }`, `org: { id: OrganizationId; slug: string }`
-  (created lazily, the user as admin, `orgName` option for screenshots, else `Test org <uuid>` — the
-  slug is what specs build `/orgs/…` URLs from, per organization-slugs), `users.create(spec)`; the
-  `request` fixture overridden to `context.request` so `upload-limit.e2e.ts` shares the browser's
-  cookies once they exist. Options `identity: 'onboarded' | 'new' | 'anonymous'` (default
-  `'onboarded'`).
-- **`apps/web/e2e/fixtures/test.ts`** extends the shared test. `reports.create(state)` inserts into
-  `org`; `insertReportFixture(db, state, organizationId)` loses its placeholder default, and
-  `reportUrl(reportId, organizationSlug)` loses its placeholder default too — `reportUrl`'s second
-  argument is already the slug (organization-slugs), not the id; `insertOrganizationFixture(db,
-  userId, spec)` takes the member. `@gbd/db/testing`'s `insertOrganization` gains `adminUserId?`.
-- **Specs:** `auth.e2e.ts`, `upload-limit.e2e.ts`, `new-report/*.ts`, `reports/*.e2e.ts`,
-  `reports/reports.screenshot.ts`, `tests/e2e/specs/report-lifecycle.e2e.ts` (reads `user.email`
-  instead of `RUN_NOTIFICATION_EMAIL`). Screenshot specs pass a fixed `orgName`, **distinct per
-  file** — a fixed name shared by two files collides on `organization_name_unique_ci` under
-  `fullyParallel`.
-- **Screenshots regenerate:** every `(app)` shot's switcher changes from "Phase One Foodservice" to
-  the spec's org name. Mechanical, but reviewers should see only that text change.
-- Docs: `apps/web/e2e/README.md` § Database state; comment touch-ups in
-  `organizations/members.screenshot.ts`, `organizations/organizations.screenshot.ts`; fix the stale
-  "the e2e suite, which truncates" at `packages/db/src/testing/concurrency.ts:366`.
-
-Not yet: `lib/stub-page-data.ts` (needs a memberless user — PR 3).
-
-## PR 2 — Sign-in UI, unmounted
-
-Lands reviewed and component-tested, reachable from nowhere until PR 3 mounts it.
+Lands reviewed and component-tested, reachable from nowhere until PR 2 mounts it.
 
 - **Catalog + `apps/web` `dependencies`:** `@supabase/ssr`, `@supabase/supabase-js`. Server code
   imports them, so `dependencies`, not `devDependencies` (see `.claude/rules/typescript.md`).
@@ -154,10 +143,10 @@ Lands reviewed and component-tested, reachable from nowhere until PR 3 mounts it
   elapses (fake timers) and passes `shouldCreateUser: false`; "Change email" returns to step one with
   the address preserved.
 
-Lives in `$lib/components/auth/` from the start: two routes will mount it (PR 3 and PR 5), which is
+Lives in `$lib/components/auth/` from the start: two routes will mount it (PR 2 and PR 4), which is
 the promotion rule.
 
-## PR 3 — Switch on Supabase Auth
+## PR 2 — Switch on Supabase Auth
 
 The server reads the cookie, the sign-in page and sign-out work, e2e identities are real GoTrue
 users, and the seed is deleted. Dev workflow changes with it.
@@ -195,7 +184,7 @@ users, and the seed is deleted. Dev workflow changes with it.
 - `hooks.server.ts`: a `null` from `loadAuthorization` becomes `console.error` + signed out (replace
   the throw and its comment). Delete the "temporary" test at `hooks.server.test.ts:124`; add one for
   the new branch.
-- `types.ts`: `AuthenticatedUser.displayName` stays `string | null` until PR 4.
+- `types.ts`: `AuthenticatedUser.displayName` stays `string | null` until PR 3.
 
 **Client:**
 
@@ -212,7 +201,10 @@ users, and the seed is deleted. Dev workflow changes with it.
 **Test identities:**
 
 - `packages/db/src/testing/fixtures.ts`: `insertAppUser` accepts `id?` (and keeps `email?`).
-- `identity.ts` rewritten: `admin.generateLink({ type: 'magiclink', email })` on a service client
+- `identity.ts` rewritten — `prepareRunIdentity`/`readRunIdentity` give way to minting a user per
+  test, and `runAgainstFreshStack`'s `identityEmail` goes with them, which means `tests/e2e` gets
+  its private mailbox from its own per-test address instead. `admin.generateLink({ type:
+  'magiclink', email })` on a service client
   (creates the user in GoTrue without mail; use `data.user.email` — GoTrue lowercases) →
   `insertAppUser(db, { id: data.user.id, email, displayName })` in the run DB → a
   `createServerClient` whose cookie store only records `setAll`, `verifyOtp({ email, token:
@@ -224,7 +216,16 @@ users, and the seed is deleted. Dev workflow changes with it.
   `run-database.ts`). `identity: 'anonymous'` adds no cookies; `users.contextFor(user)` returns a
   second signed-in context.
 - `packages/browser-testing` gains `waitForSignInCode(address)` over `@gbd/email/testing`'s
-  `waitForEmail`, anchored on our template's copy.
+  `waitForEmail`, anchored on our template's copy. `fixtures.ts` gains what the prefactor
+  deliberately left out: the `identity` option, `users.create`, `users.contextFor`, and `request`
+  overridden to `context.request` so `upload-limit.e2e.ts` shares the browser's cookies.
+- **A per-test address is not screenshot-safe.** `account/menu.png` renders the signed-in email, so
+  the fixtures need a `userEmail` option beside `orgName`, pinned by `account-menu.screenshot.ts`
+  and any other spec whose committed image shows it — shared across the run the same way `orgName`
+  already is, since `auth.users.email` is unique and those specs must stay parallel. Note this is
+  the one identity a run cannot mint per test, so `findOrCreateOrganization`'s "same identity
+  everywhere" note stops holding and a pinned organization needs a membership row per asking user.
+  See § Settled decisions.
 - **Delete the seed:** `packages/db/src/seed.ts`, `seed.test.ts`, `scripts/seed-identity.ts`, the
   `./seed` export, the `seed:identity` task in `turbo.json` and root `package.json`;
   `apps/web/e2e/lib/stub-page-data.ts` (the `orgs-list-empty` shots now use a user with no
@@ -233,13 +234,14 @@ users, and the seed is deleted. Dev workflow changes with it.
 - `auth.e2e.ts` becomes the real flow: `identity: 'anonymous'` → `/` shows the marketing page →
   `/sign-in` → enter `users.create()`'s email → `waitForSignInCode` → enter code → lands on the
   user's org (or `/orgs/new`) → account menu shows the email → Sign out → `/`. Test that a signed-out
-  visit to an org URL answers 401 (the inline form arrives in PR 5).
+  visit to an org URL answers 401 (the inline form arrives in PR 4).
 - `sign-in.screenshot.ts`: email step; code step reached by `page.route('**/auth/v1/otp', fulfil
   200)` so the containerized browser never dials GoTrue (`127.0.0.1` is unreachable from Docker, and
   screenshots may not POST anyway).
 - `tests/e2e/scripts/containers.ts` `webContainerCommand`: add `PUBLIC_SUPABASE_URL` through
-  `forContainer` and `PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The spec already uses the shared fixtures
-  from PR 1; the worker needs nothing.
+  `forContainer` and `PUBLIC_SUPABASE_PUBLISHABLE_KEY`. `report-lifecycle.e2e.ts` already runs on
+  the shared fixtures and reads `user.email` for its mailbox, so the spec needs nothing; nor does
+  the worker.
 
 **Docs:** root `README.md` (first run: `pnpm migrate`, then sign up in the UI and read the code at
 Mailpit 55324; superadmin is `app_user.is_superadmin` in Studio; delete every `seed:identity`
@@ -249,7 +251,7 @@ HttpOnly trade-off with CSP as the compensating control, `getUser()` and the fou
 `getClaims()`; Open: CSP), `apps/web/e2e/README.md` § Database state, and the staging plan's
 `PUBLIC_*` sentence.
 
-## PR 4 — Onboarding: the display name is required, and `/account` can change it
+## PR 3 — Onboarding: the display name is required, and `/account` can change it
 
 - **Migration `002_app_user_display_name.ts`:** `CHECK (display_name IS NULL OR (char_length BETWEEN
   1 AND 100 AND display_name = btrim(display_name)))`; `MAX_DISPLAY_NAME_LENGTH = 100` beside
@@ -280,7 +282,7 @@ HttpOnly trade-off with CSP as the compensating control, `getUser()` and the fou
   `account.png` (new — stubs get their first shot when implemented); `account-menu.png`
   regenerates (monogram and name now present).
 
-## PR 5 — 401 in place, and the access tests that were waiting
+## PR 4 — 401 in place, and the access tests that were waiting
 
 - `error-page.svelte`: for `status === 401`, mount `SignInFlow` under the heading with
   `onSignedIn: () => invalidateAll()` — the page the user asked for renders with no redirect and no
@@ -311,16 +313,16 @@ HttpOnly trade-off with CSP as the compensating control, `getUser()` and the fou
 Per PR, the gate in the background: `pnpm lint && pnpm check && pnpm test`. While iterating, scope
 to the file (`pnpm --filter @gbd/web test:unit -- path`, `pnpm --filter @gbd/web test:e2e --
 e2e/auth.e2e.ts`). Re-baseline screenshots only when Playwright asks:
-`pnpm turbo run screenshots:update --filter=@gbd/web`. PR 3 also needs `pnpm test:system`, since it
+`pnpm turbo run screenshots:update --filter=@gbd/web`. PR 2 also needs `pnpm test:system`, since it
 changes what the web container is given.
 
 Then `pnpm dev` and walk it with Mailpit (55324) open:
 
-- PR 3: `/` → Sign in → address → code arrives with a six-digit code and no link → lands on
+- PR 2: `/` → Sign in → address → code arrives with a six-digit code and no link → lands on
   `/orgs/new` for a fresh address → create an organization → Sign out returns to `/`; Back does not
   show the signed-in header. A second tab signing out signs the first out on its next interaction.
   Stop the auth container (`docker stop supabase_auth_fsi-dev`) and confirm a 503, not a sign-in form.
-- PR 4: a fresh address is sent to `/onboarding` before anything else; an empty or 101-character
+- PR 3: a fresh address is sent to `/onboarding` before anything else; an empty or 101-character
   name is refused inline; the menu shows the monogram; `/account` renames.
-- PR 5: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
+- PR 4: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
   the same URL.

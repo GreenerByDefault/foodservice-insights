@@ -64,6 +64,10 @@ export default defineConfig({
         // Re-compresses any snapshot the run wrote. See optimize-screenshots.teardown.ts.
         name: 'screenshots-optimize',
         testMatch: '**/optimize-screenshots.teardown.ts',
+        // `oxipng --opt max` over the whole gallery is ~30s of real work on a warm machine, which
+        // the default 30s timeout cuts off mid-write. It runs whenever the gallery is dirty — an
+        // uncommitted re-baseline included — so this is not only the `screenshots:update` path.
+        timeout: 180_000,
       },
     ],
     webServer: {

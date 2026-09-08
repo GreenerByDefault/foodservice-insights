@@ -1,11 +1,16 @@
 import { ensureHydrated } from '@gbd/browser-testing';
-import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 import { chooseCsv } from '../lib/upload.ts';
 
-test('the new report form, before any file is chosen', async ({ page }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+// The switcher renders `org`'s name in every image below, so it is pinned rather than random.
+// Pinning shares one organization across this file's tests, which is what keeps them parallel —
+// see the `orgName` option.
+test.use({ orgName: 'Cedar Lane Catering' });
+
+test('the new report form, before any file is chosen', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
   await expect(page.getByText('Choose a CSV file')).toBeVisible();
@@ -23,8 +28,9 @@ const CSV = [
 
 test('the new report form, with the monthly counts component partway filled in', async ({
   page,
+  org,
 }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+  await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
   await chooseCsv(page, 'procurement.csv', CSV);
@@ -78,8 +84,9 @@ const WORST_CASE_REJECTION_CSV = [
 
 test('the rejection view, with a file dense enough to trigger every kind of problem', async ({
   page,
+  org,
 }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+  await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
   await chooseCsv(page, 'worst-case.csv', WORST_CASE_REJECTION_CSV);
@@ -99,8 +106,8 @@ const EVERY_ROW_REJECTION_CSV = [
   'beef,2026-01-07,5 oz',
 ].join('\n');
 
-test('the rejection view, with a rule that fails on every row', async ({ page }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+test('the rejection view, with a rule that fails on every row', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
   await chooseCsv(page, 'every-row.csv', EVERY_ROW_REJECTION_CSV);
@@ -116,8 +123,8 @@ test('the rejection view, with a rule that fails on every row', async ({ page })
 // check).
 const MISSING_COLUMN_CSV = ['product,date', 'beef,2026-01-05'].join('\n');
 
-test('the rejection view, with only a bare summary and no row list', async ({ page }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+test('the rejection view, with only a bare summary and no row list', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
   await chooseCsv(page, 'missing-column.csv', MISSING_COLUMN_CSV);

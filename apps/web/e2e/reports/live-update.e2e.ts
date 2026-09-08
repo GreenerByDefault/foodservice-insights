@@ -16,12 +16,13 @@ test('a report that finishes while the page is open updates in place, without a 
   page,
   reports,
   db,
+  org,
 }) => {
   // Installed before navigation so it is in place before the page's own timer is armed on mount.
   await page.clock.install();
 
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

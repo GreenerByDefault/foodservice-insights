@@ -8,7 +8,7 @@
  *
  * `report.created_at` is always an offset from one `ANCHOR`, fixed well outside
  * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
- * spends the placeholder organization's rate-limit budget (that's what the limit counts against —
+ * spends the organization's rate-limit budget (that's what the limit counts against —
  * see `countReportsSince`). The exceptions are the timestamps a screen renders relative to "now"
  * rather than as an absolute date which are recent instead, via `dbMsAgo` (`@gbd/db/testing`) —
  * Postgres's own clock, not `msAgo`'s (`@gbd/core`), since that "now" is `ReportPageData.now`,
@@ -26,7 +26,6 @@ import type {
   UserId,
 } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
-import { PLACEHOLDER_ORGANIZATION_ID, PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import {
   dbMsAgo,
   insertAnalysisAttempt,
@@ -64,11 +63,12 @@ export type ReportState =
  */
 async function insertReportWithInputFile(
   tx: Transaction<Database>,
+  organizationId: OrganizationId,
   name: string,
   overrides: { siteName?: string; createdByUserId?: UserId } = {},
 ): Promise<ReportId> {
   const report = await insertReport(tx, {
-    organizationId: PLACEHOLDER_ORGANIZATION_ID,
+    organizationId,
     name,
     createdAt: ANCHOR,
     siteName: overrides.siteName ?? null,
@@ -78,12 +78,14 @@ async function insertReportWithInputFile(
   return report.id;
 }
 
-function buildPending(
-  name: string,
-  queuedForMs: number,
-): (tx: Transaction<Database>) => Promise<ReportId> {
-  return async (tx) => {
-    const reportId = await insertReportWithInputFile(tx, name);
+type ReportBuilder = (
+  tx: Transaction<Database>,
+  organizationId: OrganizationId,
+) => Promise<ReportId>;
+
+function buildPending(name: string, queuedForMs: number): ReportBuilder {
+  return async (tx, organizationId) => {
+    const reportId = await insertReportWithInputFile(tx, organizationId, name);
     await insertAnalysisAttempt(tx, {
       reportId,
       status: 'pending',
@@ -93,13 +95,9 @@ function buildPending(
   };
 }
 
-function buildProcessing(
-  name: string,
-  queuedForMs: number,
-  analyzingForMs: number,
-): (tx: Transaction<Database>) => Promise<ReportId> {
-  return async (tx) => {
-    const reportId = await insertReportWithInputFile(tx, name);
+function buildProcessing(name: string, queuedForMs: number, analyzingForMs: number): ReportBuilder {
+  return async (tx, organizationId) => {
+    const reportId = await insertReportWithInputFile(tx, organizationId, name);
     await insertAnalysisAttempt(tx, {
       reportId,
       status: 'processing',
@@ -110,10 +108,13 @@ function buildProcessing(
   };
 }
 
-async function buildSucceeded(tx: Transaction<Database>): Promise<ReportId> {
+async function buildSucceeded(
+  tx: Transaction<Database>,
+  organizationId: OrganizationId,
+): Promise<ReportId> {
   // The screen most likely to be shown off, so it's the one that carries the full heading.
   const creator = await insertAppUser(tx, { displayName: 'Dana Cook' });
-  const reportId = await insertReportWithInputFile(tx, 'Q1 Procurement', {
+  const reportId = await insertReportWithInputFile(tx, organizationId, 'Q1 Procurement', {
     siteName: 'Lakeside Grill',
     createdByUserId: creator.id,
   });
@@ -159,11 +160,14 @@ async function insertFailedAttempts(
   });
 }
 
-async function buildFailed(tx: Transaction<Database>): Promise<ReportId> {
+async function buildFailed(
+  tx: Transaction<Database>,
+  organizationId: OrganizationId,
+): Promise<ReportId> {
   // A creator with no display name, so the heading's email-fallback branch gets exercised. A
   // fixed email, not the default random one — this fixture renders into a committed screenshot.
   const creator = await insertAppUser(tx, { email: 'jordan@example.test' });
-  const reportId = await insertReportWithInputFile(tx, 'January Dairy', {
+  const reportId = await insertReportWithInputFile(tx, organizationId, 'January Dairy', {
     createdByUserId: creator.id,
   });
   await insertAnalysisAttempt(tx, {
@@ -177,21 +181,30 @@ async function buildFailed(tx: Transaction<Database>): Promise<ReportId> {
 }
 
 /** A second attempt has already failed, but there's still room to retry again. */
-async function buildFailedRetried(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'March Seafood');
+async function buildFailedRetried(
+  tx: Transaction<Database>,
+  organizationId: OrganizationId,
+): Promise<ReportId> {
+  const reportId = await insertReportWithInputFile(tx, organizationId, 'March Seafood');
   await insertFailedAttempts(tx, reportId, 2, 'child_crashed');
   return reportId;
 }
 
 /** At `MAX_ANALYSIS_ATTEMPTS`, with a reason whose own follow-up would otherwise say "retry". */
-async function buildFailedAtRetryCap(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'April Beverages');
+async function buildFailedAtRetryCap(
+  tx: Transaction<Database>,
+  organizationId: OrganizationId,
+): Promise<ReportId> {
+  const reportId = await insertReportWithInputFile(tx, organizationId, 'April Beverages');
   await insertFailedAttempts(tx, reportId, MAX_ANALYSIS_ATTEMPTS, 'child_crashed');
   return reportId;
 }
 
-async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, 'May Seafood');
+async function buildCanceled(
+  tx: Transaction<Database>,
+  organizationId: OrganizationId,
+): Promise<ReportId> {
+  const reportId = await insertReportWithInputFile(tx, organizationId, 'May Seafood');
   const stoppedMsAgo = 2 * HOUR_MS;
   await insertAnalysisAttempt(tx, {
     reportId,
@@ -202,7 +215,7 @@ async function buildCanceled(tx: Transaction<Database>): Promise<ReportId> {
   return reportId;
 }
 
-const BUILDERS: Record<ReportState, (tx: Transaction<Database>) => Promise<ReportId>> = {
+const BUILDERS: Record<ReportState, ReportBuilder> = {
   pending: buildPending('March Produce', 5_000),
   'pending-delayed': buildPending('June Dry Goods', QUEUE_WARNING_AFTER_MS + 30_000),
   processing: buildProcessing('February Proteins', 70_000, 20_000),
@@ -218,12 +231,13 @@ const BUILDERS: Record<ReportState, (tx: Transaction<Database>) => Promise<Repor
   canceled: buildCanceled,
 };
 
-/** Commit one report in `state`, in the placeholder organization. Returns its id. */
+/** Commit one report in `state`, in `organizationId`. Returns its id. */
 export async function insertReportFixture(
   db: Kysely<Database>,
   state: ReportState,
+  organizationId: OrganizationId,
 ): Promise<ReportId> {
-  return await withTransaction(db, BUILDERS[state]);
+  return await withTransaction(db, (tx) => BUILDERS[state](tx, organizationId));
 }
 
 /** Finish the report's newest attempt from underneath an open page, as the worker would.
@@ -295,9 +309,6 @@ export async function insertReportWithAttempt(
   return report.id;
 }
 
-export function reportUrl(
-  reportId: ReportId,
-  organizationSlug: string = PLACEHOLDER_ORGANIZATION_SLUG,
-): string {
+export function reportUrl(reportId: ReportId, organizationSlug: string): string {
   return `/orgs/${organizationSlug}/reports/${reportId}`;
 }

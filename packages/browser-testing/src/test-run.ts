@@ -1,5 +1,5 @@
-/** Spin up a fresh per-run database and blob-store bucket, run Playwright against them, and tear
- * everything down afterward.
+/** Spin up a fresh per-run database, blob-store bucket and signed-in identity, run Playwright
+ * against them, and tear everything down afterward.
  *
  * Both `apps/web/scripts/test-run.ts` and `tests/e2e/scripts/test-run.ts` need this: without it,
  * every `pnpm test:e2e` in every worktree would share one database and bucket and truncate them
@@ -14,8 +14,6 @@ import { createServer } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { requireEnv } from '@gbd/core/env';
-import { initializeDatabase, shutdownDatabase } from '@gbd/db';
-import { seedPlaceholderIdentity } from '@gbd/db/seed';
 import {
   createRunDatabase,
   dropRunDatabase,
@@ -24,6 +22,7 @@ import {
 } from '@gbd/db/testing';
 import { type BlobStoreConfig, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { createRunBucket, deleteRunBucket, sweepStaleRunBuckets } from '@gbd/storage/testing';
+import { prepareRunIdentity } from './identity.ts';
 
 /** Locates the `playwright` binary next to a `scripts/test-run.ts` caller.
  * Pass the caller's own `import.meta.url`. */
@@ -96,15 +95,6 @@ async function sweepStaleResources(connectionString: string, s3: BlobStoreConfig
   }
 }
 
-async function seedRunDatabase(connectionString: string): Promise<void> {
-  const database = initializeDatabase({ connectionString });
-  try {
-    await seedPlaceholderIdentity(database);
-  } finally {
-    await shutdownDatabase(database);
-  }
-}
-
 function spawnPlaywright(
   playwrightBin: string,
   args: readonly string[],
@@ -143,19 +133,22 @@ export type RunAgainstFreshStackOptions = {
   s3: BlobStoreConfig;
   playwrightBin: string;
   playwrightArgs: readonly string[];
+  /** The address the run's one identity is given. See `prepareRunIdentity`. */
+  identityEmail?: string;
   beforePlaywright?(stack: FreshStack): Promise<BeforePlaywrightResult>;
 };
 
 /** Returns Playwright's own exit code — assign it straight to `process.exitCode`. */
 export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions): Promise<number> {
-  const { connectionString, s3, playwrightBin, playwrightArgs, beforePlaywright } = options;
+  const { connectionString, s3, playwrightBin, playwrightArgs, identityEmail, beforePlaywright } =
+    options;
 
   await sweepStaleResources(connectionString, s3);
 
   const templateName = await ensureTemplateDatabase(connectionString);
   const runDatabase = await createRunDatabase(connectionString, templateName);
   try {
-    await seedRunDatabase(runDatabase.connectionString);
+    await prepareRunIdentity(runDatabase.connectionString, identityEmail);
 
     const store = initializeBlobStore(s3);
     let runBucket: Awaited<ReturnType<typeof createRunBucket>> | undefined;
