@@ -22,7 +22,7 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
     status: 'succeeded',
   }));
 
-  const organizationId = await organizations.create({
+  const { id: organizationId } = await organizations.create({
     name: `Pagination test org ${crypto.randomUUID()}`,
     reports,
   });

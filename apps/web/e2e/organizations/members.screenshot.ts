@@ -13,7 +13,7 @@ test('a mix of roles and both name shapes, the viewer among them', async ({
   page,
   organizations,
 }) => {
-  const organizationId = await organizations.create({
+  const { id: organizationId } = await organizations.create({
     name: 'Members Screenshot Foodservice',
     members: [
       { displayName: 'Priya Shah', email: 'members-screenshot-admin@example.test', role: 'admin' },

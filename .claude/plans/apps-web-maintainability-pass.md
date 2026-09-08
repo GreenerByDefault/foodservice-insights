@@ -17,7 +17,7 @@ already established by `deleteOrganization`/`renameOrganization`. A loader only 
 page URL; an API client builds its own URL from `lib/hrefs.ts` and the ids the page already has.
 The one decision still ahead: the "imported by the browser as well as the server" header, now down
 to 29 copies (`grep -rl 'keep it free of'` — `switcher-limit.ts`'s was replaced with its own real
-reason rather than counted here), goes, replaced by one README rule (PR 2).
+reason rather than counted here), goes, replaced by one README rule (PR 1, below).
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
 done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable.
@@ -48,33 +48,26 @@ unoverridden). `csv/findings.test.ts`, `csv/describe/findings.test.ts`, and
 `csv/describe/rows.test.ts` import `csv/testing` fixtures via `$lib/reports/csv/testing` rather
 than a relative path.
 
----
-
-## PR 1 — e2e fixtures and README
-
-- `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
-  `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
-  from `organizations.ts` and use it in `fixtures/test.ts` (retyped verbatim today).
-- `insertOrganizationFixture` returns the report ids it minted; drop the two 5-line re-queries in
-  `reports-list/reports-list.e2e.ts` and `reports-list/live-update.e2e.ts`.
-- Add `reports.adopt(id)` / `organizations.adopt(id)` to the extended `test` so
-  `create-organization.e2e.ts` and `new-report.e2e.ts` stop hand-deleting with their own
-  URL-parsing helper. Give `upload-limit.e2e.ts` the extended `test` and adopt the 5MB report
-  it currently leaks.
-- `lib/reconnecting.ts` helper for the arrange block duplicated between
-  `reports/reports.screenshot.ts` and `reports/reconnect.e2e.ts`.
-- Screenshot names lose their folder prefix per `e2e/README.md` (`organizations/orgs-list.png` →
-  `organizations/list.png`, `reports-list/reports-list-empty.png` → `reports-list/empty.png`, etc.):
-  `git mv` across the three viewport folders, update the spec names.
-- Add an `invites` key to `OrganizationSpec` now (memberships already have one).
-- `e2e/README.md`: `fixtures/` line covers organizations too; "every test mints its own report"
-  → describes `adopt`; drop "Most fixtures live in the placeholder organization" (11 specs use
-  dedicated orgs, 9 the placeholder); refresh the Pending table (org endpoints now have unit tests;
-  invite/sign-in endpoints have none); note `lib/poll-interval.ts` reads env at import.
+The e2e fixtures pass has landed too: `e2e/fixtures/reports.ts` exports `insertReportWithAttempt`
+(one report, one input file, one attempt, and — when `status` is `succeeded` — both result files,
+all in one transaction), which `e2e/fixtures/organizations.ts` now calls instead of carrying its
+own copy; `OrganizationReportSpec` is `Omit<ReportWithAttemptSpec, 'organizationId'>`.
+`insertOrganizationFixture` returns `{ organizationId, reportIds }`, and the `organizations`
+Playwright fixture's `create()` returns `{ id, reportIds }` — so a spec that seeds a report and
+then needs to act on it (`reports-list.e2e.ts`, `live-update.e2e.ts`) no longer re-queries for the
+id. `reports.adopt(id)` / `organizations.adopt(id)` register an id a spec created some other way —
+through the UI or the API directly — for the same end-of-test cleanup as `create`, used by
+`create-organization.e2e.ts`, `new-report.e2e.ts`, and `upload-limit.e2e.ts` (which no longer leaks
+its 5MB report). `e2e/lib/reconnecting.ts`'s `makeReportUnreachable` is the arrange block shared by
+`reports/reports.screenshot.ts` and `reports/reconnect.e2e.ts`. `OrganizationSpec` (in
+`e2e/fixtures/organizations.ts`) has an `invites` key alongside `members`. Screenshot names lost
+their folder prefix (`organizations/orgs-list.png` → `organizations/list.png`,
+`reports-list/reports-list-empty.png` → `reports-list/empty.png`, `account/account-menu.png` →
+`account/menu.png`, etc.) per `e2e/README.md`'s own naming rule.
 
 ---
 
-## PR 2 — Docs and comments
+## PR 1 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
@@ -132,9 +125,7 @@ than a relative path.
 
 ## Verification
 
-Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
-the diff is ready). While iterating, scope to the touched files with
+From the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once the diff
+is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 1's screenshot renames need
-`pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
-actually changed (renames only).
+`pnpm --filter @gbd/web test:e2e -- <path>`.

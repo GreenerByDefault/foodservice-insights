@@ -10,18 +10,15 @@ import { test } from '../fixtures/test.ts';
 test('a report appears in the organization list and links to its report page', async ({
   page,
   organizations,
-  db,
 }) => {
   const name = 'List report';
-  const organizationId = await organizations.create({
+  const {
+    id: organizationId,
+    reportIds: [reportId],
+  } = await organizations.create({
     name: `Reports list test org ${crypto.randomUUID()}`,
     reports: [{ name, createdAt: dbMsAgo(0), status: 'pending' }],
   });
-  const { id: reportId } = await db
-    .selectFrom('report')
-    .select('id')
-    .where('organizationId', '=', organizationId)
-    .executeTakeFirstOrThrow();
 
   await page.goto(`/orgs/${organizationId}`);
 

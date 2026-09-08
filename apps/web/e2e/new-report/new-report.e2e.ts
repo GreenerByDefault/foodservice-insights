@@ -16,7 +16,7 @@ function reportIdFromUrl(url: string): ReportId {
   return match[1] as ReportId;
 }
 
-test('uploading a good CSV creates a report and lands on its page', async ({ page, db }) => {
+test('uploading a good CSV creates a report and lands on its page', async ({ page, reports }) => {
   await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}`);
   await ensureHydrated(page);
   await page.getByRole('link', { name: 'New report' }).click();
@@ -36,8 +36,9 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
 
   // Playwright runs every e2e spec against one shared run database (fullyParallel), so this
   // report must not outlive the test: left behind, it'd skew another test's report-list count
-  // or eat into the placeholder org's rate limit.
-  await db.deleteFrom('report').where('id', '=', reportIdFromUrl(page.url())).execute();
+  // or eat into the placeholder org's rate limit. Adopted, since the upload form created it
+  // rather than the `reports` fixture.
+  reports.adopt(reportIdFromUrl(page.url()));
 });
 
 test('uploading a CSV with bad rows shows the rejection view, naming them, without ever submitting', async ({

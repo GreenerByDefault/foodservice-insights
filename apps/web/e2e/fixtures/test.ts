@@ -11,6 +11,7 @@ import type { Kysely } from 'kysely';
 import {
   clearOrganizationFixture,
   insertOrganizationFixture,
+  type OrganizationInviteSpec,
   type OrganizationMemberSpec,
   type OrganizationReportSpec,
 } from './organizations.ts';
@@ -21,11 +22,18 @@ export interface ReportFactory {
    * passed or failed — a behavioural spec is free to mutate what it created (cancel it, retry
    * it) without touching another test's rows. */
   create(state: ReportState): Promise<ReportId>;
+
+  /** Register a report id this test created some other way — through the UI, or the API directly
+   * — for the same end-of-test cleanup as `create`, instead of a spec hand-parsing a URL and
+   * deleting the row itself. */
+  adopt(id: ReportId): void;
 }
 
 export interface OrganizationFactory {
-  /** Commit a private organization the placeholder user belongs to, and return its id. Deleted
-   * when this test ends, whether it passed or failed.
+  /** Commit a private organization the placeholder user belongs to. Deleted when this test ends,
+   * whether it passed or failed. Returns its id, and the ids of the reports it minted (in the
+   * order given in `spec.reports`) — so a spec that needs to act on one of its own reports never
+   * has to re-query for it.
    *
    * `role` defaults to `admin`, which also makes the placeholder its creator and sole member;
    * `member` puts a disposable admin above it instead. See `insertOrganizationFixture`. */
@@ -34,7 +42,13 @@ export interface OrganizationFactory {
     reports?: OrganizationReportSpec[];
     role?: OrganizationRole;
     members?: OrganizationMemberSpec[];
-  }): Promise<OrganizationId>;
+    invites?: OrganizationInviteSpec[];
+  }): Promise<{ id: OrganizationId; reportIds: ReportId[] }>;
+
+  /** Register an organization id this test created some other way — through the UI — for the
+   * same end-of-test cleanup as `create`, instead of a spec hand-parsing a URL and deleting the
+   * row itself. */
+  adopt(id: OrganizationId): void;
 }
 
 export const test = base.extend<
@@ -66,6 +80,9 @@ export const test = base.extend<
         createdIds.push(reportId);
         return reportId;
       },
+      adopt: (id) => {
+        createdIds.push(id);
+      },
     });
 
     if (createdIds.length > 0) {
@@ -78,9 +95,12 @@ export const test = base.extend<
 
     await use({
       create: async (spec) => {
-        const organizationId = await insertOrganizationFixture(db, spec);
+        const { organizationId, reportIds } = await insertOrganizationFixture(db, spec);
         createdIds.push(organizationId);
-        return organizationId;
+        return { id: organizationId, reportIds };
+      },
+      adopt: (id) => {
+        createdIds.push(id);
       },
     });
 

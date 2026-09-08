@@ -6,10 +6,12 @@
  * The rest of the upload rules are covered against the test database in `create-report.test.ts`.
  */
 
+import type { ReportId } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { UNEXPECTED_ERROR_MESSAGE } from '../src/lib/errors/messages';
 import { MAX_UPLOAD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
+import { test } from './fixtures/test.ts';
 
 const ENDPOINT = `/api/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports`;
 
@@ -43,12 +45,15 @@ function uploadRequestOptions(csv: string, baseURL: string) {
 test('accepts a file far past the Svelte default but inside the product limit', async ({
   request,
   baseURL,
+  reports,
 }) => {
   const csv = csvOfAtLeast(MAX_UPLOAD_BYTES / 2);
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(201);
-  expect(await response.json()).toEqual({ reportId: expect.any(String) });
+  const body = await response.json();
+  expect(body).toEqual({ reportId: expect.any(String) });
+  reports.adopt(body.reportId as ReportId);
 });
 
 test('rejects a file over the product limit as our own 400, not the transport 413', async ({
