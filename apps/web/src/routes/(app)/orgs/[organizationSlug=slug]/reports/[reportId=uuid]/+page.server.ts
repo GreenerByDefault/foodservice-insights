@@ -74,8 +74,6 @@ export type Attempt =
   | { status: 'canceled'; stoppedAt: Date };
 
 export type ReportPageData = {
-  /** For the delete/cancel/retry buttons and the "your reports" link — never for a query, so a
-   * slug, not the real id. */
   organizationSlug: string;
   report: {
     id: ReportId;

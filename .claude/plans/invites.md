@@ -96,8 +96,10 @@ double confirmation of an email change — recorded in that plan's Context.)
 - `apps/web/e2e/fixtures/organizations.ts`: implement the `invites` key —
   `InviteSpec = { email: string; role?: OrganizationRole; expiresAt?: Date }` — inserted in the
   same transaction, `invitedByUserId` the placeholder when it is the admin.
-- `apps/web/src/lib/hrefs.ts`: `organizationInvitesApiHref(orgId)`, `organizationInviteApiHref(orgId,
-  inviteId)`, `acceptInviteApiHref(inviteId)`, `declineInviteApiHref(inviteId)`.
+- `apps/web/src/lib/hrefs.ts`: `organizationInvitesApiHref(organizationSlug)`,
+  `organizationInviteApiHref(organizationSlug, inviteId)`, `acceptInviteApiHref(inviteId)`,
+  `declineInviteApiHref(inviteId)` — every organization-scoped builder here takes the slug, not the
+  id (organization-slugs).
 - `audit.ts`: `InviteAuditAction`; `target.type` already allows `'invite'` (memberships PR 1).
 - `route-context.ts`: `requireOrganizationRouteContext` also returns `organizationName` from the
   access row — the invite email needs it and the row already carries it.
@@ -113,8 +115,9 @@ double confirmation of an email change — recorded in that plan's Context.)
 - `apps/web/src/lib/invites/limits.ts`: `HOURLY_INVITE_LIMIT = 20`. `REQUIREMENTS.md` § Abuse limits:
   the invite line becomes "per inviting user" and links here (the requirement change in § Sequencing).
   The `POST` stub's "five an hour for the organization" comment goes with it.
-- `POST /api/orgs/:id/invites` → `_createInvite(db, { organizationId, organizationName, actor,
-  actorDisplayName, body })`: parse (400 `Fix the highlighted field.`); transaction: lock, count →
+- `POST /api/orgs/[organizationSlug=slug]/invites` → `_createInvite(db, { organizationId,
+  organizationName, actor, actorDisplayName, body })`: parse (400 `Fix the highlighted field.`);
+  transaction: lock, count →
   `{ kind: 'rate-limited' }`; existing member with that email (`auth.users` ⋈ `organization_member`)
   → `{ kind: 'already-member' }`; supersede; insert returning `id, expires_at`; audit
   `invite.created`. After commit `sendInvite({ kind: 'organization-invite', to, organizationName,
@@ -124,8 +127,9 @@ double confirmation of an email change — recorded in that plan's Context.)
   `organization-invite` to the lowercased address; re-invite supersedes the old row and the new
   `expires_at` is later; already-member 409 writes nothing; the limit-th+1 invite 429s (seed
   `HOURLY_INVITE_LIMIT` rows with `insertOrganizationInvite`); bad bodies `test.for`.
-- `DELETE /api/orgs/:id/invites/:inviteId` → `_revokeInvite`: `UPDATE … SET status = 'revoked'
-  WHERE id, organization_id, status = 'pending'` → 0 rows → 404; audit `invite.revoked`; 204. Test.
+- `DELETE /api/orgs/[organizationSlug=slug]/invites/:inviteId` → `_revokeInvite`:
+  `UPDATE … SET status = 'revoked' WHERE id, organization_id, status = 'pending'` → 0 rows → 404;
+  audit `invite.revoked`; 204. Test.
 
 ## PR 3 — Admin UI on the Members page
 
