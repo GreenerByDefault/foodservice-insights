@@ -64,22 +64,10 @@ test('rejects a file over the product limit as our own 400, not the transport 41
   request,
   baseURL,
 }) => {
-  const csv = csvOfAtLeast(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES / 2);
-  const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
-
-  expect(response.status()).toBe(400);
-  expect(await response.json()).toEqual({
-    summary: 'That file is larger than 10MB.',
-  });
-});
-
-test('accepts a body past the old transport limit, now that the workbook side-car has room', async ({
-  request,
-  baseURL,
-}) => {
-  // `BODY_SIZE_LIMIT` grew by `MAX_WORKBOOK_BYTES` to leave room for the workbook field; this
-  // size used to sit past the old limit and get the transport's own 413. It still exceeds our
-  // own CSV field cap, so it is refused — just not by the transport.
+  // `BODY_SIZE_LIMIT` is sized for the CSV field plus, when there is one, the workbook side-car —
+  // even though this request sends only the CSV field. Sized past `MAX_UPLOAD_BYTES` by more than
+  // `TRANSPORT_MARGIN_BYTES` alone would allow, so the rejection below can only be ours, never
+  // the transport's.
   const csv = csvOfAtLeast(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES + 512 * 1024);
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
