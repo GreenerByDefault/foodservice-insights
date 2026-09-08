@@ -7,13 +7,13 @@
  */
 
 import type { ReportId } from '@gbd/db';
-import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
+import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { expect } from '@playwright/test';
 import { UNEXPECTED_ERROR_MESSAGE } from '../src/lib/errors/messages';
 import { MAX_UPLOAD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
 import { test } from './fixtures/test.ts';
 
-const ENDPOINT = `/api/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports`;
+const ENDPOINT = `/api/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports`;
 
 const HEADER = 'product name,date ordered,weight\n';
 const ROW = 'beef mince,2026-01-05,12\n';

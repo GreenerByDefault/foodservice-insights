@@ -12,8 +12,9 @@ test('a non-superadmin gets their own memberships, not the organization table', 
   const result = await _loadAllOrganizations(undefined as never, auth);
 
   expect(result).toEqual(
-    memberships.map(({ organizationId, organizationName }) => ({
+    memberships.map(({ organizationId, organizationSlug, organizationName }) => ({
       id: organizationId,
+      slug: organizationSlug,
       name: organizationName,
     })),
   );
@@ -34,7 +35,7 @@ test('a superadmin gets the whole organization table, alphabetically — not jus
     const result = await _loadAllOrganizations(transaction, auth);
 
     expect(result.filter((organization) => organization.name.startsWith(prefix))).toEqual(
-      [...names].sort().map((name) => ({ id: expect.any(String), name })),
+      [...names].sort().map((name) => ({ id: expect.any(String), slug: expect.any(String), name })),
     );
   });
 });

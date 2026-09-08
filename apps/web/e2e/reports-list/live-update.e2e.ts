@@ -21,7 +21,7 @@ test('a report that finishes while the list is open updates in place, without a 
 }) => {
   const name = 'Live update report';
   const {
-    id: organizationId,
+    slug: organizationSlug,
     reportIds: [reportId],
   } = await organizations.create({
     name: `Reports list live update test org ${crypto.randomUUID()}`,
@@ -32,7 +32,7 @@ test('a report that finishes while the list is open updates in place, without a 
 
   // Installed before navigation so it is in place before the page's own timer is armed on mount.
   await page.clock.install();
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

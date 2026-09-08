@@ -8,19 +8,19 @@ export type UploadOutcome =
   | { kind: 'unknown' };
 
 export async function uploadReport(
-  organizationId: string,
+  organizationSlug: string,
   form: FormData,
   signal?: AbortSignal,
 ): Promise<UploadOutcome> {
   try {
-    const response = await apiCall(reportsApiHref(organizationId), {
+    const response = await apiCall(reportsApiHref(organizationSlug), {
       method: 'POST',
       body: form,
       signal,
     });
     return {
       kind: 'created',
-      location: response.headers.get('location') ?? organizationHref(organizationId),
+      location: response.headers.get('location') ?? organizationHref(organizationSlug),
     };
   } catch (error) {
     if (error instanceof ApiError) {

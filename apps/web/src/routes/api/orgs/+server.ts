@@ -114,6 +114,6 @@ export async function _createOrganization(
 
   return json(
     { organizationId: outcome.organizationId },
-    { status: 201, headers: { location: organizationHref(outcome.organizationId) } },
+    { status: 201, headers: { location: organizationHref(slug) } },
   );
 }

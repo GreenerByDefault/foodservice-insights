@@ -1,6 +1,6 @@
 /** The checks a route makes before doing anything. */
 
-import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
+import type { DatabaseExecutor } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import { withDbErrorHandling } from '$lib/server/db';
 import type { AuthContext, OrganizationAccess } from './types.ts';
@@ -11,40 +11,45 @@ export function requireAuth(locals: App.Locals): AuthContext {
   return locals.auth;
 }
 
-/** The user's access to `organizationId`, or a 404.
+/** The user's access to the organization slugged `organizationSlug`, or a 404.
  *
  * 404 rather than 403, everywhere: whether an organization exists and whether you may act in it
- * must be indistinguishable, or the error code itself leaks the customer list. An id no
+ * must be indistinguishable, or the error code itself leaks the customer list. A slug no
  * organization has takes the same path, since it can be in nobody's list.
  *
  * A superadmin is admin everywhere, including an organization where they hold a `member` row —
- * so the flag is checked before the membership, never after. That check is a single PK lookup,
- * and it only ever runs for a superadmin: everyone else resolves from `auth.memberships`, already
- * in memory, with no database access and no timing difference between "no access" and "no such
- * organization".
+ * so the flag is checked before the membership, never after. That check is a single lookup by
+ * slug (the unique index it's built from), and it only ever runs for a superadmin: everyone else
+ * resolves from `auth.memberships`, already in memory, with no database access and no timing
+ * difference between "no access" and "no such organization".
  */
 export async function requireOrganizationAccess(
   db: DatabaseExecutor,
   auth: AuthContext,
-  organizationId: OrganizationId,
+  organizationSlug: string,
 ): Promise<OrganizationAccess> {
   if (auth.user.isSuperadmin) {
     return await withDbErrorHandling(
       async () => {
         const organization = await db
           .selectFrom('organization')
-          .select(['id', 'name'])
-          .where('id', '=', organizationId)
+          .select(['id', 'name', 'slug'])
+          .where('slug', '=', organizationSlug)
           .executeTakeFirst();
         if (!organization) error(404, { message: 'Not found', code: 'not_found' });
-        return { organizationId, organizationName: organization.name, role: 'admin' as const };
+        return {
+          organizationId: organization.id,
+          organizationSlug: organization.slug,
+          organizationName: organization.name,
+          role: 'admin' as const,
+        };
       },
-      { action: 'look up an organization for a superadmin', context: { organizationId } },
+      { action: 'look up an organization for a superadmin', context: { organizationSlug } },
     );
   }
 
   const access = auth.memberships.find(
-    (membership) => membership.organizationId === organizationId,
+    (membership) => membership.organizationSlug === organizationSlug,
   );
   if (!access) error(404, { message: 'Not found', code: 'not_found' });
   return access;
@@ -58,9 +63,9 @@ export async function requireOrganizationAccess(
 export async function requireOrganizationAdmin(
   db: DatabaseExecutor,
   auth: AuthContext,
-  organizationId: OrganizationId,
+  organizationSlug: string,
 ): Promise<OrganizationAccess> {
-  const access = await requireOrganizationAccess(db, auth, organizationId);
+  const access = await requireOrganizationAccess(db, auth, organizationSlug);
   if (access.role !== 'admin') {
     error(403, { message: 'Only an admin can do that', code: 'forbidden' });
   }

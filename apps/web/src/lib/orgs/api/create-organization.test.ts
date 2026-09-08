@@ -43,4 +43,14 @@ describe('createOrganization', () => {
 
     await expect(createOrganization('Acme Foodservice')).resolves.toEqual({ kind: 'name-taken' });
   });
+
+  test.for([
+    ['slug-taken', 409],
+    ['slug-reserved', 422],
+    ['slug-underivable', 422],
+  ] as const)('a %s failure is classified from the body code', async ([code, status]) => {
+    stubFetch(new Response(JSON.stringify({ message: 'Nope', code }), { status }));
+
+    await expect(createOrganization('Acme Foodservice')).resolves.toEqual({ kind: code });
+  });
 });

@@ -6,6 +6,7 @@ import OrganizationsList from './organizations-list.svelte';
 function anOrganization(overrides: Partial<OrganizationListRow> = {}): OrganizationListRow {
   return {
     id: 'a4f8e2b0-1111-4a11-8111-000000000001' as OrganizationListRow['id'],
+    slug: 'acme-foodservice',
     name: 'Acme Foodservice',
     ...overrides,
   };
@@ -17,10 +18,12 @@ describe('OrganizationsList', () => {
       organizations: [
         anOrganization({
           id: 'a4f8e2b0-1111-4a11-8111-000000000001' as OrganizationListRow['id'],
+          slug: 'acme-foodservice',
           name: 'Acme Foodservice',
         }),
         anOrganization({
           id: 'a4f8e2b0-1111-4a11-8111-000000000002' as OrganizationListRow['id'],
+          slug: 'bakers-row',
           name: 'Bakers Row',
         }),
       ],
@@ -31,12 +34,8 @@ describe('OrganizationsList', () => {
     const bakers = screen.getByRole('link', { name: 'Bakers Row' });
     await expect.element(acme).toBeVisible();
     await expect.element(bakers).toBeVisible();
-    await expect
-      .element(acme)
-      .toHaveAttribute('href', '/orgs/a4f8e2b0-1111-4a11-8111-000000000001');
-    await expect
-      .element(bakers)
-      .toHaveAttribute('href', '/orgs/a4f8e2b0-1111-4a11-8111-000000000002');
+    await expect.element(acme).toHaveAttribute('href', '/orgs/acme-foodservice');
+    await expect.element(bakers).toHaveAttribute('href', '/orgs/bakers-row');
   });
 
   test('shows an empty-state sentence when there are no organizations', async () => {

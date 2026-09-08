@@ -10,11 +10,11 @@ import { cancelReportApiHref } from '$lib/hrefs';
 export type CancelOutcome = 'canceled' | 'already-settled';
 
 export async function cancelReport(
-  organizationId: string,
+  organizationSlug: string,
   reportId: string,
 ): Promise<CancelOutcome> {
   try {
-    await apiCall(cancelReportApiHref(organizationId, reportId), { method: 'POST' });
+    await apiCall(cancelReportApiHref(organizationSlug, reportId), { method: 'POST' });
     return 'canceled';
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) return 'already-settled';

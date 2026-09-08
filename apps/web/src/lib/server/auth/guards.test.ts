@@ -8,10 +8,11 @@ import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from
 import type { AuthContext } from './types.ts';
 
 const ORGANIZATION_ID = crypto.randomUUID() as OrganizationId;
+const ORGANIZATION_SLUG = 'acme-foods';
 
 function withRoleIn(role: 'member' | 'admin'): AuthContext {
   return anAuthContext({
-    memberships: [anOrganizationAccess('Acme Foods', role, ORGANIZATION_ID)],
+    memberships: [anOrganizationAccess('Acme Foods', role, ORGANIZATION_ID, ORGANIZATION_SLUG)],
   });
 }
 
@@ -33,9 +34,10 @@ describe('requireAuth', () => {
 describe('requireOrganizationAccess', () => {
   test('returns the access a membership row grants', async () => {
     await expect(
-      requireOrganizationAccess(database(), withRoleIn('member'), ORGANIZATION_ID),
+      requireOrganizationAccess(database(), withRoleIn('member'), ORGANIZATION_SLUG),
     ).resolves.toEqual({
       organizationId: ORGANIZATION_ID,
+      organizationSlug: ORGANIZATION_SLUG,
       organizationName: 'Acme Foods',
       role: 'member',
     });
@@ -43,7 +45,7 @@ describe('requireOrganizationAccess', () => {
 
   test('404s a non-superadmin with no membership, rather than 403ing them', async () => {
     await expect(
-      statusOf(() => requireOrganizationAccess(database(), anAuthContext(), ORGANIZATION_ID)),
+      statusOf(() => requireOrganizationAccess(database(), anAuthContext(), ORGANIZATION_SLUG)),
     ).resolves.toEqual({ status: 404, code: 'not_found' });
   });
 
@@ -53,8 +55,11 @@ describe('requireOrganizationAccess', () => {
       const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
       const auth = anAuthContext({ user: { id: superadmin.id, isSuperadmin: true } });
 
-      await expect(requireOrganizationAccess(transaction, auth, organization.id)).resolves.toEqual({
+      await expect(
+        requireOrganizationAccess(transaction, auth, organization.slug),
+      ).resolves.toEqual({
         organizationId: organization.id,
+        organizationSlug: organization.slug,
         organizationName: 'Acme Foods',
         role: 'admin',
       });
@@ -73,23 +78,28 @@ describe('requireOrganizationAccess', () => {
         .execute();
       const auth = anAuthContext({
         user: { id: admin.id, isSuperadmin: true },
-        memberships: [anOrganizationAccess('Acme Foods', 'admin', organization.id)],
+        memberships: [
+          anOrganizationAccess('Acme Foods', 'admin', organization.id, organization.slug),
+        ],
       });
 
-      await expect(requireOrganizationAccess(transaction, auth, organization.id)).resolves.toEqual({
+      await expect(
+        requireOrganizationAccess(transaction, auth, organization.slug),
+      ).resolves.toEqual({
         organizationId: organization.id,
+        organizationSlug: organization.slug,
         organizationName: 'Acme Foods',
         role: 'admin',
       });
     });
   });
 
-  test('404s a superadmin on an organization id that does not exist', async () => {
+  test('404s a superadmin on an organization slug that does not exist', async () => {
     await withRollback(database(), async (transaction) => {
       const auth = anAuthContext({ user: { isSuperadmin: true } });
 
       await expect(
-        statusOf(() => requireOrganizationAccess(transaction, auth, ORGANIZATION_ID)),
+        statusOf(() => requireOrganizationAccess(transaction, auth, ORGANIZATION_SLUG)),
       ).resolves.toEqual({ status: 404, code: 'not_found' });
     });
   });
@@ -98,9 +108,10 @@ describe('requireOrganizationAccess', () => {
 describe('requireOrganizationAdmin', () => {
   test('lets an admin through, returning their access', async () => {
     await expect(
-      requireOrganizationAdmin(database(), withRoleIn('admin'), ORGANIZATION_ID),
+      requireOrganizationAdmin(database(), withRoleIn('admin'), ORGANIZATION_SLUG),
     ).resolves.toEqual({
       organizationId: ORGANIZATION_ID,
+      organizationSlug: ORGANIZATION_SLUG,
       organizationName: 'Acme Foods',
       role: 'admin',
     });
@@ -108,13 +119,13 @@ describe('requireOrganizationAdmin', () => {
 
   test('403s a plain member', async () => {
     await expect(
-      statusOf(() => requireOrganizationAdmin(database(), withRoleIn('member'), ORGANIZATION_ID)),
+      statusOf(() => requireOrganizationAdmin(database(), withRoleIn('member'), ORGANIZATION_SLUG)),
     ).resolves.toEqual({ status: 403, code: 'forbidden' });
   });
 
   test('404s an outsider', async () => {
     await expect(
-      statusOf(() => requireOrganizationAdmin(database(), anAuthContext(), ORGANIZATION_ID)),
+      statusOf(() => requireOrganizationAdmin(database(), anAuthContext(), ORGANIZATION_SLUG)),
     ).resolves.toEqual({ status: 404, code: 'not_found' });
   });
 });

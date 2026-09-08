@@ -8,28 +8,28 @@ test('admin: renaming updates the switcher while the URL stays put', async ({
 }) => {
   const name = `Settings Rename ${crypto.randomUUID()}`;
   const renamed = `${name} Renamed`;
-  const { id: organizationId } = await organizations.create({ name });
+  const { slug: organizationSlug } = await organizations.create({ name });
 
-  await page.goto(`/orgs/${organizationId}/settings`);
+  await page.goto(`/orgs/${organizationSlug}/settings`);
   await ensureHydrated(page);
 
   await page.getByLabel('Organization name').fill(renamed);
   await page.getByRole('button', { name: 'Save' }).click();
 
   await expect(page.getByRole('button', { name: 'Switch organization' })).toContainText(renamed);
-  await expect(page).toHaveURL(`/orgs/${organizationId}/settings`);
+  await expect(page).toHaveURL(`/orgs/${organizationSlug}/settings`);
 });
 
 test('member: settings is neither linked from the nav nor reachable directly', async ({
   page,
   organizations,
 }) => {
-  const { id: organizationId } = await organizations.create({
+  const { slug: organizationSlug } = await organizations.create({
     name: `Settings 403 ${crypto.randomUUID()}`,
     role: 'member',
   });
 
-  const response = await page.goto(`/orgs/${organizationId}/settings`);
+  const response = await page.goto(`/orgs/${organizationSlug}/settings`);
 
   expect(response?.status()).toBe(403);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText("You don't have access");

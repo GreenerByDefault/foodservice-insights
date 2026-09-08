@@ -45,7 +45,7 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
         {#snippet child({ props })}
           <a
             {...props}
-            href={organizationHref(organization.id)}
+            href={organizationHref(organization.slug)}
             class={cnChildProps(props, 'flex items-center gap-2')}
           >
             <CheckIcon

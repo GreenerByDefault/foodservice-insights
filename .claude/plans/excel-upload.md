@@ -127,7 +127,7 @@ Lands before the form sends one; with the field absent every path is byte-for-by
   `variants.workbook` set. A comment on the field: the server only sizes, sniffs, hashes and stores
   it — anything more is a security regression, see ARCHITECTURE. `submission.test.ts`: workbook
   accepted and carried; oversize; bad signature; filename precedence.
-- **Create** `routes/api/orgs/[organizationId=uuid]/reports/+server.ts` `insertReport` writes the
+- **Create** `routes/api/orgs/[organizationSlug=slug]/reports/+server.ts` `insertReport` writes the
   three columns from `stored.workbook`. `create-report.test.ts`: row and object both present.
 - **Download** `routes/file/input/[id=uuid]/+server.ts`: select the workbook columns too and redirect
   to `workbookStorageKey ?? storageKey`. `download-input-file.test.ts`: with a workbook, the bytes

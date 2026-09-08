@@ -14,7 +14,11 @@ interface Props {
   submitLabel: string;
   submittingLabel: string;
   unknownNotice: Snippet;
-  onSubmit: (name: string) => Promise<'done' | 'name-taken' | 'unknown'>;
+  onSubmit: (
+    name: string,
+  ) => Promise<
+    'done' | 'name-taken' | 'slug-taken' | 'slug-reserved' | 'slug-underivable' | 'unknown'
+  >;
 }
 
 let { initialName, legend, submitLabel, submittingLabel, unknownNotice, onSubmit }: Props =
@@ -32,6 +36,9 @@ type FormState =
   | { status: 'idle' }
   | { status: 'submitting' }
   | { status: 'name-taken' }
+  | { status: 'slug-taken' }
+  | { status: 'slug-reserved' }
+  | { status: 'slug-underivable' }
   | { status: 'outcome-unknown' };
 
 let formState: FormState = $state({ status: 'idle' });
@@ -49,8 +56,13 @@ async function handleSubmit(event: SubmitEvent) {
     return;
   }
 
-  if (outcome === 'name-taken') {
-    formState = { status: 'name-taken' };
+  if (
+    outcome === 'name-taken' ||
+    outcome === 'slug-taken' ||
+    outcome === 'slug-reserved' ||
+    outcome === 'slug-underivable'
+  ) {
+    formState = { status: outcome };
     nameInputElement?.focus();
     return;
   }
@@ -75,6 +87,14 @@ async function handleSubmit(event: SubmitEvent) {
     />
     {#if formState.status === 'name-taken'}
       <Field.Error>An organization with that name already exists.</Field.Error>
+    {:else if formState.status === 'slug-taken'}
+      <Field.Error>
+        That name is too close to another organization's. Try adding your region or division.
+      </Field.Error>
+    {:else if formState.status === 'slug-reserved'}
+      <Field.Error>That name isn't available. Try adding your region or division.</Field.Error>
+    {:else if formState.status === 'slug-underivable'}
+      <Field.Error>That name needs at least one letter or number in a–z or 0–9.</Field.Error>
     {/if}
   </Field.Field>
 

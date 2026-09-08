@@ -46,7 +46,7 @@ test('the full switcher, past the cap', async ({ page, organizations }) => {
     names.map((name) => organizations.create({ name, role: 'member' })),
   );
 
-  await page.goto(`/orgs/${current.id}`);
+  await page.goto(`/orgs/${current.slug}`);
   await ensureHydrated(page);
 
   // `role: 'member'` above now does double duty: besides keeping the placeholder from being

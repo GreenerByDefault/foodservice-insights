@@ -13,19 +13,19 @@ test('a report appears in the organization list and links to its report page', a
 }) => {
   const name = 'List report';
   const {
-    id: organizationId,
+    slug: organizationSlug,
     reportIds: [reportId],
   } = await organizations.create({
     name: `Reports list test org ${crypto.randomUUID()}`,
     reports: [{ name, createdAt: dbMsAgo(0), status: 'pending' }],
   });
 
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
 
   const link = page.getByRole('link', { name: new RegExp(name) });
   await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute('href', reportUrl(reportId, organizationId));
+  await expect(link).toHaveAttribute('href', reportUrl(reportId, organizationSlug));
 
   await link.click();
-  await expect(page).toHaveURL(reportUrl(reportId, organizationId));
+  await expect(page).toHaveURL(reportUrl(reportId, organizationSlug));
 });

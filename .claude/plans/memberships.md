@@ -4,7 +4,7 @@
 
 The Members page lists an organization's people and does nothing else; the admin sees
 "Inviting and removing people arrives later." The endpoints for role changes and removal exist as
-501 stubs at `apps/web/src/routes/api/orgs/[organizationId=uuid]/members/[userId=uuid]/+server.ts`
+501 stubs at `apps/web/src/routes/api/orgs/[organizationSlug=slug]/members/[userId=uuid]/+server.ts`
 with the design in their doc comments, and the database already enforces the one rule that
 matters: `organization_member_at_least_one_admin` (`packages/db/public-schema.sql:386`) is a
 deferred constraint trigger that locks the organization row and refuses any delete or demotion that
@@ -51,7 +51,8 @@ No behaviour change.
   `isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_CHECK_VIOLATION && cause.constraint === constraint`
   (`pg`'s `DatabaseError` carries `constraint`; `organization.test.ts:346` already asserts on it).
   Test in `db.test.ts`.
-- `apps/web/src/lib/hrefs.ts`: `organizationMemberApiHref(organizationId, userId)` under API writes.
+- `apps/web/src/lib/hrefs.ts`: `organizationMemberApiHref(organizationSlug, userId)` under API
+  writes — every organization-scoped builder here takes the slug, not the id (organization-slugs).
 - `members/+page.server.ts`: `MemberRow` gains `userId`; `members-list.svelte` keys on it, not
   `email`; `load-members.test.ts` and `members-list.svelte.test.ts` follow.
 - `$lib/components/confirm-action.svelte`: `trigger` becomes optional. Without it the caller drives
@@ -62,7 +63,7 @@ No behaviour change.
 
 ## PR 2 — Promote and demote
 
-- **Server** `PATCH /api/orgs/:id/members/:userId`, body `{ role: 'admin' | 'member' }`
+- **Server** `PATCH /api/orgs/[organizationSlug=slug]/members/:userId`, body `{ role: 'admin' | 'member' }`
   (valibot `v.picklist`), behind `requireOrganizationRouteContext(…, { admin: true })`. Exported
   `_changeMemberRole(db, { organizationId, actor, targetUserId, role })`: inside
   `withDbErrorHandling(withTransaction(…))` — `SET CONSTRAINTS … IMMEDIATE`; `SELECT role … FOR
@@ -88,7 +89,7 @@ No behaviour change.
 
 ## PR 3 — Remove and leave
 
-- **Server** `DELETE /api/orgs/:id/members/:userId`: `requireOrganizationRouteContext` without
+- **Server** `DELETE /api/orgs/[organizationSlug=slug]/members/:userId`: `requireOrganizationRouteContext` without
   `admin`; if `targetUserId !== actor.userId`, `requireOrganizationAdmin` (403 for a member).
   `_removeMember(db, { organizationId, actor, targetUserId })`: `SET CONSTRAINTS … IMMEDIATE`;
   `DELETE … RETURNING user_id` in a `try` → 0 rows → 404, check violation → 409 `last-admin`; audit
@@ -104,9 +105,10 @@ No behaviour change.
   Component tests: dialog copy, DELETE url, navigation after leave.
 - **E2E** (same file): admin removes a member and the row disappears; member leaves and lands on
   `/orgs` or the remaining org (branch like `delete-organization.e2e.ts:40`); a member's
-  `page.request.delete(organizationMemberApiHref(org, otherUserId))` answers 403 — the `members`
-  fixture spec needs to return the ids it minted (extend `OrganizationFactory.create`'s return, or
-  look the user up by the fixed email).
+  `page.request.delete(organizationMemberApiHref(org.slug, otherUserId))` answers 403 —
+  `OrganizationFactory.create` already returns the ids it minted (organization-slugs), so this is a
+  lookup, not a fixture extension; look the target member up by their fixed email if the id isn't
+  already in scope.
 - **Screenshots**: `member-actions.png` (admin, menu open on another member's row — the
   `account-menu.png` pattern); `members-as-member.png` (`role: 'member'`: no menus except the own
   row's, no invite section — the only image proving a member sees no admin controls).

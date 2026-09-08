@@ -1,0 +1,100 @@
+<script lang="ts">
+import { createPoller } from '$lib/polling/create-poller.svelte';
+import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
+import { isWaiting } from '$lib/reports/attempt-status';
+import { SETTLED_ON_PAGE } from '$lib/reports/status-copy';
+import type { ReportPageData } from './+page.server.ts';
+import CanceledView from './canceled-view.svelte';
+import FailureView from './failure/failure-view.svelte';
+import { pollReport } from './polling/poll-report.ts';
+import ReportHeading from './report-heading.svelte';
+import ResultView from './result-view.svelte';
+import { describeProgress } from './waiting/progress.ts';
+import WaitingView from './waiting/waiting-view.svelte';
+
+let { data }: { data: ReportPageData } = $props();
+
+/** The page's own copy of the report: a writable `$derived`, so the poll moves it, and a new
+ * `data` prop resets it.
+ *
+ * The reset matters because SvelteKit reuses this component across `[reportId]` — navigating from
+ * one report to another changes `data` without remounting, and a plain `$state` copy would keep
+ * showing the report the user just left. Nothing else replaces `data`: this page is the
+ * only writer of its own state, and it writes through the poller (see `./poll/+server.ts` for why
+ * `invalidate()` is not used here).
+ *
+ * A failed poll never touches `current`, so "keep the last known state on screen through an
+ * outage" falls out of that rather than needing its own retention logic. */
+let current = $derived(data);
+
+let reportSettled = $derived(!isWaiting(current.attempt));
+let headline = $derived(screenHeadline(current));
+
+const poller = createPoller({
+  poll: () => pollReport(current.pollHref),
+  isSettled: () => reportSettled,
+  pollIntervalMs: () => current.pollIntervalMs,
+  onData: (next) => {
+    current = next;
+  },
+});
+
+/** What the live region announces. */
+function screenHeadline(report: ReportPageData): string {
+  return isWaiting(report.attempt)
+    ? describeProgress(report.attempt, report.now).headline
+    : SETTLED_ON_PAGE[report.attempt.status];
+}
+</script>
+
+<svelte:head>
+  <title>{current.report.name}</title>
+</svelte:head>
+
+<ReportHeading
+  name={current.report.name}
+  siteName={current.report.siteName}
+  creator={current.report.creator}
+/>
+
+<!-- Outside the switch on purpose so that it is not unmounted when the view changes. -->
+<div aria-live="polite" class="sr-only">{headline}</div>
+
+{#if poller.connectionStatus === 'retrying'}
+  <ReconnectingAlert subject="report" />
+{/if}
+
+{#if isWaiting(current.attempt)}
+  <WaitingView
+    attempt={current.attempt}
+    now={current.now}
+    organizationSlug={current.organizationSlug}
+    reportId={current.report.id}
+    onReportChanged={poller.pollNow}
+  />
+{:else if current.attempt.status === 'succeeded'}
+  <ResultView
+    finishedAt={current.attempt.finishedAt}
+    now={current.now}
+    files={current.attempt.files}
+    inputFile={current.inputFile}
+    organizationSlug={current.organizationSlug}
+    reportId={current.report.id}
+  />
+{:else if current.attempt.status === 'failed'}
+  <FailureView
+    attemptNumber={current.attempt.attemptNumber}
+    failure={current.attempt.failure}
+    organizationSlug={current.organizationSlug}
+    reportId={current.report.id}
+    onReportChanged={poller.pollNow}
+  />
+{:else if current.attempt.status === 'canceled'}
+  <CanceledView
+    stoppedAt={current.attempt.stoppedAt}
+    now={current.now}
+    newReportHref={current.newReportHref}
+    organizationSlug={current.organizationSlug}
+    reportId={current.report.id}
+  />
+{/if}

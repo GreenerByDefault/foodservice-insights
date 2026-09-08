@@ -12,18 +12,18 @@ test('confirm stays disabled until the name is typed; confirming lands on /orgs,
   // switcher's accessible name once this organization is current.
   const name = `Org To Delete ${crypto.randomUUID()}`;
   const reportName = 'Q1 procurement';
-  const { id: organizationId } = await organizations.create({
+  const { slug: organizationSlug } = await organizations.create({
     name,
     reports: [{ name: reportName, createdAt: dbMsAgo(0), status: 'succeeded' }],
   });
 
   // Confirm the report is actually there before the organization goes, so "gone" afterward means
   // something.
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
   await ensureHydrated(page);
   await expect(page.getByRole('link', { name: new RegExp(reportName) })).toBeVisible();
 
-  await page.goto(`/orgs/${organizationId}/settings`);
+  await page.goto(`/orgs/${organizationSlug}/settings`);
   await ensureHydrated(page);
 
   await page.getByRole('button', { name: 'Delete organization' }).click();
@@ -37,10 +37,10 @@ test('confirm stays disabled until the name is typed; confirming lands on /orgs,
   await expect(confirmButton).toBeEnabled();
   await confirmButton.click();
 
-  // The success handler navigates to `/orgs`, but `_resolvePostSignInDestination` immediately
+  // The success handler navigates to `/orgs`, but `_organizationsPageRedirect` immediately
   // forwards that on to a single remaining organization when there is one — so the deterministic
   // assertion is just that the browser is no longer anywhere under the deleted organization.
-  await page.waitForURL((url) => !url.pathname.includes(organizationId));
+  await page.waitForURL((url) => !url.pathname.includes(organizationSlug));
 
   if (new URL(page.url()).pathname === '/orgs') {
     // Landed on the bare list rather than being forwarded further — the deleted organization
@@ -52,6 +52,6 @@ test('confirm stays disabled until the name is typed; confirming lands on /orgs,
   }
 
   // The organization, and everything that hung off it, is gone.
-  const response = await page.goto(`/orgs/${organizationId}`);
+  const response = await page.goto(`/orgs/${organizationSlug}`);
   expect(response?.status()).toBe(404);
 });

@@ -7,7 +7,7 @@ import UserMenu from './shell/user-menu.svelte';
 
 let { data, children }: LayoutProps = $props();
 
-// Published by the layout under `orgs/[organizationId]`, which sits *below* this one. `page.data`
+// Published by the layout under `orgs/[organizationSlug]`, which sits *below* this one. `page.data`
 // is every load's data merged together, so the shell can read what a descendant resolved. Absent
 // on the routes that act on no organization, such as `/account`.
 const currentOrganization = $derived(page.data.organization);

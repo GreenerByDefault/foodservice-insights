@@ -94,7 +94,12 @@ describe('loadAuthorization', () => {
       // `organization_member` row in — creating Mango Co enrolled them there — never the whole
       // table. `requireOrganizationAccess` is what grants them access beyond this list.
       expect(auth?.memberships).toEqual([
-        { organizationId: mango.id, organizationName: 'Mango Co', role: 'admin' },
+        {
+          organizationId: mango.id,
+          organizationSlug: mango.slug,
+          organizationName: 'Mango Co',
+          role: 'admin',
+        },
       ]);
     });
   });

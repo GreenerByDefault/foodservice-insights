@@ -17,7 +17,7 @@ test('a mix of report states', async ({ page, organizations, db }) => {
   const processingCreatedAt = dbMsAgo(12 * MINUTE_MS + 30 * SECOND_MS);
   const succeededCreatedAt = dbMsAgo(3 * DAY_MS + 2 * HOUR_MS);
 
-  const { id: organizationId } = await organizations.create({
+  const { slug: organizationSlug } = await organizations.create({
     name: 'Riverside Foods',
     reports: [
       {
@@ -48,7 +48,7 @@ test('a mix of report states', async ({ page, organizations, db }) => {
     ],
   });
 
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
 
   await expect(page.getByRole('button', { name: 'Riverside Foods' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible();
@@ -66,9 +66,9 @@ test('a mix of report states', async ({ page, organizations, db }) => {
 });
 
 test('the empty state', async ({ page, organizations }) => {
-  const { id: organizationId } = await organizations.create({ name: 'New Foodservice Co' });
+  const { slug: organizationSlug } = await organizations.create({ name: 'New Foodservice Co' });
 
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
 
   await expect(page.getByText('No reports yet', { exact: false })).toBeVisible();
   await expectScreenshots(page, 'empty.png');
@@ -84,9 +84,12 @@ test('the pagination nav, with both Newer and Older visible', async ({ page, org
     status: 'succeeded',
   }));
 
-  const { id: organizationId } = await organizations.create({ name: 'Pagination Nav Co', reports });
+  const { slug: organizationSlug } = await organizations.create({
+    name: 'Pagination Nav Co',
+    reports,
+  });
 
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
   await page.getByRole('link', { name: 'Older' }).click();
 
   await expect(page.getByRole('link', { name: 'Newer' })).toBeVisible();

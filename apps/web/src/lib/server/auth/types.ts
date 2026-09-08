@@ -10,6 +10,7 @@ export type AuthenticatedUser = {
 
 export type OrganizationAccess = {
   organizationId: OrganizationId;
+  organizationSlug: string;
   organizationName: string;
   role: OrganizationRole;
 };

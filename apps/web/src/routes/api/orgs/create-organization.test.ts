@@ -18,8 +18,8 @@ describe('a valid name', () => {
       });
 
       expect(response.status).toBe(201);
-      const body = (await response.json()) as { organizationId: OrganizationId };
-      expect(response.headers.get('location')).toBe(`/orgs/${body.organizationId}`);
+      // The location is the derived slug, not the id — see `deriveOrganizationSlug`.
+      expect(response.headers.get('location')).toBe('/orgs/acme-foodservice');
     });
   });
 

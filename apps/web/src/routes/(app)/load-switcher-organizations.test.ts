@@ -25,8 +25,9 @@ test('a member under the cap sees every organization they belong to, unsliced', 
   const result = await _loadSwitcherOrganizations(database(), auth);
 
   expect(result).toEqual({
-    organizations: memberships.map(({ organizationId, organizationName }) => ({
+    organizations: memberships.map(({ organizationId, organizationSlug, organizationName }) => ({
       id: organizationId,
+      slug: organizationSlug,
       name: organizationName,
     })),
     hasMoreOrganizations: false,
@@ -40,10 +41,13 @@ test('a member of more than SWITCHER_LIMIT organizations is truncated, with hasM
   const result = await _loadSwitcherOrganizations(database(), auth);
 
   expect(result.organizations).toEqual(
-    memberships.slice(0, SWITCHER_LIMIT).map(({ organizationId, organizationName }) => ({
-      id: organizationId,
-      name: organizationName,
-    })),
+    memberships
+      .slice(0, SWITCHER_LIMIT)
+      .map(({ organizationId, organizationSlug, organizationName }) => ({
+        id: organizationId,
+        slug: organizationSlug,
+        name: organizationName,
+      })),
   );
   expect(result.hasMoreOrganizations).toBe(true);
 });

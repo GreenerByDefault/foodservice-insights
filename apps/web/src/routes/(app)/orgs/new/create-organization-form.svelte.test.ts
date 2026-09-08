@@ -33,6 +33,29 @@ describe('CreateOrganizationForm', () => {
     expect(goto).toHaveBeenCalledWith('/orgs/org-1');
   });
 
+  test.for([
+    [
+      'slug-taken',
+      "That name is too close to another organization's. Try adding your region or division.",
+      409,
+    ],
+    ['slug-reserved', "That name isn't available. Try adding your region or division.", 422],
+    ['slug-underivable', 'That name needs at least one letter or number in a–z or 0–9.', 422],
+  ] as const)(
+    'a %s response shows its inline error and takes focus',
+    async ([code, message, status]) => {
+      stubFetch(new Response(JSON.stringify({ message: 'Nope', code }), { status }));
+      const screen = await render(CreateOrganizationForm);
+
+      await screen.getByLabelText('Organization name').fill('Acme Foodservice');
+      await screen.getByRole('button', { name: 'Create organization' }).click();
+
+      await expect.element(screen.getByText(message)).toBeInTheDocument();
+      await expect.element(screen.getByLabelText('Organization name')).toHaveFocus();
+      expect(goto).not.toHaveBeenCalled();
+    },
+  );
+
   test('an unreachable server shows the unknown-outcome message and a link to the organization list', async () => {
     stubUnreachableFetch();
     const screen = await render(CreateOrganizationForm);

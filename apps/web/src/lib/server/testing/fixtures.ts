@@ -43,13 +43,14 @@ export function anAuthContext(
 }
 
 /** An `OrganizationAccess` for an organization named `name`, with `member` role and a random id
- * unless overridden. */
+ * and slug unless overridden. */
 export function anOrganizationAccess(
   name: string,
   role: OrganizationRole = 'member',
   organizationId: OrganizationId = crypto.randomUUID() as OrganizationId,
+  organizationSlug: string = `test-org-${crypto.randomUUID().slice(0, 8)}`,
 ): OrganizationAccess {
-  return { organizationId, organizationName: name, role };
+  return { organizationId, organizationSlug, organizationName: name, role };
 }
 
 // -----------------------------------------------------
@@ -91,6 +92,7 @@ export type OrganizationFixtures = {
   transaction: Transaction<Database>;
   store: BlobStore;
   organizationId: OrganizationId;
+  organizationSlug: string;
   adminUserId: UserId;
 };
 
@@ -110,6 +112,7 @@ export async function withOrganizationFixtures<T>(
         transaction,
         store: blobStore(),
         organizationId: organization.id,
+        organizationSlug: organization.slug,
         adminUserId: admin.id,
       });
     } finally {

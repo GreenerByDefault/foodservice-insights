@@ -7,7 +7,13 @@ const unknownNotice = createRawSnippet(() => ({
   render: () => '<span>Something went wrong.</span>',
 }));
 
-function props(onSubmit: (name: string) => Promise<'done' | 'name-taken' | 'unknown'>) {
+function props(
+  onSubmit: (
+    name: string,
+  ) => Promise<
+    'done' | 'name-taken' | 'slug-taken' | 'slug-reserved' | 'slug-underivable' | 'unknown'
+  >,
+) {
   return {
     initialName: 'Acme Foodservice',
     submitLabel: 'Save',
@@ -72,6 +78,27 @@ describe('OrganizationNameForm', () => {
     await expect.element(screen.getByLabelText('Organization name')).toHaveValue('Riverside Foods');
     await expect.element(screen.getByLabelText('Organization name')).toHaveFocus();
   });
+
+  test.for([
+    [
+      'slug-taken',
+      "That name is too close to another organization's. Try adding your region or division.",
+    ],
+    ['slug-reserved', "That name isn't available. Try adding your region or division."],
+    ['slug-underivable', 'That name needs at least one letter or number in a–z or 0–9.'],
+  ] as const)(
+    'a "%s" outcome shows its inline error and moves focus',
+    async ([outcome, message]) => {
+      const onSubmit = vi.fn().mockResolvedValue(outcome);
+      const screen = await render(OrganizationNameForm, props(onSubmit));
+
+      await screen.getByLabelText('Organization name').fill('Riverside Foods');
+      await screen.getByRole('button', { name: 'Save' }).click();
+
+      await expect.element(screen.getByText(message)).toBeInTheDocument();
+      await expect.element(screen.getByLabelText('Organization name')).toHaveFocus();
+    },
+  );
 
   test('an "unknown" outcome renders the caller-supplied notice as an alert', async () => {
     const onSubmit = vi.fn().mockResolvedValue('unknown');

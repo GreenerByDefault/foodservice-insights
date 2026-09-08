@@ -1,4 +1,4 @@
-import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
+import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { expect, test } from '@playwright/test';
 
 // The whole chain in one assertion: the seeded identity, the lookup in `hooks.server.ts`, the guard
@@ -12,7 +12,7 @@ import { expect, test } from '@playwright/test';
 // Supabase Auth lands, replace this with a real sign-in flow test (OTP submission, session cookie,
 // logout), and with one that reaches `/` signed out and sees the marketing page.
 test('a signed-in request reaches its organization, which the shell names', async ({ page }) => {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}`);
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}`);
 
   await expect(page.getByRole('banner')).toContainText('Phase One Foodservice');
 

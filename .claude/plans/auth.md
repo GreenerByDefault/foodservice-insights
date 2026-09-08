@@ -101,15 +101,17 @@ made.
 - **New `packages/browser-testing/src/fixtures.ts`**, exported as `@gbd/browser-testing/fixtures`
   (separate entry so `playwright.config.ts` never loads `@gbd/db/env`, per the pool-at-import note in
   `apps/web/e2e/fixtures/test.ts`). Extends `@playwright/test` with: worker-scoped `db` (moved from
-  apps/web); test-scoped `user: { id, email, displayName }`, `org: OrganizationId` (created lazily, the
-  user as admin, `orgName` option for screenshots, else `Test org <uuid>`), `users.create(spec)`; the
+  apps/web); test-scoped `user: { id, email, displayName }`, `org: { id: OrganizationId; slug: string }`
+  (created lazily, the user as admin, `orgName` option for screenshots, else `Test org <uuid>` — the
+  slug is what specs build `/orgs/…` URLs from, per organization-slugs), `users.create(spec)`; the
   `request` fixture overridden to `context.request` so `upload-limit.e2e.ts` shares the browser's
   cookies once they exist. Options `identity: 'onboarded' | 'new' | 'anonymous'` (default
   `'onboarded'`).
 - **`apps/web/e2e/fixtures/test.ts`** extends the shared test. `reports.create(state)` inserts into
-  `org`; `insertReportFixture(db, state, organizationId)` and `reportUrl(reportId, organizationId)`
-  lose their placeholder defaults; `insertOrganizationFixture(db, userId, spec)` takes the member.
-  `@gbd/db/testing`'s `insertOrganization` gains `adminUserId?`.
+  `org`; `insertReportFixture(db, state, organizationId)` loses its placeholder default, and
+  `reportUrl(reportId, organizationSlug)` loses its placeholder default too — `reportUrl`'s second
+  argument is already the slug (organization-slugs), not the id; `insertOrganizationFixture(db,
+  userId, spec)` takes the member. `@gbd/db/testing`'s `insertOrganization` gains `adminUserId?`.
 - **Specs:** `auth.e2e.ts`, `upload-limit.e2e.ts`, `new-report/*.ts`, `reports/*.e2e.ts`,
   `reports/reports.screenshot.ts`, `tests/e2e/specs/report-lifecycle.e2e.ts` (reads `user.email`
   instead of `RUN_NOTIFICATION_EMAIL`). Screenshot specs pass a fixed `orgName`, **distinct per
@@ -283,11 +285,11 @@ HttpOnly trade-off with CSP as the compensating control, `getUser()` and the fou
 - `error-page.svelte`: for `status === 401`, mount `SignInFlow` under the heading with
   `onSignedIn: () => invalidateAll()` — the page the user asked for renders with no redirect and no
   `?next=`. Component test for the 401 branch; update the "No calls to action yet" comment.
-- E2E: `identity: 'anonymous'` → `/orgs/<org>` → 401 page with the form → code from Mailpit → the
-  org page renders at the same URL.
+- E2E: `identity: 'anonymous'` → `/orgs/<org.slug>` → 401 page with the form → code from Mailpit →
+  the org page renders at the same URL.
 - The three rows in `apps/web/e2e/README.md` § Pending: with `users.contextFor(bystander)`, `GET`
-  `/orgs/:id/reports/:id` and `POST`/`DELETE` via `context.request` answer 404; signed out answers
-  401. Delete § Pending.
+  `/orgs/<org.slug>/reports/<reportId>` and `POST`/`DELETE` via `context.request` answer 404; signed
+  out answers 401. Delete § Pending.
 
 ## Follow-ups (not in this plan)
 

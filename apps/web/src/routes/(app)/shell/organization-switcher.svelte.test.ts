@@ -4,8 +4,8 @@ import { organizationHref } from '$lib/hrefs';
 import type { SwitcherOrganization } from '../+layout.server.ts';
 import OrganizationSwitcher from './organization-switcher.svelte';
 
-function anOrganization(name: string, id = name): SwitcherOrganization {
-  return { id: id as SwitcherOrganization['id'], name };
+function anOrganization(name: string, id = name, slug = id): SwitcherOrganization {
+  return { id: id as SwitcherOrganization['id'], slug, name };
 }
 
 type Props = {
@@ -105,7 +105,7 @@ describe('OrganizationSwitcher', () => {
     expect(organizationRows(screen).every((row) => !isChecked(row))).toBe(true);
   });
 
-  test('each organization links to organizationHref(id)', async () => {
+  test('each organization links to organizationHref(slug)', async () => {
     const acme = anOrganization('Acme Foodservice', 'org-acme');
     const screen = await opened({ current: undefined, organizations: [acme], hasMore: false });
 

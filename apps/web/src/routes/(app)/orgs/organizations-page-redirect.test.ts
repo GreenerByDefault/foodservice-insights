@@ -33,7 +33,7 @@ test('an invite past its deadline is ignored, however its status still reads', a
     const auth = anAuthContext({ user: { email }, memberships: [access] });
 
     await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe(
-      `/orgs/${access.organizationId}`,
+      `/orgs/${access.organizationSlug}`,
     );
   });
 });
@@ -46,7 +46,7 @@ test('an accepted invite is ignored even though it has not expired', async () =>
     const auth = anAuthContext({ user: { email }, memberships: [access] });
 
     await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe(
-      `/orgs/${access.organizationId}`,
+      `/orgs/${access.organizationSlug}`,
     );
   });
 });
@@ -83,7 +83,7 @@ test('one organization skips the picker', async () => {
     const auth = anAuthContext({ user: { email: anEmail() }, memberships: [access] });
 
     await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe(
-      `/orgs/${access.organizationId}`,
+      `/orgs/${access.organizationSlug}`,
     );
   });
 });

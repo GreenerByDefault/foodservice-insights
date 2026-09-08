@@ -22,12 +22,12 @@ test('paging older then newer through 21 reports', async ({ page, organizations 
     status: 'succeeded',
   }));
 
-  const { id: organizationId } = await organizations.create({
+  const { slug: organizationSlug } = await organizations.create({
     name: `Pagination test org ${crypto.randomUUID()}`,
     reports,
   });
 
-  await page.goto(`/orgs/${organizationId}`);
+  await page.goto(`/orgs/${organizationSlug}`);
 
   // The same elements are repeated in the DOM for mobile vs desktop, so we use `.first()`.
 
