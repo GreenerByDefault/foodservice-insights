@@ -14,6 +14,7 @@ export {
   withCommittedFixture,
   withConcurrentTransactions,
 } from './concurrency.ts';
+export { expectConstraintViolation } from './constraints.ts';
 export { aDatabaseError, anUnreachableDatabaseError, divideByZero } from './errors.ts';
 export {
   aChecksum,

@@ -3,10 +3,8 @@
 
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
-import {
-  POSTGRES_CODE_CHECK_VIOLATION,
-  POSTGRES_CODE_UNIQUE_VIOLATION,
-} from '../src/postgres-codes.ts';
+import { POSTGRES_CODE_UNIQUE_VIOLATION } from '../src/postgres-codes.ts';
+import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   aChecksum,
   insertAppUser,
@@ -29,10 +27,7 @@ describe('report', () => {
         .execute();
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'report_deleted_at_after_created_at',
-    });
+    await expectConstraintViolation(insert, 'report_deleted_at_after_created_at');
   });
 
   test.each([
@@ -44,10 +39,7 @@ describe('report', () => {
       await insertReport(transaction, { monthlyCounts });
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'report_monthly_counts_is_object',
-    });
+    await expectConstraintViolation(insert, 'report_monthly_counts_is_object');
   });
 
   test('is deleted with its organization', async () => {
@@ -73,10 +65,7 @@ describe('report', () => {
       await checkDeferredConstraints(transaction);
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'report_has_an_input_file',
-    });
+    await expectConstraintViolation(insert, 'report_has_an_input_file');
   });
 
   test('report_has_an_input_file passes once the input file is attached', async () => {
@@ -122,7 +111,11 @@ describe('input_file', () => {
       await insertInputFile(transaction, { reportId: report.id });
     });
 
-    await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
+    await expectConstraintViolation(
+      insert,
+      'input_file_report_id_key',
+      POSTGRES_CODE_UNIQUE_VIOLATION,
+    );
   });
 
   test('rejects a storage key that is already taken', async () => {
@@ -132,7 +125,11 @@ describe('input_file', () => {
       await insertInputFile(transaction, { storageKey });
     });
 
-    await expect(insert).rejects.toMatchObject({ code: POSTGRES_CODE_UNIQUE_VIOLATION });
+    await expectConstraintViolation(
+      insert,
+      'input_file_storage_key_key',
+      POSTGRES_CODE_UNIQUE_VIOLATION,
+    );
   });
 
   test('rejects a checksum that is not 32 bytes', async () => {
@@ -152,10 +149,7 @@ describe('input_file', () => {
         .execute();
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'input_file_checksum_sha256_length',
-    });
+    await expectConstraintViolation(insert, 'input_file_checksum_sha256_length');
   });
 
   test('rejects an empty file', async () => {
@@ -175,10 +169,7 @@ describe('input_file', () => {
         .execute();
     });
 
-    await expect(insert).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'input_file_byte_size_positive',
-    });
+    await expectConstraintViolation(insert, 'input_file_byte_size_positive');
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
-import { POSTGRES_CODE_CHECK_VIOLATION } from '../src/postgres-codes.ts';
+import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
@@ -73,10 +73,7 @@ describe('audit_event', () => {
         .execute();
     });
 
-    await expect(update).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'audit_event_is_append_only',
-    });
+    await expectConstraintViolation(update, 'audit_event_is_append_only');
   });
 
   test('rejects a delete', async () => {
@@ -90,9 +87,6 @@ describe('audit_event', () => {
       await transaction.deleteFrom('auditEvent').where('id', '=', event.id).execute();
     });
 
-    await expect(remove).rejects.toMatchObject({
-      code: POSTGRES_CODE_CHECK_VIOLATION,
-      constraint: 'audit_event_is_append_only',
-    });
+    await expectConstraintViolation(remove, 'audit_event_is_append_only');
   });
 });

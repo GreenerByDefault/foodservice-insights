@@ -55,61 +55,22 @@ one-dimensional axis, and all setup is externalized to `testing/worker-harness.t
 ## PR stack
 
 **This PR (the last one) lands directly on `improve-test-org`** (this branch) — it's small and
-doesn't need review isolation. PRs 1-3 (`packages/db`, `apps/worker`, `apps/web`) are big enough
-to want independent review, so they go out as three separate branches/PRs off `main` — not a
-`gh-stack` chain, just three ordinary branches that all start from `main` post-convention.
-Rebase each on `main` before pushing: this is a pure-reorganization stack, so an upstream test
-added to a block being restructured (as `#291` did to `organization.test.ts`, already reflected
-below) is a conflict every time.
+doesn't need review isolation. PRs 1-2 (`apps/worker`, `apps/web`) are big enough to want
+independent review, so they go out as two separate branches/PRs off `main` — not a `gh-stack`
+chain, just ordinary branches that start from `main` post-convention. Rebase each on `main`
+before pushing: this is a pure-reorganization stack, so an upstream test added to a block being
+restructured is a conflict every time — `packages/db`'s own PR already hit this once, from
+`#291` landing on `organization.test.ts` mid-planning.
 
-### PR 1 — `packages/db`
+`packages/db` has landed. It added `expectConstraintViolation(work, constraint, code?)` in
+[`packages/db/src/testing/constraints.ts`](packages/db/src/testing/constraints.ts), exported
+from the [`testing/` barrel](packages/db/src/testing/index.ts), covering all 62 of that
+package's constraint-violation assertions — the one instance of `toMatchObject`
+[`AGENTS.md`](AGENTS.md) § Testing philosophy allows for now lives in one doc comment instead of
+62 call sites. `apps/worker` and `apps/web` don't assert Postgres constraints directly, so
+neither PR below needs it.
 
-**Add the shared constraint assertion.** There are 62 near-identical assertions across
-`packages/db/tests/` (54 check, 7 unique, 1 foreign key) and no helper, despite a well-built
-[`packages/db/src/testing/`](packages/db/src/testing/) barrel. Add
-`packages/db/src/testing/constraints.ts` and export it from
-[`index.ts`](packages/db/src/testing/index.ts):
-
-```ts
-export function expectConstraintViolation(
-  work: Promise<unknown>,
-  constraint: string,
-  code = POSTGRES_CODE_CHECK_VIOLATION,
-): Promise<void>;
-```
-
-One symbol covers all 62 sites. Its doc comment is the right place to record why this is the
-one justified `toMatchObject` — a `pg.DatabaseError` carries a dozen fields no test cares
-about, which is the exception [`AGENTS.md`](AGENTS.md) § Testing philosophy allows for. Today
-that exception is re-made silently 62 times.
-
-**Nest, keeping every test its own block** (per the answered question — no collapsing into
-`test.each`; the per-case comments explaining trigger precedence have nowhere else to live):
-
-- [`analysis-attempt.test.ts`](packages/db/tests/analysis-attempt.test.ts) —
-  `'analysis_attempt column invariants'` (14 flat tests, L66-376) splits into the status and
-  timestamp constraints, the notification columns (six constraints, L175-268), and the
-  contract version. The timestamp-ordering block at L311-375 already has a shared comment and
-  two shared constants declared mid-describe — it is a nested describe in all but name.
-- [`organization.test.ts`](packages/db/tests/organization.test.ts) — `'organization'` (L69-238,
-  now **13 flat tests**) splits into name validation (L70-133), slug validation (L134-199), and
-  the membership invariants (L200-238); `'organization_member'` (L239-497) into the
-  at-least-one-admin rule, user deletion, and superadmin accounting. Its `demote` helper (L240)
-  serves only the first group and moves into it.
-
-  This file is the clearest evidence for the whole change: the five slug tests arrived with
-  `#291` *during this planning session* and landed as five more flat siblings in a block that
-  was already mixing two subjects. The block accretes because there is nothing telling a new
-  test where to go.
-- `report.test.ts`, `audit-event.test.ts`, `report-rate-limit.test.ts`, `conventions.test.ts` —
-  helper application only, no restructuring.
-
-**Split the one oversized file.** `analysis-attempt.test.ts` is 1048 lines covering two
-subjects; move `describe('result_file')` (L875-1047, ~10 tests) to
-`packages/db/tests/result-file.test.ts`, carrying its nested
-`'a succeeded attempt has a pdf and an xlsx'` block intact.
-
-### PR 2 — `apps/worker`
+### PR 1 — `apps/worker`
 
 - [`converge.test.ts`](apps/worker/src/sweeps/converge.test.ts) — the worst ratio in the repo
   (17 flat tests under `reapExpiredAttempts`). Split into which attempts it catches (L68-149),
@@ -139,7 +100,7 @@ subjects; move `describe('result_file')` (L875-1047, ~10 tests) to
   six tests share an 8-line `withBreakable`/`withWorker`/`parkAtUpload` preamble and one uses
   a different store. Do **not** split this file; it is the reference for correct flatness.
 
-### PR 3 — `apps/web`
+### PR 2 — `apps/web`
 
 - [`db.test.ts`](apps/web/src/lib/server/db.test.ts) — no `describe` at all, and 9 of 10 titles
   type the function name as a prefix (6 × `withDbErrorHandling`, 3 × `isUniqueViolation`). Add
@@ -173,7 +134,7 @@ subjects; move `describe('result_file')` (L875-1047, ~10 tests) to
   (~30 files), `apps/worker` and `packages/db` use `test.each` (~22 sites), and two files use
   `it.each` ([`failures.test.ts`](apps/worker/src/failures.test.ts),
   [`retry.test.ts`](apps/worker/src/retry.test.ts)) — the only `it` in a repo that otherwise
-  uses `test`. The two `for`-loop-to-`test.each` conversions in PR 2 are included only because
+  uses `test`. The two `for`-loop-to-`test.each` conversions in PR 1 are included only because
   they sit inside blocks being restructured anyway.
 
 ## Verification
@@ -185,18 +146,14 @@ The safety property for a pure reorganization is that the same tests still run a
    after — it must be identical. Test *names* change as describe paths change, so compare counts
    and pass/fail, not name lists:
    `pnpm --filter @gbd/<pkg> test:unit -- --reporter=json`
-   Take the baseline per PR rather than hardcoding a number: `main` moved once already during
-   planning (`2fe6f45` → `e09da86`, which added five tests to a PR 1 target file), so any
-   absolute count goes stale between PRs in the stack.
+   Take the baseline per PR rather than hardcoding a number — `main` has already moved once
+   during planning, and each PR in the stack rebases onto whatever `main` is current when it's
+   built.
 3. The gate, run in the background per
    [`.claude/rules/typescript.md`](.claude/rules/typescript.md):
    `pnpm lint && pnpm check && pnpm test`
 4. `pnpm test:system` is **not** in the gate and is not needed here — no Dockerfile, service
    startup, or cross-stack seam is touched.
-5. The DB work needs the test stack up: `TEST_DB=1 scripts/supabase start`. The `packages/db`
-   PR is the only one that changes assertion *form*; re-run `pnpm --filter @gbd/db test:unit`
-   and confirm every constraint name still appears in a failure message by temporarily
-   breaking one constraint expectation, so the helper is proven to actually assert.
 
 **Open:** whether `packages/db/src/testing/constraints.ts` should also replace the handful of
 `resolves.toBeUndefined()` "accepts" cases with a matching `expectAccepted` helper. Left out
