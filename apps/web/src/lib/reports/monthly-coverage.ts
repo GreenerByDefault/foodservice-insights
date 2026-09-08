@@ -1,8 +1,4 @@
-/** The months a file has orders in, against the counts the form gave for them.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** The months a file has orders in, against the counts the form gave for them. */
 
 import type { MonthlyCounts, MonthsFromFile } from './metadata.ts';
 import type { RejectedUploadRecord } from './rejection.ts';

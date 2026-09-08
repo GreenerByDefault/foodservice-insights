@@ -1,8 +1,4 @@
-/** The form field names and the schemas for the report metadata an upload carries.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** The form field names and the schemas for the report metadata an upload carries. */
 
 import { exhaustiveArray } from '@gbd/core';
 import type { CountsBasis, UnitSystem } from '@gbd/db';

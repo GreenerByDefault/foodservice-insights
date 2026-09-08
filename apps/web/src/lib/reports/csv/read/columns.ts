@@ -1,8 +1,4 @@
-/** Finding the three columns the analysis needs in a header row.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Finding the three columns the analysis needs in a header row. */
 
 export type RequiredColumn = 'product' | 'date' | 'weight';
 

@@ -30,5 +30,4 @@ export type AuthContext = {
   memberships: readonly OrganizationAccess[];
 };
 
-/** Who is making a request, and in what role. */
 export type Actor = { userId: UserId; role: OrganizationRole };

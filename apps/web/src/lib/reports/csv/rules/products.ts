@@ -7,9 +7,6 @@
  *
  * Every pattern here is anchored with bounded quantifiers, and callers length-check a cell before
  * handing it over.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 export type ProductFault = 'empty' | 'placeholder' | 'invisible-character';

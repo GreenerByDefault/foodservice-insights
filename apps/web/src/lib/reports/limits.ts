@@ -1,8 +1,4 @@
-/** Caps on an upload's size and the free text and metadata it carries.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Caps on an upload's size and the free text and metadata it carries. */
 
 import { MINUTE_MS } from '@gbd/core';
 import { MAX_UPLOAD_BYTES } from './upload-limit.js';

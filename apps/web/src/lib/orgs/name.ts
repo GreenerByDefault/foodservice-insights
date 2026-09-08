@@ -1,8 +1,4 @@
-/** The form field name and the schema for an organization's name, shared by create and rename.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** The form field name and the schema for an organization's name, shared by create and rename. */
 
 import { requiredText } from '$lib/forms/validation';
 

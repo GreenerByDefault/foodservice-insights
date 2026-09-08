@@ -6,9 +6,6 @@
  * The normalized CSV is discarded rather than kept: the server always redoes this from the
  * original upload, and a client-normalized file would be a different file from the one the user
  * chose to send.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import { describeUnreadableFile } from './csv/describe/index.ts';

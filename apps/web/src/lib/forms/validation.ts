@@ -1,8 +1,4 @@
-/** Valibot pieces that forms may share. A form's own schema belongs with its feature.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Valibot pieces that forms may share. A form's own schema belongs with its feature. */
 
 import * as v from 'valibot';
 

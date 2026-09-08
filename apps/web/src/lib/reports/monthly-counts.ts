@@ -1,8 +1,5 @@
 /** The count a user is typing in for each month, and what it takes to turn that into what the
  * form submits.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 import type { MonthlyCounts, MonthsFromFile } from './metadata.ts';

@@ -5,9 +5,6 @@
  * this area refuses to make.
  *
  * Line endings are already normalized to `\n` by `decode.ts`.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
  */
 
 export type CsvRecord = {

@@ -1,8 +1,4 @@
-/** A `FindingGroup` into the `Problem` a customer reads about it.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** A `FindingGroup` into the `Problem` a customer reads about it. */
 
 import { EARLIEST_DATE, MAX_FREE_TEXT_LENGTH, MAX_FUTURE_DAYS } from '../../limits.ts';
 import type { FindingGroup, RowFinding } from '../findings.ts';

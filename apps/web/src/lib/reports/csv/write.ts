@@ -1,8 +1,4 @@
-/** Accepted rows into the comma-separated CSV the analysis reads.
- *
- * Imported by the browser as well as the server — keep it free of `$env`, `$lib/server`, and
- * anything Node-only.
- */
+/** Accepted rows into the comma-separated CSV the analysis reads. */
 
 export const NORMALIZED_HEADER = ['product', 'date', 'weight'] as const;
 export const NORMALIZED_DATE_FORMAT = 'YYYY-MM-DD';
