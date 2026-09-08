@@ -63,19 +63,13 @@ describe('decodeCsv', () => {
   });
 
   describe('rejects', () => {
-    test.for([
-      [
-        'an XLSX file, by its ZIP signature',
-        Uint8Array.of(0x50, 0x4b, 0x03, 0x04, 0x14, 0x00),
-        'xlsx',
-      ],
-      [
-        'a legacy XLS file, by its OLE2 signature',
-        Uint8Array.of(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1),
-        'xls',
-      ],
-    ] as const)('%s', ([, bytes, format]) => {
-      expect(decodeCsv(bytes)).toEqual({ ok: false, fault: { kind: 'signature', format } });
+    // Which bytes count as a spreadsheet signature is `spreadsheetSignature`'s own contract,
+    // covered in `signatures.test.ts`; this only checks that a recognised signature comes back as
+    // a `signature` fault naming the format.
+    test('a recognised spreadsheet signature, as a signature fault', () => {
+      const bytes = Uint8Array.of(0x50, 0x4b, 0x03, 0x04, 0x14, 0x00);
+
+      expect(decodeCsv(bytes)).toEqual({ ok: false, fault: { kind: 'signature', format: 'xlsx' } });
     });
 
     test.for([

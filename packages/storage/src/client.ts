@@ -16,7 +16,7 @@ export type BlobStoreLimits = {
    * The clock is reset only by bytes arriving *back*, and a write gets nothing back until the body
    * is sent and the store has processed it. So, this is a cap on the slowest legitimate upload rather
    * than only a stall detector, and cutting it fails every attempt of an upload that would have
-   * finished. `MAX_UPLOAD_BYTES` caps an upload at 10MB, which 30s carries down to 2.7Mbit/s; in-region,
+   * finished. `MAX_UPLOAD_FIELD_BYTES` caps an upload at 10MB, which 30s carries down to 2.7Mbit/s; in-region,
    * a real upload should be under a second.
    */
   attemptTimeoutMs: number;

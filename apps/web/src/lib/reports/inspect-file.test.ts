@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { inspectFile } from './inspect-file.ts';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
+import { MAX_UPLOAD_FIELD_BYTES, MAX_UPLOAD_FIELD_MEGABYTES } from './limits.ts';
 import { validateSubmission } from './submission.ts';
 
 const HEADER = 'product,date,weight';
@@ -10,7 +10,7 @@ function aFile(text: string, name = 'procurement.csv'): File {
 }
 
 describe('inspectFile', () => {
-  test('yields the months a valid CSV covers, ascending and deduplicated', async () => {
+  test('yields the months a valid CSV covers, ascending and deduplicated, and the file to upload', async () => {
     const text = [
       HEADER,
       'beef,2026-03-02,1',
@@ -18,21 +18,23 @@ describe('inspectFile', () => {
       'beef,2026-03-28,1',
       'beef,2026-01-31,1',
     ].join('\n');
+    const file = aFile(text);
 
-    await expect(inspectFile(aFile(text))).resolves.toEqual({
+    await expect(inspectFile(file)).resolves.toEqual({
       ok: true,
       months: ['2026-01', '2026-03'],
+      upload: { file },
     });
   });
 
   test('rejects an oversized file without reading it', async () => {
-    const text = 'x'.repeat(MAX_UPLOAD_BYTES + 1);
+    const text = 'x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1);
 
     await expect(inspectFile(aFile(text))).resolves.toEqual({
       ok: false,
       rejection: {
         reason: 'too_large',
-        summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
+        summary: `That file is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`,
         rejectionDetail: `${text.length} bytes`,
       },
     });

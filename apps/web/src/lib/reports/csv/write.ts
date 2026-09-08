@@ -10,12 +10,12 @@ export function encodeNormalizedCsv(rows: readonly NormalizedRow[]): Uint8Array 
   const lines = [NORMALIZED_HEADER.join(',')];
   for (const { product, isoDate, weight } of rows) {
     // Only the product needs escaping.
-    lines.push(`${escapeField(product)},${isoDate},${weight}`);
+    lines.push(`${escapeCsvField(product)},${isoDate},${weight}`);
   }
   lines.push('');
   return new TextEncoder().encode(lines.join('\n'));
 }
 
-function escapeField(value: string): string {
+export function escapeCsvField(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

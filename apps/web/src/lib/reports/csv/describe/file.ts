@@ -2,7 +2,7 @@
  * unreadable by the decode / layout / header / parse-error rejections once parsing starts.
  */
 
-import { MAX_COLUMNS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';
+import { MAX_COLUMNS, MAX_UPLOAD_FIELD_MEGABYTES } from '../../limits.ts';
 import type { RejectedUploadRecord } from '../../rejection.ts';
 import type {
   CsvParseError,
@@ -28,7 +28,7 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
     case 'too-large':
       return {
         reason: 'too_large',
-        summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
+        summary: `That file is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`,
         rejectionDetail: `${file.byteSize} bytes`,
       };
     case 'empty':

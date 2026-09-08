@@ -3,6 +3,8 @@
  * Uses `TextDecoder`, never `Buffer` — this runs in the browser too.
  */
 
+import { spreadsheetSignature } from '../../signatures.ts';
+
 export type DecodeFault =
   | { kind: 'signature'; format: 'xlsx' | 'xls' }
   | { kind: 'control-character'; code: number; offset: number }
@@ -10,24 +12,9 @@ export type DecodeFault =
 
 export type Decoded = { ok: true; text: string } | { ok: false; fault: DecodeFault };
 
-/** Files that people mistake for a CSV, recognised so we can say which one it is.
- *
- * This is a diagnostic, not a security control. There is no zip bomb to defend against: we never
- * interpret an upload as an archive, only ever as CSV, so nothing is ever decompressed. What this
- * buys is the difference between "line 1 contains control characters" and "that looks like an
- * Excel file" — something a user may get wrong. Resist growing the list; every
- * other binary format already lands on the control-character rule below with an honest message.
- *
- * The filename and the browser-supplied content type are never consulted.
- */
-const SIGNATURES = [
-  { bytes: [0x50, 0x4b], format: 'xlsx' },
-  { bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], format: 'xls' },
-] as const;
-
 export function decodeCsv(bytes: Uint8Array): Decoded {
-  const signature = SIGNATURES.find((candidate) => startsWith(bytes, candidate.bytes));
-  if (signature) return { ok: false, fault: { kind: 'signature', format: signature.format } };
+  const format = spreadsheetSignature(bytes);
+  if (format) return { ok: false, fault: { kind: 'signature', format } };
 
   const text = normalizeLineEndings(decodeText(bytes));
 

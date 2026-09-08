@@ -150,7 +150,7 @@ function readRow(
   // Length before any rule runs. Every pattern in `rules/` is anchored and bounded, but this is
   // what guarantees none of them ever sees a long input in the first place. Only these three
   // columns are read out of the record at all, so a column the file carries but the analysis
-  // never reads is bounded only by `MAX_UPLOAD_BYTES`.
+  // never reads is bounded only by `MAX_UPLOAD_FIELD_BYTES`.
   let overLong: RequiredColumn[] | undefined;
   for (const column of REQUIRED_COLUMNS) {
     if (raw[column].length > MAX_FREE_TEXT_LENGTH) {

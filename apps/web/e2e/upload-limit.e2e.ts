@@ -10,7 +10,7 @@ import type { ReportId } from '@gbd/db';
 import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { expect } from '@playwright/test';
 import { UNEXPECTED_ERROR_MESSAGE } from '../src/lib/errors/messages';
-import { MAX_UPLOAD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
+import { MAX_UPLOAD_FIELD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
 import { test } from './fixtures/test.ts';
 
 const ENDPOINT = `/api/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports`;
@@ -47,7 +47,7 @@ test('accepts a file far past the Svelte default but inside the product limit', 
   baseURL,
   reports,
 }) => {
-  const csv = csvOfAtLeast(MAX_UPLOAD_BYTES / 2);
+  const csv = csvOfAtLeast(MAX_UPLOAD_FIELD_BYTES / 2);
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(201);
@@ -60,7 +60,11 @@ test('rejects a file over the product limit as our own 400, not the transport 41
   request,
   baseURL,
 }) => {
-  const csv = csvOfAtLeast(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES / 2);
+  // `BODY_SIZE_LIMIT` is sized for the CSV field plus, when there is one, the workbook side-car —
+  // even though this request sends only the CSV field. Sized past `MAX_UPLOAD_FIELD_BYTES` by
+  // more than `TRANSPORT_MARGIN_BYTES` alone would allow, so the rejection below can only be
+  // ours, never the transport's.
+  const csv = csvOfAtLeast(MAX_UPLOAD_FIELD_BYTES + TRANSPORT_MARGIN_BYTES + 512 * 1024);
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(400);
@@ -73,7 +77,7 @@ test('rejects a file over the transport limit as adapter-node, not our own valid
   request,
   baseURL,
 }) => {
-  const csv = csvOfAtLeast(MAX_UPLOAD_BYTES + TRANSPORT_MARGIN_BYTES + 512 * 1024);
+  const csv = csvOfAtLeast(MAX_UPLOAD_FIELD_BYTES * 2 + TRANSPORT_MARGIN_BYTES + 512 * 1024);
   const response = await request.post(ENDPOINT, uploadRequestOptions(csv, baseURL as string));
 
   expect(response.status()).toBe(413);

@@ -1,10 +1,26 @@
 /** Caps on an upload's size and the free text and metadata it carries. */
 
 import { MINUTE_MS } from '@gbd/core';
-import { MAX_UPLOAD_BYTES } from './upload-limit.js';
+import { MAX_UPLOAD_FIELD_BYTES } from './upload-limit.js';
 
-export { MAX_UPLOAD_BYTES };
-export const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / 1024 / 1024;
+export { MAX_UPLOAD_FIELD_BYTES };
+export const MAX_UPLOAD_FIELD_MEGABYTES = MAX_UPLOAD_FIELD_BYTES / 1024 / 1024;
+
+/** XML runs this much wordier than the CSV it represents. */
+const XML_TO_CSV_EXPANSION = 4;
+
+/** Margin past the break-even point with `MAX_UPLOAD_FIELD_BYTES`, so the cap isn't sitting right
+ * at the edge of a legitimate file.
+ */
+const UNPACKED_MARGIN = 2.5;
+
+/** How much declared-uncompressed XML a workbook's zip entries may total before we refuse to
+ * unzip it — checked against the central directory before anything is inflated, so an oversize
+ * declaration never reaches the decompressor. It only bounds what a single sheet can make us
+ * inflate.
+ */
+export const MAX_WORKBOOK_UNPACKED_BYTES =
+  MAX_UPLOAD_FIELD_BYTES * XML_TO_CSV_EXPANSION * UNPACKED_MARGIN;
 
 /** Caps on the free text and the metadata an upload carries. */
 export const MAX_FREE_TEXT_LENGTH = 200;
@@ -42,8 +58,8 @@ export const MAX_HEADER_SEARCH_LINES = 10;
  * At this limit, 500,000 rows, that would be about 200MB for one request — and if 3–5 requests
  * hit that peak at once, it would add up to 600MB–1GB.
  *
- * `MAX_UPLOAD_BYTES` binds first in practice, which is why this number isn't lower — a file runs
- * out of upload bytes before it runs out of row headroom. But the two caps aren't far apart: a
+ * `MAX_UPLOAD_FIELD_BYTES` binds first in practice, which is why this number isn't lower — a file
+ * runs out of upload bytes before it runs out of row headroom. But the two caps aren't far apart: a
  * row like `Chicken Breast Portion 5oz,2026-01-05,12.5` is 42 bytes, so a 10MB upload of rows
  * that short is already about 250,000 of them — half of `MAX_DATA_ROWS`. A real file with short
  * product names can land in that range. Lowering `MAX_DATA_ROWS` to shrink the peak would start

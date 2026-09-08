@@ -4,6 +4,7 @@ import { findRepoRoot } from '@gbd/core/env';
 import { describe, expect, test } from 'vitest';
 import {
   encodeNormalizedCsv,
+  escapeCsvField,
   NORMALIZED_DATE_FORMAT,
   NORMALIZED_HEADER,
   type NormalizedRow,
@@ -35,6 +36,20 @@ describe('encodeNormalizedCsv', () => {
     expect(decoded([{ product, isoDate: '2026-01-05', weight: 1 }])).toBe(
       `product,date,weight\n${expected},2026-01-05,1\n`,
     );
+  });
+});
+
+describe('escapeCsvField', () => {
+  test.for([
+    ['a comma', 'beef, minced', '"beef, minced"'],
+    ['a quote', 'beef 12" cut', '"beef 12"" cut"'],
+    ['a newline', 'beef\nmince', '"beef\nmince"'],
+  ] as const)('quotes a value containing %s', ([, value, expected]) => {
+    expect(escapeCsvField(value)).toBe(expected);
+  });
+
+  test('leaves plain text unchanged', () => {
+    expect(escapeCsvField('beef mince')).toBe('beef mince');
   });
 });
 
