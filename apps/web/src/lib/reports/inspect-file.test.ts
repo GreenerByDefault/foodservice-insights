@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { inspectFile } from './inspect-file.ts';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from './limits.ts';
+import { MAX_UPLOAD_FIELD_BYTES, MAX_UPLOAD_FIELD_MEGABYTES } from './limits.ts';
 import { validateSubmission } from './submission.ts';
 
 const HEADER = 'product,date,weight';
@@ -28,13 +28,13 @@ describe('inspectFile', () => {
   });
 
   test('rejects an oversized file without reading it', async () => {
-    const text = 'x'.repeat(MAX_UPLOAD_BYTES + 1);
+    const text = 'x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1);
 
     await expect(inspectFile(aFile(text))).resolves.toEqual({
       ok: false,
       rejection: {
         reason: 'too_large',
-        summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
+        summary: `That file is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`,
         rejectionDetail: `${text.length} bytes`,
       },
     });

@@ -12,7 +12,7 @@ import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
 import { describeUnreadableFile } from './csv/describe/index.ts';
 import { normalizeCsv } from './csv/normalize.ts';
-import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_BYTES } from './limits.ts';
+import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_FIELD_BYTES } from './limits.ts';
 import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
 import { monthsWithoutCounts } from './monthly-coverage.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
@@ -77,7 +77,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     byteSize: raw.file.size,
   };
 
-  if (fileDescription.byteSize > MAX_UPLOAD_BYTES) {
+  if (fileDescription.byteSize > MAX_UPLOAD_FIELD_BYTES) {
     return {
       ok: false,
       fileDescription,

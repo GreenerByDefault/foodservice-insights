@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_UPLOAD_BYTES } from './limits.ts';
+import { MAX_UPLOAD_FIELD_BYTES } from './limits.ts';
 import { FIELD } from './metadata.ts';
 import { type RawSubmission, readSubmission, validateSubmission } from './submission.ts';
 
@@ -81,7 +81,7 @@ describe('validateSubmission', () => {
 
       expect(outcome).toMatchObject({
         ok: false,
-        rejection: { reason: 'too_large', rejectionDetail: `${MAX_UPLOAD_BYTES + 1} bytes` },
+        rejection: { reason: 'too_large', rejectionDetail: `${MAX_UPLOAD_FIELD_BYTES + 1} bytes` },
       });
     });
 
@@ -145,7 +145,7 @@ describe('validateSubmission', () => {
 
     expect(outcome).toMatchObject({
       ok: false,
-      fileDescription: { originalFilename: 'big.csv', byteSize: MAX_UPLOAD_BYTES + 1 },
+      fileDescription: { originalFilename: 'big.csv', byteSize: MAX_UPLOAD_FIELD_BYTES + 1 },
       bytes: null,
     });
   });
@@ -172,7 +172,7 @@ describe('validateSubmission', () => {
 
 /** One byte over the cap. */
 function anOversizedFile(name: string): File {
-  return new File(['x'.repeat(MAX_UPLOAD_BYTES + 1)], name);
+  return new File(['x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1)], name);
 }
 
 describe('readSubmission', () => {

@@ -16,9 +16,6 @@ export function encodeNormalizedCsv(rows: readonly NormalizedRow[]): Uint8Array 
   return new TextEncoder().encode(lines.join('\n'));
 }
 
-/** Exported for `excel/` to render a workbook cell's text the same way this file already
- * escapes one, so a workbook and the CSV saved from it are judged identically.
- */
 export function escapeCsvField(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

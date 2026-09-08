@@ -10,7 +10,11 @@ import { Input } from '$lib/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group';
 import { organizationHref } from '$lib/hrefs';
 import { inspectFile } from '$lib/reports/inspect-file';
-import { MAX_FREE_TEXT_LENGTH, MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from '$lib/reports/limits';
+import {
+  MAX_FREE_TEXT_LENGTH,
+  MAX_UPLOAD_FIELD_BYTES,
+  MAX_UPLOAD_FIELD_MEGABYTES,
+} from '$lib/reports/limits';
 import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '$lib/reports/metadata';
 import { type CountDraft, reconcileDraft, serializeCounts } from '$lib/reports/monthly-counts';
 import { userFacingRejection, type UploadRejection } from '$lib/reports/rejection';
@@ -56,7 +60,7 @@ function fileRejectionMessage(reason: FileRejectedReason): string {
     case 'File type not allowed':
       return 'We can only read CSV files right now. In Excel, choose File → Save As → CSV.';
     case 'Maximum file size exceeded':
-      return `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`;
+      return `That file is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`;
     case 'Maximum files uploaded':
       return 'Choose only one file.';
   }
@@ -169,7 +173,7 @@ function backToForm() {
       <Field.Legend>File</Field.Legend>
       <Field.Description>
         A CSV with three columns: product name, date ordered, and weight. Up to
-        {MAX_UPLOAD_MEGABYTES}MB.
+        {MAX_UPLOAD_FIELD_MEGABYTES}MB.
       </Field.Description>
 
       {#if upload}
@@ -184,7 +188,7 @@ function backToForm() {
         <FileDropZone.Root
           maxFiles={1}
           fileCount={0}
-          maxFileSize={MAX_UPLOAD_BYTES}
+          maxFileSize={MAX_UPLOAD_FIELD_BYTES}
           accept=".csv,text/csv"
           onUpload={inspectChosenFile}
           {onFileRejected}

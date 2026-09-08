@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_UPLOAD_MEGABYTES } from '../../limits.ts';
+import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_UPLOAD_FIELD_MEGABYTES } from '../../limits.ts';
 import type { RejectedUploadRecord } from '../../rejection.ts';
 import { CsvParseError, type DecodeFault, type LayoutFault } from '../read/index.ts';
 import { describeUnreadableFile } from './file.ts';
@@ -173,7 +173,7 @@ describe('describeUnreadableFile', () => {
   test('a file over the size cap', () => {
     expect(describeUnreadableFile({ kind: 'too-large', byteSize: 12_345 })).toEqual({
       reason: 'too_large',
-      summary: `That file is larger than ${MAX_UPLOAD_MEGABYTES}MB.`,
+      summary: `That file is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`,
       rejectionDetail: '12345 bytes',
     });
   });

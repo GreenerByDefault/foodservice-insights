@@ -2,7 +2,7 @@ import type { RejectedUploadReason, ReportId } from '@gbd/db';
 import { insertReport } from '@gbd/db/testing';
 import { getObject } from '@gbd/storage';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_BYTES } from '$lib/reports/limits';
+import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_FIELD_BYTES } from '$lib/reports/limits';
 import { FIELD } from '$lib/reports/metadata';
 import { lockAndCheckReportRateLimit } from '$lib/server/reports/rate-limit';
 import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
@@ -257,7 +257,7 @@ describe('a rejected upload', () => {
   });
 
   test('records an oversized file without storing its bytes', async () => {
-    const oversized = new File(['x'.repeat(MAX_UPLOAD_BYTES + 1)], 'big.csv', {
+    const oversized = new File(['x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1)], 'big.csv', {
       type: 'text/csv',
     });
 
@@ -267,7 +267,7 @@ describe('a rejected upload', () => {
     expect(recorded).toMatchObject({
       rejectionReason: 'too_large',
       inputFileOriginalFilename: 'big.csv',
-      inputFileByteSize: MAX_UPLOAD_BYTES + 1,
+      inputFileByteSize: MAX_UPLOAD_FIELD_BYTES + 1,
       inputFileStorageKey: null,
     });
   });

@@ -25,10 +25,11 @@ Two things were decided with Eric on 2026-09-07 that go past the architecture no
 The prefactor is done: `inspectFile` now returns `{ ok: true; months; upload: { file: File;
 workbook?: File } }`, `apps/web/src/lib/reports/signatures.ts` holds `spreadsheetSignature(bytes):
 'xlsx' | 'xls' | undefined` (the four-byte zip local-file-header check, isomorphic and imported by
-`csv/read/decode.ts`), `csv/write.ts` exports `escapeCsvField`, and `MAX_WORKBOOK_BYTES` /
-`MAX_WORKBOOK_UNPACKED_BYTES` exist in `upload-limit.js` / `limits.ts` with `start.js` already
-summing all three into `BODY_SIZE_LIMIT`. Every PR below builds on that shape; none of it is
-optional infrastructure to add later.
+`csv/read/decode.ts`), `csv/write.ts` exports `escapeCsvField`, and `MAX_UPLOAD_FIELD_BYTES` (one
+cap shared by the CSV field and the workbook field) / `MAX_WORKBOOK_UNPACKED_BYTES` exist in
+`upload-limit.js` / `limits.ts` with `start.js` already doubling the field cap plus the transport
+margin into `BODY_SIZE_LIMIT`. Every PR below builds on that shape; none of it is optional
+infrastructure to add later.
 
 Once adopted with `/plan-adopt`, this file belongs at `.claude/plans/excel-upload.md`.
 
@@ -69,7 +70,7 @@ switch the converter to a sync unzip of our own).
 | Where conversion happens | Browser only, in `inspectFile`, before anything is uploaded | ARCHITECTURE § Input file upload. The server never decompresses or parses a workbook |
 | How a workbook is recognised | By its bytes (`50 4B 03 04` = zip local-file header → try as workbook; OLE2 `D0 CF 11 E0 A1 B1 1A E1` → `.xls` or password-protected → reject), never by extension or MIME | Same rule `decode.ts` already states for CSV; a `.csv` renamed `.xlsx` still just works. Four bytes, not two: a CSV whose title line starts `PKG SUMMARY` must not be sent to the unzipper and told it is a damaged workbook — this is what `signatures.ts` already enforces |
 | What is uploaded | Two multipart fields: `file` = the converted CSV (what the server validates and the worker reads, unchanged), plus `workbook` = the untouched original | Server code paths for CSV stay identical; the workbook is a side-car the server only sizes, sniffs two bytes of, hashes and stores |
-| What the server does with the workbook | `size ≤ MAX_WORKBOOK_BYTES`, first two bytes are `PK`, sha256, `putObject` with the xlsx content type. Nothing else, ever | Eric: "we must never actually do anything with the Excel file". A comment on the field says so |
+| What the server does with the workbook | `size ≤ MAX_UPLOAD_FIELD_BYTES`, first two bytes are `PK`, sha256, `putObject` with the xlsx content type. Nothing else, ever | Eric: "we must never actually do anything with the Excel file". A comment on the field says so |
 | Where the workbook lives | Blob key `…/input/{inputFileId}.xlsx`; three nullable columns on `input_file` (`workbook_storage_key`, `workbook_byte_size`, `workbook_checksum_sha256`), all-or-none | One row per report stays; the download route `coalesce`s. *Rejected:* a convention-only key like `-original.csv` — the download route would need `objectExists` on every hit and the row's `byte_size` would lie about the file the user gets |
 | `original_filename` | The workbook's name (`orders.xlsx`) when one was sent; the CSV's otherwise | It is what the user chose and what the report page shows |
 | Download link | Serves the workbook when present, else the CSV, under `original_filename` | Eric: the original Excel "is way less confusing than a CSV" |
@@ -80,8 +81,8 @@ switch the converter to a sync unzip of our own).
 | Blank rows | An all-`null` row becomes an empty line, not `,,` | `parseCsv` skips empty lines while still counting them, so "row 7" in a message is Excel's row 7. Verify with a fixture that the library keeps interior blank rows as `null` rows; if it collapses them, cell addresses are the fallback |
 | Extra columns and rows | Emitted as-is | `readLayout`/`MAX_COLUMNS` and `MAX_DATA_ROWS` already bound and describe them |
 | Text trimming | `trim: false` | A workbook and the CSV saved from it must be judged identically; the CSV rules already trim where they mean to |
-| Size caps | Workbook `≤ MAX_WORKBOOK_BYTES` (10MB, in `upload-limit.js`); its converted CSV `≤ MAX_UPLOAD_BYTES` (existing 10MB), with a message that says "converted to CSV, your workbook comes to 34MB"; declared uncompressed XML `≤ MAX_WORKBOOK_UNPACKED_BYTES` (100MB, in `limits.ts`) | XML is ~4× wordier than CSV, so 100MB of XML is ~25MB of CSV — the unpacked cap never refuses a workbook whose CSV would have passed, and it bounds what a tab inflates. A workbook whose *rows* fit 10MB of CSV compresses to 1–3MB, so 10MB of `.xlsx` is images and other tabs; keeping one number keeps the copy one sentence |
-| Body limit | `BODY_SIZE_LIMIT = MAX_UPLOAD_BYTES + MAX_WORKBOOK_BYTES + TRANSPORT_MARGIN_BYTES` in `start.js` | Both files travel in one request. Already wired, ahead of the form ever sending a `workbook` field |
+| Size caps | Workbook and its converted CSV each `≤ MAX_UPLOAD_FIELD_BYTES` (10MB, in `upload-limit.js`, one cap for both fields), with a message that says "converted to CSV, your workbook comes to 34MB"; declared uncompressed XML `≤ MAX_WORKBOOK_UNPACKED_BYTES` (100MB, in `limits.ts`, derived from `MAX_UPLOAD_FIELD_BYTES`) | XML is ~4× wordier than CSV, so 100MB of XML is ~25MB of CSV — the unpacked cap never refuses a workbook whose CSV would have passed, and it bounds what a tab inflates. A workbook whose *rows* fit 10MB of CSV compresses to 1–3MB, so 10MB of `.xlsx` is images and other tabs; keeping one number keeps the copy one sentence |
+| Body limit | `BODY_SIZE_LIMIT = MAX_UPLOAD_FIELD_BYTES * 2 + TRANSPORT_MARGIN_BYTES` in `start.js` | Both files travel in one request, each bounded by the same field cap. Already wired, ahead of the form ever sending a `workbook` field |
 | Rejected workbooks | A workbook the browser rejects is never sent, like a CSV the browser rejects today; a server rejection stores the CSV bytes as today and not the workbook | Unchanged behaviour; REQUIREMENTS "rejected files are kept" already means "kept when they reached us". Consequence worth a sentence in ARCHITECTURE: workbook-specific rejections never reach `rejected_upload`, so no new `rejected_upload_reason` value is needed — `excel/describe.ts` reuses `unparseable` / `too_large` / `empty` for type compatibility only |
 | `-original.csv` forensics variant | Unchanged. For a workbook upload it holds the *converter's* CSV, which is exactly the forensic we want for a converter bug | Free |
 | Main thread | Conversion runs where `normalizeCsv` already runs, behind the same `setTimeout` yield in `upload-form.svelte` | The library parses in `setTimeout(0)` chunks. **Open:** moving conversion + normalization into a Web Worker is the fix for jank on big files, for both formats at once |
@@ -104,7 +105,7 @@ Lands before the form sends one; with the field absent every path is byte-for-by
   same `Promise.all` and returns `workbook?: StoredFile`. Tests in `keys.test.ts` / `files.test.ts`.
 - **Submission** `apps/web/src/lib/reports/metadata.ts`: `FIELD.workbook = 'workbook'`.
   `submission.ts`: `RawSubmission.workbook: File | null`; in `validateSubmission`, after the CSV
-  size check: refuse a workbook over `MAX_WORKBOOK_BYTES` (`too_large`, "That workbook is larger
+  size check: refuse a workbook over `MAX_UPLOAD_FIELD_BYTES` (`too_large`, "That workbook is larger
   than 10MB") or whose bytes do not start with `PK` (`unparseable`, "That doesn't look like an Excel
   workbook"); `fileDescription.originalFilename` comes from the workbook when present;
   `variants.workbook` set. A comment on the field: the server only sizes, sniffs, hashes and stores
@@ -144,7 +145,7 @@ Pure code with tests; nothing calls it yet. All isomorphic (the same header line
   `WorkbookFault = { kind: 'xls' } | { kind: 'not-a-workbook' } | { kind: 'corrupt' } | { kind: 'too-large-unpacked'; declaredBytes: number } | { kind: 'no-data' }`.
 - `excel/describe.ts`: `describeWorkbookFault(fault): RejectedUploadRecord` — the only file with
   sentences about workbooks, using the existing `RejectedUploadReason` values (`unparseable`,
-  `too_large`, `empty`); `describeOversizeConversion(byteSize)` for a CSV past `MAX_UPLOAD_BYTES`;
+  `too_large`, `empty`); `describeOversizeConversion(byteSize)` for a CSV past `MAX_UPLOAD_FIELD_BYTES`;
   `withSheetHint(rejection, sheet)` appends the hint sentence (uses `listOf` from
   `csv/describe/text.ts`). `excel/index.ts` re-exports.
 - `excel/testing/workbook.ts`: `aWorkbook({ sheets: [{ name, rows }], date1904? })` assembles a
@@ -177,7 +178,7 @@ Pure code with tests; nothing calls it yet. All isomorphic (the same header line
 
 - `inspect-file.ts`: after the size and empty checks, `spreadsheetSignature(bytes)`: `'xls'` →
   `describeWorkbookFault({ kind: 'xls' })`; `'xlsx'` → `convertWorkbook`, fault → describe; then
-  `csv.byteLength > MAX_UPLOAD_BYTES` → `describeOversizeConversion`; `upload = { file: new
+  `csv.byteLength > MAX_UPLOAD_FIELD_BYTES` → `describeOversizeConversion`; `upload = { file: new
   File([csv], stem(file.name) + '.csv', { type: 'text/csv' }), workbook: file }`. Run `normalizeCsv`
   on the CSV bytes as today; on `reason === 'bad_columns'` with `sheet.others.length > 0`, wrap
   with `withSheetHint`. `inspect-file.test.ts`: a workbook yields `months`, a `text/csv`
