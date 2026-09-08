@@ -17,10 +17,19 @@ where the organization *lives*.
 `organization.name` keeps its existing global case-insensitive unique index. Because names are
 unique, two organizations almost never derive the same slug.
 
-The slug is not user-editable — not at creation, not later. What the user gets instead is a live
-preview of the address under the name field, so the address is never a surprise. That makes the
-name the single lever: every way a name can fail — unusable, reserved, or taken — is answered by
-asking the user to pick a different one, never by the server quietly picking for them.
+The slug is not user-editable — not at creation, not later — and **the app never mentions it.**
+It is in the browser's address bar, which is where a user already looks for a URL. The name is the
+single lever: every way a name can fail — unusable, reserved, or taken — is answered by asking the
+user to pick a different one, never by the server quietly picking for them.
+
+*Rejected: a live address preview under the name field on `/orgs/new`, and a read-only "web
+address" block on the settings page.* Both explain a mechanism the user did not ask about and
+cannot act on — the settings block especially, since it describes a URL that is on screen three
+inches above it. The cost is real but small: creation is the only moment the name influences the
+permanent address, so a user who would have preferred `/orgs/acme` over
+`/orgs/acme-foodservice-inc` never gets the chance. That is a guess about what users want, and the
+cheaper guess is that they do not care. Revisit if user testing says otherwise: adding it back is a
+snippet in one form plus a browser-safe copy of the derivation, and nothing here forecloses it.
 
 ### What has landed since this plan was first written
 
@@ -34,13 +43,13 @@ rather than invents:
 - **`$lib/server/auth/route-context.ts` is the org prologue** (#280). Every organization-scoped
   route resolves its context through `requireOrganizationRouteContext`, so slug→id resolution has
   exactly one home.
-- **A constant the migration hardcodes is mirrored, not imported** — see the comment on
-  `organization_name_length` in the migration, `MAX_ORGANIZATION_NAME_LENGTH` in
-  `packages/db/src/types.ts` and `apps/web/src/lib/orgs/name.ts`, and the pinning test at the top
-  of [`name.test.ts`](apps/web/src/lib/orgs/name.test.ts). **This supersedes the original plan's
-  `@gbd/core` module**: a value imported into an applied migration only affects databases created
-  from now on, and importing a value out of `@gbd/db` into browser code pulls `pg` into the
-  bundle. Mirror and pin instead.
+- **A constant the migration hardcodes is re-declared in `@gbd/db` and pinned by a test**, never
+  imported into the migration — see the comment on `organization_name_length` in the migration and
+  `MAX_ORGANIZATION_NAME_LENGTH` in `packages/db/src/types.ts`, since a value imported into an
+  applied migration only affects databases created from now on. **This supersedes the original
+  plan's `@gbd/core` module.** The convention has a second half — mirror into
+  [`$lib/orgs/name.ts`](apps/web/src/lib/orgs/name.ts) with a pinning test — for a constant the
+  *browser* needs; the slug constants are server-only, so they skip it.
 
 Two pieces of the original plan are already done and drop out entirely: the `organization_name_trimmed`
 and `organization_name_length` CHECKs, and the create/rename forms with their 409 handling
@@ -76,10 +85,13 @@ simplification over the original plan, which assumed both endpoints would need t
 3. Truncate to 48 at a hyphen boundary.
 4. Return `null` if nothing survives.
 
-`null` is a real outcome — a name of only punctuation or only CJK has no ASCII address to give.
-The form previews that as a message rather than an address, and the server answers 422. Deriving a
-random fallback was rejected: it produces an unreadable slug, which defeats the change, and a
-random value cannot be previewed because the browser and the server would disagree on it.
+`null` is a real outcome — a name of only punctuation or only CJK has no ASCII address to give —
+and the server answers it with a 422. *Rejected: deriving a random fallback,* which produces an
+unreadable slug and so defeats the whole change.
+
+**The derivation is server-only**, which is the main dividend of dropping the preview: it lives in
+`$lib/server/orgs/slug.ts` and imports its constants straight from `@gbd/db`, so there is no
+browser copy to keep in step and no pinning test to keep it there.
 
 ### Why some slugs are reserved
 
@@ -93,115 +105,58 @@ name to the list later is a migration plus a hunt for rows that already violate 
 now costs a customer nothing, since the answer to a reserved name is "pick another" and these are
 not names a foodservice company has.
 
-The list is a hardcoded array in the migration's CHECK, mirrored as `RESERVED_ORGANIZATION_SLUGS`
-in **two** places per the mirror-and-pin convention — `packages/db/src/types.ts` for the database
-test, and `$lib/orgs/slug.ts` for the browser — and three tests chain the guarantee so nothing can
-drift:
+`RESERVED_ORGANIZATION_SLUGS` lives once, in `packages/db/src/types.ts`, hardcoded a second time
+in the migration's CHECK per the mirror-and-pin convention. Nothing in the browser needs it, so
+there is no third copy. Two tests chain the guarantee:
 
-- `slug.test.ts` (apps/web) pins its copy against `@gbd/db`'s, exactly as `name.test.ts` already
-  pins the name cap. A test file runs in Node, so it may import `@gbd/db` where the browser bundle
-  may not.
-- `packages/db` asserts every member of `@gbd/db`'s copy is refused by the CHECK.
+- `packages/db` asserts every member of the constant is refused by the CHECK.
 - An apps/web test reads `src/routes/(app)/orgs/` and asserts every static directory name is in
   the constant.
-
-Because the list is static, the browser can tell a user their name is reserved before they submit.
-Uniqueness is the opposite — only the database knows it — and that difference is what shapes the
-error handling below.
 
 ---
 
 ## The UI
 
-### Creating an organization — `/orgs/new`
-
-One input. The address is shown, not asked for.
-
-```
-New organization
-
-Organization name
-[ Acme Foodservice                                   ]
-Your address will be  /orgs/acme-foodservice
-It is fixed once created, so links keep working when you rename.
-
-[ Create organization ]
-```
-
-The preview updates as the user types, computed in the browser by the same
-`deriveOrganizationSlug` the server calls. It is a preview, not a verdict — the server still
-decides — which keeps it inside the house rule that constraint attributes (`required`,
-`maxlength=100`) are the only browser-side source of truth for whether a field is valid. Nothing
-rewrites the address behind the user's back, so "will be" is a promise the endpoint keeps.
-
-The preview is **create-only**. `organization-name-form.svelte` is shared with rename, where an
-address preview would be a lie, so it arrives as an optional snippet the create page passes and
-the rename form does not — the same way `legend` is already optional there.
+Nothing new on `/orgs/new` or on settings. The create form gains no preview and the settings page
+gains no address block; both keep the shape they have today. What changes is only what the create
+form can say when the name it was given cannot become an address.
 
 ### When a name cannot be used
 
-Every failure resolves the same way: **pick a different name.** There is no slug field, so that is
-the only lever the user has, and every message ends by asking for it. What differs is only where
-they find out.
+Every failure resolves the same way: **pick a different name.** There is no slug field and no
+address on screen, so that is the only lever the user has, and every message ends by asking for it.
+All four are learned on submit and all four render in `Field.Error` (already `role="alert"`,
+already `text-destructive`) directly under the name input, with focus moved there — the machinery
+[`organization-name-form.svelte`](apps/web/src/lib/components/orgs/organization-name-form.svelte)
+already has for `name-taken`.
 
-| The name… | Learned | Answer |
+| The name… | Answer | Copy |
 | --- | --- | --- |
-| has no `a–z0–9` to build an address from | preview, as typed | 422 `slug-underivable` |
-| derives to a reserved address | preview, as typed | 422 `slug-reserved` |
-| is already taken | on submit | 409 `name-taken` (exists) |
-| derives to an address already taken | on submit | 409 `slug-taken` |
+| has no `a–z0–9` to build an address from | 422 `slug-underivable` | "That name needs at least one letter or number in a–z or 0–9." |
+| derives to a reserved address | 422 `slug-reserved` | "That name isn't available. Try adding your region or division." |
+| is already taken | 409 `name-taken` (exists) | unchanged |
+| derives to an address already taken | 409 `slug-taken` | "That name is too close to another organization's. Try adding your region or division." |
 
-The first two are knowable in the browser — a pure function and a static list — so the preview line
-turns into guidance and the user never round-trips:
-
-```
-[ ——— ]
-That name has no letters or numbers to make an address from. Add at least one of a–z or 0–9.
-```
-
-The server answers them anyway, because a preview is not a verdict and the rule needs one owner.
-
-The last two need the database. Both render in `Field.Error` (already `role="alert"`, already
-`text-destructive`) directly under the name input, with focus moved there — the machinery
-`organization-name-form.svelte` already has for `name-taken`:
-
-```
-Organization name
-[ Acme, Inc.                                         ]
-⚠ That name gives the address /orgs/acme-inc, which another organization already has.
-  Try adding your region or division.
-```
+The copy is better for not naming the address. "That name gives the address `/orgs/acme-inc`, which
+another organization already has" asks the user to reason about a URL they have never seen; "too
+close to another organization's name" is the same fact in terms they already hold.
 
 The fourth row is rare by construction: names are already unique, so reaching it takes two distinct
 names deriving to one address (`Acme Inc` and `Acme, Inc.`). **Rejected: silently appending `-2`.**
 It buys nothing the user wants — they have to tell the two organizations apart somewhere, and doing
-it in the name they chose beats a machine picking `acme-inc-2` and quietly contradicting the address
-the preview just showed them. Rejecting also keeps one rule instead of two, and drops the
-`ON CONFLICT … DO NOTHING` candidate loop from the create path, so both unique violations are caught
-the same way.
+it in the name they chose beats a machine picking `acme-inc-2`. Rejecting also keeps one rule
+instead of two, and drops the `ON CONFLICT … DO NOTHING` candidate loop from the create path, so
+both unique violations are caught the same way.
 
 No suggested replacement name is offered either. A machine-generated company name
 (`Acme Foodservice 2`) is not something anyone would accept, so the copy asks for the
-disambiguation only a human can supply. This is the one deviation from "409 → error + suggestion":
-the suggestion mechanism was designed for an editable slug field, and there is no slug field.
+disambiguation only a human can supply.
 
 **No availability check while typing.** Rejected on two grounds: a `GET /api/orgs/name-available`
 endpoint is an oracle that lets any signed-in user enumerate the customer list, which the 404-not-403
 rule in [guards.ts](apps/web/src/lib/server/auth/guards.ts) goes out of its way to prevent; and it
 would still need the 409 path underneath, since any check can go stale between keystroke and submit.
-At our user count the submit-time error will fire approximately never.
-
-### Settings — `/orgs/[organizationSlug]/settings`
-
-The rename form and delete button stay as they are. A read-only address block goes above the
-rename form, explaining itself:
-
-```
-Web address
-/orgs/acme-foodservice
-Set when the organization was created and fixed since, so links people already
-have keep working. Renaming below does not move it.
-```
+At our user count the submit-time errors will fire approximately never.
 
 ---
 
@@ -252,10 +207,14 @@ with `TEST_DB=1`.
 
 ### 2. `deriveOrganizationSlug`
 
-- **New** `apps/web/src/lib/orgs/slug.ts` (+ test), modelled on
-  [`name.ts`](apps/web/src/lib/orgs/name.ts) — browser-safe, no `$env`, no `$lib/server`. Exports
-  the derive function and the three mirrored constants, with `name.ts`'s comment about why they are
-  mirrored rather than imported. `slug.test.ts` opens with the pin against `@gbd/db`.
+- **New** `apps/web/src/lib/server/orgs/slug.ts` (+ test), beside
+  [`name.ts`](apps/web/src/lib/server/orgs/name.ts). Server-only, so it imports
+  `RESERVED_ORGANIZATION_SLUGS` and `MAX_ORGANIZATION_SLUG_LENGTH` from `@gbd/db` rather than
+  mirroring them, and `$lib/server` makes that a rule SvelteKit enforces rather than one a comment
+  asks for.
+- **Keep it free of `$lib` and `$env`.** The e2e fixture imports it by relative path from a plain
+  Playwright runtime where neither resolves — the constraint
+  [`pagination.e2e.ts:10-12`](apps/web/e2e/reports-list/pagination.e2e.ts) already documents.
 - Test the derivation against the cases the copy promises: accents, punctuation runs, leading and
   trailing separators, the 48-character truncation landing on a hyphen boundary, and `null` for a
   name with no `a–z0–9` in it.
@@ -265,6 +224,13 @@ with `TEST_DB=1`.
 - **New** `apps/web/src/params/slug.ts` (+ test), same shape and rationale as
   [`uuid.ts`](apps/web/src/params/uuid.ts) — a non-slug segment must 404, not reach Postgres.
   `uuid.ts` stays for report, invite, user and file ids.
+- A matcher ships to the browser for client-side routing, so this one **inlines its regex** instead
+  of importing the constant, exactly as `uuid.ts` inlines `v.uuid()`. The invariant to write down
+  is one-directional: the matcher may be looser than the CHECK (the route then 404s from the
+  database instead of the router, same answer) but never tighter, or a legitimately-slugged
+  organization is unreachable forever. Its test pins that by asserting the matcher accepts
+  everything `deriveOrganizationSlug` returns for a set of awkward names — a Node test, so it may
+  import the server module.
 - `git mv` `[organizationId=uuid]` → `[organizationSlug=slug]` in both
   `src/routes/(app)/orgs/` and `src/routes/api/orgs/`. Those two directories are the only ones.
   Path-only for almost every file in them; the content changes are the handful of
@@ -314,12 +280,12 @@ with `TEST_DB=1`.
   rather than the shared classifier — `classifyNameWriteFailure` keeps its two-case return for
   rename, and `create-organization.ts` handles `slug-taken` / `slug-reserved` / `slug-underivable`
   on top of it.
-- `organization-name-form.svelte`: an optional `preview` snippet rendered under the input, and
-  extra `FormState` cases for the slug errors, reusing the existing focus-the-input behaviour.
-- `create-organization-form.svelte` passes the preview and the new copy. Its component test covers
-  the preview (including the derives-to-nothing and reserved messages) and that each 409 renders
-  its own copy inline and takes focus.
-- Settings: the read-only address block above the rename form.
+- `organization-name-form.svelte`: extra `FormState` cases for the three new failures, reusing the
+  existing focus-the-input behaviour and `Field.Error`. No new props and no layout change — the
+  rename form, which shares this component and can hit none of the three, is untouched.
+- `create-organization-form.svelte` maps each outcome to its copy; its component test covers each
+  one rendering inline and taking focus.
+- Nothing changes on the settings page.
 
 ---
 
@@ -336,14 +302,13 @@ Then `pnpm dev` and walk it:
 
 - `/orgs/phase-one-foodservice` loads; `/orgs/00000000-0000-7000-8000-000000000002` 404s (the
   matcher rejects it), as does `/orgs/Phase-One`.
-- `/orgs/new` with `Acme Foodservice` previews `/orgs/acme-foodservice` and lands there.
-- The same name again shows the inline "already called" error under the field, with focus on it.
-- `Acme, Inc.` after `Acme Inc` shows the *address* already taken error, naming `/orgs/acme-inc` —
-  the one that used to be silently suffixed, so it is the row most worth seeing by hand.
-- `Café Ñoño` previews `/orgs/cafe-nono`; `———` shows the no-address guidance and 422s on submit;
-  `New` is caught in the preview as reserved, without a round trip.
+- `/orgs/new` with `Acme Foodservice` lands on `/orgs/acme-foodservice`.
+- The same name again shows the inline "already exists" error under the field, with focus on it.
+- `Acme, Inc.` after `Acme Inc` shows the "too close to another organization's" error — the case
+  that used to be silently suffixed, so it is the row most worth seeing by hand.
+- `Café Ñoño` lands on `/orgs/cafe-nono`; `———` and `New` each come back with their own inline
+  message and the name still in the field.
 - Renaming from settings changes the heading and the switcher while the URL stays put.
 
-Screenshot baselines: the UUID never appeared on screen, so only `/orgs/new` (which gains the
-preview line) and settings (which gains the address block) should produce new images. Re-baseline
-only if `pnpm test:screenshots` disagrees.
+Screenshot baselines: the UUID never appeared on screen and no view gains anything, so **no image
+should change.** If `pnpm test:screenshots` disagrees, that is a finding, not a re-baseline.
