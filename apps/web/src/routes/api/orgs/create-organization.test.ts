@@ -1,4 +1,4 @@
-import type { OrganizationId } from '@gbd/db';
+import { type OrganizationId, RESERVED_ORGANIZATION_SLUGS } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test, vi } from 'vitest';
 import { database } from '$lib/server/db';
@@ -112,6 +112,50 @@ describe('a name already taken', () => {
 
       expect(response.status).toBe(409);
       expect(await response.json()).toMatchObject({ code: 'name-taken' });
+    });
+  });
+});
+
+describe('a name that derives to a taken slug', () => {
+  // Two distinct names deriving to the same slug — the only way to reach this without also
+  // tripping `name-taken` first, since names are already unique.
+  test('answers 409 slug-taken', async () => {
+    await withRollback(database(), async (transaction) => {
+      await insertOrganization(transaction, { name: 'Acme Inc', slug: 'acme-inc' });
+      const creator = await anOrganizationCreator(transaction);
+
+      const response = await _createOrganization(transaction, creator, {
+        name: 'Acme, Inc.',
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code: 'slug-taken', slug: 'acme-inc' });
+    });
+  });
+});
+
+describe('a name with no address to derive', () => {
+  test.for(['———', '日本語'])('answers 422 slug-underivable for %j', async (name) => {
+    await withRollback(database(), async (transaction) => {
+      const creator = await anOrganizationCreator(transaction);
+
+      const response = await _createOrganization(transaction, creator, { name });
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ code: 'slug-underivable' });
+    });
+  });
+});
+
+describe('a name that derives to a reserved slug', () => {
+  test.for(RESERVED_ORGANIZATION_SLUGS)('answers 422 slug-reserved for %j', async (reserved) => {
+    await withRollback(database(), async (transaction) => {
+      const creator = await anOrganizationCreator(transaction);
+
+      const response = await _createOrganization(transaction, creator, { name: reserved });
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ code: 'slug-reserved' });
     });
   });
 });

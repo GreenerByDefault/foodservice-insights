@@ -97,7 +97,7 @@ export async function insertAppUserWithEmail(
 /** An organization and the admin it must have. Anything else would fail its deferred trigger. */
 export async function insertOrganization(
   database: DatabaseExecutor,
-  overrides: { name?: string } = {},
+  overrides: { name?: string; slug?: string } = {},
 ): Promise<{ organization: Organization; admin: AppUser }> {
   const admin = await insertAppUser(database);
 
@@ -105,6 +105,8 @@ export async function insertOrganization(
     .insertInto('organization')
     .values({
       name: overrides.name ?? `Test org ${crypto.randomUUID()}`,
+      // Slug-legal without deriving one: lowercase hex, already hyphen-free.
+      slug: overrides.slug ?? `test-org-${crypto.randomUUID().slice(0, 8)}`,
       createdByUserId: admin.id,
     })
     .returningAll()

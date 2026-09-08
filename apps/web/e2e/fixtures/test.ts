@@ -43,7 +43,7 @@ export interface OrganizationFactory {
     role?: OrganizationRole;
     members?: OrganizationMemberSpec[];
     invites?: OrganizationInviteSpec[];
-  }): Promise<{ id: OrganizationId; reportIds: ReportId[] }>;
+  }): Promise<{ id: OrganizationId; slug: string; reportIds: ReportId[] }>;
 
   /** Register an organization id this test created some other way — through the UI — for the
    * same end-of-test cleanup as `create`, instead of a spec hand-parsing a URL and deleting the
@@ -95,9 +95,12 @@ export const test = base.extend<
 
     await use({
       create: async (spec) => {
-        const { organizationId, reportIds } = await insertOrganizationFixture(db, spec);
+        const { organizationId, organizationSlug, reportIds } = await insertOrganizationFixture(
+          db,
+          spec,
+        );
         createdIds.push(organizationId);
-        return { id: organizationId, reportIds };
+        return { id: organizationId, slug: organizationSlug, reportIds };
       },
       adopt: (id) => {
         createdIds.push(id);
