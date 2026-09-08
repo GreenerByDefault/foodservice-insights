@@ -6,7 +6,7 @@
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
-import { PLACEHOLDER_ORGANIZATION_ID } from '@gbd/db/seed';
+import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
 import { readMailbox } from '@gbd/email/testing';
 import { expect, type Page, test } from '@playwright/test';
 
@@ -29,7 +29,7 @@ const RUN_NOTIFICATION_EMAIL = process.env.RUN_NOTIFICATION_EMAIL ?? '';
 const LIFECYCLE_TIMEOUT_MS = 60_000;
 
 async function uploadReport(page: Page, reportName: string): Promise<void> {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/new`);
+  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
   await ensureHydrated(page);
 
   await page.getByLabel('Report name').fill(reportName);
@@ -43,7 +43,7 @@ async function uploadReport(page: Page, reportName: string): Promise<void> {
   await page.getByRole('button', { name: 'Upload report' }).click();
 
   await expect(page).toHaveURL(
-    new RegExp(`/orgs/${PLACEHOLDER_ORGANIZATION_ID}/reports/[0-9a-f-]+$`),
+    new RegExp(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/[0-9a-f-]+$`),
   );
 }
 
