@@ -396,143 +396,152 @@ describe('cancellation, through the loop', () => {
 });
 
 describe('parked verdicts', () => {
-  test('a verdict parked at record lands once the database comes back', async () => {
-    await withBreakable(breakableDatabase, async (database) => {
-      await withWorker(
-        { steps: SUCCEEDING_ON_RELEASE_STEPS, db: database.service },
-        async (harness) => {
-          const attemptId = await startOne(harness);
+  describe('parked at record', () => {
+    test('lands once the database comes back', async () => {
+      await withBreakable(breakableDatabase, async (database) => {
+        await withWorker(
+          { steps: SUCCEEDING_ON_RELEASE_STEPS, db: database.service },
+          async (harness) => {
+            const attemptId = await startOne(harness);
 
-          // Broken across the terminal write only: the upload happens against a healthy store, so
-          // the verdict parks at `record` with its files already stored.
-          await parkAtRecord(harness, database, attemptId);
-          expect(await statusIs(attemptId, 'processing')).toBe(true);
+            // Broken across the terminal write only: the upload happens against a healthy store,
+            // so the verdict parks at `record` with its files already stored.
+            await parkAtRecord(harness, database, attemptId);
+            expect(await statusIs(attemptId, 'processing')).toBe(true);
 
-          database.restore();
-          await directUntil(
-            harness.worker,
-            () => statusIs(attemptId, 'succeeded'),
-            'the parked verdict lands',
-          );
-          expect(await resultFileRows(attemptId)).toHaveLength(2);
-        },
-      );
+            database.restore();
+            await directUntil(
+              harness.worker,
+              () => statusIs(attemptId, 'succeeded'),
+              'the parked verdict lands',
+            );
+            expect(await resultFileRows(attemptId)).toHaveLength(2);
+          },
+        );
+      });
     });
   });
 
-  test('a verdict parked at upload lands once the store comes back, renewing throughout', async () => {
-    await withBreakable(breakableBlobStore, async (store) => {
-      await withWorker(
-        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
-        async (harness, fixture) => {
-          const attemptId = await startOne(harness);
-          await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 5 * SECOND_MS });
+  describe('parked at upload', () => {
+    test('lands once the store comes back, renewing throughout', async () => {
+      await withBreakable(breakableBlobStore, async (store) => {
+        await withWorker(
+          { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+          async (harness, fixture) => {
+            const attemptId = await startOne(harness);
+            await backdateAttemptTimeline(WORKER_DATABASE, attemptId, {
+              renewedAgo: 5 * SECOND_MS,
+            });
 
-          await parkAtUpload(harness, store, attemptId);
-          const parked = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+            await parkAtUpload(harness, store, attemptId);
+            const parked = (await attemptRow(attemptId)).leaseRenewedAt as Date;
 
-          // The database is healthy throughout, so a parked record keeps its lease renewed — which
-          // is why this stage needs `uploadRetryBudgetMs` and cannot rely on fencing.
-          await harness.worker.direct();
-          const renewed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
-          expect(renewed.getTime()).toBeGreaterThan(parked.getTime());
+            // The database is healthy throughout, so a parked record keeps its lease renewed —
+            // which is why this stage needs `uploadRetryBudgetMs` and cannot rely on fencing.
+            await harness.worker.direct();
+            const renewed = (await attemptRow(attemptId)).leaseRenewedAt as Date;
+            expect(renewed.getTime()).toBeGreaterThan(parked.getTime());
 
-          store.restore();
-          await directUntil(
-            harness.worker,
-            () => statusIs(attemptId, 'succeeded'),
-            'the parked verdict lands',
-          );
+            store.restore();
+            await directUntil(
+              harness.worker,
+              () => statusIs(attemptId, 'succeeded'),
+              'the parked verdict lands',
+            );
 
-          const files = await resultFileRows(attemptId);
-          expect(files).toHaveLength(2);
-          expect(await uploadedKeys(fixture)).toHaveLength(files.length);
-        },
-      );
+            const files = await resultFileRows(attemptId);
+            expect(files).toHaveLength(2);
+            expect(await uploadedKeys(fixture)).toHaveLength(files.length);
+          },
+        );
+      });
     });
-  });
 
-  test('a verdict parked at upload past its budget fails with the store error it parked on', async () => {
-    await withBreakable(breakableBlobStore, async (store) => {
-      await withWorker(
-        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
-        async (harness, fixture) => {
-          const attemptId = await startOne(harness);
+    test('past its budget fails with the store error it parked on', async () => {
+      await withBreakable(breakableBlobStore, async (store) => {
+        await withWorker(
+          { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+          async (harness, fixture) => {
+            const attemptId = await startOne(harness);
 
-          await parkAtUpload(harness, store, attemptId);
+            await parkAtUpload(harness, store, attemptId);
 
-          harness.advance(harness.config.uploadRetryBudgetMs);
-          await directUntil(
-            harness.worker,
-            () => statusIs(attemptId, 'failed'),
-            'the budget runs out and the verdict is converted',
-          );
+            harness.advance(harness.config.uploadRetryBudgetMs);
+            await directUntil(
+              harness.worker,
+              () => statusIs(attemptId, 'failed'),
+              'the budget runs out and the verdict is converted',
+            );
 
-          const row = await attemptRow(attemptId);
-          expect(row.failureReason).toBe('infrastructure');
-          expect(row.failureDetail).toContain('blob store');
-          expect(await resultFileRows(attemptId)).toHaveLength(0);
-          expect(await uploadedKeys(fixture)).toEqual([]);
-        },
-      );
+            const row = await attemptRow(attemptId);
+            expect(row.failureReason).toBe('infrastructure');
+            expect(row.failureDetail).toContain('blob store');
+            expect(await resultFileRows(attemptId)).toHaveLength(0);
+            expect(await uploadedKeys(fixture)).toEqual([]);
+          },
+        );
+      });
     });
-  });
 
-  test('a reap mid-park drops the verdict without uploading at all', async () => {
-    await withBreakable(breakableBlobStore, async (store) => {
-      await withWorker(
-        {
-          steps: SUCCEEDING_ON_RELEASE_STEPS,
-          store: store.service,
-          overrides: { maxConcurrentAttempts: 1 },
-        },
-        async (harness, fixture) => {
-          const other = harness.anotherWorker();
-          const attemptId = await startOne(harness);
+    test('a reap mid-park drops the verdict without uploading at all', async () => {
+      await withBreakable(breakableBlobStore, async (store) => {
+        await withWorker(
+          {
+            steps: SUCCEEDING_ON_RELEASE_STEPS,
+            store: store.service,
+            overrides: { maxConcurrentAttempts: 1 },
+          },
+          async (harness, fixture) => {
+            const other = harness.anotherWorker();
+            const attemptId = await startOne(harness);
 
-          await parkAtUpload(harness, store, attemptId);
+            await parkAtUpload(harness, store, attemptId);
 
-          await backdateAttemptTimeline(WORKER_DATABASE, attemptId, { renewedAgo: 70 * SECOND_MS });
-          expect((await other.worker.reap()).expired).toEqual([attemptId]);
+            await backdateAttemptTimeline(WORKER_DATABASE, attemptId, {
+              renewedAgo: 70 * SECOND_MS,
+            });
+            expect((await other.worker.reap()).expired).toEqual([attemptId]);
 
-          // Restored first, so what stops the upload is the drop and not the outage.
-          store.restore();
-          await harness.worker.direct();
+            // Restored first, so what stops the upload is the drop and not the outage.
+            store.restore();
+            await harness.worker.direct();
 
-          expect((await attemptRow(attemptId)).failureReason).toBe('abandoned');
-          expect(await resultFileRows(attemptId)).toHaveLength(0);
-          expect(await uploadedKeys(fixture)).toEqual([]);
-          // Dropping the record is what frees the slot and stops the lease being renewed.
-          await fixture.seedAttempt();
-          expect(await harness.worker.claimAndStart()).toBe('started');
-        },
-      );
+            expect((await attemptRow(attemptId)).failureReason).toBe('abandoned');
+            expect(await resultFileRows(attemptId)).toHaveLength(0);
+            expect(await uploadedKeys(fixture)).toEqual([]);
+            // Dropping the record is what frees the slot and stops the lease being renewed.
+            await fixture.seedAttempt();
+            expect(await harness.worker.claimAndStart()).toBe('started');
+          },
+        );
+      });
     });
-  });
 
-  test('a cancel mid-park records canceled with the budget unspent', async () => {
-    await withBreakable(breakableBlobStore, async (store) => {
-      await withWorker(
-        { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
-        async (harness, fixture) => {
-          const attemptId = await startOne(harness);
+    test('a cancel mid-park records canceled with the budget unspent', async () => {
+      await withBreakable(breakableBlobStore, async (store) => {
+        await withWorker(
+          { steps: SUCCEEDING_ON_RELEASE_STEPS, store: store.service },
+          async (harness, fixture) => {
+            const attemptId = await startOne(harness);
 
-          await parkAtUpload(harness, store, attemptId);
+            await parkAtUpload(harness, store, attemptId);
 
-          await requestCancel(attemptId);
-          // Restored, so an unconverted resume would happily upload a report the user just deleted.
-          store.restore();
-          await directUntil(
-            harness.worker,
-            () => statusIs(attemptId, 'canceled'),
-            'the parked verdict is converted to canceled',
-          );
+            await requestCancel(attemptId);
+            // Restored, so an unconverted resume would happily upload a report the user just
+            // deleted.
+            store.restore();
+            await directUntil(
+              harness.worker,
+              () => statusIs(attemptId, 'canceled'),
+              'the parked verdict is converted to canceled',
+            );
 
-          expect((await attemptRow(attemptId)).failureReason).toBeNull();
-          expect(await resultFileRows(attemptId)).toHaveLength(0);
-          expect(await uploadedKeys(fixture)).toEqual([]);
-        },
-      );
+            expect((await attemptRow(attemptId)).failureReason).toBeNull();
+            expect(await resultFileRows(attemptId)).toHaveLength(0);
+            expect(await uploadedKeys(fixture)).toEqual([]);
+          },
+        );
+      });
     });
   });
 });

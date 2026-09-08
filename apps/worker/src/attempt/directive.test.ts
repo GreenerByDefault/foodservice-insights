@@ -92,96 +92,110 @@ describe('the rule table', () => {
     });
   });
 
-  test('settling: an already-exited attempt is left alone', () => {
-    const state = aState({ exited: true, lastProgressAt: -10_000 });
-    expect(directiveOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
-  });
-
-  test('contract-violation: a progress read that threw a ContractError kills the child with that reason', () => {
-    const error = new ContractError('malformed progress.json');
-    const reading = aReading({ progress: { kind: 'failed', error } });
-    expect(directiveOf(aState(), reading, 0)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'contract-violation', detail: error.message },
+  describe('settling', () => {
+    test('an already-exited attempt is left alone', () => {
+      const state = aState({ exited: true, lastProgressAt: -10_000 });
+      expect(directiveOf(state, aReading(), 0)).toEqual({ kind: 'nothing' });
     });
   });
 
-  test('progress-read-failed: a progress read that threw anything else is swallowed rather than treated as a verdict', () => {
-    const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
-    expect(directiveOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
-  });
-
-  test('progress-read-failed suppresses hung, since an unreadable file is not a stalled child', () => {
-    const reading = aReading({
-      progress: { kind: 'failed', error: new Error('EIO') },
-      lease: { kind: 'skipped' },
-      renewalIssuedAt: undefined,
-    });
-    // The other two clock rules are pushed out of range, so `hung` is the only one that could
-    // fire here — and it does not.
-    const thresholds = {
-      ...THRESHOLDS,
-      killAfterTotalRuntimeMs: 10_000,
-      leaseExpiresAfterMs: 10_000,
-    };
-    expect(directiveOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs, thresholds)).toEqual({
-      kind: 'nothing',
+  describe('contract-violation', () => {
+    test('a progress read that threw a ContractError kills the child with that reason', () => {
+      const error = new ContractError('malformed progress.json');
+      const reading = aReading({ progress: { kind: 'failed', error } });
+      expect(directiveOf(aState(), reading, 0)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'contract-violation', detail: error.message },
+      });
     });
   });
 
-  test('progress-read-failed still lets hard-timeout fire', () => {
-    const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
-    expect(directiveOf(aState(), reading, THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'hard-timeout' },
+  describe('progress-read-failed', () => {
+    test('a progress read that threw anything else is swallowed rather than treated as a verdict', () => {
+      const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
+      expect(directiveOf(aState(), reading, 0)).toEqual({ kind: 'nothing' });
+    });
+
+    test('suppresses hung, since an unreadable file is not a stalled child', () => {
+      const reading = aReading({
+        progress: { kind: 'failed', error: new Error('EIO') },
+        lease: { kind: 'skipped' },
+        renewalIssuedAt: undefined,
+      });
+      // The other two clock rules are pushed out of range, so `hung` is the only one that could
+      // fire here — and it does not.
+      const thresholds = {
+        ...THRESHOLDS,
+        killAfterTotalRuntimeMs: 10_000,
+        leaseExpiresAfterMs: 10_000,
+      };
+      expect(directiveOf(aState(), reading, THRESHOLDS.killAfterNoProgressMs, thresholds)).toEqual({
+        kind: 'nothing',
+      });
+    });
+
+    test('still lets hard-timeout fire', () => {
+      const reading = aReading({ progress: { kind: 'failed', error: new Error('EIO') } });
+      expect(directiveOf(aState(), reading, THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'hard-timeout' },
+      });
+    });
+
+    // The case that closes the gap: a progress read failing every tick also skips every renewal
+    // (`no-check-no-renewal`), so fencing is the only local rule left that can end the child.
+    test('still lets lease-expired fence, with the renewal skipped alongside', () => {
+      const reading = aReading({
+        progress: { kind: 'failed', error: new Error('EIO') },
+        lease: { kind: 'skipped' },
+        renewalIssuedAt: undefined,
+      });
+      expect(directiveOf(aState(), reading, THRESHOLDS.leaseExpiresAfterMs)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'fenced' },
+      });
     });
   });
 
-  // The case that closes the gap: a progress read failing every tick also skips every renewal
-  // (`no-check-no-renewal`), so fencing is the only local rule left that can end the child.
-  test('progress-read-failed still lets lease-expired fence, with the renewal skipped alongside', () => {
-    const reading = aReading({
-      progress: { kind: 'failed', error: new Error('EIO') },
-      lease: { kind: 'skipped' },
-      renewalIssuedAt: undefined,
-    });
-    expect(directiveOf(aState(), reading, THRESHOLDS.leaseExpiresAfterMs)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'fenced' },
+  describe('cancel-requested', () => {
+    test('a cancellation request kills the child', () => {
+      const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
+      expect(directiveOf(aState(), reading, 0)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'canceled' },
+      });
     });
   });
 
-  test('cancel-requested: a cancellation request kills the child', () => {
-    const reading = aReading({ lease: { kind: 'held', cancelRequestedAt: new Date() } });
-    expect(directiveOf(aState(), reading, 0)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'canceled' },
+  describe('hung', () => {
+    test('no progress for killAfterNoProgressMs kills as hung', () => {
+      expect(directiveOf(aState(), aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'hung' },
+      });
     });
   });
 
-  test('hung: no progress for killAfterNoProgressMs kills as hung', () => {
-    expect(directiveOf(aState(), aReading(), THRESHOLDS.killAfterNoProgressMs)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'hung' },
+  describe('hard-timeout', () => {
+    test('running past killAfterTotalRuntimeMs kills as hard-timeout, even with fresh progress', () => {
+      const state = aState({ lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs });
+      expect(directiveOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'hard-timeout' },
+      });
     });
   });
 
-  test('hard-timeout: running past killAfterTotalRuntimeMs kills as hard-timeout, even with fresh progress', () => {
-    const state = aState({ lastProgressAt: THRESHOLDS.killAfterTotalRuntimeMs });
-    expect(directiveOf(state, aReading(), THRESHOLDS.killAfterTotalRuntimeMs)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'hard-timeout' },
-    });
-  });
-
-  test('lease-expired: no successful renewal for leaseExpiresAfterMs fences the child', () => {
-    const state = aState({
-      lastProgressAt: THRESHOLDS.leaseExpiresAfterMs,
-      startedAt: THRESHOLDS.leaseExpiresAfterMs,
-    });
-    expect(directiveOf(state, aReading(), THRESHOLDS.leaseExpiresAfterMs)).toEqual({
-      kind: 'kill',
-      kill: { reason: 'fenced' },
+  describe('lease-expired', () => {
+    test('no successful renewal for leaseExpiresAfterMs fences the child', () => {
+      const state = aState({
+        lastProgressAt: THRESHOLDS.leaseExpiresAfterMs,
+        startedAt: THRESHOLDS.leaseExpiresAfterMs,
+      });
+      expect(directiveOf(state, aReading(), THRESHOLDS.leaseExpiresAfterMs)).toEqual({
+        kind: 'kill',
+        kill: { reason: 'fenced' },
+      });
     });
   });
 
@@ -253,73 +267,77 @@ describe('precedence', () => {
 });
 
 describe('the state transition', () => {
-  test('lastProgressAt is frozen when progressSequence repeats', () => {
-    const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
-    const reading = aReading({ progress: { kind: 'read', progressSequence: 3 } });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.lastProgressAt).toBe(0);
-    expect(next.lastProgressSequence).toBe(3);
-  });
-
-  test('lastProgressAt advances to now when progressSequence changes', () => {
-    const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
-    const reading = aReading({ progress: { kind: 'read', progressSequence: 4 } });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.lastProgressAt).toBe(500);
-    expect(next.lastProgressSequence).toBe(4);
-  });
-
-  test('lastProgressAt stays at startedAt while progress.json has never been written', () => {
-    const state = aState({ startedAt: 10, lastProgressAt: 10 });
-    const { state: next } = decideDirective(state, aReading(), THRESHOLDS, 500);
-    expect(next.lastProgressAt).toBe(10);
-    expect(next.lastProgressSequence).toBeUndefined();
-  });
-
-  test('lastProgressAt advances the first time progressSequence 0 is observed, not just on truthy sequences', () => {
-    const state = aState({ startedAt: 10, lastProgressAt: 10 });
-    const reading = aReading({ progress: { kind: 'read', progressSequence: 0 } });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.lastProgressAt).toBe(500);
-    expect(next.lastProgressSequence).toBe(0);
-  });
-
-  test('renewalIssuedAt advances only on a held lease, to the issue time', () => {
-    const state = aState({ renewalIssuedAt: 0 });
-    const reading = aReading({
-      lease: { kind: 'held', cancelRequestedAt: null },
-      renewalIssuedAt: 500,
+  describe('lastProgressAt', () => {
+    test('is frozen when progressSequence repeats', () => {
+      const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
+      const reading = aReading({ progress: { kind: 'read', progressSequence: 3 } });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.lastProgressAt).toBe(0);
+      expect(next.lastProgressSequence).toBe(3);
     });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.renewalIssuedAt).toBe(500);
-  });
 
-  test('renewalIssuedAt is frozen when the lease is held but no renewal was issued this tick', () => {
-    const state = aState({ renewalIssuedAt: 0 });
-    const reading = aReading({
-      lease: { kind: 'held', cancelRequestedAt: null },
-      renewalIssuedAt: undefined,
+    test('advances to now when progressSequence changes', () => {
+      const state = aState({ lastProgressAt: 0, lastProgressSequence: 3 });
+      const reading = aReading({ progress: { kind: 'read', progressSequence: 4 } });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.lastProgressAt).toBe(500);
+      expect(next.lastProgressSequence).toBe(4);
     });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.renewalIssuedAt).toBe(0);
-  });
 
-  test('renewalIssuedAt is frozen when the renewal was skipped', () => {
-    const state = aState({ renewalIssuedAt: 0 });
-    const reading = aReading({
-      progress: { kind: 'failed', error: new Error('EIO') },
-      lease: { kind: 'skipped' },
-      renewalIssuedAt: undefined,
+    test('stays at startedAt while progress.json has never been written', () => {
+      const state = aState({ startedAt: 10, lastProgressAt: 10 });
+      const { state: next } = decideDirective(state, aReading(), THRESHOLDS, 500);
+      expect(next.lastProgressAt).toBe(10);
+      expect(next.lastProgressSequence).toBeUndefined();
     });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.renewalIssuedAt).toBe(0);
+
+    test('advances the first time progressSequence 0 is observed, not just on truthy sequences', () => {
+      const state = aState({ startedAt: 10, lastProgressAt: 10 });
+      const reading = aReading({ progress: { kind: 'read', progressSequence: 0 } });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.lastProgressAt).toBe(500);
+      expect(next.lastProgressSequence).toBe(0);
+    });
   });
 
-  test('renewalIssuedAt is frozen when the renewal statement itself failed', () => {
-    const state = aState({ renewalIssuedAt: 0 });
-    const reading = aReading({ lease: { kind: 'failed', error: new Error('ECONNRESET') } });
-    const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
-    expect(next.renewalIssuedAt).toBe(0);
+  describe('renewalIssuedAt', () => {
+    test('advances only on a held lease, to the issue time', () => {
+      const state = aState({ renewalIssuedAt: 0 });
+      const reading = aReading({
+        lease: { kind: 'held', cancelRequestedAt: null },
+        renewalIssuedAt: 500,
+      });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.renewalIssuedAt).toBe(500);
+    });
+
+    test('is frozen when the lease is held but no renewal was issued this tick', () => {
+      const state = aState({ renewalIssuedAt: 0 });
+      const reading = aReading({
+        lease: { kind: 'held', cancelRequestedAt: null },
+        renewalIssuedAt: undefined,
+      });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.renewalIssuedAt).toBe(0);
+    });
+
+    test('is frozen when the renewal was skipped', () => {
+      const state = aState({ renewalIssuedAt: 0 });
+      const reading = aReading({
+        progress: { kind: 'failed', error: new Error('EIO') },
+        lease: { kind: 'skipped' },
+        renewalIssuedAt: undefined,
+      });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.renewalIssuedAt).toBe(0);
+    });
+
+    test('is frozen when the renewal statement itself failed', () => {
+      const state = aState({ renewalIssuedAt: 0 });
+      const reading = aReading({ lease: { kind: 'failed', error: new Error('ECONNRESET') } });
+      const { state: next } = decideDirective(state, reading, THRESHOLDS, 500);
+      expect(next.renewalIssuedAt).toBe(0);
+    });
   });
 
   test('every threshold fires at exactly >=, not only strictly past it', () => {
