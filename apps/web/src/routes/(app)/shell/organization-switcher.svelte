@@ -7,9 +7,8 @@ import { Button } from '$lib/components/ui/button';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import { organizationHref } from '$lib/hrefs';
 import { cnChildProps } from '$lib/utils/shadcn.js';
+import type { SwitcherOrganization } from '../+layout.server.ts';
 import { SWITCHER_LIMIT } from './switcher-limit';
-
-type SwitcherOrganization = { id: string; name: string };
 
 interface Props {
   current?: SwitcherOrganization;

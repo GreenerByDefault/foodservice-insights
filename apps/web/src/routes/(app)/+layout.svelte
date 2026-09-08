@@ -1,9 +1,9 @@
 <script lang="ts">
 import { APP_NAME } from '@gbd/core';
 import { page } from '$app/state';
-import OrganizationSwitcher from './organization-switcher.svelte';
 import type { LayoutProps } from './$types';
-import UserMenu from './user-menu.svelte';
+import OrganizationSwitcher from './shell/organization-switcher.svelte';
+import UserMenu from './shell/user-menu.svelte';
 
 let { data, children }: LayoutProps = $props();
 

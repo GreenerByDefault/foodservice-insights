@@ -1,4 +1,5 @@
 <script lang="ts">
+import ItemList from '$lib/components/item-list.svelte';
 import type { MemberRow } from './+page.server.ts';
 
 interface Props {
@@ -10,8 +11,9 @@ let { members }: Props = $props();
 const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
 </script>
 
-<ul class="w-full divide-y border-y">
-  {#each members as member (member.email)}
+<!-- No empty state: `organization_check_has_member` makes an empty list impossible. -->
+<ItemList items={members} key={(member) => member.email} empty="">
+  {#snippet children(member)}
     <li class="flex w-full items-center justify-between gap-4 px-2 py-3">
       <span class="flex min-w-0 flex-col">
         <span class="min-w-0 truncate font-medium">
@@ -26,5 +28,5 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
       </span>
       <span class="shrink-0 text-sm text-muted-foreground">{ROLE_LABEL[member.role]}</span>
     </li>
-  {/each}
-</ul>
+  {/snippet}
+</ItemList>

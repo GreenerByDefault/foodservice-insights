@@ -1,4 +1,5 @@
 <script lang="ts">
+import ItemList from '$lib/components/item-list.svelte';
 import type { ReportsPageData } from '../+page.server.ts';
 import ReportRow from './report-row.svelte';
 
@@ -9,12 +10,8 @@ interface Props {
 let { reports }: Props = $props();
 </script>
 
-{#if reports.length === 0}
-  <p class="w-full text-muted-foreground">No reports yet.</p>
-{:else}
-  <ul class="w-full divide-y border-y">
-    {#each reports as report (report.id)}
-      <ReportRow {report} />
-    {/each}
-  </ul>
-{/if}
+<ItemList items={reports} key={(report) => report.id} empty="No reports yet.">
+  {#snippet children(report)}
+    <ReportRow {report} />
+  {/snippet}
+</ItemList>

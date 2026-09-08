@@ -3,7 +3,7 @@ import CircleCheckBigIcon from '@lucide/svelte/icons/circle-check-big';
 import FileSpreadsheetIcon from '@lucide/svelte/icons/file-spreadsheet';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import { Button } from '$lib/components/ui/button';
-import RelativeTime from '$lib/components/reports/relative-time.svelte';
+import RelativeTime from '$lib/components/relative-time.svelte';
 import type { ResultFiles } from './+page.server.ts';
 import DeleteButton from './delete-button.svelte';
 import StatusLine from './status-line.svelte';

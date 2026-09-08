@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { organizationHref } from '$lib/hrefs';
+import type { SwitcherOrganization } from '../+layout.server.ts';
 import OrganizationSwitcher from './organization-switcher.svelte';
 
-type SwitcherOrganization = { id: string; name: string };
-
 function anOrganization(name: string, id = name): SwitcherOrganization {
-  return { id, name };
+  return { id: id as SwitcherOrganization['id'], name };
 }
 
 type Props = {

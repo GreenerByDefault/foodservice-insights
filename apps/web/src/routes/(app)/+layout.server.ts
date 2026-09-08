@@ -1,11 +1,12 @@
-import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
+import type { DatabaseExecutor } from '@gbd/db';
 import { requireAuth } from '$lib/server/auth/guards';
 import type { AuthContext } from '$lib/server/auth/types';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { database } from '$lib/server/db';
+import { listOrganizations, type OrganizationRow } from '$lib/server/orgs/list';
 import type { LayoutServerLoad } from './$types';
-import { SWITCHER_LIMIT } from './switcher-limit';
+import { SWITCHER_LIMIT } from './shell/switcher-limit';
 
-export type SwitcherOrganization = { id: OrganizationId; name: string };
+export type SwitcherOrganization = OrganizationRow;
 
 /** The gate for everything inside `(app)`: a request gets no further without an identity.
  *
@@ -26,33 +27,12 @@ export const load: LayoutServerLoad = async ({ locals }) => {
   };
 };
 
-/** The organizations the switcher offers this user, capped at `SWITCHER_LIMIT`.
- *
- * A superadmin sees the whole `organization` table, alphabetically. It's a bounded query, unlike
- * `orgs/+page.server.ts`'s `_loadAllOrganizations`, which reads the same table unbounded for the
- * full `/orgs` picker. Meanwhile, non-superadmins already hold their full membership list in
- * `auth.memberships`, ordered by name (see `memberOrganizations`), so they don't need the
- * database.
- */
+/** The organizations the switcher offers this user, capped at `SWITCHER_LIMIT`. */
 export async function _loadSwitcherOrganizations(
   db: DatabaseExecutor,
   auth: AuthContext,
 ): Promise<{ organizations: readonly SwitcherOrganization[]; hasMoreOrganizations: boolean }> {
-  const rows: readonly SwitcherOrganization[] = auth.user.isSuperadmin
-    ? await withDbErrorHandling(
-        () =>
-          db
-            .selectFrom('organization')
-            .select(['id', 'name'])
-            .orderBy('name')
-            .limit(SWITCHER_LIMIT + 1)
-            .execute(),
-        { action: 'list organizations for the switcher', context: { userId: auth.user.id } },
-      )
-    : auth.memberships.slice(0, SWITCHER_LIMIT + 1).map((membership) => ({
-        id: membership.organizationId,
-        name: membership.organizationName,
-      }));
+  const rows = await listOrganizations(db, auth, { limit: SWITCHER_LIMIT + 1 });
 
   return {
     organizations: rows.slice(0, SWITCHER_LIMIT),

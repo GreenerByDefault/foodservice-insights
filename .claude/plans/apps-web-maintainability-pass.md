@@ -15,8 +15,9 @@ that have drifted from the code or sit far from what they explain.
 API URLs are now built by the client from ids, everywhere — reports followed the org convention
 already established by `deleteOrganization`/`renameOrganization`. A loader only ever hands out a
 page URL; an API client builds its own URL from `lib/hrefs.ts` and the ids the page already has.
-The one decision still ahead: the 30-copy "imported by the browser as well as the server" header
-goes, replaced by one README rule (PR 4).
+The one decision still ahead: the "imported by the browser as well as the server" header, now down
+to 29 copies (`grep -rl 'keep it free of'` — `switcher-limit.ts`'s was replaced with its own real
+reason rather than counted here), goes, replaced by one README rule (PR 3).
 
 Every PR below runs `pnpm lint && pnpm check && pnpm test` from the repo root before it's called
 done, and `/prune-comments` over the diff. PRs are ordered so each is independently mergeable.
@@ -26,37 +27,18 @@ are already shared (`lib/components/orgs/organization-name-form.svelte`, `lib/or
 an invite form that also writes a name has a pattern to follow rather than a second copy to
 reconcile.
 
----
-
-## PR 1 — Shared pieces with a second caller now
-
-- `lib/server/orgs/list.ts`: one `listOrganizations(db, auth, { limit? })` with the
-  superadmin-reads-table / member-reads-memberships rule in one place. `_loadAllOrganizations`
-  and `_loadSwitcherOrganizations` call it (the latter with `SWITCHER_LIMIT + 1`). Delete the
-  `+layout.server.ts` paragraph that documents the *other* loader's behavior.
-- `organization-switcher.svelte` and its test import `SwitcherOrganization` from
-  `+layout.server.ts` instead of redeclaring it (the two other list components already import
-  their row type from the loader).
-- Rename `_resolvePostSignInDestination` → `_organizationsPageRedirect` (it runs on every visit to
-  `/orgs`, not after sign-in) and its test file. Fix the stale file header on
-  `orgs/+page.server.ts` ("A list of all organizations the user belongs to" — it redirects first,
-  and superadmins see all).
-- `lib/components/reports/relative-time.svelte` → `lib/components/relative-time.svelte`; nothing in
-  it is report-specific. Reword its `now` prop doc in its own terms (it points down into
-  `ReportPageData.now`). Delete the one-file folder.
-- List chrome: `lib/components/item-list.svelte` (the `<ul class="w-full divide-y border-y">` plus
-  an `empty` text prop for the `<p>` state) and `lib/components/item-list-link.svelte` (the
-  chevron-terminated `<a>` row). Use in `organizations-list.svelte`, `reports-list.svelte` +
-  `report-row.svelte`, `members-list.svelte`. Add the missing one-line note on `members-list`:
-  no empty state because `organization_has_a_member` makes an empty list impossible.
-- `routes/(app)/` root: move `organization-switcher.svelte(+test)`, `user-menu.svelte(+test)`,
-  `initials.ts(+test)`, `switcher-limit.ts` into `routes/(app)/shell/`. `+layout.svelte` and
-  `load-switcher-organizations.test.ts` stay. Replace `switcher-limit.ts`'s boilerplate header
-  with the real reason the file exists (a `.svelte` file can't import a `+layout.server.ts`).
+The shared-pieces pass has landed: `lib/server/orgs/list.ts`'s `listOrganizations` (the
+superadmin-reads-table / member-reads-memberships rule in one place, called by both
+`_loadAllOrganizations` and `_loadSwitcherOrganizations`); `lib/components/item-list.svelte` /
+`item-list-link.svelte` for the list chrome shared by `organizations-list.svelte`,
+`reports-list.svelte` + `report-row.svelte`, and `members-list.svelte`; the `routes/(app)/shell/`
+grouping for `organization-switcher.svelte`, `user-menu.svelte`, `initials.ts`, and
+`switcher-limit.ts`; and the `_organizationsPageRedirect` rename (from
+`_resolvePostSignInDestination`, since it runs on every `/orgs` visit, not after sign-in).
 
 ---
 
-## PR 2 — Browser test helpers
+## PR 1 — Browser test helpers
 
 - `apps/web/src/lib/testing/fetch.ts`: `stubFetch(response)` (returns the mock),
   `stubUnreachableFetch()`, `stubPendingFetch()` → `{ resolve }`, `jsonResponse(body, status?)`,
@@ -73,7 +55,7 @@ reconcile.
 
 ---
 
-## PR 3 — e2e fixtures and README
+## PR 2 — e2e fixtures and README
 
 - `e2e/fixtures/reports.ts` exports the report+input-file(+result-files) builder;
   `fixtures/organizations.ts` calls it instead of re-implementing it. Export `OrganizationSpec`
@@ -97,7 +79,7 @@ reconcile.
 
 ---
 
-## PR 4 — Docs and comments
+## PR 3 — Docs and comments
 
 **`apps/web/README.md`**
 - Routes: "Most routes exist only as scaffolding so far" → "A few routes are still scaffolding
@@ -111,7 +93,8 @@ reconcile.
   its own union" (the actual reason both org forms have one).
 - UI components: one sentence — anything under `src/lib` outside `server/` is imported by the
   browser; the build rejects `$lib/server` and `$env/*/private` there, and nothing Node-only may
-  go in either. Then delete the 30 copies of the per-file header (`grep -rl 'keep it free of'`).
+  go in either. Then delete the 29 remaining copies of the per-file header
+  (`grep -rl 'keep it free of'`).
   Server-side: also mention audit-in-transaction and post-commit `notifyGbd` in a short Auth/Writes
   paragraph, pointing at `lib/server/audit.ts` and `lib/server/email.ts`.
 
@@ -157,6 +140,6 @@ reconcile.
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test` (run in the background once
 the diff is ready). While iterating, scope to the touched files with
 `pnpm --filter @gbd/web test:unit -- <path>` and
-`pnpm --filter @gbd/web test:e2e -- <path>`. PR 3's screenshot renames need
+`pnpm --filter @gbd/web test:e2e -- <path>`. PR 2's screenshot renames need
 `pnpm --filter @gbd/web test:screenshots` inside the browser container to confirm no image
 actually changed (renames only).

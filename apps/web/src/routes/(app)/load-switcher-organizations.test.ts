@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { database } from '$lib/server/db';
 import { anAuthContext, anOrganizationAccess } from '$lib/server/testing/fixtures';
 import { _loadSwitcherOrganizations } from './+layout.server.ts';
-import { SWITCHER_LIMIT } from './switcher-limit';
+import { SWITCHER_LIMIT } from './shell/switcher-limit';
 
 function paddedNames(count: number): string[] {
   return Array.from({ length: count }, (_, i) => `Org ${String(i).padStart(2, '0')}`);
