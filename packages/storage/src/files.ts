@@ -43,8 +43,7 @@ export type StoredFile = {
 export type InputFileVariants = {
   original: Uint8Array;
   normalized: Uint8Array;
-  /** The original workbook, when the upload was one. Stored under its own key alongside the
-   * normalized CSV; the server never opens it — see `putInputFile`'s doc comment. */
+  /** Present only when the upload was an Excel workbook. */
   workbook?: Uint8Array;
 };
 

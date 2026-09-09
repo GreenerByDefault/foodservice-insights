@@ -33,7 +33,7 @@ type SubmissionOverrides = {
   countsBasis?: string | null;
   unitSystem?: string | null;
   monthlyCounts?: string | null;
-  file?: File | null;
+  csvFile?: File | null;
   workbook?: File | null;
 };
 
@@ -45,7 +45,7 @@ function createUploadRequest(overrides: SubmissionOverrides = {}): Request {
     countsBasis: 'people',
     unitSystem: 'lb',
     monthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
-    file: new File([RAW_CSV], 'procurement.csv', { type: 'text/csv' }),
+    csvFile: new File([RAW_CSV], 'procurement.csv', { type: 'text/csv' }),
     workbook: null,
     ...overrides,
   };
@@ -232,10 +232,10 @@ describe('a rejected upload', () => {
   }
 
   test.for([
-    ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty'],
+    ['an empty file', { csvFile: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty'],
     ['a counts basis outside the enum', { countsBasis: 'guesses' }, 'invalid_metadata'],
     ['monthly counts that are not JSON', { monthlyCounts: '{oops' }, 'invalid_metadata'],
-    ['no file at all', { file: null }, 'other'],
+    ['no file at all', { csvFile: null }, 'other'],
   ] as const)('answers 400 and records %s', async ([, overrides, reason]) => {
     const { refusal, recorded, reports } = await reject(overrides);
 
@@ -274,7 +274,7 @@ describe('a rejected upload', () => {
   });
 
   test('leaves the file columns null when no file arrived', async () => {
-    const { recorded } = await reject({ file: null });
+    const { recorded } = await reject({ csvFile: null });
 
     expect(recorded).toMatchObject({
       inputFileStorageKey: null,
@@ -295,7 +295,7 @@ describe('a rejected upload', () => {
       type: 'text/csv',
     });
 
-    const { refusal, recorded } = await reject({ file: oversized });
+    const { refusal, recorded } = await reject({ csvFile: oversized });
 
     expect(refusal).toMatchObject({ status: 400 });
     expect(recorded).toMatchObject({

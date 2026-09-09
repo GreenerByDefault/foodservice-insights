@@ -31,7 +31,7 @@ let { organizationSlug, rateLimitWarning }: Props = $props();
 
 // Every field's value lives here, in the component's own state, rather than only in the DOM —
 // so swapping to the rejection view and back never loses what the user already typed.
-let upload: { file: File; workbook?: File } | undefined = $state();
+let upload: { csvFile: File; workbook?: File } | undefined = $state();
 let months: readonly string[] | undefined = $state();
 let counts: CountDraft = $state({});
 let name = $state('');
@@ -75,7 +75,7 @@ async function inspectChosenFile(files: File[]) {
   if (!chosen) return;
 
   // Shown during "Checking your file…" before inspection names the actual upload.
-  upload = { file: chosen };
+  upload = { csvFile: chosen };
   fileError = undefined;
   formState = { status: 'checking' };
   // Yields once so the "Checking your file…" state paints before the normalizer locks the main
@@ -134,7 +134,7 @@ async function handleSubmit(event: SubmitEvent) {
   if (serialized === null) return;
 
   const formData = new FormData(form);
-  formData.set(FIELD.file, chosenUpload.file);
+  formData.set(FIELD.csvFile, chosenUpload.csvFile);
   formData.set(FIELD.monthlyCounts, serialized);
 
   formState = { status: 'submitting' };
@@ -178,7 +178,7 @@ function backToForm() {
 
       {#if upload}
         <div class="flex items-center justify-between gap-4 rounded-md border p-3">
-          <p class="min-w-0 truncate font-medium">{upload.workbook?.name ?? upload.file.name}</p>
+          <p class="min-w-0 truncate font-medium">{upload.workbook?.name ?? upload.csvFile.name}</p>
           <Button type="button" variant="outline" onclick={replaceFile}>Replace</Button>
         </div>
         {#if formState.status === 'checking'}

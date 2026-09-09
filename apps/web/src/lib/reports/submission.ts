@@ -28,8 +28,8 @@ export type RawSubmission = {
   countsBasis: string | null;
   unitSystem: string | null;
   monthlyCounts: string | null;
-  file: File | null;
-  /** The original workbook, present only when the browser converted one to `file` — see
+  csvFile: File | null;
+  /** The original workbook, present only when the browser converted one to `csvFile` — see
    * `inspect-file.ts`. */
   workbook: File | null;
 };
@@ -59,14 +59,14 @@ export function readSubmission(form: FormData): RawSubmission {
     countsBasis: readText(form, FIELD.countsBasis),
     unitSystem: readText(form, FIELD.unitSystem),
     monthlyCounts: readText(form, FIELD.monthlyCounts),
-    file: readFile(form, FIELD.file),
+    csvFile: readFile(form, FIELD.csvFile),
     workbook: readFile(form, FIELD.workbook),
   };
 }
 
 /** Decide whether `raw` becomes a report. */
 export async function validateSubmission(raw: RawSubmission): Promise<ValidatedSubmission> {
-  if (!raw.file) {
+  if (!raw.csvFile) {
     return {
       ok: false,
       fileDescription: null,
@@ -82,8 +82,8 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
   const fileDescription: FileDescription = {
     // The workbook's name when there was one — it's what the user chose and what the report page
     // shows. Truncate long file names rather than reject them.
-    originalFilename: (raw.workbook ?? raw.file).name.slice(0, MAX_ORIGINAL_FILENAME_LENGTH),
-    byteSize: raw.file.size,
+    originalFilename: (raw.workbook ?? raw.csvFile).name.slice(0, MAX_ORIGINAL_FILENAME_LENGTH),
+    byteSize: raw.csvFile.size,
   };
 
   if (fileDescription.byteSize > MAX_UPLOAD_FIELD_BYTES) {
@@ -98,7 +98,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
 
   // The server only sizes, sniffs, hashes and stores the workbook — it never opens it. Every zip
   // and XML risk stays in the uploader's own browser tab, which is what actually converted this
-  // workbook to the CSV in `raw.file`. Doing anything more with these bytes here is a security
+  // workbook to the CSV in `raw.csvFile`. Doing anything more with these bytes here is a security
   // regression; see ARCHITECTURE.md § Input file upload.
   let workbookBytes: Uint8Array | undefined;
   if (raw.workbook) {
@@ -133,7 +133,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     }
   }
 
-  const bytes = new Uint8Array(await raw.file.arrayBuffer());
+  const bytes = new Uint8Array(await raw.csvFile.arrayBuffer());
 
   if (bytes.byteLength === 0) {
     return {

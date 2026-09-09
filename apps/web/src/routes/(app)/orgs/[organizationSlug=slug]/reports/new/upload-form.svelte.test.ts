@@ -56,7 +56,7 @@ describe('UploadForm', () => {
       expect(body.get('counts-basis')).toBe('meals');
       expect(body.get('unit-system')).toBe('lb');
       expect(JSON.parse(body.get('monthly-counts') as string)).toEqual({ '2026-01': 100 });
-      expect(body.get('file')).toBeInstanceOf(File);
+      expect(body.get('csv-file')).toBeInstanceOf(File);
 
       expect(goto).toHaveBeenCalledWith('/orgs/org-1/reports/report-1');
     });

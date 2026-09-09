@@ -180,8 +180,6 @@ export async function insertInputFile(
     reportId?: Report['id'];
     storageKey?: string;
     object?: { byteSize: number; checksumSha256: Buffer };
-    /** Set to give the row an original workbook alongside the CSV; omitted, the three workbook
-     * columns stay null. */
     workbook?: { storageKey?: string; byteSize?: number; checksumSha256?: Buffer };
   } = {},
 ): Promise<InputFile> {

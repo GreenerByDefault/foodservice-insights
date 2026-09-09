@@ -97,9 +97,6 @@ export function originalInputFileKey(ids: {
   );
 }
 
-/** The original workbook, when the upload was one. Only ever sized, sniffed, hashed and stored —
- * see `input_file.workbook_storage_key`'s column comment.
- */
 export function workbookInputFileKey(ids: {
   organizationId: OrganizationId;
   reportId: ReportId;

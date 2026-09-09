@@ -22,14 +22,27 @@ Two things were decided with Eric on 2026-09-07 that go past the architecture no
   that choice leads to a header failure, the rejection says which sheet we read and which we
   skipped.
 
-The prefactor is done: `inspectFile` now returns `{ ok: true; months; upload: { file: File;
-workbook?: File } }`, `apps/web/src/lib/reports/signatures.ts` holds `spreadsheetSignature(bytes):
-'xlsx' | 'xls' | undefined` (the four-byte zip local-file-header check, isomorphic and imported by
-`csv/read/decode.ts`), `csv/write.ts` exports `escapeCsvField`, and `MAX_UPLOAD_FIELD_BYTES` (one
-cap shared by the CSV field and the workbook field) / `MAX_WORKBOOK_UNPACKED_BYTES` exist in
-`upload-limit.js` / `limits.ts` with `start.js` already doubling the field cap plus the transport
-margin into `BODY_SIZE_LIMIT`. Every PR below builds on that shape; none of it is optional
-infrastructure to add later.
+The prefactor and the PR that made the server keep a workbook it never opens are both done.
+`inspectFile` now returns `{ ok: true; months; upload: { csvFile: File; workbook?: File } }` —
+`file` was renamed
+to `csvFile` throughout (`FileInspection`, `RawSubmission`, `FIELD`, the upload form's local state)
+so a workbook upload has two unambiguous fields — and `apps/web/src/lib/reports/signatures.ts` holds
+`spreadsheetSignature(bytes): 'xlsx' | 'xls' | undefined` (the four-byte zip local-file-header check,
+isomorphic and imported by `csv/read/decode.ts`), `csv/write.ts` exports `escapeCsvField`, and
+`MAX_UPLOAD_FIELD_BYTES` (one cap shared by the CSV field and the workbook field) /
+`MAX_WORKBOOK_UNPACKED_BYTES` exist in `upload-limit.js` / `limits.ts` with `start.js` already
+doubling the field cap plus the transport margin into `BODY_SIZE_LIMIT`.
+
+The server side of a workbook upload is fully wired and already exercised end to end by tests, with
+the field simply absent today: `RawSubmission.workbook: File | null`, sized and PK-sniffed (never
+opened) in `validateSubmission`, stored at `workbookInputFileKey(ids)` alongside the CSV by
+`putInputFile`, its three columns (`workbook_storage_key`, `workbook_byte_size`,
+`workbook_checksum_sha256`, all-or-none, folded into `packages/db/migrations/001_initial_schema.ts`
+rather than a new migration — the app has not shipped yet, so there is no prior deploy to leave
+alone) written by `insertReport`, and both the download route and the report page's byte size
+preferring the workbook over the CSV when one is present. `XLSX_CONTENT_TYPE` is exported once from
+`packages/storage/src/keys.ts` and reused by `RESULT_FILE_FORMATS.xlsx`. Every PR below builds on
+that shape; none of it is optional infrastructure to add later.
 
 Once adopted with `/plan-adopt`, this file belongs at `.claude/plans/excel-upload.md`.
 
@@ -69,7 +82,7 @@ switch the converter to a sync unzip of our own).
 | --- | --- | --- |
 | Where conversion happens | Browser only, in `inspectFile`, before anything is uploaded | ARCHITECTURE § Input file upload. The server never decompresses or parses a workbook |
 | How a workbook is recognised | By its bytes (`50 4B 03 04` = zip local-file header → try as workbook; OLE2 `D0 CF 11 E0 A1 B1 1A E1` → `.xls` or password-protected → reject), never by extension or MIME | Same rule `decode.ts` already states for CSV; a `.csv` renamed `.xlsx` still just works. Four bytes, not two: a CSV whose title line starts `PKG SUMMARY` must not be sent to the unzipper and told it is a damaged workbook — this is what `signatures.ts` already enforces |
-| What is uploaded | Two multipart fields: `file` = the converted CSV (what the server validates and the worker reads, unchanged), plus `workbook` = the untouched original | Server code paths for CSV stay identical; the workbook is a side-car the server only sizes, sniffs two bytes of, hashes and stores |
+| What is uploaded | Two multipart fields: `csv-file` = the converted CSV (what the server validates and the worker reads, unchanged), plus `workbook` = the untouched original | Server code paths for CSV stay identical; the workbook is a side-car the server only sizes, sniffs two bytes of, hashes and stores |
 | What the server does with the workbook | `size ≤ MAX_UPLOAD_FIELD_BYTES`, first two bytes are `PK`, sha256, `putObject` with the xlsx content type. Nothing else, ever | Eric: "we must never actually do anything with the Excel file". A comment on the field says so |
 | Where the workbook lives | Blob key `…/input/{inputFileId}.xlsx`; three nullable columns on `input_file` (`workbook_storage_key`, `workbook_byte_size`, `workbook_checksum_sha256`), all-or-none | One row per report stays; the download route `coalesce`s. *Rejected:* a convention-only key like `-original.csv` — the download route would need `objectExists` on every hit and the row's `byte_size` would lie about the file the user gets |
 | `original_filename` | The workbook's name (`orders.xlsx`) when one was sent; the CSV's otherwise | It is what the user chose and what the report page shows |
@@ -88,38 +101,7 @@ switch the converter to a sync unzip of our own).
 | Main thread | Conversion runs where `normalizeCsv` already runs, behind the same `setTimeout` yield in `upload-form.svelte` | The library parses in `setTimeout(0)` chunks. **Open:** moving conversion + normalization into a Web Worker is the fix for jank on big files, for both formats at once |
 | Bundle | Static import | No dynamic-import precedent in `apps/web`; `sideEffects: false` and ~60KB minified is tolerable. A lazy import when `PK` bytes are seen is a one-line follow-up if it matters |
 
-## PR 1 — Server keeps a workbook it never opens
-
-Lands before the form sends one; with the field absent every path is byte-for-byte today's.
-
-- **DB** `packages/db/migrations/002_input_file_workbook.ts` (forward migrations from here on —
-  `deploy-migrations.md`): `workbook_storage_key text`, `workbook_byte_size integer`,
-  `workbook_checksum_sha256 bytea`, all nullable; `CHECK` all-null-or-all-set; positive size and
-  32-byte checksum when set; `UNIQUE (workbook_storage_key)`. `pnpm db:gen-types`. Column comment:
-  the bytes are stored as received and never parsed by any service. Test in
-  `packages/db/tests/report.test.ts`: a half-set row is refused (documentation that executes).
-  `packages/db/src/testing/fixtures.ts` `insertInputFile` accepts `workbook` overrides.
-- **Storage** `packages/storage/src/keys.ts`: `workbookInputFileKey(ids)` → `…/input/{inputFileId}.xlsx`,
-  header diagram updated; `XLSX_CONTENT_TYPE` exported once and reused by `RESULT_FILE_FORMATS.xlsx`.
-  `files.ts`: `InputFileVariants` gains `workbook?: Uint8Array`; `putInputFile` stores it in the
-  same `Promise.all` and returns `workbook?: StoredFile`. Tests in `keys.test.ts` / `files.test.ts`.
-- **Submission** `apps/web/src/lib/reports/metadata.ts`: `FIELD.workbook = 'workbook'`.
-  `submission.ts`: `RawSubmission.workbook: File | null`; in `validateSubmission`, after the CSV
-  size check: refuse a workbook over `MAX_UPLOAD_FIELD_BYTES` (`too_large`, "That workbook is larger
-  than 10MB") or whose bytes do not start with `PK` (`unparseable`, "That doesn't look like an Excel
-  workbook"); `fileDescription.originalFilename` comes from the workbook when present;
-  `variants.workbook` set. A comment on the field: the server only sizes, sniffs, hashes and stores
-  it — anything more is a security regression, see ARCHITECTURE. `submission.test.ts`: workbook
-  accepted and carried; oversize; bad signature; filename precedence.
-- **Create** `routes/api/orgs/[organizationSlug=slug]/reports/+server.ts` `insertReport` writes the
-  three columns from `stored.workbook`. `create-report.test.ts`: row and object both present.
-- **Download** `routes/file/input/[id=uuid]/+server.ts`: select the workbook columns too and redirect
-  to `workbookStorageKey ?? storageKey`. `download-input-file.test.ts`: with a workbook, the bytes
-  and `content-disposition` are the workbook's.
-- **Report page** `reports/[reportId=uuid]/+page.server.ts`: `byteSize` is the workbook's when
-  present. `result-view.svelte` unchanged.
-
-## PR 2 — `excel/`: a workbook into the CSV `normalizeCsv` reads
+## PR 1 — `excel/`: a workbook into the CSV `normalizeCsv` reads
 
 Pure code with tests; nothing calls it yet. All isomorphic (the same header line as `csv/`).
 
@@ -174,11 +156,11 @@ Pure code with tests; nothing calls it yet. All isomorphic (the same header line
   `ranges: [{ start: 7, end: 7 }]` — this is what proves line = Excel row); the three real fixtures
   normalize ok.
 
-## PR 3 — The form accepts a workbook
+## PR 2 — The form accepts a workbook
 
 - `inspect-file.ts`: after the size and empty checks, `spreadsheetSignature(bytes)`: `'xls'` →
   `describeWorkbookFault({ kind: 'xls' })`; `'xlsx'` → `convertWorkbook`, fault → describe; then
-  `csv.byteLength > MAX_UPLOAD_FIELD_BYTES` → `describeOversizeConversion`; `upload = { file: new
+  `csv.byteLength > MAX_UPLOAD_FIELD_BYTES` → `describeOversizeConversion`; `upload = { csvFile: new
   File([csv], stem(file.name) + '.csv', { type: 'text/csv' }), workbook: file }`. Run `normalizeCsv`
   on the CSV bytes as today; on `reason === 'bad_columns'` with `sheet.others.length > 0`, wrap
   with `withSheetHint`. `inspect-file.test.ts`: a workbook yields `months`, a `text/csv`
@@ -191,7 +173,7 @@ Pure code with tests; nothing calls it yet. All isomorphic (the same header line
   Excel choose File → Save As → Excel Workbook (.xlsx)."; the submit-time "Choose a CSV file to
   upload." and `submission.ts`'s copy → "…CSV or Excel file…"; on submit also
   `formData.set(FIELD.workbook, upload.workbook)` when present. `upload-form.svelte.test.ts`:
-  uploading `aWorkbook(...)` posts `file` as `orders.csv`/`text/csv` and `workbook` as the
+  uploading `aWorkbook(...)` posts `csv-file` as `orders.csv`/`text/csv` and `workbook` as the
   original; the type-rejection copy.
 - `apps/web/e2e/lib/upload.ts`: label lookup follows; add `chooseWorkbook(page, filename, bytes)`.
   `new-report.e2e.ts`: upload a real fixture workbook → report created → the report page shows
@@ -212,8 +194,7 @@ Pure code with tests; nothing calls it yet. All isomorphic (the same header line
 
 Per PR: `pnpm lint && pnpm check && pnpm test` in the background; while iterating,
 `pnpm --filter @gbd/web test:unit -- src/lib/reports/excel` and
-`test:e2e -- e2e/new-report/new-report.e2e.ts`. PR 1 needs `TEST_DB=1 pnpm migrate` against the
-test stack and `pnpm db:gen-types`. Re-baseline with
+`test:e2e -- e2e/new-report/new-report.e2e.ts`. Re-baseline with
 `pnpm turbo run screenshots:update --filter=@gbd/web` only when Playwright asks.
 
 End to end, by hand in `pnpm dev`: upload each `excel/testing/fixtures/*.xlsx` and a workbook with
