@@ -19,15 +19,18 @@ for the 403 case. It is the first of three plans — see `invites.md` § Sequenc
 `auth.md` interleave.
 
 The shared groundwork the other two plans lean on has already landed: `recordAuditEvent` takes
-`{ action, actor: Pick<Actor, 'userId'>, organizationId: OrganizationId | null, target?: { type:
-'report' | 'user' | 'invite'; id: string }, detail? }`, with `target` defaulting to the
-organization; `AuditAction` now includes `MemberAuditAction`; and `apps/web/src/lib/server/db.ts`
-has `isCheckViolation(cause, constraint)` beside `isUniqueViolation` for the trigger every plan
-below leans on. `members/+page.server.ts`'s `MemberRow` carries `userId`, keyed on in
-`members-list.svelte`; `$lib/hrefs.ts` has `organizationMemberApiHref(organizationSlug, userId)`;
-and `$lib/components/confirm-action.svelte`'s `trigger` prop is optional, rendering no
-`AlertDialogTrigger` wrapper when omitted, so a menu item can drive `bind:open` itself instead of
-being one.
+`{ action, actor: Pick<Actor, 'userId'>, target, detail? }`, where `target` is a required,
+discriminated `AuditTarget` — `{ type: 'organization'; id: OrganizationId }` or `{ type: 'report' |
+'user' | 'invite'; id: string; organizationId: OrganizationId }` — so a caller can't forget it and
+can't have it disagree with the row's `organization_id`. (Account PR 1's `user.deleted` has no
+organization; when that PR lands, `AuditTarget`'s `'user'` branch will need `organizationId: … |
+null` too — not added now, since nothing needs it yet.) `AuditAction` now includes
+`MemberAuditAction`; and `apps/web/src/lib/server/db.ts` has `isCheckViolation(cause, constraint)`
+beside `isUniqueViolation` for the trigger every plan below leans on. `members/+page.server.ts`'s
+`MemberRow` carries `userId`, keyed on in `members-list.svelte`; `$lib/hrefs.ts` has
+`organizationMemberApiHref(organizationSlug, userId)`; and `$lib/components/confirm-action.svelte`'s
+`trigger` prop is optional, rendering no `AlertDialogTrigger` wrapper when omitted, so a menu item
+can drive `bind:open` itself instead of being one.
 
 ## Settled decisions
 

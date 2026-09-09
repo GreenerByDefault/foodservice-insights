@@ -39,7 +39,7 @@ describe('a valid name', () => {
         expectedAuditEvent({
           action: 'organization.renamed',
           actorUserId: admin.id,
-          organizationId: organization.id,
+          target: { type: 'organization', id: organization.id },
         }),
       ]);
     });

@@ -4,10 +4,10 @@
  * The helpers intentionally read all rows to make sure extra rows were not written.
  */
 
-import type { Database, OrganizationId, UserId } from '@gbd/db';
+import type { Database, UserId } from '@gbd/db';
 import type { Selectable, Transaction } from 'kysely';
 import type { JsonValue } from '$lib/api/fetch';
-import type { AuditAction } from '../audit.ts';
+import type { AuditAction, AuditTarget } from '../audit.ts';
 
 const AUDIT_EVENT_COLUMNS = [
   'action',
@@ -34,22 +34,21 @@ export async function auditEventsFor(
     .execute();
 }
 
-/** The row `auditEventsFor` should return for one `action` by one user. `target` defaults to the
- * organization itself, matching `recordAuditEvent`'s own default. */
+/** The row `auditEventsFor` should return for one `action` by one user. */
 export function expectedAuditEvent(params: {
   action: AuditAction;
   actorUserId: UserId;
-  organizationId: OrganizationId;
-  target?: { type: 'report' | 'user' | 'invite'; id: string };
+  target: AuditTarget;
   detail?: Record<string, JsonValue>;
 }): AuditEventRow {
-  const target = params.target ?? { type: 'organization' as const, id: params.organizationId };
+  const { target } = params;
+  const organizationId = target.type === 'organization' ? target.id : target.organizationId;
 
   return {
     action: params.action,
     actorUserId: params.actorUserId,
     actorKind: 'user',
-    organizationId: params.organizationId,
+    organizationId,
     targetType: target.type,
     targetId: target.id,
     detail: params.detail ?? null,

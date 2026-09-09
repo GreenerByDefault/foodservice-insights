@@ -24,15 +24,15 @@ export type MemberAuditAction = 'member.role_changed' | 'member.removed' | 'memb
 
 export type AuditAction = OrganizationAuditAction | ReportAuditAction | MemberAuditAction;
 
-/** What the event happened to, beyond the organization itself. Defaults to the organization when
- * omitted — every `organization.*` action, and nothing else. */
-type AuditTarget = { type: 'report' | 'user' | 'invite'; id: string };
+/** What the event happened to, and the organization it happened in. */
+export type AuditTarget =
+  | { type: 'organization'; id: OrganizationId }
+  | { type: 'report' | 'user' | 'invite'; id: string; organizationId: OrganizationId };
 
 type AuditEvent = {
   action: AuditAction;
   actor: Pick<Actor, 'userId'>;
-  organizationId: OrganizationId | null;
-  target?: AuditTarget;
+  target: AuditTarget;
   detail?: Record<string, JsonValue>;
 };
 
@@ -42,8 +42,8 @@ export async function recordAuditEvent(
   transaction: Transaction<Database>,
   event: AuditEvent,
 ): Promise<void> {
-  const { action, actor, organizationId, detail } = event;
-  const target = event.target ?? { type: 'organization' as const, id: organizationId };
+  const { action, actor, target, detail } = event;
+  const organizationId = target.type === 'organization' ? target.id : target.organizationId;
 
   await transaction
     .insertInto('auditEvent')

@@ -66,7 +66,7 @@ describe('a valid name', () => {
         expectedAuditEvent({
           action: 'organization.created',
           actorUserId: creator.actor.userId,
-          organizationId,
+          target: { type: 'organization', id: organizationId },
         }),
       ]);
     });

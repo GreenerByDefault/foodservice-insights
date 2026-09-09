@@ -39,8 +39,7 @@ export async function requestCancellation(
     await recordAuditEvent(transaction, {
       action: 'report.cancel_requested',
       actor,
-      organizationId,
-      target: { type: 'report', id: report.id },
+      target: { type: 'report', id: report.id, organizationId },
     });
   });
 }

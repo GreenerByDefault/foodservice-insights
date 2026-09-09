@@ -12,7 +12,7 @@ describe('recordAuditEvent', () => {
       await recordAuditEvent(transaction, {
         action: 'organization.renamed',
         actor: { userId: admin.id },
-        organizationId: organization.id,
+        target: { type: 'organization', id: organization.id },
       });
 
       // Spelled out rather than built with `expectedAuditEvent`: this is the test that pins the
@@ -39,8 +39,7 @@ describe('recordAuditEvent', () => {
       await recordAuditEvent(transaction, {
         action: 'report.deleted',
         actor: { userId: admin.id },
-        organizationId: organization.id,
-        target: { type: 'report', id: report.id },
+        target: { type: 'report', id: report.id, organizationId: organization.id },
       });
 
       // Spelled out rather than built with `expectedAuditEvent`: this is the test that pins the
@@ -66,7 +65,7 @@ describe('recordAuditEvent', () => {
       await recordAuditEvent(transaction, {
         action: 'organization.renamed',
         actor: { userId: admin.id },
-        organizationId: organization.id,
+        target: { type: 'organization', id: organization.id },
         detail: { role: 'admin' },
       });
 
