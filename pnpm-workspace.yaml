@@ -64,6 +64,13 @@ catalog:
   # keep the range within what `@aws-sdk/client-s3` itself depends on.
   '@smithy/types': ^4.17.0
 
+  # --- Spreadsheets -----------------------------------------------------------
+  read-excel-file: ^9.3.10
+  # Direct because `excel/zip.ts` reads a workbook's central directory itself, to cap the
+  # declared uncompressed size before `read-excel-file` inflates anything. Keep the range
+  # within what `read-excel-file` depends on, so one copy resolves.
+  fflate: ^0.8.3
+
   # --- Validation -------------------------------------------------------------
   valibot: ^1.4.2
 

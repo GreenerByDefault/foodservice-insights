@@ -1,0 +1,98 @@
+import { describe, expect, test } from 'vitest';
+import {
+  MAX_UPLOAD_FIELD_MEGABYTES,
+  MAX_WORKBOOK_UNPACKED_BYTES,
+  MAX_WORKBOOK_UNPACKED_MEGABYTES,
+} from '../limits.ts';
+import type { RejectedUploadRecord } from '../rejection.ts';
+import type { WorkbookFault } from './convert.ts';
+import { describeOversizeConversion, describeWorkbookFault, withSheetHint } from './describe.ts';
+
+const FAULT_CASES: [WorkbookFault, RejectedUploadRecord][] = [
+  [
+    { kind: 'xls' },
+    {
+      reason: 'unparseable',
+      summary:
+        'That is an older Excel (.xls) file, which we cannot read. In Excel, choose File → Save As → Excel Workbook (.xlsx) and upload that.',
+      rejectionDetail: 'signature matched xls',
+    },
+  ],
+  [
+    { kind: 'not-a-workbook' },
+    {
+      reason: 'unparseable',
+      summary:
+        'That file is neither a CSV nor an Excel workbook. Save it as CSV (comma separated values) and upload it again.',
+      rejectionDetail: 'no spreadsheet signature',
+    },
+  ],
+  [
+    { kind: 'corrupt' },
+    {
+      reason: 'unparseable',
+      summary:
+        'We could not open that Excel file — it looks damaged. Open it in Excel, save a fresh copy, and upload that instead.',
+      rejectionDetail: 'workbook could not be unzipped or parsed',
+    },
+  ],
+  [
+    { kind: 'too-large-unpacked', declaredBytes: 999_000_000 },
+    {
+      reason: 'too_large',
+      summary: `That Excel file holds more than we can open — its sheets unpack to over ${MAX_WORKBOOK_UNPACKED_MEGABYTES}MB. Delete the sheets you don't need, or save just your orders as CSV.`,
+      rejectionDetail: `declared 999000000 bytes of XML, cap ${MAX_WORKBOOK_UNPACKED_BYTES}`,
+    },
+  ],
+  [{ kind: 'no-data' }, { reason: 'empty', summary: 'That Excel file has no rows in it.' }],
+];
+
+describe('describeWorkbookFault', () => {
+  test.for(FAULT_CASES)('describes %s', ([fault, expected]) => {
+    expect(describeWorkbookFault(fault)).toEqual(expected);
+  });
+});
+
+describe('describeOversizeConversion', () => {
+  test('names the size the user cannot see', () => {
+    expect(describeOversizeConversion(35_651_584)).toEqual({
+      reason: 'too_large',
+      summary: `Converted to CSV, your workbook comes to 34MB — more than the ${MAX_UPLOAD_FIELD_MEGABYTES}MB we can accept.`,
+      rejectionDetail: '35651584 bytes of converted CSV',
+    });
+  });
+
+  test('rounds up, so a file barely over the cap does not read as exactly the cap', () => {
+    const barelyOver = MAX_UPLOAD_FIELD_MEGABYTES * 1024 * 1024 + 1;
+
+    expect(describeOversizeConversion(barelyOver).summary).toBe(
+      `Converted to CSV, your workbook comes to 10.1MB — more than the ${MAX_UPLOAD_FIELD_MEGABYTES}MB we can accept.`,
+    );
+  });
+});
+
+describe('withSheetHint', () => {
+  const rejection: RejectedUploadRecord = {
+    reason: 'bad_columns',
+    summary: 'Your file needs a column for weight.',
+    rejectionDetail: 'missing column(s): weight',
+  };
+
+  test('says which sheet was read and which others held data', () => {
+    expect(withSheetHint(rejection, { name: 'Notes', others: ['Orders', 'Lookup'] })).toEqual({
+      ...rejection,
+      summary:
+        'Your file needs a column for weight. We read the first sheet, "Notes". Your workbook also has "Orders" and "Lookup" — move the sheet with your orders first, or delete the ones you don\'t need.',
+    });
+  });
+
+  test('names a single other sheet without a list', () => {
+    expect(withSheetHint(rejection, { name: 'Notes', others: ['Orders'] }).summary).toBe(
+      'Your file needs a column for weight. We read the first sheet, "Notes". Your workbook also has "Orders" — move the sheet with your orders first, or delete the ones you don\'t need.',
+    );
+  });
+
+  test('leaves a rejection alone when there was no other sheet to have read', () => {
+    expect(withSheetHint(rejection, { name: 'Orders', others: [] })).toEqual(rejection);
+  });
+});

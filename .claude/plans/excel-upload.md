@@ -46,6 +46,29 @@ that shape; none of it is optional infrastructure to add later.
 
 Once adopted with `/plan-adopt`, this file belongs at `.claude/plans/excel-upload.md`.
 
+`apps/web/src/lib/reports/excel/` is also done: `convert.ts` exports `convertWorkbook(bytes)` —
+no options parameter, since `MAX_WORKBOOK_UNPACKED_BYTES` from `limits.ts` is the only cap there
+is — returning `WorkbookConversion` (`{ ok: true; csv; sheet: ChosenSheet }` or `{ ok: false;
+fault: WorkbookFault }`); `zip.ts`'s `declaredXmlBytes` returns `{ ok: true; xmlBytes } | { ok:
+false; fault: 'unreadable-directory' }` rather than throwing, so `convert.ts` maps that failure to
+`{ kind: 'corrupt' }` itself; `describe.ts` covers every `WorkbookFault` and exports
+`describeOversizeConversion` and `withSheetHint` unchanged from the decisions table.
+`limits.ts` also grew `MAX_WORKBOOK_UNPACKED_MEGABYTES`, which `describe.ts` needs for the
+too-large-unpacked sentence (`MAX_UPLOAD_FIELD_MEGABYTES` already existed for the same reason on
+the CSV side). `excel/index.ts` re-exports the public surface.
+
+Both the fixture-building test helper and the real-file fixtures ended up different from what
+this plan first proposed. `excel/testing/workbook.ts` holds `aWorkbook`; the bit-twiddling that
+proves the unpacked cap is enforced without inflating anything moved to its own
+`excel/testing/archive.ts` (`aWorkbookDeclaring`), reading and rewriting a zip central directory's
+declared sizes directly — a good split, since it needs none of `aWorkbook`'s XML templating.
+`excel/testing/fixtures/` holds two files (`openpyxl-orders.xlsx`, `openpyxl-notes-first.xlsx`),
+both written by Python's `openpyxl` rather than saved from Excel/Sheets/LibreOffice as first
+proposed — no access to those applications from here, and an independent OOXML writer with no
+relation to `read-excel-file` still catches what a hand-built file cannot. If a real
+Excel-or-equivalent fixture turns out to matter later, adding one is free — `fixtures.test.ts`
+already reads whatever lands in that directory.
+
 ## Library: `read-excel-file`, via its `universal` entry
 
 Reading `.xlsx` for real means shared strings, rich-text runs, inline strings, formulas' cached
@@ -101,62 +124,7 @@ switch the converter to a sync unzip of our own).
 | Main thread | Conversion runs where `normalizeCsv` already runs, behind the same `setTimeout` yield in `upload-form.svelte` | The library parses in `setTimeout(0)` chunks. **Open:** moving conversion + normalization into a Web Worker is the fix for jank on big files, for both formats at once |
 | Bundle | Static import | No dynamic-import precedent in `apps/web`; `sideEffects: false` and ~60KB minified is tolerable. A lazy import when `PK` bytes are seen is a one-line follow-up if it matters |
 
-## PR 1 — `excel/`: a workbook into the CSV `normalizeCsv` reads
-
-Pure code with tests; nothing calls it yet. All isomorphic (the same header line as `csv/`).
-
-- Dependencies: `read-excel-file` and `fflate` in a new `# --- Spreadsheets ---` catalog block
-  (`fflate`'s comment: direct because `excel/zip.ts` reads the central directory; keep the range
-  inside `read-excel-file`'s). Both `devDependencies` of `apps/web`, like every other
-  browser-only library there. Add to `minimumReleaseAgeExclude` only if `pnpm install` refuses
-  the version. Verify at install that `read-excel-file/universal` resolves its types under
-  `moduleResolution: bundler`; if not, a local `.d.ts` shim in `excel/`. Also read `unzipSync` to
-  confirm what `fflate` does when a payload inflates past its declared size, and state it in
-  `zip.ts`'s comment — the cap is a *declared*-size check.
-- `apps/web/src/lib/reports/excel/zip.ts`: `declaredXmlBytes(bytes): number` via `unzipSync` with an
-  always-`false` filter that sums `originalSize` for `.xml`/`.xml.rels` entries (the same entries
-  the library inflates). Throws the library-independent `WorkbookFault` on a malformed directory.
-- `excel/convert.ts`: `convertWorkbook(bytes: Uint8Array, options?: { maxUnpackedBytes?: number })
-  : Promise<WorkbookConversion>` with
-  `{ ok: true; csv: Uint8Array; sheet: { name: string; others: readonly string[] } } | { ok: false; fault: WorkbookFault }`.
-  Steps, in precedence order like `normalize.ts`: signature (`spreadsheetSignature`; `xls` → fault)
-  → `declaredXmlBytes` cap → `readExcelFile(bytes.buffer)` from `read-excel-file/universal` → first
-  sheet with rows, `others` = the rest with rows → render rows per the decisions table (text via
-  `escapeCsvField`) → `TextEncoder`. `InvalidInputError` codes and `InvalidSpreadsheetError` map to
-  faults; anything else rethrows.
-  `WorkbookFault = { kind: 'xls' } | { kind: 'not-a-workbook' } | { kind: 'corrupt' } | { kind: 'too-large-unpacked'; declaredBytes: number } | { kind: 'no-data' }`.
-- `excel/describe.ts`: `describeWorkbookFault(fault): RejectedUploadRecord` — the only file with
-  sentences about workbooks, using the existing `RejectedUploadReason` values (`unparseable`,
-  `too_large`, `empty`); `describeOversizeConversion(byteSize)` for a CSV past `MAX_UPLOAD_FIELD_BYTES`;
-  `withSheetHint(rejection, sheet)` appends the hint sentence (uses `listOf` from
-  `csv/describe/text.ts`). `excel/index.ts` re-exports.
-- `excel/testing/workbook.ts`: `aWorkbook({ sheets: [{ name, rows }], date1904? })` assembles a
-  minimal `.xlsx` with `fflate.zipSync` from XML template strings — `[Content_Types].xml`,
-  `_rels/.rels`, `xl/workbook.xml`, `xl/_rels/workbook.xml.rels`, `xl/styles.xml` (built-in date
-  style 14, one custom `dd/mm/yyyy`, one time-only), `xl/sharedStrings.xml` when asked,
-  `xl/worksheets/sheetN.xml`. A cell is `string | number | boolean | null |
-  { date: '2026-01-05' } | { formula: 'B2*2'; cached: 25 } | { error: '#N/A' } | { rich: ['a','b'] }`,
-  so every edge case reads inline like the CSV tests do. `excel/testing/fixtures/*.xlsx`: three tiny
-  synthetic workbooks saved from Excel for Mac, Google Sheets and LibreOffice — the repo's first
-  binary fixtures, read with `node:fs` in the node tier only, there to catch what a hand-built
-  file cannot.
-- Tests: `zip.test.ts` (sums, ignores non-XML, malformed directory); `convert.test.ts` (each cell
-  kind; date by built-in id, by custom format, in 1904; a date-time keeps only the day; shared vs
-  inline vs rich strings; formula cached value; error cell → empty; interior blank row → empty
-  line and the header on Excel row 3 is `headerLine: 3` once normalized; first-sheet choice and
-  `others`; an empty workbook; `.xls` bytes; a zip with no workbook; a corrupt zip; a
-  17-digit formula result renders at 15; the unpacked cap via a small `maxUnpackedBytes`, and a
-  cap test that *proves nothing was inflated*: a zip whose central directory declares an
-  oversize entry over a garbage payload must come back `too-large-unpacked`, since inflating it
-  would have produced `corrupt`; two entries each just under the cap together exceed it);
-  `describe.test.ts` (one case per fault, `toEqual`); the parity test — the integration point
-  AGENTS.md says to test — asserts `normalizeCsv(convertWorkbook(aWorkbook(rows)).csv)` equals
-  `normalizeCsv` of the same rows written as CSV, both for an accepted file (months and bytes) and
-  for a file with a bad weight on Excel row 7 below two blank rows (the same `rowProblems`, with
-  `ranges: [{ start: 7, end: 7 }]` — this is what proves line = Excel row); the three real fixtures
-  normalize ok.
-
-## PR 2 — The form accepts a workbook
+## PR 1 — The form accepts a workbook
 
 - `inspect-file.ts`: after the size and empty checks, `spreadsheetSignature(bytes)`: `'xls'` →
   `describeWorkbookFault({ kind: 'xls' })`; `'xlsx'` → `convertWorkbook`, fault → describe; then

@@ -21,6 +21,7 @@ const UNPACKED_MARGIN = 2.5;
  */
 export const MAX_WORKBOOK_UNPACKED_BYTES =
   MAX_UPLOAD_FIELD_BYTES * XML_TO_CSV_EXPANSION * UNPACKED_MARGIN;
+export const MAX_WORKBOOK_UNPACKED_MEGABYTES = MAX_WORKBOOK_UNPACKED_BYTES / 1024 / 1024;
 
 /** Caps on the free text and the metadata an upload carries. */
 export const MAX_FREE_TEXT_LENGTH = 200;
