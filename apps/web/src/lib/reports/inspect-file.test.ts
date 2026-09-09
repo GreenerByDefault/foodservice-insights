@@ -58,6 +58,7 @@ describe('inspectFile', () => {
       unitSystem: 'lb',
       monthlyCounts: JSON.stringify({ '2026-01': 1 }),
       file: aFile(text),
+      workbook: null,
     });
 
     if (inspection.ok) throw new Error('expected a rejection');

@@ -24,6 +24,13 @@ export default interface InputFileTable {
   isModified: ColumnType<boolean, boolean, boolean>;
 
   createdAt: ColumnType<Date, Date | string | undefined, Date | string>;
+
+  /** The original .xlsx as uploaded, when there was one. Stored as received and never parsed by any service — every zip and XML risk stays in the uploader's own browser tab. */
+  workbookStorageKey: ColumnType<string | null, string | null, string | null>;
+
+  workbookByteSize: ColumnType<number | null, number | null, number | null>;
+
+  workbookChecksumSha256: ColumnType<unknown | null, unknown | null, unknown | null>;
 }
 
 export type InputFile = Selectable<InputFileTable>;

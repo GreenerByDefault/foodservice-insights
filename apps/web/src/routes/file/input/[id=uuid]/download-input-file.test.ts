@@ -47,6 +47,42 @@ describe('_downloadInputFile', () => {
     });
   });
 
+  test('redirects to the workbook, not the CSV, when the input file has one', async () => {
+    await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
+      const report = await insertReport(transaction, { organizationId });
+      const inputFileId = newInputFileId();
+      const workbook = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
+      const stored = await putInputFile(
+        store,
+        { organizationId, reportId: report.id, inputFileId },
+        { original: CSV, normalized: CSV, workbook },
+      );
+      await transaction
+        .insertInto('inputFile')
+        .values({
+          id: inputFileId,
+          reportId: report.id,
+          storageKey: stored.storageKey,
+          byteSize: stored.byteSize,
+          contentType: stored.contentType,
+          originalFilename: 'procurement.xlsx',
+          checksumSha256: stored.checksumSha256,
+          isModified: stored.isModified,
+          workbookStorageKey: stored.workbook?.storageKey,
+          workbookByteSize: stored.workbook?.byteSize,
+          workbookChecksumSha256: stored.workbook?.checksumSha256,
+        })
+        .execute();
+
+      const response = await _downloadInputFile(transaction, store, inputFileId);
+      const location = response.headers.get('location') ?? '';
+      const download = await fetch(location);
+
+      expect(new Uint8Array(await download.arrayBuffer())).toEqual(workbook);
+      expect(download.headers.get('content-disposition')).toContain('procurement.xlsx');
+    });
+  });
+
   describe('404s for', () => {
     test('a file that does not exist', async () => {
       await withOrganizationFixtures(async ({ transaction, store }) => {

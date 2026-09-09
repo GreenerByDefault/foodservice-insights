@@ -6,6 +6,7 @@
  *     /report/{report_id}
  *         /input/{input_file_id}.csv
  *         /input/{input_file_id}-original.csv
+ *         /input/{input_file_id}.xlsx
  *         /analysis-attempt/{analysis_attempt_id}
  *             /result/{result_file_id}.{ext}
  * ```
@@ -37,6 +38,10 @@ export const NORMALIZED_CSV_CONTENT_TYPE = 'text/csv';
  */
 export const OPAQUE_CSV_CONTENT_TYPE = 'application/octet-stream';
 
+/** The one Excel content type, so a workbook's own storage and a `result_file` xlsx agree on it. */
+export const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
 /** How each kind of result file is stored.
  *
  * Keyed by the database's own `result_file_kind`, so the `kind` written to `result_file` and the
@@ -44,10 +49,7 @@ export const OPAQUE_CSV_CONTENT_TYPE = 'application/octet-stream';
  */
 export const RESULT_FILE_FORMATS = {
   pdf: { extension: 'pdf', contentType: 'application/pdf' },
-  xlsx: {
-    extension: 'xlsx',
-    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  },
+  xlsx: { extension: 'xlsx', contentType: XLSX_CONTENT_TYPE },
 } as const satisfies Record<ResultFileKind, { extension: string; contentType: string }>;
 
 /** The trailing slash is load-bearing: `deletePrefix` matches the string, not path segments, so
@@ -92,6 +94,23 @@ export function originalInputFileKey(ids: {
     ids.reportId,
     'input',
     `${ids.inputFileId}-original.csv`,
+  );
+}
+
+/** The original workbook, when the upload was one. Only ever sized, sniffed, hashed and stored —
+ * see `input_file.workbook_storage_key`'s column comment.
+ */
+export function workbookInputFileKey(ids: {
+  organizationId: OrganizationId;
+  reportId: ReportId;
+  inputFileId: InputFileId;
+}): string {
+  return organizationScoped(
+    ids.organizationId,
+    'report',
+    ids.reportId,
+    'input',
+    `${ids.inputFileId}.xlsx`,
   );
 }
 

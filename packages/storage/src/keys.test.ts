@@ -15,6 +15,7 @@ import {
   RESULT_FILE_FORMATS,
   rejectedUploadKey,
   resultFileKey,
+  workbookInputFileKey,
 } from './keys.ts';
 
 // Readable stand-ins for real ids, so a golden string shows which id landed in which segment.
@@ -34,6 +35,14 @@ const EVERY_KEY: ReadonlyArray<[string, string]> = [
   [
     'input file',
     normalizedInputFileKey({
+      organizationId: ORGANIZATION_ID,
+      reportId: REPORT_ID,
+      inputFileId: INPUT_FILE_ID,
+    }),
+  ],
+  [
+    'workbook',
+    workbookInputFileKey({
       organizationId: ORGANIZATION_ID,
       reportId: REPORT_ID,
       inputFileId: INPUT_FILE_ID,
@@ -79,6 +88,16 @@ describe('the layout', () => {
         inputFileId: INPUT_FILE_ID,
       }),
     ).toBe('org/organization-1/report/report-1/input/input-file-1-original.csv');
+  });
+
+  test('puts the workbook alongside the normalized input file', () => {
+    expect(
+      workbookInputFileKey({
+        organizationId: ORGANIZATION_ID,
+        reportId: REPORT_ID,
+        inputFileId: INPUT_FILE_ID,
+      }),
+    ).toBe('org/organization-1/report/report-1/input/input-file-1.xlsx');
   });
 
   test('puts a result file under the attempt that produced it', () => {

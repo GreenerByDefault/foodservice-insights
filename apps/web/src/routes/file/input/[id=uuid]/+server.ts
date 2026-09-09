@@ -21,7 +21,11 @@ export async function _downloadInputFile(
       db
         .selectFrom('inputFile')
         .innerJoin('report', 'report.id', 'inputFile.reportId')
-        .select(['inputFile.storageKey', 'inputFile.originalFilename'])
+        .select([
+          'inputFile.storageKey',
+          'inputFile.workbookStorageKey',
+          'inputFile.originalFilename',
+        ])
         .where('inputFile.id', '=', fileId)
         .where('report.deletedAt', 'is', null)
         .executeTakeFirst(),
@@ -30,5 +34,10 @@ export async function _downloadInputFile(
 
   if (!file) error(404, { message: 'That file is not available.' });
 
-  return await redirectToSignedUrl(store, file.storageKey, file.originalFilename);
+  // The workbook the user uploaded, not the CSV they never saw, when there was one.
+  return await redirectToSignedUrl(
+    store,
+    file.workbookStorageKey ?? file.storageKey,
+    file.originalFilename,
+  );
 }

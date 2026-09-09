@@ -13,9 +13,13 @@ function aSubmission(overrides: Partial<RawSubmission> = {}): RawSubmission {
     unitSystem: 'lb',
     monthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
     file: new File([CSV], 'procurement.csv', { type: 'text/csv' }),
+    workbook: null,
     ...overrides,
   };
 }
+
+// Only the signature matters to `validateSubmission` — it never opens the workbook.
+const WORKBOOK_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
 
 describe('validateSubmission', () => {
   test('accepts a well-formed submission', async () => {
@@ -170,6 +174,59 @@ describe('validateSubmission', () => {
   });
 });
 
+describe('a workbook', () => {
+  function aSubmissionWithWorkbook(
+    workbook: File,
+    overrides: Partial<RawSubmission> = {},
+  ): RawSubmission {
+    return aSubmission({
+      file: new File([CSV], 'procurement.csv', { type: 'text/csv' }),
+      workbook,
+      ...overrides,
+    });
+  }
+
+  test('is accepted and carried alongside the converted CSV', async () => {
+    const outcome = await validateSubmission(
+      aSubmissionWithWorkbook(new File([WORKBOOK_BYTES], 'procurement.xlsx')),
+    );
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      file: { originalFilename: 'procurement.xlsx', variants: { workbook: WORKBOOK_BYTES } },
+    });
+  });
+
+  test("the workbook's name takes precedence over the converted CSV's", async () => {
+    const outcome = await validateSubmission(
+      aSubmissionWithWorkbook(new File([WORKBOOK_BYTES], 'procurement.xlsx'), {
+        file: new File([CSV], 'orders.csv', { type: 'text/csv' }),
+      }),
+    );
+
+    expect(outcome).toMatchObject({ ok: true, file: { originalFilename: 'procurement.xlsx' } });
+  });
+
+  test('an oversized workbook is refused, without reading its bytes', async () => {
+    const oversized = new File(['x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1)], 'big.xlsx');
+
+    const outcome = await validateSubmission(aSubmissionWithWorkbook(oversized));
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      rejection: { reason: 'too_large', rejectionDetail: `${MAX_UPLOAD_FIELD_BYTES + 1} bytes` },
+    });
+  });
+
+  test('bytes that do not start with PK are refused', async () => {
+    const notAWorkbook = new File([new Uint8Array([0, 1, 2, 3])], 'procurement.xlsx');
+
+    const outcome = await validateSubmission(aSubmissionWithWorkbook(notAWorkbook));
+
+    expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'unparseable' } });
+  });
+});
+
 /** One byte over the cap. */
 function anOversizedFile(name: string): File {
   return new File(['x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1)], name);
@@ -203,6 +260,7 @@ describe('readSubmission', () => {
       unitSystem: null,
       monthlyCounts: null,
       file: null,
+      workbook: null,
     });
   });
 
@@ -212,5 +270,13 @@ describe('readSubmission', () => {
     form.set(FIELD.file, new File([], '', { type: 'application/octet-stream' }));
 
     expect(readSubmission(form).file).toBeNull();
+  });
+
+  test('reads the workbook field alongside the converted CSV', () => {
+    const form = new FormData();
+    form.set(FIELD.file, new File([CSV], 'procurement.csv', { type: 'text/csv' }));
+    form.set(FIELD.workbook, new File([WORKBOOK_BYTES], 'procurement.xlsx'));
+
+    expect(readSubmission(form).workbook).toBeInstanceOf(File);
   });
 });

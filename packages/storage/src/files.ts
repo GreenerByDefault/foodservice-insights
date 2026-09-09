@@ -23,6 +23,8 @@ import {
   RESULT_FILE_FORMATS,
   rejectedUploadKey,
   resultFileKey,
+  workbookInputFileKey,
+  XLSX_CONTENT_TYPE,
 } from './keys.ts';
 import { putObject } from './objects.ts';
 
@@ -38,25 +40,37 @@ export type StoredFile = {
   checksumSha256: Uint8Array;
 };
 
-export type InputFileVariants = { original: Uint8Array; normalized: Uint8Array };
+export type InputFileVariants = {
+  original: Uint8Array;
+  normalized: Uint8Array;
+  /** The original workbook, when the upload was one. Stored under its own key alongside the
+   * normalized CSV; the server never opens it — see `putInputFile`'s doc comment. */
+  workbook?: Uint8Array;
+};
 
-export type StoredInputFile = StoredFile & { isModified: boolean };
+export type StoredInputFile = StoredFile & { isModified: boolean; workbook?: StoredFile };
 
+/** Store an upload's normalized CSV, its original bytes where they differ, and its workbook where
+ * there was one — three keys written in parallel, none opened or interpreted here.
+ */
 export async function putInputFile(
   store: BlobStore,
   ids: { organizationId: OrganizationId; reportId: ReportId; inputFileId: InputFileId },
   variants: InputFileVariants,
 ): Promise<StoredInputFile> {
   const isModified = Buffer.compare(variants.original, variants.normalized) !== 0;
-  const [stored] = await Promise.all([
+  const [stored, , workbook] = await Promise.all([
     storeFile(store, normalizedInputFileKey(ids), variants.normalized, NORMALIZED_CSV_CONTENT_TYPE),
     isModified
       ? putObject(store, originalInputFileKey(ids), variants.original, {
           contentType: OPAQUE_CSV_CONTENT_TYPE,
         })
       : Promise.resolve(),
+    variants.workbook
+      ? storeFile(store, workbookInputFileKey(ids), variants.workbook, XLSX_CONTENT_TYPE)
+      : Promise.resolve(undefined),
   ]);
-  return { ...stored, isModified };
+  return { ...stored, isModified, ...(workbook && { workbook }) };
 }
 
 export async function putResultFile(

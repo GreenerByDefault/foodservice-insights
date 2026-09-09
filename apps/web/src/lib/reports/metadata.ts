@@ -15,6 +15,7 @@ export const FIELD = {
   unitSystem: 'unit-system',
   monthlyCounts: 'monthly-counts',
   file: 'file',
+  workbook: 'workbook',
 } as const;
 
 export const COUNTS_BASES = exhaustiveArray<CountsBasis>()(['people', 'meals']);

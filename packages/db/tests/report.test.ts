@@ -152,6 +152,82 @@ describe('input_file', () => {
     await expectConstraintViolation(insert, 'input_file_checksum_sha256_length');
   });
 
+  describe('workbook', () => {
+    test('accepts a workbook with all three columns set', async () => {
+      await withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        const inputFile = await insertInputFile(transaction, {
+          reportId: report.id,
+          workbook: {},
+        });
+
+        expect(inputFile.workbookStorageKey).not.toBeNull();
+        expect(inputFile.workbookByteSize).not.toBeNull();
+        expect(inputFile.workbookChecksumSha256).not.toBeNull();
+      });
+    });
+
+    test('rejects a workbook with only some of its three columns set', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        await transaction
+          .insertInto('inputFile')
+          .values({
+            reportId: report.id,
+            storageKey: `org/test/${crypto.randomUUID()}.csv`,
+            byteSize: 1024,
+            contentType: 'text/csv',
+            originalFilename: 'procurement.csv',
+            checksumSha256: aChecksum(),
+            isModified: false,
+            workbookStorageKey: `org/test/${crypto.randomUUID()}.xlsx`,
+            // workbookByteSize and workbookChecksumSha256 left unset.
+          })
+          .execute();
+      });
+
+      await expectConstraintViolation(insert, 'input_file_workbook_all_or_none');
+    });
+
+    test('rejects a byte size that is not positive', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        await insertInputFile(transaction, {
+          reportId: report.id,
+          workbook: { byteSize: 0 },
+        });
+      });
+
+      await expectConstraintViolation(insert, 'input_file_workbook_byte_size_positive');
+    });
+
+    test('rejects a checksum that is not 32 bytes', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        await insertInputFile(transaction, {
+          reportId: report.id,
+          workbook: { checksumSha256: Buffer.from('too short') },
+        });
+      });
+
+      await expectConstraintViolation(insert, 'input_file_workbook_checksum_sha256_length');
+    });
+
+    test('rejects a storage key that is already taken', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const storageKey = `org/test/${crypto.randomUUID()}.xlsx`;
+        await insertInputFile(transaction, { workbook: { storageKey } });
+        await insertInputFile(transaction, { workbook: { storageKey } });
+      });
+
+      await expectConstraintViolation(
+        insert,
+        'input_file_workbook_storage_key_key',
+        POSTGRES_CODE_UNIQUE_VIOLATION,
+      );
+    });
+  });
+
   test('rejects an empty file', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction);

@@ -690,8 +690,14 @@ CREATE TABLE IF NOT EXISTS "public"."input_file" (
     "checksum_sha256" "bytea" NOT NULL,
     "is_modified" boolean NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "workbook_storage_key" "text",
+    "workbook_byte_size" integer,
+    "workbook_checksum_sha256" "bytea",
     CONSTRAINT "input_file_byte_size_positive" CHECK (("byte_size" > 0)),
-    CONSTRAINT "input_file_checksum_sha256_length" CHECK (("octet_length"("checksum_sha256") = 32))
+    CONSTRAINT "input_file_checksum_sha256_length" CHECK (("octet_length"("checksum_sha256") = 32)),
+    CONSTRAINT "input_file_workbook_all_or_none" CHECK (((("workbook_storage_key" IS NULL) = ("workbook_byte_size" IS NULL)) AND (("workbook_byte_size" IS NULL) = ("workbook_checksum_sha256" IS NULL)))),
+    CONSTRAINT "input_file_workbook_byte_size_positive" CHECK ((("workbook_byte_size" IS NULL) OR ("workbook_byte_size" > 0))),
+    CONSTRAINT "input_file_workbook_checksum_sha256_length" CHECK ((("workbook_checksum_sha256" IS NULL) OR ("octet_length"("workbook_checksum_sha256") = 32)))
 );
 
 
@@ -702,6 +708,13 @@ ALTER TABLE "public"."input_file" OWNER TO "postgres";
 --
 
 COMMENT ON COLUMN "public"."input_file"."is_modified" IS 'Whether storage_key holds bytes the user did not send. When true, the upload as received is at the same key suffixed -original, which no row references. When false, storage_key is it.';
+
+
+--
+-- Name: COLUMN "input_file"."workbook_storage_key"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."input_file"."workbook_storage_key" IS 'The original .xlsx as uploaded, when there was one. Stored as received and never parsed by any service — every zip and XML risk stays in the uploader''s own browser tab.';
 
 
 --
@@ -919,6 +932,14 @@ ALTER TABLE ONLY "public"."input_file"
 
 ALTER TABLE ONLY "public"."input_file"
     ADD CONSTRAINT "input_file_storage_key_key" UNIQUE ("storage_key");
+
+
+--
+-- Name: input_file input_file_workbook_storage_key_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."input_file"
+    ADD CONSTRAINT "input_file_workbook_storage_key_key" UNIQUE ("workbook_storage_key");
 
 
 --

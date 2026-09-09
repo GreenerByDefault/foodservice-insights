@@ -6,7 +6,7 @@ import { newInputFileId, newResultFileId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { BLOB_STORE } from './env.ts';
 import { putInputFile, putRejectedUpload, putResultFile } from './files.ts';
-import { organizationPrefix, originalInputFileKey } from './keys.ts';
+import { organizationPrefix, originalInputFileKey, workbookInputFileKey } from './keys.ts';
 import { deletePrefix, getObject, headObject, listObjectKeys } from './objects.ts';
 import { withTemporaryOrganization } from './testing/organizations.ts';
 
@@ -20,6 +20,9 @@ const NORMALIZED_CSV = new TextEncoder().encode(
 );
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
+
+// A real xlsx is a zip; only the signature matters here, since putInputFile never opens it.
+const WORKBOOK = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
 
 function aReportId(): ReportId {
   return crypto.randomUUID() as ReportId;
@@ -127,6 +130,44 @@ describe('putInputFile', () => {
       });
     });
   });
+
+  describe('workbook', () => {
+    test('is absent when the upload carried none, and writes no object for it', async () => {
+      await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
+        const ids = { organizationId, reportId: aReportId(), inputFileId: newInputFileId() };
+        const stored = await putInputFile(BLOB_STORE, ids, {
+          original: ORIGINAL_CSV,
+          normalized: ORIGINAL_CSV,
+        });
+
+        expect(stored.workbook).toBeUndefined();
+        expect(await listObjectKeys(BLOB_STORE, organizationPrefix(organizationId))).toEqual([
+          stored.storageKey,
+        ]);
+      });
+    });
+
+    test('is stored at its own key, under the xlsx content type, alongside the CSV', async () => {
+      await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
+        const ids = { organizationId, reportId: aReportId(), inputFileId: newInputFileId() };
+        const stored = await putInputFile(BLOB_STORE, ids, {
+          original: ORIGINAL_CSV,
+          normalized: ORIGINAL_CSV,
+          workbook: WORKBOOK,
+        });
+
+        expect(stored.workbook).toMatchObject({
+          storageKey: workbookInputFileKey(ids),
+          byteSize: WORKBOOK.byteLength,
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        expect(await getObject(BLOB_STORE, stored.workbook?.storageKey ?? '')).toEqual(WORKBOOK);
+        expect(await headObject(BLOB_STORE, stored.workbook?.storageKey ?? '')).toMatchObject({
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+      });
+    });
+  });
 });
 
 describe('putResultFile', () => {
@@ -204,7 +245,7 @@ describe('deleting an organization', () => {
         await putInputFile(
           BLOB_STORE,
           { organizationId: doomed, reportId, inputFileId: newInputFileId() },
-          { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
+          { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV, workbook: WORKBOOK },
         );
         await putResultFile(
           BLOB_STORE,
@@ -223,7 +264,7 @@ describe('deleting an organization', () => {
           { original: ORIGINAL_CSV, normalized: ORIGINAL_CSV },
         );
 
-        expect(await deletePrefix(BLOB_STORE, organizationPrefix(doomed))).toBe(3);
+        expect(await deletePrefix(BLOB_STORE, organizationPrefix(doomed))).toBe(4);
 
         expect(await listObjectKeys(BLOB_STORE, organizationPrefix(doomed))).toEqual([]);
         expect(await listObjectKeys(BLOB_STORE, organizationPrefix(kept))).toEqual([

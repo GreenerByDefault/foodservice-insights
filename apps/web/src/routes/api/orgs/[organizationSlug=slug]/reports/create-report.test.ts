@@ -34,6 +34,7 @@ type SubmissionOverrides = {
   unitSystem?: string | null;
   monthlyCounts?: string | null;
   file?: File | null;
+  workbook?: File | null;
 };
 
 /** The multipart request the upload form posts. */
@@ -45,6 +46,7 @@ function createUploadRequest(overrides: SubmissionOverrides = {}): Request {
     unitSystem: 'lb',
     monthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
     file: new File([RAW_CSV], 'procurement.csv', { type: 'text/csv' }),
+    workbook: null,
     ...overrides,
   };
 
@@ -161,6 +163,38 @@ describe('a valid upload', () => {
         expect(inputFile.storageKey.startsWith(`org/${organizationId}/`)).toBe(true);
       },
     );
+  });
+
+  describe('with a workbook', () => {
+    const WORKBOOK = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
+
+    test('writes the row and the object both', async () => {
+      await withOrganizationFixtures(
+        async ({ transaction, store, organizationId, organizationSlug, adminUserId }) => {
+          const response = await _createReport(
+            transaction,
+            store,
+            { organizationId, organizationSlug, userId: adminUserId },
+            createUploadRequest({ workbook: new File([WORKBOOK], 'procurement.xlsx') }),
+          );
+          const { reportId } = (await response.json()) as { reportId: ReportId };
+
+          const inputFile = await transaction
+            .selectFrom('inputFile')
+            .selectAll()
+            .where('reportId', '=', reportId)
+            .executeTakeFirstOrThrow();
+          expect(inputFile).toMatchObject({
+            originalFilename: 'procurement.xlsx',
+            workbookByteSize: WORKBOOK.byteLength,
+          });
+          expect(Buffer.from(inputFile.workbookChecksumSha256 as Uint8Array)).toHaveLength(32);
+
+          const workbookBytes = await getObject(store, inputFile.workbookStorageKey as string);
+          expect(workbookBytes).toEqual(WORKBOOK);
+        },
+      );
+    });
   });
 });
 
