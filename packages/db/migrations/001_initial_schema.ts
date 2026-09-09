@@ -434,16 +434,37 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
     .addColumn('checksum_sha256', 'bytea', (column) => column.notNull())
     .addColumn('is_modified', 'boolean', (column) => column.notNull())
     .addColumn('created_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
+    .addColumn('workbook_storage_key', 'text', (column) => column.unique())
+    .addColumn('workbook_byte_size', 'integer')
+    .addColumn('workbook_checksum_sha256', 'bytea')
     .addCheckConstraint('input_file_byte_size_positive', sql`byte_size > 0`)
     .addCheckConstraint(
       'input_file_checksum_sha256_length',
       sql`octet_length(checksum_sha256) = 32`,
+    )
+    .addCheckConstraint(
+      'input_file_workbook_all_or_none',
+      sql`(workbook_storage_key IS NULL) = (workbook_byte_size IS NULL)
+          AND (workbook_byte_size IS NULL) = (workbook_checksum_sha256 IS NULL)`,
+    )
+    .addCheckConstraint(
+      'input_file_workbook_byte_size_positive',
+      sql`workbook_byte_size IS NULL OR workbook_byte_size > 0`,
+    )
+    .addCheckConstraint(
+      'input_file_workbook_checksum_sha256_length',
+      sql`workbook_checksum_sha256 IS NULL OR octet_length(workbook_checksum_sha256) = 32`,
     )
     .execute();
 
   await sql`
     COMMENT ON COLUMN input_file.is_modified IS
       'Whether storage_key holds bytes the user did not send. When true, the upload as received is at the same key suffixed -original, which no row references. When false, storage_key is it.'
+  `.execute(database);
+
+  await sql`
+    COMMENT ON COLUMN input_file.workbook_storage_key IS
+      'The original .xlsx as uploaded, when there was one. Stored as received and never parsed by any service — every zip and XML risk stays in the uploader''s own browser tab.'
   `.execute(database);
 
   // `input_file.report_id` is UNIQUE; this closes the other half of "exactly one" — a report with

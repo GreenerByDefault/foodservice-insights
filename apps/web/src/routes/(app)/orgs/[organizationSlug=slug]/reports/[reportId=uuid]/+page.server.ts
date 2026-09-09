@@ -103,6 +103,7 @@ type ReportRow = {
   inputFileId: InputFileId;
   inputFileOriginalFilename: string;
   inputFileByteSize: number;
+  inputFileWorkbookByteSize: number | null;
   attemptId: AnalysisAttemptId;
   attemptNumber: number;
   status: AnalysisAttemptStatus;
@@ -150,6 +151,7 @@ export async function _loadReport(
       'inputFile.id as inputFileId',
       'inputFile.originalFilename as inputFileOriginalFilename',
       'inputFile.byteSize as inputFileByteSize',
+      'inputFile.workbookByteSize as inputFileWorkbookByteSize',
       'analysisAttempt.id as attemptId',
       'analysisAttempt.attemptNumber as attemptNumber',
       'analysisAttempt.status as status',
@@ -187,7 +189,8 @@ export async function _loadReport(
     inputFile: {
       href: inputFileHref(row.inputFileId),
       originalFilename: row.inputFileOriginalFilename,
-      byteSize: row.inputFileByteSize,
+      // The download this links to serves the workbook, not the normalized CSV, when there was one.
+      byteSize: row.inputFileWorkbookByteSize ?? row.inputFileByteSize,
     },
     attempt: await toAttempt(db, row, params.supportEmail),
     now: row.now,

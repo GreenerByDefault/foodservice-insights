@@ -12,10 +12,14 @@ function aSubmission(overrides: Partial<RawSubmission> = {}): RawSubmission {
     countsBasis: 'people',
     unitSystem: 'lb',
     monthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
-    file: new File([CSV], 'procurement.csv', { type: 'text/csv' }),
+    csvFile: new File([CSV], 'procurement.csv', { type: 'text/csv' }),
+    workbook: null,
     ...overrides,
   };
 }
+
+// Only the signature matters to `validateSubmission` — it never opens the workbook.
+const WORKBOOK_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
 
 describe('validateSubmission', () => {
   test('accepts a well-formed submission', async () => {
@@ -50,7 +54,7 @@ describe('validateSubmission', () => {
 
   test('truncates an absurd filename rather than rejecting it', async () => {
     const outcome = await validateSubmission(
-      aSubmission({ file: new File([CSV], `${'x'.repeat(500)}.csv`, { type: 'text/csv' }) }),
+      aSubmission({ csvFile: new File([CSV], `${'x'.repeat(500)}.csv`, { type: 'text/csv' }) }),
     );
 
     expect(outcome).toMatchObject({ ok: true, file: { originalFilename: 'x'.repeat(255) } });
@@ -59,8 +63,13 @@ describe('validateSubmission', () => {
   describe('rejects', () => {
     test.for([
       // A file rejection has no metadata field to name, so `field` is null for those rows.
-      ['no file at all', { file: null }, 'other', null],
-      ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty', null],
+      ['no file at all', { csvFile: null }, 'other', null],
+      [
+        'an empty file',
+        { csvFile: new File([], 'empty.csv', { type: 'text/csv' }) },
+        'empty',
+        null,
+      ],
       // Content rules for each metadata field belong to `ReportMetadataSchema`, covered by
       // metadata.test.ts. This one case just proves a metadata rejection is wired through.
       ['a missing report name', { name: null }, 'invalid_metadata', 'name'],
@@ -77,7 +86,9 @@ describe('validateSubmission', () => {
     });
 
     test('a file over the size cap, reported before its content is read', async () => {
-      const outcome = await validateSubmission(aSubmission({ file: anOversizedFile('big.csv') }));
+      const outcome = await validateSubmission(
+        aSubmission({ csvFile: anOversizedFile('big.csv') }),
+      );
 
       expect(outcome).toMatchObject({
         ok: false,
@@ -103,7 +114,7 @@ describe('validateSubmission', () => {
     // This is only that the pipeline is wired in.
     test('a file the CSV pipeline refuses', async () => {
       const outcome = await validateSubmission(
-        aSubmission({ file: new File(['product,date\nbeef,2026-01-05\n'], 'no-weight.csv') }),
+        aSubmission({ csvFile: new File(['product,date\nbeef,2026-01-05\n'], 'no-weight.csv') }),
       );
 
       expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'bad_columns' } });
@@ -135,13 +146,13 @@ describe('validateSubmission', () => {
   });
 
   test('has nothing to keep when no file arrived', async () => {
-    const outcome = await validateSubmission(aSubmission({ file: null }));
+    const outcome = await validateSubmission(aSubmission({ csvFile: null }));
 
     expect(outcome).toMatchObject({ ok: false, fileDescription: null, bytes: null });
   });
 
   test('describes an oversized file without reading it', async () => {
-    const outcome = await validateSubmission(aSubmission({ file: anOversizedFile('big.csv') }));
+    const outcome = await validateSubmission(aSubmission({ csvFile: anOversizedFile('big.csv') }));
 
     expect(outcome).toMatchObject({
       ok: false,
@@ -152,7 +163,7 @@ describe('validateSubmission', () => {
 
   test('reports a file problem before a metadata one', async () => {
     const outcome = await validateSubmission(
-      aSubmission({ file: new File([], 'empty.csv'), countsBasis: 'guesses' }),
+      aSubmission({ csvFile: new File([], 'empty.csv'), countsBasis: 'guesses' }),
     );
 
     expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'empty' } });
@@ -162,11 +173,56 @@ describe('validateSubmission', () => {
     const outcome = await validateSubmission(
       aSubmission({
         countsBasis: 'guesses',
-        file: new File(['product,date\nbeef,2026-01-05\n'], 'no-weight.csv'),
+        csvFile: new File(['product,date\nbeef,2026-01-05\n'], 'no-weight.csv'),
       }),
     );
 
     expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'invalid_metadata' } });
+  });
+});
+
+describe('a workbook', () => {
+  function aSubmissionWithWorkbook(
+    workbook: File,
+    overrides: Partial<RawSubmission> = {},
+  ): RawSubmission {
+    return aSubmission({
+      csvFile: new File([CSV], 'procurement.csv', { type: 'text/csv' }),
+      workbook,
+      ...overrides,
+    });
+  }
+
+  test('is accepted, carried alongside the converted CSV, and its name takes precedence', async () => {
+    const outcome = await validateSubmission(
+      aSubmissionWithWorkbook(new File([WORKBOOK_BYTES], 'procurement.xlsx'), {
+        csvFile: new File([CSV], 'orders.csv', { type: 'text/csv' }),
+      }),
+    );
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      file: { originalFilename: 'procurement.xlsx', variants: { workbook: WORKBOOK_BYTES } },
+    });
+  });
+
+  test('an oversized workbook is refused, without reading its bytes', async () => {
+    const oversized = new File(['x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1)], 'big.xlsx');
+
+    const outcome = await validateSubmission(aSubmissionWithWorkbook(oversized));
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      rejection: { reason: 'too_large', rejectionDetail: `${MAX_UPLOAD_FIELD_BYTES + 1} bytes` },
+    });
+  });
+
+  test('bytes that do not start with PK are refused', async () => {
+    const notAWorkbook = new File([new Uint8Array([0, 1, 2, 3])], 'procurement.xlsx');
+
+    const outcome = await validateSubmission(aSubmissionWithWorkbook(notAWorkbook));
+
+    expect(outcome).toMatchObject({ ok: false, rejection: { reason: 'unparseable' } });
   });
 });
 
@@ -183,7 +239,7 @@ describe('readSubmission', () => {
     form.set(FIELD.countsBasis, 'meals');
     form.set(FIELD.unitSystem, 'kg');
     form.set(FIELD.monthlyCounts, '{"2026-01":1}');
-    form.set(FIELD.file, new File([CSV], 'procurement.csv', { type: 'text/csv' }));
+    form.set(FIELD.csvFile, new File([CSV], 'procurement.csv', { type: 'text/csv' }));
 
     expect(readSubmission(form)).toMatchObject({
       name: 'Q1 procurement',
@@ -191,7 +247,7 @@ describe('readSubmission', () => {
       countsBasis: 'meals',
       unitSystem: 'kg',
       monthlyCounts: '{"2026-01":1}',
-      file: expect.any(File),
+      csvFile: expect.any(File),
     });
   });
 
@@ -202,15 +258,24 @@ describe('readSubmission', () => {
       countsBasis: null,
       unitSystem: null,
       monthlyCounts: null,
-      file: null,
+      csvFile: null,
+      workbook: null,
     });
   });
 
   test('reads an untouched file input as no file', () => {
     // What a browser submits for `<input type="file">` that the user never opened.
     const form = new FormData();
-    form.set(FIELD.file, new File([], '', { type: 'application/octet-stream' }));
+    form.set(FIELD.csvFile, new File([], '', { type: 'application/octet-stream' }));
 
-    expect(readSubmission(form).file).toBeNull();
+    expect(readSubmission(form).csvFile).toBeNull();
+  });
+
+  test('reads the workbook field alongside the converted CSV', () => {
+    const form = new FormData();
+    form.set(FIELD.csvFile, new File([CSV], 'procurement.csv', { type: 'text/csv' }));
+    form.set(FIELD.workbook, new File([WORKBOOK_BYTES], 'procurement.xlsx'));
+
+    expect(readSubmission(form).workbook).toBeInstanceOf(File);
   });
 });

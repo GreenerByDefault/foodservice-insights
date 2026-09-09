@@ -23,7 +23,7 @@ describe('inspectFile', () => {
     await expect(inspectFile(file)).resolves.toEqual({
       ok: true,
       months: ['2026-01', '2026-03'],
-      upload: { file },
+      upload: { csvFile: file },
     });
   });
 
@@ -57,7 +57,8 @@ describe('inspectFile', () => {
       countsBasis: 'people',
       unitSystem: 'lb',
       monthlyCounts: JSON.stringify({ '2026-01': 1 }),
-      file: aFile(text),
+      csvFile: aFile(text),
+      workbook: null,
     });
 
     if (inspection.ok) throw new Error('expected a rejection');

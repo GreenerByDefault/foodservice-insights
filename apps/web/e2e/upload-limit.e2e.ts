@@ -29,7 +29,7 @@ function submission(csv: string) {
     'counts-basis': 'people',
     'unit-system': 'kg',
     'monthly-counts': JSON.stringify({ '2026-01': 120 }),
-    file: { name: 'procurement.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) },
+    'csv-file': { name: 'procurement.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) },
   };
 }
 

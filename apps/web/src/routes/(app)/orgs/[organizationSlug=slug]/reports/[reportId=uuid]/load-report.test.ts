@@ -139,6 +139,22 @@ describe('a report the caller may see', () => {
     });
   });
 
+  test("inputFile.byteSize is the workbook's, not the normalized CSV's, when there was one", async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const report = await insertReport(transaction, { organizationId: organization.id });
+      await insertInputFile(transaction, {
+        reportId: report.id,
+        workbook: { byteSize: 4096 },
+      });
+      await insertAnalysisAttempt(transaction, { reportId: report.id });
+
+      const data = await loadReport(transaction, organization, report.id);
+
+      expect(data.inputFile.byteSize).toBe(4096);
+    });
+  });
+
   test('report.siteName is passed through when set', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization, report } = await anOrgAndReport(transaction, {

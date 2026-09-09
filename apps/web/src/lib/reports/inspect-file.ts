@@ -12,7 +12,7 @@ import type { MonthsFromFile } from './metadata.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
 export type FileInspection =
-  | { ok: true; months: MonthsFromFile; upload: { file: File; workbook?: File } }
+  | { ok: true; months: MonthsFromFile; upload: { csvFile: File; workbook?: File } }
   | { ok: false; rejection: RejectedUploadRecord };
 
 export async function inspectFile(file: File): Promise<FileInspection> {
@@ -31,5 +31,5 @@ export async function inspectFile(file: File): Promise<FileInspection> {
   const csv = normalizeCsv(bytes);
   if (!csv.ok) return { ok: false, rejection: csv.rejection };
 
-  return { ok: true, months: csv.months, upload: { file } };
+  return { ok: true, months: csv.months, upload: { csvFile: file } };
 }

@@ -33,7 +33,8 @@ type SubmissionOverrides = {
   countsBasis?: string | null;
   unitSystem?: string | null;
   monthlyCounts?: string | null;
-  file?: File | null;
+  csvFile?: File | null;
+  workbook?: File | null;
 };
 
 /** The multipart request the upload form posts. */
@@ -44,7 +45,8 @@ function createUploadRequest(overrides: SubmissionOverrides = {}): Request {
     countsBasis: 'people',
     unitSystem: 'lb',
     monthlyCounts: JSON.stringify({ '2026-01': 120, '2026-02': 135 }),
-    file: new File([RAW_CSV], 'procurement.csv', { type: 'text/csv' }),
+    csvFile: new File([RAW_CSV], 'procurement.csv', { type: 'text/csv' }),
+    workbook: null,
     ...overrides,
   };
 
@@ -162,6 +164,38 @@ describe('a valid upload', () => {
       },
     );
   });
+
+  describe('with a workbook', () => {
+    const WORKBOOK = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
+
+    test('writes the row and the object both', async () => {
+      await withOrganizationFixtures(
+        async ({ transaction, store, organizationId, organizationSlug, adminUserId }) => {
+          const response = await _createReport(
+            transaction,
+            store,
+            { organizationId, organizationSlug, userId: adminUserId },
+            createUploadRequest({ workbook: new File([WORKBOOK], 'procurement.xlsx') }),
+          );
+          const { reportId } = (await response.json()) as { reportId: ReportId };
+
+          const inputFile = await transaction
+            .selectFrom('inputFile')
+            .selectAll()
+            .where('reportId', '=', reportId)
+            .executeTakeFirstOrThrow();
+          expect(inputFile).toMatchObject({
+            originalFilename: 'procurement.xlsx',
+            workbookByteSize: WORKBOOK.byteLength,
+          });
+          expect(Buffer.from(inputFile.workbookChecksumSha256 as Uint8Array)).toHaveLength(32);
+
+          const workbookBytes = await getObject(store, inputFile.workbookStorageKey as string);
+          expect(workbookBytes).toEqual(WORKBOOK);
+        },
+      );
+    });
+  });
 });
 
 describe('a rejected upload', () => {
@@ -198,10 +232,10 @@ describe('a rejected upload', () => {
   }
 
   test.for([
-    ['an empty file', { file: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty'],
+    ['an empty file', { csvFile: new File([], 'empty.csv', { type: 'text/csv' }) }, 'empty'],
     ['a counts basis outside the enum', { countsBasis: 'guesses' }, 'invalid_metadata'],
     ['monthly counts that are not JSON', { monthlyCounts: '{oops' }, 'invalid_metadata'],
-    ['no file at all', { file: null }, 'other'],
+    ['no file at all', { csvFile: null }, 'other'],
   ] as const)('answers 400 and records %s', async ([, overrides, reason]) => {
     const { refusal, recorded, reports } = await reject(overrides);
 
@@ -240,7 +274,7 @@ describe('a rejected upload', () => {
   });
 
   test('leaves the file columns null when no file arrived', async () => {
-    const { recorded } = await reject({ file: null });
+    const { recorded } = await reject({ csvFile: null });
 
     expect(recorded).toMatchObject({
       inputFileStorageKey: null,
@@ -261,7 +295,7 @@ describe('a rejected upload', () => {
       type: 'text/csv',
     });
 
-    const { refusal, recorded } = await reject({ file: oversized });
+    const { refusal, recorded } = await reject({ csvFile: oversized });
 
     expect(refusal).toMatchObject({ status: 400 });
     expect(recorded).toMatchObject({

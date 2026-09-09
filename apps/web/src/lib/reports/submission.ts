@@ -12,7 +12,11 @@ import { readFile, readText } from '$lib/forms/form-data';
 import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
 import { describeUnreadableFile } from './csv/describe/index.ts';
 import { normalizeCsv } from './csv/normalize.ts';
-import { MAX_ORIGINAL_FILENAME_LENGTH, MAX_UPLOAD_FIELD_BYTES } from './limits.ts';
+import {
+  MAX_ORIGINAL_FILENAME_LENGTH,
+  MAX_UPLOAD_FIELD_BYTES,
+  MAX_UPLOAD_FIELD_MEGABYTES,
+} from './limits.ts';
 import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
 import { monthsWithoutCounts } from './monthly-coverage.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
@@ -24,7 +28,10 @@ export type RawSubmission = {
   countsBasis: string | null;
   unitSystem: string | null;
   monthlyCounts: string | null;
-  file: File | null;
+  csvFile: File | null;
+  /** The original workbook, present only when the browser converted one to `csvFile` — see
+   * `inspect-file.ts`. */
+  workbook: File | null;
 };
 
 export type FileDescription = {
@@ -52,13 +59,14 @@ export function readSubmission(form: FormData): RawSubmission {
     countsBasis: readText(form, FIELD.countsBasis),
     unitSystem: readText(form, FIELD.unitSystem),
     monthlyCounts: readText(form, FIELD.monthlyCounts),
-    file: readFile(form, FIELD.file),
+    csvFile: readFile(form, FIELD.csvFile),
+    workbook: readFile(form, FIELD.workbook),
   };
 }
 
 /** Decide whether `raw` becomes a report. */
 export async function validateSubmission(raw: RawSubmission): Promise<ValidatedSubmission> {
-  if (!raw.file) {
+  if (!raw.csvFile) {
     return {
       ok: false,
       fileDescription: null,
@@ -72,9 +80,10 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
   }
 
   const fileDescription: FileDescription = {
-    // Truncate long file names rather than reject them.
-    originalFilename: raw.file.name.slice(0, MAX_ORIGINAL_FILENAME_LENGTH),
-    byteSize: raw.file.size,
+    // The workbook's name when there was one — it's what the user chose and what the report page
+    // shows. Truncate long file names rather than reject them.
+    originalFilename: (raw.workbook ?? raw.csvFile).name.slice(0, MAX_ORIGINAL_FILENAME_LENGTH),
+    byteSize: raw.csvFile.size,
   };
 
   if (fileDescription.byteSize > MAX_UPLOAD_FIELD_BYTES) {
@@ -87,7 +96,44 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     };
   }
 
-  const bytes = new Uint8Array(await raw.file.arrayBuffer());
+  // The server only sizes, sniffs, hashes and stores the workbook — it never opens it. Every zip
+  // and XML risk stays in the uploader's own browser tab, which is what actually converted this
+  // workbook to the CSV in `raw.csvFile`. Doing anything more with these bytes here is a security
+  // regression; see ARCHITECTURE.md § Input file upload.
+  let workbookBytes: Uint8Array | undefined;
+  if (raw.workbook) {
+    if (raw.workbook.size > MAX_UPLOAD_FIELD_BYTES) {
+      return {
+        ok: false,
+        fileDescription,
+        bytes: null,
+        rejection: {
+          reason: 'too_large',
+          summary: `That workbook is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`,
+          rejectionDetail: `${raw.workbook.size} bytes`,
+        },
+      };
+    }
+
+    workbookBytes = new Uint8Array(await raw.workbook.arrayBuffer());
+    // Every zip, `.xlsx` included, starts with these two bytes. That's all we check: telling an
+    // `.xlsx` from an `.xls` or a corrupt archive is the browser's job, done before this ever
+    // reached us — see `signatures.ts`.
+    if (workbookBytes[0] !== 0x50 || workbookBytes[1] !== 0x4b) {
+      return {
+        ok: false,
+        fileDescription,
+        bytes: null,
+        rejection: {
+          reason: 'unparseable',
+          summary: "That doesn't look like an Excel workbook.",
+          rejectionDetail: 'workbook bytes did not start with PK',
+        },
+      };
+    }
+  }
+
+  const bytes = new Uint8Array(await raw.csvFile.arrayBuffer());
 
   if (bytes.byteLength === 0) {
     return {
@@ -126,7 +172,14 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
 
   return {
     ok: true,
-    file: { ...fileDescription, variants: { original: bytes, normalized: csv.normalized } },
+    file: {
+      ...fileDescription,
+      variants: {
+        original: bytes,
+        normalized: csv.normalized,
+        ...(workbookBytes && { workbook: workbookBytes }),
+      },
+    },
     metadata: parsed.output,
   };
 }

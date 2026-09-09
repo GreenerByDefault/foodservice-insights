@@ -173,6 +173,11 @@ async function insertReport(
       originalFilename: input.file.originalFilename,
       checksumSha256: input.stored.checksumSha256,
       isModified: input.stored.isModified,
+      ...(input.stored.workbook && {
+        workbookStorageKey: input.stored.workbook.storageKey,
+        workbookByteSize: input.stored.workbook.byteSize,
+        workbookChecksumSha256: input.stored.workbook.checksumSha256,
+      }),
     })
     .execute();
 
