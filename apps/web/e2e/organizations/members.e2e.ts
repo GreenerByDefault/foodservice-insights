@@ -32,7 +32,7 @@ test('an admin promotes a member to admin, then demotes them back, with no reloa
   expect(loads.count).toBe(0);
 });
 
-test('the sole admin cannot demote their own row, and sees why', async ({
+test('the sole admin demoting their own row is refused, and told how to proceed', async ({
   page,
   organizations,
   user,
@@ -44,8 +44,15 @@ test('the sole admin cannot demote their own row, and sees why', async ({
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  await page.getByRole('button', { name: `Manage ${user.email}` }).click();
+  const ownRow = page.getByRole('listitem').filter({ hasText: user.email });
 
-  await expect(page.getByRole('menuitem', { name: 'Make member' })).toBeDisabled();
-  await expect(page.getByText("You're the only admin")).toBeVisible();
+  await ownRow.getByRole('button', { name: `Manage ${user.email}` }).click();
+  await page.getByRole('menuitem', { name: 'Make member' }).click();
+
+  await expect(
+    page.getByText("You're the only admin. Make someone else an admin first."),
+  ).toBeVisible();
+  // The trigger refused, so the role on screen is unchanged. `exact: true`, or this also matches
+  // the "only admin" in the alert above — `getByText` is a case-insensitive substring match.
+  await expect(ownRow.getByText('Admin', { exact: true })).toBeVisible();
 });

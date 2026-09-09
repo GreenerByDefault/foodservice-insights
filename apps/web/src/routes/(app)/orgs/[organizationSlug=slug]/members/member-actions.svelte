@@ -6,24 +6,16 @@ import type { ActionState } from '$lib/forms/action-state';
 import { changeMemberRole } from '$lib/orgs/api/change-member-role';
 import type { MemberRow } from './+page.server.ts';
 
-/** The per-row "⋯" menu on the Members page. This PR only offers a role change, so it only
- * appears for an admin viewer — see `members-list.svelte`. */
+/** The per-row "⋯" menu on the Members page. */
 interface Props {
   organizationSlug: string;
   member: MemberRow;
-  /** Whether the viewer is the organization's only admin — disables demoting `member` when it's
-   * their own admin row, since the trigger would refuse it anyway. */
-  soleAdmin: boolean;
   onDone: () => Promise<void>;
 }
 
-let { organizationSlug, member, soleAdmin, onDone }: Props = $props();
+let { organizationSlug, member, onDone }: Props = $props();
 
 let actionState = $state<ActionState>({ status: 'idle' });
-
-// `soleAdmin` is only ever true for the viewer's own admin row — there's no other admin left to
-// be the one the trigger would refuse to demote.
-const demoteDisabled = $derived(member.role === 'admin' && soleAdmin);
 
 async function setRole(role: 'admin' | 'member') {
   actionState = { status: 'loading' };
@@ -57,12 +49,11 @@ async function setRole(role: 'admin' | 'member') {
     {#if member.role === 'member'}
       <DropdownMenu.Item onSelect={() => setRole('admin')}>Make admin</DropdownMenu.Item>
     {:else}
-      <DropdownMenu.Item disabled={demoteDisabled} onSelect={() => setRole('member')}>
-        Make member
-      </DropdownMenu.Item>
-      {#if demoteDisabled}
-        <DropdownMenu.Label>You're the only admin</DropdownMenu.Label>
-      {/if}
+      <!-- Live even for the last admin's own row, where it can only fail: the refusal answers
+           with a sentence naming the way out, where a disabled item would only be a dead end.
+           Pre-disabling would also duplicate the trigger's rule and still race a concurrent
+           demotion. -->
+      <DropdownMenu.Item onSelect={() => setRole('member')}>Make member</DropdownMenu.Item>
     {/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

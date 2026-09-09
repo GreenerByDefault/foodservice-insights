@@ -35,7 +35,7 @@ describe('MembersList', () => {
       viewerRole: 'member',
     });
 
-    await expect.element(screen.getByText('no-name@example.test').first()).toBeVisible();
+    await expect.element(screen.getByText('no-name@example.test')).toBeVisible();
   });
 
   test('labels an admin', async () => {

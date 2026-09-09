@@ -20,7 +20,6 @@ function aMember(overrides: Partial<MemberRow> = {}): MemberRow {
 async function opened(props: {
   organizationSlug: string;
   member: MemberRow;
-  soleAdmin: boolean;
   onDone: () => Promise<void>;
 }) {
   const screen = await render(MemberActions, props);
@@ -33,7 +32,6 @@ describe('MemberActions', () => {
     const screen = await opened({
       organizationSlug: 'org-1',
       member: aMember({ role: 'member' }),
-      soleAdmin: false,
       onDone: vi.fn(),
     });
 
@@ -43,28 +41,27 @@ describe('MemberActions', () => {
       .not.toBeInTheDocument();
   });
 
-  test('an admin row offers Make member, enabled, when not the sole admin', async () => {
+  test('an admin row offers Make member only', async () => {
     const screen = await opened({
       organizationSlug: 'org-1',
       member: aMember({ role: 'admin' }),
-      soleAdmin: false,
+      onDone: vi.fn(),
+    });
+
+    await expect.element(screen.getByRole('menuitem', { name: 'Make member' })).toBeInTheDocument();
+    await expect
+      .element(screen.getByRole('menuitem', { name: 'Make admin' }))
+      .not.toBeInTheDocument();
+  });
+
+  test('the last admin’s own row offers Make member live, for the trigger to refuse', async () => {
+    const screen = await opened({
+      organizationSlug: 'org-1',
+      member: aMember({ role: 'admin', isYou: true }),
       onDone: vi.fn(),
     });
 
     await expect.element(screen.getByRole('menuitem', { name: 'Make member' })).toBeEnabled();
-    await expect.element(screen.getByText("You're the only admin")).not.toBeInTheDocument();
-  });
-
-  test('the sole admin’s own row disables Make member and shows why', async () => {
-    const screen = await opened({
-      organizationSlug: 'org-1',
-      member: aMember({ role: 'admin', isYou: true }),
-      soleAdmin: true,
-      onDone: vi.fn(),
-    });
-
-    await expect.element(screen.getByRole('menuitem', { name: 'Make member' })).toBeDisabled();
-    await expect.element(screen.getByText("You're the only admin")).toBeVisible();
   });
 
   test('promoting PATCHes the member with role admin, then calls onDone', async () => {
@@ -74,7 +71,6 @@ describe('MemberActions', () => {
     const screen = await opened({
       organizationSlug: 'org-1',
       member,
-      soleAdmin: false,
       onDone,
     });
 
@@ -97,7 +93,6 @@ describe('MemberActions', () => {
     const screen = await opened({
       organizationSlug: 'org-1',
       member: aMember({ role: 'admin' }),
-      soleAdmin: false,
       onDone,
     });
 
@@ -114,7 +109,6 @@ describe('MemberActions', () => {
     const screen = await opened({
       organizationSlug: 'org-1',
       member: aMember({ role: 'member' }),
-      soleAdmin: false,
       onDone: vi.fn(),
     });
 
