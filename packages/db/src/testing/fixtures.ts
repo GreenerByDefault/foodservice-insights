@@ -94,12 +94,22 @@ export async function insertAppUserWithEmail(
   return { id: user.id, email: email as string };
 }
 
-/** An organization and the admin it must have. Anything else would fail its deferred trigger. */
+/** An organization and the admin it must have. Anything else would fail its deferred trigger.
+ *
+ * `adminUserId` names an existing user to admin it, for a caller that has one already — a browser
+ * test's signed-in identity, say. Left out, a disposable admin is created here. */
 export async function insertOrganization(
   database: DatabaseExecutor,
-  overrides: { name?: string; slug?: string } = {},
+  overrides: { name?: string; slug?: string; adminUserId?: AppUser['id'] } = {},
 ): Promise<{ organization: Organization; admin: AppUser }> {
-  const admin = await insertAppUser(database);
+  const admin =
+    overrides.adminUserId === undefined
+      ? await insertAppUser(database)
+      : await database
+          .selectFrom('appUser')
+          .selectAll()
+          .where('id', '=', overrides.adminUserId)
+          .executeTakeFirstOrThrow();
 
   const organization = await database
     .insertInto('organization')

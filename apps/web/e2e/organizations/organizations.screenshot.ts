@@ -1,18 +1,17 @@
 /** The switcher and `/orgs` both show *every* organization the signed-in user belongs to, with
- * no `/orgs/<id>` of their own to scope a fixture to — unlike every other screenshot in this
+ * no `/orgs/<slug>` of their own to scope a fixture to — unlike every other screenshot in this
  * suite, which renders inside one dedicated organization (see `reports-list.screenshot.ts`). And
- * every spec shares one identity (`identifyUser` always returns the placeholder user), so what
- * shows up here is whatever else is committed for that user at the moment this test happens to
- * run — including the seeded placeholder organization itself, `"Phase One Foodservice"`.
+ * every spec shares one identity (`identifyUser` always returns one seeded user), so what shows
+ * up here is whatever else is committed for that user at the moment this test happens to run —
+ * every concurrent spec's own `org` included.
  *
  * The fix is the same one `_loadSwitcherOrganizations`/`_loadAllOrganizations` already rely on
  * for their own unit tests: give these organizations a name that sorts ahead of anything an
  * ordinary fixture would use. Every other organization in this suite has a letter-led name (a
- * human-readable one, `Test org <uuid>`, or the seeded placeholder), so no letter can promise
- * "always first" — some other name, present or future, is free to start earlier in the alphabet.
- * A leading digit can promise that, since it sorts before every letter, so these are named like a
- * real digit-led foodservice chain — `"24/7 …"` — rather than with a bare, test-only-looking
- * prefix.
+ * human-readable one, or `Test org <uuid>`), so no letter can promise "always first" — some other
+ * name, present or future, is free to start earlier in the alphabet. A leading digit can promise
+ * that, since it sorts before every letter, so these are named like a real digit-led foodservice
+ * chain — `"24/7 …"` — rather than with a bare, test-only-looking prefix.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -49,7 +48,7 @@ test('the full switcher, past the cap', async ({ page, organizations }) => {
   await page.goto(`/orgs/${current.slug}`);
   await ensureHydrated(page);
 
-  // `role: 'member'` above now does double duty: besides keeping the placeholder from being
+  // `role: 'member'` above now does double duty: besides keeping the signed-in user from being
   // these organizations' sole member, this is the only committed image proving a member's nav
   // has two tabs, not three.
   await page.getByRole('button', { name: 'Switch organization' }).click();

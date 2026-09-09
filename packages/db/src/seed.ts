@@ -1,10 +1,12 @@
 /** The one user and organization the app runs as until Supabase Auth lands.
  *
- * Phase 1 has no sign-in, so these rows stand in for whoever would have been authenticated. When
- * auth arrives, delete this file along with `scripts/seed-identity.ts`, the `seed:identity` task
- * in `turbo.json`, the call to `seedPlaceholderIdentity` in `packages/browser-testing/src/test-run.ts`,
- * and the stand-in body of `identifyUser` in `apps/web/src/lib/server/auth/identify.ts`. Nothing
- * else should refer to these constants.
+ * Phase 1 has no sign-in, so these rows stand in for whoever would have been authenticated. `pnpm
+ * seed:identity` writes them for a dev database; the browser suites take only the user's id and
+ * address, and build their own organizations (`packages/browser-testing/src/identity.ts`).
+ *
+ * When auth arrives, delete this file along with `scripts/seed-identity.ts`, the `seed:identity`
+ * task in `turbo.json`, and the stand-in body of `identifyUser` in
+ * `apps/web/src/lib/server/auth/identify.ts`. Nothing else should refer to these constants.
  */
 
 import type { DatabaseExecutor } from './schema.ts';

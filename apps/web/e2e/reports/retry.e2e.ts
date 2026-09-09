@@ -18,6 +18,7 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
   page,
   reports,
   db,
+  org,
 }) => {
   // Installed before navigation so it is in place before the retry re-arms the page's timer.
   await page.clock.install();
@@ -26,7 +27,7 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
   // screenshot, which collides with a concurrent run of this test. 'failed-retried' still has
   // attempts to spare, so retry behaves the same either way.
   const reportId = await reports.create('failed-retried');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

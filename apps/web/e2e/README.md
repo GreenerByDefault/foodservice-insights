@@ -19,8 +19,8 @@ other axis: **what part of the product a spec covers.**
 
 | | |
 | --- | --- |
-| `lib/` | Helpers a spec imports. No tests, no side effects at import — except `lib/poll-interval.ts`, which reads `WORKER_MODE` at import, the same caveat `fixtures/test.ts` calls out for `@gbd/db/env`. |
-| `fixtures/` | The report-state catalogue, the dedicated-organization builder, and the extended `test` that commits and cleans up both. |
+| `lib/` | Helpers a spec imports. No tests, no side effects at import — except `lib/poll-interval.ts`, which reads `WORKER_MODE` at import, the same caveat `@gbd/browser-testing/fixtures` calls out for `@gbd/db/env`. |
+| `fixtures/` | The report-state catalogue, the built-to-spec organization builder, and the extended `test` that commits and cleans up both — on top of the shared identity and organization in [`@gbd/browser-testing/fixtures`](../../../packages/browser-testing/src/fixtures.ts). |
 | `setup/` | Getting the containerized browser up, taking it down, and optimizing screenshots afterward. Not tests of the app. |
 | `__screenshots__/` | The committed PNGs, nested to match the spec that captures them, and by viewport. |
 | everything else | Specs, both suites. |
@@ -63,28 +63,41 @@ visual change. Capture screens that carry real visual risk, not every route.
 
 `e2e/fixtures/reports.ts` is the source of truth for what each report state contains.
 
-There's no shared reset: every test mints its own report or organization via the `reports` /
-`organizations` fixture (`e2e/fixtures/test.ts`) and deletes it when it ends, whether it passed or
-failed. A spec that creates one some other way — through the UI, or the API directly — registers
-it with `reports.adopt(id)` / `organizations.adopt(id)` instead, for the same cleanup. Screenshots
-and e2e share the catalogue of states, not any rows, so a behavioural spec is free to mutate what
-it created without affecting another test.
+There's no shared reset. Every test gets its own `org` — a private organization the signed-in
+`user` administers — and it is deleted when the test ends, whether it passed or failed. `report`
+and `organization_member` cascade from it, so anything committed inside goes with it, including a
+report the spec created through the UI or the API rather than through the `reports` fixture. Both
+come from [`@gbd/browser-testing/fixtures`](../../../packages/browser-testing/src/fixtures.ts),
+shared with `tests/e2e`; `identity.ts` beside it is the only place either suite refers to the
+phase-one placeholder user.
 
-A spec that needs to control an organization's *entire* contents — rather than one report of its
-own — grants the placeholder user membership in a second, dedicated organization for the test's
-duration instead. `auth.e2e.ts` no longer assumes the placeholder user belongs to exactly one
-organization, so doing this does not race that spec the way it once did.
+Screenshots and e2e share the catalogue of report states, not any rows, so a behavioural spec is
+free to mutate what it created without affecting another test.
 
-One screen has no fixture that can reach it: an empty `/orgs`, since the placeholder user always
-belongs to at least one organization. `lib/stub-page-data.ts` rewrites the page-data response
-instead — a temporary stand-in for real sign-in, same as `identifyUser`.
+A spec that needs more of an organization than that — a whole list of reports, a roster, a view
+through a non-admin's eyes — asks the `organizations` fixture (`e2e/fixtures/test.ts`) for a
+second one built to a spec, and `organizations.adopt(id)` registers one the UI created for the
+same cleanup.
+
+A screenshot spec that renders the switcher pins `org`'s name with `test.use({ orgName })`, since
+its committed image is diffed pixel-for-pixel. A pinned name is shared across the run rather than
+per-test — `organization_name_unique_ci` is global, and two tests holding one name at once would
+collide — so the spec's tests stay parallel instead of serializing behind it. Pin one only from a
+spec that reads the organization; one that renames it, deletes it, or asserts on the whole of its
+reports list wants `organizations.create` instead.
+
+One screen still has no fixture that can reach it: an empty `/orgs`. Every spec shares one
+identity, so that user belongs to every organization any concurrent test creates.
+`lib/stub-page-data.ts` rewrites the page-data response instead — a temporary stand-in for real
+sign-in, same as `identifyUser`.
 
 ## Pending
 
 `identifyUser` always resolves to one seeded user (see `auth.e2e.ts`) — there's no way yet to
 drive a signed-out request through a real route to see its 401. Add one e2e per row once real
 sign-in lands. An admin-gated route's 403 is already drivable, though: the `organizations` fixture
-can create an org where the placeholder is only a `member` (see `organizations/settings.e2e.ts`).
+can create an org where the signed-in user is only a `member` (see
+`organizations/settings.e2e.ts`).
 
 | Route | Unit coverage today |
 | --- | --- |

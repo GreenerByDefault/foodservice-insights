@@ -14,9 +14,10 @@ import { watchPageLoads } from '../lib/no-reload.ts';
 test('canceling a report from the waiting screen shows the canceled screen, without a reload', async ({
   page,
   reports,
+  org,
 }) => {
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

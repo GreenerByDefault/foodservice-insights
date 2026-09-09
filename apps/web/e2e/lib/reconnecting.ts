@@ -1,4 +1,5 @@
 import { advanceThroughPollFailures, ensureHydrated } from '@gbd/browser-testing';
+import type { TestOrganization } from '@gbd/browser-testing/fixtures';
 import type { Page } from '@playwright/test';
 import { reportUrl } from '../fixtures/reports.ts';
 import type { ReportFactory } from '../fixtures/test.ts';
@@ -15,12 +16,13 @@ import { POLL_INTERVAL_MS } from './poll-interval.ts';
 export async function makeReportUnreachable(
   page: Page,
   reports: ReportFactory,
+  org: TestOrganization,
 ): Promise<{ readonly count: number }> {
   // Installed before navigation so it is in place before the page's own timer is armed on mount.
   await page.clock.install();
 
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

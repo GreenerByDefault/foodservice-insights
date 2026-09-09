@@ -6,9 +6,9 @@
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
-import { PLACEHOLDER_ORGANIZATION_SLUG } from '@gbd/db/seed';
+import { test } from '@gbd/browser-testing/fixtures';
 import { readMailbox } from '@gbd/email/testing';
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 const CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 
@@ -17,19 +17,18 @@ const CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
  * which is the source of truth. */
 const STUB_PDF_MAGIC_BYTES = '%PDF-1.4\n%stub\n';
 
-/** Set by `scripts/test-run.ts`, which points this run's placeholder user at a mailbox no other
- * run sends to. Both tests share it, so match on the subject rather than taking whatever arrives
- * first. */
-const RUN_NOTIFICATION_EMAIL = process.env.RUN_NOTIFICATION_EMAIL ?? '';
-
 /** Long enough for the queue poll, the child, and — for the email — the notification sweep, all at
  * the `stubbed` profile's cadences (`STUBBED_OVERRIDES` in `apps/worker/src/modes.ts`), with room
  * for a loaded CI machine. The page polls itself every second, so nothing here needs a fake clock:
  * these are real waits on a real backend. */
 const LIFECYCLE_TIMEOUT_MS = 60_000;
 
-async function uploadReport(page: Page, reportName: string): Promise<void> {
-  await page.goto(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/new`);
+async function uploadReport(
+  page: Page,
+  organizationSlug: string,
+  reportName: string,
+): Promise<void> {
+  await page.goto(`/orgs/${organizationSlug}/reports/new`);
   await ensureHydrated(page);
 
   await page.getByLabel('Report name').fill(reportName);
@@ -42,16 +41,16 @@ async function uploadReport(page: Page, reportName: string): Promise<void> {
   await page.getByRole('radio', { name: 'lb' }).click();
   await page.getByRole('button', { name: 'Upload report' }).click();
 
-  await expect(page).toHaveURL(
-    new RegExp(`/orgs/${PLACEHOLDER_ORGANIZATION_SLUG}/reports/[0-9a-f-]+$`),
-  );
+  await expect(page).toHaveURL(new RegExp(`/orgs/${organizationSlug}/reports/[0-9a-f-]+$`));
 }
 
 test('a report uploaded through the form is analysed, downloadable, and emailed about', async ({
   page,
+  user,
+  org,
 }) => {
   const reportName = 'Q1 procurement';
-  await uploadReport(page, reportName);
+  await uploadReport(page, org.slug, reportName);
 
   const downloadPdf = page.getByRole('link', { name: 'Download PDF' });
   await expect(downloadPdf).toBeVisible({ timeout: LIFECYCLE_TIMEOUT_MS });
@@ -66,18 +65,20 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
     STUB_PDF_MAGIC_BYTES,
   );
 
+  // The run's identity is pointed at a mailbox no other run sends to (`scripts/test-run.ts`), but
+  // both tests here share it — so match on the subject rather than taking whatever arrives first.
   await expect
-    .poll(
-      async () => (await readMailbox(RUN_NOTIFICATION_EMAIL)).map((message) => message.subject),
-      {
-        timeout: LIFECYCLE_TIMEOUT_MS,
-      },
-    )
+    .poll(async () => (await readMailbox(user.email)).map((message) => message.subject), {
+      timeout: LIFECYCLE_TIMEOUT_MS,
+    })
     .toContain(`Your report is ready: ${reportName}`);
 });
 
-test('a failure the child declares reaches the report page with its own copy', async ({ page }) => {
-  await uploadReport(page, '!fail:unusable-data');
+test('a failure the child declares reaches the report page with its own copy', async ({
+  page,
+  org,
+}) => {
+  await uploadReport(page, org.slug, '!fail:unusable-data');
 
   // Written by the real child as a `failure.json` and parsed by the real parent, rather than a
   // status this test wrote into the database itself.

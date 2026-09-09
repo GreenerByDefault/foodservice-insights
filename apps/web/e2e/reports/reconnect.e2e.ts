@@ -14,8 +14,9 @@ import { makeReportUnreachable } from '../lib/reconnecting.ts';
 test('an unreachable poll leaves the timeline up and shows a reconnecting notice, never a reload', async ({
   page,
   reports,
+  org,
 }) => {
-  const loads = await makeReportUnreachable(page, reports);
+  const loads = await makeReportUnreachable(page, reports, org);
 
   await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
   await expect(page.getByText('You can close this page', { exact: false })).toBeVisible();

@@ -28,7 +28,7 @@ test('a mix of roles and both name shapes, the viewer among them', async ({
   await expect(page.getByText('Priya Shah')).toBeVisible();
   await expect(page.getByText('Ana Ruiz')).toBeVisible();
   await expect(page.getByText('members-screenshot-noname@example.test')).toBeVisible();
-  // The placeholder is this organization's creator and admin, so it's the row naming "You".
+  // The signed-in user is this organization's creator and admin, so it's the row naming "You".
   await expect(page.getByText('(You)')).toBeVisible();
 
   await expectScreenshots(page, 'members.png');

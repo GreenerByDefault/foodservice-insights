@@ -1,6 +1,8 @@
-/** A private organization, for anything that needs to control the *whole* reports list rather
- * than one report inside it — the empty state, pagination, or a screenshot whose contents must be
- * fully known — or that needs the placeholder user in several organizations at once.
+/** A private organization built to a spec — members, invites, a whole list of reports — beyond
+ * the plain one `@gbd/browser-testing/fixtures`' `org` already gives every test. For anything
+ * that needs to control the *whole* reports list rather than one report inside it, that needs to
+ * look at the app through a non-admin's eyes, or that needs the signed-in user in several
+ * organizations at once.
  *
  * Names collide on `organization_name_unique_ci`, so every caller passes its own unique one — a
  * random suffix for a behavioural spec, a fixed name for a screenshot whose committed image
@@ -13,11 +15,11 @@ import type {
   OrganizationInviteStatus,
   OrganizationRole,
   ReportId,
+  UserId,
 } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
-import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { insertAppUser, insertOrganization, insertOrganizationMember } from '@gbd/db/testing';
-import { type Kysely, sql, type Transaction } from 'kysely';
+import { type Kysely, sql } from 'kysely';
 import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
@@ -38,23 +40,23 @@ export type OrganizationInviteSpec = {
   status?: OrganizationInviteStatus;
 };
 
-/** Commit a private organization the placeholder user belongs to — the only identity
- * `identifyUser` can ever produce — with, optionally, its reports. Returns the organization's id
- * and the ids of the reports it minted, in the order given.
+/** Commit a private organization `userId` belongs to, with, optionally, its reports. Returns the
+ * organization's id and the ids of the reports it minted, in the order given.
  *
- * `role` decides who *else* is in it. As an `admin` the placeholder is also the creator and the
- * sole member. As a `member` the organization is created and admin'd by a fresh, disposable user
+ * `role` decides who *else* is in it. As an `admin` the user is also the creator and the sole
+ * member. As a `member` the organization is created and admin'd by a fresh, disposable user
  * instead, which a spec needs whenever it looks at the app through non-admin eyes: a member's
  * view of settings or the roster only proves anything with a real admin sitting elsewhere.
  *
  * Everything commits in one transaction either way. For `member` that is load-bearing rather
  * than tidy: `organization_check_has_member` is `DEFERRABLE INITIALLY DEFERRED`, checked at
  * `COMMIT`, so `insertOrganization`'s own admin-membership insert has to still be uncommitted
- * when the placeholder's runs — two separate auto-committed statements would let the
- * organization row commit with zero members and fail that constraint before this ever adds one.
+ * when this user's runs — two separate auto-committed statements would let the organization row
+ * commit with zero members and fail that constraint before this ever adds one.
  */
 export async function insertOrganizationFixture(
   db: Kysely<Database>,
+  userId: UserId,
   spec: {
     name: string;
     reports?: OrganizationReportSpec[];
@@ -70,12 +72,16 @@ export async function insertOrganizationFixture(
   }
 
   return await withTransaction(db, async (tx) => {
-    const organizationId = await insertOrganizationFor(tx, spec.name, slug, role);
+    const { organization } = await insertOrganization(tx, {
+      name: spec.name,
+      slug,
+      ...(role === 'admin' ? { adminUserId: userId } : {}),
+    });
+    const organizationId = organization.id;
 
-    await tx
-      .insertInto('organizationMember')
-      .values({ userId: PLACEHOLDER_USER_ID, organizationId, role })
-      .execute();
+    if (role === 'member') {
+      await insertOrganizationMember(tx, { organizationId, userId, role });
+    }
 
     const reportIds: ReportId[] = [];
     for (const report of spec.reports ?? []) {
@@ -105,26 +111,6 @@ export async function insertOrganizationFixture(
 
     return { organizationId, organizationSlug: slug, reportIds };
   });
-}
-
-/** The organization row, plus — for `member` — the disposable admin that has to own it. */
-async function insertOrganizationFor(
-  tx: Transaction<Database>,
-  name: string,
-  slug: string,
-  role: OrganizationRole,
-): Promise<OrganizationId> {
-  if (role === 'member') {
-    const { organization } = await insertOrganization(tx, { name, slug });
-    return organization.id;
-  }
-
-  const organization = await tx
-    .insertInto('organization')
-    .values({ name, slug, createdByUserId: PLACEHOLDER_USER_ID })
-    .returning('id')
-    .executeTakeFirstOrThrow();
-  return organization.id;
 }
 
 /** Deletes the organization and everything hanging off it: `organization_member` and `report`

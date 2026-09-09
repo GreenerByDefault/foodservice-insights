@@ -1,6 +1,5 @@
-/** Every image renders in a dedicated organization (`e2e/fixtures/organizations.ts`) so its
- * contents are fully controlled, rather than the shared placeholder organization every other
- * spec is also writing reports into.
+/** Every image renders in an organization built to a spec (`e2e/fixtures/organizations.ts`), so
+ * its whole list of reports is controlled rather than just one report inside it.
  *
  * Timestamp stability follows `e2e/fixtures/reports.ts`'s discipline.
  */

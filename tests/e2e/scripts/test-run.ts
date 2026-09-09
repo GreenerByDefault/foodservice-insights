@@ -20,8 +20,6 @@ import {
   runAgainstFreshStack,
 } from '@gbd/browser-testing/test-run';
 import { findRepoRoot, loadLocalEnv, requireEnv } from '@gbd/core/env';
-import { initializeDatabase, shutdownDatabase } from '@gbd/db';
-import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { aTestEmailAddress } from '@gbd/email/testing';
 import {
   assertDockerIsUsable,
@@ -33,31 +31,6 @@ import {
 
 const REPO_ROOT = findRepoRoot();
 
-/** Route this run's notifications to an address nothing else will send to.
- *
- * `identifyUser` is a phase-one stand-in that always resolves to `PLACEHOLDER_USER_ID`, so every
- * attempt this run creates carries it as `requestedByUserId`, and the worker's notification sweep
- * joins `analysisAttempt -> appUser -> auth.users.email` to find the recipient. Overwriting that
- * one row is therefore what isolates this run's mail. It has to happen here rather than in a spec:
- * Mailpit is shared across concurrent runs and worktrees, `seedPlaceholderIdentity` inserts
- * `ON CONFLICT DO NOTHING` so it leaves the fixed `PLACEHOLDER_USER_EMAIL` in place, and the real
- * worker — unlike the sweep's own tests — never narrows to a candidate list.
- */
-async function useAFreshNotificationAddress(connectionString: string): Promise<string> {
-  const address = aTestEmailAddress('system-e2e');
-  const database = initializeDatabase({ connectionString });
-  try {
-    await database
-      .updateTable('auth.users')
-      .set({ email: address })
-      .where('id', '=', PLACEHOLDER_USER_ID)
-      .execute();
-  } finally {
-    await shutdownDatabase(database);
-  }
-  return address;
-}
-
 /** The worker runs as its own container, not an in-process import: `apps/worker/src/db.ts`,
  * `@gbd/storage/env` and `@gbd/email/env` all read their environment at *import* time, so the
  * run's database and bucket have to be in place before the module graph loads.
@@ -67,8 +40,6 @@ async function useAFreshNotificationAddress(connectionString: string): Promise<s
  * as uid 1001 is one of the things this tier exists to prove.
  */
 async function startServices(stack: FreshStack): Promise<BeforePlaywrightResult> {
-  const notificationEmail = await useAFreshNotificationAddress(stack.connectionString);
-
   // Everything this run creates in Docker is named for `stack.name`, so two worktrees running at
   // once cannot race a shared tag, and one teardown call reaches all of it.
   const containerImages = await buildContainerImages(REPO_ROOT, stack.name);
@@ -80,7 +51,6 @@ async function startServices(stack: FreshStack): Promise<BeforePlaywrightResult>
 
   return {
     env: {
-      RUN_NOTIFICATION_EMAIL: notificationEmail,
       SYSTEM_E2E_WEB_IMAGE: containerImages.web,
       SYSTEM_E2E_WORKER_IMAGE: containerImages.worker,
     },
@@ -106,6 +76,10 @@ async function main(): Promise<void> {
     connectionString: requireEnv('DB_CONNECTION_STRING'),
     s3: blobStoreConfigFromEnv(),
     playwrightBin: resolvePlaywrightBin(import.meta.url),
+    // The worker's notification sweep joins `analysisAttempt -> appUser -> auth.users.email` to
+    // find a recipient, so the run's identity is also the mailbox `report-lifecycle.e2e.ts` reads.
+    // Unique per run, because Mailpit is shared across concurrent runs and worktrees.
+    identityEmail: aTestEmailAddress('system-e2e'),
     playwrightArgs: process.argv.slice(2),
     beforePlaywright: startServices,
   });

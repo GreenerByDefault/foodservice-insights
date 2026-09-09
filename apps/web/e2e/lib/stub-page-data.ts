@@ -2,10 +2,10 @@ import type { Page } from '@playwright/test';
 
 /** Rewrite `/orgs`'s next client-side page-data fetch so its `organizations` array comes back
  * empty — the only way to see that screen. `identifyUser` (`$lib/server/auth/identify.ts`)
- * ignores the request and always resolves to the one seeded placeholder user, who always belongs
- * to at least the seeded organization, and a superadmin's branch reads the whole `organization`
- * table, which the shared test database is never empty of either. No fixture can produce this
- * page; only a stubbed response can.
+ * ignores the request and always resolves to one seeded user, who belongs to every organization
+ * any concurrent spec creates, and a superadmin's branch reads the whole `organization` table,
+ * which the run database is never empty of either. No fixture can produce this page; only a
+ * stubbed response can.
  *
  * **Temporary**, like `identifyUser` itself: once real sign-in lands, drive this screen with a
  * user who genuinely belongs to no organizations, and delete this file.

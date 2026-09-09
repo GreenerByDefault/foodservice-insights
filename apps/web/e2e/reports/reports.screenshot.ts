@@ -5,25 +5,30 @@ import { test } from '../fixtures/test.ts';
 import { makeReportUnreachable } from '../lib/reconnecting.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
-test('a report waiting to start', async ({ page, reports }) => {
+// The switcher renders `org`'s name in every image below, so it is pinned rather than random.
+// Pinning shares one organization across this file's tests, which is what keeps them parallel —
+// see the `orgName` option.
+test.use({ orgName: 'Harbor Point Dining' });
+
+test('a report waiting to start', async ({ page, reports, org }) => {
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.locator('[aria-current="step"]')).toContainText('Waiting to start');
   await expectScreenshots(page, 'pending.png');
 });
 
-test('a report waiting to start, taking longer than usual', async ({ page, reports }) => {
+test('a report waiting to start, taking longer than usual', async ({ page, reports, org }) => {
   const reportId = await reports.create('pending-delayed');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.getByText('It is busier than usual')).toBeVisible();
   await expectScreenshots(page, 'pending-delayed.png');
 });
 
-test('a report being analyzed', async ({ page, reports }) => {
+test('a report being analyzed', async ({ page, reports, org }) => {
   const reportId = await reports.create('processing');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.locator('[aria-current="step"]')).toContainText(
     'Reading your purchases and building your charts',
@@ -31,26 +36,26 @@ test('a report being analyzed', async ({ page, reports }) => {
   await expectScreenshots(page, 'processing.png');
 });
 
-test('a report being analyzed, taking longer than usual', async ({ page, reports }) => {
+test('a report being analyzed, taking longer than usual', async ({ page, reports, org }) => {
   const reportId = await reports.create('processing-delayed');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.getByText('This is taking longer than usual')).toBeVisible();
   await expectScreenshots(page, 'processing-delayed.png');
 });
 
-test('a report that succeeded', async ({ page, reports }) => {
+test('a report that succeeded', async ({ page, reports, org }) => {
   const reportId = await reports.create('succeeded');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   await expect(page.getByText('Finished 3 hours ago.')).toBeVisible();
   await expectScreenshots(page, 'succeeded.png');
 });
 
-test('a report that failed on its first attempt', async ({ page, reports }) => {
+test('a report that failed on its first attempt', async ({ page, reports, org }) => {
   const reportId = await reports.create('failed');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(
     page.getByText('Something on our end interrupted the analysis before it could finish.'),
@@ -61,9 +66,10 @@ test('a report that failed on its first attempt', async ({ page, reports }) => {
 test('a report that failed at the attempt cap, for a reason that would otherwise offer a retry', async ({
   page,
   reports,
+  org,
 }) => {
   const reportId = await reports.create('failed-at-retry-cap');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(
     page.getByText(`You've used all ${MAX_ANALYSIS_ATTEMPTS} attempts for this report.`),
@@ -74,32 +80,32 @@ test('a report that failed at the attempt cap, for a reason that would otherwise
   await expectScreenshots(page, 'failed-at-retry-cap.png');
 });
 
-test('a report that failed on a retried attempt, below the cap', async ({ page, reports }) => {
+test('a report that failed on a retried attempt, below the cap', async ({ page, reports, org }) => {
   const reportId = await reports.create('failed-retried');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.getByText('This was attempt 2.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   await expectScreenshots(page, 'failed-retried.png');
 });
 
-test('a report that was canceled', async ({ page, reports }) => {
+test('a report that was canceled', async ({ page, reports, org }) => {
   const reportId = await reports.create('canceled');
-  await page.goto(reportUrl(reportId));
+  await page.goto(reportUrl(reportId, org.slug));
 
   await expect(page.getByText('Someone stopped this report 2 hours ago.')).toBeVisible();
   await expectScreenshots(page, 'canceled.png');
 });
 
-test('a report whose poll cannot reach the server', async ({ page, reports }) => {
-  await makeReportUnreachable(page, reports);
+test('a report whose poll cannot reach the server', async ({ page, reports, org }) => {
+  await makeReportUnreachable(page, reports, org);
 
   await expect(page.getByText('We lost the connection', { exact: false })).toBeVisible();
   await expectScreenshots(page, 'reconnecting.png');
 });
 
-test('a report that does not exist', async ({ page }) => {
-  await page.goto(reportUrl(newReportId()));
+test('a report that does not exist', async ({ page, org }) => {
+  await page.goto(reportUrl(newReportId(), org.slug));
 
   // Proves the org shell's error boundary caught this 404, not the top-level one — the nav here
   // is what a bare `+error.svelte` at the site root would not render.

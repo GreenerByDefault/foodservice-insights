@@ -364,8 +364,7 @@ let sweep: Promise<void> | undefined;
  *
  * Bounded by age rather than by this run's ids, because test files run concurrently against one
  * database: a sweep that could reach a live fixture would break the test beside it. Orphaned
- * `auth.users` rows are left alone — they collide with nothing, and `pnpm test` ends with the e2e
- * suite, which truncates.
+ * `auth.users` rows are left alone — they collide with nothing, and each has a random address.
  */
 function sweepStaleFixtures(database: Kysely<Database>): Promise<void> {
   sweep ??= (async () => {

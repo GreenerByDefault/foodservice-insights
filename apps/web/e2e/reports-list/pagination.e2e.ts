@@ -1,5 +1,5 @@
 /** Pagination needs the dedicated organization fixture (`e2e/fixtures/organizations.ts`), both to
- * control the page contents and to keep 21 reports out of the shared placeholder organization.
+ * control the page contents and to keep 21 reports out of the organization every test has.
  */
 
 import { MINUTE_MS } from '@gbd/core';
