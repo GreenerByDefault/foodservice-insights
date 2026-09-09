@@ -1,3 +1,4 @@
+import type { UserId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { MemberRow } from './+page.server.ts';
@@ -5,6 +6,7 @@ import MembersList from './members-list.svelte';
 
 function aMember(overrides: Partial<MemberRow> = {}): MemberRow {
   return {
+    userId: crypto.randomUUID() as UserId,
     displayName: 'Ana Ruiz',
     email: 'ana@example.test',
     role: 'member',

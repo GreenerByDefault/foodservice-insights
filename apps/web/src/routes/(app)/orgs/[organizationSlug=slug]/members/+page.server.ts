@@ -18,6 +18,7 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
 };
 
 export type MemberRow = {
+  userId: UserId;
   displayName: string | null;
   email: string;
   role: OrganizationRole;
@@ -52,6 +53,7 @@ export async function _loadMembers(
     .execute();
 
   return rows.map((row) => ({
+    userId: row.userId,
     displayName: row.displayName,
     // `auth.users.email` is nullable in the generated type but never actually null for a row
     // that made it into `app_user` — see `AuthenticatedUser.email`'s own comment.

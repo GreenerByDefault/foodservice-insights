@@ -40,8 +40,6 @@ describe('a valid name', () => {
           action: 'organization.renamed',
           actorUserId: admin.id,
           organizationId: organization.id,
-          targetType: 'organization',
-          targetId: organization.id,
         }),
       ]);
     });

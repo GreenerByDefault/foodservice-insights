@@ -51,8 +51,7 @@ describe('_retryReport', () => {
           action: 'report.retry_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id },
         }),
       ]);
     });
@@ -86,8 +85,7 @@ describe('_retryReport', () => {
           action: 'report.retry_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id },
         }),
       ]);
     });

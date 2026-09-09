@@ -1,6 +1,7 @@
 import {
   isPermanentDatabaseError,
   isTransientDatabaseError,
+  POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '@gbd/db';
 import {
@@ -12,7 +13,7 @@ import {
 } from '@gbd/db/testing';
 import { error, isHttpError } from '@sveltejs/kit';
 import { describe, expect, test, vi } from 'vitest';
-import { database, isUniqueViolation, withDbErrorHandling } from './db.ts';
+import { database, isCheckViolation, isUniqueViolation, withDbErrorHandling } from './db.ts';
 
 test('queries the database through the app handle, rolling back after', async () => {
   const id = await withRollback(database(), async (transaction) => {
@@ -155,5 +156,45 @@ describe('isUniqueViolation', () => {
 
   test('is false for something that is not a database error at all', () => {
     expect(isUniqueViolation(new Error('unrelated'))).toBe(false);
+  });
+});
+
+describe('isCheckViolation', () => {
+  const violation = (constraint: string) =>
+    Object.assign(aDatabaseError('check constraint violated', POSTGRES_CODE_CHECK_VIOLATION), {
+      constraint,
+    });
+
+  test('recognizes a violation of the named constraint', () => {
+    expect(
+      isCheckViolation(
+        violation('organization_member_at_least_one_admin'),
+        'organization_member_at_least_one_admin',
+      ),
+    ).toBe(true);
+  });
+
+  test('is false for a check violation of a different constraint', () => {
+    expect(
+      isCheckViolation(
+        violation('some_other_constraint'),
+        'organization_member_at_least_one_admin',
+      ),
+    ).toBe(false);
+  });
+
+  test('is false for a database failure that is not a check violation', () => {
+    expect(
+      isCheckViolation(
+        aDatabaseError('duplicate key', POSTGRES_CODE_UNIQUE_VIOLATION),
+        'organization_member_at_least_one_admin',
+      ),
+    ).toBe(false);
+  });
+
+  test('is false for something that is not a database error at all', () => {
+    expect(isCheckViolation(new Error('unrelated'), 'organization_member_at_least_one_admin')).toBe(
+      false,
+    );
   });
 });

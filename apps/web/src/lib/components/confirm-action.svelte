@@ -22,10 +22,14 @@ import type { ActionState } from '$lib/forms/action-state';
  * `open` is bindable so a caller that wants to close the dialog itself, right after its request
  * succeeds and before it awaits a refresh that might be slow, can. A caller with nothing to do
  * once `onConfirm` resolves (one that navigates away instead) can leave it unbound.
+ *
+ * `trigger` is optional: without one, the dialog renders no `AlertDialogTrigger` and the caller
+ * drives `open` itself — needed when the opener is a menu item, which closes its menu as the
+ * dialog opens and so cannot be the `AlertDialogTrigger` itself.
  */
 interface Props {
   open?: boolean;
-  trigger: Snippet;
+  trigger?: Snippet;
   title: string;
   description: string;
   confirmLabel: string;
@@ -81,9 +85,11 @@ async function confirm() {
 </script>
 
 <AlertDialog bind:open>
-  <AlertDialogTrigger class={buttonVariants({ variant: 'outline' })}>
-    {@render trigger()}
-  </AlertDialogTrigger>
+  {#if trigger}
+    <AlertDialogTrigger class={buttonVariants({ variant: 'outline' })}>
+      {@render trigger()}
+    </AlertDialogTrigger>
+  {/if}
   <AlertDialogContent>
     <AlertDialogHeader>
       <AlertDialogTitle>{title}</AlertDialogTitle>

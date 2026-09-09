@@ -8,9 +8,10 @@ and the rule REQUIREMENTS § Data deletion attaches to the second: an admin is b
 their account until they promote someone or delete the organization.
 
 **Depends on** `auth.md` PRs 3 and 4 (a real session to end; the `/account` page and `BrowserAuth`
-to extend) and on `memberships.md` PR 1 (the widened `AuditEvent`, `isCheckViolation`). Nothing
-here is worth landing before real sign-in — `invites.md` § Sequencing has the table and the order
-across all three plans. It also retires the two `/account` bullets in `auth.md` § Follow-ups.
+to extend). The widened `AuditEvent` (nullable `organizationId`, `target`, `detail`) and
+`isCheckViolation` this plan needs already landed with `memberships.md`. Nothing here is worth
+landing before real sign-in — `invites.md` § Sequencing has the table and the order across all
+three plans. It also retires the two `/account` bullets in `auth.md` § Follow-ups.
 
 **Two decisions that read the requirements differently, for you to confirm** (the other three are
 in `invites.md` § Sequencing):

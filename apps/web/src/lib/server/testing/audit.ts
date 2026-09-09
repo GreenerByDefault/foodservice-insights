@@ -1,11 +1,13 @@
-/** Reading back the audit trail that an organization or report action was supposed to leave.
+/** Reading back the audit trail that an organization, report, or membership action was supposed
+ * to leave.
  *
  * The helpers intentionally read all rows to make sure extra rows were not written.
  */
 
-import type { Database, OrganizationId, ReportId, UserId } from '@gbd/db';
+import type { Database, OrganizationId, UserId } from '@gbd/db';
 import type { Selectable, Transaction } from 'kysely';
-import type { OrganizationAuditAction, ReportAuditAction } from '../audit.ts';
+import type { JsonValue } from '$lib/api/fetch';
+import type { AuditAction } from '../audit.ts';
 
 const AUDIT_EVENT_COLUMNS = [
   'action',
@@ -14,6 +16,7 @@ const AUDIT_EVENT_COLUMNS = [
   'organizationId',
   'targetType',
   'targetId',
+  'detail',
 ] as const;
 
 type AuditEventRow = Pick<Selectable<Database['auditEvent']>, (typeof AUDIT_EVENT_COLUMNS)[number]>;
@@ -31,21 +34,24 @@ export async function auditEventsFor(
     .execute();
 }
 
-/** The row `auditEventsFor` should return for one `action` by one user, against an organization or
- * a report. */
+/** The row `auditEventsFor` should return for one `action` by one user. `target` defaults to the
+ * organization itself, matching `recordAuditEvent`'s own default. */
 export function expectedAuditEvent(params: {
-  action: OrganizationAuditAction | ReportAuditAction;
+  action: AuditAction;
   actorUserId: UserId;
   organizationId: OrganizationId;
-  targetType: 'organization' | 'report';
-  targetId: OrganizationId | ReportId;
+  target?: { type: 'report' | 'user' | 'invite'; id: string };
+  detail?: Record<string, JsonValue>;
 }): AuditEventRow {
+  const target = params.target ?? { type: 'organization' as const, id: params.organizationId };
+
   return {
     action: params.action,
     actorUserId: params.actorUserId,
     actorKind: 'user',
     organizationId: params.organizationId,
-    targetType: params.targetType,
-    targetId: params.targetId,
+    targetType: target.type,
+    targetId: target.id,
+    detail: params.detail ?? null,
   };
 }

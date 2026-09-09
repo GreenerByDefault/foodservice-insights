@@ -75,7 +75,7 @@ export async function _retryReport(
           action: 'report.retry_requested',
           actor,
           organizationId,
-          reportId: report.id,
+          target: { type: 'report', id: report.id },
         });
       }),
     { action: 'retry a report', context: { organizationId, reportId: params.reportId } },

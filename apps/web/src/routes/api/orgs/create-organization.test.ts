@@ -67,8 +67,6 @@ describe('a valid name', () => {
           action: 'organization.created',
           actorUserId: creator.actor.userId,
           organizationId,
-          targetType: 'organization',
-          targetId: organizationId,
         }),
       ]);
     });

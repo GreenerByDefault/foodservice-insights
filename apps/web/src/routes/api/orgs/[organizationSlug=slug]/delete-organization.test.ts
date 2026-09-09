@@ -61,8 +61,6 @@ describe('_deleteOrganization', () => {
           action: 'organization.deleted',
           actorUserId: adminUserId,
           organizationId,
-          targetType: 'organization',
-          targetId: organizationId,
         }),
       ]);
     });

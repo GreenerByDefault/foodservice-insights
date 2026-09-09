@@ -12,7 +12,7 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
 </script>
 
 <!-- No empty state: `organization_check_has_member` makes an empty list impossible. -->
-<ItemList items={members} key={(member) => member.email} empty="">
+<ItemList items={members} key={(member) => member.userId} empty="">
   {#snippet children(member)}
     <li class="flex w-full items-center justify-between gap-4 px-2 py-3">
       <span class="flex min-w-0 flex-col">

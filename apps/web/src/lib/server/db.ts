@@ -3,6 +3,7 @@ import {
   initializeDatabase,
   isPermanentDatabaseError,
   isTransientDatabaseError,
+  POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
   shutdownDatabase,
 } from '@gbd/db';
@@ -73,4 +74,15 @@ export async function withDbErrorHandling<T>(
  * outcomes — a name already taken, most often — rather than some other permanent failure. */
 export function isUniqueViolation(cause: unknown): boolean {
   return isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_UNIQUE_VIOLATION;
+}
+
+/** Whether `cause` is a violation of the named CHECK constraint — a write expected as one of its
+ * possible outcomes — rather than some other permanent failure or a different constraint
+ * entirely. */
+export function isCheckViolation(cause: unknown, constraint: string): boolean {
+  return (
+    isPermanentDatabaseError(cause) &&
+    cause.code === POSTGRES_CODE_CHECK_VIOLATION &&
+    cause.constraint === constraint
+  );
 }

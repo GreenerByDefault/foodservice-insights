@@ -40,7 +40,7 @@ export async function requestCancellation(
       action: 'report.cancel_requested',
       actor,
       organizationId,
-      reportId: report.id,
+      target: { type: 'report', id: report.id },
     });
   });
 }

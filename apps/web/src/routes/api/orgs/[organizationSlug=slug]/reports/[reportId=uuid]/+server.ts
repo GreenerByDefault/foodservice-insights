@@ -52,7 +52,7 @@ export async function _deleteReport(
           action: 'report.deleted',
           actor,
           organizationId,
-          reportId: report.id,
+          target: { type: 'report', id: report.id },
         });
 
         if (canceled) {
@@ -60,7 +60,7 @@ export async function _deleteReport(
             action: 'report.cancel_requested',
             actor,
             organizationId,
-            reportId: report.id,
+            target: { type: 'report', id: report.id },
           });
         }
       }),

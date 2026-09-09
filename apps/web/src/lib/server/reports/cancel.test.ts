@@ -111,8 +111,7 @@ describe('requestCancellation', () => {
           action: 'report.cancel_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id },
         }),
       ]);
     });
@@ -147,8 +146,7 @@ describe('requestCancellation', () => {
           action: 'report.cancel_requested',
           actorUserId: admin.id,
           organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id },
         }),
       ]);
     });

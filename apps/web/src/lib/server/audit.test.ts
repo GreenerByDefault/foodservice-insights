@@ -11,7 +11,7 @@ describe('recordAuditEvent', () => {
 
       await recordAuditEvent(transaction, {
         action: 'organization.renamed',
-        actor: { userId: admin.id, role: 'admin' },
+        actor: { userId: admin.id },
         organizationId: organization.id,
       });
 
@@ -25,6 +25,7 @@ describe('recordAuditEvent', () => {
           organizationId: organization.id,
           targetType: 'organization',
           targetId: organization.id,
+          detail: null,
         },
       ]);
     });
@@ -37,9 +38,9 @@ describe('recordAuditEvent', () => {
 
       await recordAuditEvent(transaction, {
         action: 'report.deleted',
-        actor: { userId: admin.id, role: 'admin' },
+        actor: { userId: admin.id },
         organizationId: organization.id,
-        reportId: report.id,
+        target: { type: 'report', id: report.id },
       });
 
       // Spelled out rather than built with `expectedAuditEvent`: this is the test that pins the
@@ -52,6 +53,32 @@ describe('recordAuditEvent', () => {
           organizationId: organization.id,
           targetType: 'report',
           targetId: report.id,
+          detail: null,
+        },
+      ]);
+    });
+  });
+
+  test('writes the given detail', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+
+      await recordAuditEvent(transaction, {
+        action: 'organization.renamed',
+        actor: { userId: admin.id },
+        organizationId: organization.id,
+        detail: { role: 'admin' },
+      });
+
+      expect(await auditEventsFor(transaction, organization.id)).toEqual([
+        {
+          action: 'organization.renamed',
+          actorUserId: admin.id,
+          actorKind: 'user',
+          organizationId: organization.id,
+          targetType: 'organization',
+          targetId: organization.id,
+          detail: { role: 'admin' },
         },
       ]);
     });
