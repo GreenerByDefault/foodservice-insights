@@ -25,9 +25,13 @@ test('a mix of roles and both name shapes, the viewer among them', async ({
   await page.goto(`/orgs/${organizationSlug}/members`);
 
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
-  await expect(page.getByText('Priya Shah')).toBeVisible();
-  await expect(page.getByText('Ana Ruiz')).toBeVisible();
-  await expect(page.getByText('members-screenshot-noname@example.test')).toBeVisible();
+  // `exact: true`, since each row's own "⋯" menu carries a sr-only "Manage {name}" label that
+  // would otherwise also match a plain substring search.
+  await expect(page.getByText('Priya Shah', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ana Ruiz', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('members-screenshot-noname@example.test', { exact: true }),
+  ).toBeVisible();
   // The signed-in user is this organization's creator and admin, so it's the row naming "You".
   await expect(page.getByText('(You)')).toBeVisible();
 

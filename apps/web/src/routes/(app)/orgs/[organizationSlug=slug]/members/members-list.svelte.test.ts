@@ -17,7 +17,11 @@ function aMember(overrides: Partial<MemberRow> = {}): MemberRow {
 
 describe('MembersList', () => {
   test('shows the name, the email beneath it, and the role', async () => {
-    const screen = await render(MembersList, { members: [aMember()] });
+    const screen = await render(MembersList, {
+      members: [aMember()],
+      organizationSlug: 'org-1',
+      viewerRole: 'member',
+    });
 
     await expect.element(screen.getByText('Ana Ruiz')).toBeVisible();
     await expect.element(screen.getByText('ana@example.test')).toBeVisible();
@@ -27,20 +31,50 @@ describe('MembersList', () => {
   test('shows only the email for a member with no display name', async () => {
     const screen = await render(MembersList, {
       members: [aMember({ displayName: null, email: 'no-name@example.test' })],
+      organizationSlug: 'org-1',
+      viewerRole: 'member',
     });
 
     await expect.element(screen.getByText('no-name@example.test').first()).toBeVisible();
   });
 
   test('labels an admin', async () => {
-    const screen = await render(MembersList, { members: [aMember({ role: 'admin' })] });
+    const screen = await render(MembersList, {
+      members: [aMember({ role: 'admin' })],
+      organizationSlug: 'org-1',
+      viewerRole: 'member',
+    });
 
     await expect.element(screen.getByText('Admin')).toBeVisible();
   });
 
   test('marks the viewer’s own row', async () => {
-    const screen = await render(MembersList, { members: [aMember({ isYou: true })] });
+    const screen = await render(MembersList, {
+      members: [aMember({ isYou: true })],
+      organizationSlug: 'org-1',
+      viewerRole: 'member',
+    });
 
     await expect.element(screen.getByText('(You)')).toBeVisible();
+  });
+
+  test('a member viewer sees no per-row menu', async () => {
+    const screen = await render(MembersList, {
+      members: [aMember({ isYou: true }), aMember({ role: 'admin' })],
+      organizationSlug: 'org-1',
+      viewerRole: 'member',
+    });
+
+    await expect.element(screen.getByRole('button')).not.toBeInTheDocument();
+  });
+
+  test('an admin viewer sees a per-row menu for every member', async () => {
+    const screen = await render(MembersList, {
+      members: [aMember({ isYou: true, role: 'admin' }), aMember({ displayName: null })],
+      organizationSlug: 'org-1',
+      viewerRole: 'admin',
+    });
+
+    expect(screen.getByRole('button').elements()).toHaveLength(2);
   });
 });
