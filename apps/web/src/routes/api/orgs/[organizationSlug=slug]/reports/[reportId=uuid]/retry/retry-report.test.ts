@@ -50,9 +50,7 @@ describe('_retryReport', () => {
         expectedAuditEvent({
           action: 'report.retry_requested',
           actorUserId: admin.id,
-          organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id, organizationId: organization.id },
         }),
       ]);
     });
@@ -85,9 +83,7 @@ describe('_retryReport', () => {
         expectedAuditEvent({
           action: 'report.retry_requested',
           actorUserId: admin.id,
-          organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id, organizationId: organization.id },
         }),
       ]);
     });

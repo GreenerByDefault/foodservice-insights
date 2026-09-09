@@ -60,9 +60,7 @@ describe('_deleteOrganization', () => {
         expectedAuditEvent({
           action: 'organization.deleted',
           actorUserId: adminUserId,
-          organizationId,
-          targetType: 'organization',
-          targetId: organizationId,
+          target: { type: 'organization', id: organizationId },
         }),
       ]);
     });

@@ -47,16 +47,12 @@ describe('_deleteReport', () => {
         expectedAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
-          organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id, organizationId: organization.id },
         }),
         expectedAuditEvent({
           action: 'report.cancel_requested',
           actorUserId: admin.id,
-          organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id, organizationId: organization.id },
         }),
       ]);
     });
@@ -89,9 +85,7 @@ describe('_deleteReport', () => {
         expectedAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
-          organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id, organizationId: organization.id },
         }),
       ]);
     });
@@ -133,9 +127,7 @@ describe('_deleteReport', () => {
         expectedAuditEvent({
           action: 'report.deleted',
           actorUserId: admin.id,
-          organizationId: organization.id,
-          targetType: 'report',
-          targetId: report.id,
+          target: { type: 'report', id: report.id, organizationId: organization.id },
         }),
       ]);
     });

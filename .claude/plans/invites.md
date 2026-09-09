@@ -16,8 +16,8 @@ The **invitee side** can only be e2e-tested with per-test identities (auth PR 3)
 
 **Depends on** `apps-web-maintainability-pass.md` (names: `mockUnreachableEmailer`,
 `inviteExpiring` in `lib/server/testing/fixtures.ts`, `item-list.svelte`, `routes/(app)/shell/`,
-the `invites` key on `OrganizationSpec`) and on `memberships.md` PR 1 (the widened `AuditEvent`,
-`isCheckViolation`).
+the `invites` key on `OrganizationSpec`). The widened `AuditEvent` and `isCheckViolation` this plan
+needs already landed with `memberships.md`.
 
 ## Sequencing: the three plans against `auth.md`
 
@@ -37,7 +37,7 @@ built and e2e-tested today by varying what the placeholder *belongs to*. What ca
 | Delete account | Nothing worth landing | Deleting the identity every request runs as breaks the run; and the flow's last step is ending a session that does not exist yet |
 | Change email | Nothing | Entirely a browser-side Supabase call |
 
-**The order that keeps you unblocked:** memberships PRs 1–3 → invites PRs 1–4 → auth PRs 1–3 →
+**The order that keeps you unblocked:** memberships PRs 1–2 → invites PRs 1–4 → auth PRs 1–3 →
 invites PR 5 → auth PR 4 → account-self-service PRs 1–2. Auth PR 1 (the fixtures prefactor) can
 slot in anywhere: if it lands before invites PR 3, the invite specs read the viewer's address from
 `user.email` rather than `PLACEHOLDER_USER_EMAIL`; otherwise auth PR 1 sweeps it.
@@ -100,7 +100,7 @@ double confirmation of an email change — recorded in that plan's Context.)
   `organizationInviteApiHref(organizationSlug, inviteId)`, `acceptInviteApiHref(inviteId)`,
   `declineInviteApiHref(inviteId)` — every organization-scoped builder here takes the slug, not the
   id (organization-slugs).
-- `audit.ts`: `InviteAuditAction`; `target.type` already allows `'invite'` (memberships PR 1).
+- `audit.ts`: `InviteAuditAction`; `target.type` already allows `'invite'`.
 - `route-context.ts`: `requireOrganizationRouteContext` also returns `organizationName` from the
   access row — the invite email needs it and the row already carries it.
 - `$lib/forms/validation.ts`: `emailAddress()` + test.

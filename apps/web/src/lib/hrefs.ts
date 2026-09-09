@@ -94,3 +94,7 @@ export function cancelReportApiHref(organizationSlug: string, reportId: string):
 export function retryReportApiHref(organizationSlug: string, reportId: string): string {
   return `${reportApiHref(organizationSlug, reportId)}/retry`;
 }
+
+export function organizationMemberApiHref(organizationSlug: string, userId: string): string {
+  return `${organizationApiHref(organizationSlug)}/members/${userId}`;
+}

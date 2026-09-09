@@ -1,7 +1,8 @@
-/** The audit row shared by every route that acts on an organization or a report. */
+/** The audit row shared by every route. */
 
-import type { Database, OrganizationId, ReportId } from '@gbd/db';
+import type { Database, OrganizationId } from '@gbd/db';
 import type { Transaction } from 'kysely';
+import type { JsonValue } from '$lib/api/fetch';
 import type { Actor } from '$lib/server/auth/types';
 
 /** The `organization.*` audit actions a route may record. Extend this as new organization
@@ -17,14 +18,23 @@ export type ReportAuditAction =
   | 'report.cancel_requested'
   | 'report.retry_requested';
 
-type AuditEvent =
-  | { action: OrganizationAuditAction; actor: Actor; organizationId: OrganizationId }
-  | {
-      action: ReportAuditAction;
-      actor: Actor;
-      organizationId: OrganizationId;
-      reportId: ReportId;
-    };
+/** The `member.*` audit actions a route may record. Extend this as new membership actions are
+ * added. */
+export type MemberAuditAction = 'member.role_changed' | 'member.removed' | 'member.left';
+
+export type AuditAction = OrganizationAuditAction | ReportAuditAction | MemberAuditAction;
+
+/** What the event happened to, and the organization it happened in. */
+export type AuditTarget =
+  | { type: 'organization'; id: OrganizationId }
+  | { type: 'report' | 'user' | 'invite'; id: string; organizationId: OrganizationId };
+
+type AuditEvent = {
+  action: AuditAction;
+  actor: Pick<Actor, 'userId'>;
+  target: AuditTarget;
+  detail?: Record<string, JsonValue>;
+};
 
 /** Takes a `Transaction`, not a `DatabaseExecutor`: an audit event only ever makes sense
  * committed atomically with the write it records, never on its own. */
@@ -32,11 +42,8 @@ export async function recordAuditEvent(
   transaction: Transaction<Database>,
   event: AuditEvent,
 ): Promise<void> {
-  const { action, actor, organizationId } = event;
-  const [targetType, targetId] =
-    'reportId' in event
-      ? (['report', event.reportId] as const)
-      : (['organization', organizationId] as const);
+  const { action, actor, target, detail } = event;
+  const organizationId = target.type === 'organization' ? target.id : target.organizationId;
 
   await transaction
     .insertInto('auditEvent')
@@ -45,8 +52,9 @@ export async function recordAuditEvent(
       actorUserId: actor.userId,
       actorKind: 'user',
       organizationId,
-      targetType,
-      targetId,
+      targetType: target.type,
+      targetId: target.id,
+      detail: detail ?? null,
     })
     .execute();
 }

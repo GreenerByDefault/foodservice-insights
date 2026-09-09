@@ -66,7 +66,7 @@ export async function _renameOrganization(
         await recordAuditEvent(transaction, {
           action: 'organization.renamed',
           actor,
-          organizationId,
+          target: { type: 'organization', id: organizationId },
         });
 
         return { ok: true as const };
@@ -105,7 +105,7 @@ export async function _deleteOrganization(
         await recordAuditEvent(transaction, {
           action: 'organization.deleted',
           actor,
-          organizationId,
+          target: { type: 'organization', id: organizationId },
         });
 
         return await transaction

@@ -74,8 +74,7 @@ export async function _retryReport(
         await recordAuditEvent(transaction, {
           action: 'report.retry_requested',
           actor,
-          organizationId,
-          reportId: report.id,
+          target: { type: 'report', id: report.id, organizationId },
         });
       }),
     { action: 'retry a report', context: { organizationId, reportId: params.reportId } },

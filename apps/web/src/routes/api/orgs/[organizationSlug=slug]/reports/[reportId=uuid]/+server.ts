@@ -51,16 +51,14 @@ export async function _deleteReport(
         await recordAuditEvent(transaction, {
           action: 'report.deleted',
           actor,
-          organizationId,
-          reportId: report.id,
+          target: { type: 'report', id: report.id, organizationId },
         });
 
         if (canceled) {
           await recordAuditEvent(transaction, {
             action: 'report.cancel_requested',
             actor,
-            organizationId,
-            reportId: report.id,
+            target: { type: 'report', id: report.id, organizationId },
           });
         }
       }),

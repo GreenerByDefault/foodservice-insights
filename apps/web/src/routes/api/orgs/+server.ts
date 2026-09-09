@@ -92,7 +92,7 @@ export async function _createOrganization(
         await recordAuditEvent(transaction, {
           action: 'organization.created',
           actor,
-          organizationId,
+          target: { type: 'organization', id: organizationId },
         });
 
         return { ok: true as const, organizationId };

@@ -16,9 +16,21 @@ would leave zero admins. This plan puts the buttons on the page and turns that t
 `$lib/testing/navigation.ts`). **Depends on nothing in `auth.md`**: every rule here is exercised by
 varying what the placeholder identity belongs to, which the `organizations` fixture already does
 for the 403 case. It is the first of three plans — see `invites.md` § Sequencing for how they and
-`auth.md` interleave — and its PR 1 does the two pieces of shared groundwork the other two build
-on: the audit module grows past "organization or report", and `db.ts` gains `isCheckViolation` for
-the trigger every plan leans on.
+`auth.md` interleave.
+
+The shared groundwork the other two plans lean on has already landed: `recordAuditEvent` takes
+`{ action, actor: Pick<Actor, 'userId'>, target, detail? }`, where `target` is a required,
+discriminated `AuditTarget` — `{ type: 'organization'; id: OrganizationId }` or `{ type: 'report' |
+'user' | 'invite'; id: string; organizationId: OrganizationId }` — so a caller can't forget it and
+can't have it disagree with the row's `organization_id`. (Account PR 1's `user.deleted` has no
+organization; when that PR lands, `AuditTarget`'s `'user'` branch will need `organizationId: … |
+null` too — not added now, since nothing needs it yet.) `AuditAction` now includes
+`MemberAuditAction`; and `apps/web/src/lib/server/db.ts` has `isCheckViolation(cause, constraint)`
+beside `isUniqueViolation` for the trigger every plan below leans on. `members/+page.server.ts`'s
+`MemberRow` carries `userId`, keyed on in `members-list.svelte`; `$lib/hrefs.ts` has
+`organizationMemberApiHref(organizationSlug, userId)`; and `$lib/components/confirm-action.svelte`'s
+`trigger` prop is optional, rendering no `AlertDialogTrigger` wrapper when omitted, so a menu item
+can drive `bind:open` itself instead of being one.
 
 ## Settled decisions
 
@@ -35,33 +47,7 @@ the trigger every plan leans on.
 | Audit | `member.role_changed` (detail `{ role }`), `member.removed`, `member.left`; target type `user` | REQUIREMENTS § Audit trail: membership and role changes |
 | After leaving | `goto('/orgs', { invalidateAll: true })` | Same as delete-organization: `/orgs` forwards to a remaining org or `/orgs/new` |
 
-## PR 1 — Prefactor: audit grows up, `isCheckViolation`, row ids
-
-No behaviour change.
-
-- `apps/web/src/lib/server/audit.ts`: `AuditEvent` becomes one shape —
-  `{ action: AuditAction; actor: Pick<Actor, 'userId'>; organizationId: OrganizationId | null; target?: { type: 'report' | 'user' | 'invite'; id: string }; detail?: Record<string, JsonValue> }`
-  with `target` defaulting to the organization. Add `MemberAuditAction`; keep the per-family unions
-  (`AuditAction = OrganizationAuditAction | ReportAuditAction | MemberAuditAction`). `Pick<Actor,
-  'userId'>` because the role was never persisted and invites PR 4 records events for a caller with
-  no role. `organizationId` nullable for account PR 1 (`user.deleted`). Existing callers unchanged;
-  `recordAuditEvent` writes `detail` (the jsonb column exists, unused). `lib/server/testing/audit.ts`:
-  `expectedAuditEvent` accepts `target`/`detail`; `AUDIT_EVENT_COLUMNS` gains `detail`.
-- `apps/web/src/lib/server/db.ts`: `isCheckViolation(cause, constraint)` beside `isUniqueViolation` —
-  `isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_CHECK_VIOLATION && cause.constraint === constraint`
-  (`pg`'s `DatabaseError` carries `constraint`; `organization.test.ts:346` already asserts on it).
-  Test in `db.test.ts`.
-- `apps/web/src/lib/hrefs.ts`: `organizationMemberApiHref(organizationSlug, userId)` under API
-  writes — every organization-scoped builder here takes the slug, not the id (organization-slugs).
-- `members/+page.server.ts`: `MemberRow` gains `userId`; `members-list.svelte` keys on it, not
-  `email`; `load-members.test.ts` and `members-list.svelte.test.ts` follow.
-- `$lib/components/confirm-action.svelte`: `trigger` becomes optional. Without it the caller drives
-  `bind:open` — a menu item cannot be an `AlertDialogTrigger`, since the menu closes as the dialog
-  opens. Reset `typedPhrase` and `actionState` when `open` flips to false (the maintainability pass
-  flagged the missing reset; this is the PR that makes it matter, because the same dialog now
-  reopens for different rows).
-
-## PR 2 — Promote and demote
+## PR 1 — Promote and demote
 
 - **Server** `PATCH /api/orgs/[organizationSlug=slug]/members/:userId`, body `{ role: 'admin' | 'member' }`
   (valibot `v.picklist`), behind `requireOrganizationRouteContext(…, { admin: true })`. Exported
@@ -85,9 +71,9 @@ No behaviour change.
   contents per role/row, PATCH url + body, last-admin message, unknown message.
 - **E2E** `organizations/members.e2e.ts`: admin promotes a fixture member — the row reads Admin
   with no reload (`watchPageLoads`) — then demotes them back. Sole admin's own Make member is disabled.
-- **Screenshots**: `members.png` regenerates (menu triggers appear). No new screen yet.
+- **Screenshots**: `organizations/members.png` regenerates (menu triggers appear). No new screen yet.
 
-## PR 3 — Remove and leave
+## PR 2 — Remove and leave
 
 - **Server** `DELETE /api/orgs/[organizationSlug=slug]/members/:userId`: `requireOrganizationRouteContext` without
   `admin`; if `targetUserId !== actor.userId`, `requireOrganizationAdmin` (403 for a member).
@@ -112,7 +98,6 @@ No behaviour change.
 - **Screenshots**: `member-actions.png` (admin, menu open on another member's row — the
   `account-menu.png` pattern); `members-as-member.png` (`role: 'member'`: no menus except the own
   row's, no invite section — the only image proving a member sees no admin controls).
-- `apps/web/e2e/README.md` § Pending: note the member-403 row is now driven.
 - Deletes this plan file.
 
 ## Verification
