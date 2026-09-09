@@ -55,11 +55,11 @@ No behaviour change.
   writes — every organization-scoped builder here takes the slug, not the id (organization-slugs).
 - `members/+page.server.ts`: `MemberRow` gains `userId`; `members-list.svelte` keys on it, not
   `email`; `load-members.test.ts` and `members-list.svelte.test.ts` follow.
-- `$lib/components/confirm-action.svelte`: `trigger` becomes optional. Without it the caller drives
-  `bind:open` — a menu item cannot be an `AlertDialogTrigger`, since the menu closes as the dialog
-  opens. Reset `typedPhrase` and `actionState` when `open` flips to false (the maintainability pass
-  flagged the missing reset; this is the PR that makes it matter, because the same dialog now
-  reopens for different rows).
+- `$lib/components/confirm-action.svelte`: `trigger` becomes optional, and the `AlertDialogTrigger`
+  wrapper renders only when it's given. Without it the caller drives `bind:open` — a menu item
+  cannot be an `AlertDialogTrigger`, since the menu closes as the dialog opens. (The reset of
+  `typedPhrase`/`actionState` on close already landed in #290; this PR doesn't need to touch it,
+  just benefits from it — the same dialog now reopens for different rows.)
 
 ## PR 2 — Promote and demote
 
@@ -85,7 +85,7 @@ No behaviour change.
   contents per role/row, PATCH url + body, last-admin message, unknown message.
 - **E2E** `organizations/members.e2e.ts`: admin promotes a fixture member — the row reads Admin
   with no reload (`watchPageLoads`) — then demotes them back. Sole admin's own Make member is disabled.
-- **Screenshots**: `members.png` regenerates (menu triggers appear). No new screen yet.
+- **Screenshots**: `organizations/members.png` regenerates (menu triggers appear). No new screen yet.
 
 ## PR 3 — Remove and leave
 
@@ -112,7 +112,6 @@ No behaviour change.
 - **Screenshots**: `member-actions.png` (admin, menu open on another member's row — the
   `account-menu.png` pattern); `members-as-member.png` (`role: 'member'`: no menus except the own
   row's, no invite section — the only image proving a member sees no admin controls).
-- `apps/web/e2e/README.md` § Pending: note the member-403 row is now driven.
 - Deletes this plan file.
 
 ## Verification

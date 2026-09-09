@@ -90,25 +90,3 @@ One screen still has no fixture that can reach it: an empty `/orgs`. Every spec 
 identity, so that user belongs to every organization any concurrent test creates.
 `lib/stub-page-data.ts` rewrites the page-data response instead — a temporary stand-in for real
 sign-in, same as `identifyUser`.
-
-## Pending
-
-`identifyUser` always resolves to one seeded user (see `auth.e2e.ts`) — there's no way yet to
-drive a signed-out request through a real route to see its 401. Add one e2e per row once real
-sign-in lands. An admin-gated route's 403 is already drivable, though: the `organizations` fixture
-can create an org where the signed-in user is only a `member` (see
-`organizations/settings.e2e.ts`).
-
-| Route | Unit coverage today |
-| --- | --- |
-| `POST orgs` (create) | `create-organization.test.ts` |
-| `PATCH orgs/:id` (rename) | `rename-organization.test.ts` |
-| `DELETE orgs/:id` | `delete-organization.test.ts` |
-| `POST orgs/:id/reports` (create) | `create-report.test.ts` |
-| `GET orgs/:id/reports/:id` (view) | `load-report.test.ts` |
-| `DELETE orgs/:id/reports/:id` | `delete-report.test.ts` |
-| `POST orgs/:id/invites` (create) | none |
-| `DELETE orgs/:id/invites/:id` (revoke) | none |
-| `POST invites/:id/accept` | none |
-| `POST invites/:id/decline` | none |
-| `GET sign-in` | none |
