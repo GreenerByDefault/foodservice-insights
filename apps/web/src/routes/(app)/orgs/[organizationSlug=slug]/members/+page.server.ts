@@ -12,7 +12,7 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
   return {
     members: await withDbErrorHandling(
       () => _loadMembers(database(), { organizationId: organization.id, viewerId: auth.user.id }),
-      { action: 'load an organization’s members', context: { organizationId: organization.id } },
+      { action: "load an organization's members", context: { organizationId: organization.id } },
     ),
   };
 };

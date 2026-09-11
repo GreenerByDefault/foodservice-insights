@@ -36,7 +36,7 @@ describe('_changeMemberRole', () => {
           action: 'member.role_changed',
           actorUserId: admin,
           target: { type: 'user', id: targetUserId, organizationId },
-          detail: { role: 'admin' },
+          detail: { from: 'member', to: 'admin' },
         }),
       ]);
     });

@@ -16,8 +16,8 @@ The **invitee side** can only be e2e-tested with per-test identities (auth PR 3)
 
 **Depends on** `apps-web-maintainability-pass.md` (names: `mockUnreachableEmailer`,
 `inviteExpiring` in `lib/server/testing/fixtures.ts`, `item-list.svelte`, `routes/(app)/shell/`,
-the `invites` key on `OrganizationSpec`). The widened `AuditEvent` and `isCheckViolation` this plan
-needs already landed with `memberships.md`.
+the `invites` key on `OrganizationSpec`). The widened `AuditEvent` (`lib/server/audit.ts`) and
+`isCheckViolation` (`lib/server/db.ts`) this plan needs have already landed.
 
 ## Sequencing: the three plans against `auth.md`
 
@@ -37,8 +37,8 @@ built and e2e-tested today by varying what the placeholder *belongs to*. What ca
 | Delete account | Nothing worth landing | Deleting the identity every request runs as breaks the run; and the flow's last step is ending a session that does not exist yet |
 | Change email | Nothing | Entirely a browser-side Supabase call |
 
-**The order that keeps you unblocked:** memberships PRs 1–2 → invites PRs 1–4 → auth PRs 1–3 →
-invites PR 5 → auth PR 4 → account-self-service PRs 1–2. Auth PR 1 (the fixtures prefactor) can
+**The order that keeps you unblocked:** invites PRs 1–4 → auth PRs 1–3 →
+invites PR 5 → auth PR 4 → account-self-service PRs 1–2 (memberships already landed). Auth PR 1 (the fixtures prefactor) can
 slot in anywhere: if it lands before invites PR 3, the invite specs read the viewer's address from
 `user.email` rather than `PLACEHOLDER_USER_EMAIL`; otherwise auth PR 1 sweeps it.
 
@@ -116,7 +116,8 @@ double confirmation of an email change — recorded in that plan's Context.)
   the invite line becomes "per inviting user" and links here (the requirement change in § Sequencing).
   The `POST` stub's "five an hour for the organization" comment goes with it.
 - `POST /api/orgs/[organizationSlug=slug]/invites` → `_createInvite(db, { organizationId,
-  organizationName, actor, actorDisplayName, body })`: parse (400 `Fix the highlighted field.`);
+  organizationName, actor, actorDisplayName, body })`: parse with `parseBody`
+  (`lib/server/body.ts`, 400 `Fix the highlighted field.`);
   transaction: lock, count →
   `{ kind: 'rate-limited' }`; existing member with that email (`auth.users` ⋈ `organization_member`)
   → `{ kind: 'already-member' }`; supersede; insert returning `id, expires_at`; audit
@@ -133,7 +134,7 @@ double confirmation of an email change — recorded in that plan's Context.)
 
 ## PR 3 — Admin UI on the Members page
 
-- `members/+page.server.ts`: use `requireOrganizationRouteContext` for the role; admins also get
+- `members/+page.server.ts`: read `role`/`organization.id` from `parent()`; admins also get
   `invites: await _loadPendingInvites(db, organizationId)` → `InviteRow = { inviteId, email, role,
   expiresAt, isExpired }` (`isExpired` computed in SQL), pending rows newest first; members get
   `invites: null`. Test.
@@ -181,7 +182,6 @@ Unit and component tested here; e2e and screenshot in PR 5.
 - Clients `$lib/invites/api/accept-invite.ts`, `decline-invite.ts` (outcome unions).
 - `routes/(app)/shell/user-menu.svelte`: "Invitations" item → `/invites` between Account and Sign
   out; test; `account-menu.png` regenerates.
-- `apps/web/README.md` § Routes: the scaffolding sentence shrinks to `/account` and `/sign-in`.
 
 ## PR 5 — Invitee e2e and screenshot (after auth PR 3)
 

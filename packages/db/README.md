@@ -76,7 +76,9 @@ Design reasoning:
 
 - **Every constraint, index, and trigger is named.** Triggers raise with
   `ERRCODE = 'check_violation'` and an explicit `CONSTRAINT`, so a trigger and a check are
-  indistinguishable to a caller.
+  indistinguishable to a caller. A constraint a caller needs to catch mid-transaction (rather than
+  only at `COMMIT`) is declared `DEFERRABLE INITIALLY DEFERRED`, and the caller sets it `IMMEDIATE`
+  first — see the migration for which constraints are deferred.
 - **Every check, unique constraint, and trigger needs a test** in [`tests/`](tests/) asserting the
   database rejects the violation.
 - **Every table has a primary key and every foreign key has an index**, so rows are cleaned up

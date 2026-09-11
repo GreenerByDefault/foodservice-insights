@@ -37,8 +37,7 @@ Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler,
 code harder for newcomers to follow without a strong enough payoff. See
 [Calling the API from the browser](#calling-the-api-from-the-browser) for how the client calls it.
 
-A few routes are still scaffolding (`/account`, `/invites`, `/sign-in`, the marketing page, and
-the invite/member/account API handlers). Each one says so with a `**Stub:**` marker naming what
+A few routes are still scaffolding. Each one says so with a `**Stub:**` marker naming what
 belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
 
 **`/orgs` redirects rather than always showing the picker**: to `/invites` if one is waiting, to
@@ -174,7 +173,8 @@ rather than a variant of membership-table logic.
 
 ## Writes
 
-A write that changes something worth a record does two more things: it records an audit event in
-the same transaction as the change (`$lib/server/audit.ts`), and once that transaction commits, it
-notifies GBD (`notifyGbd` in `$lib/server/email.ts`) — never before, so a notification never
+A write that changes something worth a record does one or two more things: every one of them
+records an audit event in the same transaction as the change (`$lib/server/audit.ts`); the subset
+`REQUIREMENTS.md` § GBD email notifications names also notifies GBD (`notifyGbd` in
+`$lib/server/email.ts`) once that transaction commits — never before, so a notification never
 outlives a change that got rolled back.

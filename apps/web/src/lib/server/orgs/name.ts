@@ -8,19 +8,15 @@
 import { json } from '@sveltejs/kit';
 import * as v from 'valibot';
 import { OrganizationNameSchema } from '$lib/orgs/name';
+import { parseBody } from '$lib/server/body';
 
 /** `body` if it holds a valid organization name, or the 400 response to send back otherwise. */
 export function parseOrganizationNameBody(
   body: unknown,
 ): { ok: true; name: string } | { ok: false; response: Response } {
-  const parsed = v.safeParse(v.object({ name: OrganizationNameSchema }), body);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      response: json({ message: 'Fix the highlighted field.' }, { status: 400 }),
-    };
-  }
-  return { ok: true, name: parsed.output.name };
+  const parsed = parseBody(v.object({ name: OrganizationNameSchema }), body);
+  if (!parsed.ok) return parsed;
+  return { ok: true, name: parsed.value.name };
 }
 
 /** The 409 for a name another organization already holds. */

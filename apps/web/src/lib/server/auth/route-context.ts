@@ -1,6 +1,6 @@
 /** The auth + org-access prologue shared by every route scoped to an organization. */
 
-import type { DatabaseExecutor, OrganizationId, ReportId } from '@gbd/db';
+import type { DatabaseExecutor, OrganizationId, ReportId, UserId } from '@gbd/db';
 import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
 import type { Actor } from './types.ts';
 
@@ -9,7 +9,7 @@ import type { Actor } from './types.ts';
 export async function requireOrganizationRouteContext(
   db: DatabaseExecutor,
   event: { params: { organizationSlug: string }; locals: App.Locals },
-  options: { admin?: true } = {},
+  options: { admin?: boolean } = {},
 ): Promise<{ organizationId: OrganizationId; actor: Actor }> {
   const auth = requireAuth(event.locals);
   const organizationSlug = event.params.organizationSlug;
@@ -33,8 +33,21 @@ export async function requireReportRouteContext(
     params: { organizationSlug: string; reportId: string };
     locals: App.Locals;
   },
-  options: { admin?: true } = {},
+  options: { admin?: boolean } = {},
 ): Promise<{ organizationId: OrganizationId; reportId: ReportId; actor: Actor }> {
   const { organizationId, actor } = await requireOrganizationRouteContext(db, event, options);
   return { organizationId, reportId: event.params.reportId as ReportId, actor };
+}
+
+/** Like `requireOrganizationRouteContext`, for a route scoped to a single member. */
+export async function requireMemberRouteContext(
+  db: DatabaseExecutor,
+  event: {
+    params: { organizationSlug: string; userId: string };
+    locals: App.Locals;
+  },
+  options: { admin?: boolean } = {},
+): Promise<{ organizationId: OrganizationId; actor: Actor; targetUserId: UserId }> {
+  const { organizationId, actor } = await requireOrganizationRouteContext(db, event, options);
+  return { organizationId, actor, targetUserId: event.params.userId as UserId };
 }
