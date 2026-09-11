@@ -1,14 +1,21 @@
-/** Four committed images.
+/** Five committed images.
  *
  * `members-as-admin.png` and `members-as-member.png` are one roster seen by each of the two
  * viewer roles — both roles among the people listed, and both name shapes a row renders: a
  * display name with the email beneath, and a display name-less row that shows only the email.
- * The pair is what shows the admin-only controls are admin-only: the "⋯" menus, the note under
- * the list, and the "Your membership" section are all in the first and gone from the second.
+ * The pair is what shows the admin-only controls are admin-only: the per-row "⋯" menus are in
+ * the first and gone from the second, and the "Your membership" section holds Step down + Leave
+ * for the admin image but Leave alone for the member one.
  *
  * `members-menu.png` is a row's menu open — where that menu lands against the row it belongs to,
- * which a roster image can't show. `members-error.png` is the "Your membership" section's refused
- * Step down, the one action that acts on the viewer rather than another row.
+ * which a roster image can't show — now with Remove from organization below the role toggle.
+ * `members-remove-confirm.png` continues one step further: the menu's "Remove from organization"
+ * item opens `ConfirmAction`'s dialog, not its own trigger, so this is the one place that path —
+ * and the member's name interpolated into the dialog's title — renders. The dialog's own chrome
+ * (loading, error banner) is generic across every `ConfirmAction` call site and already covered by
+ * `members-error.png`, so this image isn't re-proving that.
+ * `members-error.png` is the "Your membership" section's refused Step down, the one action that
+ * acts on the viewer rather than another row.
  *
  * Every person's email is fixed rather than the fixture's default random one: unlike a
  * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
@@ -61,6 +68,7 @@ test('the roster as an admin, the viewer among them', async ({ page, organizatio
   await expect(page.getByText('(You)')).toBeVisible();
   // Own-row actions live in "Your membership" below the list, not in a menu on the row itself.
   await expect(page.getByRole('button', { name: 'Step down as admin' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Leave organization' })).toBeVisible();
 
   await expectScreenshots(page, 'members-as-admin.png');
 });
@@ -80,10 +88,11 @@ test('the roster as a member, who administers none of it', async ({ page, organi
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
   await expect(page.getByText('Priya Shah', { exact: true })).toBeVisible();
   await expect(page.getByText('(You)')).toBeVisible();
-  // Both of the things the viewer's role gates: no row offers a menu, not even their own, and
-  // the note under the list is the admin's too.
+  // No row offers a menu, not even their own — the admin-only "⋯".
   await expect(page.getByRole('button', { name: /^Manage / })).toHaveCount(0);
-  await expect(page.getByText('Inviting and removing people arrives later.')).toHaveCount(0);
+  // "Your membership" holds Leave alone: no Step down, since the viewer isn't an admin here.
+  await expect(page.getByRole('button', { name: 'Step down as admin' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Leave organization' })).toBeVisible();
 
   await expectScreenshots(page, 'members-as-member.png');
 });
@@ -99,12 +108,35 @@ test('a member row’s menu, open', async ({ page, organizations }) => {
 
   await page.getByRole('button', { name: 'Manage Ana Ruiz' }).click();
   await expect(page.getByRole('menuitem', { name: 'Make admin' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Remove from organization' })).toBeVisible();
 
   // Hover it so the committed image also shows the hover affordance, and so the pointer isn't
   // left sitting on the trigger it just clicked.
   await page.getByRole('menuitem', { name: 'Make admin' }).hover();
 
   await expectScreenshots(page, 'members-menu.png');
+});
+
+test('a member row’s Remove from organization, confirming', async ({ page, organizations }) => {
+  const { slug: organizationSlug } = await organizations.create({
+    name: 'Members Remove Confirm Screenshot Foodservice',
+    members: [
+      { displayName: 'Ana Ruiz', email: 'members-remove-confirm-ana@example.test', role: 'member' },
+    ],
+  });
+
+  await page.goto(`/orgs/${organizationSlug}/members`);
+  await ensureHydrated(page);
+
+  await page.getByRole('button', { name: 'Manage Ana Ruiz' }).click();
+  await page.getByRole('menuitem', { name: 'Remove from organization' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Remove Ana Ruiz?' })).toBeVisible();
+  await expect(
+    page.getByText("They'll lose access to this organization's reports and files."),
+  ).toBeVisible();
+
+  await expectScreenshots(page, 'members-remove-confirm.png');
 });
 
 test('the sole admin’s Your membership section, after Step down is refused', async ({
