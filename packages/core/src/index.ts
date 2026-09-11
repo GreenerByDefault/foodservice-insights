@@ -6,6 +6,10 @@ export const APP_NAME = 'Foodservice Insights';
 
 export * from './time.ts';
 
+/** The one OOXML spreadsheet content type. */
+export const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
 /**
  * Exhaustiveness check for discriminated unions. Calling this is a type error unless
  * every case has already been handled, which turns a missed case into a compile

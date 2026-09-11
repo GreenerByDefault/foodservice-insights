@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { goto } from '$app/navigation';
+import { aWorkbook } from '$lib/reports/excel/testing';
 import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { resetNavigationMocks } from '$lib/testing/navigation';
 import UploadForm from './upload-form.svelte';
@@ -14,6 +15,16 @@ function csvFile(text = CSV): File {
   return new File([text], 'procurement.csv', { type: 'text/csv' });
 }
 
+function workbookFile(): File {
+  const bytes = aWorkbook([
+    ['Product', 'Date ordered', 'Weight'],
+    ['beef', { date: '2026-01-05' }, 12],
+  ]);
+  return new File([bytes as BlobPart], 'orders.xlsx', {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   resetNavigationMocks();
@@ -24,7 +35,7 @@ async function fillRequiredFields(
   { reportName = 'Q1 procurement' }: { reportName?: string } = {},
 ) {
   await screen.getByLabelText('Report name').fill(reportName);
-  await screen.getByLabelText('Choose a CSV file', { exact: false }).upload(csvFile());
+  await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(csvFile());
   await expect.element(screen.getByText('1 of 1 months still need a count')).toBeInTheDocument();
   await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
   await screen.getByRole('radio', { name: 'lb' }).click();
@@ -57,8 +68,48 @@ describe('UploadForm', () => {
       expect(body.get('unit-system')).toBe('lb');
       expect(JSON.parse(body.get('monthly-counts') as string)).toEqual({ '2026-01': 100 });
       expect(body.get('csv-file')).toBeInstanceOf(File);
+      expect(body.get('workbook')).toBeNull();
 
       expect(goto).toHaveBeenCalledWith('/orgs/org-1/reports/report-1');
+    });
+
+    test('a workbook posts the converted CSV alongside the untouched original', async () => {
+      const fetchMock = stubFetch(
+        new Response(JSON.stringify({ reportId: 'report-1' }), {
+          status: 201,
+          headers: { location: '/orgs/org-1/reports/report-1' },
+        }),
+      );
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      const workbook = workbookFile();
+
+      await screen.getByLabelText('Report name').fill('Q1 procurement');
+      await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(workbook);
+      await expect
+        .element(screen.getByText('1 of 1 months still need a count'))
+        .toBeInTheDocument();
+      await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
+      await screen.getByRole('radio', { name: 'lb' }).click();
+      await screen.getByRole('button', { name: 'Upload report' }).click();
+
+      await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
+      const body = lastFetchCall(fetchMock)[1].body as FormData;
+      const posted = body.get('csv-file') as File;
+      expect({ name: posted.name, type: posted.type }).toEqual({
+        name: 'orders.csv',
+        type: 'text/csv',
+      });
+      expect(await posted.text()).toBe('Product,Date ordered,Weight\nbeef,2026-01-05,12\n');
+      // The picker hands the form its own `File` for the chosen bytes, so identity is not the
+      // thing to assert — that the original arrives byte for byte is.
+      const original = body.get('workbook') as File;
+      expect({ name: original.name, type: original.type }).toEqual({
+        name: 'orders.xlsx',
+        type: workbook.type,
+      });
+      expect(new Uint8Array(await original.arrayBuffer())).toEqual(
+        new Uint8Array(await workbook.arrayBuffer()),
+      );
     });
 
     test('a 400 shows the rejection view', async () => {
@@ -136,7 +187,9 @@ describe('UploadForm', () => {
       const fetchMock = stubFetch(new Response(null, { status: 201 }));
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
-      await screen.getByLabelText('Choose a CSV file', { exact: false }).upload(csvFile(''));
+      await screen
+        .getByLabelText('Choose a CSV or Excel file', { exact: false })
+        .upload(csvFile(''));
 
       await expect.element(screen.getByText('That file has no rows in it.')).toBeInTheDocument();
       await expect.element(screen.getByText('No report was created.')).toBeInTheDocument();
@@ -148,13 +201,13 @@ describe('UploadForm', () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
       await screen
-        .getByLabelText('Choose a CSV file', { exact: false })
+        .getByLabelText('Choose a CSV or Excel file', { exact: false })
         .upload(new File(['not a csv'], 'notes.txt', { type: 'text/plain' }));
 
       await expect
         .element(
           screen.getByText(
-            'We can only read CSV files right now. In Excel, choose File → Save As → CSV.',
+            'We can read CSV and Excel (.xlsx) files. For an older .xls file, in Excel choose File → Save As → Excel Workbook (.xlsx).',
           ),
         )
         .toBeInTheDocument();
@@ -164,7 +217,7 @@ describe('UploadForm', () => {
     test('replacing a chosen file returns to the drop zone and clears the months prompt', async () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
-      await screen.getByLabelText('Choose a CSV file', { exact: false }).upload(csvFile());
+      await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(csvFile());
       await expect
         .element(screen.getByText('1 of 1 months still need a count'))
         .toBeInTheDocument();
@@ -175,7 +228,7 @@ describe('UploadForm', () => {
         .element(screen.getByText('Choose a file first — we will list the months it covers.'))
         .toBeInTheDocument();
       await expect
-        .element(screen.getByLabelText('Choose a CSV file', { exact: false }))
+        .element(screen.getByLabelText('Choose a CSV or Excel file', { exact: false }))
         .toBeInTheDocument();
     });
 
@@ -187,7 +240,9 @@ describe('UploadForm', () => {
       await screen.getByRole('radio', { name: 'lb' }).click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
-      await expect.element(screen.getByText('Choose a CSV file to upload.')).toBeInTheDocument();
+      await expect
+        .element(screen.getByText('Choose a CSV or Excel file to upload.'))
+        .toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -196,7 +251,7 @@ describe('UploadForm', () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
       await screen.getByLabelText('Report name').fill('Q1 procurement');
-      await screen.getByLabelText('Choose a CSV file', { exact: false }).upload(csvFile());
+      await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(csvFile());
       await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
       await screen.getByRole('button', { name: 'Upload report' }).click();
 

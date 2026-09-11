@@ -73,7 +73,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       bytes: null,
       rejection: {
         reason: 'other',
-        summary: 'Choose a CSV file to upload.',
+        summary: 'Choose a CSV or Excel file to upload.',
         rejectionDetail: 'the request carried no file',
       },
     };

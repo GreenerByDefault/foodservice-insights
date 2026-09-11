@@ -401,8 +401,20 @@ Routing downloads through our server also means we can add server-side download 
 
 ## Input file upload and validation
 
-**The web server accepts only CSV**; the client converts XLSX to CSV before uploading, taking
-care with Excel dates.
+**The web server accepts only CSV**; the client converts XLSX to CSV before uploading with
+`read-excel-file`, taking care with Excel dates.
+[`apps/web/src/lib/reports/excel/`](apps/web/src/lib/reports/excel/) owns that conversion, which
+tab of a workbook is read, and the reasoning behind both.
+
+**The original workbook travels as a second field and is stored without ever being opened** —
+sized, sniffed for `PK`, hashed, stored. Decompressing or parsing it server-side would move every
+zip- and XML-bomb risk out of the uploader's own tab and onto us, so the guard against those runs
+in the browser, in `excel/zip.ts`, against a cap in
+[`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts). The upload's download
+link then hands back the file the user actually chose rather than a CSV they never saw.
+
+**A workbook the browser refuses is never sent**, so no workbook-specific rejection reaches
+`rejected_upload` and that table needs no new reason value for one.
 
 **The file is sent directly to the web server**, not through a presigned upload URL. At a 10MB
 cap the performance is fine, the server has to download the file for validation anyway, and it

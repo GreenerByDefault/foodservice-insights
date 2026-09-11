@@ -56,7 +56,8 @@ Four distinct failures can reach the user, and each calls for a different answer
 The input file and result files are stored in a blob store, with associated metadata in the
 database.
 
-- **Input metadata:** uploader, name, upload time, file size.
+- **Input metadata:** uploader, name, upload time, file size — and, when the upload was an
+  Excel workbook, the workbook itself alongside the CSV the browser converted it to.
 - **Result metadata:** file size and processing time.
   - **Open:** a `result_metadata` JSON column existed for structured output from the AI library
     (rows in, rows categorized, products uncategorized, ...) but was dropped for now — it wasn't
