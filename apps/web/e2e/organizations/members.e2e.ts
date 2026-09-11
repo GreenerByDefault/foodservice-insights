@@ -32,7 +32,7 @@ test('an admin promotes a member to admin, then demotes them back, with no reloa
   expect(loads.count).toBe(0);
 });
 
-test('the sole admin demoting their own row is refused, and told how to proceed', async ({
+test('the sole admin stepping down is refused, and told how to proceed', async ({
   page,
   organizations,
   user,
@@ -46,8 +46,8 @@ test('the sole admin demoting their own row is refused, and told how to proceed'
 
   const ownRow = page.getByRole('listitem').filter({ hasText: user.email });
 
-  await ownRow.getByRole('button', { name: `Manage ${user.email}` }).click();
-  await page.getByRole('menuitem', { name: 'Make member' }).click();
+  await page.getByRole('button', { name: 'Step down as admin' }).click();
+  await page.getByRole('button', { name: 'Yes, step down' }).click();
 
   await expect(
     page.getByText("You're the only admin. Make someone else an admin first."),

@@ -68,13 +68,23 @@ describe('MembersList', () => {
     await expect.element(screen.getByRole('button')).not.toBeInTheDocument();
   });
 
-  test('an admin viewer sees a per-row menu for every member', async () => {
+  test('an admin viewer sees a per-row menu for every other member', async () => {
     const screen = await render(MembersList, {
       members: [aMember({ isYou: true, role: 'admin' }), aMember({ displayName: null })],
       organizationSlug: 'org-1',
       viewerRole: 'admin',
     });
 
-    expect(screen.getByRole('button').elements()).toHaveLength(2);
+    expect(screen.getByRole('button').elements()).toHaveLength(1);
+  });
+
+  test('an admin viewer sees no menu on their own row — that’s “Your membership”’s job', async () => {
+    const screen = await render(MembersList, {
+      members: [aMember({ isYou: true, role: 'admin' })],
+      organizationSlug: 'org-1',
+      viewerRole: 'admin',
+    });
+
+    await expect.element(screen.getByRole('button')).not.toBeInTheDocument();
   });
 });
