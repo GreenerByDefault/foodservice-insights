@@ -1,3 +1,10 @@
+<script module lang="ts">
+/** Thrown from `onConfirm` to show a message more specific than the generic `errorMessage` prop —
+ * a caller that knows why this particular action failed shouldn't have to reimplement the
+ * dialog's error banner to say so. */
+export class ConfirmActionError extends Error {}
+</script>
+
 <script lang="ts">
 import type { Snippet } from 'svelte';
 import {
@@ -78,8 +85,11 @@ async function confirm() {
     await onConfirm();
     // No success UI to show, so just close — the caller may have already done this itself.
     open = false;
-  } catch {
-    actionState = { status: 'error', message: errorMessage };
+  } catch (error) {
+    actionState = {
+      status: 'error',
+      message: error instanceof ConfirmActionError ? error.message : errorMessage,
+    };
   }
 }
 </script>

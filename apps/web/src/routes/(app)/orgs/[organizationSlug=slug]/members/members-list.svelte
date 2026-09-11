@@ -47,8 +47,9 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
       <!-- One copy of it, not a hidden twin per breakpoint: `MemberActions` is interactive
            (dropdown state, ids, handlers), and a second copy would be a second menu per member
            wherever a test environment renders without Tailwind's compiled CSS to apply the
-           `hidden` that would otherwise take it out of the accessibility tree. -->
-      {#if viewerRole === 'admin'}
+           `hidden` that would otherwise take it out of the accessibility tree. Never on the
+           viewer's own row: that's the "Your membership" section's job, not this menu's. -->
+      {#if viewerRole === 'admin' && !member.isYou}
         <MemberActions {organizationSlug} {member} onDone={invalidateAll} />
       {/if}
     </li>

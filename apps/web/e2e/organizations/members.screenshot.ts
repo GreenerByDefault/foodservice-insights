@@ -3,12 +3,12 @@
  * `members-as-admin.png` and `members-as-member.png` are one roster seen by each of the two
  * viewer roles — both roles among the people listed, and both name shapes a row renders: a
  * display name with the email beneath, and a display name-less row that shows only the email.
- * The pair is what shows the admin-only controls are admin-only: the "⋯" menus and the note
- * under the list are in the first and gone from the second.
+ * The pair is what shows the admin-only controls are admin-only: the "⋯" menus, the note under
+ * the list, and the "Your membership" section are all in the first and gone from the second.
  *
  * `members-menu.png` is a row's menu open — where that menu lands against the row it belongs to,
- * which a roster image can't show. `members-error.png` is a refused action's message, which
- * takes a full-width line below the row rather than crowding the name and the menu off it.
+ * which a roster image can't show. `members-error.png` is the "Your membership" section's refused
+ * Step down, the one action that acts on the viewer rather than another row.
  *
  * Every person's email is fixed rather than the fixture's default random one: unlike a
  * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
@@ -59,6 +59,8 @@ test('the roster as an admin, the viewer among them', async ({ page, organizatio
   ).toBeVisible();
   // The signed-in user is this organization's creator and admin, so it's the row naming "You".
   await expect(page.getByText('(You)')).toBeVisible();
+  // Own-row actions live in "Your membership" below the list, not in a menu on the row itself.
+  await expect(page.getByRole('button', { name: 'Step down as admin' })).toBeVisible();
 
   await expectScreenshots(page, 'members-as-admin.png');
 });
@@ -105,13 +107,12 @@ test('a member row’s menu, open', async ({ page, organizations }) => {
   await expectScreenshots(page, 'members-menu.png');
 });
 
-test('the sole admin’s own row, after Make member is refused', async ({
+test('the sole admin’s Your membership section, after Step down is refused', async ({
   page,
   organizations,
-  user,
 }) => {
   // No `members` given: the signed-in user is this organization's creator and only member, so
-  // demoting their own row is the one action `member-actions.svelte` refuses client-side-visibly.
+  // stepping down is the one action `your-membership.svelte` refuses client-side-visibly.
   const { slug: organizationSlug } = await organizations.create({
     name: 'Members Error Screenshot Foodservice',
   });
@@ -119,8 +120,8 @@ test('the sole admin’s own row, after Make member is refused', async ({
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  await page.getByRole('button', { name: `Manage ${user.email}` }).click();
-  await page.getByRole('menuitem', { name: 'Make member' }).click();
+  await page.getByRole('button', { name: 'Step down as admin' }).click();
+  await page.getByRole('button', { name: 'Yes, step down' }).click();
 
   await expect(
     page.getByText("You're the only admin. Make someone else an admin first."),

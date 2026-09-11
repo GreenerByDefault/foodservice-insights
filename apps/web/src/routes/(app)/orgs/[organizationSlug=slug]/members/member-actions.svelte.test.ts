@@ -54,16 +54,6 @@ describe('MemberActions', () => {
       .not.toBeInTheDocument();
   });
 
-  test('the last admin’s own row offers Make member live, for the trigger to refuse', async () => {
-    const screen = await opened({
-      organizationSlug: 'org-1',
-      member: aMember({ role: 'admin', isYou: true }),
-      onDone: vi.fn(),
-    });
-
-    await expect.element(screen.getByRole('menuitem', { name: 'Make member' })).toBeEnabled();
-  });
-
   test('promoting PATCHes the member with role admin, then calls onDone', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
     const onDone = vi.fn().mockResolvedValue(undefined);
