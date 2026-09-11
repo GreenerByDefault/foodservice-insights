@@ -1,4 +1,4 @@
-/** Four committed images.
+/** Five committed images.
  *
  * `members-as-admin.png` and `members-as-member.png` are one roster seen by each of the two
  * viewer roles — both roles among the people listed, and both name shapes a row renders: a
@@ -9,6 +9,11 @@
  *
  * `members-menu.png` is a row's menu open — where that menu lands against the row it belongs to,
  * which a roster image can't show — now with Remove from organization below the role toggle.
+ * `members-remove-confirm.png` continues one step further: the menu's "Remove from organization"
+ * item opens `ConfirmAction`'s dialog, not its own trigger, so this is the one place that path —
+ * and the member's name interpolated into the dialog's title — renders. The dialog's own chrome
+ * (loading, error banner) is generic across every `ConfirmAction` call site and already covered by
+ * `members-error.png`, so this image isn't re-proving that.
  * `members-error.png` is the "Your membership" section's refused Step down, the one action that
  * acts on the viewer rather than another row.
  *
@@ -110,6 +115,28 @@ test('a member row’s menu, open', async ({ page, organizations }) => {
   await page.getByRole('menuitem', { name: 'Make admin' }).hover();
 
   await expectScreenshots(page, 'members-menu.png');
+});
+
+test('a member row’s Remove from organization, confirming', async ({ page, organizations }) => {
+  const { slug: organizationSlug } = await organizations.create({
+    name: 'Members Remove Confirm Screenshot Foodservice',
+    members: [
+      { displayName: 'Ana Ruiz', email: 'members-remove-confirm-ana@example.test', role: 'member' },
+    ],
+  });
+
+  await page.goto(`/orgs/${organizationSlug}/members`);
+  await ensureHydrated(page);
+
+  await page.getByRole('button', { name: 'Manage Ana Ruiz' }).click();
+  await page.getByRole('menuitem', { name: 'Remove from organization' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Remove Ana Ruiz?' })).toBeVisible();
+  await expect(
+    page.getByText("They'll lose access to this organization's reports and files."),
+  ).toBeVisible();
+
+  await expectScreenshots(page, 'members-remove-confirm.png');
 });
 
 test('the sole admin’s Your membership section, after Step down is refused', async ({
