@@ -14,7 +14,7 @@ import readExcelFile, { InvalidInputError } from 'read-excel-file/universal';
 import { escapeCsvField } from '../csv/write.ts';
 import { MAX_WORKBOOK_UNPACKED_BYTES } from '../limits.ts';
 import { spreadsheetSignature } from '../signatures.ts';
-import { type Cell, chooseSheet, type Sheet } from './sheets.ts';
+import { type Cell, chooseSheet, type Sheet, type SheetBasis } from './sheets.ts';
 import { declaredXmlBytes } from './zip.ts';
 
 export type WorkbookFault =
@@ -25,8 +25,9 @@ export type WorkbookFault =
   | { kind: 'no-data' }
   | { kind: 'no-columns'; sheets: readonly string[] };
 
-/** `others` is what lets a header failure say we may have read the wrong tab. */
-export type ChosenSheet = { name: string; others: readonly string[] };
+/** `others` is what lets a header failure say we may have read the wrong tab, and `basis` is
+ * how much of a guess reading this one was — see `withSheetHint`. */
+export type ChosenSheet = { name: string; basis: SheetBasis; others: readonly string[] };
 
 export type WorkbookConversion =
   | { ok: true; csv: Uint8Array; sheet: ChosenSheet }
@@ -62,7 +63,7 @@ export async function convertWorkbook(bytes: Uint8Array): Promise<WorkbookConver
       return {
         ok: true,
         csv: new TextEncoder().encode(renderCsv(choice.chosen.data)),
-        sheet: { name: choice.chosen.sheet, others: choice.others },
+        sheet: { name: choice.chosen.sheet, basis: choice.basis, others: choice.others },
       };
   }
 }

@@ -80,6 +80,11 @@ export const MAX_PROBLEMS_REPORTED = 20;
  */
 export const MAX_ROW_RANGES_REPORTED = 5;
 
+/** How many of a workbook's tabs a sentence names before the rest become "and N more". Excel
+ * caps a sheet name at 31 characters, so this bounds the list at roughly a line and a half.
+ */
+export const MAX_SHEETS_NAMED = 5;
+
 /** How many different values one problem quotes back as examples. */
 export const MAX_EXAMPLE_VALUES = 3;
 

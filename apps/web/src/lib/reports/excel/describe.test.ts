@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  MAX_SHEETS_NAMED,
   MAX_UPLOAD_FIELD_MEGABYTES,
   MAX_WORKBOOK_UNPACKED_BYTES,
   MAX_WORKBOOK_UNPACKED_MEGABYTES,
@@ -60,6 +61,19 @@ describe('describeWorkbookFault', () => {
   test.for(FAULT_CASES)('describes %s', ([fault, expected]) => {
     expect(describeWorkbookFault(fault)).toEqual(expected);
   });
+
+  test('names MAX_SHEETS_NAMED of a workbook full of tabs, and counts the rest', () => {
+    const sheets = Array.from({ length: MAX_SHEETS_NAMED + 2 }, (_, index) => `Tab ${index + 1}`);
+
+    expect(describeWorkbookFault({ kind: 'no-columns', sheets })).toEqual({
+      reason: 'bad_columns',
+      summary: `We could not find columns for product name, date ordered and weight on any sheet in that workbook — we looked at ${sheets
+        .slice(0, MAX_SHEETS_NAMED)
+        .map((name) => `"${name}"`)
+        .join(', ')} and 2 more.`,
+      rejectionDetail: `no required column on any of ${sheets.length} sheets`,
+    });
+  });
 });
 
 describe('describeOversizeConversion', () => {
@@ -87,21 +101,53 @@ describe('withSheetHint', () => {
     rejectionDetail: 'missing column(s): weight',
   };
 
-  test('names the sheet the rejection is about, and the ones it is not', () => {
-    expect(withSheetHint(rejection, { name: 'Orders', others: ['Notes', 'Lookup'] })).toEqual({
+  test('says a guess was a guess, and names the sheets it passed over', () => {
+    expect(
+      withSheetHint(rejection, { name: 'Orders', basis: 'closest', others: ['Notes', 'Lookup'] }),
+    ).toEqual({
       ...rejection,
       summary:
         'Your file needs a column for weight. We read "Orders", the sheet that came closest to the columns we need; your workbook also has "Notes" and "Lookup".',
     });
   });
 
+  // The header was the one we were looking for, so the rejection is about something else and
+  // "came closest" would send the user looking for a column that is already there.
+  test('only names the sheet when its header is the one we recognized', () => {
+    expect(
+      withSheetHint(rejection, { name: 'Orders', basis: 'header', others: ['Notes'] }).summary,
+    ).toBe(
+      'Your file needs a column for weight. We read "Orders"; your workbook also has "Notes".',
+    );
+  });
+
   test('names a single other sheet without a list', () => {
-    expect(withSheetHint(rejection, { name: 'Orders', others: ['Notes'] }).summary).toBe(
+    expect(
+      withSheetHint(rejection, { name: 'Orders', basis: 'closest', others: ['Notes'] }).summary,
+    ).toBe(
       'Your file needs a column for weight. We read "Orders", the sheet that came closest to the columns we need; your workbook also has "Notes".',
     );
   });
 
+  test('counts the sheets past MAX_SHEETS_NAMED rather than listing them', () => {
+    const others = Array.from({ length: MAX_SHEETS_NAMED + 1 }, (_, index) => `Tab ${index + 1}`);
+
+    expect(
+      withSheetHint(rejection, { name: 'Orders', basis: 'closest', others }).summary,
+    ).toContain(`"Tab ${MAX_SHEETS_NAMED}" and 1 more.`);
+  });
+
+  // A sheet name is the user's own text, and nothing stops a hand-written workbook putting a
+  // newline in one.
+  test('flattens a sheet name the way every other quoted value is flattened', () => {
+    expect(
+      withSheetHint(rejection, { name: 'Orders\nQ1', basis: 'header', others: ['Notes'] }).summary,
+    ).toContain('We read "Orders Q1";');
+  });
+
   test('leaves a rejection alone when there was no other sheet to have read', () => {
-    expect(withSheetHint(rejection, { name: 'Orders', others: [] })).toEqual(rejection);
+    expect(withSheetHint(rejection, { name: 'Orders', basis: 'only', others: [] })).toEqual(
+      rejection,
+    );
   });
 });

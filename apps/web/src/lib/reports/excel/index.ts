@@ -7,3 +7,4 @@ export {
   describeWorkbookFault,
   withSheetHint,
 } from './describe.ts';
+export type { SheetBasis } from './sheets.ts';

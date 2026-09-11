@@ -141,7 +141,7 @@ describe('convertWorkbook', () => {
       expect(result).toEqual({
         ok: true,
         csv: new TextEncoder().encode('product,date,weight\nBeef,,12.5\n'),
-        sheet: { name: 'Orders', others: ['Notes', 'Lookup'] },
+        sheet: { name: 'Orders', basis: 'header', others: ['Notes', 'Lookup'] },
       });
     });
 
@@ -164,7 +164,7 @@ describe('convertWorkbook', () => {
       expect(result).toEqual({
         ok: true,
         csv: new TextEncoder().encode('product,date\nBeef,2026-01-05\n'),
-        sheet: { name: 'Orders', others: ['Notes'] },
+        sheet: { name: 'Orders', basis: 'closest', others: ['Notes'] },
       });
     });
 
@@ -197,7 +197,7 @@ describe('convertWorkbook', () => {
       expect(result).toEqual({
         ok: true,
         csv: new TextEncoder().encode('Beef\n'),
-        sheet: { name: 'Orders', others: [] },
+        sheet: { name: 'Orders', basis: 'only', others: [] },
       });
     });
   });

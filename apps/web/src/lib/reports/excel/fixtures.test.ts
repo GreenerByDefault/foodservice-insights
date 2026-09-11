@@ -41,7 +41,7 @@ describe('a workbook written by other software', () => {
     const { csv, sheet } = await converted(name);
 
     expect(new TextDecoder().decode(csv)).toBe(ORDERS_CSV);
-    expect(sheet).toEqual({ name: 'Orders', others: [] });
+    expect(sheet).toEqual({ name: 'Orders', basis: 'header', others: [] });
   });
 
   test.for(ORDERS_FIXTURES)('normalizes to an accepted file: %s', async (name) => {
@@ -59,7 +59,7 @@ describe('a workbook written by other software', () => {
   test('finds the orders of a real workbook behind a notes tab', async () => {
     const { csv, sheet } = await converted('openpyxl-notes-first.xlsx');
 
-    expect(sheet).toEqual({ name: 'Orders', others: ['Notes'] });
+    expect(sheet).toEqual({ name: 'Orders', basis: 'header', others: ['Notes'] });
     expect(new TextDecoder().decode(csv)).toBe(ORDERS_CSV);
     expect(normalizeCsv(csv, { now: NOW })).toMatchObject({
       ok: true,

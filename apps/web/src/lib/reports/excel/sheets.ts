@@ -2,8 +2,13 @@
  *
  * A CSV has one sheet; a workbook has as many as the user felt like keeping, and nothing on the
  * page tells them we only read one. So we look for the tab whose header row `resolveHeader`
- * reads — the same verdict the CSV reader will reach on the converted bytes — rather than taking
- * whichever tab happens to sit first.
+ * reads, rather than taking whichever tab happens to sit first.
+ *
+ * *One* row of that tab may read as a header, because that is what `readLayout` demands of the
+ * converted bytes: two resolvable rows are two ways to read the file, and it refuses the pair as
+ * ambiguous. A tab it would refuse that way must not shadow one it could have read. The check is
+ * otherwise weaker than `readLayout`'s — it never probes the `;`, tab and `|` delimiters — which
+ * can only turn a tab we expected to read into an ambiguous rejection, never the reverse.
  *
  * Failing that, the tab naming the *most* required columns is the one worth reading, because it
  * is the one whose rejection is worth showing: "your file needs a column for weight", about the
@@ -29,42 +34,61 @@ export type Cell = string | number | boolean | Date | null;
 
 export type Sheet = { sheet: string; data: readonly Cell[][] };
 
-/** `others` is every *other* sheet with data, before or after the one we read, since the user's
- * orders could be on any of them. `sheets` on a `no-columns` is all of them, there being no one
- * sheet the answer is about. */
+/** How much of a choice this was, which is what decides whether a rejection may say we read the
+ * sheet that "came closest" — see `withSheetHint`.
+ *
+ * - `header`: its header row reads, and no other row of it does. We are not guessing.
+ * - `closest`: no sheet's header read, and this one named the most of what we need.
+ * - `only`: one sheet had cells in it, so there was nothing to choose between. Whatever it
+ *   holds, `csv/` judges it and says something better about it than we could.
+ */
+export type SheetBasis = 'header' | 'closest' | 'only';
+
+/** `others` is every *other* sheet with cells in it, before or after the one we read, since the
+ * user's orders could be on any of them — empty, necessarily, on an `only`. `sheets` on a
+ * `no-columns` is all of them, there being no one sheet the answer is about. */
 export type SheetChoice =
-  | { kind: 'read'; chosen: Sheet; others: readonly string[] }
+  | { kind: 'read'; chosen: Sheet; basis: SheetBasis; others: readonly string[] }
   | { kind: 'no-columns'; sheets: readonly string[] }
   | { kind: 'no-data' };
 
 export function chooseSheet(sheets: readonly Sheet[]): SheetChoice {
-  const withData = sheets.filter(({ data }) => data.length > 0);
+  const withData = sheets.filter(hasCells);
   const [only, ...rest] = withData;
   if (!only) return { kind: 'no-data' };
 
-  const readable = withData.find(hasReadableHeader);
-  if (readable) return read(readable, withData);
-  if (rest.length === 0) return read(only, withData);
+  const readable = withData.find(readsAsOneHeader);
+  if (readable) return read(readable, 'header', withData);
+  if (rest.length === 0) return read(only, 'only', withData);
 
   const closest = closestMatch(withData);
   return closest
-    ? read(closest, withData)
+    ? read(closest, 'closest', withData)
     : { kind: 'no-columns', sheets: withData.map(({ sheet }) => sheet) };
 }
 
-function read(chosen: Sheet, withData: readonly Sheet[]): SheetChoice {
+/** A sheet of nothing but blank rows is not a sheet the user put anything on: reading it would
+ * convert to a CSV of empty lines, and naming it would claim we looked somewhere we didn't. */
+function hasCells({ data }: Sheet): boolean {
+  return data.some((row) => row.some((cell) => cell !== null));
+}
+
+function read(chosen: Sheet, basis: SheetBasis, withData: readonly Sheet[]): SheetChoice {
   return {
     kind: 'read',
     chosen,
+    basis,
     others: withData.filter((sheet) => sheet !== chosen).map(({ sheet }) => sheet),
   };
 }
 
-function hasReadableHeader(sheet: Sheet): boolean {
+function readsAsOneHeader(sheet: Sheet): boolean {
+  let readable = 0;
   for (const fields of headerCandidates(sheet)) {
-    if (resolveHeader(fields).ok) return true;
+    if (resolveHeader(fields).ok) readable += 1;
+    if (readable > 1) return false;
   }
-  return false;
+  return readable === 1;
 }
 
 /** The sheet naming the most required columns, or undefined when that is none of them. */

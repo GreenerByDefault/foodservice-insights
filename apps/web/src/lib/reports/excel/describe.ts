@@ -6,9 +6,10 @@
  */
 
 import { headerLabel } from '../csv/describe/index.ts';
-import { listOf } from '../csv/describe/text.ts';
+import { listOf, quote } from '../csv/describe/text.ts';
 import { REQUIRED_COLUMNS } from '../csv/read/index.ts';
 import {
+  MAX_SHEETS_NAMED,
   MAX_UPLOAD_FIELD_MEGABYTES,
   MAX_WORKBOOK_UNPACKED_BYTES,
   MAX_WORKBOOK_UNPACKED_MEGABYTES,
@@ -71,22 +72,32 @@ export function describeOversizeConversion(byteSize: number): RejectedUploadReco
  * one file and has no idea the user sent four sheets. What to *do* about the rejection is left to
  * the sentence this appends to, which is more specific than anything we could say here.
  *
- * `chooseSheet` reaches a sheet with other sheets beside it only by finding the one that named
- * the most of what we need, so "came closest" is true whenever this fires.
+ * Only a guess explains itself. We read a `closest` sheet because it was the nearest thing to a
+ * header in the workbook, which is worth saying — the user may have meant another tab. A `header`
+ * sheet we read because its header is the one we were looking for, and claiming it merely "came
+ * closest" would misdescribe a rejection that is about something else entirely.
  */
 export function withSheetHint(
   rejection: RejectedUploadRecord,
   sheet: ChosenSheet,
 ): RejectedUploadRecord {
   if (sheet.others.length === 0) return rejection;
+  const why =
+    sheet.basis === 'closest' ? ', the sheet that came closest to the columns we need' : '';
   return {
     ...rejection,
-    summary: `${rejection.summary} We read "${sheet.name}", the sheet that came closest to the columns we need; your workbook also has ${quotedList(sheet.others)}.`,
+    summary: `${rejection.summary} We read ${quote(sheet.name)}${why}; your workbook also has ${quotedList(sheet.others)}.`,
   };
 }
 
+/** Sheet names are the user's own text, so they are quoted the way every other value quoted back
+ * to them is. A workbook can carry dozens of tabs, and a sentence listing all of them is one
+ * nobody reads; the count in `rejectionDetail` still has the whole number.
+ */
 function quotedList(names: readonly string[]): string {
-  return listOf(names.map((name) => `"${name}"`));
+  const named = names.slice(0, MAX_SHEETS_NAMED).map(quote);
+  const hidden = names.length - named.length;
+  return listOf(hidden > 0 ? [...named, `${hidden} more`] : named);
 }
 
 /** Rounded *up*, so a file barely over a cap never reads as exactly the cap. */
