@@ -3,6 +3,7 @@ import { error, json } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import * as v from 'valibot';
 import { recordAuditEvent } from '$lib/server/audit';
+import { requireAuth, requireOrganizationAdmin } from '$lib/server/auth/guards';
 import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
 import type { Actor } from '$lib/server/auth/types';
 import { database, isCheckViolation, withDbErrorHandling } from '$lib/server/db';
@@ -23,15 +24,24 @@ export const PATCH: RequestHandler = async (event) => {
   );
 };
 
-/** **Stub:** answers 501 until `memberships.md`'s remaining PR lands.
- *
- * Remove a member, or leave — the same request with your own id, which is why this is not two
- * endpoints. An admin may do either; a member may only do the second.
- *
- * `organization_member_at_least_one_admin` is deferred and takes a row lock, so it, not this
- * handler, decides whether the last admin may go. Turn its `check_violation` into a 409.
+/** Remove a member, or leave — the same request with your own id, which is why this is not two
+ * endpoints. An admin may do either; a member may only do the second, so a request for anyone
+ * else's id first re-checks admin (403 for a member).
  */
-export const DELETE: RequestHandler = () => error(501, { message: 'Not implemented yet' });
+export const DELETE: RequestHandler = async (event) => {
+  const { organizationId, actor } = await requireOrganizationRouteContext(database(), event);
+  const targetUserId = event.params.userId as UserId;
+
+  if (targetUserId !== actor.userId) {
+    await requireOrganizationAdmin(
+      database(),
+      requireAuth(event.locals),
+      event.params.organizationSlug,
+    );
+  }
+
+  return await _removeMember(database(), { organizationId, actor, targetUserId });
+};
 
 /** Promote or demote `targetUserId` to `role`, from `body`'s `{ role }`.
  *
@@ -102,6 +112,66 @@ export async function _changeMemberRole(
         return { ok: true as const };
       }),
     { action: 'change a member’s role', context: { organizationId, targetUserId } },
+  );
+
+  if (!outcome.ok) {
+    return json(
+      {
+        message: "You're the only admin. Make someone else an admin first.",
+        code: 'last-admin',
+      },
+      { status: 409 },
+    );
+  }
+  return new Response(null, { status: 204 });
+}
+
+/** Remove `targetUserId` from `organizationId` — or leave, when it's `actor`'s own id.
+ *
+ * - 404 if `targetUserId` isn't a member of `organizationId`.
+ * - 409 `last-admin` if this would leave the organization with no admin —
+ *   `organization_member_at_least_one_admin` decides, not this function, the same way and for the
+ *   same reason as `_changeMemberRole`.
+ * - Otherwise `member.left` when `targetUserId` is `actor` else `member.removed`, then 204.
+ */
+export async function _removeMember(
+  db: DatabaseExecutor,
+  params: { organizationId: OrganizationId; actor: Actor; targetUserId: UserId },
+): Promise<Response> {
+  const { organizationId, actor, targetUserId } = params;
+
+  const outcome = await withDbErrorHandling(
+    () =>
+      withTransaction(db, async (transaction) => {
+        await sql`SET CONSTRAINTS organization_member_at_least_one_admin IMMEDIATE`.execute(
+          transaction,
+        );
+
+        try {
+          const removed = await transaction
+            .deleteFrom('organizationMember')
+            .where('organizationId', '=', organizationId)
+            .where('userId', '=', targetUserId)
+            .returning('userId')
+            .executeTakeFirst();
+
+          if (!removed) error(404, { message: 'Not found', code: 'not_found' });
+        } catch (cause) {
+          if (isCheckViolation(cause, 'organization_member_at_least_one_admin')) {
+            return { ok: false as const };
+          }
+          throw cause;
+        }
+
+        await recordAuditEvent(transaction, {
+          action: targetUserId === actor.userId ? 'member.left' : 'member.removed',
+          actor,
+          target: { type: 'user', id: targetUserId, organizationId },
+        });
+
+        return { ok: true as const };
+      }),
+    { action: 'remove a member', context: { organizationId, targetUserId } },
   );
 
   if (!outcome.ok) {

@@ -108,4 +108,55 @@ describe('MemberActions', () => {
       .element(screen.getByText('Could not update this member. Please try again.'))
       .toBeVisible();
   });
+
+  describe('Remove from organization', () => {
+    test('confirming DELETEs the member, then calls onDone', async () => {
+      const fetchMock = stubFetch(new Response(null, { status: 204 }));
+      const onDone = vi.fn().mockResolvedValue(undefined);
+      const member = aMember({ userId: 'user-1' as UserId });
+      const screen = await opened({ organizationSlug: 'org-1', member, onDone });
+
+      await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
+      await screen.getByRole('button', { name: 'Yes, remove' }).click();
+
+      await expect.poll(() => onDone.mock.calls.length).toBe(1);
+      const [url, options] = lastFetchCall(fetchMock);
+      expect(url).toBe('/api/orgs/org-1/members/user-1');
+      expect(options.method).toBe('DELETE');
+    });
+
+    test('a 409 shows the last-admin message and does not call onDone', async () => {
+      stubFetch(
+        new Response(JSON.stringify({ message: 'Only admin', code: 'last-admin' }), {
+          status: 409,
+        }),
+      );
+      const onDone = vi.fn().mockResolvedValue(undefined);
+      const screen = await opened({ organizationSlug: 'org-1', member: aMember(), onDone });
+
+      await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
+      await screen.getByRole('button', { name: 'Yes, remove' }).click();
+
+      await expect
+        .element(screen.getByText("You're the only admin. Make someone else an admin first."))
+        .toBeVisible();
+      expect(onDone).not.toHaveBeenCalled();
+    });
+
+    test('any other failure shows a generic message', async () => {
+      stubFetch(new Response(JSON.stringify({ message: 'Nope' }), { status: 500 }));
+      const screen = await opened({
+        organizationSlug: 'org-1',
+        member: aMember(),
+        onDone: vi.fn(),
+      });
+
+      await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
+      await screen.getByRole('button', { name: 'Yes, remove' }).click();
+
+      await expect
+        .element(screen.getByText('Could not remove this member. Please try again.'))
+        .toBeVisible();
+    });
+  });
 });

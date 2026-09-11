@@ -20,12 +20,8 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
   viewerRole={data.role}
 />
 
-{#if data.role === 'admin'}
-  <p class="w-full text-sm text-muted-foreground">Inviting and removing people arrives later.</p>
-{/if}
-
-{#if data.role === 'admin' && viewerUserId}
+{#if viewerUserId}
   <Field.Separator />
 
-  <YourMembership organizationSlug={data.organization.slug} {viewerUserId} />
+  <YourMembership organizationSlug={data.organization.slug} {viewerUserId} viewerRole={data.role} />
 {/if}
