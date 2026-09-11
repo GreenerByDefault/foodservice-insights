@@ -21,6 +21,7 @@ const UNPACKED_MARGIN = 2.5;
  */
 export const MAX_WORKBOOK_UNPACKED_BYTES =
   MAX_UPLOAD_FIELD_BYTES * XML_TO_CSV_EXPANSION * UNPACKED_MARGIN;
+export const MAX_WORKBOOK_UNPACKED_MEGABYTES = MAX_WORKBOOK_UNPACKED_BYTES / 1024 / 1024;
 
 /** Caps on the free text and the metadata an upload carries. */
 export const MAX_FREE_TEXT_LENGTH = 200;
@@ -78,6 +79,11 @@ export const MAX_PROBLEMS_REPORTED = 20;
  * are collapsed into runs first, so a whole column failing is one run however long the file is.
  */
 export const MAX_ROW_RANGES_REPORTED = 5;
+
+/** How many of a workbook's tabs a sentence names before the rest become "and N more". Excel
+ * caps a sheet name at 31 characters, so this bounds the list at roughly a line and a half.
+ */
+export const MAX_SHEETS_NAMED = 5;
 
 /** How many different values one problem quotes back as examples. */
 export const MAX_EXAMPLE_VALUES = 3;
