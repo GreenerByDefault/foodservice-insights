@@ -48,7 +48,6 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
            (dropdown state, ids, handlers), and a second copy would be a second menu per member
            wherever a test environment renders without Tailwind's compiled CSS to apply the
            `hidden` that would otherwise take it out of the accessibility tree. -->
-      <!-- This PR only offers a role change, admin-only; a member sees no menu on any row yet. -->
       {#if viewerRole === 'admin'}
         <MemberActions {organizationSlug} {member} onDone={invalidateAll} />
       {/if}
