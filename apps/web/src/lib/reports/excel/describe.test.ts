@@ -45,6 +45,15 @@ const FAULT_CASES: [WorkbookFault, RejectedUploadRecord][] = [
     },
   ],
   [{ kind: 'no-data' }, { reason: 'empty', summary: 'That Excel file has no rows in it.' }],
+  [
+    { kind: 'no-columns', sheets: ['Notes', 'Sheet2', 'Lookup'] },
+    {
+      reason: 'bad_columns',
+      summary:
+        'We could not find columns for product name, date ordered and weight on any sheet in that workbook — we looked at "Notes", "Sheet2" and "Lookup".',
+      rejectionDetail: 'no required column on any of 3 sheets',
+    },
+  ],
 ];
 
 describe('describeWorkbookFault', () => {
@@ -78,17 +87,17 @@ describe('withSheetHint', () => {
     rejectionDetail: 'missing column(s): weight',
   };
 
-  test('says which sheet was read and which others held data', () => {
-    expect(withSheetHint(rejection, { name: 'Notes', others: ['Orders', 'Lookup'] })).toEqual({
+  test('names the sheet the rejection is about, and the ones it is not', () => {
+    expect(withSheetHint(rejection, { name: 'Orders', others: ['Notes', 'Lookup'] })).toEqual({
       ...rejection,
       summary:
-        'Your file needs a column for weight. We read the sheet named "Notes"; your workbook also has "Orders" and "Lookup". If your orders are on one of those, delete the sheets you don\'t need and upload it again.',
+        'Your file needs a column for weight. We read "Orders", the sheet that came closest to the columns we need; your workbook also has "Notes" and "Lookup".',
     });
   });
 
   test('names a single other sheet without a list', () => {
-    expect(withSheetHint(rejection, { name: 'Notes', others: ['Orders'] }).summary).toBe(
-      'Your file needs a column for weight. We read the sheet named "Notes"; your workbook also has "Orders". If your orders are on one of those, delete the sheets you don\'t need and upload it again.',
+    expect(withSheetHint(rejection, { name: 'Orders', others: ['Notes'] }).summary).toBe(
+      'Your file needs a column for weight. We read "Orders", the sheet that came closest to the columns we need; your workbook also has "Notes".',
     );
   });
 

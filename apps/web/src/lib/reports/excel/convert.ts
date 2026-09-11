@@ -22,7 +22,8 @@ export type WorkbookFault =
   | { kind: 'not-a-workbook' }
   | { kind: 'corrupt' }
   | { kind: 'too-large-unpacked'; declaredBytes: number }
-  | { kind: 'no-data' };
+  | { kind: 'no-data' }
+  | { kind: 'no-columns'; sheets: readonly string[] };
 
 /** `others` is what lets a header failure say we may have read the wrong tab. */
 export type ChosenSheet = { name: string; others: readonly string[] };
@@ -52,13 +53,18 @@ export async function convertWorkbook(bytes: Uint8Array): Promise<WorkbookConver
   }
 
   const choice = chooseSheet(sheets);
-  if (!choice) return { ok: false, fault: { kind: 'no-data' } };
-
-  return {
-    ok: true,
-    csv: new TextEncoder().encode(renderCsv(choice.chosen.data)),
-    sheet: { name: choice.chosen.sheet, others: choice.others },
-  };
+  switch (choice.kind) {
+    case 'no-data':
+      return { ok: false, fault: { kind: 'no-data' } };
+    case 'no-columns':
+      return { ok: false, fault: { kind: 'no-columns', sheets: choice.sheets } };
+    case 'read':
+      return {
+        ok: true,
+        csv: new TextEncoder().encode(renderCsv(choice.chosen.data)),
+        sheet: { name: choice.chosen.sheet, others: choice.others },
+      };
+  }
 }
 
 /** The `default` is deliberate: the library's own crash on a shape it did not expect — a workbook

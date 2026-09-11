@@ -145,20 +145,42 @@ describe('convertWorkbook', () => {
       });
     });
 
-    test('falls back to the first sheet with data when no sheet has a header we know', async () => {
+    test('reads the sheet naming the most of what we need, when none names it all', async () => {
       const result = await convertWorkbook(
         aWorkbook({
           sheets: [
             { name: 'Notes', rows: [['Ask Dana about January']] },
-            { name: 'Orders', rows: [['thing', 'when', 'how much']] },
+            {
+              name: 'Orders',
+              rows: [
+                ['product', 'date'],
+                ['Beef', { date: '2026-01-05' }],
+              ],
+            },
           ],
         }),
       );
 
       expect(result).toEqual({
         ok: true,
-        csv: new TextEncoder().encode('Ask Dana about January\n'),
-        sheet: { name: 'Notes', others: ['Orders'] },
+        csv: new TextEncoder().encode('product,date\nBeef,2026-01-05\n'),
+        sheet: { name: 'Orders', others: ['Notes'] },
+      });
+    });
+
+    test('refuses a workbook no sheet of which names a required column', async () => {
+      const result = await convertWorkbook(
+        aWorkbook({
+          sheets: [
+            { name: 'Notes', rows: [['Ask Dana about January']] },
+            { name: 'Lookup', rows: [['thing', 'when', 'how much']] },
+          ],
+        }),
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        fault: { kind: 'no-columns', sheets: ['Notes', 'Lookup'] },
       });
     });
 

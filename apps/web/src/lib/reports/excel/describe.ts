@@ -5,7 +5,9 @@
  * refuses is never uploaded, so none of these reaches `rejected_upload`.
  */
 
+import { headerLabel } from '../csv/describe/index.ts';
 import { listOf } from '../csv/describe/text.ts';
+import { REQUIRED_COLUMNS } from '../csv/read/index.ts';
 import {
   MAX_UPLOAD_FIELD_MEGABYTES,
   MAX_WORKBOOK_UNPACKED_BYTES,
@@ -45,6 +47,12 @@ export function describeWorkbookFault(fault: WorkbookFault): RejectedUploadRecor
       };
     case 'no-data':
       return { reason: 'empty', summary: 'That Excel file has no rows in it.' };
+    case 'no-columns':
+      return {
+        reason: 'bad_columns',
+        summary: `We could not find columns for ${listOf(REQUIRED_COLUMNS.map(headerLabel))} on any sheet in that workbook — we looked at ${quotedList(fault.sheets)}.`,
+        rejectionDetail: `no required column on any of ${fault.sheets.length} sheets`,
+      };
   }
 }
 
@@ -59,22 +67,26 @@ export function describeOversizeConversion(byteSize: number): RejectedUploadReco
   };
 }
 
-/** Says which sheet we read, for a rejection that is probably really "we read the wrong tab".
- * Only worth appending to a header failure, which is the caller's call.
+/** Names the tab a rejection is about, which is the one thing `csv/` cannot know: it was handed
+ * one file and has no idea the user sent four sheets. What to *do* about the rejection is left to
+ * the sentence this appends to, which is more specific than anything we could say here.
  *
- * It does not tell them to reorder their tabs: `chooseSheet` reads the tab whose header we
- * recognize wherever it sits, so by the time this sentence is written, moving one first would
- * change nothing. Deleting the tabs that are not orders is what actually helps. */
+ * `chooseSheet` reaches a sheet with other sheets beside it only by finding the one that named
+ * the most of what we need, so "came closest" is true whenever this fires.
+ */
 export function withSheetHint(
   rejection: RejectedUploadRecord,
   sheet: ChosenSheet,
 ): RejectedUploadRecord {
   if (sheet.others.length === 0) return rejection;
-  const others = listOf(sheet.others.map((name) => `"${name}"`));
   return {
     ...rejection,
-    summary: `${rejection.summary} We read the sheet named "${sheet.name}"; your workbook also has ${others}. If your orders are on one of those, delete the sheets you don't need and upload it again.`,
+    summary: `${rejection.summary} We read "${sheet.name}", the sheet that came closest to the columns we need; your workbook also has ${quotedList(sheet.others)}.`,
   };
+}
+
+function quotedList(names: readonly string[]): string {
+  return listOf(names.map((name) => `"${name}"`));
 }
 
 /** Rounded *up*, so a file barely over a cap never reads as exactly the cap. */

@@ -19,8 +19,9 @@ Two things were decided with Eric on 2026-09-07 that go past the architecture no
   hands back `orders.xlsx`, not a CSV the user never saw. The server stores it as opaque bytes and
   **never opens it** — every zip and XML risk stays in the uploader's own browser tab.
 - **A multi-sheet workbook is read from the tab whose header we recognise**, wherever it sits,
-  falling back to the first tab with data when no tab has one. When that fallback leads to a header
-  failure, the rejection says which sheet we read and which others held data.
+  falling back to the tab naming the most of what we need. A rejection then says which tab it is
+  about. When *no* tab names a single required column there is nothing worth converting, and the
+  workbook is refused before the CSV reader ever sees it.
 
 The prefactor and the PR that made the server keep a workbook it never opens are both done.
 `inspectFile` now returns `{ ok: true; months; upload: { csvFile: File; workbook?: File } }` —
@@ -52,10 +53,12 @@ is — returning `WorkbookConversion` (`{ ok: true; csv; sheet: ChosenSheet }` o
 fault: WorkbookFault }`); `zip.ts`'s `declaredXmlBytes` returns `{ ok: true; xmlBytes } | { ok:
 false; fault: 'unreadable-directory' }` rather than throwing, so `convert.ts` maps that failure to
 `{ kind: 'corrupt' }` itself; `sheets.ts` owns which tab is read — `chooseSheet(sheets)` returns
-`{ chosen, others }`, or `undefined` when no tab holds a cell, and declares the `Cell` union
-`convert.ts` renders from; `describe.ts` covers every `WorkbookFault` and exports
-`describeOversizeConversion` and `withSheetHint`. `limits.ts` also grew
-`MAX_WORKBOOK_UNPACKED_MEGABYTES`, which `describe.ts` needs for the too-large-unpacked sentence
+`{ kind: 'read'; chosen; others } | { kind: 'no-columns'; sheets } | { kind: 'no-data' }`, and
+declares the `Cell` union `convert.ts` renders from; `describe.ts` covers every `WorkbookFault`
+and exports `describeOversizeConversion` and `withSheetHint`. `csv/describe/` exports `headerLabel`
+for the `no-columns` sentence, so both layers spell a column the way the alias table does.
+`limits.ts` also grew `MAX_WORKBOOK_UNPACKED_MEGABYTES`, which `describe.ts` needs for the
+too-large-unpacked sentence
 (`MAX_UPLOAD_FIELD_MEGABYTES` already existed for the same reason on the CSV side).
 `excel/index.ts` re-exports the public surface.
 
@@ -113,8 +116,9 @@ switch the converter to a sync unzip of our own).
 | Where the workbook lives | Blob key `…/input/{inputFileId}.xlsx`; three nullable columns on `input_file` (`workbook_storage_key`, `workbook_byte_size`, `workbook_checksum_sha256`), all-or-none | One row per report stays; the download route `coalesce`s. *Rejected:* a convention-only key like `-original.csv` — the download route would need `objectExists` on every hit and the row's `byte_size` would lie about the file the user gets |
 | `original_filename` | The workbook's name (`orders.xlsx`) when one was sent; the CSV's otherwise | It is what the user chose and what the report page shows |
 | Download link | Serves the workbook when present, else the CSV, under `original_filename` | Eric: the original Excel "is way less confusing than a CSV" |
-| Sheet selection | The first tab whose header row `resolveHeader` recognises, searched over that tab's first `MAX_HEADER_SEARCH_LINES` non-blank rows; the first tab with any cell when no tab has one. All sheets are parsed anyway, so the others' names are known | Taking the first tab only *tolerated* a notes tab — it still read the wrong one whenever anything sat in front of the orders, which is the common shape. Sharing `resolveHeader` means a tab we choose is one the CSV reader can then open, and the same bounded window keeps the search to ~10 rows per sheet on top of a parse that already read them. *Rejected:* rejecting multi-sheet workbooks — too strict for real files; a sheet picker — first disambiguation UI in the app, more than this needs |
-| Sheet hint | When `normalizeCsv` rejects with `reason: 'bad_columns'` and other sheets had data, append: `We read the sheet named "Notes"; your workbook also has "Orders" and "Lookup". If your orders are on one of those, delete the sheets you don't need and upload it again.` | Eric asked for exactly this: tolerate, but explain when the header failure is probably the wrong tab. It no longer tells them to reorder their tabs — by the time this sentence is written, `chooseSheet` has already failed to find a header on *any* tab, so moving one first would change nothing. `bad_columns` is the only reason `describe/file.ts` gives a header failure |
+| Sheet selection | The first tab whose header row `resolveHeader` reads, searched over that tab's first `MAX_HEADER_SEARCH_LINES` non-blank rows; else the tab naming the most required columns, ties to the earlier tab. A tab naming none is never read unless it is the only one | Taking the first tab only *tolerated* a notes tab — it still read the wrong one whenever anything sat in front of the orders, which is the common shape. Reading the closest match is what makes the rejection "needs a column for weight", about the sheet the user meant, instead of "needs product name, date ordered and weight", about their notes. Readable beats closest rather than ranking by count alone, so a tab naming all three but repeating one cannot shadow a tab we could have read. The bounded window keeps the search to ~10 rows per sheet, on top of a parse that already read them. *Rejected:* rejecting multi-sheet workbooks — too strict for real files; a sheet picker — first disambiguation UI in the app, more than this needs |
+| No tab names anything | `convertWorkbook` fails with `{ kind: 'no-columns'; sheets }` and `describe.ts` writes the sentence: `We could not find columns for product name, date ordered and weight on any sheet in that workbook — we looked at "Notes", "Sheet2" and "Lookup".` Nothing is converted and `normalizeCsv` never runs | Eric, working back from the UX: with nothing to go on, the CSV reader's sentence is generic anyway and is *about* a tab we picked arbitrarily, which frames a pivot table as "your file". The honest answer is workbook-shaped, and `csv/` structurally cannot write it — it is handed one file and never learns there were four sheets. Also skips rendering and reparsing a workbook we already know is hopeless. Not duplicated prose: it shares `headerLabel` with `csv/describe/`. **A workbook with one sheet is exempt** — it goes to `csv/` whatever its header, so a single-tab workbook and the CSV saved from it are refused in the same words |
+| Sheet hint | When `normalizeCsv` rejects with `reason: 'bad_columns'` and other sheets had data, append: `We read "Orders", the sheet that came closest to the columns we need; your workbook also has "Notes" and "Lookup".` | Which tab the rejection is about is the one thing `csv/` cannot know. What to *do* about it is left to the sentence this appends to, which is more specific than anything the workbook layer could add — and tolerating other sheets is fine, so it asks for nothing to be reordered or deleted. `bad_columns` is the only reason `describe/file.ts` gives a header failure |
 | Excel dates | `Date` → `YYYY-MM-DD` from UTC getters; time of day dropped | Sidesteps the CSV's day-first/month-first inference entirely — the cell *was* a date, so there is nothing to infer. Matches `dates.ts` dropping times on `YYYY-MM-DD hh:mm`. A date-formatted cell holding text stays text and meets the CSV rules as before |
 | Other cell kinds | number → `String(Number(n.toPrecision(15)))`; boolean → `TRUE`/`FALSE`; `null` → empty field; text escaped via `csv/write.ts`'s `escapeCsvField` (quote when it holds `"`, `,` or `\n`) | The output must be exactly the CSV a user could have saved themselves, so every existing rule and message applies. The 15 digits are Excel's own precision: the XML serialises a formula result like `=B2*0.453592` as `5.669900000000001`, which `weights.ts` would refuse as too many digits although Excel shows and saves-as-CSV `5.6699`. Rounding to what Excel holds is transcription, not a guess |
 | Blank rows | An all-`null` row becomes an empty line, not `,,` | `parseCsv` skips empty lines while still counting them, so "row 7" in a message is Excel's row 7. Verify with a fixture that the library keeps interior blank rows as `null` rows; if it collapses them, cell addresses are the fallback |
@@ -136,8 +140,8 @@ switch the converter to a sync unzip of our own).
   on the CSV bytes as today; on `reason === 'bad_columns'` with `sheet.others.length > 0`, wrap
   with `withSheetHint`. `inspect-file.test.ts`: a workbook yields `months`, a `text/csv`
   `orders.csv` and the original as `workbook`; a workbook whose orders sit behind a notes tab
-  yields `months` with no hint; one where no tab has a header we know carries the hint naming the
-  others; a single-sheet header failure does not; a converted CSV over the cap; the CSV path
+  yields `months` with no hint; one whose closest tab is missing a column carries the hint naming
+  the others; a single-sheet header failure does not; a converted CSV over the cap; the CSV path
   unchanged; client and server agree on the same CSV bytes (existing test, still true).
 - `upload-form.svelte`: `accept=".csv,text/csv,.xlsx,{XLSX_CONTENT_TYPE}"`; trigger label
   "Choose a CSV or Excel file"; description "A CSV or Excel workbook with three columns…";
@@ -170,7 +174,7 @@ Per PR: `pnpm lint && pnpm check && pnpm test` in the background; while iteratin
 `pnpm turbo run screenshots:update --filter=@gbd/web` only when Playwright asks.
 
 End to end, by hand in `pnpm dev`: upload each `excel/testing/fixtures/*.xlsx` — including the
-notes-first workbook, whose Orders tab should be found — and a workbook no tab of which has a
-header we know; confirm the months list, the hint copy on that last one, that the report page's
-"Uploaded file"
+notes-first workbook, whose Orders tab should be found — a workbook whose closest tab is missing
+one column, and one whose tabs name nothing at all; confirm the months list, the hint copy on the
+first of those and the `no-columns` sentence on the second, that the report page's "Uploaded file"
 downloads the `.xlsx`, and that `sample-reports/valid.csv` still behaves exactly as before.
