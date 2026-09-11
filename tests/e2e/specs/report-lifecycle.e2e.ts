@@ -32,7 +32,7 @@ async function uploadReport(
   await ensureHydrated(page);
 
   await page.getByLabel('Report name').fill(reportName);
-  await page.getByLabel('Choose a CSV file', { exact: false }).setInputFiles({
+  await page.getByLabel('Choose a CSV or Excel file', { exact: false }).setInputFiles({
     name: 'procurement.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(CSV),
