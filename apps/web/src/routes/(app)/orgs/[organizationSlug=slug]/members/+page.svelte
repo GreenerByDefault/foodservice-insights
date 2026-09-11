@@ -8,7 +8,11 @@ let { data }: PageProps = $props();
 
 <PageHeading>Members</PageHeading>
 
-<MembersList members={data.members} />
+<MembersList
+  members={data.members}
+  organizationSlug={data.organization.slug}
+  viewerRole={data.role}
+/>
 
 {#if data.role === 'admin'}
   <p class="w-full text-sm text-muted-foreground">Inviting and removing people arrives later.</p>

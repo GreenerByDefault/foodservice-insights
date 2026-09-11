@@ -11,6 +11,7 @@
 
 import type {
   Database,
+  DatabaseExecutor,
   OrganizationId,
   OrganizationInviteStatus,
   OrganizationRole,
@@ -31,6 +32,11 @@ export type OrganizationMemberSpec = {
   role?: OrganizationRole;
 };
 
+/** The disposable user who admins the organization when the signed-in user joins it as a
+ * `member`. Left out, that admin keeps the random identity `insertOrganization` mints — which a
+ * screenshot spec cannot have, since the roster it captures renders this person's row. */
+export type OrganizationAdminSpec = Omit<OrganizationMemberSpec, 'role'>;
+
 export type OrganizationReportSpec = Omit<ReportWithAttemptSpec, 'organizationId'>;
 
 export type OrganizationInviteSpec = {
@@ -45,8 +51,9 @@ export type OrganizationInviteSpec = {
  *
  * `role` decides who *else* is in it. As an `admin` the user is also the creator and the sole
  * member. As a `member` the organization is created and admin'd by a fresh, disposable user
- * instead, which a spec needs whenever it looks at the app through non-admin eyes: a member's
- * view of settings or the roster only proves anything with a real admin sitting elsewhere.
+ * instead — `spec.admin` names that user — which a spec needs whenever it looks at the app
+ * through non-admin eyes: a member's view of settings or the roster only proves anything with a
+ * real admin sitting elsewhere.
  *
  * Everything commits in one transaction either way. For `member` that is load-bearing rather
  * than tidy: `organization_check_has_member` is `DEFERRABLE INITIALLY DEFERRED`, checked at
@@ -61,6 +68,7 @@ export async function insertOrganizationFixture(
     name: string;
     reports?: OrganizationReportSpec[];
     role?: OrganizationRole;
+    admin?: OrganizationAdminSpec;
     members?: OrganizationMemberSpec[];
     invites?: OrganizationInviteSpec[];
   },
@@ -72,10 +80,11 @@ export async function insertOrganizationFixture(
   }
 
   return await withTransaction(db, async (tx) => {
+    const adminUserId = await resolveAdminUserId(tx, { userId, role, admin: spec.admin });
     const { organization } = await insertOrganization(tx, {
       name: spec.name,
       slug,
-      ...(role === 'admin' ? { adminUserId: userId } : {}),
+      ...(adminUserId === undefined ? {} : { adminUserId }),
     });
     const organizationId = organization.id;
 
@@ -111,6 +120,19 @@ export async function insertOrganizationFixture(
 
     return { organizationId, organizationSlug: slug, reportIds };
   });
+}
+
+/** Who to hand `insertOrganization` as its admin: the signed-in user when that's the role they
+ * hold here, otherwise the disposable admin `admin` pins — or nothing, leaving `insertOrganization`
+ * to mint one with a random identity of its own.
+ */
+async function resolveAdminUserId(
+  tx: DatabaseExecutor,
+  params: { userId: UserId; role: OrganizationRole; admin: OrganizationAdminSpec | undefined },
+): Promise<UserId | undefined> {
+  if (params.role === 'admin') return params.userId;
+  if (params.admin === undefined) return undefined;
+  return (await insertAppUser(tx, params.admin)).id;
 }
 
 /** Deletes the organization and everything hanging off it: `organization_member` and `report`

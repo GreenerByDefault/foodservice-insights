@@ -2,35 +2,60 @@
 
 ## Context
 
-The Members page lists an organization's people and does nothing else; the admin sees
-"Inviting and removing people arrives later." The endpoints for role changes and removal exist as
-501 stubs at `apps/web/src/routes/api/orgs/[organizationSlug=slug]/members/[userId=uuid]/+server.ts`
-with the design in their doc comments, and the database already enforces the one rule that
+The Members page lists an organization's people and does nothing else; a member sees no menu at
+all, and an admin's row menu offers only a role change so far — "Inviting and removing people
+arrives later" still shows beneath the list. The endpoint for removal/leaving exists as a 501 stub
+at `apps/web/src/routes/api/orgs/[organizationSlug=slug]/members/[userId=uuid]/+server.ts`'s
+`DELETE`, with the design in its doc comment, and the database already enforces the one rule that
 matters: `organization_member_at_least_one_admin` (`packages/db/public-schema.sql:386`) is a
 deferred constraint trigger that locks the organization row and refuses any delete or demotion that
-would leave zero admins. This plan puts the buttons on the page and turns that trigger's
-`check_violation` into a 409.
+would leave zero admins. This plan puts removal and leaving on the page and turns that trigger's
+`check_violation` into a 409, the same way the role-change endpoint already does.
 
 **Depends on** `apps-web-maintainability-pass.md` having landed (this plan uses its names:
 `lib/server/testing/`, `anOrganizationWithMembers`, `expectedAuditEvent`, `$lib/testing/fetch.ts`,
 `$lib/testing/navigation.ts`). **Depends on nothing in `auth.md`**: every rule here is exercised by
 varying what the placeholder identity belongs to, which the `organizations` fixture already does
-for the 403 case. It is the first of three plans — see `invites.md` § Sequencing for how they and
+for the 403 case. It is the second of three plans — see `invites.md` § Sequencing for how they and
 `auth.md` interleave.
 
-The shared groundwork the other two plans lean on has already landed: `recordAuditEvent` takes
-`{ action, actor: Pick<Actor, 'userId'>, target, detail? }`, where `target` is a required,
-discriminated `AuditTarget` — `{ type: 'organization'; id: OrganizationId }` or `{ type: 'report' |
-'user' | 'invite'; id: string; organizationId: OrganizationId }` — so a caller can't forget it and
-can't have it disagree with the row's `organization_id`. (Account PR 1's `user.deleted` has no
+The shared groundwork this plan leans on has already landed: `recordAuditEvent` takes `{ action,
+actor: Pick<Actor, 'userId'>, target, detail? }`, where `target` is a required, discriminated
+`AuditTarget` — `{ type: 'organization'; id: OrganizationId }` or `{ type: 'report' | 'user' |
+'invite'; id: string; organizationId: OrganizationId }` — so a caller can't forget it and can't
+have it disagree with the row's `organization_id`. (Account PR 1's `user.deleted` has no
 organization; when that PR lands, `AuditTarget`'s `'user'` branch will need `organizationId: … |
 null` too — not added now, since nothing needs it yet.) `AuditAction` now includes
 `MemberAuditAction`; and `apps/web/src/lib/server/db.ts` has `isCheckViolation(cause, constraint)`
-beside `isUniqueViolation` for the trigger every plan below leans on. `members/+page.server.ts`'s
+beside `isUniqueViolation` for the trigger every route below leans on. `members/+page.server.ts`'s
 `MemberRow` carries `userId`, keyed on in `members-list.svelte`; `$lib/hrefs.ts` has
 `organizationMemberApiHref(organizationSlug, userId)`; and `$lib/components/confirm-action.svelte`'s
 `trigger` prop is optional, rendering no `AlertDialogTrigger` wrapper when omitted, so a menu item
 can drive `bind:open` itself instead of being one.
+
+Promote/demote has also landed: `PATCH .../members/:userId` and its exported
+`_changeMemberRole(db, { organizationId, actor, targetUserId }, body)` in the same `+server.ts`;
+the client at `$lib/orgs/api/change-member-role.ts`; and the per-row menu at
+`members/member-actions.svelte`, rendered from `members-list.svelte` only for an admin viewer.
+Two things that work settles are load-bearing for what's left:
+
+- **`App.Error`'s `code` union is deliberately closed** (see its own doc comment in `app.d.ts`) —
+  it does not, and should not, grow a route-specific code like `last-admin`. A route answering a
+  409 with one has to build a plain `json()` response itself, after its transaction settles, the
+  same way `nameTakenResponse` already answers `name-taken` for organization renames. Concretely,
+  `_changeMemberRole` returns `Promise<Response>`, not `void`: the transaction callback returns an
+  `{ ok: boolean }` outcome (`ok: false` on the check violation, caught in a `try` around the
+  `UPDATE` alone — nothing else runs after, so the aborted transaction has nothing left to lose),
+  and the function builds the 409 from that afterward. A 404 for a target that isn't a member is
+  still a thrown `error(404, { code: 'not_found' })` from inside the transaction, same as every
+  other route's 404 — `'not_found'` already lives in `App.Error`'s union. `_removeMember` needs
+  the identical split.
+- **The disabled-item convention**: when `soleAdmin` rules out an action on the viewer's own row,
+  `member-actions.svelte` renders the menu item itself with `disabled`, immediately followed by a
+  `DropdownMenu.Label` naming the reason ("You're the only admin"). Leave's own disabled state
+  follows the same shape. The component owns one local `ActionState` and renders its own inline
+  `role="alert"` paragraph on a failure — per row, not hoisted to the list — which is what Remove
+  and Leave's `ConfirmAction` dialogs (each with their own `errorMessage`) sit beside, not replace.
 
 ## Settled decisions
 
@@ -47,66 +72,47 @@ can drive `bind:open` itself instead of being one.
 | Audit | `member.role_changed` (detail `{ role }`), `member.removed`, `member.left`; target type `user` | REQUIREMENTS § Audit trail: membership and role changes |
 | After leaving | `goto('/orgs', { invalidateAll: true })` | Same as delete-organization: `/orgs` forwards to a remaining org or `/orgs/new` |
 
-## PR 1 — Promote and demote
-
-- **Server** `PATCH /api/orgs/[organizationSlug=slug]/members/:userId`, body `{ role: 'admin' | 'member' }`
-  (valibot `v.picklist`), behind `requireOrganizationRouteContext(…, { admin: true })`. Exported
-  `_changeMemberRole(db, { organizationId, actor, targetUserId, role })`: inside
-  `withDbErrorHandling(withTransaction(…))` — `SET CONSTRAINTS … IMMEDIATE`; `SELECT role … FOR
-  UPDATE` → none → 404; same → `{ kind: 'unchanged' }`; `UPDATE` in a `try` → `isCheckViolation(cause,
-  'organization_member_at_least_one_admin')` → `{ kind: 'last-admin' }`; then `recordAuditEvent`
-  `member.role_changed`, target user, detail `{ role }`. Responses: 204 / 404 / 409 `{ message:
-  "You're the only admin. Make someone else an admin first.", code: 'last-admin' }`. Test
-  `change-member-role.test.ts` with `anOrganizationWithMembers`: promote writes row + audit; demote
-  the only admin 409s, leaves the role, writes no audit; demote with a second admin succeeds;
-  unchanged → 204 and no audit; non-member 404; bad bodies `test.for([…])` → 400.
-- **Client** `$lib/orgs/api/change-member-role.ts` → `{ kind: 'changed' } | { kind: 'last-admin' } |
-  { kind: 'unknown' }` (409 by status, like the org clients). Test.
-- **UI** `members/member-actions.svelte` (route-local): the row menu, props `member`, `viewerRole`,
-  `soleAdmin: boolean` (derived in `members-list.svelte` from the list: one admin and it is you),
-  `onDone: () => Promise<void>` (`invalidateAll`). Items this PR: Make admin / Make member; the
-  latter disabled with "You're the only admin" as a `DropdownMenu.Label` when `soleAdmin`. Failure
-  copy renders as one `role="alert"` paragraph under the list (`ActionState` in the list). Rendered
-  only when the viewer has an action for the row — this PR, admins only. Component tests: menu
-  contents per role/row, PATCH url + body, last-admin message, unknown message.
-- **E2E** `organizations/members.e2e.ts`: admin promotes a fixture member — the row reads Admin
-  with no reload (`watchPageLoads`) — then demotes them back. Sole admin's own Make member is disabled.
-- **Screenshots**: `organizations/members.png` regenerates (menu triggers appear). No new screen yet.
-
-## PR 2 — Remove and leave
+## PR 1 — Remove and leave
 
 - **Server** `DELETE /api/orgs/[organizationSlug=slug]/members/:userId`: `requireOrganizationRouteContext` without
   `admin`; if `targetUserId !== actor.userId`, `requireOrganizationAdmin` (403 for a member).
-  `_removeMember(db, { organizationId, actor, targetUserId })`: `SET CONSTRAINTS … IMMEDIATE`;
-  `DELETE … RETURNING user_id` in a `try` → 0 rows → 404, check violation → 409 `last-admin`; audit
-  `member.left` when self else `member.removed`, target user. 204. Test `remove-member.test.ts`:
-  admin removes member; member leaves; admin leaves with another admin present; only admin leaving
-  409s and stays; non-member 404. The 403 is the handler's guard, covered in e2e below.
+  `_removeMember(db, { organizationId, actor, targetUserId })` follows `_changeMemberRole`'s shape
+  (see Context): inside `withDbErrorHandling(withTransaction(…))` — `SET CONSTRAINTS … IMMEDIATE`;
+  `DELETE … RETURNING user_id` in a `try` → 0 rows → `error(404, { code: 'not_found' })`; a check
+  violation → the outcome flag that turns into a `json()` 409 `last-admin` after the transaction
+  settles, not a thrown `error()` — `App.Error`'s code union has no room for it. Otherwise audit
+  `member.left` when self else `member.removed`, target user, then 204. Test
+  `remove-member.test.ts`: admin removes member; member leaves; admin leaves with another admin
+  present; only admin leaving 409s and stays; non-member 404. The 403 is the handler's guard,
+  covered in e2e below.
 - **Client** `$lib/orgs/api/remove-member.ts` throws, like `deleteOrganization`.
-- **UI**: menu gains Remove from organization (others, admins only) and Leave organization (own row,
-  any role; disabled with the reason when `soleAdmin`). Both open a triggerless `ConfirmAction`
-  (`errorMessage` generic — the sole-admin case is pre-disabled, so the 409 only reaches the dialog
-  in a race). Remove → `invalidateAll()`; leave → `goto('/orgs', { invalidateAll: true })`. A member
-  now sees the menu on their own row only. Delete the "arrives later" paragraph from `+page.svelte`.
-  Component tests: dialog copy, DELETE url, navigation after leave.
-- **E2E** (same file): admin removes a member and the row disappears; member leaves and lands on
-  `/orgs` or the remaining org (branch like `delete-organization.e2e.ts:40`); a member's
-  `page.request.delete(organizationMemberApiHref(org.slug, otherUserId))` answers 403 —
+- **UI**: `member-actions.svelte` gains Remove from organization (others, admins only) and Leave
+  organization (own row, any role; disabled with the reason when `soleAdmin`, the same
+  disabled-item-plus-`Label` shape the role-change item already uses). Both open a triggerless
+  `ConfirmAction` (`errorMessage` generic — the sole-admin case is pre-disabled, so the 409 only
+  reaches the dialog in a race). Remove → `invalidateAll()`; leave → `goto('/orgs', {
+  invalidateAll: true })`. A member now sees the menu on their own row only. Delete the "arrives
+  later" paragraph from `+page.svelte`. Component tests: dialog copy, DELETE url, navigation after
+  leave.
+- **E2E** (`organizations/members.e2e.ts`): admin removes a member and the row disappears; member
+  leaves and lands on `/orgs` or the remaining org (branch like `delete-organization.e2e.ts:40`); a
+  member's `page.request.delete(organizationMemberApiHref(org.slug, otherUserId))` answers 403 —
   `OrganizationFactory.create` already returns the ids it minted (organization-slugs), so this is a
   lookup, not a fixture extension; look the target member up by their fixed email if the id isn't
   already in scope.
-- **Screenshots**: `member-actions.png` (admin, menu open on another member's row — the
-  `account-menu.png` pattern); `members-as-member.png` (`role: 'member'`: no menus except the own
-  row's, no invite section — the only image proving a member sees no admin controls).
+- **Screenshots**: both already exist and are re-baselined here rather than added —
+  `members-menu.png` (admin, menu open on another member's row) grows the new items, and
+  `members-as-member.png` gains the own row's menu, which today has none at all, and loses the
+  "arrives later" note along with the paragraph.
 - Deletes this plan file.
 
 ## Verification
 
-Per PR: `pnpm lint && pnpm check && pnpm test` in the background; scope while iterating to
+`pnpm lint && pnpm check && pnpm test` in the background; scope while iterating to
 `pnpm --filter @gbd/web test:unit -- <path>` and `test:e2e -- e2e/organizations/members.e2e.ts`.
 Re-baseline with `pnpm turbo run screenshots:update --filter=@gbd/web` only when Playwright asks.
 
-Then `pnpm dev`: in an org where you are the only admin, Make member and Leave are disabled and
-say why; promote a second person, and both enable; leave, and you land on your other org (or
-`/orgs/new`); as a member of an org (create one via Studio with another admin), the menu appears on
-your row only, and `curl -X DELETE …/members/<other>` answers 403.
+Then `pnpm dev`: as the only admin, Leave is disabled and says why; promote a second admin, and it
+enables; leaving lands you on your other org (or `/orgs/new`); as a member of an org (create one
+via Studio with another admin), the menu appears on your own row only, and `curl -X DELETE
+…/members/<other>` answers 403.

@@ -1,3 +1,4 @@
+import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
 import { test } from './fixtures/test.ts';
 
@@ -17,6 +18,7 @@ test('a signed-in request reaches its organization, which the shell names', asyn
   org,
 }) => {
   await page.goto(`/orgs/${org.slug}`);
+  await ensureHydrated(page);
 
   await expect(page.getByRole('banner')).toContainText(org.name);
 
