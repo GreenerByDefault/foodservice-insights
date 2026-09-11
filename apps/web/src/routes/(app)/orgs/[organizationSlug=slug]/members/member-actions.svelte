@@ -49,15 +49,13 @@ async function setRole(role: 'admin' | 'member') {
     {#if member.role === 'member'}
       <DropdownMenu.Item onSelect={() => setRole('admin')}>Make admin</DropdownMenu.Item>
     {:else}
-      <!-- Live even for the last admin's own row, where it can only fail: the refusal answers
-           with a sentence naming the way out, where a disabled item would only be a dead end.
-           Pre-disabling would also duplicate the trigger's rule and still race a concurrent
-           demotion. -->
       <DropdownMenu.Item onSelect={() => setRole('member')}>Make member</DropdownMenu.Item>
     {/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>
 
 {#if actionState.status === 'error'}
-  <p role="alert" class="text-sm text-destructive">{actionState.message}</p>
+  <!-- `basis-full`: forces this onto its own line of the row's `flex-wrap` — see the comment on
+       `<li>` in members-list.svelte. -->
+  <p role="alert" class="basis-full text-sm text-destructive">{actionState.message}</p>
 {/if}

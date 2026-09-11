@@ -7,6 +7,7 @@ import type { OrganizationId, OrganizationRole, ReportId } from '@gbd/db';
 import {
   clearOrganizationFixture,
   insertOrganizationFixture,
+  type OrganizationAdminSpec,
   type OrganizationInviteSpec,
   type OrganizationMemberSpec,
   type OrganizationReportSpec,
@@ -27,11 +28,13 @@ export interface OrganizationFactory {
    * needs to act on one of its own reports never has to re-query for it.
    *
    * `role` defaults to `admin`, which also makes the user its creator and sole member; `member`
-   * puts a disposable admin above it instead. See `insertOrganizationFixture`. */
+   * puts a disposable admin above it instead, whose identity `admin` pins. See
+   * `insertOrganizationFixture`. */
   create(spec: {
     name: string;
     reports?: OrganizationReportSpec[];
     role?: OrganizationRole;
+    admin?: OrganizationAdminSpec;
     members?: OrganizationMemberSpec[];
     invites?: OrganizationInviteSpec[];
   }): Promise<{ id: OrganizationId; slug: string; reportIds: ReportId[] }>;

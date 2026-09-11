@@ -100,9 +100,10 @@ Two things that work settles are load-bearing for what's left:
   `OrganizationFactory.create` already returns the ids it minted (organization-slugs), so this is a
   lookup, not a fixture extension; look the target member up by their fixed email if the id isn't
   already in scope.
-- **Screenshots**: `member-actions.png` (admin, menu open on another member's row — the
-  `account-menu.png` pattern); `members-as-member.png` (`role: 'member'`: no menus except the own
-  row's, no invite section — the only image proving a member sees no admin controls).
+- **Screenshots**: both already exist and are re-baselined here rather than added —
+  `members-menu.png` (admin, menu open on another member's row) grows the new items, and
+  `members-as-member.png` gains the own row's menu, which today has none at all, and loses the
+  "arrives later" note along with the paragraph.
 - Deletes this plan file.
 
 ## Verification

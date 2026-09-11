@@ -153,8 +153,8 @@ double confirmation of an email change — recorded in that plan's Context.)
   row appears without reload → `waitForEmail(address)` from `@gbd/email/testing` has the "Join …"
   subject and a `/sign-in?email=` link → Revoke → row gone. Second test: with a fixture pending
   invite for the same address, re-inviting still shows one row. Member view: no form, no list.
-- **Screenshots**: `members.png` regenerates with fixture invites — one live, one expired — so the
-  admin screen shows both states. `members-as-member.png` is unaffected.
+- **Screenshots**: `members-as-admin.png` regenerates with fixture invites — one live, one
+  expired — so the admin screen shows both states. `members-as-member.png` is unaffected.
 
 ## PR 4 — Invitee endpoints and the `/invites` page
 
