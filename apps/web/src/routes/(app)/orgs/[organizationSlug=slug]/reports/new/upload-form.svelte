@@ -1,4 +1,5 @@
 <script lang="ts">
+import { XLSX_CONTENT_TYPE } from '@gbd/core';
 import type { CountsBasis, UnitSystem } from '@gbd/db';
 import { goto } from '$app/navigation';
 import { Alert, AlertDescription } from '$lib/components/ui/alert';
@@ -51,14 +52,8 @@ let formState: FormState = $state({ status: 'idle' });
 let fileError: string | undefined = $state();
 let unitSystemError: string | undefined = $state();
 
-/** A hint to the file picker only; what a file actually is, `inspectFile` decides from its bytes.
- *
- * The Excel type is spelled out rather than imported from `@gbd/storage`'s `XLSX_CONTENT_TYPE`:
- * that package's entry point reaches the S3 client, and this component is bundled for the
- * browser. It is an OOXML constant, not a choice of ours, so there is nothing here to drift.
- */
-const ACCEPTED_FILE_TYPES =
-  '.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+/** A hint to the file picker only; what a file actually is, `inspectFile` decides from its bytes. */
+const ACCEPTED_FILE_TYPES = `.csv,text/csv,.xlsx,${XLSX_CONTENT_TYPE}`;
 
 let formElement: HTMLFormElement | undefined = $state();
 let dropZoneTriggerElement: HTMLElement | null = $state(null);

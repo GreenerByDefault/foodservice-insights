@@ -1,8 +1,7 @@
+import { XLSX_CONTENT_TYPE } from '@gbd/core';
 import type { Page } from '@playwright/test';
 
 const FILE_LABEL = 'Choose a CSV or Excel file';
-
-const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** Put a CSV into the new-report form's file input, as a real pick would. */
 export async function chooseCsv(page: Page, filename: string, csv: string): Promise<void> {

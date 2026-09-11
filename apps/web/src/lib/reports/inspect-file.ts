@@ -45,8 +45,8 @@ export async function inspectFile(file: File): Promise<FileInspection> {
 
   const csv = normalizeCsv(prepared.csvBytes);
   if (!csv.ok) {
-    // The only reason a header failure is given, and so the only one that may be about the
-    // wrong tab.
+    // A `bad_columns` rejection is the one CSV failure a wrong-tab choice could cause, so it's
+    // the only one worth telling the user which sheet was converted.
     const rejection =
       csv.rejection.reason === 'bad_columns' && prepared.sheet
         ? withSheetHint(csv.rejection, prepared.sheet)

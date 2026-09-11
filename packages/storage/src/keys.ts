@@ -20,6 +20,7 @@
  *    validation: an `OrganizationId` cannot have come from a request body.
  */
 
+import { XLSX_CONTENT_TYPE } from '@gbd/core';
 import type {
   AnalysisAttemptId,
   InputFileId,
@@ -30,6 +31,9 @@ import type {
   ResultFileKind,
 } from '@gbd/db';
 
+// Re-exported so existing storage consumers don't need a second import for it.
+export { XLSX_CONTENT_TYPE };
+
 export const NORMALIZED_CSV_CONTENT_TYPE = 'text/csv';
 
 /** Not `text/csv`: a rejected upload's bytes may carry a spreadsheet-formula payload, and the
@@ -37,10 +41,6 @@ export const NORMALIZED_CSV_CONTENT_TYPE = 'text/csv';
  * text.
  */
 export const OPAQUE_CSV_CONTENT_TYPE = 'application/octet-stream';
-
-/** The one Excel content type, so a workbook's own storage and a `result_file` xlsx agree on it. */
-export const XLSX_CONTENT_TYPE =
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** How each kind of result file is stored.
  *
@@ -83,8 +83,8 @@ export function normalizedInputFileKey(ids: {
 /** The upload as the *browser* sent it, kept only for date-order-inference forensics. See this
  * file's header — no row anywhere holds this key.
  *
- * For a workbook that is the converter's CSV rather than anything the user saw, which is exactly
- * the forensic a converter bug needs. The workbook itself is at `workbookInputFileKey`.
+ * For a workbook upload, this is the converter's output CSV, not what the user saw — that's
+ * exactly the forensic a converter bug needs. The workbook itself is at `workbookInputFileKey`.
  */
 export function originalInputFileKey(ids: {
   organizationId: OrganizationId;

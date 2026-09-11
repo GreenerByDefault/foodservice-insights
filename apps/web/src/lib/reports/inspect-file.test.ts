@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { describeOversizeConversion, describeWorkbookFault } from './excel/index.ts';
 import { aWorkbook, type WorkbookRow } from './excel/testing/index.ts';
 import { inspectFile } from './inspect-file.ts';
 import { MAX_UPLOAD_FIELD_BYTES, MAX_UPLOAD_FIELD_MEGABYTES } from './limits.ts';
@@ -87,6 +88,16 @@ describe('inspectFile', () => {
     expect(inspection.rejection).toEqual(submission.rejection);
   });
 
+  test('reads a CSV named .xlsx as the CSV it is, uploading it untouched', async () => {
+    const file = aFile([HEADER, 'beef,2026-01-05,1'].join('\n'), 'procurement.xlsx');
+
+    await expect(inspectFile(file)).resolves.toEqual({
+      ok: true,
+      months: ['2026-01'],
+      upload: { csvFile: file },
+    });
+  });
+
   describe('a workbook', () => {
     test('uploads as the converted CSV plus the untouched original', async () => {
       const workbook = aWorkbookFile(
@@ -106,23 +117,6 @@ describe('inspectFile', () => {
       expect(await csvFile.text()).toBe(ORDERS_CSV);
     });
 
-    test('is judged on the tab holding the orders, not whichever one comes first', async () => {
-      const workbook = aWorkbookFile(
-        aWorkbook({
-          sheets: [
-            { name: 'Notes', rows: [['Ask Dana about the February invoice']] },
-            { name: 'Orders', rows: [['Product', 'Date ordered', 'Weight'], ...ORDER_ROWS] },
-          ],
-        }),
-      );
-
-      const inspection = await inspectFile(workbook);
-
-      if (!inspection.ok) throw new Error(`expected a conversion: ${inspection.rejection.summary}`);
-      expect(inspection.months).toEqual(['2026-01', '2026-03']);
-      expect(await inspection.upload.csvFile.text()).toBe(ORDERS_CSV);
-    });
-
     test('refuses one whose tabs name no column we need, before the CSV reader ever runs', async () => {
       const workbook = aWorkbookFile(
         aWorkbook({
@@ -133,12 +127,9 @@ describe('inspectFile', () => {
         }),
       );
 
-      expect(await rejectionOf(workbook)).toEqual({
-        reason: 'bad_columns',
-        summary:
-          'We could not find columns for product name, date ordered and weight on any sheet in that workbook — we looked at "Notes" and "Lookup".',
-        rejectionDetail: 'no required column on any of 2 sheets',
-      });
+      expect(await rejectionOf(workbook)).toEqual(
+        describeWorkbookFault({ kind: 'no-columns', sheets: ['Notes', 'Lookup'] }),
+      );
     });
 
     test('names the tab it read when the closest one is missing a column', async () => {
@@ -164,6 +155,26 @@ describe('inspectFile', () => {
           'Your file needs a column for weight. We read "Orders", the sheet that came closest to the columns we need; your workbook also has "Notes" and "Lookup".',
         rejectionDetail: 'missing column(s): weight',
       });
+    });
+
+    // The hint is for a header failure, which is the one rejection a wrong-tab choice explains.
+    test('says nothing about sheets when the rows fail, however many tabs it has', async () => {
+      const rows: readonly WorkbookRow[] = [
+        ['Product', 'Date ordered', 'Weight'],
+        ['Beef Patty', { date: '2026-01-05' }, '5 oz'],
+      ];
+      const workbook = aWorkbookFile(
+        aWorkbook({
+          sheets: [
+            { name: 'Notes', rows: [['Ask Dana about the February invoice']] },
+            { name: 'Orders', rows },
+          ],
+        }),
+      );
+
+      expect(await rejectionOf(workbook)).toEqual(
+        await rejectionOf(aFile('Product,Date ordered,Weight\nBeef Patty,2026-01-05,5 oz\n')),
+      );
     });
 
     test('says nothing about sheets when the one sheet there is fails on its header', async () => {
@@ -194,22 +205,15 @@ describe('inspectFile', () => {
       const csvBytes =
         `Product,Date ordered,Weight\n${values.map((value) => `${value},,`).join('\n')}\n`.length;
 
-      expect(await rejectionOf(workbook)).toEqual({
-        reason: 'too_large',
-        summary: `Converted to CSV, your workbook comes to 10.5MB — more than the ${MAX_UPLOAD_FIELD_MEGABYTES}MB we can accept.`,
-        rejectionDetail: `${csvBytes} bytes of converted CSV`,
-      });
+      expect(await rejectionOf(workbook)).toEqual(describeOversizeConversion(csvBytes));
     });
 
     test('refuses an older .xls by its bytes, without trying to unzip it', async () => {
       const ole2 = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0, 0, 0]);
 
-      expect(await rejectionOf(aWorkbookFile(ole2, 'orders.xls'))).toEqual({
-        reason: 'unparseable',
-        summary:
-          'That is an older Excel (.xls) file, which we cannot read. In Excel, choose File → Save As → Excel Workbook (.xlsx) and upload that.',
-        rejectionDetail: 'signature matched xls',
-      });
+      expect(await rejectionOf(aWorkbookFile(ole2, 'orders.xls'))).toEqual(
+        describeWorkbookFault({ kind: 'xls' }),
+      );
     });
   });
 });
