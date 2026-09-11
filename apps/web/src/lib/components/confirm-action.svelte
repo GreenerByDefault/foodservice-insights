@@ -1,7 +1,6 @@
 <script module lang="ts">
-/** Thrown from `onConfirm` to show a message more specific than the generic `errorMessage` prop —
- * a caller that knows why this particular action failed shouldn't have to reimplement the
- * dialog's error banner to say so. */
+/** Lets `onConfirm` show a more specific error than `errorMessage` without reimplementing the
+ * dialog's own error banner. */
 export class ConfirmActionError extends Error {}
 </script>
 

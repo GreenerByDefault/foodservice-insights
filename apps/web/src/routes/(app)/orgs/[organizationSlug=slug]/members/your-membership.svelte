@@ -5,7 +5,7 @@ import * as Field from '$lib/components/ui/field';
 import { changeMemberRole } from '$lib/orgs/api/change-member-role';
 
 /** The page-level section for actions on the viewer's own row — the counterpart to
- * `member-actions.svelte`'s per-row menu, which now only acts on other people. */
+ * `member-actions.svelte`'s per-row menu, which only acts on other people. */
 interface Props {
   organizationSlug: string;
   viewerUserId: string;
