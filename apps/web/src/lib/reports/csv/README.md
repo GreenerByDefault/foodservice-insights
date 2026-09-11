@@ -59,5 +59,9 @@ What comes out is `product,date,weight`: comma-delimited, UTF-8, dates `YYYY-MM-
 numbers, and nothing else. Ambiguous dates, unit words, semicolon delimiters, Windows-1252 are rejected. Weights stay in the unit the form declared, which
 the run manifest carries; converting them is the analysis's job.
 
+A workbook reaches this folder as CSV: the sibling `excel/` converts one in the browser into
+exactly the bytes a user could have saved from that sheet themselves, so everything here applies
+to a spreadsheet unchanged.
+
 Every file in this folder is imported by the browser as well as the server: keep them free of
 `$env`, `$lib/server`, and anything Node-only.

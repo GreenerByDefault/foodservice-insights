@@ -51,6 +51,15 @@ let formState: FormState = $state({ status: 'idle' });
 let fileError: string | undefined = $state();
 let unitSystemError: string | undefined = $state();
 
+/** A hint to the file picker only; what a file actually is, `inspectFile` decides from its bytes.
+ *
+ * The Excel type is spelled out rather than imported from `@gbd/storage`'s `XLSX_CONTENT_TYPE`:
+ * that package's entry point reaches the S3 client, and this component is bundled for the
+ * browser. It is an OOXML constant, not a choice of ours, so there is nothing here to drift.
+ */
+const ACCEPTED_FILE_TYPES =
+  '.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
 let formElement: HTMLFormElement | undefined = $state();
 let dropZoneTriggerElement: HTMLElement | null = $state(null);
 let unitSystemElement: HTMLElement | null = $state(null);
@@ -58,7 +67,7 @@ let unitSystemElement: HTMLElement | null = $state(null);
 function fileRejectionMessage(reason: FileRejectedReason): string {
   switch (reason) {
     case 'File type not allowed':
-      return 'We can only read CSV files right now. In Excel, choose File → Save As → CSV.';
+      return 'We can read CSV and Excel (.xlsx) files. For an older .xls file, in Excel choose File → Save As → Excel Workbook (.xlsx).';
     case 'Maximum file size exceeded':
       return `That file is larger than ${MAX_UPLOAD_FIELD_MEGABYTES}MB.`;
     case 'Maximum files uploaded':
@@ -114,7 +123,7 @@ async function handleSubmit(event: SubmitEvent) {
   // a hidden input (`required` on it is a no-op). Both need a hand-written check, an inline
   // message, and a manual focus/scroll — a failed submit otherwise gives the user no locator.
   const chosenUpload = upload;
-  fileError = chosenUpload ? undefined : 'Choose a CSV file to upload.';
+  fileError = chosenUpload ? undefined : 'Choose a CSV or Excel file to upload.';
   unitSystemError = unitSystem ? undefined : 'Choose lb or kg.';
 
   if (!chosenUpload) {
@@ -135,6 +144,8 @@ async function handleSubmit(event: SubmitEvent) {
 
   const formData = new FormData(form);
   formData.set(FIELD.csvFile, chosenUpload.csvFile);
+  // The original, for the server to store without ever opening it.
+  if (chosenUpload.workbook) formData.set(FIELD.workbook, chosenUpload.workbook);
   formData.set(FIELD.monthlyCounts, serialized);
 
   formState = { status: 'submitting' };
@@ -172,7 +183,7 @@ function backToForm() {
     <Field.Set>
       <Field.Legend>File</Field.Legend>
       <Field.Description>
-        A CSV with three columns: product name, date ordered, and weight. Up to
+        A CSV or Excel workbook with three columns: product name, date ordered, and weight. Up to
         {MAX_UPLOAD_FIELD_MEGABYTES}MB.
       </Field.Description>
 
@@ -189,11 +200,14 @@ function backToForm() {
           maxFiles={1}
           fileCount={0}
           maxFileSize={MAX_UPLOAD_FIELD_BYTES}
-          accept=".csv,text/csv"
+          accept={ACCEPTED_FILE_TYPES}
           onUpload={inspectChosenFile}
           {onFileRejected}
         >
-          <FileDropZone.Trigger bind:ref={dropZoneTriggerElement} label="Choose a CSV file" />
+          <FileDropZone.Trigger
+            bind:ref={dropZoneTriggerElement}
+            label="Choose a CSV or Excel file"
+          />
         </FileDropZone.Root>
       {/if}
 

@@ -13,7 +13,7 @@ test('the new report form, before any file is chosen', async ({ page, org }) => 
   await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);
 
-  await expect(page.getByText('Choose a CSV file')).toBeVisible();
+  await expect(page.getByText('Choose a CSV or Excel file')).toBeVisible();
   await expectScreenshots(page, 'empty.png');
 });
 

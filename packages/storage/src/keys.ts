@@ -80,8 +80,11 @@ export function normalizedInputFileKey(ids: {
   );
 }
 
-/** The upload as the user sent it, kept only for date-order-inference forensics. See this file's
- * header — no row anywhere holds this key.
+/** The upload as the *browser* sent it, kept only for date-order-inference forensics. See this
+ * file's header — no row anywhere holds this key.
+ *
+ * For a workbook that is the converter's CSV rather than anything the user saw, which is exactly
+ * the forensic a converter bug needs. The workbook itself is at `workbookInputFileKey`.
  */
 export function originalInputFileKey(ids: {
   organizationId: OrganizationId;
