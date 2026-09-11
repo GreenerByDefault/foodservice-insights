@@ -120,13 +120,19 @@ describe('convertWorkbook', () => {
   });
 
   describe('sheets', () => {
-    test('reads the first sheet with data and names the others that had any', async () => {
+    test('reads the sheet whose header names the required columns, wherever it sits', async () => {
       const result = await convertWorkbook(
         aWorkbook({
           sheets: [
             { name: 'Empty', rows: [[]] },
             { name: 'Notes', rows: [['Ask Dana about January']] },
-            { name: 'Orders', rows: [['Beef']] },
+            {
+              name: 'Orders',
+              rows: [
+                ['product', 'date', 'weight'],
+                ['Beef', null, 12.5],
+              ],
+            },
             { name: 'Lookup', rows: [['kg']] },
           ],
         }),
@@ -134,8 +140,25 @@ describe('convertWorkbook', () => {
 
       expect(result).toEqual({
         ok: true,
+        csv: new TextEncoder().encode('product,date,weight\nBeef,,12.5\n'),
+        sheet: { name: 'Orders', others: ['Notes', 'Lookup'] },
+      });
+    });
+
+    test('falls back to the first sheet with data when no sheet has a header we know', async () => {
+      const result = await convertWorkbook(
+        aWorkbook({
+          sheets: [
+            { name: 'Notes', rows: [['Ask Dana about January']] },
+            { name: 'Orders', rows: [['thing', 'when', 'how much']] },
+          ],
+        }),
+      );
+
+      expect(result).toEqual({
+        ok: true,
         csv: new TextEncoder().encode('Ask Dana about January\n'),
-        sheet: { name: 'Notes', others: ['Orders', 'Lookup'] },
+        sheet: { name: 'Notes', others: ['Orders'] },
       });
     });
 

@@ -14,6 +14,7 @@ import readExcelFile, { InvalidInputError } from 'read-excel-file/universal';
 import { escapeCsvField } from '../csv/write.ts';
 import { MAX_WORKBOOK_UNPACKED_BYTES } from '../limits.ts';
 import { spreadsheetSignature } from '../signatures.ts';
+import { type Cell, chooseSheet, type Sheet } from './sheets.ts';
 import { declaredXmlBytes } from './zip.ts';
 
 export type WorkbookFault =
@@ -41,7 +42,7 @@ export async function convertWorkbook(bytes: Uint8Array): Promise<WorkbookConver
     return { ok: false, fault: { kind: 'too-large-unpacked', declaredBytes: declared.xmlBytes } };
   }
 
-  let sheets: readonly { sheet: string; data: readonly Cell[][] }[];
+  let sheets: readonly Sheet[];
   try {
     // `trim: false` so a workbook and the CSV saved from it are judged identically.
     sheets = (await readExcelFile(toArrayBuffer(bytes), { trim: false })) as typeof sheets;
@@ -50,20 +51,15 @@ export async function convertWorkbook(bytes: Uint8Array): Promise<WorkbookConver
     return { ok: false, fault: faultFor(cause) };
   }
 
-  // Tolerates a notes tab sitting in front of the orders. The rest are named, never read.
-  const [chosen, ...others] = sheets.filter(({ data }) => data.length > 0);
-  if (!chosen) return { ok: false, fault: { kind: 'no-data' } };
+  const choice = chooseSheet(sheets);
+  if (!choice) return { ok: false, fault: { kind: 'no-data' } };
 
   return {
     ok: true,
-    csv: new TextEncoder().encode(renderCsv(chosen.data)),
-    sheet: { name: chosen.sheet, others: others.map(({ sheet }) => sheet) },
+    csv: new TextEncoder().encode(renderCsv(choice.chosen.data)),
+    sheet: { name: choice.chosen.sheet, others: choice.others },
   };
 }
-
-/** What a cell can actually be. The library's own `CellValue` says `typeof Date` — the
- * constructor — where it means a `Date` instance, so it cannot be narrowed as written. */
-type Cell = string | number | boolean | Date | null;
 
 /** The `default` is deliberate: the library's own crash on a shape it did not expect — a workbook
  * carrying no sheets at all throws a bare `TypeError` — is not worth letting an exception out of

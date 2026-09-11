@@ -56,13 +56,14 @@ describe('a workbook written by other software', () => {
     });
   });
 
-  test('reads the first sheet of a real workbook whose orders sit behind a notes tab', async () => {
+  test('finds the orders of a real workbook behind a notes tab', async () => {
     const { csv, sheet } = await converted('openpyxl-notes-first.xlsx');
 
-    expect(sheet).toEqual({ name: 'Notes', others: ['Orders'] });
+    expect(sheet).toEqual({ name: 'Orders', others: ['Notes'] });
+    expect(new TextDecoder().decode(csv)).toBe(ORDERS_CSV);
     expect(normalizeCsv(csv, { now: NOW })).toMatchObject({
-      ok: false,
-      rejection: { reason: 'bad_columns' },
+      ok: true,
+      months: ['2026-01', '2026-02'],
     });
   });
 });

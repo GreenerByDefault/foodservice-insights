@@ -60,7 +60,11 @@ export function describeOversizeConversion(byteSize: number): RejectedUploadReco
 }
 
 /** Says which sheet we read, for a rejection that is probably really "we read the wrong tab".
- * Only worth appending to a header failure, which is the caller's call. */
+ * Only worth appending to a header failure, which is the caller's call.
+ *
+ * It does not tell them to reorder their tabs: `chooseSheet` reads the tab whose header we
+ * recognize wherever it sits, so by the time this sentence is written, moving one first would
+ * change nothing. Deleting the tabs that are not orders is what actually helps. */
 export function withSheetHint(
   rejection: RejectedUploadRecord,
   sheet: ChosenSheet,
@@ -69,7 +73,7 @@ export function withSheetHint(
   const others = listOf(sheet.others.map((name) => `"${name}"`));
   return {
     ...rejection,
-    summary: `${rejection.summary} We read the first sheet, "${sheet.name}". Your workbook also has ${others} — move the sheet with your orders first, or delete the ones you don't need.`,
+    summary: `${rejection.summary} We read the sheet named "${sheet.name}"; your workbook also has ${others}. If your orders are on one of those, delete the sheets you don't need and upload it again.`,
   };
 }
 

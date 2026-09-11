@@ -82,13 +82,13 @@ describe('withSheetHint', () => {
     expect(withSheetHint(rejection, { name: 'Notes', others: ['Orders', 'Lookup'] })).toEqual({
       ...rejection,
       summary:
-        'Your file needs a column for weight. We read the first sheet, "Notes". Your workbook also has "Orders" and "Lookup" — move the sheet with your orders first, or delete the ones you don\'t need.',
+        'Your file needs a column for weight. We read the sheet named "Notes"; your workbook also has "Orders" and "Lookup". If your orders are on one of those, delete the sheets you don\'t need and upload it again.',
     });
   });
 
   test('names a single other sheet without a list', () => {
     expect(withSheetHint(rejection, { name: 'Notes', others: ['Orders'] }).summary).toBe(
-      'Your file needs a column for weight. We read the first sheet, "Notes". Your workbook also has "Orders" — move the sheet with your orders first, or delete the ones you don\'t need.',
+      'Your file needs a column for weight. We read the sheet named "Notes"; your workbook also has "Orders". If your orders are on one of those, delete the sheets you don\'t need and upload it again.',
     );
   });
 
