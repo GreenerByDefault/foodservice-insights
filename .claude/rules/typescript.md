@@ -145,15 +145,17 @@ Applies to `packages/storage` and every app or package that imports it.
   the client — or the route handler does, when there is no `_` function to own it. It splits
   three ways — a statement we could not complete is a 503, one Postgres refused is a 500,
   anything else is rethrown — and the status is not the caller's to pass in.
-- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** Usually
-  answer it with `error()` there; an `HttpError` is no kind of database failure, so it passes back
-  out untouched. Checking for the condition beforehand instead duplicates the constraint and still
-  races. The other shape is a code that isn't in `App.Error` — organizations' `last-admin`, e.g.
-  (`attemptMemberWrite` in `apps/web/src/lib/server/orgs/members.ts`): the callback returns an
-  outcome instead of throwing, and the route answers with `json()` after the transaction settles.
-  Either way, a constraint checked `DEFERRABLE INITIALLY DEFERRED` needs `SET CONSTRAINTS …
-  IMMEDIATE` first, or it fires at `COMMIT` — too late to catch, and never at all inside a test's
-  `withRollback`.
+- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** If it
+  maps to an existing `App.Error` code, answer it with `error()` there — an `HttpError` is no
+  kind of database failure, so `withDbErrorHandling` passes it back out untouched. Checking for
+  the condition beforehand instead duplicates the constraint and still races.
+- **When the expected outcome has no `App.Error` code, have the callback return it instead of
+  throwing.** `attemptMemberWrite` (`apps/web/src/lib/server/orgs/members.ts`) is the example:
+  it returns `'last-admin'` from inside the transaction, and the route answers with `json()`
+  once the transaction settles.
+- **A `DEFERRABLE INITIALLY DEFERRED` constraint needs `SET CONSTRAINTS … IMMEDIATE` before the
+  write that might violate it.** Otherwise it fires at `COMMIT` — too late for the callback to
+  catch, and not at all inside a test's `withRollback`, which never commits.
 - **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
   (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
   unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
