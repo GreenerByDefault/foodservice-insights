@@ -1,6 +1,12 @@
 /** The auth + org-access prologue shared by every route scoped to an organization. */
 
-import type { DatabaseExecutor, OrganizationId, ReportId, UserId } from '@gbd/db';
+import type {
+  DatabaseExecutor,
+  OrganizationId,
+  OrganizationInviteId,
+  ReportId,
+  UserId,
+} from '@gbd/db';
 import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
 import type { Actor } from './types.ts';
 
@@ -51,4 +57,17 @@ export async function requireMemberRouteContext(
 ): Promise<{ organizationId: OrganizationId; actor: Actor; targetUserId: UserId }> {
   const { organizationId, actor } = await requireOrganizationRouteContext(db, event, options);
   return { organizationId, actor, targetUserId: event.params.userId as UserId };
+}
+
+/** Like `requireOrganizationRouteContext`, for a route scoped to a single invite. */
+export async function requireInviteRouteContext(
+  db: DatabaseExecutor,
+  event: {
+    params: { organizationSlug: string; inviteId: string };
+    locals: App.Locals;
+  },
+  options: { admin?: boolean } = {},
+): Promise<{ organizationId: OrganizationId; actor: Actor; inviteId: OrganizationInviteId }> {
+  const { organizationId, actor } = await requireOrganizationRouteContext(db, event, options);
+  return { organizationId, actor, inviteId: event.params.inviteId as OrganizationInviteId };
 }
