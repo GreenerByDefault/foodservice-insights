@@ -93,9 +93,8 @@ double confirmation of an email change — recorded in that plan's Context.)
   documented once, here). Replaces `inviteExpiring` in `apps/web/src/lib/server/testing/fixtures.ts`
   (delete it; callers use the shared one) and the hand-built rows in
   `packages/db/tests/organization.test.ts`. Export from `testing/index.ts`.
-- `apps/web/e2e/fixtures/organizations.ts`: implement the `invites` key —
-  `InviteSpec = { email: string; role?: OrganizationRole; expiresAt?: Date }` — inserted in the
-  same transaction, `invitedByUserId` the placeholder when it is the admin.
+- `apps/web/e2e/fixtures/organizations.ts`: `OrganizationInviteSpec` already has `email`, `role`,
+  and `status`. Add `expiresAt?: Date`, the one field it's missing.
 - `apps/web/src/lib/hrefs.ts`: `organizationInvitesApiHref(organizationSlug)`,
   `organizationInviteApiHref(organizationSlug, inviteId)`, `acceptInviteApiHref(inviteId)`,
   `declineInviteApiHref(inviteId)` — every organization-scoped builder here takes the slug, not the
@@ -149,7 +148,8 @@ double confirmation of an email change — recorded in that plan's Context.)
 - Clients `$lib/invites/api/create-invite.ts` (outcome union incl. `emailSent`) and
   `revoke-invite.ts` (throws). Tests. Component tests for both components.
 - `members/+page.svelte`: admins see `PendingInvites` and `InviteForm` under the roster, each with a
-  heading. Drop the `**Stub:**` markers on the two admin endpoint files.
+  heading, between `MembersList` and the `Field.Separator` + `YourMembership` section that already
+  sits there. Drop the `**Stub:**` markers on the two admin endpoint files.
 - **E2E** `organizations/invites.e2e.ts`: admin invites `aTestEmailAddress('invitee')` as member →
   row appears without reload → `waitForEmail(address)` from `@gbd/email/testing` has the "Join …"
   subject and a `/sign-in?email=` link → Revoke → row gone. Second test: with a fixture pending

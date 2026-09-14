@@ -96,9 +96,7 @@ describe('a valid name', () => {
 });
 
 describe('a name already taken', () => {
-  // The unique violation comes from the insert itself, which leaves the transaction aborted —
-  // see withTransaction's documented join-not-nest trade-off — so this doesn't try to read
-  // anything back afterward. withRollback discards the attempt either way.
+  // Nothing is read back afterward — see withTransaction's documented join-not-nest trade-off.
   test('answers 409 name-taken, case-insensitively', async () => {
     await withRollback(database(), async (transaction) => {
       await insertOrganization(transaction, { name: 'Acme Foodservice' });

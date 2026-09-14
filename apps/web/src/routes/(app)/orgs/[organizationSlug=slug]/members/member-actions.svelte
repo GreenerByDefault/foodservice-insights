@@ -1,12 +1,13 @@
 <script lang="ts">
 import MoreHorizontalIcon from '@lucide/svelte/icons/more-horizontal';
-import ConfirmAction, { ConfirmActionError } from '$lib/components/confirm-action.svelte';
+import ConfirmAction from '$lib/components/confirm-action.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import type { ActionState } from '$lib/forms/action-state';
 import { changeMemberRole } from '$lib/orgs/api/change-member-role';
 import { removeMember } from '$lib/orgs/api/remove-member';
 import type { MemberRow } from './+page.server.ts';
+import { confirmMemberWrite, LAST_ADMIN_MESSAGE } from './member-write.ts';
 
 /** The per-row "⋯" menu on the Members page — never rendered for the viewer's own row (see
  * `members-list.svelte`), so every action here is unconditionally about someone else. */
@@ -24,7 +25,7 @@ let removeDialogOpen = $state(false);
 async function setRole(role: 'admin' | 'member') {
   actionState = { status: 'loading' };
   const outcome = await changeMemberRole(organizationSlug, member.userId, role);
-  if (outcome.kind === 'changed') {
+  if (outcome.kind === 'done') {
     actionState = { status: 'idle' };
     await onDone();
     return;
@@ -33,7 +34,7 @@ async function setRole(role: 'admin' | 'member') {
     status: 'error',
     message:
       outcome.kind === 'last-admin'
-        ? "You're the only admin. Make someone else an admin first."
+        ? LAST_ADMIN_MESSAGE
         : 'Could not update this member. Please try again.',
   };
 }
@@ -41,13 +42,7 @@ async function setRole(role: 'admin' | 'member') {
 // Reachable for a superadmin removing an organization's only admin — an ordinary admin's own row
 // never has this menu, since the demotion path to it is Step down, not Remove.
 async function remove() {
-  const outcome = await removeMember(organizationSlug, member.userId);
-  if (outcome.kind === 'last-admin') {
-    throw new ConfirmActionError("You're the only admin. Make someone else an admin first.");
-  }
-  if (outcome.kind === 'unknown') {
-    throw new Error('unknown');
-  }
+  confirmMemberWrite(await removeMember(organizationSlug, member.userId));
   await onDone();
 }
 </script>

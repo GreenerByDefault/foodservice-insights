@@ -18,9 +18,8 @@ import { _retryReport } from './+server.ts';
 // packages/db/tests/analysis-attempt.test.ts) — these only check that _retryReport wires both up,
 // plus the retry-specific behavior (the new attempt and its audit event).
 //
-// A case that gets its 409 from the insert itself (rather than from requireReportAccess) leaves the
-// transaction aborted, per withTransaction's documented join-not-nest trade-off — so those tests
-// don't try to read anything back afterward. withRollback discards the attempt either way.
+// A case that gets its 409 from the insert itself doesn't read anything back afterward — see
+// withTransaction's documented join-not-nest trade-off.
 describe('_retryReport', () => {
   test('a member can retry their own failed report', async () => {
     await withRollback(database(), async (transaction) => {
