@@ -145,10 +145,11 @@ Applies to `packages/storage` and every app or package that imports it.
   the client — or the route handler does, when there is no `_` function to own it. It splits
   three ways — a statement we could not complete is a 503, one Postgres refused is a 500,
   anything else is rethrown — and the status is not the caller's to pass in.
-- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** Answer it
-  with `error()` there; an `HttpError` is no kind of database failure, so it passes back out
-  untouched. Checking for the condition beforehand instead duplicates the constraint and still
-  races.
+- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** If it
+  maps to an existing `App.Error` code, answer it with `error()` there — an `HttpError` is no
+  kind of database failure, so `withDbErrorHandling` passes it back out untouched. Checking for
+  the condition beforehand instead duplicates the constraint and still races. When the expected
+  outcome has no `App.Error` code, have the callback return it instead of throwing.
 - **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
   (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
   unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
