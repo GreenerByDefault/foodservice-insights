@@ -4,7 +4,6 @@
 import { json } from '@sveltejs/kit';
 import * as v from 'valibot';
 
-/** `body` against `schema`, or the 400 response to send back if it doesn't match. */
 export function parseBody<T>(
   schema: v.GenericSchema<unknown, T>,
   body: unknown,

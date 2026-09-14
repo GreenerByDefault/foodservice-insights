@@ -41,13 +41,9 @@ export const DELETE: RequestHandler = async (event) => {
 /** Promote or demote `targetUserId` to `role`, from `body`'s `{ role }`.
  *
  * - 400 for a body that isn't `{ role: 'admin' | 'member' }`.
- * - 404 if `targetUserId` isn't a member of `organizationId` — `App.Error`'s `code` already
- *   carries `'not_found'`, so this goes through `error()` like every other route's 404.
+ * - 404 if `targetUserId` isn't a member of `organizationId`.
  * - 204 with no audit row if the role is already `role` — a no-op is not a role change.
- * - 409 `last-admin` if this would leave the organization with no admin — see
- *   `attemptMemberWrite`'s header comment for why. `last-admin` is this route's own code, not
- *   `App.Error`'s, so this is a `json()` response built after the transaction settles, the same
- *   way `nameTakenResponse` answers a collision — not a caught-and-rethrown `error()`.
+ * - 409 `last-admin` if this would leave the organization with no admin.
  */
 export async function _changeMemberRole(
   db: DatabaseExecutor,
@@ -63,9 +59,6 @@ export async function _changeMemberRole(
   const outcome = await withDbErrorHandling(
     () =>
       attemptMemberWrite(db, async (transaction) => {
-        // The only row lock in apps/web: it makes the "same role → 204, no audit row" decision
-        // and the audit `detail` (which needs the *previous* role) consistent under two
-        // concurrent role changes to the same row.
         const member = await transaction
           .selectFrom('organizationMember')
           .select('role')
@@ -101,10 +94,7 @@ export async function _changeMemberRole(
 /** Remove `targetUserId` from `organizationId` — or leave, when it's `actor`'s own id.
  *
  * - 404 if `targetUserId` isn't a member of `organizationId`.
- * - 409 `last-admin` if this would leave the organization with no admin — see
- *   `attemptMemberWrite`'s header comment for why. No row lock is needed here, unlike
- *   `_changeMemberRole`: `DELETE … RETURNING` is a single statement, so there's nothing to hold
- *   consistent across a read and a later write.
+ * - 409 `last-admin` if this would leave the organization with no admin.
  * - Otherwise `member.left` when `targetUserId` is `actor` else `member.removed`, then 204.
  */
 export async function _removeMember(
