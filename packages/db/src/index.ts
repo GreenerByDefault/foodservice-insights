@@ -12,6 +12,7 @@ export {
 } from './client.ts';
 export { isPermanentDatabaseError, isTransientDatabaseError } from './errors.ts';
 export { requireConstraint } from './invariants.ts';
+export { countInvitesSince, lockInviteRateLimit } from './invite-rate-limit.ts';
 export { migrateToLatest } from './migrate.ts';
 export {
   POSTGRES_CODE_CHECK_VIOLATION,
