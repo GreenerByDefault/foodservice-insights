@@ -399,10 +399,9 @@ CREATE OR REPLACE FUNCTION "public"."organization_member_check_admin_remains"() 
       -- under a fresh snapshot once the lock is granted.
       --
       -- And FOUND answers "is the organization gone?". Deleting an organization cascades to its
-      -- members and queues this trigger; because the trigger is AFTER and fires once the cascade
-      -- has already run, by the time it runs the organization row is already absent, and that
-      -- absence is exactly what distinguishes a deleted organization from one that just lost its
-      -- last admin.
+      -- members and queues this trigger; because AFTER triggers fire once the cascade has already
+      -- run, by the time it runs the organization row is already absent, and that absence is
+      -- exactly what distinguishes a deleted organization from one that just lost its last admin.
       PERFORM 1 FROM organization WHERE id = affected_organization_id FOR NO KEY UPDATE;
       IF NOT FOUND THEN
         RETURN NULL;
