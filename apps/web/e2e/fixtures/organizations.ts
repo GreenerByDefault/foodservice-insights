@@ -19,8 +19,13 @@ import type {
   UserId,
 } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
-import { insertAppUser, insertOrganization, insertOrganizationMember } from '@gbd/db/testing';
-import { type Kysely, sql } from 'kysely';
+import {
+  insertAppUser,
+  insertOrganization,
+  insertOrganizationInvite,
+  insertOrganizationMember,
+} from '@gbd/db/testing';
+import type { Kysely } from 'kysely';
 import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
@@ -44,6 +49,9 @@ export type OrganizationInviteSpec = {
   email?: string;
   role?: OrganizationRole;
   status?: OrganizationInviteStatus;
+  /** Defaults to `INVITE_LIFETIME_DAYS` out — set this to pin an expired invite for a screenshot
+   * or an e2e spec. */
+  expiresAt?: Date;
 };
 
 /** Commit a private organization `userId` belongs to, with, optionally, its reports. Returns the
@@ -81,7 +89,7 @@ export async function insertOrganizationFixture(
 
   return await withTransaction(db, async (tx) => {
     const adminUserId = await resolveAdminUserId(tx, { userId, role, admin: spec.admin });
-    const { organization } = await insertOrganization(tx, {
+    const { organization, admin } = await insertOrganization(tx, {
       name: spec.name,
       slug,
       ...(adminUserId === undefined ? {} : { adminUserId }),
@@ -106,16 +114,14 @@ export async function insertOrganizationFixture(
     }
 
     for (const invite of spec.invites ?? []) {
-      await tx
-        .insertInto('organizationInvite')
-        .values({
-          organizationId,
-          email: invite.email ?? `${crypto.randomUUID()}@example.test`,
-          role: invite.role ?? 'member',
-          status: invite.status ?? 'pending',
-          expiresAt: sql`now() + interval '14 days'`,
-        })
-        .execute();
+      await insertOrganizationInvite(tx, {
+        organizationId,
+        email: invite.email ?? `${crypto.randomUUID()}@example.test`,
+        role: invite.role ?? 'member',
+        status: invite.status ?? 'pending',
+        expiresAt: invite.expiresAt,
+        invitedByUserId: admin.id,
+      });
     }
 
     return { organizationId, organizationSlug: slug, reportIds };

@@ -11,6 +11,7 @@
  * Values that must be unique are randomised, because tests run concurrently against one database.
  */
 
+import { INVITE_LIFETIME_DAYS } from '@gbd/core';
 import { type RawBuilder, sql } from 'kysely';
 import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
@@ -19,6 +20,8 @@ import type AnalysisFailureReason from '../generated/public/AnalysisFailureReaso
 import type { AppUser } from '../generated/public/AppUser.ts';
 import type { InputFile } from '../generated/public/InputFile.ts';
 import type { Organization } from '../generated/public/Organization.ts';
+import type { OrganizationInvite } from '../generated/public/OrganizationInvite.ts';
+import type OrganizationInviteStatus from '../generated/public/OrganizationInviteStatus.ts';
 import type { OrganizationMember } from '../generated/public/OrganizationMember.ts';
 import type OrganizationRole from '../generated/public/OrganizationRole.ts';
 import type { Report } from '../generated/public/Report.ts';
@@ -149,6 +152,51 @@ export async function insertOrganizationMember(
       userId,
       organizationId: overrides.organizationId,
       role: overrides.role ?? 'member',
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
+
+/** A full invite lifetime, as a Postgres interval — shared between `expiresAt`'s default and the
+ * backdating below, so the two can't drift apart. */
+const INVITE_LIFETIME_INTERVAL = sql`make_interval(days => ${INVITE_LIFETIME_DAYS})`;
+
+/** An `organization_invite` row. `expiresAt` defaults to `INVITE_LIFETIME_DAYS` from Postgres's
+ * clock, and accepts a `RawBuilder<Date>` (e.g. `DB_NOW`/`dbMsAgo`) as well as a plain `Date` —
+ * whichever it is, `created_at` is computed from it in SQL rather than left to the column's
+ * default whenever it falls at or before `now()`, backdated a full lifetime earlier. That's the
+ * only way to build the expired case at all:
+ * `organization_invite_expires_at_after_created_at` refuses a row whose `created_at` isn't
+ * strictly before `expires_at`, and comparing in SQL against Postgres's clock — rather than the
+ * process's — is the same reason `DB_NOW`/`dbMsAgo` exist: a JS-clock comparison can land on the
+ * wrong side of "now" under load.
+ */
+export async function insertOrganizationInvite(
+  database: DatabaseExecutor,
+  overrides: {
+    organizationId: Organization['id'];
+    email: string;
+    role?: OrganizationRole;
+    status?: OrganizationInviteStatus;
+    expiresAt?: Date | RawBuilder<Date>;
+    invitedByUserId?: AppUser['id'] | null;
+  },
+): Promise<OrganizationInvite> {
+  const expiresAt = overrides.expiresAt ?? sql<Date>`now() + ${INVITE_LIFETIME_INTERVAL}`;
+
+  return await database
+    .insertInto('organizationInvite')
+    .values({
+      organizationId: overrides.organizationId,
+      email: overrides.email,
+      role: overrides.role ?? 'member',
+      status: overrides.status ?? 'pending',
+      invitedByUserId: overrides.invitedByUserId ?? null,
+      expiresAt,
+      createdAt: sql<Date>`CASE WHEN (${expiresAt})::timestamptz <= now()
+        THEN (${expiresAt})::timestamptz - ${INVITE_LIFETIME_INTERVAL}
+        ELSE now()
+      END`,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

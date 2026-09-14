@@ -5,6 +5,7 @@ import {
   type GbdOrganizationDeleted,
   type GbdUserDeleted,
   initializeEmailer,
+  type OrganizationInvite,
   parseTransportSettings,
   resolveTransport,
   sendEmail,
@@ -49,5 +50,18 @@ export async function notifyGbd(message: GbdNotice): Promise<void> {
     await sendEmail(emailer(), message);
   } catch (cause) {
     console.error('Could not notify GBD', { kind: message.kind, error: cause });
+  }
+}
+
+/** Send an invite email, logging rather than throwing if it fails. Unlike `notifyGbd`, the caller
+ * needs to know which happened: the invite row is already committed by the time this runs, so a
+ * failed send still has to answer its request rather than 500ing on it. */
+export async function sendInvite(message: OrganizationInvite): Promise<boolean> {
+  try {
+    await sendEmail(emailer(), message);
+    return true;
+  } catch (cause) {
+    console.error('Could not send invite', { to: message.to, error: cause });
+    return false;
   }
 }

@@ -6,6 +6,10 @@ export const APP_NAME = 'Foodservice Insights';
 
 export * from './time.ts';
 
+/** How long an invite stays live before it expires — the app's `expires_at = now() +
+ * make_interval(days => …)` and REQUIREMENTS.md § Invite flow both link here. */
+export const INVITE_LIFETIME_DAYS = 14;
+
 /** The one OOXML spreadsheet content type. */
 export const XLSX_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

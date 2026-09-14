@@ -1,10 +1,4 @@
-import type {
-  Database,
-  OrganizationId,
-  OrganizationInviteStatus,
-  OrganizationRole,
-  UserId,
-} from '@gbd/db';
+import type { Database, OrganizationId, OrganizationRole, UserId } from '@gbd/db';
 import {
   insertAppUser,
   insertAppUserWithEmail,
@@ -119,38 +113,6 @@ export async function withOrganizationFixtures<T>(
       await deletePrefix(blobStore(), organizationPrefix(organization.id));
     }
   });
-}
-
-// -----------------------------------------------------
-// Invites
-// -----------------------------------------------------
-
-/** An invite for `email` that runs out at `expiresAt`.
- *
- * `created_at` is backdated a full invite lifetime rather than left to default, because
- * `organization_invite_expires_at_after_created_at` refuses a row that is already expired the
- * moment it is written — so this is also the only way to build the expired case.
- */
-export async function inviteExpiring(
-  transaction: Transaction<Database>,
-  email: string,
-  expiresAt: Date,
-  status: OrganizationInviteStatus = 'pending',
-): Promise<void> {
-  const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
-  const { organization } = await insertOrganization(transaction);
-
-  await transaction
-    .insertInto('organizationInvite')
-    .values({
-      organizationId: organization.id,
-      email,
-      role: 'member',
-      status,
-      createdAt: new Date(expiresAt.getTime() - INVITE_LIFETIME_MS),
-      expiresAt,
-    })
-    .execute();
 }
 
 // -----------------------------------------------------

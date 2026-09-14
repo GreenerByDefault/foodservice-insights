@@ -25,6 +25,7 @@ export {
   insertAppUserWithEmail,
   insertInputFile,
   insertOrganization,
+  insertOrganizationInvite,
   insertOrganizationMember,
   insertReport,
   insertReportWithAttempt,

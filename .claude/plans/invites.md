@@ -17,15 +17,19 @@ per-test identities, which arrive with auth PR 2. See § Sequencing.
 **No UI lands without the screenshots that show it.** The committed images are how the design gets
 looked at, so a PR that adds a component also regenerates or adds its `__screenshots__` entries;
 "the images come later" is not a way to make a PR smaller. Server-only PRs have no design to see
-and are the thing to split out instead — which is what PR 2 and PR 4 are.
+and are the thing to split out instead — which is what PR 1 and PR 3 are.
 
 **Depends on nothing outstanding.** The post-membership maintainability pass has landed, and with it
 everything this plan leans on: `parseBody` (`lib/server/body.ts`), `requireOrganizationRouteContext`
-and friends (`lib/server/auth/route-context.ts`), `isCheckViolation` (`lib/server/db.ts`), the
-widened `AuditEvent` with its `'invite'` target type (`lib/server/audit.ts`), `item-list.svelte`,
-`relative-time.svelte`, `routes/(app)/shell/user-menu.svelte`, the `invites` key on
-`insertOrganizationFixture`'s spec, and `mockUnreachableEmailer` / `inviteExpiring` in
-`apps/web/src/lib/server/testing/fixtures.ts`.
+and friends (`lib/server/auth/route-context.ts`, which also returns `organizationName`),
+`isCheckViolation` (`lib/server/db.ts`), the widened `AuditEvent` with its `'invite'` target type and
+`InviteAuditAction` (`lib/server/audit.ts`), `item-list.svelte`, `relative-time.svelte`,
+`routes/(app)/shell/user-menu.svelte`, and the `invites` key on `insertOrganizationFixture`'s spec.
+The invites prefactor has also landed, adding: `INVITE_LIFETIME_DAYS` (`@gbd/core`),
+`HOURLY_INVITE_LIMIT` (`$lib/invites/limits.ts`), `insertOrganizationInvite` (`@gbd/db/testing` —
+the fixture every invite row goes through now, including `insertOrganizationFixture`'s and
+`organization.test.ts`'s), the invite href builders (`$lib/hrefs.ts`), `emailAddress`
+(`$lib/forms/validation.ts`), and `sendInvite` (`$lib/server/email.ts`).
 
 ## Sequencing: the three plans against `auth.md`
 
@@ -51,20 +55,20 @@ client-side navigation, so it would need the account-menu link to exist first, a
 second temporary hack on a file `auth.md` PR 2 already deletes — to get one image weeks earlier
 that the real fixture then has to reproduce anyway.
 
-**The order that keeps you unblocked:** invites PRs 1–4 → auth PRs 1–2 → invites PR 5 →
+**The order that keeps you unblocked:** invites PRs 1–3 → auth PRs 1–2 → invites PR 4 →
 auth PRs 3–4 → account-self-service PRs 1–2 (memberships already landed).
 
 Two notes on the auth numbering, which moved when auth's own fixtures prefactor landed as #298:
 per-test identities arrive with **auth PR 2** (the switch-on PR), not PR 3, and the `?email=`
 prefill belongs to the sign-in email step **auth PR 1** builds. After auth PR 3 an invitee with no
-display name meets `/onboarding` before `/invites` — correct, and no change here, since PR 5's
+display name meets `/onboarding` before `/invites` — correct, and no change here, since PR 4's
 fixtures mint onboarded users.
 
 **Requirements this plan changes, confirmed.** Each is a change to the written requirement, not a
-misreading of it. **PR 1 makes all three edits to `REQUIREMENTS.md`**, so the requirement is settled
-before any handler implements it.
+misreading of it. REQUIREMENTS.md already carries all three edits below, landed with the prefactor,
+so the requirement was settled before any handler implements it.
 
-1. **Invite rate limit.** `REQUIREMENTS.md` § Abuse limits and the `POST` stub's comment both say
+1. **Invite rate limit.** `REQUIREMENTS.md` § Abuse limits and the `POST` stub's comment both said
    *5 invites per hour, per organization*. This becomes **20 per hour, per inviting user**. Why:
    organization creation is uncapped (you removed that limit), so a per-organization cap bounds
    nothing an attacker cares about — they make another organization. And 5/hour stops a real admin
@@ -75,9 +79,9 @@ before any handler implements it.
    switch from user to organization, and the constant becomes 5.
 2. **"Expired invites … the user sees a one-time notice"** becomes *shown until dismissed*, and
    dismissing is what writes `expired`. Nothing else writes it; loads never write.
-3. **Inviting an address that is already a member answers 409.** Not in the requirements today; the
-   alternative is a pending invite the invitee can never usefully accept. § Invite flow gains a
-   bullet.
+3. **Inviting an address that is already a member answers 409.** Not in the requirements before
+   this plan; the alternative is a pending invite the invitee can never usefully accept. § Invite
+   flow has the bullet.
 
 (Account self-service has two more of these — how the user row is deleted, and single rather than
 double confirmation of an email change — recorded in that plan's Context.)
@@ -98,60 +102,14 @@ double confirmation of an email change — recorded in that plan's Context.)
 | Rate limit | `HOURLY_INVITE_LIMIT = 20` per *inviting user*: `pg_advisory_xact_lock(3, hashtext(userId))`, then count `organization_invite` rows by `invited_by_user_id` in the last hour, in the writing transaction; 429 `{ code: 'rate-limited', message }` | § Sequencing, item 1. Lock class 3 per `report-rate-limit.ts`'s "add a new class" rule. Superseded rows still count — they sent mail |
 | Email failure | Send after commit; on failure log and answer 201 `{ inviteId, emailSent: false }`; the form warns "Saved, but the email couldn't be sent — try inviting them again" | The row is committed by then, so a 5xx would lie; silence would strand the invitee. Re-inviting supersedes and resends |
 | Accept/decline guard | Invite looked up by id and `email = lower(user.email)`; anything else 404 | The stub's design: the verified address is the token. 404 so an id leaks nothing |
-| Audit | `invite.created`, `invite.revoked`, `invite.accepted`, `invite.declined`, `invite.expired`; target type `invite`. Supersession is not its own event | REQUIREMENTS § Audit trail: invites. The superseded row's status is the record |
-| Validation | `emailAddress()` in `$lib/forms/validation.ts`: trim, lowercase, `v.email()`, `v.maxLength(254)`; `FIELD = { email: 'email', role: 'role' }` in `$lib/invites/invite.ts` | The CHECK requires lowercase; auth PR 1's `EmailSchema` should reuse this |
+| Audit | `invite.created`, `invite.revoked`, `invite.accepted`, `invite.declined`, `invite.expired`; target type `invite` | REQUIREMENTS § Audit trail: invites. Supersession is not its own event — the superseded row's status is the record |
+| Validation | `emailAddress` in `$lib/forms/validation.ts`: trim, lowercase, `v.email()`, `v.maxLength(254)`; `FIELD = { email: 'email', role: 'role' }` in `$lib/invites/invite.ts` | The CHECK requires lowercase; auth PR 1's `EmailSchema` should reuse this |
 | Who the email says invited you | `invited_by_user_id`'s display name, `null` → "An admin" | The column is `ON DELETE SET NULL` and display names are nullable until auth PR 3; `renderOrganizationInvite` already has this fallback, so `/invites` matches it |
 | `?email=` prefill on `/sign-in` | Not here — auth PR 1 builds the email step; add "read `?email=` into it" to that PR | The email already carries it |
 
-## PR 1 — Prefactor, and the requirements it settles
+## PR 1 — Admin endpoints
 
-Lands the constants, fixtures and helpers the next four PRs share, plus every `REQUIREMENTS.md`
-edit, so the rules are agreed before a handler enacts them.
-
-**Requirements** (§ Sequencing, items 1–3):
-
-- § Invite flow: "Invites expire after 14 days" → a link to `INVITE_LIFETIME_DAYS` (the
-  `writing-docs` rule: one owner, docs link). The expiry bullet becomes "shown until the user
-  dismisses it, which is what records the expiry". A new bullet: inviting an address that already
-  belongs to the organization is refused.
-- § Abuse limits: the invite line becomes "a user can invite 20 people per hour" and links
-  `HOURLY_INVITE_LIMIT`. The `POST` stub's "capped at five an hour for the organization" comment
-  goes with it.
-
-**Code:**
-
-- `@gbd/core`: `INVITE_LIFETIME_DAYS = 14`.
-- `apps/web/src/lib/invites/limits.ts`: `HOURLY_INVITE_LIMIT = 20`, mirroring
-  `$lib/reports/limits.ts`. No consumer until PR 2 — it exists here because the requirement links
-  to it.
-- `@gbd/db/testing` `fixtures.ts`: `insertOrganizationInvite(db, { organizationId, email, role?,
-  status?, expiresAt?, invitedByUserId? })` returning the row. `expiresAt` defaults to
-  `now() + INVITE_LIFETIME_DAYS` and accepts a `RawBuilder<Date>` as well as a `Date`, and
-  `created_at` is backdated one lifetime in SQL when the row is already expired — both for the
-  reason `DB_NOW`/`dbMsAgo` give: `organization_invite_expires_at_after_created_at` compares
-  against Postgres's clock, so a JS-clock value races it. Document that constraint here, once.
-  Export from `testing/index.ts`. Replaces `inviteExpiring` in
-  `apps/web/src/lib/server/testing/fixtures.ts` (delete it) and the hand-built rows in
-  `packages/db/tests/organization.test.ts`.
-- `apps/web/e2e/fixtures/organizations.ts`: `OrganizationInviteSpec` gains `expiresAt?: Date`, the
-  one field it's missing, and `insertOrganizationFixture`'s inline `insertInto('organizationInvite')`
-  becomes a call to `insertOrganizationInvite` — which is what makes an expired `expiresAt` legal at
-  all, and what stops `interval '14 days'` being spelled a second time. Set `invitedByUserId` to the
-  organization's admin, so a screenshot can pin the inviter's name through `spec.admin`.
-- `apps/web/src/lib/hrefs.ts`: `organizationInvitesApiHref(organizationSlug)`,
-  `organizationInviteApiHref(organizationSlug, inviteId)`, `acceptInviteApiHref(inviteId)`,
-  `declineInviteApiHref(inviteId)` — every organization-scoped builder here takes the slug, not the
-  id (organization-slugs).
-- `audit.ts`: `InviteAuditAction`; `target.type` already allows `'invite'`.
-- `route-context.ts`: `requireOrganizationRouteContext` also returns `organizationName` from the
-  access row — the invite email needs it and the row already carries it.
-- `$lib/forms/validation.ts`: `emailAddress()` + test.
-- `$lib/server/email.ts`: `sendInvite(message: OrganizationInvite): Promise<boolean>` — true when
-  sent, false (logged) when not. Not `notifyGbd`: the caller needs the answer.
-
-## PR 2 — Admin endpoints
-
-Server only; the UI that reaches them is PR 3.
+Server only; the UI that reaches them is PR 2.
 
 - `packages/db/src/invite-rate-limit.ts`: `lockInviteRateLimit(db, { userId })` (class 3) and
   `countInvitesSince(db, { userId, windowSeconds })`. `tests/invite-rate-limit.test.ts` mirrors
@@ -163,7 +121,7 @@ Server only; the UI that reaches them is PR 3.
   insert returning `id, expires_at`; audit `invite.created`. After commit `sendInvite({ kind:
   'organization-invite', to, organizationName, role, invitedByName: actorDisplayName, expiresAt })`.
   201 `{ inviteId, emailSent }` / 409 / 429.
-  The handler gets `organizationName` from `requireOrganizationRouteContext` (PR 1) and
+  The handler gets `organizationName` from `requireOrganizationRouteContext` and
   `actorDisplayName` from `requireAuth(event.locals).user` — a locals read, no second database
   guard, so this is not the double-guard the maintainability pass removed from `DELETE`.
   `create-invite.test.ts` (`vi.mock('$lib/server/email')` with `recordingEmailer` for the send
@@ -177,7 +135,7 @@ Server only; the UI that reaches them is PR 3.
   audit `invite.revoked`; 204. Test.
 - Drop the `**Stub:**` markers on both files.
 
-## PR 3 — Admin UI on the Members page
+## PR 2 — Admin UI on the Members page
 
 - `members/+page.server.ts`: read `role`/`organization.id` from `parent()`; admins also get
   `invites: await _loadPendingInvites(db, organizationId)` → `InviteRow = { inviteId, email, role,
@@ -211,10 +169,10 @@ Server only; the UI that reaches them is PR 3.
     address forwards every parallel spec's `/orgs` to `/invites` (§ Sequencing). The `roster(prefix)`
     convention already keeps them apart — keep the invited addresses under the same prefix.
 
-## PR 4 — Invitee endpoints, unmounted
+## PR 3 — Invitee endpoints, unmounted
 
 Server only, and landable now: these tests run inside `withRollback`, so no invite ever commits and
-the hazard in § Sequencing never fires. Nothing reaches them until PR 5, the same way auth PR 1's
+the hazard in § Sequencing never fires. Nothing reaches them until PR 4, the same way auth PR 1's
 sign-in flow lands before the page that mounts it.
 
 - `apps/web/src/lib/server/invites/claim.ts`: `lockInviteFor(transaction, inviteId, email)` →
@@ -227,9 +185,9 @@ sign-in flow lands before the page that mounts it.
   URL, and `organizationHref` takes slugs. `POST …/decline` → `_declineInvite`: expired → `expired` + audit, 204;
   pending → `declined` + audit, 204; else 409. Tests for every branch, including "another user's
   invite is a 404" and "accepting as an existing member still marks it accepted".
-- Drop the `**Stub:**` markers on both files. `/invites/+page.*` keeps its own until PR 5.
+- Drop the `**Stub:**` markers on both files. `/invites/+page.*` keeps its own until PR 4.
 
-## PR 5 — The `/invites` page, end to end (after auth PR 2)
+## PR 4 — The `/invites` page, end to end (after auth PR 2)
 
 Deferred as a whole, not split: the page, its e2e and its screenshots need the same thing — a test
 that can be the invitee — and shipping the components without the images would be shipping a design
@@ -265,14 +223,14 @@ Per PR as usual (`pnpm lint && pnpm check && pnpm test`) — plus, specific to t
 
 1. While iterating, scope to the files touched:
    `pnpm --filter @gbd/web test:unit -- 'src/lib/invites' 'src/routes/api/orgs' 'src/routes/api/invites' 'src/routes/(app)/orgs/[organizationSlug=slug]/members' 'src/routes/(app)/invites'`.
-2. PR 1 and PR 2 also `pnpm --filter @gbd/db test`.
-3. Re-baseline images for PRs 3 and 5 with `pnpm turbo run screenshots:update --filter=@gbd/web`
+2. PR 1 also `pnpm --filter @gbd/db test`.
+3. Re-baseline images for PRs 2 and 4 with `pnpm turbo run screenshots:update --filter=@gbd/web`
    **from the repo root**. Running `screenshots:update` inside `apps/web` skips the `build` Turbo
    injects, so Playwright serves the previous build and the images regenerate showing the *old* UI,
    with nothing in the output saying so.
-4. Then `pnpm dev` with Mailpit (55324) open. After PR 3: invite an address as admin → it appears
+4. Then `pnpm dev` with Mailpit (55324) open. After PR 2: invite an address as admin → it appears
    pending and the email has a `/sign-in?email=` link; invite it again → still one row, later
    expiry; invite a current member → inline "already a member"; the 21st invite in an hour → the
-   rate-limit alert; revoke → gone. After PR 5, in Studio, insert a pending invite for your own
+   rate-limit alert; revoke → gone. After PR 4, in Studio, insert a pending invite for your own
    email (and one already expired) → `/orgs` forwards to `/invites` → Accept lands you in the org;
    Dismiss removes the expired one and its status reads `expired`.
