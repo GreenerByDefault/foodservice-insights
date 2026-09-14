@@ -6,6 +6,12 @@ import type { Database, DatabaseExecutor } from './schema.ts';
  * Joining rather than nesting is what lets `db` be a rolled-back test transaction: Kysely
  * throws on `db.transaction()` if `db` is already a `Transaction`. See `transactions.test.ts`
  * for the atomicity this buys and its trade-off.
+ *
+ * The trade-off: Postgres aborts the whole transaction on a statement error, not just that
+ * statement, so a caller that catches an expected one (a check violation, say) to classify it
+ * cannot read anything back afterward in the same transaction — everything from that point runs
+ * against an aborted transaction and fails the same way. A test asserting on such a failure just
+ * stops there and lets `withRollback` discard the attempt.
  */
 export async function withTransaction<T>(
   db: DatabaseExecutor,

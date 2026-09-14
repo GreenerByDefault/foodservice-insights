@@ -47,9 +47,7 @@ describe('a valid name', () => {
 });
 
 describe('a name already taken', () => {
-  // The UPDATE's unique violation aborts the transaction (see withTransaction's documented
-  // join-not-nest trade-off), so nothing is read back afterward — the abort also means the
-  // name is never partially applied and the audit event is never recorded.
+  // Nothing is read back afterward — see withTransaction's documented join-not-nest trade-off.
   test('answers 409 name-taken, case-insensitively', async () => {
     await withRollback(database(), async (transaction) => {
       await insertOrganization(transaction, { name: 'Acme Foodservice' });

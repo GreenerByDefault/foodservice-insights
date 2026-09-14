@@ -1,10 +1,11 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
 import { goto, invalidateAll } from '$app/navigation';
-import ConfirmAction, { ConfirmActionError } from '$lib/components/confirm-action.svelte';
+import ConfirmAction from '$lib/components/confirm-action.svelte';
 import * as Field from '$lib/components/ui/field';
 import { changeMemberRole } from '$lib/orgs/api/change-member-role';
 import { removeMember } from '$lib/orgs/api/remove-member';
+import { confirmMemberWrite } from './member-write.ts';
 
 /** The page-level section for actions on the viewer's own row — the counterpart to
  * `member-actions.svelte`'s per-row menu, which only acts on other people. Step down is
@@ -18,24 +19,12 @@ interface Props {
 let { organizationSlug, viewerUserId, viewerRole }: Props = $props();
 
 async function stepDown() {
-  const outcome = await changeMemberRole(organizationSlug, viewerUserId, 'member');
-  if (outcome.kind === 'last-admin') {
-    throw new ConfirmActionError("You're the only admin. Make someone else an admin first.");
-  }
-  if (outcome.kind === 'unknown') {
-    throw new Error('unknown');
-  }
+  confirmMemberWrite(await changeMemberRole(organizationSlug, viewerUserId, 'member'));
   await invalidateAll();
 }
 
 async function leave() {
-  const outcome = await removeMember(organizationSlug, viewerUserId);
-  if (outcome.kind === 'last-admin') {
-    throw new ConfirmActionError("You're the only admin. Make someone else an admin first.");
-  }
-  if (outcome.kind === 'unknown') {
-    throw new Error('unknown');
-  }
+  confirmMemberWrite(await removeMember(organizationSlug, viewerUserId));
   // Same landing as delete-organization: `/orgs` forwards to a remaining organization, or
   // `/orgs/new` if this was the viewer's last.
   await goto('/orgs', { invalidateAll: true });

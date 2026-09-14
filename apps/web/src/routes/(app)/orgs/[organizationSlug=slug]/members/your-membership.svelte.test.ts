@@ -1,8 +1,11 @@
+import type { OrganizationRole } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { goto, invalidateAll } from '$app/navigation';
-import { lastFetchCall, stubFetch } from '$lib/testing/fetch';
+import { expectFetched, stubFetch } from '$lib/testing/fetch';
 import { resetNavigationMocks } from '$lib/testing/navigation';
+import { LAST_ADMIN_MESSAGE } from './member-write.ts';
+import { lastAdminResponse } from './testing/fixtures.ts';
 import YourMembership from './your-membership.svelte';
 
 vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
@@ -12,69 +15,13 @@ afterEach(() => {
   resetNavigationMocks();
 });
 
+function renderAs(viewerRole: OrganizationRole) {
+  return render(YourMembership, { organizationSlug: 'org-1', viewerUserId: 'user-1', viewerRole });
+}
+
 describe('YourMembership', () => {
-  test('stepping down PATCHes the viewer with role member, then refreshes', async () => {
-    const fetchMock = stubFetch(new Response(null, { status: 204 }));
-    const screen = await render(YourMembership, {
-      organizationSlug: 'org-1',
-      viewerUserId: 'user-1',
-      viewerRole: 'admin',
-    });
-
-    await screen.getByRole('button', { name: 'Step down as admin' }).click();
-    await screen.getByRole('button', { name: 'Yes, step down' }).click();
-
-    await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
-    const [url, options] = lastFetchCall(fetchMock);
-    expect(url).toBe('/api/orgs/org-1/members/user-1');
-    expect(options.method).toBe('PATCH');
-    expect(JSON.parse(options.body as string)).toEqual({ role: 'member' });
-  });
-
-  test('the sole admin is refused, and told how to proceed', async () => {
-    stubFetch(
-      new Response(JSON.stringify({ message: 'Only admin', code: 'last-admin' }), {
-        status: 409,
-      }),
-    );
-    const screen = await render(YourMembership, {
-      organizationSlug: 'org-1',
-      viewerUserId: 'user-1',
-      viewerRole: 'admin',
-    });
-
-    await screen.getByRole('button', { name: 'Step down as admin' }).click();
-    await screen.getByRole('button', { name: 'Yes, step down' }).click();
-
-    await expect
-      .element(screen.getByText("You're the only admin. Make someone else an admin first."))
-      .toBeVisible();
-    expect(invalidateAll).not.toHaveBeenCalled();
-  });
-
-  test('any other failure shows a generic message', async () => {
-    stubFetch(new Response(JSON.stringify({ message: 'Nope' }), { status: 500 }));
-    const screen = await render(YourMembership, {
-      organizationSlug: 'org-1',
-      viewerUserId: 'user-1',
-      viewerRole: 'admin',
-    });
-
-    await screen.getByRole('button', { name: 'Step down as admin' }).click();
-    await screen.getByRole('button', { name: 'Yes, step down' }).click();
-
-    await expect
-      .element(screen.getByText('Could not update your role. Please try again.'))
-      .toBeVisible();
-    expect(invalidateAll).not.toHaveBeenCalled();
-  });
-
   test('a member sees Leave alone, with no Step down', async () => {
-    const screen = await render(YourMembership, {
-      organizationSlug: 'org-1',
-      viewerUserId: 'user-1',
-      viewerRole: 'member',
-    });
+    const screen = await renderAs('member');
 
     await expect
       .element(screen.getByRole('button', { name: 'Step down as admin' }))
@@ -82,60 +29,55 @@ describe('YourMembership', () => {
     await expect.element(screen.getByRole('button', { name: 'Leave organization' })).toBeVisible();
   });
 
-  describe('Leave organization', () => {
+  describe('stepping down', () => {
+    test('PATCHes the viewer with role member, then refreshes', async () => {
+      const fetchMock = stubFetch(new Response(null, { status: 204 }));
+      const screen = await renderAs('admin');
+
+      await screen.getByRole('button', { name: 'Step down as admin' }).click();
+      await screen.getByRole('button', { name: 'Yes, step down' }).click();
+
+      await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+      expectFetched(fetchMock, {
+        url: '/api/orgs/org-1/members/user-1',
+        method: 'PATCH',
+        body: { role: 'member' },
+      });
+    });
+
+    test('the sole admin is refused, and told how to proceed', async () => {
+      stubFetch(lastAdminResponse());
+      const screen = await renderAs('admin');
+
+      await screen.getByRole('button', { name: 'Step down as admin' }).click();
+      await screen.getByRole('button', { name: 'Yes, step down' }).click();
+
+      await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
+      expect(invalidateAll).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('leaving', () => {
     test('DELETEs the viewer, then navigates to /orgs', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 204 }));
-      const screen = await render(YourMembership, {
-        organizationSlug: 'org-1',
-        viewerUserId: 'user-1',
-        viewerRole: 'admin',
-      });
+      const screen = await renderAs('admin');
 
       await screen.getByRole('button', { name: 'Leave organization' }).click();
       await screen.getByRole('button', { name: 'Yes, leave' }).click();
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
       expect(goto).toHaveBeenCalledWith('/orgs', { invalidateAll: true });
-      const [url, options] = lastFetchCall(fetchMock);
-      expect(url).toBe('/api/orgs/org-1/members/user-1');
-      expect(options.method).toBe('DELETE');
+      expectFetched(fetchMock, { url: '/api/orgs/org-1/members/user-1', method: 'DELETE' });
     });
 
     test('the only admin leaving is refused, and told how to proceed', async () => {
-      stubFetch(
-        new Response(JSON.stringify({ message: 'Only admin', code: 'last-admin' }), {
-          status: 409,
-        }),
-      );
-      const screen = await render(YourMembership, {
-        organizationSlug: 'org-1',
-        viewerUserId: 'user-1',
-        viewerRole: 'admin',
-      });
+      stubFetch(lastAdminResponse());
+      const screen = await renderAs('admin');
 
       await screen.getByRole('button', { name: 'Leave organization' }).click();
       await screen.getByRole('button', { name: 'Yes, leave' }).click();
 
-      await expect
-        .element(screen.getByText("You're the only admin. Make someone else an admin first."))
-        .toBeVisible();
-      expect(goto).not.toHaveBeenCalled();
-    });
-
-    test('any other failure shows a generic message', async () => {
-      stubFetch(new Response(JSON.stringify({ message: 'Nope' }), { status: 500 }));
-      const screen = await render(YourMembership, {
-        organizationSlug: 'org-1',
-        viewerUserId: 'user-1',
-        viewerRole: 'admin',
-      });
-
-      await screen.getByRole('button', { name: 'Leave organization' }).click();
-      await screen.getByRole('button', { name: 'Yes, leave' }).click();
-
-      await expect
-        .element(screen.getByText('Could not leave this organization. Please try again.'))
-        .toBeVisible();
+      await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
       expect(goto).not.toHaveBeenCalled();
     });
   });

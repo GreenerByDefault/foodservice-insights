@@ -10,7 +10,7 @@ test('an admin promotes a member to admin, then demotes them back, with no reloa
 }) => {
   const memberName = 'Priya Shah';
   const { slug: organizationSlug } = await organizations.create({
-    name: `Promotion Foodservice ${crypto.randomUUID()}`,
+    name: `Promotion ${crypto.randomUUID()}`,
     members: [{ displayName: memberName, role: 'member' }],
   });
 
@@ -39,7 +39,7 @@ test('the sole admin stepping down is refused, and told how to proceed', async (
   user,
 }) => {
   const { slug: organizationSlug } = await organizations.create({
-    name: `Sole Admin Foodservice ${crypto.randomUUID()}`,
+    name: `Sole Admin ${crypto.randomUUID()}`,
   });
 
   await page.goto(`/orgs/${organizationSlug}/members`);
@@ -61,7 +61,7 @@ test('the sole admin stepping down is refused, and told how to proceed', async (
 test('an admin removes a member, and the row disappears', async ({ page, organizations }) => {
   const memberName = 'Priya Shah';
   const { slug: organizationSlug } = await organizations.create({
-    name: `Removal Foodservice ${crypto.randomUUID()}`,
+    name: `Removal ${crypto.randomUUID()}`,
     members: [{ displayName: memberName, role: 'member' }],
   });
 
@@ -81,7 +81,7 @@ test('a member leaves via the button and lands on /orgs or a remaining organizat
   organizations,
 }) => {
   const { slug: organizationSlug } = await organizations.create({
-    name: `Leaving Foodservice ${crypto.randomUUID()}`,
+    name: `Leaving ${crypto.randomUUID()}`,
     role: 'member',
     admin: { displayName: 'Priya Shah' },
   });
@@ -107,7 +107,7 @@ test('the only admin leaving is refused, and the organization is still there', a
   organizations,
 }) => {
   const { slug: organizationSlug } = await organizations.create({
-    name: `Sole Admin Leaving Foodservice ${crypto.randomUUID()}`,
+    name: `Sole Admin Leaving ${crypto.randomUUID()}`,
   });
 
   await page.goto(`/orgs/${organizationSlug}/members`);
@@ -129,7 +129,7 @@ test('a member removing someone else through the API is refused', async ({
 }) => {
   const adminEmail = `sole-admin-${crypto.randomUUID()}@example.test`;
   const { slug: organizationSlug } = await organizations.create({
-    name: `Member Api Refusal Foodservice ${crypto.randomUUID()}`,
+    name: `Member Api Refusal ${crypto.randomUUID()}`,
     role: 'member',
     admin: { email: adminEmail },
   });

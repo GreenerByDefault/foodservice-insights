@@ -13,9 +13,9 @@
  * item opens `ConfirmAction`'s dialog, not its own trigger, so this is the one place that path —
  * and the member's name interpolated into the dialog's title — renders. The dialog's own chrome
  * (loading, error banner) is generic across every `ConfirmAction` call site and already covered by
- * `members-error.png`, so this image isn't re-proving that.
- * `members-error.png` is the "Your membership" section's refused Step down, the one action that
- * acts on the viewer rather than another row.
+ * `members-step-down-refused.png`, so this image isn't re-proving that.
+ * `members-step-down-refused.png` is the "Your membership" section's refused Step down, the one
+ * action that acts on the viewer rather than another row.
  *
  * Every person's email is fixed rather than the fixture's default random one: unlike a
  * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
@@ -159,5 +159,5 @@ test('the sole admin’s Your membership section, after Step down is refused', a
     page.getByText("You're the only admin. Make someone else an admin first."),
   ).toBeVisible();
 
-  await expectScreenshots(page, 'members-error.png');
+  await expectScreenshots(page, 'members-step-down-refused.png');
 });

@@ -1,19 +1,7 @@
-import type { UserId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { MemberRow } from './+page.server.ts';
 import MembersList from './members-list.svelte';
-
-function aMember(overrides: Partial<MemberRow> = {}): MemberRow {
-  return {
-    userId: crypto.randomUUID() as UserId,
-    displayName: 'Ana Ruiz',
-    email: 'ana@example.test',
-    role: 'member',
-    isYou: false,
-    ...overrides,
-  };
-}
+import { aMember } from './testing/fixtures.ts';
 
 describe('MembersList', () => {
   test('shows the name, the email beneath it, and the role', async () => {
@@ -65,7 +53,7 @@ describe('MembersList', () => {
       viewerRole: 'member',
     });
 
-    await expect.element(screen.getByRole('button')).not.toBeInTheDocument();
+    await expect.element(screen.getByRole('button', { name: /^Manage / })).not.toBeInTheDocument();
   });
 
   test('an admin viewer sees a per-row menu for every other member', async () => {
@@ -75,7 +63,7 @@ describe('MembersList', () => {
       viewerRole: 'admin',
     });
 
-    expect(screen.getByRole('button').elements()).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /^Manage / }).elements()).toHaveLength(1);
   });
 
   test('an admin viewer sees no menu on their own row — that’s “Your membership”’s job', async () => {
@@ -85,6 +73,6 @@ describe('MembersList', () => {
       viewerRole: 'admin',
     });
 
-    await expect.element(screen.getByRole('button')).not.toBeInTheDocument();
+    await expect.element(screen.getByRole('button', { name: /^Manage / })).not.toBeInTheDocument();
   });
 });

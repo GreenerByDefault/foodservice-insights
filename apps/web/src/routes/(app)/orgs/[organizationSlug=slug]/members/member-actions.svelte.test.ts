@@ -1,20 +1,15 @@
 import type { UserId } from '@gbd/db';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { lastFetchCall, stubFetch } from '$lib/testing/fetch';
+import { expectFetched, jsonResponse, stubFetch } from '$lib/testing/fetch';
 import type { MemberRow } from './+page.server.ts';
 import MemberActions from './member-actions.svelte';
+import { LAST_ADMIN_MESSAGE } from './member-write.ts';
+import { aMember, lastAdminResponse } from './testing/fixtures.ts';
 
-function aMember(overrides: Partial<MemberRow> = {}): MemberRow {
-  return {
-    userId: crypto.randomUUID() as UserId,
-    displayName: 'Ana Ruiz',
-    email: 'ana@example.test',
-    role: 'member',
-    isYou: false,
-    ...overrides,
-  };
-}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /** Opens the menu and returns the screen — the content is portalled, so it only exists once open. */
 async function opened(props: {
@@ -54,62 +49,57 @@ describe('MemberActions', () => {
       .not.toBeInTheDocument();
   });
 
-  test('promoting PATCHes the member with role admin, then calls onDone', async () => {
-    const fetchMock = stubFetch(new Response(null, { status: 204 }));
-    const onDone = vi.fn().mockResolvedValue(undefined);
-    const member = aMember({ role: 'member', userId: 'user-1' as UserId });
-    const screen = await opened({
-      organizationSlug: 'org-1',
-      member,
-      onDone,
+  describe('changing a role', () => {
+    test('promoting PATCHes the member with role admin, then calls onDone', async () => {
+      const fetchMock = stubFetch(new Response(null, { status: 204 }));
+      const onDone = vi.fn().mockResolvedValue(undefined);
+      const member = aMember({ role: 'member', userId: 'user-1' as UserId });
+      const screen = await opened({ organizationSlug: 'org-1', member, onDone });
+
+      await screen.getByRole('menuitem', { name: 'Make admin' }).click();
+
+      await expect.poll(() => onDone.mock.calls.length).toBe(1);
+      expectFetched(fetchMock, {
+        url: '/api/orgs/org-1/members/user-1',
+        method: 'PATCH',
+        body: { role: 'admin' },
+      });
     });
 
-    await screen.getByRole('menuitem', { name: 'Make admin' }).click();
+    test('a 409 shows the last-admin message and does not call onDone', async () => {
+      stubFetch(lastAdminResponse());
+      const onDone = vi.fn().mockResolvedValue(undefined);
+      const screen = await opened({
+        organizationSlug: 'org-1',
+        member: aMember({ role: 'admin' }),
+        onDone,
+      });
 
-    await expect.poll(() => onDone.mock.calls.length).toBe(1);
-    const [url, options] = lastFetchCall(fetchMock);
-    expect(url).toBe('/api/orgs/org-1/members/user-1');
-    expect(options.method).toBe('PATCH');
-    expect(JSON.parse(options.body as string)).toEqual({ role: 'admin' });
-  });
+      await screen.getByRole('menuitem', { name: 'Make member' }).click();
 
-  test('a 409 shows the last-admin message and does not call onDone', async () => {
-    stubFetch(
-      new Response(JSON.stringify({ message: 'Only admin', code: 'last-admin' }), {
-        status: 409,
-      }),
-    );
-    const onDone = vi.fn().mockResolvedValue(undefined);
-    const screen = await opened({
-      organizationSlug: 'org-1',
-      member: aMember({ role: 'admin' }),
-      onDone,
+      await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
+      expect(onDone).not.toHaveBeenCalled();
     });
 
-    await screen.getByRole('menuitem', { name: 'Make member' }).click();
+    // This is the one "any other failure" case worth keeping: `setRole` renders its own alert
+    // rather than going through `ConfirmAction`, so nothing else covers its fallback message.
+    test('any other failure shows a generic message', async () => {
+      stubFetch(jsonResponse({ message: 'Nope' }, 500));
+      const screen = await opened({
+        organizationSlug: 'org-1',
+        member: aMember({ role: 'member' }),
+        onDone: vi.fn(),
+      });
 
-    await expect
-      .element(screen.getByText("You're the only admin. Make someone else an admin first."))
-      .toBeVisible();
-    expect(onDone).not.toHaveBeenCalled();
-  });
+      await screen.getByRole('menuitem', { name: 'Make admin' }).click();
 
-  test('any other failure shows a generic message', async () => {
-    stubFetch(new Response(JSON.stringify({ message: 'Nope' }), { status: 500 }));
-    const screen = await opened({
-      organizationSlug: 'org-1',
-      member: aMember({ role: 'member' }),
-      onDone: vi.fn(),
+      await expect
+        .element(screen.getByText('Could not update this member. Please try again.'))
+        .toBeVisible();
     });
-
-    await screen.getByRole('menuitem', { name: 'Make admin' }).click();
-
-    await expect
-      .element(screen.getByText('Could not update this member. Please try again.'))
-      .toBeVisible();
   });
 
-  describe('Remove from organization', () => {
+  describe('removing another member', () => {
     test('confirming DELETEs the member, then calls onDone', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 204 }));
       const onDone = vi.fn().mockResolvedValue(undefined);
@@ -120,43 +110,19 @@ describe('MemberActions', () => {
       await screen.getByRole('button', { name: 'Yes, remove' }).click();
 
       await expect.poll(() => onDone.mock.calls.length).toBe(1);
-      const [url, options] = lastFetchCall(fetchMock);
-      expect(url).toBe('/api/orgs/org-1/members/user-1');
-      expect(options.method).toBe('DELETE');
+      expectFetched(fetchMock, { url: '/api/orgs/org-1/members/user-1', method: 'DELETE' });
     });
 
     test('a 409 shows the last-admin message and does not call onDone', async () => {
-      stubFetch(
-        new Response(JSON.stringify({ message: 'Only admin', code: 'last-admin' }), {
-          status: 409,
-        }),
-      );
+      stubFetch(lastAdminResponse());
       const onDone = vi.fn().mockResolvedValue(undefined);
       const screen = await opened({ organizationSlug: 'org-1', member: aMember(), onDone });
 
       await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
       await screen.getByRole('button', { name: 'Yes, remove' }).click();
 
-      await expect
-        .element(screen.getByText("You're the only admin. Make someone else an admin first."))
-        .toBeVisible();
+      await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
       expect(onDone).not.toHaveBeenCalled();
-    });
-
-    test('any other failure shows a generic message', async () => {
-      stubFetch(new Response(JSON.stringify({ message: 'Nope' }), { status: 500 }));
-      const screen = await opened({
-        organizationSlug: 'org-1',
-        member: aMember(),
-        onDone: vi.fn(),
-      });
-
-      await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
-      await screen.getByRole('button', { name: 'Yes, remove' }).click();
-
-      await expect
-        .element(screen.getByText('Could not remove this member. Please try again.'))
-        .toBeVisible();
     });
   });
 });
