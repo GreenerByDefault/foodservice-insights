@@ -219,7 +219,7 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     BEGIN
       -- One statement doing two jobs.
       --
-      -- The lock serializes membership changes per organization. Deferring to commit is not a
+      -- The lock serializes membership changes per organization. Holding it until commit is not a
       -- serializable guarantee on its own: without this, two transactions can each still see the
       -- other's committed admin, both pass, and both commit, leaving zero. FOR NO KEY UPDATE is
       -- the right strength — it conflicts with itself, but not with the FOR KEY SHARE locks our
@@ -227,9 +227,9 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
       -- under a fresh snapshot once the lock is granted.
       --
       -- And FOUND answers "is the organization gone?". Deleting an organization cascades to its
-      -- members and queues this trigger; because it is deferred, by the time it runs the
-      -- organization row is already absent, and that absence is exactly what distinguishes a
-      -- deleted organization from one that just lost its last admin.
+      -- members and queues this trigger; because AFTER triggers fire once the cascade has already
+      -- run, by the time it runs the organization row is already absent, and that absence is
+      -- exactly what distinguishes a deleted organization from one that just lost its last admin.
       PERFORM 1 FROM organization WHERE id = affected_organization_id FOR NO KEY UPDATE;
       IF NOT FOUND THEN
         RETURN NULL;
@@ -252,12 +252,13 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     $$
   `.execute(database);
 
-  // Deferred, so intermediate states within a transaction — demoting one admin before promoting
-  // another — do not trip it. A constraint trigger must be AFTER and FOR EACH ROW.
+  // Not deferrable: this app never needs the invalid intermediate state deferring would permit —
+  // a caller appoints a successor before demoting or removing themselves, rather than swapping
+  // admins atomically across two statements — so checking at end-of-statement is free. A
+  // constraint trigger must still be AFTER and FOR EACH ROW.
   await sql`
     CREATE CONSTRAINT TRIGGER organization_member_at_least_one_admin
       AFTER INSERT OR UPDATE OR DELETE ON organization_member
-      DEFERRABLE INITIALLY DEFERRED
       FOR EACH ROW EXECUTE FUNCTION organization_member_check_admin_remains()
   `.execute(database);
 

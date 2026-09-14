@@ -225,7 +225,6 @@ describe('organization', () => {
           .insertInto('organizationMember')
           .values({ userId: user.id, organizationId: organization.id, role: 'member' })
           .execute();
-        await checkDeferredConstraints(transaction);
       });
 
       await expectConstraintViolation(insert, 'organization_member_at_least_one_admin');
@@ -248,12 +247,14 @@ describe('organization_member', () => {
         .execute();
     }
 
-    test('its at-least-one-admin trigger is deferred to commit', async () => {
-      // Not provocable from a single transaction: this is a property of the trigger's definition,
-      // not of a row. `withRollback` never commits, which is exactly why every test above that
-      // relies on the deferral has to force it with `checkDeferredConstraints` — asserting the
-      // definition here is what stops a refactor making it immediate (and those tests silently
-      // asserting nothing) without anyone noticing.
+    test('organization_has_a_member is deferred to commit; the admin trigger is not', async () => {
+      // Not provocable from a single transaction: this is a property of each trigger's
+      // definition, not of a row. `organization_has_a_member` has to stay deferred — the
+      // organization and its first member are inserted as two separate statements (see
+      // `apps/web/src/routes/api/orgs/+server.ts`) — which is why the test above forces the check
+      // with `checkDeferredConstraints`. The admin trigger deliberately isn't (see its
+      // `CREATE CONSTRAINT TRIGGER` comment in the migration for why); asserting both here is what
+      // stops a refactor flipping either one without anyone noticing.
       const rows = await withRollback(DATABASE, async (transaction) => {
         const result = await sql<{ name: string; deferrable: boolean; deferred: boolean }>`
         SELECT tgname AS name, tgdeferrable AS deferrable, tginitdeferred AS deferred
@@ -266,7 +267,7 @@ describe('organization_member', () => {
 
       expect(rows).toEqual([
         { name: 'organization_has_a_member', deferrable: true, deferred: true },
-        { name: 'organization_member_at_least_one_admin', deferrable: true, deferred: true },
+        { name: 'organization_member_at_least_one_admin', deferrable: false, deferred: false },
       ]);
     });
 
@@ -286,7 +287,6 @@ describe('organization_member', () => {
           .where('organizationId', '=', organization.id)
           .where('userId', '=', admin.id)
           .execute();
-        await checkDeferredConstraints(transaction);
       });
 
       await expectConstraintViolation(remove, 'organization_member_at_least_one_admin');
@@ -296,7 +296,6 @@ describe('organization_member', () => {
       const demoted = withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
         await demote(transaction, organization.id, admin.id);
-        await checkDeferredConstraints(transaction);
       });
 
       await expectConstraintViolation(demoted, 'organization_member_at_least_one_admin');
@@ -320,19 +319,15 @@ describe('organization_member', () => {
         },
         async ({ organizationId, first, second }) => {
           await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+            // Not deferred, so this fires immediately: it takes the organization's row lock,
+            // passes (the other admin is still standing), and alpha holds the lock until it
+            // commits.
             await demote(alpha.transaction, organizationId, first.id);
-            // Fire alpha's deferred trigger now. It takes the organization's row lock, passes, and
-            // alpha holds that lock until it commits. `<name>` rather than `ALL`, which would also
-            // flip `organization_has_a_member` and every foreign key.
-            await sql`SET CONSTRAINTS organization_member_at_least_one_admin IMMEDIATE`.execute(
-              alpha.transaction,
-            );
 
-            await demote(beta.transaction, organizationId, second.id);
-            // Beta blocks inside a real COMMIT rather than a `SET CONSTRAINTS`, so what is under
-            // test is the path production takes.
+            // Beta's own demote is what blocks: its trigger wants the same row lock alpha is
+            // holding, and won't get it until alpha commits.
             const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-              transaction.commit().execute(),
+              demote(transaction, organizationId, second.id),
             );
 
             await alpha.transaction.commit().execute();
@@ -358,10 +353,9 @@ describe('organization_member', () => {
       );
     });
 
-    test('permits handing the role over, demoting before promoting', async () => {
-      // The point of deferring: an immediate trigger would reject the demotion, forcing callers to
-      // order their statements to suit the constraint rather than the operation.
-      const roles = await withRollback(DATABASE, async (transaction) => {
+    test('rejects demoting the last admin before a successor is promoted', async () => {
+      // Mirrors the order `_removeMember` and `_changeMemberRole` require in production.
+      const demoted = withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
         const successor = await insertAppUser(transaction);
 
@@ -375,8 +369,26 @@ describe('organization_member', () => {
           .insertInto('organizationMember')
           .values({ userId: successor.id, organizationId: organization.id, role: 'admin' })
           .execute();
+      });
 
-        await checkDeferredConstraints(transaction);
+      await expectConstraintViolation(demoted, 'organization_member_at_least_one_admin');
+    });
+
+    test('permits handing the role over when the successor is promoted first', async () => {
+      const roles = await withRollback(DATABASE, async (transaction) => {
+        const { organization, admin } = await insertOrganization(transaction);
+        const successor = await insertAppUser(transaction);
+
+        await transaction
+          .insertInto('organizationMember')
+          .values({ userId: successor.id, organizationId: organization.id, role: 'admin' })
+          .execute();
+        await transaction
+          .updateTable('organizationMember')
+          .set({ role: 'member' })
+          .where('organizationId', '=', organization.id)
+          .where('userId', '=', admin.id)
+          .execute();
 
         return await transaction
           .selectFrom('organizationMember')
@@ -392,12 +404,11 @@ describe('organization_member', () => {
 
   describe('user deletion', () => {
     test('does not fire when the organization itself is deleted', async () => {
-      // Deleting an organization cascades to its members, which queues the trigger. It has to
+      // Deleting an organization cascades to its members, which fires the trigger. It has to
       // tell "this organization is gone" apart from "this organization lost its last admin".
       const remaining = await withRollback(DATABASE, async (transaction) => {
         const { organization } = await insertOrganization(transaction);
         await transaction.deleteFrom('organization').where('id', '=', organization.id).execute();
-        await checkDeferredConstraints(transaction);
 
         return await transaction
           .selectFrom('organizationMember')
@@ -422,7 +433,6 @@ describe('organization_member', () => {
           .execute();
 
         await transaction.deleteFrom('auth.users').where('id', '=', admin.id).execute();
-        await checkDeferredConstraints(transaction);
       });
 
       await expectConstraintViolation(remove, 'organization_member_at_least_one_admin');
@@ -447,7 +457,6 @@ describe('organization_member', () => {
           .where('organizationId', '=', organization.id)
           .where('userId', '=', admin.id)
           .execute();
-        await checkDeferredConstraints(transaction);
       });
 
       await expectConstraintViolation(demote, 'organization_member_at_least_one_admin');
@@ -472,7 +481,6 @@ describe('organization_member', () => {
           .where('organizationId', '=', organization.id)
           .where('userId', '=', admin.id)
           .execute();
-        await checkDeferredConstraints(transaction);
 
         return await transaction
           .selectFrom('organizationMember')

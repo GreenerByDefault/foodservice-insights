@@ -1,6 +1,5 @@
 import { type DatabaseExecutor, type OrganizationId, type UserId, withTransaction } from '@gbd/db';
 import { error, json } from '@sveltejs/kit';
-import { sql } from 'kysely';
 import * as v from 'valibot';
 import { recordAuditEvent } from '$lib/server/audit';
 import { requireAuth, requireOrganizationAdmin } from '$lib/server/auth/guards';
@@ -50,12 +49,10 @@ export const DELETE: RequestHandler = async (event) => {
  *   carries `'not_found'`, so this goes through `error()` like every other route's 404.
  * - 204 with no audit row if the role is already `role` — a no-op is not a role change.
  * - 409 `last-admin` if this would leave the organization with no admin —
- *   `organization_member_at_least_one_admin` decides, not this function. `SET CONSTRAINTS …
- *   IMMEDIATE` moves its check from `COMMIT` onto the `UPDATE` itself, so it can be caught here
- *   with a `try`, and so it actually fires when a test calls this inside `withRollback`, which
- *   never commits. `last-admin` is this route's own code, not `App.Error`'s, so this is a `json()`
- *   response built after the transaction settles, the same way `nameTakenResponse` answers a
- *   collision — not a caught-and-rethrown `error()`.
+ *   `organization_member_at_least_one_admin` decides, not this function, checking at
+ *   end-of-statement so a `try` around the `UPDATE` catches it. `last-admin` is this route's own
+ *   code, not `App.Error`'s, so this is a `json()` response built after the transaction settles,
+ *   the same way `nameTakenResponse` answers a collision — not a caught-and-rethrown `error()`.
  */
 export async function _changeMemberRole(
   db: DatabaseExecutor,
@@ -73,10 +70,6 @@ export async function _changeMemberRole(
   const outcome = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction) => {
-        await sql`SET CONSTRAINTS organization_member_at_least_one_admin IMMEDIATE`.execute(
-          transaction,
-        );
-
         const member = await transaction
           .selectFrom('organizationMember')
           .select('role')
@@ -143,10 +136,6 @@ export async function _removeMember(
   const outcome = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction) => {
-        await sql`SET CONSTRAINTS organization_member_at_least_one_admin IMMEDIATE`.execute(
-          transaction,
-        );
-
         try {
           const removed = await transaction
             .deleteFrom('organizationMember')
