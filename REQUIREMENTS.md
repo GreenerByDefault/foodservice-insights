@@ -195,13 +195,16 @@ Email OTP (one-time passcode).
   log in with OTP as normal.
 - On login, the server checks for pending invites matching the user's email:
   - Invites still within `expires_at` are shown on an accept/decline screen.
-  - Invites past `expires_at` transition to expired at that moment, and the user sees a one-time
-    notice.
+  - Invites past `expires_at` transition to expired at that moment, and the user sees the expired
+    state shown until they dismiss it, which is what records the expiry.
 - Only the person who controls the invited email address can accept. Forwarding the link does
   not grant access.
-- Invites expire after 14 days. An admin can revoke a pending invite at any time.
+- Invites expire after `INVITE_LIFETIME_DAYS` days
+  ([`packages/core/src/index.ts`](packages/core/src/index.ts)). An admin can revoke a pending
+  invite at any time.
 - An admin can re-invite an address that already has an invite outstanding. That sends a fresh
-  email and restarts the 14 days with a new invite.
+  email and restarts the invite's lifetime.
+- Inviting an address that already belongs to the organization is refused.
 
 ### Login flow
 
@@ -279,7 +282,8 @@ Follow security best practices for web development.
   [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
 - **Report retries:** a report can be attempted up to `MAX_ANALYSIS_ATTEMPTS` times — see
   [`packages/db/src/types.ts`](packages/db/src/types.ts). Retries exist for internal errors.
-- **Invites:** an organization can invite 5 users per hour.
+- **Invites:** a user can invite `HOURLY_INVITE_LIMIT` people per hour — see
+  [`apps/web/src/lib/invites/limits.ts`](apps/web/src/lib/invites/limits.ts).
 - Cloudflare for DDoS protection, and potentially geo-restrictions.
 
 ### Performance

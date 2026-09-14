@@ -10,7 +10,7 @@ export async function requireOrganizationRouteContext(
   db: DatabaseExecutor,
   event: { params: { organizationSlug: string }; locals: App.Locals },
   options: { admin?: boolean } = {},
-): Promise<{ organizationId: OrganizationId; actor: Actor }> {
+): Promise<{ organizationId: OrganizationId; organizationName: string; actor: Actor }> {
   const auth = requireAuth(event.locals);
   const organizationSlug = event.params.organizationSlug;
   const access = options.admin
@@ -22,6 +22,7 @@ export async function requireOrganizationRouteContext(
   // actor will say.
   return {
     organizationId: access.organizationId,
+    organizationName: access.organizationName,
     actor: { userId: auth.user.id, role: access.role },
   };
 }

@@ -22,7 +22,20 @@ export type ReportAuditAction =
  * added. */
 export type MemberAuditAction = 'member.role_changed' | 'member.removed' | 'member.left';
 
-export type AuditAction = OrganizationAuditAction | ReportAuditAction | MemberAuditAction;
+/** The `invite.*` audit actions a route may record. Supersession is not its own event — the
+ * superseded row's status is the record. */
+export type InviteAuditAction =
+  | 'invite.created'
+  | 'invite.revoked'
+  | 'invite.accepted'
+  | 'invite.declined'
+  | 'invite.expired';
+
+export type AuditAction =
+  | OrganizationAuditAction
+  | ReportAuditAction
+  | MemberAuditAction
+  | InviteAuditAction;
 
 /** What the event happened to, and the organization it happened in. */
 export type AuditTarget =

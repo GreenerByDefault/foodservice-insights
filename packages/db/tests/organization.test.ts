@@ -18,7 +18,11 @@ import {
   withConcurrentTransactions,
 } from '../src/testing/concurrency.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
-import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
+import {
+  insertAppUser,
+  insertOrganization,
+  insertOrganizationInvite,
+} from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 import {
   MAX_ORGANIZATION_NAME_LENGTH,
@@ -496,35 +500,31 @@ describe('organization_member', () => {
 });
 
 describe('organization_invite', () => {
-  function anInvite(organizationId: string, email: string) {
-    return {
-      organizationId: organizationId as never,
-      email,
-      role: 'member' as const,
-      status: 'pending' as const,
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    };
-  }
-
   test('rejects an address that is not already lowercased', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
-      await transaction
-        .insertInto('organizationInvite')
-        .values(anInvite(organization.id, 'Ada@Example.Test'))
-        .execute();
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email: 'Ada@Example.Test',
+      });
     });
 
     await expectConstraintViolation(insert, 'organization_invite_email_is_lowercase');
   });
 
   test('rejects an expiry that precedes creation', async () => {
+    // Built by hand, not `insertOrganizationInvite`: that fixture backdates `createdAt` to keep
+    // an expired row legal, which would defeat the point of a test that wants this constraint to
+    // fire.
     const insert = withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
       await transaction
         .insertInto('organizationInvite')
         .values({
-          ...anInvite(organization.id, 'ada@example.test'),
+          organizationId: organization.id,
+          email: 'ada@example.test',
+          role: 'member',
+          status: 'pending',
           expiresAt: new Date('2020-01-01T00:00:00Z'),
         })
         .execute();
@@ -536,14 +536,14 @@ describe('organization_invite', () => {
   test('allows only one pending invite per address', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
-      await transaction
-        .insertInto('organizationInvite')
-        .values(anInvite(organization.id, 'ada@example.test'))
-        .execute();
-      await transaction
-        .insertInto('organizationInvite')
-        .values(anInvite(organization.id, 'ada@example.test'))
-        .execute();
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email: 'ada@example.test',
+      });
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email: 'ada@example.test',
+      });
     });
 
     await expectConstraintViolation(
@@ -558,10 +558,10 @@ describe('organization_invite', () => {
     // survives as the audit trail rather than being overwritten.
     const statuses = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
-      await transaction
-        .insertInto('organizationInvite')
-        .values(anInvite(organization.id, 'ada@example.test'))
-        .execute();
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email: 'ada@example.test',
+      });
 
       await transaction
         .updateTable('organizationInvite')
@@ -570,10 +570,10 @@ describe('organization_invite', () => {
         .where('email', '=', 'ada@example.test')
         .where('status', '=', 'pending')
         .execute();
-      await transaction
-        .insertInto('organizationInvite')
-        .values(anInvite(organization.id, 'ada@example.test'))
-        .execute();
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email: 'ada@example.test',
+      });
 
       return await transaction
         .selectFrom('organizationInvite')

@@ -95,6 +95,30 @@ export function retryReportApiHref(organizationSlug: string, reportId: string): 
   return `${reportApiHref(organizationSlug, reportId)}/retry`;
 }
 
+// -----------------------------------------------------
+// Members
+// -----------------------------------------------------
+
 export function organizationMemberApiHref(organizationSlug: string, userId: string): string {
   return `${organizationApiHref(organizationSlug)}/members/${userId}`;
+}
+
+// -----------------------------------------------------
+// Invites
+// -----------------------------------------------------
+
+export function organizationInvitesApiHref(organizationSlug: string): string {
+  return `${organizationApiHref(organizationSlug)}/invites`;
+}
+
+export function organizationInviteApiHref(organizationSlug: string, inviteId: string): string {
+  return `${organizationInvitesApiHref(organizationSlug)}/${inviteId}`;
+}
+
+export function acceptInviteApiHref(inviteId: string): string {
+  return `/api/invites/${inviteId}/accept`;
+}
+
+export function declineInviteApiHref(inviteId: string): string {
+  return `/api/invites/${inviteId}/decline`;
 }

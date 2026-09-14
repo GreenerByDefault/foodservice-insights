@@ -22,6 +22,17 @@ export function requiredText(maxLength: number) {
   );
 }
 
+const MAX_EMAIL_LENGTH = 254;
+
+/** An email address field: trimmed, lowercased, and validated — matching
+ * `organization_invite_email_is_lowercase`, the CHECK an invite's address must satisfy. */
+export const emailAddress = v.pipe(
+  v.string(),
+  v.transform((value) => value.trim().toLowerCase()),
+  v.email(),
+  v.maxLength(MAX_EMAIL_LENGTH),
+);
+
 /** `JSON.parse` a field, to pipe into the schema that judges what it holds.
  *
  * Both a missing field and unparseable text become issues rather than a throw, so the form still

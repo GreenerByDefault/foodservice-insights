@@ -2,6 +2,7 @@ import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
 import {
   describeIssues,
+  emailAddress,
   fieldsWithIssues,
   optionalText,
   parsedJson,
@@ -67,6 +68,24 @@ describe('parsedJson', () => {
 
   test('reports a missing field as required', () => {
     expect(describeIssues(issuesOf(schema, null))).toContain('is required');
+  });
+});
+
+describe('emailAddress', () => {
+  test.for([
+    ['Ada@Example.Test', 'ada@example.test'],
+    ['  ada@example.test  ', 'ada@example.test'],
+  ] as const)('%o becomes %o', ([input, expected]) => {
+    expect(v.parse(emailAddress, input)).toBe(expected);
+  });
+
+  test('rejects a value with no @', () => {
+    expect(v.safeParse(emailAddress, 'not-an-email').success).toBe(false);
+  });
+
+  test('rejects an address over the cap', () => {
+    const tooLong = `${'a'.repeat(255)}@example.test`;
+    expect(v.safeParse(emailAddress, tooLong).success).toBe(false);
   });
 });
 
