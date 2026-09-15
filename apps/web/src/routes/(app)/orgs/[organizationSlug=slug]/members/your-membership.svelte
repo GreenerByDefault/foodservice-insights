@@ -40,7 +40,6 @@ async function leave() {
 {/snippet}
 
 <Field.Set>
-  <Field.Legend>Your membership</Field.Legend>
   <Field.Description>
     {viewerRole === 'admin'
       ? "You're an admin of this organization."

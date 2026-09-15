@@ -1,6 +1,6 @@
 <script lang="ts">
+import * as Card from '$lib/components/ui/card';
 import PageHeading from '$lib/components/page-heading.svelte';
-import * as Field from '$lib/components/ui/field';
 import type { PageProps } from './$types';
 import MembersList from './members-list.svelte';
 import YourMembership from './your-membership.svelte';
@@ -14,14 +14,32 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
 
 <PageHeading>Members</PageHeading>
 
-<MembersList
-  members={data.members}
-  organizationSlug={data.organization.slug}
-  viewerRole={data.role}
-/>
+<!-- Each part of the page gets its own Card so the eye can tell them apart at a glance, rather
+     than relying on a hairline separator to carry that weight between differently-shaped
+     content. -->
+<div class="space-y-6">
+  <Card.Root>
+    <Card.Content>
+      <MembersList
+        members={data.members}
+        organizationSlug={data.organization.slug}
+        viewerRole={data.role}
+      />
+    </Card.Content>
+  </Card.Root>
 
-{#if viewerUserId}
-  <Field.Separator />
-
-  <YourMembership organizationSlug={data.organization.slug} {viewerUserId} viewerRole={data.role} />
-{/if}
+  {#if viewerUserId}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Your membership</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <YourMembership
+          organizationSlug={data.organization.slug}
+          {viewerUserId}
+          viewerRole={data.role}
+        />
+      </Card.Content>
+    </Card.Root>
+  {/if}
+</div>
