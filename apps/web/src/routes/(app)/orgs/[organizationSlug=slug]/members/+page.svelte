@@ -2,7 +2,9 @@
 import * as Card from '$lib/components/ui/card';
 import PageHeading from '$lib/components/page-heading.svelte';
 import type { PageProps } from './$types';
+import InviteForm from './invite-form.svelte';
 import MembersList from './members-list.svelte';
+import PendingInvites from './pending-invites.svelte';
 import YourMembership from './your-membership.svelte';
 
 let { data }: PageProps = $props();
@@ -14,9 +16,9 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
 
 <PageHeading>Members</PageHeading>
 
-<!-- Each part of the page gets its own Card so the eye can tell them apart at a glance, rather
-     than relying on a hairline separator to carry that weight between differently-shaped
-     content. -->
+<!-- Each part of the page — the roster, invites, and the viewer's own controls — gets its own
+     Card so the eye can tell them apart at a glance, rather than relying on hairline separators
+     to carry that weight between differently-shaped content. -->
 <div class="space-y-6">
   <Card.Root>
     <Card.Content>
@@ -27,6 +29,26 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
       />
     </Card.Content>
   </Card.Root>
+
+  {#if data.invites}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Pending invitations</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <PendingInvites invites={data.invites} organizationSlug={data.organization.slug} />
+      </Card.Content>
+    </Card.Root>
+
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Invite someone</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <InviteForm organizationSlug={data.organization.slug} />
+      </Card.Content>
+    </Card.Root>
+  {/if}
 
   {#if viewerUserId}
     <Card.Root>

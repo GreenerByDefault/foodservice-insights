@@ -67,3 +67,29 @@ export function formatWhen(now: Date, at: Date): string {
   if (ms < WEEK_MS) return formatRelativeUnderAWeek(now, at);
   return ABSOLUTE_DATE_FORMAT.format(at);
 }
+
+/** `at - now`, in the coarsest unit that keeps the count small — "in 3 days" instead of "in
+ * 4,320 minutes". The future-facing counterpart to `formatRelativeUnderAWeek`, which only reads
+ * naturally for the past: reusing it here by negating its inputs would still hand
+ * `Intl.RelativeTimeFormat` the wrong sign ("3 days ago" for a deadline still ahead), not just a
+ * different phrasing. Meaningless for a delta of a week or more — see `formatUntil`. */
+function formatRelativeUntilAWeek(now: Date, at: Date): string {
+  const ms = at.getTime() - now.getTime();
+  const minutes = Math.floor(ms / MINUTE_MS);
+  if (minutes < 1) return 'less than a minute from now';
+  if (minutes < 60) return RELATIVE_TIME_FORMAT.format(minutes, 'minute');
+  const hours = Math.floor(ms / HOUR_MS);
+  if (hours < 24) return RELATIVE_TIME_FORMAT.format(hours, 'hour');
+  const days = Math.floor(ms / DAY_MS);
+  return RELATIVE_TIME_FORMAT.format(days, 'day');
+}
+
+/** The label a UI shows for "when will this happen" — a deadline, not an event that already
+ * happened: relative within a week ("in 3 days"), an absolute date beyond that. Mirrors
+ * `formatWhen`'s own cutoff, for the same reason: past a week, a relative count is less useful
+ * than the date itself. */
+export function formatUntil(now: Date, at: Date): string {
+  const ms = at.getTime() - now.getTime();
+  if (ms < WEEK_MS) return formatRelativeUntilAWeek(now, at);
+  return ABSOLUTE_DATE_FORMAT.format(at);
+}

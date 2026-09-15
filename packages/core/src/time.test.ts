@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DAY_MS,
   formatTimestamp,
+  formatUntil,
   formatWhen,
   HOUR_MS,
   MINUTE_MS,
@@ -116,5 +117,87 @@ describe('formatWhen', () => {
         'Jan 15, 2026',
       );
     });
+  });
+});
+
+describe('formatUntil', () => {
+  describe('within the next hour', () => {
+    it('under a minute reads as "less than a minute from now"', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 59_000))).toBe(
+        'less than a minute from now',
+      );
+    });
+
+    it('exactly one minute', () => {
+      expect(formatUntil(CREATED_AT, minutesAfter(CREATED_AT, 1))).toBe('in 1 minute');
+    });
+
+    it('several minutes, rounded down', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 3 * 60_000 + 30_000))).toBe(
+        'in 3 minutes',
+      );
+    });
+
+    it('just under an hour stays in minutes', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 59 * MINUTE_MS))).toBe(
+        'in 59 minutes',
+      );
+    });
+  });
+
+  describe('within the next day', () => {
+    it('an hour or more switches to hours', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + HOUR_MS))).toBe('in 1 hour');
+      expect(
+        formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 5 * HOUR_MS + 30 * MINUTE_MS)),
+      ).toBe('in 5 hours');
+    });
+
+    it('just under a day stays in hours', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 23 * HOUR_MS))).toBe(
+        'in 23 hours',
+      );
+    });
+  });
+
+  describe('within the next week', () => {
+    it('a day or more switches to days', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + DAY_MS))).toBe('tomorrow');
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 3 * DAY_MS))).toBe(
+        'in 3 days',
+      );
+    });
+
+    it('just under a week stays relative', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + WEEK_MS - SECOND_MS))).toBe(
+        'in 6 days',
+      );
+    });
+  });
+
+  describe('a week or more', () => {
+    it('exactly a week switches to an absolute date', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + WEEK_MS))).toBe(
+        'Jan 22, 2026',
+      );
+    });
+
+    it('well over a week stays an absolute date, rather than an ever-growing day count', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 412 * DAY_MS))).toBe(
+        'Mar 3, 2027',
+      );
+    });
+
+    it('the invite lifetime (14 days) is an absolute date, not "in 14 days"', () => {
+      expect(formatUntil(CREATED_AT, new Date(CREATED_AT.getTime() + 14 * DAY_MS))).toBe(
+        'Jan 29, 2026',
+      );
+    });
+  });
+
+  it('is the mirror image of formatWhen: swapping now/at round-trips the magnitude', () => {
+    const at = new Date(CREATED_AT.getTime() + 3 * DAY_MS);
+    expect(formatUntil(CREATED_AT, at)).toBe('in 3 days');
+    expect(formatWhen(at, CREATED_AT)).toBe('3 days ago');
   });
 });

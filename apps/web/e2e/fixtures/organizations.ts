@@ -25,7 +25,7 @@ import {
   insertOrganizationInvite,
   insertOrganizationMember,
 } from '@gbd/db/testing';
-import type { Kysely } from 'kysely';
+import type { Kysely, RawBuilder } from 'kysely';
 import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
@@ -50,8 +50,10 @@ export type OrganizationInviteSpec = {
   role?: OrganizationRole;
   status?: OrganizationInviteStatus;
   /** Defaults to `INVITE_LIFETIME_DAYS` out — set this to pin an expired invite for a screenshot
-   * or an e2e spec. */
-  expiresAt?: Date;
+   * or an e2e spec. Accepts a `RawBuilder<Date>` (`dbMsAgo`/`DB_NOW`, `@gbd/db/testing`) as well
+   * as a plain `Date`, for a screenshot that renders relative to "now" and so needs Postgres's
+   * clock, not the process's — the same reason `insertOrganizationInvite`'s own `expiresAt` does. */
+  expiresAt?: Date | RawBuilder<Date>;
 };
 
 /** Commit a private organization `userId` belongs to, with, optionally, its reports. Returns the

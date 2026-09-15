@@ -45,6 +45,12 @@ export function dbMsAgo(ms: number): RawBuilder<Date> {
   return sql<Date>`now() - make_interval(secs => ${ms / 1000})`;
 }
 
+/** Postgres's clock, `ms` milliseconds into the future — `dbMsAgo`'s mirror, for a deadline
+ * (an invite's `expiresAt`) a page renders relative to "now" rather than as an absolute date. */
+export function dbMsFromNow(ms: number): RawBuilder<Date> {
+  return sql<Date>`now() + make_interval(secs => ${ms / 1000})`;
+}
+
 /** A 32-byte checksum, the only length `checksum_sha256` accepts. */
 export function aChecksum(): Buffer {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32)));

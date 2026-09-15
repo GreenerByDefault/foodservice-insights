@@ -20,6 +20,7 @@ export {
   aChecksum,
   DB_NOW,
   dbMsAgo,
+  dbMsFromNow,
   insertAnalysisAttempt,
   insertAppUser,
   insertAppUserWithEmail,
