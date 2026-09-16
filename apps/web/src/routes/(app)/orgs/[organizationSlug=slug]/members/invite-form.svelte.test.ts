@@ -3,10 +3,12 @@ import { render } from 'vitest-browser-svelte';
 import { expectFetched, jsonResponse, stubFetch, stubPendingFetch } from '$lib/testing/fetch';
 import InviteForm from './invite-form.svelte';
 
-vi.mock('$app/navigation', () => ({ invalidateAll: vi.fn() }));
+const invalidate = vi.fn();
+vi.mock('$app/navigation', () => ({ invalidate: (key: string) => invalidate(key) }));
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  invalidate.mockClear();
 });
 
 async function filledOut(email = 'invitee@example.test') {
@@ -95,22 +97,24 @@ describe('InviteForm', () => {
     await screen.getByRole('button', { name: 'Send invitation' }).click();
 
     await expect
-      .element(screen.getByText("Saved, but the email couldn't be sent — try inviting them again."))
+      .element(screen.getByText(/They're invited, but we couldn't email them/))
       .toBeVisible();
     await expect.element(screen.getByLabelText('Email address')).toHaveValue('');
   });
 
-  test('an unknown failure keeps the typed email and warns to check the list', async () => {
+  test('an unknown failure keeps the typed email, warns to check the list, and refreshes it', async () => {
     stubFetch(jsonResponse({ message: 'Nope' }, 500));
     const screen = await filledOut();
 
     await screen.getByRole('button', { name: 'Send invitation' }).click();
 
     await expect
-      .element(screen.getByText(/We're not sure whether that invite went through/))
+      .element(screen.getByText(/We couldn't tell whether that invite was sent/))
       .toBeVisible();
     await expect
       .element(screen.getByLabelText('Email address'))
       .toHaveValue('invitee@example.test');
+    await expect.poll(() => invalidate.mock.calls.length).toBe(1);
+    expect(invalidate).toHaveBeenCalledWith('app:members');
   });
 });

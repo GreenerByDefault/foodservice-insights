@@ -9,14 +9,16 @@ import { sql } from 'kysely';
 import { requireAuth } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
+import { MEMBERS_DEPENDENCY } from './dependencies.ts';
 
 /** The layout already settled access; a member load only needs to know who is asking, and the
  * organization id the layout already resolved from the URL's slug. Only an admin sees pending
  * invites — a member gets `null` rather than an empty list, so the page can tell "there are none"
  * from "you may not see them" without re-deriving the role. */
-export const load: PageServerLoad = async ({ locals, parent }) => {
+export const load: PageServerLoad = async ({ locals, parent, depends }) => {
   const auth = requireAuth(locals);
   const { organization, role } = await parent();
+  depends(MEMBERS_DEPENDENCY);
 
   return {
     members: await withDbErrorHandling(

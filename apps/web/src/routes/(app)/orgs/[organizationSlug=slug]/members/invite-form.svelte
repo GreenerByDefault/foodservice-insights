@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
-import { invalidateAll } from '$app/navigation';
+import { invalidate } from '$app/navigation';
 import { Button } from '$lib/components/ui/button';
 import * as Field from '$lib/components/ui/field';
 import { Input } from '$lib/components/ui/input';
@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group';
 import { MAX_EMAIL_LENGTH } from '$lib/forms/validation';
 import { createInvite } from '$lib/invites/api/create-invite';
 import { FIELD } from '$lib/invites/invite';
+import { MEMBERS_DEPENDENCY } from './dependencies.ts';
 
 interface Props {
   organizationSlug: string;
@@ -47,13 +48,14 @@ async function handleSubmit(event: SubmitEvent) {
   }
   if (outcome.kind === 'unknown') {
     formState = { status: 'outcome-unknown' };
+    await invalidate(MEMBERS_DEPENDENCY);
     return;
   }
 
   formState = outcome.emailSent ? { status: 'idle' } : { status: 'email-failed' };
   email = '';
   role = 'member';
-  await invalidateAll();
+  await invalidate(MEMBERS_DEPENDENCY);
 }
 </script>
 
@@ -101,11 +103,12 @@ async function handleSubmit(event: SubmitEvent) {
     </p>
   {:else if formState.status === 'email-failed'}
     <p class="text-sm text-muted-foreground">
-      Saved, but the email couldn't be sent — try inviting them again.
+      They're invited, but we couldn't email them. Send the invite again to retry.
     </p>
   {:else if formState.status === 'outcome-unknown'}
     <p role="alert" class="text-sm text-destructive">
-      We're not sure whether that invite went through. Check the list above before trying again.
+      We couldn't tell whether that invite was sent. Check the list above — if it's not there, try
+      again; if it is, there's nothing more to do.
     </p>
   {/if}
 

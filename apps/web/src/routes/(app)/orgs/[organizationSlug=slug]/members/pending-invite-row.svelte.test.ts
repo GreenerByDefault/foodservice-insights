@@ -57,7 +57,7 @@ describe('PendingInviteRow', () => {
     await screen.getByRole('button', { name: 'Revoke' }).click();
 
     await expect
-      .element(screen.getByText('Could not revoke this invite. Please try again.'))
+      .element(screen.getByText("Couldn't revoke this invite — please try again."))
       .toBeVisible();
     expect(onRevoked).not.toHaveBeenCalled();
   });

@@ -272,7 +272,7 @@ test('an invite that saved but couldn’t be emailed', async ({ page, organizati
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
   await expect(
-    page.getByText("Saved, but the email couldn't be sent — try inviting them again."),
+    page.getByText("They're invited, but we couldn't email them. Send the invite again to retry."),
   ).toBeVisible();
 
   await expectScreenshots(page, 'members-invite-email-failed.png');
@@ -303,7 +303,7 @@ test('revoking an invite, refused', async ({ page, organizations }) => {
 
   await page.getByRole('button', { name: 'Revoke', exact: true }).click();
 
-  await expect(page.getByText('Could not revoke this invite. Please try again.')).toBeVisible();
+  await expect(page.getByText("Couldn't revoke this invite — please try again.")).toBeVisible();
 
   await expectScreenshots(page, 'members-invite-revoke-failed.png');
 });

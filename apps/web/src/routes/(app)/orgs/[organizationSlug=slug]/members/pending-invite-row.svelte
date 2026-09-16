@@ -27,7 +27,7 @@ async function revoke() {
     actionState = { status: 'idle' };
     await onRevoked();
   } catch {
-    actionState = { status: 'error', message: 'Could not revoke this invite. Please try again.' };
+    actionState = { status: 'error', message: "Couldn't revoke this invite — please try again." };
   }
 }
 </script>
