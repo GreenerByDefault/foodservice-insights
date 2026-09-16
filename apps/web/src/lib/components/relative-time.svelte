@@ -10,7 +10,7 @@ interface Props {
    * rather than read from the browser, so a stale client clock can't skew the result. */
   now: Date;
   /** `'past'` (the default) for something that already happened ("3 days ago"); `'future'` for a
-   * deadline still ahead ("in 3 days") — an invite's expiry, say. */
+   * deadline still ahead ("in 3 days"). */
   direction?: 'past' | 'future';
   class?: string;
 }

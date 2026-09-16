@@ -45,8 +45,8 @@ export function dbMsAgo(ms: number): RawBuilder<Date> {
   return sql<Date>`now() - make_interval(secs => ${ms / 1000})`;
 }
 
-/** Postgres's clock, `ms` milliseconds into the future — `dbMsAgo`'s mirror, for a deadline
- * (an invite's `expiresAt`) a page renders relative to "now" rather than as an absolute date. */
+/** Postgres's clock, `ms` milliseconds into the future — `dbMsAgo`'s mirror, for a deadline a
+ * page renders relative to "now" rather than as an absolute date. */
 export function dbMsFromNow(ms: number): RawBuilder<Date> {
   return sql<Date>`now() + make_interval(secs => ${ms / 1000})`;
 }
