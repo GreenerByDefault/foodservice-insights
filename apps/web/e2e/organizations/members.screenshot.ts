@@ -281,7 +281,17 @@ test('an invite that saved but couldn’t be emailed', async ({ page, organizati
 test('revoking an invite, refused', async ({ page, organizations }) => {
   const { slug: organizationSlug } = await organizations.create({
     name: 'Members Invite Revoke Failed Screenshot Foodservice',
-    invites: [{ email: 'members-invite-revoke-failed@example.test', role: 'member' }],
+    invites: [
+      {
+        email: 'members-invite-revoke-failed@example.test',
+        role: 'member',
+        // Well within a week, so `formatUntil` reads relative — "in 3 days" — rather than an
+        // absolute date. Left at the default `INVITE_LIFETIME_DAYS` (14 days out), the row would
+        // render an absolute date that shifts with the calendar, un-diffable against a committed
+        // image on any day but the one it was captured.
+        expiresAt: dbMsFromNow(3 * DAY_MS + 12 * HOUR_MS),
+      },
+    ],
   });
 
   await page.route(`**${organizationInvitesApiHref(organizationSlug)}/*`, (route) =>
