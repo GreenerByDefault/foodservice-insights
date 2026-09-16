@@ -22,7 +22,9 @@ let { finishedAt, now, files, inputFile, organizationSlug, reportId }: Props = $
 
 <div class="space-y-6">
   <StatusLine icon={CircleCheckBigIcon}>
-    <p class="text-muted-foreground">Finished <RelativeTime at={finishedAt} {now} />.</p>
+    <p class="text-muted-foreground">
+      Finished <RelativeTime at={finishedAt} {now} direction="past" />.
+    </p>
   </StatusLine>
 
   <div class="flex flex-wrap gap-3">

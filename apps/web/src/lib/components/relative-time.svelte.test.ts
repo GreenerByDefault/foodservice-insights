@@ -5,10 +5,11 @@ import RelativeTime from './relative-time.svelte';
 const NOW = new Date('2026-01-15T10:00:00Z');
 
 describe('RelativeTime', () => {
-  test('defaults to the past direction', async () => {
+  test('direction "past" reads as something already happened', async () => {
     const screen = await render(RelativeTime, {
       at: new Date(NOW.getTime() - 3 * 24 * 60 * 60 * 1000),
       now: NOW,
+      direction: 'past',
     });
 
     await expect.element(screen.getByText('3 days ago')).toBeInTheDocument();

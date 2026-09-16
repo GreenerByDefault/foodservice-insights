@@ -16,9 +16,6 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
 
 <PageHeading>Members</PageHeading>
 
-<!-- Each part of the page — the roster, invites, and the viewer's own controls — gets its own
-     Card so the eye can tell them apart at a glance, rather than relying on hairline separators
-     to carry that weight between differently-shaped content. -->
 <div class="space-y-6">
   <Card.Root>
     <Card.Content>
