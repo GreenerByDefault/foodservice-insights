@@ -361,8 +361,9 @@ for real.
 Every other test fakes the transport with an in-memory `recordingEmailer()`, asserting only that
 the right email was asked for.
 
-**Open:** decide which email provider, such as SendGrid. Idempotency-key support should be part of
-that evaluation — it would close the last duplicate-send window § Result notifications leaves open.
+**Open:** decide which email provider. See
+[`.claude/plans/email-provider.md`](.claude/plans/email-provider.md) for the evaluation and
+recommendation.
 
 The `packages/email` code does not retry failures. Instead, callers must decide how to handle
 failure.
