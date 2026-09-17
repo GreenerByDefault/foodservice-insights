@@ -55,6 +55,7 @@ async function revoke() {
     onclick={revoke}
     disabled={actionState.status === 'loading'}
     aria-busy={actionState.status === 'loading'}
+    aria-label="Revoke invite for {invite.email}"
   >
     Revoke
   </Button>

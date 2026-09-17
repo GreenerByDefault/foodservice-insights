@@ -39,7 +39,7 @@ describe('PendingInviteRow', () => {
     const invite = aPendingInvite();
     const screen = await render(PendingInviteRow, { organizationSlug: 'org-1', invite, onRevoked });
 
-    await screen.getByRole('button', { name: 'Revoke' }).click();
+    await screen.getByRole('button', { name: `Revoke invite for ${invite.email}` }).click();
 
     await expect.poll(() => onRevoked.mock.calls.length).toBe(1);
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
@@ -54,7 +54,7 @@ describe('PendingInviteRow', () => {
     const invite = aPendingInvite();
     const screen = await render(PendingInviteRow, { organizationSlug: 'org-1', invite, onRevoked });
 
-    await screen.getByRole('button', { name: 'Revoke' }).click();
+    await screen.getByRole('button', { name: `Revoke invite for ${invite.email}` }).click();
 
     await expect
       .element(screen.getByText("Couldn't revoke this invite — please try again."))

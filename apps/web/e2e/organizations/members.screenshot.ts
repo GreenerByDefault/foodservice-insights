@@ -301,7 +301,9 @@ test('revoking an invite, refused', async ({ page, organizations }) => {
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  await page.getByRole('button', { name: 'Revoke', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Revoke invite for members-invite-revoke-failed@example.test' })
+    .click();
 
   await expect(page.getByText("Couldn't revoke this invite — please try again.")).toBeVisible();
 
