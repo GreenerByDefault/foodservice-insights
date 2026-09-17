@@ -29,7 +29,12 @@ let { steps, now }: Props = $props();
       <div>
         <p class={step.current ? 'font-medium' : 'text-muted-foreground'}>{step.title}</p>
         {#if step.completedAt}
-          <RelativeTime at={step.completedAt} {now} class="text-xs text-muted-foreground" />
+          <RelativeTime
+            at={step.completedAt}
+            {now}
+            direction="past"
+            class="text-xs text-muted-foreground"
+          />
         {/if}
         {#if step.description}
           <p class="text-muted-foreground text-sm">{step.description}</p>

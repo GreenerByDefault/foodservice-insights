@@ -18,7 +18,7 @@ let { stoppedAt, now, newReportHref, organizationSlug, reportId }: Props = $prop
 <div class="space-y-4">
   <StatusLine icon={CircleStopIcon}>
     <p class="text-muted-foreground">
-      Someone stopped this report <RelativeTime at={stoppedAt} {now} />.
+      Someone stopped this report <RelativeTime at={stoppedAt} {now} direction="past" />.
       <a class="underline hover:no-underline" href={newReportHref}>Upload a file</a>
       to start a new one.
     </p>

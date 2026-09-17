@@ -22,7 +22,7 @@ export function requiredText(maxLength: number) {
   );
 }
 
-const MAX_EMAIL_LENGTH = 254;
+export const MAX_EMAIL_LENGTH = 254;
 
 /** An email address field: trimmed, lowercased, and validated — matching
  * `organization_invite_email_is_lowercase`, the CHECK an invite's address must satisfy. */

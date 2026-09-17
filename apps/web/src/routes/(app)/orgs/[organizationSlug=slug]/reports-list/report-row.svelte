@@ -32,7 +32,7 @@ let reportSubheading = $derived(subheading(report.siteName, report.creator));
     </span>
     <span class="truncate text-sm text-muted-foreground" title={reportSubheading}
       >{reportSubheading}
-      · <RelativeTime at={report.createdAt} now={report.now} /></span
+      · <RelativeTime at={report.createdAt} now={report.now} direction="past" /></span
     >
   </span>
   <!-- The mobile entry, which uses four rows. -->
@@ -49,6 +49,11 @@ let reportSubheading = $derived(subheading(report.siteName, report.creator));
     <span class="truncate text-sm text-muted-foreground" title={reportSubheading}
       >{reportSubheading}</span
     >
-    <RelativeTime at={report.createdAt} now={report.now} class="text-sm text-muted-foreground" />
+    <RelativeTime
+      at={report.createdAt}
+      now={report.now}
+      direction="past"
+      class="text-sm text-muted-foreground"
+    />
   </span>
 </ItemListLink>

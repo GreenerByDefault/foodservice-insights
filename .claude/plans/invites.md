@@ -19,7 +19,7 @@ per-test identities, which arrive with auth PR 2. See § Sequencing.
 **No UI lands without the screenshots that show it.** The committed images are how the design gets
 looked at, so a PR that adds a component also regenerates or adds its `__screenshots__` entries;
 "the images come later" is not a way to make a PR smaller. Server-only PRs have no design to see
-and are the thing to split out instead — which is what PR 2 is.
+and are the thing to split out instead — which is what PR 1 is.
 
 **Depends on nothing outstanding.** The post-membership maintainability pass has landed, and with it
 everything this plan leans on: `parseBody` (`lib/server/body.ts`), `requireOrganizationRouteContext`
@@ -32,6 +32,14 @@ The invites prefactor has also landed, adding: `INVITE_LIFETIME_DAYS` (`@gbd/cor
 the fixture every invite row goes through now, including `insertOrganizationFixture`'s and
 `organization.test.ts`'s), the invite href builders (`$lib/hrefs.ts`), `emailAddress`
 (`$lib/forms/validation.ts`), and `sendInvite` (`$lib/server/email.ts`).
+
+The admin UI has also landed, adding a few things the invitee side reuses rather than
+rebuilding: `formatUntil` (`@gbd/core`) and `relative-time.svelte`'s `direction: 'future'` prop,
+for a countdown to a deadline rather than a time since one; `dbMsFromNow`
+(`@gbd/db/testing`) and `OrganizationInviteSpec.expiresAt` accepting a `RawBuilder<Date>` as
+well as a plain `Date`, for pinning a screenshot's invite relative to the database's own clock;
+and the outcome-union client pattern `create-invite.ts`/`revoke-invite.ts` established, which
+`accept-invite.ts`/`decline-invite.ts` should follow.
 
 ## Sequencing: the three plans against `auth.md`
 
@@ -46,7 +54,7 @@ varies what *that* user belongs to can be built and e2e-tested today. What canno
 | Feature | Before auth | Blocked by |
 | --- | --- | --- |
 | Promote/demote, remove, leave, sole-admin block | Everything — landed | — |
-| Admin invites: create, re-invite, revoke, rate limit, email to Mailpit | Everything, incl. e2e + screenshots | — |
+| Admin invites: create, re-invite, revoke, rate limit, email to Mailpit | Everything, incl. e2e + screenshots — landed | — |
 | Invitee accept/decline endpoints | Everything (unit tests run in `withRollback`, so nothing commits) | — |
 | Invitee `/invites` page | Nothing worth landing | **The UI cannot be screenshotted or driven.** A *live* invite for the run's one identity makes `_resolvePostSignInDestination` send every parallel spec's `/orgs` visit to `/invites` for as long as it exists — `delete-organization.e2e.ts` and `organizations.screenshot.ts` both land there. `users.create()` / `users.contextFor()` (auth PR 2) remove the hazard |
 | Delete account | Nothing worth landing | Deleting the identity every request runs as breaks the run; and the flow's last step is ending a session that does not exist yet |
@@ -57,7 +65,7 @@ client-side navigation, so it would need the account-menu link to exist first, a
 second temporary hack on a file `auth.md` PR 2 already deletes — to get one image weeks earlier
 that the real fixture then has to reproduce anyway.
 
-**The order that keeps you unblocked:** invites PRs 1–2 → auth PRs 1–2 → invites PR 3 →
+**The order that keeps you unblocked:** invites PR 1 → auth PRs 1–2 → invites PR 2 →
 auth PRs 3–4 → account-self-service PRs 1–2 (memberships already landed).
 
 Two notes on the auth numbering, which moved when auth's own fixtures prefactor landed as #298:
@@ -109,44 +117,10 @@ double confirmation of an email change — recorded in that plan's Context.)
 | Who the email says invited you | `invited_by_user_id`'s display name, `null` → "An admin" | The column is `ON DELETE SET NULL` and display names are nullable until auth PR 3; `renderOrganizationInvite` already has this fallback, so `/invites` matches it |
 | `?email=` prefill on `/sign-in` | Not here — auth PR 1 builds the email step; add "read `?email=` into it" to that PR | The email already carries it |
 
-## PR 1 — Admin UI on the Members page
-
-- `members/+page.server.ts`: read `role`/`organization.id` from `parent()`; admins also get
-  `invites: await _loadPendingInvites(db, organizationId)` → `InviteRow = { inviteId, email, role,
-  expiresAt, isExpired }` (`isExpired` computed in SQL), pending rows newest first; members get
-  `invites: null`. Test.
-- `members/pending-invites.svelte`: `item-list.svelte` rows — email, role label, "Expires in 12
-  days" / "Expired" via `relative-time.svelte` — with a Revoke button (`ActionState`, no dialog:
-  low stakes and re-invitable). Empty text "No pending invitations."
-- `members/invite-form.svelte`: `Input type="email" name={FIELD.email} required maxlength`,
-  `RadioGroup` Member (default) / Admin, "Send invitation" → "Sending…". `FormState`: idle |
-  submitting | already-member (`Field.Error`, focus the field) | rate-limited (`role="alert"`) |
-  email-failed (warning, list still refreshes) | outcome-unknown. On success `invalidateAll()` and
-  clear the field.
-- Clients `$lib/invites/api/create-invite.ts` (outcome union incl. `emailSent`) and
-  `revoke-invite.ts` (throws). Tests. Component tests for both components.
-- `members/+page.svelte`: admins see `PendingInvites` and `InviteForm` under the roster, each with a
-  heading, between `MembersList` and the `Field.Separator` + `YourMembership` section that already
-  sits there.
-- **E2E** `organizations/invites.e2e.ts`: admin invites `aTestEmailAddress('invitee')` as member →
-  row appears without reload → `waitForEmail(address)` from `@gbd/email/testing` has the "Join …"
-  subject and a `/sign-in?email=` link → Revoke → row gone. Second test: with a fixture pending
-  invite for the same address, re-inviting still shows one row. Member view: no form, no list.
-- **Screenshots**, in `members.screenshot.ts` beside the roster images they extend:
-  - `members-as-admin.png` regenerates with fixture invites — one live, one expired — so the admin
-    screen shows the roster, both invite states and the form in one composition.
-    `members-as-member.png` is unaffected.
-  - `members-invite-refused.png` (new): the form's inline "already a member" error, the same way
-    `members-step-down-refused.png` owns the refused step-down. It is the only invite state with
-    its own copy that the roster image cannot show.
-  - Every pinned address here must stay off the run identity's own email: a *live* invite for that
-    address forwards every parallel spec's `/orgs` to `/invites` (§ Sequencing). The `roster(prefix)`
-    convention already keeps them apart — keep the invited addresses under the same prefix.
-
-## PR 2 — Invitee endpoints, unmounted
+## PR 1 — Invitee endpoints, unmounted
 
 Server only, and landable now: these tests run inside `withRollback`, so no invite ever commits and
-the hazard in § Sequencing never fires. Nothing reaches them until PR 3, the same way auth PR 1's
+the hazard in § Sequencing never fires. Nothing reaches them until PR 2, the same way auth PR 1's
 sign-in flow lands before the page that mounts it.
 
 - `apps/web/src/lib/server/invites/claim.ts`: `lockInviteFor(transaction, inviteId, email)` →
@@ -159,9 +133,9 @@ sign-in flow lands before the page that mounts it.
   URL, and `organizationHref` takes slugs. `POST …/decline` → `_declineInvite`: expired → `expired` + audit, 204;
   pending → `declined` + audit, 204; else 409. Tests for every branch, including "another user's
   invite is a 404" and "accepting as an existing member still marks it accepted".
-- Drop the `**Stub:**` markers on both files. `/invites/+page.*` keeps its own until PR 3.
+- Drop the `**Stub:**` markers on both files. `/invites/+page.*` keeps its own until PR 2.
 
-## PR 3 — The `/invites` page, end to end (after auth PR 2)
+## PR 2 — The `/invites` page, end to end (after auth PR 2)
 
 Deferred as a whole, not split: the page, its e2e and its screenshots need the same thing — a test
 that can be the invitee — and shipping the components without the images would be shipping a design
@@ -197,13 +171,10 @@ Per PR as usual (`pnpm lint && pnpm check && pnpm test`) — plus, specific to t
 
 1. While iterating, scope to the files touched:
    `pnpm --filter @gbd/web test:unit -- 'src/lib/invites' 'src/routes/api/orgs' 'src/routes/api/invites' 'src/routes/(app)/orgs/[organizationSlug=slug]/members' 'src/routes/(app)/invites'`.
-2. Re-baseline images for PRs 1 and 3 with `pnpm turbo run screenshots:update --filter=@gbd/web`
+2. Re-baseline images for PR 2 with `pnpm turbo run screenshots:update --filter=@gbd/web`
    **from the repo root**. Running `screenshots:update` inside `apps/web` skips the `build` Turbo
    injects, so Playwright serves the previous build and the images regenerate showing the *old* UI,
    with nothing in the output saying so.
-3. Then `pnpm dev` with Mailpit (55324) open. After PR 1: invite an address as admin → it appears
-   pending and the email has a `/sign-in?email=` link; invite it again → still one row, later
-   expiry; invite a current member → inline "already a member"; the 21st invite in an hour → the
-   rate-limit alert; revoke → gone. After PR 3, in Studio, insert a pending invite for your own
-   email (and one already expired) → `/orgs` forwards to `/invites` → Accept lands you in the org;
-   Dismiss removes the expired one and its status reads `expired`.
+3. Then `pnpm dev` with Mailpit (55324) open. After PR 2, in Studio, insert a pending invite for
+   your own email (and one already expired) → `/orgs` forwards to `/invites` → Accept lands you in
+   the org; Dismiss removes the expired one and its status reads `expired`.

@@ -1,9 +1,10 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
-import { invalidateAll } from '$app/navigation';
+import { invalidate } from '$app/navigation';
 import ItemList from '$lib/components/item-list.svelte';
 import MemberActions from './member-actions.svelte';
 import type { MemberRow } from './+page.server.ts';
+import { MEMBERS_DEPENDENCY } from './dependencies.ts';
 
 interface Props {
   members: readonly MemberRow[];
@@ -50,7 +51,7 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
            `hidden` that would otherwise take it out of the accessibility tree. Never on the
            viewer's own row: that's the "Your membership" section's job, not this menu's. -->
       {#if viewerRole === 'admin' && !member.isYou}
-        <MemberActions {organizationSlug} {member} onDone={invalidateAll} />
+        <MemberActions {organizationSlug} {member} onDone={() => invalidate(MEMBERS_DEPENDENCY)} />
       {/if}
     </li>
   {/snippet}
