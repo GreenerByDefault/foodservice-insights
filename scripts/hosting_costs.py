@@ -107,7 +107,9 @@ class Service:
 
 @dataclass(frozen=True)
 class Environment:
-    """One deployed copy of the system, e.g. production or staging."""
+    """One deployed copy of the system — production, and nothing else: REQUIREMENTS.md
+    § Out of scope rejected a staging environment.
+    """
 
     name: str
     services: tuple[Service, ...]
@@ -159,18 +161,9 @@ SCENARIOS: Final = (
         seats=2,
     ),
     Scenario(
-        "Planned + staging",
-        environments=(
-            environment("prod", reports_per_month=500, web_replicas=1, worker_replicas=2),
-            environment("staging", reports_per_month=20, web_replicas=1, worker_replicas=1),
-        ),
-        seats=2,
-    ),
-    Scenario(
-        "Growth: 2 web, 3 workers, ~2,000 reports/month, + staging",
+        "Growth: 2 web, 3 workers, ~2,000 reports/month",
         environments=(
             environment("prod", reports_per_month=2_000, web_replicas=2, worker_replicas=3),
-            environment("staging", reports_per_month=20, web_replicas=1, worker_replicas=1),
         ),
         seats=3,
     ),

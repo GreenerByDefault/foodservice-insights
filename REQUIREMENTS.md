@@ -324,7 +324,6 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md#failure-modes) for the failure-mode inve
 - High test coverage.
 - Linters, type checkers, formatters.
 - Clear documentation, including architecture.
-- Staging environment.
 
 ### Observability
 
@@ -338,6 +337,10 @@ Deliberate non-goals. These are as load-bearing as the requirements above — th
 have decided *not* to do for now.
 
 - **No batch upload.** Uploads are one file at a time.
+- **No staging environment.** A bad deploy is cheap because rollback is a promotion of an older
+  image ([`ARCHITECTURE.md`](ARCHITECTURE.md#rollback)), an interrupted attempt is retried, and no
+  data is lost. So, a second hosted environment is not worth its money and upkeep. Feel free to
+  revisit later.
 - **No search for reports.**
 - **No complex filtering of reports.**
 - **No blocking of users or organizations.** It would only slow down someone malicious, and the

@@ -77,7 +77,6 @@ class Volume:
     result_notifications: float
     invites: float
     gbd_notices: float
-    staging: float
 
     def sources(self) -> tuple[tuple[str, float], ...]:
         return (
@@ -85,7 +84,6 @@ class Volume:
             ("result notifications", self.result_notifications),
             ("invites", self.invites),
             ("GBD notices", self.gbd_notices),
-            ("staging", self.staging),
         )
 
     def total(self) -> float:
@@ -102,9 +100,6 @@ class Scenario:
     reports_per_month: int
     new_users_per_month: int
     new_orgs_per_month: int
-    # A staging environment pointed at the provider rather than at Mailpit, if we run one that
-    # way. Mostly e2e and smoke traffic to addresses we own.
-    staging_emails_per_month: int = 0
 
     def volume(self) -> Volume:
         return Volume(
@@ -112,7 +107,6 @@ class Scenario:
             result_notifications=self.reports_per_month * NOTIFICATIONS_PER_REPORT,
             invites=self.new_users_per_month * EMAILS_PER_INVITE,
             gbd_notices=self.new_orgs_per_month * GBD_NOTICES_PER_NEW_ORG,
-            staging=self.staging_emails_per_month,
         )
 
 
@@ -138,20 +132,11 @@ SCENARIOS: Final = (
         new_orgs_per_month=3,
     ),
     Scenario(
-        "Planned + staging",
-        users=40,
-        reports_per_month=500,
-        new_users_per_month=8,
-        new_orgs_per_month=3,
-        staging_emails_per_month=200,
-    ),
-    Scenario(
-        "Growth: ~150 users, ~2,000 reports/month, + staging",
+        "Growth: ~150 users, ~2,000 reports/month",
         users=150,
         reports_per_month=2_000,
         new_users_per_month=25,
         new_orgs_per_month=6,
-        staging_emails_per_month=200,
     ),
 )
 

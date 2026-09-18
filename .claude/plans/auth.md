@@ -107,7 +107,7 @@ database still needs.
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable with a new trimmed/length CHECK, `MAX_DISPLAY_NAME_LENGTH = 100` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
 | OTP input | Plain `<input inputmode="numeric" autocomplete="one-time-code" pattern maxlength>` | Native constraint validation per `apps/web/README.md` § Forms; no new dependency |
-| Env vars | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public`; `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable. The staging plan's "no `PUBLIC_*`" sentence means `$env/static/*`; fix its wording |
+| Env vars | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public`; `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
 | Dependencies | `@supabase/ssr` 0.12.x, `@supabase/supabase-js` 2.115.x, both in the catalog | Latest; cfa-app runs 0.12 |
 | Screenshot text the identity owns | A screenshot spec pins what the shell renders — `test.use({ orgName })` today, a `userEmail` equivalent once identities are per-test — and a pinned value is *shared* across the run, never per-test | `organization_name_unique_ci` and `auth.users.email` are globally unique, so two tests holding one pinned value at once collide. Sharing the row is what keeps those specs `fullyParallel`; serializing them behind a name is not an acceptable price for one string. Nothing pinned may be mutated, and nothing is deleted — the run's database is dropped wholesale. `account/menu.png` renders the signed-in address, which is why `identityEmail` defaults to a fixed one and only `tests/e2e` (which asserts on delivered mail, against a shared Mailpit) passes a unique one |
 | Local keys | Fixed CLI defaults committed in `.env.example`/`.env.test`: `sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`, `sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz` | Same on every machine and in CI |
@@ -248,8 +248,7 @@ Mailpit 55324; superadmin is `app_user.is_superadmin` in Studio; delete every `s
 mention), `apps/web/README.md` § Auth (drop the stub paragraph; add the cookie-name pin, the
 HttpOnly trade-off with CSP as the compensating control, `getUser()` and the four error classes),
 `ARCHITECTURE.md` (§ Failure modes row "Web server has trouble with Supabase Auth"; Open:
-`getClaims()`; Open: CSP), `apps/web/e2e/README.md` § Database state, and the staging plan's
-`PUBLIC_*` sentence.
+`getClaims()`; Open: CSP), and `apps/web/e2e/README.md` § Database state.
 
 ## PR 3 — Onboarding: the display name is required, and `/account` can change it
 
