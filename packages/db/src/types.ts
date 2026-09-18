@@ -29,6 +29,10 @@ export const MAX_ANALYSIS_ATTEMPTS = 5;
  * create/rename forms and their tests. */
 export const MAX_ORGANIZATION_NAME_LENGTH = 100;
 
+/** How long a display name may be, enforced by the `app_user_display_name_trimmed_length` CHECK
+ * constraint. Mirrored here, not read from the DB, for the account/onboarding forms and their tests. */
+export const MAX_DISPLAY_NAME_LENGTH = 100;
+
 /** How long an organization's slug may be, enforced by the `organization_slug_length` CHECK
  * constraint (`packages/db/public-schema.sql`). Mirrored here, not read from the DB, for
  * `deriveOrganizationSlug` and its tests. */

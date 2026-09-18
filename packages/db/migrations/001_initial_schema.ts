@@ -84,6 +84,10 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     .addColumn('display_name', 'text')
     .addColumn('is_superadmin', 'boolean', (column) => column.notNull().defaultTo(false))
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
+    .addCheckConstraint(
+      'app_user_display_name_trimmed_length',
+      sql`display_name IS NULL OR (display_name = btrim(display_name) AND char_length(display_name) BETWEEN 1 AND 100)`,
+    )
     .execute();
 
   await sql`

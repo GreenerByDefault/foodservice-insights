@@ -25,6 +25,7 @@ import {
 } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 import {
+  MAX_DISPLAY_NAME_LENGTH,
   MAX_ORGANIZATION_NAME_LENGTH,
   MAX_ORGANIZATION_SLUG_LENGTH,
   RESERVED_ORGANIZATION_SLUGS,
@@ -71,6 +72,46 @@ describe('app_user', () => {
       'app_user_id_fkey',
       POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
     );
+  });
+
+  describe('display name validation', () => {
+    test('rejects a name with leading or trailing whitespace', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        await insertAppUser(transaction, { displayName: ' Ada ' });
+      });
+
+      await expectConstraintViolation(insert, 'app_user_display_name_trimmed_length');
+    });
+
+    test('rejects an empty name', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        await insertAppUser(transaction, { displayName: '' });
+      });
+
+      await expectConstraintViolation(insert, 'app_user_display_name_trimmed_length');
+    });
+
+    // Together, these two tests pin MAX_DISPLAY_NAME_LENGTH to the
+    // `app_user_display_name_trimmed_length` CHECK constraint it mirrors: either side drifting
+    // from the other fails one of them.
+
+    test('accepts a name exactly at the cap', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        await insertAppUser(transaction, { displayName: 'a'.repeat(MAX_DISPLAY_NAME_LENGTH) });
+      });
+
+      await expect(insert).resolves.toBeUndefined();
+    });
+
+    test('rejects a name one character over the cap', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        await insertAppUser(transaction, {
+          displayName: 'a'.repeat(MAX_DISPLAY_NAME_LENGTH + 1),
+        });
+      });
+
+      await expectConstraintViolation(insert, 'app_user_display_name_trimmed_length');
+    });
   });
 });
 
