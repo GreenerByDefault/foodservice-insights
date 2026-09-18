@@ -623,7 +623,8 @@ CREATE TABLE IF NOT EXISTS "public"."app_user" (
     "id" "uuid" NOT NULL,
     "display_name" "text",
     "is_superadmin" boolean DEFAULT false NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "app_user_display_name_trimmed_length" CHECK ((("display_name" IS NULL) OR (("display_name" = "btrim"("display_name")) AND (("char_length"("display_name") >= 1) AND ("char_length"("display_name") <= 100)))))
 );
 
 

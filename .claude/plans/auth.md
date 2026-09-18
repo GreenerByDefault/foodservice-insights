@@ -105,7 +105,7 @@ database still needs.
 | Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`) + `secure: event.url.protocol === 'https:'` | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. SvelteKit's default `secure` would drop cookies on `http://host.docker.internal` |
 | Sign-out scope | `local` | Signs out this device; matches CFA |
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
-| Display name | Required by the flow; DB stays nullable with a new trimmed/length CHECK, `MAX_DISPLAY_NAME_LENGTH = 100` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
+| Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
 | OTP input | Plain `<input inputmode="numeric" autocomplete="one-time-code" pattern maxlength>` | Native constraint validation per `apps/web/README.md` § Forms; no new dependency |
 | Env vars | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public`; `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
 | Dependencies | `@supabase/ssr` 0.12.x, `@supabase/supabase-js` 2.115.x, both in the catalog | Latest; cfa-app runs 0.12 |
@@ -252,11 +252,13 @@ HttpOnly trade-off with CSP as the compensating control, `getUser()` and the fou
 
 ## PR 3 — Onboarding: the display name is required, and `/account` can change it
 
-- **Migration `002_app_user_display_name.ts`:** `CHECK (display_name IS NULL OR (char_length BETWEEN
-  1 AND 100 AND display_name = btrim(display_name)))`; `MAX_DISPLAY_NAME_LENGTH = 100` beside
-  `MAX_ORGANIZATION_NAME_LENGTH` in `packages/db/src/types.ts`; tests in
-  `packages/db/tests/organization.test.ts`'s `app_user` block (the README requires one per check);
-  `pnpm db:gen-types`. The template fingerprint picks the migration up automatically.
+The `app_user_display_name_trimmed_length` CHECK already exists on `display_name` — folded into
+`001_initial_schema.ts` as a prefactor, since 001 hadn't shipped yet — with `MAX_DISPLAY_NAME_LENGTH
+= 100` in `packages/db/src/types.ts` and tests in `packages/db/tests/organization.test.ts`'s
+`app_user` block. This PR only needs the schema's non-null enforcement (§ Settled decisions
+already covers that — the trigger still creates the row with NULL, and the CHECK is written to
+allow that).
+
 - **`apps/web/src/lib/account/display-name.ts`:** `FIELD = { displayName: 'display-name' }`,
   `DisplayNameSchema = requiredText(MAX_DISPLAY_NAME_LENGTH)` with the constant mirrored and pinned
   by a test, exactly as `$lib/orgs/name.ts` does.
