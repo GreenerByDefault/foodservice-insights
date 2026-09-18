@@ -57,7 +57,6 @@ authentication become ours to operate forever.
 | Our 5-send burst | 10 req/s per team, raisable | No documented req/s cap; 10 concurrent SMTP connections | 14/s default in production | Well above |
 | Message log and search | 30 days, all plans | 45 days; longer is a paid add-on on Pro or above | **None** — build it from SNS + storage | 3–7 days; 30 needs a paid add-on |
 | Bounce and complaint handling | Managed suppression list | Managed suppression list | **Ours to build** — SNS topic, subscriber, storage | Managed suppression list |
-| Separate staging sending | Second domain/API key | A second Server, its own token and streams | Second identity or account | Subuser (paid tiers) |
 | Sandbox on signup | No | No | **Yes** — 200/day to verified addresses until AWS approves production access | No |
 
 ### Deliverability: the part we cannot compensate for
@@ -118,8 +117,7 @@ exists; the script says which ones and how they combine.
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Launch: ~10 users, ~100 reports/mo | 155 | $0 | $15 | $0.02 | $19.95 |
 | Planned: ~40 users, ~500 reports/mo | 707 | $20 | $15 | $0.07 | $19.95 |
-| Planned + staging | 907 | $20 | $15 | $0.09 | $19.95 |
-| Growth: ~150 users, ~2,000 reports/mo, + staging | 2,962 | $20 | $15 | $0.30 | $19.95 |
+| Growth: ~150 users, ~2,000 reports/mo | 2,762 | $20 | $15 | $0.28 | $19.95 |
 
 What the table is really saying:
 
@@ -310,9 +308,6 @@ provider, and `EMAIL_TRANSPORT` already selects between implementations. Switchi
 4. Point Supabase Auth at the provider's SMTP credentials, and raise Supabase's own auth email
    rate limit, which defaults to 30/hour once custom SMTP is configured. Set the OTP templates to
    match our copy.
-5. Give staging its own sending identity — a separate Postmark Server, Resend domain, or SES
-   identity — so a test run can never affect production's sending reputation
-   ([`staging-environment.md`](staging-environment.md)).
 
 **Open:** nothing consumes bounce or complaint webhooks, whichever provider wins. A hard-bouncing
 address will be suppressed provider-side and our sends will silently succeed forever after. Decide
