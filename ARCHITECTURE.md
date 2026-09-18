@@ -303,6 +303,10 @@ commit, whether or not that commit ever deploys. **A deploy is a promotion of an
 never a rebuild:** it resolves the commit SHA it's deploying to that image's digest and hands the
 digest to the hosting provider. That's also what makes a rollback simple.
 
+**An image carries no environment's configuration.** A build-time `PUBLIC_*` or an
+`$env/static/*` import would bake one in, and promoting that image — forward or back — would
+start shipping the wrong config with it. Read configuration at runtime instead.
+
 ### Web deploys on every push
 
 Web deploys automatically on every push to `main`, database migrations included, because it's the side

@@ -27,7 +27,6 @@ provider builds nothing and needs no git integration. What is left:
 3. **Manual scaling, restarts, alerts on CPU/memory/disk, and logs** — § Choosing a host and
    § Failure modes.
 4. **Price, and simplicity over time**, for a two-person nonprofit team. No autoscaling.
-5. A staging copy later ([`staging-environment.md`](staging-environment.md)).
 
 Candidates: Railway, Render, and DigitalOcean App Platform. *Rejected: a DigitalOcean Droplet.*
 $12–18/month runs both containers, but OS patching, Docker, TLS, restarts, log shipping, and a
@@ -46,7 +45,7 @@ they also cannot pull from GHCR or pin a digest, and there are no alerts below E
 | Compute | ≈$20 per vCPU-month + ≈$10 per GB-month, metered | $7 (0.5 CPU / 512MB), $25 (1 CPU / 2GB), $85 (2 / 4GB)… nothing between $7 and $25 | $5 (1 shared vCPU / 512MB, single instance), $12 (1GB), $25 (2GB), $50 (2 / 4GB) |
 | Egress | $0.05/GB, nothing included | 5GB (Hobby) / 25GB (Pro) included, then $0.15/GB | 50–250GB per instance, pooled, then $0.02/GB |
 | Nonprofit | None found | None found | $2,500 one-time credit, valid one year. **Open:** the program dates from 2023 and its application page is gone; confirm it still exists |
-| Bill surprises | Metering has no ceiling until you set Replica Limits, so a leak runs up the bill. A duplicated environment is a second billed copy | Preview environments never expire by default; dedicated IPs $100/mo | Dedicated egress IP $25/app/mo; the $5 and $10 tiers cannot scale past one instance |
+| Bill surprises | Metering has no ceiling until you set Replica Limits, so a leak runs up the bill | Preview environments never expire by default; dedicated IPs $100/mo | Dedicated egress IP $25/app/mo; the $5 and $10 tiers cannot scale past one instance |
 
 Railway is priced at Pro, not Hobby, because CPU/memory alerts ("Monitors") and 30-day logs are
 Pro-only. Render is priced at Pro because Hobby is one seat and a shared login is out.
@@ -60,15 +59,14 @@ production exists; the script says which ones.
 | --- | ---: | ---: | ---: |
 | Launch: 1 web, 1 worker, ~100 reports/mo | $20 | $57 | $30 |
 | Planned: 1 web, 2 workers, ~500 reports/mo | $20 | $82 | $55 |
-| Planned + staging | $20 | $114 | $85 |
-| Growth: 2 web, 3 workers, ~2,000 reports/mo, + staging | $21 | $149 | $129 |
+| Growth: 2 web, 3 workers, ~2,000 reports/mo | $20 | $117 | $99 |
 
 What the table is really saying:
 
 - **Railway's metering is what makes it cheap here.** The pipeline is IO-bound and we assume an
-  idle worker is ~150MB, so real usage sits under the $20 credit in every scenario, and staging
-  is nearly free. The flip side is that the bill follows consumption: a memory leak or a runaway
-  child costs money instead of hitting a tier ceiling.
+  idle worker is ~150MB, so real usage sits under the $20 credit in every scenario. The flip
+  side is that the bill follows consumption: a memory leak or a runaway child costs money
+  instead of hitting a tier ceiling.
 - **Render and DigitalOcean charge for the 2GB the worker must be *able* to use**, not the
   ~200MB it averages. Two workers is $50/mo on both. If the parent plus three children measure
   under 1GB in production, DigitalOcean drops to $12 per worker; Render has no 1GB tier.
@@ -114,15 +112,11 @@ minus `killGraceMs` and one terminal write — the `PLATFORM_SHUTDOWN_GRACE_MS` 
 | CPU/memory alerts | Yes — Pro Monitors: CPU, RAM, disk, egress | **None native.** Event notifications only (deploy failed, unhealthy), plus an OpenTelemetry metrics stream (Pro) to an external tool | Yes — CPU, RAM, restart count, deploy events; email or Slack, free |
 | Ephemeral disk | 100GB (paid plans) | Unpublished; ~2GB per an old forum thread | 4GiB (one support page says 2) |
 
-## 6. Staging, and reaching Supabase
+## 6. Reaching Supabase
 
-- **Staging.** Railway: a duplicated environment in the same project, billed as a second copy
-  (cheap under metering). Render: Projects → Environments; Pro lifts Hobby's limit of two.
-  DigitalOcean: a second app, cloneable, tagged Staging within a Project. All three fit
-  [`staging-environment.md`](staging-environment.md); the pipeline diff is the same.
-- **Supabase.** Render and DigitalOcean have **no outbound IPv6**; Railway has a per-service
-  toggle. Supabase's direct connection is IPv6-only, so on all three the practical path is the
-  Supavisor session pooler over IPv4 — how `cfa-web-app` already connects. Not a differentiator.
+Render and DigitalOcean have **no outbound IPv6**; Railway has a per-service toggle. Supabase's
+direct connection is IPv6-only, so on all three the practical path is the Supavisor session pooler
+over IPv4 — how `cfa-web-app` already connects. Not a differentiator.
 
 ## 7. Reliability in 2026
 
