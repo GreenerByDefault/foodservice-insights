@@ -13,12 +13,12 @@ to extend). The widened `AuditEvent` (`target`, `detail`, `lib/server/audit.ts`)
 `AuditTarget`'s `'user'` branch requires a real `organizationId`, since nothing needed a null one
 yet; this plan's `user.deleted` is the first
 caller with no organization, so its PR 1 also widens that branch to `organizationId: OrganizationId
-| null`. Nothing here is worth landing before real sign-in — `invites.md` § Sequencing has the
+| null`. Nothing here is worth landing before real sign-in — `invitee-ui.md` § Sequencing has the
 table and the order across all three plans. It also retires the two `/account` bullets in `auth.md`
 § Follow-ups.
 
 **Two decisions that read the requirements differently, for you to confirm** (the other three are
-in `invites.md` § Sequencing):
+in `invitee-ui.md` § Sequencing):
 
 - The account is deleted by **`DELETE FROM auth.users` in our own transaction**, not through
   GoTrue's admin API. The audit row, the sole-admin trigger and the delete are then atomic, and the
