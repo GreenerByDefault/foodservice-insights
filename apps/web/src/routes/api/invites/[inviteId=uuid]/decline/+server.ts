@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit';
 import { recordAuditEvent } from '$lib/server/audit';
 import { requireAuth } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { lockInviteFor } from '$lib/server/invites/claim';
+import { lockInviteForEmailOrNotFound } from '$lib/server/invites/claim';
 import type { RequestHandler } from './$types';
 
 /** Decline an invite. Same guard as accepting, separate audit action. */
@@ -21,11 +21,10 @@ type DeclineInviteOutcome =
   | { kind: 'no-longer-valid' };
 
 /** Decline `inviteId` on behalf of `user` — 404 if it isn't a pending-or-expired invite for
- * `user.email` (`lockInviteFor`'s guard).
+ * `user.email`.
  *
  * - Not `pending` → 409 `no-longer-valid`, nothing written.
- * - Past `expires_at` → write `expired`, audit `invite.expired` → 204. This is the "one-time
- *   notice": nothing else writes `expired`, and a load never does.
+ * - Past `expires_at` → write `expired`, audit `invite.expired` → 204.
  * - Otherwise write `declined`, audit `invite.declined` → 204.
  */
 export async function _declineInvite(
@@ -37,7 +36,7 @@ export async function _declineInvite(
   const outcome = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction): Promise<DeclineInviteOutcome> => {
-        const invite = await lockInviteFor(transaction, inviteId, user.email);
+        const invite = await lockInviteForEmailOrNotFound(transaction, inviteId, user.email);
         if (invite.status !== 'pending') return { kind: 'no-longer-valid' };
 
         const status = invite.isExpired ? 'expired' : 'declined';

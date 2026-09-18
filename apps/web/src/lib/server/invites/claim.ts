@@ -9,7 +9,7 @@ import { sql, type Transaction } from 'kysely';
  * token, so anyone else's id, or the right id with the wrong address, leaks nothing beyond
  * "not found". `email` is lowercased here since only `organization_invite.email` is guaranteed to
  * be, by its CHECK constraint — `auth.users.email` isn't. */
-export async function lockInviteFor(
+export async function lockInviteForEmailOrNotFound(
   transaction: Transaction<Database>,
   inviteId: OrganizationInviteId,
   email: string,

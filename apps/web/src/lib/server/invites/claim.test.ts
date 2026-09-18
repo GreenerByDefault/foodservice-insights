@@ -8,9 +8,9 @@ import {
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
 import { statusOf } from '$lib/server/testing/http-error';
-import { lockInviteFor } from './claim.ts';
+import { lockInviteForEmailOrNotFound } from './claim.ts';
 
-describe('lockInviteFor', () => {
+describe('lockInviteForEmailOrNotFound', () => {
   test('returns the pending invite matching id and email', async () => {
     await withRollback(database(), async (transaction) => {
       const { organization } = await insertOrganization(transaction);
@@ -19,7 +19,11 @@ describe('lockInviteFor', () => {
         email: 'invitee@example.test',
       });
 
-      const found = await lockInviteFor(transaction, invite.id, 'invitee@example.test');
+      const found = await lockInviteForEmailOrNotFound(
+        transaction,
+        invite.id,
+        'invitee@example.test',
+      );
 
       expect(found).toMatchObject({ id: invite.id, email: 'invitee@example.test' });
       expect(found.isExpired).toBe(false);
@@ -34,7 +38,11 @@ describe('lockInviteFor', () => {
         email: 'invitee@example.test',
       });
 
-      const found = await lockInviteFor(transaction, invite.id, 'Invitee@Example.Test');
+      const found = await lockInviteForEmailOrNotFound(
+        transaction,
+        invite.id,
+        'Invitee@Example.Test',
+      );
 
       expect(found.id).toBe(invite.id);
     });
@@ -49,7 +57,11 @@ describe('lockInviteFor', () => {
         expiresAt: dbMsAgo(1000),
       });
 
-      const found = await lockInviteFor(transaction, invite.id, 'invitee@example.test');
+      const found = await lockInviteForEmailOrNotFound(
+        transaction,
+        invite.id,
+        'invitee@example.test',
+      );
 
       expect(found.isExpired).toBe(true);
     });
@@ -64,7 +76,9 @@ describe('lockInviteFor', () => {
       });
 
       await expect(
-        statusOf(() => lockInviteFor(transaction, invite.id, 'someone-else@example.test')),
+        statusOf(() =>
+          lockInviteForEmailOrNotFound(transaction, invite.id, 'someone-else@example.test'),
+        ),
       ).resolves.toEqual({ status: 404, code: 'not_found' });
     });
   });
@@ -79,7 +93,7 @@ describe('lockInviteFor', () => {
 
       await expect(
         statusOf(() =>
-          lockInviteFor(
+          lockInviteForEmailOrNotFound(
             transaction,
             crypto.randomUUID() as OrganizationInviteId,
             'invitee@example.test',

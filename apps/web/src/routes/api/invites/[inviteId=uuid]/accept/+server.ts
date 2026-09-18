@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit';
 import { recordAuditEvent } from '$lib/server/audit';
 import { requireAuth } from '$lib/server/auth/guards';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { lockInviteFor } from '$lib/server/invites/claim';
+import { lockInviteForEmailOrNotFound } from '$lib/server/invites/claim';
 import type { RequestHandler } from './$types';
 
 /** Accept an invite, joining the organization with the role it names.
@@ -29,14 +29,13 @@ type AcceptInviteOutcome =
   | { kind: 'no-longer-valid' };
 
 /** Accept `inviteId` on behalf of `user` — 404 if it isn't a pending-or-expired invite for
- * `user.email` (`lockInviteFor`'s guard).
+ * `user.email`.
  *
- * - Not `pending` (already accepted, declined, revoked, or superseded) → 409 `no-longer-valid`.
+ * - Status not `pending` (already accepted, declined, revoked, or superseded) → 409
+ *   `no-longer-valid`.
  * - Past `expires_at` → write `expired`, audit `invite.expired` → 410 `expired`.
- * - Otherwise insert the membership (a no-op if `user` already has one — the outcome they want is
- *   the same either way), mark `accepted`, audit `invite.accepted` → 200 `{ organizationSlug }`,
- *   the slug rather than the id because building a URL is all the caller does with it, and
- *   `organizationHref` takes slugs.
+ * - Otherwise insert the membership (a no-op if `user` already has one), mark `accepted`,
+ *   audit `invite.accepted` → 200 `{ organizationSlug }`.
  */
 export async function _acceptInvite(
   db: DatabaseExecutor,
@@ -47,7 +46,7 @@ export async function _acceptInvite(
   const outcome = await withDbErrorHandling(
     () =>
       withTransaction(db, async (transaction): Promise<AcceptInviteOutcome> => {
-        const invite = await lockInviteFor(transaction, inviteId, user.email);
+        const invite = await lockInviteForEmailOrNotFound(transaction, inviteId, user.email);
         if (invite.status !== 'pending') return { kind: 'no-longer-valid' };
 
         if (invite.isExpired) {
