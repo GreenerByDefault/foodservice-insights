@@ -87,3 +87,13 @@ catalog:
 # Drop an entry once the version is no longer new.
 minimumReleaseAgeExclude:
   - shadcn-svelte@1.5.0
+
+# `PinInput` schedules three timeouts per value change and never clears them, so one that
+# fires after the component is destroyed dispatches `input` on a detached node and writes
+# state belonging to a dead effect (Svelte's `derived_inert` warning). A backport of the fix
+# we sent upstream, unchanged but for being compiled: `syncTimeouts` captures the window and
+# returns a disposer, which is what the `watch` now returns. Capturing matters — reaching the
+# window back through `domContext` from the teardown is the same dead read by another route.
+# Unreleased as of 2.19.2; drop the patch once a release carries it.
+patchedDependencies:
+  bits-ui@2.18.1: patches/bits-ui@2.18.1.patch
