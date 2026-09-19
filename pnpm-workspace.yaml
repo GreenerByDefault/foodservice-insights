@@ -92,3 +92,9 @@ catalog:
 # Drop an entry once the version is no longer new.
 minimumReleaseAgeExclude:
   - shadcn-svelte@1.5.0
+
+# `PinInput` schedules three timeouts per value change and never clears them, so one that
+# fires after the component is destroyed reads its dead reactive state (`derived_inert`).
+# Not fixed upstream as of 2.19.2; drop the patch once a release clears them on teardown.
+patchedDependencies:
+  bits-ui@2.18.1: patches/bits-ui@2.18.1.patch

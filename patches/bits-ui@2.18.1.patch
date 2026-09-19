@@ -1,0 +1,27 @@
+diff --git a/dist/bits/pin-input/pin-input.svelte.js b/dist/bits/pin-input/pin-input.svelte.js
+index e32e48fabd7f979dcb73c74a71bd42ca92b99b54..4b9b933ef3806a6bc27e89b5fb1c219f7bd7bd18 100644
+--- a/dist/bits/pin-input/pin-input.svelte.js
++++ b/dist/bits/pin-input/pin-input.svelte.js
+@@ -108,7 +108,7 @@ export class PinInputRootState {
+             };
+         });
+         watch([() => this.opts.value.current, () => this.opts.inputRef.current], () => {
+-            syncTimeouts(() => {
++            const timeouts = syncTimeouts(() => {
+                 const input = this.opts.inputRef.current;
+                 if (!input)
+                     return;
+@@ -124,6 +124,13 @@ export class PinInputRootState {
+                     this.#prevInputMetadata.prev = [start, end, dir];
+                 }
+             }, this.domContext);
++            // Cleared on teardown: a timeout that outlives the component reads its destroyed
++            // reactive state (Svelte's `derived_inert` warning) and fires `input` on a detached node.
++            return () => {
++                for (const timeout of timeouts) {
++                    this.domContext.clearTimeout(timeout);
++                }
++            };
+         });
+         $effect(() => {
+             // invoke `onComplete` when the input is completely filled.
