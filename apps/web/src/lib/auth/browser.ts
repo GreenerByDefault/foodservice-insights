@@ -52,8 +52,9 @@ async function loadAuth(): Promise<SupabaseAuth> {
 
 /** The auth client for this browser.
  *
- * Safe to call during SSR — nothing happens until a method is, which is a user interaction — so a
- * page can pass it to a component it also server-renders.
+ * Safe to call during SSR — nothing happens until one of its methods is called, and that only
+ * happens in response to a user interaction — so a page can pass it to a component it also
+ * server-renders.
  */
 export function browserAuth(): BrowserAuth {
   return {

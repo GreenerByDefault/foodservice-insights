@@ -25,13 +25,7 @@ export function fakeBrowserAuth(): FakeBrowserAuth {
   };
 }
 
-/** An `AuthError` carrying `code`, which is all `describeAuthError` and the form ever read.
- *
- * A literal behind a cast rather than `new AuthApiError(...)`: constructing the real class would
- * make this the only runtime import of `@supabase/supabase-js` in the component tier, which Vite
- * then has to pre-bundle mid-run and warns can reload a test out from under itself. The cast is
- * needed either way — `AuthError` guards itself with a protected `__isAuthError`.
- */
+/** An `AuthError` carrying `code`, which is all `describeAuthError` and the form ever read. */
 export function authError(code: string): AuthError {
   return {
     name: 'AuthApiError',
