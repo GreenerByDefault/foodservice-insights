@@ -45,10 +45,10 @@ describe('CodeStep', () => {
     const screen = await render(CodeStep, props(auth, { onSignedIn }));
 
     await codeField(screen).fill('123456');
-    await screen.getByRole('button', { name: 'Sign in' }).click();
 
     await expect.poll(() => onSignedIn.mock.calls.length).toBe(1);
-    expect(auth.verifyOtp).toHaveBeenCalledWith({
+    // Once, not twice: the sixth digit is the only trigger, and the form locks behind it.
+    expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
       email: 'ada@example.com',
       token: '123456',
       type: 'email',
@@ -65,7 +65,6 @@ describe('CodeStep', () => {
     const screen = await render(CodeStep, props(auth, { onSignedIn }));
 
     await codeField(screen).fill('123456');
-    await screen.getByRole('button', { name: 'Sign in' }).click();
 
     await expect
       .element(
@@ -76,10 +75,14 @@ describe('CodeStep', () => {
       .toBeInTheDocument();
     expect(onSignedIn).not.toHaveBeenCalled();
 
-    // The rejected code is cleared, so submitting is closed off until a fresh one is entered.
-    await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    // The step is live again rather than spent: the next complete code is verified in its turn.
     await codeField(screen).fill('654321');
-    await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+    await expect.poll(() => auth.verifyOtp.mock.calls.length).toBe(2);
+    expect(auth.verifyOtp).toHaveBeenLastCalledWith({
+      email: 'ada@example.com',
+      token: '654321',
+      type: 'email',
+    });
   });
 
   test('stays disabled after a verified code, so the navigation cannot be raced into a second verifyOtp', async () => {
@@ -88,9 +91,9 @@ describe('CodeStep', () => {
     const screen = await render(CodeStep, props(auth, { onSignedIn: () => new Promise(() => {}) }));
 
     await codeField(screen).fill('123456');
-    await screen.getByRole('button', { name: 'Sign in' }).click();
 
-    await expect.element(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled();
+    await expect.element(screen.getByRole('status')).toHaveTextContent('Signing in…');
+    await expect.element(codeField(screen)).toBeDisabled();
   });
 
   test('resend is held for the cooldown, then sends without creating a user', async () => {
@@ -124,7 +127,8 @@ describe('CodeStep', () => {
     await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
     vi.useRealTimers();
 
-    await codeField(screen).fill('123456');
+    // Partial: a complete code is verified the moment it lands, so it never sits here to clear.
+    await codeField(screen).fill('12345');
     await screen.getByRole('button', { name: 'Send a new code' }).click();
 
     await expect
@@ -140,7 +144,6 @@ describe('CodeStep', () => {
     pasteInto(codeField(screen).element(), ' 123-456\n');
 
     await expect.poll(() => cellText(screen)).toEqual(['1', '2', '3', '4', '5', '6']);
-    await screen.getByRole('button', { name: 'Sign in' }).click();
     await expect.poll(() => auth.verifyOtp.mock.calls.length).toBe(1);
     expect(auth.verifyOtp).toHaveBeenCalledWith({
       email: 'ada@example.com',
@@ -158,20 +161,19 @@ describe('CodeStep', () => {
     const screen = await render(CodeStep, props(auth));
 
     await codeField(screen).fill('123456');
-    await screen.getByRole('button', { name: 'Sign in' }).click();
 
     await expect.element(codeField(screen)).toHaveValue('');
     expect(cellText(screen)).toEqual(['', '', '', '', '', '']);
     await expect.poll(() => document.activeElement).toBe(codeField(screen).element());
   });
 
-  test('an incomplete code cannot be submitted', async () => {
+  test('an incomplete code is left alone', async () => {
     const auth = fakeBrowserAuth();
     const screen = await render(CodeStep, props(auth));
 
     await codeField(screen).fill('12345');
 
-    await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    await expect.element(screen.getByRole('status')).not.toHaveTextContent('Signing in…');
     expect(auth.verifyOtp).not.toHaveBeenCalled();
   });
 

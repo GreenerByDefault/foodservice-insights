@@ -77,8 +77,7 @@ function keepDigits(text: string): string {
   return text.replaceAll(/\D/g, '');
 }
 
-async function handleSubmit(event: SubmitEvent) {
-  event.preventDefault();
+async function submitCode() {
   if (isBusy || !hasFullCode) return;
 
   formState = { status: 'verifying' };
@@ -96,6 +95,14 @@ async function handleSubmit(event: SubmitEvent) {
   }
   formState = { status: 'verified' };
   await onSignedIn();
+}
+
+/** The fallback behind `onComplete`. Nothing renders a submit button, but a form holding a single
+ * field still submits on Enter — which is the only way forward if a value ever lands without
+ * `onComplete` seeing the transition into it, as some password managers contrive to do. */
+function handleSubmit(event: SubmitEvent) {
+  event.preventDefault();
+  void submitCode();
 }
 
 async function handleResend() {
@@ -117,7 +124,7 @@ async function handleResend() {
 }
 </script>
 
-<form onsubmit={handleSubmit} class="w-full space-y-8">
+<form onsubmit={handleSubmit} class="w-full space-y-4">
   <Field.Field>
     <Field.Label for={FIELD.code}>Sign-in code</Field.Label>
     <InputOTP.Root
@@ -126,6 +133,7 @@ async function handleResend() {
       maxlength={OTP_LENGTH}
       pattern={REGEXP_ONLY_DIGITS}
       pasteTransformer={keepDigits}
+      onComplete={() => void submitCode()}
       disabled={isBusy}
       aria-invalid={formState.status === 'failed' || undefined}
       aria-describedby={formState.status === 'failed'
@@ -143,20 +151,21 @@ async function handleResend() {
       {/snippet}
     </InputOTP.Root>
     <Field.Description id={descriptionId}>
-      We sent a code to {email}. It expires shortly.
+      We sent a code to {email}. It expires shortly. We'll sign you in as soon as you enter it.
     </Field.Description>
     {#if formState.status === 'failed'}
       <Field.Error id={errorId}>{formState.message}</Field.Error>
     {/if}
   </Field.Field>
 
-  <Button
-    type="submit"
-    disabled={isBusy || !hasFullCode}
-    aria-busy={formState.status === 'verifying'}
-  >
-    {formState.status === 'idle' || formState.status === 'failed' ? 'Sign in' : 'Signing in…'}
-  </Button>
+  <!-- Rendered whatever the state, rather than inside the `{#if}`: a live region is only
+       announced if the screen reader was already watching the node when its text changed, so one
+       that appears along with its message is read by nobody. -->
+  <p role="status" class="text-sm text-muted-foreground">
+    {#if isBusy}
+      Signing in…
+    {/if}
+  </p>
 </form>
 
 <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
