@@ -21,7 +21,10 @@ let {
   spellcheck={false}
   class={cn(
 		"cn-input-otp flex items-center has-disabled:opacity-50",
-		"disabled:cursor-not-allowed",
+		// Scoped to the descendant input, unlike the string shadcn/ui generates for React: here
+		// the root is a `<div>` and bits-ui merges `restProps` — `disabled` among them — into the
+		// `<input>` it renders beside the cells, so the root itself is never `:disabled`.
+		"[&_input]:disabled:cursor-not-allowed",
 		className
 	)}
   {...restProps}
