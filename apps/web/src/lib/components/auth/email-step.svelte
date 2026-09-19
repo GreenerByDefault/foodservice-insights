@@ -11,14 +11,26 @@ interface Props {
   auth: BrowserAuth;
   /** Bound, so returning here from the code step brings the address back with it. */
   email: string;
+  /** True only when the visitor came back from the code step, where this field is what they asked
+   * for. On first load the page heading is what should be read, not a field torn out of it. */
+  focusOnMount: boolean;
   onCodeSent: () => void;
 }
 
-let { auth, email = $bindable(), onCodeSent }: Props = $props();
+let { auth, email = $bindable(), focusOnMount, onCodeSent }: Props = $props();
 
 type StepState = { status: 'idle' } | { status: 'sending' } | { status: 'failed'; message: string };
 
 let formState: StepState = $state({ status: 'idle' });
+let emailInputElement: HTMLInputElement | null = $state(null);
+
+const fieldId = $props.id();
+const descriptionId = `${fieldId}-description`;
+const errorId = `${fieldId}-error`;
+
+$effect(() => {
+  if (focusOnMount) emailInputElement?.focus();
+});
 
 async function handleSubmit(event: SubmitEvent) {
   event.preventDefault();
@@ -29,6 +41,7 @@ async function handleSubmit(event: SubmitEvent) {
   const parsed = v.safeParse(emailAddress, email);
   if (!parsed.success) {
     formState = { status: 'failed', message: 'Enter a valid email address.' };
+    emailInputElement?.focus();
     return;
   }
   email = parsed.output;
@@ -43,6 +56,7 @@ async function handleSubmit(event: SubmitEvent) {
 
   if (error) {
     formState = { status: 'failed', message: describeAuthError(error) };
+    emailInputElement?.focus();
     return;
   }
   formState = { status: 'idle' };
@@ -54,19 +68,24 @@ async function handleSubmit(event: SubmitEvent) {
   <Field.Field>
     <Field.Label for={FIELD.email}>Email address</Field.Label>
     <Input
+      bind:ref={emailInputElement}
       id={FIELD.email}
       name={FIELD.email}
       type="email"
       autocomplete="email"
       maxlength={MAX_EMAIL_LENGTH}
       required
+      aria-invalid={formState.status === 'failed' || undefined}
+      aria-describedby={formState.status === 'failed'
+        ? `${descriptionId} ${errorId}`
+        : descriptionId}
       bind:value={email}
     />
-    <Field.Description>
+    <Field.Description id={descriptionId}>
       We'll email you a {OTP_LENGTH}-digit code. New here? This creates your account.
     </Field.Description>
     {#if formState.status === 'failed'}
-      <Field.Error>{formState.message}</Field.Error>
+      <Field.Error id={errorId}>{formState.message}</Field.Error>
     {/if}
   </Field.Field>
 

@@ -17,13 +17,34 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** The code field, which `InputOTP` renders as one hidden input behind the six cells. */
+function codeField(screen: Awaited<ReturnType<typeof render>>) {
+  return screen.getByLabelText('Sign-in code');
+}
+
+/** A real `paste`, which is the only thing that reaches `pasteTransformer` — `fill` sets the
+ * value directly and never goes near it. */
+function pasteInto(element: Element, text: string) {
+  const clipboardData = new DataTransfer();
+  clipboardData.setData('text/plain', text);
+  element.dispatchEvent(
+    new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }),
+  );
+}
+
+function cellText(screen: Awaited<ReturnType<typeof render>>): string[] {
+  return [...screen.container.querySelectorAll('[data-slot="input-otp-slot"]')].map(
+    (cell) => cell.textContent?.trim() ?? '',
+  );
+}
+
 describe('CodeStep', () => {
   test('verifies the code against the address it was sent to, then hands off', async () => {
     const auth = fakeBrowserAuth();
     const onSignedIn = vi.fn().mockResolvedValue(undefined);
     const screen = await render(CodeStep, props(auth, { onSignedIn }));
 
-    await screen.getByLabelText('Sign-in code').fill('123456');
+    await codeField(screen).fill('123456');
     await screen.getByRole('button', { name: 'Sign in' }).click();
 
     await expect.poll(() => onSignedIn.mock.calls.length).toBe(1);
@@ -43,7 +64,7 @@ describe('CodeStep', () => {
     const onSignedIn = vi.fn().mockResolvedValue(undefined);
     const screen = await render(CodeStep, props(auth, { onSignedIn }));
 
-    await screen.getByLabelText('Sign-in code').fill('123456');
+    await codeField(screen).fill('123456');
     await screen.getByRole('button', { name: 'Sign in' }).click();
 
     await expect
@@ -54,6 +75,10 @@ describe('CodeStep', () => {
       )
       .toBeInTheDocument();
     expect(onSignedIn).not.toHaveBeenCalled();
+
+    // The rejected code is cleared, so submitting is closed off until a fresh one is entered.
+    await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    await codeField(screen).fill('654321');
     await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
   });
 
@@ -62,7 +87,7 @@ describe('CodeStep', () => {
     // A real `onSignedIn` navigates; it never resolves back into an interactive form.
     const screen = await render(CodeStep, props(auth, { onSignedIn: () => new Promise(() => {}) }));
 
-    await screen.getByLabelText('Sign-in code').fill('123456');
+    await codeField(screen).fill('123456');
     await screen.getByRole('button', { name: 'Sign in' }).click();
 
     await expect.element(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled();
@@ -99,13 +124,55 @@ describe('CodeStep', () => {
     await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
     vi.useRealTimers();
 
-    await screen.getByLabelText('Sign-in code').fill('123456');
+    await codeField(screen).fill('123456');
     await screen.getByRole('button', { name: 'Send a new code' }).click();
 
     await expect
       .element(screen.getByRole('button', { name: `Send a new code in ${RESEND_COOLDOWN_S}s` }))
       .toBeDisabled();
-    await expect.element(screen.getByLabelText('Sign-in code')).toHaveValue('');
+    await expect.element(codeField(screen)).toHaveValue('');
+  });
+
+  test('a code pasted with the whitespace around it still reaches Supabase as six digits', async () => {
+    const auth = fakeBrowserAuth();
+    const screen = await render(CodeStep, props(auth));
+
+    pasteInto(codeField(screen).element(), ' 123-456\n');
+
+    await expect.poll(() => cellText(screen)).toEqual(['1', '2', '3', '4', '5', '6']);
+    await screen.getByRole('button', { name: 'Sign in' }).click();
+    await expect.poll(() => auth.verifyOtp.mock.calls.length).toBe(1);
+    expect(auth.verifyOtp).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      token: '123456',
+      type: 'email',
+    });
+  });
+
+  test('a rejected code is cleared and the field takes focus back, ready for the next one', async () => {
+    const auth = fakeBrowserAuth();
+    auth.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: authError('otp_expired'),
+    });
+    const screen = await render(CodeStep, props(auth));
+
+    await codeField(screen).fill('123456');
+    await screen.getByRole('button', { name: 'Sign in' }).click();
+
+    await expect.element(codeField(screen)).toHaveValue('');
+    expect(cellText(screen)).toEqual(['', '', '', '', '', '']);
+    await expect.poll(() => document.activeElement).toBe(codeField(screen).element());
+  });
+
+  test('an incomplete code cannot be submitted', async () => {
+    const auth = fakeBrowserAuth();
+    const screen = await render(CodeStep, props(auth));
+
+    await codeField(screen).fill('12345');
+
+    await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
   });
 
   test('a rejected resend reports it and leaves the button ready to try again', async () => {

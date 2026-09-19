@@ -30,4 +30,23 @@ describe('SignInFlow', () => {
 
     await expect.element(screen.getByLabelText('Email address')).toHaveValue('ada@example.com');
   });
+
+  test('each step swapped in takes focus, which the swap itself would otherwise drop on the body', async () => {
+    const auth = fakeBrowserAuth();
+    const screen = await render(SignInFlow, { auth, onSignedIn: vi.fn() });
+
+    // Not on arrival: the first email step is the page, not a step moved to.
+    expect(document.activeElement).toBe(document.body);
+
+    await screen.getByLabelText('Email address').fill('ada@example.com');
+    await screen.getByRole('button', { name: 'Send code' }).click();
+    await expect
+      .poll(() => document.activeElement)
+      .toBe(screen.getByLabelText('Sign-in code').element());
+
+    await screen.getByRole('button', { name: 'Change email' }).click();
+    await expect
+      .poll(() => document.activeElement)
+      .toBe(screen.getByLabelText('Email address').element());
+  });
 });

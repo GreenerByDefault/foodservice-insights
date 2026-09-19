@@ -7,7 +7,7 @@ describe('EmailStep', () => {
   test('sends a code to the trimmed, lowercased address and advances', async () => {
     const auth = fakeBrowserAuth();
     const onCodeSent = vi.fn();
-    const screen = await render(EmailStep, { auth, email: '', onCodeSent });
+    const screen = await render(EmailStep, { auth, email: '', focusOnMount: false, onCodeSent });
 
     await screen.getByLabelText('Email address').fill('  Ada@Example.COM  ');
     await screen.getByRole('button', { name: 'Send code' }).click();
@@ -22,7 +22,7 @@ describe('EmailStep', () => {
   test('rejects an address the email input accepts but the schema does not, without calling Supabase', async () => {
     const auth = fakeBrowserAuth();
     const onCodeSent = vi.fn();
-    const screen = await render(EmailStep, { auth, email: '', onCodeSent });
+    const screen = await render(EmailStep, { auth, email: '', focusOnMount: false, onCodeSent });
 
     await screen.getByLabelText('Email address').fill('ada@example');
     await screen.getByRole('button', { name: 'Send code' }).click();
@@ -39,7 +39,7 @@ describe('EmailStep', () => {
       error: authError('over_email_send_rate_limit'),
     });
     const onCodeSent = vi.fn();
-    const screen = await render(EmailStep, { auth, email: '', onCodeSent });
+    const screen = await render(EmailStep, { auth, email: '', focusOnMount: false, onCodeSent });
 
     await screen.getByLabelText('Email address').fill('ada@example.com');
     await screen.getByRole('button', { name: 'Send code' }).click();
@@ -53,7 +53,12 @@ describe('EmailStep', () => {
   test('the button disables and swaps its label while the send is in flight', async () => {
     const auth = fakeBrowserAuth();
     auth.signInWithOtp.mockReturnValue(new Promise(() => {}));
-    const screen = await render(EmailStep, { auth, email: '', onCodeSent: vi.fn() });
+    const screen = await render(EmailStep, {
+      auth,
+      email: '',
+      focusOnMount: false,
+      onCodeSent: vi.fn(),
+    });
 
     await screen.getByLabelText('Email address').fill('ada@example.com');
     await screen.getByRole('button', { name: 'Send code' }).click();
