@@ -134,7 +134,7 @@ catalogs:
       version: 3.0.0
 
 patchedDependencies:
-  bits-ui@2.18.1: 91c52b37d270742f6b4468d411a87116e5c6c26eef0fc59e1a5661219fd77432
+  bits-ui@2.18.1: c6df5bb33730a72deea7726c02bc1adede79e7d73da76852ddcf913415e8b152
 
 importers:
 
@@ -212,7 +212,7 @@ importers:
         version: 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))(vitest@4.1.10)
       bits-ui:
         specifier: 'catalog:'
-        version: 2.18.1(patch_hash=91c52b37d270742f6b4468d411a87116e5c6c26eef0fc59e1a5661219fd77432)(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.56.9)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)(typescript@6.0.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)
+        version: 2.18.1(patch_hash=c6df5bb33730a72deea7726c02bc1adede79e7d73da76852ddcf913415e8b152)(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.56.9)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)(typescript@6.0.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)
       clsx:
         specifier: 'catalog:'
         version: 2.1.1
@@ -3030,7 +3030,7 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
-  bits-ui@2.18.1(patch_hash=91c52b37d270742f6b4468d411a87116e5c6c26eef0fc59e1a5661219fd77432)(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.56.9)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)(typescript@6.0.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9):
+  bits-ui@2.18.1(patch_hash=c6df5bb33730a72deea7726c02bc1adede79e7d73da76852ddcf913415e8b152)(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.56.9)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9)(typescript@6.0.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)))(svelte@5.56.9):
     dependencies:
       '@floating-ui/core': 1.8.0
       '@floating-ui/dom': 1.8.0
