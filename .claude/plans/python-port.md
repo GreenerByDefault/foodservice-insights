@@ -2,452 +2,341 @@
 
 ## Context
 
-Phase 1 of `foodservice-insights` is nearly done; the biggest remaining task is porting GBD's
-closed-source Python library (`greener_by_default.foodservice_insights`, 24.8k lines, 34 modules)
-into this repo, then archiving that repo. GBD agreed to a monorepo so their data-science code can
-import the product library without a cross-repo dependency, and so they can iterate locally on
-lab code without being able to break the product.
+GBD's analysis library lives in the private `catering_analysis` repo. This plan copies it into
+`python/insights/` (the product package) and `python/lab/` (everything else), implements the
+`analyze()` seam the worker already calls, wires `WORKER_MODE=mock-llm`, and archives the
+source repo.
 
-The repo is already shaped for this: `analysis.py` is the seam (`AnalysisRequest` → `analyze()`
-→ `AnalysisOutcome`), `worker_child` calls it, `apps/worker/src/modes.ts` reserves
-`WORKER_MODE=mock-llm` as "the slot the port fills", and `.claude/rules/python.md` carries a
-*Status: scaffolding* banner plus two Open items the port resolves. The Python workspace has no
-LLM SDK, no pandas, no third-party runtime dependency today.
+The monorepo side is ready. `analysis.py` is the seam (`AnalysisRequest` → `analyze()` →
+`AnalysisOutcome`, raising `NotImplementedError` today); `errors.py` and
+`testing.stub_analysis` exist; `worker_child` calls `analyze(request, report_progress=…)` and
+moves the declared files into place; `apps/worker/src/modes.ts` reserves `mock-llm` as the slot
+this fills. Groundwork already on `main`: the three cache CSVs are gitignored at their packaged
+paths with a `data_files/README.md` beside each, `python/lab/client_work/.gitignore` exists,
+`just lint`/`just fmt` run nbstripout and the `py-lab` job lints, `report.organizationName` is in
+the manifest, and the child's env allowlist is `PATH, HOME, LANG, TZ, OPENAI_API_KEY`.
+
+The source side is ready too. `catering_analysis/Docs/monorepo_migration/prework.md` records
+twenty-seven PRs that aligned that repo with this one before any copy: Ruff with this repo's rule
+set and line length, Python 3.14, ty-clean, the package renamed to `gbd_foodservice_insights`
+and flattened to the repo root, `LLMs.py` split into `llm`, `llm_prompts`, `categorize_llm` and
+the lab-bound `llm_extraction`, the lab split into its own `gbd_foodservice_insights_lab`
+package with Ruff's `TID251` ban on product → lab imports, cache loaders that tolerate a missing
+file, the tests split into `tests/insights/` and `tests/lab/` under `--import-mode=importlib`,
+and `Customer template/` renamed to `runscripts/`. **The copy is therefore a `cp -r` of two
+package directories and two test directories with no import rewriting.** That doc's "Notes for
+the monorepo copy" are all folded in below.
+
+The source's *internal* layout may still change before the copy (modules nested rather than
+flat). This plan copies package directories whole and names functions rather than files wherever
+a PR edits ported code; where a filename appears it is today's name for finding the function,
+not a commitment to the path.
 
 A companion plan, `categorization-cache.md`, moves the product-categorization cache into
-Postgres afterward. Nothing here depends on it — this plan leaves all three cache CSVs as
-gitignored files at the paths the library already reads them from.
+Postgres afterwards. This plan leaves all three caches as gitignored files at the paths the
+library reads them from; that plan's library PR depends on PR 4 here.
 
-A groundwork PR already landed ahead of the copy PRs, to shrink them: the three cache-CSV
-`.gitignore` entries and their `data_files/README.md`s, `client_work/.gitignore`, nbstripout
-wiring (`just lint`/`just fmt` plus the `py-lab` CI job gaining `just lint`), the `errors.py`
-leaf (`AnalysisError` + its three subclasses, re-exported from `analysis.py`), and the
-`report.organizationName` contract change with the env allowlist trim to
-`PATH, HOME, LANG, TZ, OPENAI_API_KEY` are all already on `main`. PRs 1, 2, 4 and 5 below
-already assume these exist and only list what remains.
+## Decisions
 
-### What this port must get right
+- **Copy first, change after.** PRs 1 and 2 are copies plus only what CI needs; every behavioural
+  change is its own PR. *Rejected: refactor during the copy* — it buries the diff that needs the
+  most attention, and the source repo's suite and live client runs are the safety net only until
+  the copy lands.
+- **Copy from a recorded `main` SHA with `git archive`, never the working tree** — `build/` on
+  disk there is a stale, gitignored duplicate of the package. No subtree, no history rewrite:
+  history stays in the archived repo. Attribution is `Co-authored-by:` trailers on each copy PR's
+  squash commit, one per human author in `git shortlog -sne` (the two bots dropped), with the
+  email each author is happy to expose on GitHub — ask, don't assume.
+- **Gitignore the caches by name under any `data_files/`**: the three existing `.gitignore`
+  lines become `python/**/data_files/<name>.csv`. That survives nesting, and it closes a hole:
+  the entree-cache loader is product-side until serving mode moves, so it resolves under
+  `python/insights/`, where that name is not ignored today.
+- **The lab stays out of the worker image with no extra tooling.** uv workspaces already do it:
+  the Dockerfile's `uv sync --package worker-child` selects `worker_child`,
+  `gbd_foodservice_insights` and their deps; the lab member and its deps (`llmwhisperer-client`,
+  `PyPDF2`, `ipython`, …) are simply not selected. The lab must stay its own workspace member for
+  this to hold.
+- **Serving mode stays in the library, inert.** `analyze()` always runs procurement, and
+  `GEMINI_API_KEY` is not in the env allowlist, so no Gemini client is ever built in the child.
+  The cost is that `google-genai` ships as a dependency and `llm.py` reads `gemini_models.json`
+  at import time. Moving entree detection to the lab needs `categorize_products` decomposed — a
+  real refactor, listed under later cleanups, not on the path to a working product.
+- **The `LlmClient` protocol is built here, not as prework**, because its shape is dictated by
+  `analyze()` and the keyword fake; the source repo's categorize runscript needs only a one-line
+  wrap. Its OpenAI implementation is the one retry layer (`apps/worker/src/failures.ts` rules it),
+  with the SDK's own retries disabled. *Rejected: an OpenAI-shaped fake that dispatches on prompt
+  text* — routing mocks by prompt content is brittle.
+- **Progress is reported without touching the categorization loops**: `analyze()` wraps whatever
+  `LlmClient` it was given so every call reports progress, and `run_food_report` reports at each
+  stage boundary. So `mock-llm` gets a real cadence for free.
+- **Safe to publish.** The source repo never committed a secret (verified across its history),
+  but it holds one real client's workbooks under `test_data/baseline_comparison/`, and client
+  and staff names and a maintainer's home directory in a handful of files. Those files are not
+  ported, and every copy PR greps its diff against a private denylist kept outside this repo.
+  Known hits still in tracked files today: `Nuffield` in two runscripts' comments, `Carle Health`
+  in one test, `Rush_health` in `test_data/create_test_data_v2.py`, the home directory in
+  `Docs/reference/editing_pdf_reports.md`.
 
-1. **The three cache CSVs never enter git.** `previously_categorized_items.csv` (~39k rows of
-   `product, category, cleaned_item_names`; most rows are the negative label `"No Matches Found"`,
-   the biggest LLM-call saver), `previously_classified_entrees.csv`, and
-   `previously_classified_weights.csv` are **gitignored at the packaged paths the library already
-   reads**, obtained out-of-band, and a missing file means an empty cache with a loud warning.
-   The companion plan replaces the first with a table; the other two stay files in the lab.
-2. **Everything not on the product path goes to the lab** (`gbd_foodservice_insights_lab`) —
-   extraction, weight cleaning, pilot analysis, procurement-vs-serving comparison, notebook
-   tooling, runscripts, and serving mode (entree detection) — so `catering_analysis` can be
-   archived whole.
-3. **Safe to publish.** The source repo has never committed a secret (verified across its
-   history), but it holds one real client's procurement workbooks under `test_data/`, and its
-   `AGENTS.md`, `CLAUDE.md`, one reference doc, and its pre-commit config carry a maintainer's
-   home directory, an internal email address, staff names, and client names. None of those files
-   are ported; the copy PRs grep for a private denylist of those strings, kept outside this repo.
-4. **Code quality can lag; safety cannot.** Refactors come after the code is in and working.
+## PR 1 — Copy the product library into `python/insights/`
 
-### Git history and attribution
+Goal: `categorize_products` and `run_food_report` work here; `just test` runs the source's
+unmocked end-to-end report test; no cache CSV is committed.
 
-Files are copied with `cp`, not merged — no subtree, no history rewrite. Attribution is carried
-by `Co-authored-by:` trailers on each copy PR's squash commit, one per author in the source
-repo's `git shortlog -sne`, using the email each author already exposes on GitHub.
-
-### Lab deps out of the production image
-
-No extra tooling: uv workspaces already do this. `uv sync --package worker-child --no-dev`
-installs `worker_child` + `gbd_foodservice_insights` and their deps — the lab member and its deps
-(`llmwhisperer-client`, `PyPDF2`, `ipython`, …) are simply not selected. `--all-packages` is the
-developer's command, `--package worker-child` is the image's. That is the whole answer; the lab
-must stay its own workspace member for it to work (an "extra" on one project would install the
-lab's code everywhere).
-
-## Target layout
-
-The layout is already flat: project directories have short names, there is no `src/` level, and
-import names match the source repo. Hatchling takes `packages = ["gbd_foodservice_insights"]`
-directly.
-
-```
-python/
-  insights/                          distribution gbd-foodservice-insights (ships)
-    pyproject.toml
-    gbd_foodservice_insights/
-      analysis.py                    the seam
-      errors.py                      AnalysisError + the three seam exceptions (leaf)
-      testing.py                     stub_analysis + KeywordLlmClient (shipped test double)
-      llm.py                         provider clients, one retry layer, LlmClient protocol
-      categorize.py categorize_steps.py categorize_cache.py categorize_reviews.py
-      categories.py emissions.py utils.py
-      food_report.py report_*.py plotting_utils.py
-      data_files/                    GBD_categories.yaml diagnostic_thresholds.yaml gemini_models.json
-                                     README.md + gitignored previously_categorized_items.csv
-      prompts/                       match_items_to_gbd_categories, clean_item_name, fuzzy_match_gbd_category
-    tests/                           conftest.py, data/, test_*.py
-  lab/                               distribution gbd-foodservice-insights-lab (ships nothing)
-    pyproject.toml  README.md
-    gbd_foodservice_insights_lab/
-      serving.py                     entree detection + serving-mode orchestration
-      llm_extraction.py              the LLMWhisperer/PDF/unit half of the old LLMs.py
-      extract_pdf.py extract_other.py extract_tabular_io.py extract_tabular_inspection.py
-      clean_product_weights.py pilot_analysis.py pilot_plots.py procurement_serving_comparison.py
-      notebook_runscript_setup.py notebook_utils.py plotting_extras.py LLM_testing.py gemini_api_examples.py
-      scripts/backfill_entree_cleaned_names.py
-      data_files/                    README.md + gitignored previously_classified_{entrees,weights}.csv
-      prompts/                       entree_detector, extract_weight, clean_units, *pdf_extraction*
-    runscripts/                      the 5 runscript .py + 4 .ipynb (outputs stripped)
-    client_work/.gitignore           "*" + "!.gitignore" — never committed
-    test_data/                       anonymized fixtures only
-    tests/
-  worker_child/                      distribution worker-child (ships)
-    pyproject.toml
-    worker_child/                    …/contract/, run.py, testing.py, mock_llm.py
-    tests/                           support/ stays here (root pytest `pythonpath` depends on it)
+```sh
+SRC=~/code/gbd/catering_analysis; SHA=$(git -C "$SRC" rev-parse main)   # record the SHA in the PR
+git -C "$SRC" archive "$SHA" gbd_foodservice_insights | tar -x -C python/insights
+git -C "$SRC" archive "$SHA" tests/insights | tar -x --strip-components=2 -C python/insights/tests
 ```
 
-Root `pyproject.toml`, `uv.lock`, `.python-version`, `Justfile` stay at the repo root: uv finds
-the workspace by walking up, and `just test` from anywhere is worth keeping. (Moving them under
-`python/` would need `--project python` on every uv call and a second lockfile location; not
-worth it.)
+- Two files exist on both sides. Keep the monorepo's `__init__.py` (it re-exports the seam;
+  drop its "scaffold" wording) and the monorepo's `data_files/README.md` (it already says
+  obtained out-of-band, missing → empty cache and a warning). `git checkout` both back after
+  extracting. Nothing inside the package is curated: the promote script and the entree code
+  ride along, and the cache plan deletes what it supersedes.
+- `.gitignore`: the three cache lines become `python/**/data_files/<name>.csv`. Prove it with
+  `git status --ignored` (the CSVs show if present) and `git ls-files` (they never do).
+- `python/insights/pyproject.toml` dependencies, from the package's imports: `pandas`, `numpy`,
+  `matplotlib`, `seaborn`, `PyYAML`, `Levenshtein` (the import name — the source declares the
+  `python-Levenshtein` shim), `openpyxl` (pandas' engine in the report workbooks), `openai`,
+  `google-genai`. Not `requests`, not `python-dotenv`. Ranges as the source pins them; `just sync`
+  updates `uv.lock`. Ruff is the same version in both repos; ty here is the version the source was
+  verified clean under.
+- Root `pyproject.toml` `[tool.ruff.lint]` gains the source's `allowed-confusables`
+  (`×`, `–`, `ℹ` — deliberate typography in plot labels). *Rejected: replace the characters.*
+- Then `just fmt` and `just lint && just check && just test`. Expect nothing to a handful of
+  fix-ups: the rule set, line length, target version, `--import-mode=importlib` and the ty
+  version all already match. No `[[tool.ty.overrides]]`.
+- Reviewer checklist: the denylist grep on the diff is empty; `git ls-files python | grep
+  '\.csv$'` shows only test fixtures; dependencies exactly as listed; no `[tool.ruff]` in the
+  member pyproject; CI green with `test_food_report_end_to_end_produces_valid_artifacts`
+  *running*, not skipped; the system-e2e job's Docker build still passes — the image now installs
+  the scientific stack with no Dockerfile change.
+- Docs. `.claude/rules/python.md`: Status banner → "library landed; the lab and the seam
+  follow"; § Style gains the library-wide conventions from the source `AGENTS.md` §9–10 — fail
+  loudly on bad data with no silent skipping, every pipeline step asserts row counts and logs
+  before/after shape, datasets are thousands of rows so plain pandas is fine; the
+  `importlib.resources` Open is resolved on the existing "Packaged assets" bullet — packaged
+  files are read with `Path(__file__)`, and the package is always installed from files on disk
+  (the worker image installs `--no-editable` into site-packages, never a zip).
+  "`GBD_categories.yaml` is the single source of truth for categories and emissions factors"
+  becomes the header comment of the module that loads it. `REQUIREMENTS.md` gains GBD's
+  substitution rule — a report never frames a shift from beef or lamb to chicken or fish as a
+  win — since it is product intent that constrains report wording. `.env.example` gains
+  `OPENAI_API_KEY=`; `python/README.md`
+  § API keys points at it. A short `python/insights/README.md`: one paragraph on what the package
+  is, plus the "which module owns which report change" ownership table from the source's
+  `editing_pdf_reports.md`, minus its commands and personal path.
 
-Every PR ends with `just lint && just check && just test` (+ `just test-lab` when the lab is
-touched), and `pnpm lint && pnpm check && pnpm test` when TS is touched.
+## PR 2 — Copy the lab into `python/lab/`
 
-### Copy mechanics (PRs 1 and 2)
+Goal: `catering_analysis` can be archived whole; GBD's manual workflow runs from this repo.
 
-Copy with `cp`, then fix up until CI is green; commits at the author's convenience (the PR
-squash-merges). Reviewer checklist: the sensitive-content grep on the diff is empty (one known
-hit to reword: a comment in `plotting_utils.standardize_title_case`); no `.csv` under a package
-directory except the gitignored names (`git status --ignored` shows them, `git ls-files` does
-not); new runtime deps exactly as listed; no `[tool.ruff]` in a member pyproject; CI green with
-the unmocked end-to-end report test *running*, not skipped. Fix-ups, in order:
-
-1. Rename `greener_by_default.foodservice_insights` → `gbd_foodservice_insights`; hard-coded
-   logger names → `logging.getLogger(__name__)`.
-2. `ruff format` (line-length 100), then `ruff check --fix --unsafe-fixes`. Measured against the
-   root config: ~25 manual fixes remain for the library, ~40 for the lab — **no per-file-ignores
-   block for ported code**. Test files: ~270 one-line docstrings that restate the test name
-   trigger E501; delete them (scripted, deleted-lines-only).
-3. Packaged data via a new `_resources.py`: `files("gbd_foodservice_insights") / relative`
-   (`importlib.resources`). Resolves the python.md Open item; the package is always installed
-   from source, so `files()` returns a real `Path`.
-4. Dead code and its tests go; deps into the member pyproject + `uv lock`.
-5. ty: one `[[tool.ty.overrides]]` per failing module in the root pyproject, listing only the
-   rules that fire, headed: *"Ported modules were never typechecked. A PR that edits one of these
-   files for any other reason deletes its entry and fixes what surfaces."*
-
-## PR 1 — Copy the product closure into `insights/`
-
-Goal: `categorize_products` and `run_food_report` work in the monorepo; the unmocked end-to-end
-report test passes; **no cache CSV is committed**.
-
-- Modules (the transitive closure of the six entry points the throwaway PoC used — 21 with
-  `__init__`): `categories`, `categorize`, `categorize_cache`, `categorize_entrees`,
-  `categorize_reviews`, `categorize_steps`, `emissions`, `food_report`, `LLMs`, `plotting_utils`,
-  `report_aggregation`, `report_artifacts`, `report_builder`, `report_diagnostics`,
-  `report_excel`, `report_plots`, `report_quality`, `report_run_logging`, `report_schema`,
-  `report_utils`, `utils`; `data_files/{GBD_categories.yaml,diagnostic_thresholds.yaml,gemini_models.json}`;
-  `prompts/{clean_item_name,match_items_to_gbd_categories,fuzzy_match_gbd_category,entree_detector}_prompt.md`.
-- **The cache CSV**: `data_files/previously_categorized_items.csv` is already gitignored and
-  `data_files/README.md` already committed (the groundwork PR). The loader
-  `get_previously_categorized_items()` returns an empty frame with the three columns +
-  `logger.warning(...)` naming `data_files/README.md` when the file is absent (test with
-  `caplog`). Source tests already patch the loader, so none read the real file; delete the two
-  that test the file itself. `analyze()` (PR 5) passes `cache_write_mode="none"` — product code
-  never writes it.
-- **Split `LLMs.py` here**: delete the LLMWhisperer/PDF/unit/weight functions, the `whisper=`
-  branch of `setup_api_clients`, `DEFAULT_PDF_MODEL`, and the `unstract`/`requests` imports, so
-  the shipped library never depends on `llmwhisperer-client`. PR 2 re-copies the source file
-  verbatim as the lab's `llm_extraction.py` and deletes the other half there.
-- **Keep the report pipeline's own "serving" axis** (`report_schema.ReportMode`, ~35 references)
-  in the library, inert — `analyze()` always passes `"procurement"`. Only the entree detector
-  moves (PR 3).
-- Dead code dropped: `report_diagnostics.{clean_column_names,validate_date_column,
-  baseline_pre_flight_checks}`; the 11 `plotting_utils` helpers only `pilot_plots` calls (→ lab
-  `plotting_extras.py` in PR 2); `food_report`'s two `*diner_meal_mapping*` compat wrappers;
-  `tests/test_package_imports.py` (builds a pip venv).
-- Tests → `python/insights/tests/`: `test_{aggregate,categories,categorize,categorize_cache,
-  categorize_entrees,categorize_reviews,categorize_steps,emissions,integration_food_report,llms,
-  plotting_utils,report_aggregation,report_builder,report_diagnostics,report_outputs,
-  report_refactor,utils}.py` + `conftest.py` (`MPLBACKEND=Agg` before any matplotlib import;
-  the `sample_*` and mock-client fixtures). Drop unregistered markers (`--strict-markers`). The
-  16 `test_report_diagnostics` tests that import `extract_*` move to the lab in PR 2. Fixture:
-  the source repo's anonymized `test_data/step_2_output/aggregated_baseline.csv` (documented
-  there as anonymized) is copied to `tests/data/` (user-approved).
-- Deps: `matplotlib>=3.10`, `numpy>=2.2`, `pandas>=2.2`, `PyYAML>=6`, `seaborn>=0.13`,
-  `openpyxl>=3.1`, `Levenshtein>=0.27` (the real import name), `openai>=2.15`,
-  `google-genai>=1.62` (Gemini helpers stay as provider helpers for the lab). All ship 3.13 wheels.
-- Docs: python.md Status banner → "library landed; lab, serving split and the seam follow";
-  § Style gains the two library-wide conventions from the source AGENTS.md (fail loudly on bad
-  data, no silent skipping; every pipeline step asserts row counts and logs before/after shape).
-  "GBD_categories.yaml is the single source of truth for categories and emissions factors"
-  becomes the header comment of `categories.py`.
-- `.env.example` gains `OPENAI_API_KEY=` and `GEMINI_API_KEY=` (lab) with one-line comments;
-  `python/README.md` § API keys points there.
-
-## PR 2 — Copy everything else into `lab/`
-
-Goal: `catering_analysis` is fully archived; GBD's manual workflow runs from the monorepo.
-
-- Modules → `python/lab/gbd_foodservice_insights_lab/` (flat; the source was flat): `extract_pdf`,
-  `extract_other`, `extract_tabular_io`, `extract_tabular_inspection`, `clean_product_weights`,
-  `pilot_analysis`, `pilot_plots`, `procurement_serving_comparison`, `notebook_runscript_setup`,
-  `LLM_testing`, `gemini_api_examples`; new `llm_extraction.py` (source `LLMs.py` minus the half
-  PR 1 kept), `notebook_utils.py` (`get_head_and_tail`/`is_interactive`/`remove_file` out of the
-  library's `utils`), `plotting_extras.py` (the 11 helpers PR 1 dropped);
-  `scripts/backfill_entree_cleaned_names.py` (the promote script is dead — drop);
-  `prompts/{cbord_pdf_extraction,clean_units,extract_pdf,extract_weight,standard_pdf_extraction}_prompt.md`.
-  Two seds: the package rename, then `gbd_foodservice_insights.<lab module>` →
-  `gbd_foodservice_insights_lab.<lab module>` for the lab list only.
-- **The two lab caches**: already gitignored, with `data_files/README.md` already committed (the
-  groundwork PR); loaders return an empty frame + warning when absent.
-- `runscripts/`: the 5 runscript `.py` and 4 `.ipynb` under their verbatim names. Notebooks stay
-  notebooks (user decision); nbstripout is already wired (the groundwork PR): `just lint`/`just
-  fmt` gained the null-safe `git ls-files -z '*.ipynb' | xargs -0 -r uv run nbstripout ...` form,
-  since a bare `$(git ls-files '*.ipynb')` with zero notebooks gives nbstripout no arguments and
-  it hangs reading stdin. All 4 have zero outputs today. Ruff already lints/formats notebook code
-  cells natively. The lab README still needs "run `just fmt` before committing a notebook."
-- CI: the `py-lab` job already gained `just lint` (the groundwork PR) — that's what makes the
-  nbstripout check above bite.
-- `notebook_runscript_setup.get_project_root()` → monorepo root; runscripts `load_dotenv` from
-  there. `client_work/.gitignore` (`*` + `!.gitignore`) already exists (the groundwork PR) — the
-  data scientists' working directories, with the existing `client_metadata.json`-in-cwd
-  convention unchanged.
-- `test_data/`: only the anonymized directories (`raw_data`, `step_*_output`); the real-client
-  directory is never copied — the tests that read it already `pytest.skip` when absent.
-- Drop: `Docs/Devlog/*` + its test, the stray 2-row CSV at the source root, `example_dot_env.md`
-  (→ `.env.example`), `example_metadata.json` (no reader), `SCRIPT_DESCRIPTIONS.md`.
-- Tests → `python/lab/tests/`: `test_{clean_product_weights,extract_other_compat,extract_pdf,
-  extract_tabular_inspection,extract_tabular_io,notebook_runscript_setup,pilot_analysis,
-  procurement_serving_comparison,categorize_runscript}.py`, `test_report_diagnostics_extract.py`
-  (the 16 lifted tests), `test_llm_extraction.py` (the PDF/whisper classes from `test_llms`).
-- Lab deps: `gbd-foodservice-insights` (workspace), `chardet`, `google-genai`, `ipython`,
+- Same `git archive` mechanics: the lab package → `python/lab/`; `tests/lab` →
+  `python/lab/tests/`; the runscripts directory → `python/lab/<its name at the SHA>/` (the four
+  notebooks are already output-stripped by the source's pre-commit hook, and `just lint`
+  verifies that); `test_data/` minus `baseline_comparison/` → `python/lab/test_data/`, the
+  runscripts' anonymized sample dataset (its README says so). Keep the monorepo's `__init__.py`
+  and `data_files/README.md` as in PR 1.
+- `python/lab/pyproject.toml` dependencies: `chardet`, `google-genai`, `ipython`,
   `llmwhisperer-client`, `matplotlib`, `numpy`, `openai`, `openpyxl`, `pandas`, `PyPDF2`,
-  `python-dotenv`, `requests`, `seaborn`, `thefuzz`. Not `python-docx` (imported nowhere).
-- Docs: lab `README.md` (pipeline steps ↔ runscripts from the source `pipeline_diagram.md`; lab
-  conventions from the source AGENTS.md — CSV intermediates, `client/period/step` filenames,
-  common broken-data shapes; `client_work/`; obtaining the CSVs). Library `README.md` (new,
-  short): "editing the report — which module owns which change", from the source reference doc
-  minus its personal path. python.md Open item on the source conventions → resolved.
-- Source repo afterwards: one README line ("archived into `foodservice-insights` at commit …"),
-  then archive. Nothing else is done there.
+  `python-dotenv`, `requests` (imported by the extraction module but never declared in the
+  source — it arrives transitively there), `seaborn`, `thefuzz`. Not `python-docx`.
+- `client_work/` is the data scientists' working directory, gitignored except its own
+  `.gitignore`; the `client_metadata.json`-in-cwd convention is unchanged; `.env` is the repo
+  root's. `.env.example` gains `GEMINI_API_KEY=` and `LLM_WHISPERER_API_KEY=` marked lab-only.
+- Gate: `just lint && just check && just test-lab` green **with none of the three cache CSVs
+  present**; the denylist grep on the diff is empty.
+- Docs. New `python/lab/README.md`: what the lab is and is not (ships nothing, carries none of
+  the product's guarantees — `python.md` § The lab boundary has the rule); pipeline steps ↔
+  runscripts as one table (replaces the source's `pipeline_diagram.md`); working in
+  `client_work/`; obtaining the two cache CSVs and where they go; the lab-workflow conventions
+  from the source `AGENTS.md` — CSV intermediates, `client/period/step` filenames, the common
+  shapes of broken client data; `just fmt` before committing a notebook. `python.md`'s
+  conventions Open is deleted — PR 1 and this README split it between them.
+- Not ported: `AGENTS.md` and `CLAUDE.md` (bound to one machine and to the Analyses Drive;
+  `python.md` and the two READMEs replace them), `.pre-commit-config.yaml` and `.github/` (this
+  repo's CI), `Docs/dead_code/`, `Docs/monorepo_migration/`, the source `README.md` and
+  `example_dot_env.md` (folded into the READMEs and `.env.example`), both `SCRIPT_DESCRIPTIONS.md`
+  (per-module prose the module docstrings already carry), `pipeline_diagram.md` (the lab
+  README's table), `Docs/reference/example_client_metadata.json` (no reader), `LICENSE` (this
+  repo's MIT covers the tree, same holder).
+- Source repo afterwards: once one real client analysis has been run from `python/lab/` — the
+  mirror of `prework.md`'s "before the copy" check — add one README line ("archived into
+  `foodservice-insights` at commit …") and archive it on GitHub. Nothing else is done there.
 
-## PR 3 — Move serving mode into the lab
+## PR 3 — `LlmClient` protocol, one retry layer, keyword fake
 
-Goal: the library's categorization path is procurement-only; the lab composes library steps
-with its own entree detector.
+- A `Protocol` with the three operations that are the live contents of `categorize_llm.py`:
+  clean a product name, match a cleaned name to a category, fuzzy-match a label to a category.
+  `OpenAiLlmClient` (frozen dataclass: `client`, `model="gpt-4.1-mini"`, `sleep=time.sleep`)
+  implements it and has `from_env()` reading `OPENAI_API_KEY` into
+  `openai.OpenAI(max_retries=0, timeout=60)`.
+- Retry: five attempts, exponential 2/4/8/16 s plus jitter — about 30 s worst case per call,
+  asserted `< 60 s` in a test, far below the parent's `killAfterNoProgressMs`. Retryable:
+  `APIConnectionError`, `APITimeoutError`, `RateLimitError`, `InternalServerError`, and
+  `APIStatusError` in `{408, 409, 425, 429, 500, 502, 503, 504}`; any other `openai.APIError`
+  → `UpstreamApiError` at once; exhaustion → `UpstreamApiError`. Imports `errors.py` directly,
+  the leaf. Today the categorization path has **no retry at all** — one 429 discards every paid
+  call in the run.
+- Threading it through: `categorize_products(df, llm, …)`, `categorize_file(…, llm)` and the
+  three step functions take an `LlmClient` where they took `openai_client: Any`. The lab's
+  categorize runscript and `LLM_testing.py` wrap `setup_api_clients()["openai_client"]` in
+  `OpenAiLlmClient`. The Gemini entree function is untouched.
+- `testing.KeywordLlmClient`, shipped beside `stub_analysis`: an ordered keyword → category table
+  (specific before generic, else `"No Matches Found"`), a small name-cleaning pass,
+  `difflib.get_close_matches` for fuzzy matching, and a `calls` list so tests can count LLM
+  calls.
+- Tests: the retry schedule with a recording `sleep`; exhaustion; a 401 fails immediately; every
+  keyword-table value is in `get_GBD_categories()`; the `patch.object` stacks in
+  `test_categorize_steps` become a tiny in-test `LlmClient`.
+- Docs: `python.md` gains § LLM providers — OpenAI does categorization; GBD prefers Gemini for
+  new work; the OpenAI class is where a swap happens. `ARCHITECTURE.md`'s failure row "e.g.
+  Gemini" → OpenAI.
 
-- → `gbd_foodservice_insights_lab/serving.py`: `categorize_entrees.py` wholesale; from
-  `categorize_cache.py` the entree-cache functions (`get_previously_classified_entrees` now reads
-  the lab's gitignored file), `_normalize_entree_classification`,
-  `build_entree_cleaned_name_reuse_index`, `save_historical_entree_classifications`,
-  `backfill_entree_cleaned_names`; `categorize_reviews.build_entree_human_review_table`;
-  `LLMs.classify_entree`; `ENTREE_SERVING_SIZE_MAP`.
-- Library generalisations: `categorize_products` loses `data_type`, `gemini_client`,
-  `historical_entree_classifications`, `update_historical_entree_classifications` and the
-  `"serving"` blocks, and is split into `_prepare(df)`, `_categorize_unique_products(...)`,
-  `merge_categorizations(...)` so the lab's `categorize_serving_products` can insert
-  `run_entree_detector` before the merge (it needs `unique_products_df`, never returned today).
-  `merge_categorizations(..., *, extra_merge_columns=(), keep_rows=None)` — the entree filter
-  becomes the lab's `keep_rows=`. `_normalize_product_name`/`_unanimous_index` become public.
-- Tests: `test_categorize_entrees.py` → lab `test_serving.py`; the serving `merge_categorizations`
-  test and the 4 entree `test_categorize_cache` tests → lab; one new library test for `keep_rows`.
+## PR 4 — `analyze()`
 
-## PR 4 — `LlmClient` protocol, one retry layer, keyword fake
+Goal: the seam is implemented; `WORKER_MODE=live` works with a real key. This is the PR
+`categorization-cache.md` waits on.
 
-- `LLMs.py` → `llm.py`:
-
-  ```python
-  class LlmClient(Protocol):
-      def clean_product_name(self, product: str) -> str: ...
-      def categorize(self, cleaned_name: str, categories: Sequence[str]) -> str: ...
-      def fuzzy_match_category(self, label: str, categories: Sequence[str]) -> str: ...
-
-
-  @dataclass(frozen=True)
-  class OpenAiLlmClient:  # openai.OpenAI(max_retries=0, timeout=60): this loop is the one retry layer
-      client: openai.OpenAI
-      model: str = "gpt-4.1-mini"
-      sleep: Callable[[float], None] = time.sleep
-
-      @classmethod
-      def from_env(cls) -> "OpenAiLlmClient": ...  # OPENAI_API_KEY
-  ```
-
-  `MAX_ATTEMPTS = 5`, exponential 2/4/8/16 s + jitter (≈30 s worst case per call, asserted
-  `< 60 s` in a test — far below the parent's `killAfterNoProgressMs`, since a sleep reports no
-  progress). Retryable: `APIConnectionError`, `APITimeoutError`, `RateLimitError`,
-  `InternalServerError`, `APIStatusError` in `{408,409,425,429,500,502,503,504}`; other
-  `openai.APIError` → `UpstreamApiError` at once; exhaustion → `UpstreamApiError`. The SDK's own
-  `max_retries=2` is disabled so there is exactly one retry layer (as `apps/worker/src/failures.ts`
-  rules). Today the categorization path has **no retry at all** — a single 429 kills a run.
-- `errors.py` (leaf, `AnalysisError` + the three subclasses, re-exported from `analysis.py`)
-  already exists (the groundwork PR); `llm.py` imports it directly, avoiding the
-  `llm.py → analysis.py → categorize.py` cycle it was written for. `worker_child` imports
-  unchanged.
-- `categorize_steps`: `clean_product_names(df, llm, *, report_progress)`,
-  `categorize_with_llm(df, llm, *, report_progress)`, `fuzzy_match_GBD_categories(df, llm)` —
-  each loop body calls `llm.<op>()` then `report_progress()`. `categorize_products(df, llm,
-  historical_categorizations=None, *, report_progress=_ignore, ...)` (`None` → the packaged
-  loader, as today).
-- `testing.KeywordLlmClient`: the throwaway PoC's 100-entry ordered keyword→category table
-  (specific before generic, else `"No Matches Found"`), its name-cleaning regexes,
-  `difflib.get_close_matches` for fuzzy matching (stdlib), and a `calls` list so tests can count
-  LLM calls. **No prompt fingerprinting** (the PoC routed mocks by prompt substrings — brittle).
-- Tests: retry schedule with a recording `sleep`; exhaustion; non-retryable 401; every keyword
-  table value ∈ `get_GBD_categories()`; the `patch.object` stacks in `test_categorize_steps`
-  become a tiny in-test `LlmClient`.
-- Docs: python.md § LLM providers (OpenAI for categorization in `llm.py`; GBD prefers Gemini for
-  new work; `llm.py` is where a swap happens). ARCHITECTURE.md failure row "e.g. Gemini" → OpenAI.
-
-## PR 5 — `analyze()` and `organizationName`
-
-Goal: the seam is implemented; `WORKER_MODE=live` works with a real key.
-
-`report.organizationName` (the PDF's "client" slot names the organization) already landed as its
-own contract change ahead of this PR, along with trimming the env allowlist to
-`PATH, HOME, LANG, TZ, OPENAI_API_KEY` — the PDF extractor and the entree detector that used the
-other two keys live in the lab now. `AnalysisRequest.organization_name: str` already exists;
-`analyze()` below is the only thing left to write.
-
-- `analyze()`:
-
-  ```python
-  LB_TO_KG: Final = 0.45359237
+```python
+LB_TO_KG: Final = 0.45359237
 
 
-  def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -> AnalysisOutcome:
-      llm = llm if llm is not None else OpenAiLlmClient.from_env()
-      df = _read_input_csv(request.input_csv)  # InvalidInputError on any shape problem
-      if request.unit_system == "lb":
-          df["weight"] *= LB_TO_KG
-      df_final, summary, ai_review_df = categorize_products(
-          df,
-          llm,
-          get_previously_categorized_items(),
-          dayfirst_preference=False,
-          report_progress=report_progress,
-      )
-      report_input = (
-          request.work_directory / "categorized_report.csv"
-      )  # stem → food_report_report.{pdf,xlsx}
-      df_final.rename(columns={"weight": "kilos_total"})[
-          ["date", "product", "category", "kilos_total"]
-      ].to_csv(report_input, index=False)
-      (request.work_directory / "client_metadata.json").write_text(
-          json.dumps(
-              {
-                  "client": _title(request),
-                  "baseline_pilot": "baseline",
-                  "procurement_serving": "procurement",
-              }
-          )
-      )
-      result = run_food_report(
-          input_file=report_input,
-          diner_meal_mapping=dict(request.monthly_counts),
-          output_dir=request.work_directory / "report",
-          procurement_serving="procurement",
-          diner_or_meal={"people": "diner", "meals": "meal"}[request.counts_basis],
-          region="us",
-          missing_data_policy="warn_continue",
-          show_quality_successes=False,
-          report_progress=report_progress,
-      )
-      pdf = _move(Path(result["pdf_path"]), request.output_directory)  # place_result_files renames
-      xlsx = _move(Path(result["client_excel_path"]), request.output_directory)
-      return AnalysisOutcome(
-          pdf=pdf, xlsx=xlsx, metadata=json_safe(_metadata(summary, result, ai_review_df))
-      )
-  ```
+def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -> AnalysisOutcome:
+    llm = _reporting(llm if llm is not None else OpenAiLlmClient.from_env(), report_progress)
+    df = _read_input_csv(request.input_csv)  # InvalidInputError on any broken promise
+    if request.unit_system == "lb":
+        df["weight"] *= LB_TO_KG
+    df_final, summary, ai_review_df = categorize_products(
+        df, llm, historical_categorizations=get_previously_categorized_items(),
+        cache_write_mode="none", dayfirst_preference=False,
+    )
+    # The stem names the outputs: food_report_report.{pdf,xlsx}.
+    report_input = request.work_directory / "categorized_report.csv"
+    df_final.rename(columns={"weight": "kilos_total"})[
+        ["date", "product", "category", "kilos_total"]
+    ].to_csv(report_input, index=False)
+    (request.work_directory / "client_metadata.json").write_text(json.dumps({
+        "client": _title(request),
+        "baseline_pilot": "baseline",
+        "procurement_serving": "procurement",
+    }))
+    result = run_food_report(
+        input_file=report_input,
+        diner_meal_mapping=dict(request.monthly_counts),  # the library checks isinstance(x, dict)
+        output_dir=request.work_directory / "report",
+        procurement_serving="procurement",
+        diner_or_meal={"people": "diner", "meals": "meal"}[request.counts_basis],
+        region="us", missing_data_policy="warn_continue", show_quality_successes=False,
+        report_progress=report_progress,
+    )
+    return AnalysisOutcome(
+        pdf=_move(Path(result["pdf_path"]), request.output_directory),
+        xlsx=_move(Path(result["client_excel_path"]), request.output_directory),
+    )
+```
 
-- `matplotlib.use("Agg")` at the top of `analysis.py` before `food_report` is imported.
-- `run_food_report`'s two file couplings (stem-derived identity; `client_metadata.json` sibling)
-  are worked around in `work_directory` (discarded) and refactored in PR 7. The one
-  `food_report.py` change: `report_progress`, called from `_log_stage` (15 stage boundaries;
-  plot/PDF stages take tens of seconds). `dict(request.monthly_counts)` because the library does
-  `isinstance(x, dict)` and the manifest hands a `MappingProxyType`.
-- `_title(request)` → `organization_name`, with ` — {site_name}` appended when present.
-- Exception mapping by construction: `_read_input_csv` raises `InvalidInputError` for wrong
-  columns / zero rows / non-numeric weight / non-ISO date / empty product, so library
-  `ValueError`s are *not* blanket-mapped. `merge_categorizations`'s >80%-eliminated
-  `AssertionError` becomes `raise UnusableDataError(...)`. `UpstreamApiError` propagates from
-  `OpenAiLlmClient`. Everything else → `unknown` with a traceback — correct, it is our bug.
-- `metadata` = `{"categorization": {n_products_before, n_products_after, pct_remaining,
-  n_rows_before, n_rows_after, row_elimination_details, match_type_counts,
-  new_categorizations: [{product, cleaned_name, category}, …]}, "report": {quality_status,
-  quality_summary, findings}}` through `json_safe()` (numpy scalars, `pd.Period`, `Path`, NaN →
-  None; `worker_child`'s writer refuses NaN). `new_categorizations` is every product the LLM
-  categorized this run, incl. `"No Matches Found"` — kept in `result_metadata` so the
-  categorization-cache plan can backfill from it and nothing the LLM did is lost. It needs
-  `build_ai_review_table` to return `cleaned_item_names` too (it returns only
-  `[category, product, occurrence_count]` today — the gap that left the PoC without cleaned
-  names).
-- Tests (`python/insights/tests/test_analysis.py`, `KeywordLlmClient`, no network): end-to-end on
-  a synthetic CSV (3 months, ~12 keyword-table products, 2 unknowns) — `%PDF` magic, xlsx sheet
-  names, one `new_categorizations` row per unique product with a non-empty cleaned name,
-  `match_type_counts == {"llm": n}`, `report_progress` count; keep it in the default suite
-  (8–20 s; PR 7's graph-export skip is the real speedup). Cache hit (a temp CSV patched in as the
-  loader's path) changes `match_type_counts` and shortens `llm.calls`; lb→kg;
-  `counts_basis="meals"`; each `InvalidInputError` branch; `UnusableDataError`; `UpstreamApiError`
-  passthrough; `json_safe`.
-- Manual `WORKER_MODE=live`: `.env` with `OPENAI_API_KEY`, `PYTHON_BIN=.venv/bin/python`; first
-  call `analyze()` from `uv run python` on a 20-row CSV in a temp dir and inspect the PDF; then
-  `pnpm dev`, upload the same CSV, watch `output/progress.json` tick, download both files.
-  ~40 `gpt-4.1-mini` calls.
-- Docs: REQUIREMENTS.md "the existing AI library" → the package; `apps/worker/README.md` `live`
-  row loses "Raises NotImplementedError"; `analysis.py`'s AI-usage Open points at
-  `OpenAiLlmClient` as where tokens would be counted; its cache Open stays, pointing at the
-  categorization-cache plan.
+- `matplotlib.use("Agg")` at the top of `analysis.py`, before the report module is imported.
+- `_read_input_csv` checks what the contract promises — the three columns, at least one row,
+  numeric weights, ISO dates, non-empty products — and raises `InvalidInputError`. Library
+  `ValueError`s are *not* blanket-mapped: past that check they are our bug and belong to
+  `unknown` with a traceback.
+- `_reporting(llm, report_progress)` is a small forwarding `LlmClient` that calls
+  `report_progress()` after each operation. The one report-module edit is a `report_progress`
+  keyword on `run_food_report`, called from `_log_stage` (fifteen stage boundaries; the plot and
+  PDF stages take tens of seconds).
+- `merge_categorizations`' ">80% of products eliminated" `AssertionError` becomes
+  `raise UnusableDataError(...)` at the raise site. `UpstreamApiError` propagates from the
+  client. A missing `OPENAI_API_KEY` raises from `from_env()` and lands as `unknown` — a
+  deployment bug, not an upstream failure.
+- `run_food_report`'s two file couplings — output names derived from the input stem, and
+  `client_metadata.json` read from and written beside the input — are satisfied inside
+  `work_directory`, which is discarded. Refactoring them away is a later cleanup.
+- `_title(request)` is `organization_name`, with ` — {site_name}` when present.
+- `AnalysisOutcome` stays `pdf` and `xlsx`. Product code never writes the cache; the products
+  this run's LLM categorized are lost until `categorization-cache.md` adds
+  `new_categorizations` to the outcome — that plan also needs `build_ai_review_table` to return
+  `cleaned_item_names`, which it returns without today.
+- Tests in `python/insights/tests/test_analysis.py`, all on `KeywordLlmClient` with no network:
+  end to end on a synthetic CSV (three months, a dozen keyword-table products, two unknowns) —
+  `%PDF` magic, the workbook opens with the expected sheets, `report_progress` was called at
+  least once per LLM call and per stage; a cache hit (a temp CSV patched in as the loader's path)
+  shortens `llm.calls` and shows in `summary["match_type_counts"]`; lb → kg; `counts_basis=
+  "meals"`; each `InvalidInputError` branch; `UnusableDataError` when every product is unknown;
+  `UpstreamApiError` passthrough from a raising fake. The end-to-end case is 8–20 s; keep it in
+  the default suite. Delete the two "not ported yet" tests (`test_analysis.py` here and
+  `test_run.py` in `worker_child`); the latter becomes "the default `analyze` with no key fails
+  `unknown` naming the key".
+- Manual `WORKER_MODE=live`: `.env` with `OPENAI_API_KEY`; first call `analyze()` from
+  `uv run python` on a 20-row CSV in a temp directory and read the PDF; then `pnpm dev`, upload
+  the same CSV, watch `output/progress.json` tick, download both files. About forty
+  `gpt-4.1-mini` calls.
+- Docs: `REQUIREMENTS.md` § Processing "the existing AI library" → the package;
+  `apps/worker/README.md`'s `live` row loses "Raises NotImplementedError"; `analysis.py`'s two
+  "once the library is ported" Opens now point at the real shapes (the `summary` dict for
+  result metadata, `OpenAiLlmClient` for token counts); its cache Open stays.
 
-## PR 6 — `WORKER_MODE=mock-llm`
+## PR 5 — `WORKER_MODE=mock-llm`
 
-- `python/worker_child/worker_child/mock_llm.py`, following the `worker_child.testing`
-  precedent: `main(argv)` → `run(Path(argv[1]), analyze=functools.partial(analyze,
-  llm=KeywordLlmClient()))`. Root per-file-ignores gains this file under the existing
-  `**/testing.py` TID251 comment. Test: a real run directory with a real `input.csv` →
-  `EXIT_WROTE_RESULT`, `%PDF`, `result.json` present. A shared
-  `gbd_foodservice_insights.testing.sample_input_csv()` feeds both packages' tests.
+- `python/worker_child/worker_child/mock_llm.py`, on the `worker_child.testing` precedent:
+  `main(argv)` → `run(Path(argv[1]), analyze=functools.partial(analyze, llm=KeywordLlmClient()))`.
+  The root per-file-ignores list it under the existing `**/testing.py` TID251 comment. Test: a
+  real run directory with a real `input.csv` → `EXIT_WROTE_RESULT`, `%PDF`, `result.json`. A
+  shared `gbd_foodservice_insights.testing.sample_input_csv()` feeds both packages' tests.
 - `apps/worker/src/modes.ts`: `MOCK_LLM_MODULE = 'worker_child.mock_llm'`, delete the throw,
-  `ResolvedWorkerMode` gains `'mock-llm'` with `overrides: {}` (it *is* `live` minus the API —
-  the point is a real `killAfterNoProgressMs` against a real workload). `modes.test.ts` replaces
-  the "not available yet" test.
-- `tests/e2e`: the happy path moves to its own Playwright project on `WORKER_MODE=mock-llm`
-  (own DB, bucket, worker — its README already specifies this); `!fail:unusable-data` stays on
-  `stubbed`.
-- Docs: `apps/worker/README.md` `WORKER_MODE` rows; `tests/e2e/README.md` Open resolved;
-  python.md Status banner removed and both Open items deleted.
+  `ResolvedWorkerMode` gains `'mock-llm'` with `overrides: {}` — it *is* `live` minus the API,
+  and the point is a real `killAfterNoProgressMs` against a real workload. `modes.test.ts`
+  replaces the "not available yet" test.
+- `tests/e2e`: the happy path moves to its own Playwright project on `WORKER_MODE=mock-llm` —
+  own database, bucket and worker, as its README already specifies, since one queue cannot serve
+  two modes. `!fail:unusable-data` stays on `stubbed`. The keyword fake ships in `testing.py`, so
+  the worker image already contains it.
+- Docs: `apps/worker/README.md`'s `WORKER_MODE` rows; `tests/e2e/README.md`'s Open resolved;
+  `python.md`'s Status banner removed.
 
-## PR 7 — Later cleanups (optional; not needed for the product to work)
+## Later cleanups (optional; the product works without them)
 
-- `run_food_report(df, *, client_name, output_dir, export_graphs: bool, ...)`: no input file, no
-  stem, no `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
-  e2e-test speedup. The lab's report runscript becomes the file-reading wrapper.
-- `ThreadPoolExecutor(max_workers=4)` over the per-product LLM loops (`report_progress` is
-  already lock-protected in `writer.py`).
-- `plt.close("all")` at the end of `export_report_plots` for the lab's long-lived kernels.
-- Retire the remaining ty overrides for `report_*`; bump `gpt-4.1-mini` after a before/after on a
-  known client (GBD's call); AI usage (tokens, cost) into `metadata`.
+- **Serving mode to the lab**: entree detection, the entree cache and its loader, the Gemini
+  helpers in `llm.py` and `setup_api_clients`' Gemini branch. Drops `google-genai` and the
+  import-time `gemini_models.json` read from the shipped package. Needs `categorize_products`
+  split so the lab can run its entree detector on `unique_products_df` before the merge.
+- `run_food_report(df, *, client_name, output_dir, export_graphs)`: no input file, no stem, no
+  `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
+  end-to-end speedup. The lab's report runscript becomes the file-reading wrapper.
+- `ThreadPoolExecutor` over the per-product LLM loops (`writer.py`'s progress reporter is
+  already lock-protected); `print_progress` → logging.
+- `plt.close("all")` after plot export, for the lab's long-lived kernels.
+- AI usage (model, tokens, cost) onto the seam — `REQUIREMENTS.md` § Persistence's Open.
 
 ## Verification
 
-- Per PR: the gates above; PR 1 additionally proves `test_food_report_end_to_end_produces_valid_artifacts`
-  *ran*; PR 5 runs `pnpm exec turbo run test:system`.
-- After PR 5: `WORKER_MODE=live` with a real key on a 20-row CSV, direct call then through the app.
-- After PR 6: the e2e happy path on `WORKER_MODE=mock-llm`; `pnpm dev` with no API key at all
-  still produces a report.
-- After PR 2: `just test-lab` green with none of the three CSVs present, and `git ls-files | grep
-  '\.csv$'` shows only `tests/data/` fixtures.
+- Every PR: `just lint && just check && just test`, plus `just test-lab` when the lab is touched
+  and `pnpm lint && pnpm check && pnpm test` when TypeScript is.
+- PR 1 additionally proves the unmocked report test *ran*, and that `git ls-files` holds no
+  cache CSV.
+- PR 2: `just test-lab` green with none of the three CSVs present.
+- PR 4: the live run above, direct call then through the app; `pnpm exec turbo run test:system`.
+- PR 5: the e2e happy path on `mock-llm`, and `pnpm dev` with no API key at all still produces
+  a report.
 
 ## Risks
 
-- **`killAfterNoProgressMs` vs backoff**: ≈30 s worst case per LLM call ≪ 10 min; progress is
-  reported after every successful call and at every report stage.
-- **Memory**: a child's RSS is dominated by pandas+matplotlib+seaborn imports (~300 MB) — the
-  real constraint on children per worker. Figures are closed by `build_pdf_report`; ~15 stay
-  alive until then.
-- **The 80% assertion as a user-facing failure**: now `UnusableDataError` → "contact GBD". With
-  an empty cache on day one this can fire legitimately; watch the `unusable_data` rate.
-- **`warn_continue` still raises for programming errors** (e.g. a category not tagged
-  food/drink) → `unknown` with a traceback — desired.
-- **Whitespace**: the golden cache's `product` values are verbatim (some with leading spaces or
-  embedded newlines) while `apps/web` trims uploads; expect some exact-match misses that the
-  cleaned-name pass catches. Do not "fix" by trimming the cache.
+- **Fonts.** The report asks for Lato and Montserrat and falls back to DejaVu Sans, which
+  matplotlib bundles. The worker image has neither GBD font, so production PDFs render in
+  DejaVu until the fonts ship — in the image (deployment config, not this plan) or in the
+  package's `data_files/` via `font_manager.addfont` (both are OFL-licensed). Decide before the
+  first real client sees a PDF.
+- **`killAfterNoProgressMs` vs backoff**: about 30 s worst case per LLM call, against a
+  ten-minute kill; progress is reported after every successful call and at every report stage.
+- **Memory**: a child's RSS is dominated by the pandas, matplotlib and seaborn imports (roughly
+  300 MB) — the real constraint on children per worker. Figures are closed by the PDF builder,
+  so about fifteen stay alive until then.
+- **The 80% assertion as a user-facing failure**, now `UnusableDataError` → "contact GBD". With
+  an empty cache on day one it can fire legitimately; watch the `unusable_data` rate.
+- **`warn_continue` still raises for programming errors** (a category not tagged food or drink,
+  say) → `unknown` with a traceback — desired.
+- **Whitespace**: the cache's `product` values are verbatim, some with leading spaces or embedded
+  newlines, while `apps/web` trims uploads; expect exact-match misses that the cleaned-name pass
+  catches. Do not "fix" it by trimming the cache.
+- **CI and image time**: `uv sync` now installs the scientific stack (cached by `setup-uv`), and
+  the system-e2e image build grows with it.

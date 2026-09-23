@@ -12,7 +12,7 @@ per claim, so the next spawn always sees the latest verified rows. Python never 
 database. The library's other two caches (entree classifications, weight patterns) stay
 gitignored files in the lab — only the product cache gets a table.
 
-This plan depends on `python-port.md` PR 6 (`analyze()`) having landed, since PR 5 here edits
+This plan depends on `python-port.md` PR 4 (`analyze()`) having landed, since PR 5 here edits
 `categorize_cache.py` and the seam it defines. PRs 1–4 touch only `packages/db`, `contract/`, and
 `apps/worker`, and can start any time.
 
