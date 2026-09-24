@@ -1,0 +1,9 @@
+{
+  "utils.call_gemini_api_default": "gemini-3-flash-preview",
+  "categorize.entree_flash": "gemini-3-flash-preview",
+  "categorize.entree_pro": "gemini-3.1-pro-preview",
+  "clean_product_weights.weight_extraction": "gemini-3.1-pro-preview",
+  "extract_pdf.gemini_visual_fallback": "gemini-3-flash-preview",
+  "gemini_api_examples.flash": "gemini-3-flash-preview",
+  "gemini_api_examples.pro": "gemini-3.1-pro-preview"
+}

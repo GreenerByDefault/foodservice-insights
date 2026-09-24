@@ -58,5 +58,5 @@ Add it to `[project.dependencies]` of the package that imports it, then `just sy
 
 ### API keys
 
-The analysis library will want `OPENAI_API_KEY`. It is deliberately absent from
-[`../.env.example`](../.env.example) until the code that reads it lands.
+The analysis library reads `OPENAI_API_KEY`. Set it in the repo root's `.env`; see
+[`../.env.example`](../.env.example).
