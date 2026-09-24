@@ -42,6 +42,7 @@ RUN npm install -g pnpm@11.18.0
 WORKDIR /src
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY patches patches
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/db/package.json packages/db/package.json

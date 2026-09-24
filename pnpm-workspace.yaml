@@ -87,3 +87,11 @@ catalog:
 # Drop an entry once the version is no longer new.
 minimumReleaseAgeExclude:
   - shadcn-svelte@1.5.0
+
+# Fix for https://github.com/huntabyte/bits-ui/pull/2166.
+patchedDependencies:
+  bits-ui@2.18.1: patches/bits-ui@2.18.1.patch
+# bits-ui is only a dependency of @gbd/web, so `pnpm deploy --filter @gbd/worker` (apps/worker's
+# Dockerfile) prunes it out of scope entirely — pnpm would otherwise treat the patch above as
+# unused and fail that deploy.
+allowUnusedPatches: true
