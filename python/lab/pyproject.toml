@@ -3,7 +3,24 @@ name = "gbd-foodservice-insights-lab"
 version = "0.0.0"
 description = "Experiments against the analysis library. Ships nothing; nothing imports it."
 requires-python = ">=3.14"
-dependencies = ["gbd-foodservice-insights"]
+dependencies = [
+    "chardet>=5.2,<6",
+    "gbd-foodservice-insights",
+    "google-genai>=1.62,<2",
+    "ipython>=8,<10",
+    "llmwhisperer-client>=2.4,<3",
+    "matplotlib>=3.10,<4",
+    "numpy>=2.2,<3",
+    "openai>=2.15,<3",
+    "openpyxl>=3.1,<4",
+    "pandas>=2.2,<4",
+    "pydantic>=2,<3",
+    "PyPDF2>=3.0,<4",
+    "python-dotenv>=1.1,<2",
+    "requests>=2.32,<3",
+    "seaborn>=0.13,<1",
+    "thefuzz>=0.22,<1",
+]
 
 [build-system]
 requires = ["hatchling"]

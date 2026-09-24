@@ -59,4 +59,4 @@ Add it to `[project.dependencies]` of the package that imports it, then `just sy
 ### API keys
 
 The analysis library reads `OPENAI_API_KEY`. Set it in the repo root's `.env`; see
-[`../.env.example`](../.env.example).
+[`../.env.example`](../.env.example). The lab reads two more; see [`lab/README.md`](lab/README.md).

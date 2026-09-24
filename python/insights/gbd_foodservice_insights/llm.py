@@ -97,7 +97,7 @@ def setup_api_clients(
         # Imported here rather than at module scope: LLM Whisperer is only used by PDF extraction,
         # which is on its way to a separate lab package. Deferring the import keeps everything
         # else in this module importable without llmwhisperer-client installed.
-        from unstract.llmwhisperer import LLMWhispererClientV2  # ty: ignore[unresolved-import]
+        from unstract.llmwhisperer import LLMWhispererClientV2
 
         api_key = os.getenv("LLM_WHISPERER_API_KEY")
         if not api_key:
