@@ -27,7 +27,7 @@ from gbd_foodservice_insights.categorization.cache import (
     build_entree_cleaned_name_reuse_index,
     get_previously_classified_entrees,
 )
-from gbd_foodservice_insights.llm import call_gemini_api, get_gemini_model
+from gbd_foodservice_insights.gemini import call_gemini_api, get_gemini_model
 from gbd_foodservice_insights.llm_prompts import load_prompt
 from gbd_foodservice_insights.utils import print_progress
 

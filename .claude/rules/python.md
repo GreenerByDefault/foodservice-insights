@@ -49,6 +49,14 @@ constraints, so its code carries none of the product's guarantees.
 - Put code in the lab when it is exploratory, and move it into `gbd_foodservice_insights` when
   the worker needs it — not the other way around.
 
+## LLM providers
+
+- **Categorization runs on OpenAI, behind `LlmClient`** in `categorization/llm.py`. Pipeline
+  code takes an `LlmClient`, never a provider SDK client; `OpenAiLlmClient` is where a provider
+  swap happens.
+- **GBD prefers Gemini for new LLM work.** Entree detection (serving data) already uses it.
+- **Tests use `testing.KeywordLlmClient`**, never the network.
+
 ## Style
 
 - **Tests live in `<package>/tests/`, not beside the code.**

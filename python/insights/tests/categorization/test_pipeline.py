@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache, pipeline, steps
 from gbd_foodservice_insights.categorization.pipeline import categorize_file, categorize_products
+from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
 def test_categorize_products_cache_write_mode_controls_destination():
@@ -68,7 +69,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
     ):
         categorize_products(
             df=df,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
             data_type="procurement",
             cache_write_mode="none",
         )
@@ -77,7 +78,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
 
         categorize_products(
             df=df,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
             data_type="procurement",
             cache_write_mode="reviewed",
         )
@@ -86,7 +87,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
 
         categorize_products(
             df=df,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
             data_type="procurement",
             cache_write_mode="web_app_unreviewed",
         )
@@ -96,7 +97,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
         with pytest.raises(ValueError, match="Invalid cache_write_mode"):
             categorize_products(
                 df=df,
-                openai_client=object(),
+                llm=KeywordLlmClient(),
                 data_type="procurement",
                 cache_write_mode="invalid-mode",
             )
@@ -114,7 +115,7 @@ def test_categorize_products_raises_when_date_cleaning_leaves_missing_values():
     ):
         categorize_products(
             df=df,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
             data_type="procurement",
         )
 
@@ -133,7 +134,7 @@ def test_categorize_products_raises_when_weight_cleaning_leaves_missing_values()
     ):
         categorize_products(
             df=df,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
             data_type="procurement",
         )
 
@@ -173,7 +174,7 @@ def test_categorize_file_writes_human_review_csv(tmp_path):
         _, result_summary = categorize_file(
             input_filepath=input_path,
             output_filepath=output_path,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
         )
 
     expected_review_path = tmp_path / "output_categorized_for_human_review.csv"
@@ -229,7 +230,7 @@ def test_categorize_file_writes_entree_human_review_csv(tmp_path):
         _, result_summary = categorize_file(
             input_filepath=input_path,
             output_filepath=output_path,
-            openai_client=object(),
+            llm=KeywordLlmClient(),
             gemini_client=object(),
             data_type="serving",
         )
@@ -258,22 +259,17 @@ def test_categorize_products_reuses_cleaned_names_and_skips_llm():
         }
     )
 
-    categorize_calls = {"n": 0}
+    class EverythingIsWholeMilk(KeywordLlmClient):
+        def clean_product_name(self, item: str) -> str:
+            super().clean_product_name(item)
+            return "whole milk"
 
-    def fake_clean(item, openai_client, max_tokens):
-        return "whole milk"
-
-    def fake_categorize(item, categories, openai_client, max_tokens):
-        categorize_calls["n"] += 1
-        return "No Matches Found"
-
+    llm = EverythingIsWholeMilk()
     empty_web_app = pd.DataFrame(
         columns=["product", "category", "cleaned_item_names", "review_status"]
     )
 
     with (
-        patch.object(steps, "clean_product_name_llm", side_effect=fake_clean),
-        patch.object(steps, "match_product_to_category_llm", side_effect=fake_categorize),
         patch.object(steps, "get_GBD_categories", return_value=["Dairy"]),
         patch.object(cache, "get_GBD_categories", return_value=["Dairy"]),
         patch.object(
@@ -286,14 +282,14 @@ def test_categorize_products_reuses_cleaned_names_and_skips_llm():
     ):
         df_final, summary, ai_review_df = categorize_products(
             df=df,
-            openai_client=object(),
+            llm=llm,
             data_type="procurement",
             historical_categorizations=historical,
             cache_write_mode="none",
         )
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
-    assert categorize_calls["n"] == 0
+    assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
     assert summary["match_type_counts"].get("cleaned_name_history") == 2
     assert set(df_final["category"]) == {"Dairy"}
     # Trusted reuse -> nothing queued for human review.

@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from gbd_foodservice_insights.llm import call_gemini_api, get_gemini_model
+from gbd_foodservice_insights.gemini import call_gemini_api, get_gemini_model
 from openai import OpenAI
 from requests.exceptions import ConnectionError, ReadTimeout, Timeout
 from unstract.llmwhisperer.client_v2 import LLMWhispererClientException

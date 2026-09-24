@@ -36,6 +36,7 @@ from gbd_foodservice_insights.categorization.cache import (
     save_unreviewed_web_app_categorizations,
 )
 from gbd_foodservice_insights.categorization.entrees import run_entree_detector
+from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.reviews import (
     build_ai_review_table,
     build_entree_human_review_table,
@@ -62,7 +63,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 def categorize_products(
     df: pd.DataFrame,
-    openai_client: Any,
+    llm: LlmClient,
     gemini_client: Any | None = None,
     data_type: str = "procurement",
     historical_categorizations: pd.DataFrame | None = None,
@@ -82,8 +83,8 @@ def categorize_products(
     ----------
     df : DataFrame
         Input data with columns: product, date, weight.
-    openai_client : Any
-        OpenAI API client for categorization and name cleaning.
+    llm : LlmClient
+        Categorization and name cleaning.
     gemini_client : Any, optional
         Gemini API client. Required when data_type="serving".
     data_type : str
@@ -116,9 +117,6 @@ def categorize_products(
           pct_remaining, n_rows_before, n_rows_after, row_elimination_details
         - AI-only review table (excludes historically categorized products)
     """
-    if openai_client is None:
-        raise ValueError("openai_client is required.")
-
     if data_type == "serving" and gemini_client is None:
         raise ValueError("gemini_client is required for serving data.")
 
@@ -165,7 +163,7 @@ def categorize_products(
     )
 
     # --- Step 2: Clean product names for uncategorized items ---
-    unique_products_df = clean_product_names(unique_products_df, openai_client)
+    unique_products_df = clean_product_names(unique_products_df, llm)
 
     # --- Step 2.5: Reuse categories for recognised cleaned names ---
     cleaned_name_reuse_index = build_cleaned_name_reuse_index(
@@ -176,10 +174,10 @@ def categorize_products(
     )
 
     # --- Step 3: LLM categorization for still-uncategorized items ---
-    unique_products_df = categorize_with_llm(unique_products_df, openai_client)
+    unique_products_df = categorize_with_llm(unique_products_df, llm)
 
     # --- Step 4: Normalize categories (fuzzy match non-standard ones) ---
-    unique_products_df = fuzzy_match_GBD_categories(unique_products_df, openai_client)
+    unique_products_df = fuzzy_match_GBD_categories(unique_products_df, llm)
 
     check_GBD_categories(unique_products_df)
 
@@ -246,9 +244,9 @@ def categorize_products(
 # ----------------------------------------------------------------------
 def categorize_file(
     input_filepath: str | Path,
+    llm: LlmClient,
     output_filepath: str | Path | None = None,
     data_type: str = "procurement",
-    openai_client: Any = None,
     gemini_client: Any = None,
     date_format: str | None = None,
     dayfirst_preference: bool | None = None,
@@ -264,12 +262,12 @@ def categorize_file(
     ----------
     input_filepath : str or Path
         Path to input file (.csv, .xlsx, .xls, or .xlsm).
+    llm : LlmClient
+        Categorization and name cleaning.
     output_filepath : str or Path, optional
         Path for output file. If None, generates name from input file.
     data_type : str
         "procurement" or "serving".
-    openai_client : Any
-        OpenAI API client.
     gemini_client : Any, optional
         Gemini API client. Required for serving data.
     date_format : str, optional
@@ -315,7 +313,7 @@ def categorize_file(
     # Run core pipeline
     df_result, summary, ai_review_df = categorize_products(
         df=df,
-        openai_client=openai_client,
+        llm=llm,
         gemini_client=gemini_client,
         data_type=data_type,
         date_format=date_format,

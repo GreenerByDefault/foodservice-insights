@@ -1,3 +1,9 @@
+import difflib
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Final, Literal
+
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisOutcome,
@@ -48,3 +54,59 @@ def stub_analysis(
         xlsx.write_bytes(XLSX_MAGIC_BYTES)
 
     return AnalysisOutcome(pdf=pdf, xlsx=xlsx)
+
+
+# The first keyword found in a name wins, so a keyword must come before any shorter one it
+# contains — "oat milk" before "milk" — or it can never match.
+KEYWORD_CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
+    ("oat milk", "Oat Milk"),
+    ("soy milk", "Soy Milk"),
+    ("almond milk", "Almond/Coconut Milk"),
+    ("beyond burger", "Plant-based Meats"),
+    ("peanut butter", "Nuts & Seeds"),
+    ("ice cream", "Ice Cream"),
+    ("liquid egg", "Liquid Eggs"),
+    ("egg", "Shelled Eggs"),
+    ("shrimp", "Shellfish (Shrimp & lobster)"),
+    ("salmon", "Fish & Mollusks"),
+    ("chicken", "Poultry (Chicken & Turkey)"),
+    ("turkey", "Poultry (Chicken & Turkey)"),
+    ("beef", "Beef and Buffalo Meat"),
+    ("pork", "Pork (pig meat)"),
+    ("lamb", "Lamb/mutton & goat meat"),
+    ("cheese", "Cheese"),
+    ("butter", "Butter"),
+    ("yogurt", "Yogurt"),
+    ("cream", "Cream"),
+    ("milk", "Milk (Cow's milk)"),
+    ("mayo", "Mayo"),
+    ("lentil", "Legumes"),
+    ("brown rice", "Whole Grains"),
+)
+NO_MATCH: Final = "No Matches Found"
+
+type LlmOperation = Literal["clean", "match", "fuzzy"]
+
+
+@dataclass
+class KeywordLlmClient:
+    """An offline `LlmClient` that categorizes by keyword, so a whole analysis can run with no
+    network and no API key. `calls` records every operation, for tests that count LLM calls."""
+
+    calls: list[tuple[LlmOperation, str]] = field(default_factory=list)
+
+    def clean_product_name(self, item: str) -> str:
+        self.calls.append(("clean", item))
+        return " ".join(re.sub(r"[^a-z ]", " ", item.lower()).split())
+
+    def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+        self.calls.append(("match", item))
+        lowered = item.lower()
+        return next(
+            (category for keyword, category in KEYWORD_CATEGORIES if keyword in lowered),
+            NO_MATCH,
+        )
+
+    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
+        self.calls.append(("fuzzy", item))
+        return next(iter(difflib.get_close_matches(item, categories, n=1)), NO_MATCH)
