@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { RESEND_COOLDOWN_S } from '$lib/auth/sign-in';
 import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '$lib/auth/testing/fake';
@@ -225,6 +226,23 @@ describe('CodeStep', () => {
     await expect.element(codeField(screen)).toHaveValue('');
     expect(cellText(screen)).toEqual(['', '', '', '', '', '']);
     await expect.poll(() => document.activeElement).toBe(codeField(screen).element());
+  });
+
+  // `onComplete` only fires as the value turns full, so a value that lands already full — as some
+  // password managers contrive — is never seen by it. Enter is then the only way forward, and it
+  // depends on two things outside this component: bits-ui leaving the keydown alone
+  // (`KEYS_TO_IGNORE`), and the browser submitting a form that has no submit button.
+  test('Enter in the field submits the form, without the browser navigating', async () => {
+    const auth = fakeBrowserAuth();
+    const screen = await render(CodeStep, props(auth));
+    const submits: SubmitEvent[] = [];
+    document.addEventListener('submit', (event) => submits.push(event), { once: true });
+
+    await codeField(screen).fill('12345');
+    await userEvent.keyboard('{Enter}');
+
+    await expect.poll(() => submits.length).toBe(1);
+    expect(submits[0]?.defaultPrevented).toBe(true);
   });
 
   test('an incomplete code is left alone', async () => {
