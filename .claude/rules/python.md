@@ -19,8 +19,8 @@ Python; nothing on the TypeScript side applies, since the two stacks share no to
 Verify a change with `just lint && just check && just test`, plus `just test-lab` if you
 touched the lab.
 
-> **Status:** the analysis library has landed in `gbd_foodservice_insights`; the lab and the
-> `analyze()` implementation follow.
+> **Status:** the analysis library has landed in `gbd_foodservice_insights` and the lab in
+> `gbd_foodservice_insights_lab`; the `analyze()` implementation follows.
 
 ## The workspace
 
@@ -62,9 +62,3 @@ constraints, so its code carries none of the product's guarantees.
   silently drops or overwrites rows is the failure we fear most.
 - **Plain pandas is fine.** Datasets rarely exceed thousands of rows, so do not vectorize or
   chunk for performance.
-
-## Open
-
-**Open:** the lab-workflow conventions from `catering_analysis`'s `AGENTS.md` — CSV for
-intermediate files, the client/period/step filename convention, and the common shapes of broken
-client data — move into the lab's README when the lab lands.
