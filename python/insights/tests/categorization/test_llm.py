@@ -5,7 +5,11 @@ from typing import Any, cast
 import httpx
 import openai
 import pytest
-from gbd_foodservice_insights.categorization.llm import MAX_ATTEMPTS, OpenAiLlmClient
+from gbd_foodservice_insights.categorization.llm import (
+    MAX_ATTEMPTS,
+    REQUEST_TIMEOUT_S,
+    OpenAiLlmClient,
+)
 from gbd_foodservice_insights.errors import UpstreamApiError
 
 _REQUEST = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
@@ -28,6 +32,11 @@ class FakeOpenAi:
 
     outcomes: list[Exception | str | None]
     requests: list[dict[str, Any]] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def with_options(self, **options: Any) -> FakeOpenAi:
+        self.options = options
+        return self
 
     @property
     def chat(self) -> Any:
@@ -114,13 +123,18 @@ def test_category_prompts_list_the_categories() -> None:
         assert "['Cheese', 'Butter']" in request["messages"][0]["content"]
 
 
-def test_from_env_disables_sdk_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_requests_go_out_with_sdk_retries_off() -> None:
+    client, fake, _ = _client("Cheese")
+
+    client.clean_product_name("cheddar")
+
+    assert fake.options == {"max_retries": 0, "timeout": REQUEST_TIMEOUT_S}
+
+
+def test_from_env_reads_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
-    client = OpenAiLlmClient.from_env()
-
-    assert client.client.max_retries == 0
-    assert client.client.api_key == "test-key"
+    assert OpenAiLlmClient.from_env().client.api_key == "test-key"
 
 
 def test_from_env_requires_the_key(monkeypatch: pytest.MonkeyPatch) -> None:

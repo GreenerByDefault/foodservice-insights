@@ -17,7 +17,7 @@ from typing import Any, Final, Protocol
 import openai
 
 from gbd_foodservice_insights.errors import UpstreamApiError
-from gbd_foodservice_insights.llm import call_gemini_api
+from gbd_foodservice_insights.gemini import call_gemini_api
 from gbd_foodservice_insights.llm_prompts import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,8 @@ class LlmClient(Protocol):
 
 
 # This class is the one retry layer for LLM calls (`apps/worker/src/failures.ts`
-# § one-retry-layer), so the SDK's own retries must stay off: `from_env` sets `max_retries=0`.
+# § one-retry-layer), so `_complete` turns the SDK's own retries off on whatever client it is
+# given, rather than trusting whoever built that client to have done so.
 #
 # Worst case for one call: MAX_ATTEMPTS request timeouts plus the backoff between them,
 # 5 × 30 s + (2 + 4 + 8 + 16 + 4 × jitter) s ≈ 3 min — well inside the parent's ten-minute
@@ -85,7 +86,7 @@ class OpenAiLlmClient:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY must be set in environment variables")
-        return cls(openai.OpenAI(api_key=api_key, max_retries=0, timeout=REQUEST_TIMEOUT_S))
+        return cls(openai.OpenAI(api_key=api_key))
 
     def clean_product_name(self, item: str) -> str:
         return self._complete(
@@ -106,10 +107,11 @@ class OpenAiLlmClient:
         )
 
     def _complete(self, system_prompt: str, user_prompt: str) -> str:
+        client = self.client.with_options(max_retries=0, timeout=REQUEST_TIMEOUT_S)
         attempt = 1
         while True:
             try:
-                response = self.client.chat.completions.create(
+                response = client.chat.completions.create(
                     model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},

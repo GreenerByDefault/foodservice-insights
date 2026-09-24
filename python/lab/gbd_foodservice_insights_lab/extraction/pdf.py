@@ -39,7 +39,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from gbd_foodservice_insights.llm import get_gemini_model
+from gbd_foodservice_insights.gemini import get_gemini_model
 from gbd_foodservice_insights.plotting_utils import GBD_colors
 from matplotlib.ticker import MaxNLocator
 from PyPDF2 import PdfReader

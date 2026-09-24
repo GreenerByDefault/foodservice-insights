@@ -43,15 +43,15 @@ library reads them from; that plan's library PR depends on PR 1 here.
   `PyPDF2` does for `python/insights/`; the image syncs `--no-dev`.
 - **Serving mode stays in the library, inert.** `analyze()` always runs procurement, and
   `GEMINI_API_KEY` is not in the env allowlist, so no Gemini client is ever built in the child.
-  The cost is that `google-genai` ships as a dependency and `llm.py` reads `gemini_models.json`
+  The cost is that `google-genai` ships as a dependency and `gemini.py` reads `gemini_models.json`
   at import time. Moving entree detection to the lab needs `categorize_products` decomposed — a
   real refactor, listed under later cleanups, not on the path to a working product.
 - **`OpenAiLlmClient` is the one retry layer** (`apps/worker/src/failures.ts` § one-retry-layer):
-  the SDK's retries are off, five attempts with 2/4/8/16 s backoff, 30 s request timeout. Only
+  it turns the SDK's retries off on whatever client it is given, then makes five attempts with
+  2/4/8/16 s backoff and a 30 s request timeout. Only
   transient failures (connection, timeout, 408/409/425/429/5xx) become `UpstreamApiError` on
   exhaustion; a 400 or 401 propagates unchanged and lands as `unknown`, since `upstream_api` tells
-  the user a retry may help. Build it with `from_env()`, never by wrapping
-  `setup_api_clients()["openai_client"]`, whose SDK retries would stack a second layer.
+  the user a retry may help.
   *Rejected: an OpenAI-shaped fake that dispatches on prompt text* — routing mocks by prompt
   content is brittle.
 - **Progress is reported without touching the categorization loops**: `analyze()` wraps whatever
@@ -171,7 +171,7 @@ def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -
 ## Later cleanups (optional; the product works without them)
 
 - **Serving mode to the lab**: entree detection, the entree cache and its loader, the Gemini
-  helpers in `llm.py` and `setup_api_clients`' Gemini branch. Drops `google-genai` and the
+  helpers in the product's `gemini.py`, and the unused `classify_entree`. Drops `google-genai` and the
   import-time `gemini_models.json` read from the shipped package. Needs `categorize_products`
   split so the lab can run its entree detector on `unique_products_df` before the merge.
 - `run_food_report(df, *, client_name, output_dir, export_graphs)`: no input file, no stem, no

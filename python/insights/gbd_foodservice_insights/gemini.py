@@ -1,19 +1,15 @@
 """
-Provider clients and transport for the Foodservice Insights package.
+The Gemini model registry and call wrapper, for serving-mode entree detection and the lab.
 
-This module owns client construction, the Gemini model registry, and the Gemini call wrapper.
-Prompt text lives in `llm_prompts`; categorization's OpenAI calls, and their retries, live in
-`categorization.llm`.
+Prompt text lives in `llm_prompts`; categorization's OpenAI calls live in `categorization.llm`;
+the lab builds its provider clients with `notebook_runscript_setup.setup_api_clients`.
 """
 
 import json
-import os
 from functools import lru_cache
 from typing import Any
 
-from google import genai
 from google.genai import types
-from openai import OpenAI
 
 from gbd_foodservice_insights import PACKAGE_DIR
 
@@ -65,51 +61,6 @@ def _build_gemini_thinking_config(model: str) -> types.ThinkingConfig:
     if model.startswith("gemini-3"):
         return types.ThinkingConfig(thinking_level="minimal")
     return types.ThinkingConfig(thinking_budget=0)
-
-
-def setup_api_clients(
-    openai: bool = False, whisper: bool = False, gemini: bool = False
-) -> dict[str, Any]:
-    """
-    Initialize API clients based on requested services.
-
-    Args:
-        openai: Whether to initialize OpenAI client.
-        whisper: Whether to initialize LLM Whisperer client.
-        gemini: Whether to initialize Gemini client.
-
-    Returns:
-        Dictionary with requested clients (keys: openai_client, whisper_client, gemini_client).
-
-    Raises:
-        ValueError: If required API keys are not set in environment variables.
-    """
-    clients: dict[str, Any] = {}
-
-    if openai:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY must be set in environment variables")
-        clients["openai_client"] = OpenAI(api_key=api_key)
-
-    if whisper:
-        # Imported here rather than at module scope: LLM Whisperer is only used by PDF extraction,
-        # which is on its way to a separate lab package. Deferring the import keeps everything
-        # else in this module importable without llmwhisperer-client installed.
-        from unstract.llmwhisperer import LLMWhispererClientV2
-
-        api_key = os.getenv("LLM_WHISPERER_API_KEY")
-        if not api_key:
-            raise ValueError("LLM_WHISPERER_API_KEY must be set in environment variables")
-        clients["whisper_client"] = LLMWhispererClientV2(api_key=api_key, logging_level="INFO")
-
-    if gemini:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY must be set in environment variables")
-        clients["gemini_client"] = genai.Client(api_key=api_key)
-
-    return clients
 
 
 def call_gemini_api(

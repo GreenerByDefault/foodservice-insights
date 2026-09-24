@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import pandas as pd
-from gbd_foodservice_insights.llm import setup_api_clients
 from gbd_foodservice_insights.report import artifacts as report_artifacts
+from google import genai
+from openai import OpenAI
+from unstract.llmwhisperer import LLMWhispererClientV2
 
 from gbd_foodservice_insights_lab import PACKAGE_DIR
 
@@ -500,6 +502,46 @@ def load_client_metadata(
     print(f"✓ Loaded client metadata from {metadata_path.name}")
     _print_configuration(metadata, step)
     return metadata, env_path, pdf_extracted
+
+
+def setup_api_clients(
+    openai: bool = False, whisper: bool = False, gemini: bool = False
+) -> dict[str, Any]:
+    """
+    Initialize API clients based on requested services.
+
+    Args:
+        openai: Whether to initialize OpenAI client.
+        whisper: Whether to initialize LLM Whisperer client.
+        gemini: Whether to initialize Gemini client.
+
+    Returns:
+        Dictionary with requested clients (keys: openai_client, whisper_client, gemini_client).
+
+    Raises:
+        ValueError: If required API keys are not set in environment variables.
+    """
+    clients: dict[str, Any] = {}
+
+    if openai:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY must be set in environment variables")
+        clients["openai_client"] = OpenAI(api_key=api_key)
+
+    if whisper:
+        api_key = os.getenv("LLM_WHISPERER_API_KEY")
+        if not api_key:
+            raise ValueError("LLM_WHISPERER_API_KEY must be set in environment variables")
+        clients["whisper_client"] = LLMWhispererClientV2(api_key=api_key, logging_level="INFO")
+
+    if gemini:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY must be set in environment variables")
+        clients["gemini_client"] = genai.Client(api_key=api_key)
+
+    return clients
 
 
 def setup_cli_environment(env_path: str | Path | None = None) -> dict[str, Any]:

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gbd_foodservice_insights.llm import get_gemini_model
+from gbd_foodservice_insights.gemini import get_gemini_model
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
