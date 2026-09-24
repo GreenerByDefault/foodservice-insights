@@ -8,6 +8,7 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_with_llm,
     merge_categorizations,
 )
+from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
 def test_categorize_using_historical_classifications():
@@ -123,19 +124,10 @@ def test_categorize_with_llm_dedupes_identical_cleaned_names():
         }
     )
 
-    call_count = {"n": 0}
+    llm = KeywordLlmClient()
 
-    def fake_match(item, categories, openai_client, max_tokens):
-        call_count["n"] += 1
-        return "Poultry"
+    result = categorize_with_llm(products_df, llm)
 
-    with (
-        patch.object(steps, "get_GBD_categories", return_value=["Poultry"]),
-        patch.object(steps, "match_product_to_category_llm", side_effect=fake_match),
-        patch.object(steps, "print_progress", return_value=None),
-    ):
-        result = categorize_with_llm(products_df, openai_client=object())
-
-    assert call_count["n"] == 1
-    assert result["category"].tolist() == ["Poultry", "Poultry"]
+    assert llm.calls == [("match", "chicken breast")]
+    assert result["category"].tolist() == ["Poultry (Chicken & Turkey)"] * 2
     assert result["match_type"].tolist() == ["llm", "llm"]

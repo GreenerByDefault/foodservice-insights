@@ -48,8 +48,9 @@ def test_runscript_sets_none_cache_mode_for_baseline(monkeypatch, tmp_path):
     monkeypatch.setattr(
         module,
         "setup_api_clients",
-        lambda **_: {"openai_client": object(), "gemini_client": object()},
+        lambda **_: {"gemini_client": object()},
     )
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
     monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
     monkeypatch.setattr(
@@ -88,8 +89,9 @@ def test_runscript_sets_unreviewed_cache_mode_for_web_app(monkeypatch, tmp_path)
     monkeypatch.setattr(
         module,
         "setup_api_clients",
-        lambda **_: {"openai_client": object(), "gemini_client": object()},
+        lambda **_: {"gemini_client": object()},
     )
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
     monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
     monkeypatch.setattr(

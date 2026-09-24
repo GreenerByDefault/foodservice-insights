@@ -7,7 +7,14 @@ from gbd_foodservice_insights.analysis import (
     UnusableDataError,
     UpstreamApiError,
 )
-from gbd_foodservice_insights.testing import PDF_MAGIC_BYTES, XLSX_MAGIC_BYTES, stub_analysis
+from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.testing import (
+    KEYWORD_CATEGORIES,
+    PDF_MAGIC_BYTES,
+    XLSX_MAGIC_BYTES,
+    KeywordLlmClient,
+    stub_analysis,
+)
 
 
 def _request(tmp_path: Path) -> AnalysisRequest:
@@ -63,3 +70,44 @@ def test_stub_analysis_writes_nothing_when_it_raises(tmp_path: Path) -> None:
     with pytest.raises(UpstreamApiError):
         stub_analysis(_request(tmp_path), raises=UpstreamApiError)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_keyword_table_names_only_gbd_categories() -> None:
+    gbd_categories = set(get_GBD_categories())
+    assert {category for _, category in KEYWORD_CATEGORIES} <= gbd_categories
+
+
+def test_keyword_table_has_no_unreachable_keywords() -> None:
+    keywords = [keyword for keyword, _ in KEYWORD_CATEGORIES]
+    shadowed = [
+        (earlier, later)
+        for i, later in enumerate(keywords)
+        for earlier in keywords[:i]
+        if earlier in later
+    ]
+    assert shadowed == []
+
+
+def test_keyword_llm_client_prefers_the_specific_keyword() -> None:
+    llm = KeywordLlmClient()
+    assert llm.match_product_to_category("Oat Milk Barista", []) == "Oat Milk"
+    assert llm.match_product_to_category("2% Milk", []) == "Milk (Cow's milk)"
+    assert llm.match_product_to_category("paper napkins", []) == "No Matches Found"
+
+
+def test_keyword_llm_client_cleans_names() -> None:
+    assert KeywordLlmClient().clean_product_name(" CHKN Breast (12) 5LB ") == "chkn breast lb"
+
+
+def test_keyword_llm_client_fuzzy_matches_to_the_closest_category() -> None:
+    llm = KeywordLlmClient()
+    assert llm.fuzzy_match_category("Chese", ["Cheese", "Butter"]) == "Cheese"
+    assert llm.fuzzy_match_category("zzz", ["Cheese", "Butter"]) == "No Matches Found"
+
+
+def test_keyword_llm_client_records_every_call() -> None:
+    llm = KeywordLlmClient()
+    llm.clean_product_name("a")
+    llm.match_product_to_category("b", [])
+    llm.fuzzy_match_category("c", [])
+    assert llm.calls == [("clean", "a"), ("match", "b"), ("fuzzy", "c")]

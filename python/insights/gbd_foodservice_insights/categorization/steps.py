@@ -22,13 +22,7 @@ from gbd_foodservice_insights.categorization.cache import (
     build_cleaned_name_reuse_index,
     get_previously_categorized_items,
 )
-from gbd_foodservice_insights.categorization.llm import clean_product_name as clean_product_name_llm
-from gbd_foodservice_insights.categorization.llm import (
-    fuzzy_match_category as fuzzy_match_category_llm,
-)
-from gbd_foodservice_insights.categorization.llm import (
-    match_product_to_category as match_product_to_category_llm,
-)
+from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.utils import print_progress
 
 MATCH_TYPE_RAW = "raw_product_history"
@@ -36,8 +30,6 @@ MATCH_TYPE_CLEANED = "cleaned_name_history"
 MATCH_TYPE_LLM = "llm"
 
 logger = logging.getLogger(__name__)
-
-MAX_TOKENS_CATEGORIZATION = 30
 
 
 # ----------------------------------------------------------------------
@@ -94,7 +86,7 @@ def categorize_using_historical_classifications(
 # ----------------------------------------------------------------------
 def clean_product_names(
     products_df: pd.DataFrame,
-    openai_client: Any,
+    llm: LlmClient,
 ) -> pd.DataFrame:
     """
     Clean product names for items that still need categorization.
@@ -106,8 +98,7 @@ def clean_product_names(
     ----------
     products_df : DataFrame
         Must contain 'product', 'category', and 'previously_categorized' columns.
-    openai_client : Any
-        OpenAI API client.
+    llm : LlmClient
 
     Returns
     -------
@@ -128,13 +119,7 @@ def clean_product_names(
         items_to_clean = products_df.loc[mask_needs_cleaning, "product"]
         cleaned_names = []
         for idx, item in enumerate(items_to_clean, 1):
-            cleaned_names.append(
-                clean_product_name_llm(
-                    item=str(item),
-                    openai_client=openai_client,
-                    max_tokens=MAX_TOKENS_CATEGORIZATION,
-                )
-            )
+            cleaned_names.append(llm.clean_product_name(str(item)))
             print_progress("Name cleaning", idx, num_to_clean)
         products_df.loc[mask_needs_cleaning, "cleaned_item_names"] = cleaned_names
 
@@ -225,7 +210,7 @@ def categorize_using_cleaned_name_history(
 # ----------------------------------------------------------------------
 def categorize_with_llm(
     products_df: pd.DataFrame,
-    openai_client: Any,
+    llm: LlmClient,
 ) -> pd.DataFrame:
     """
     Apply LLM-based categorization to products not matched historically.
@@ -234,8 +219,7 @@ def categorize_with_llm(
     ----------
     products_df : DataFrame
         Must contain 'category' and 'cleaned_item_names' columns.
-    openai_client : Any
-        OpenAI API client.
+    llm : LlmClient
 
     Returns
     -------
@@ -266,12 +250,7 @@ def categorize_with_llm(
         unique_names = pd.unique(items_to_categorize.dropna())
         name_to_category: dict[Any, str] = {}
         for idx, name in enumerate(unique_names, 1):
-            name_to_category[name] = match_product_to_category_llm(
-                item=str(name),
-                categories=gbd_categories,
-                openai_client=openai_client,
-                max_tokens=MAX_TOKENS_CATEGORIZATION,
-            )
+            name_to_category[name] = llm.match_product_to_category(str(name), gbd_categories)
             print_progress("Categorization", idx, len(unique_names))
 
         products_df.loc[mask_needs_categorization, "category"] = items_to_categorize.map(
@@ -290,7 +269,7 @@ def categorize_with_llm(
 # ----------------------------------------------------------------------
 def fuzzy_match_GBD_categories(
     products_df: pd.DataFrame,
-    openai_client: Any,
+    llm: LlmClient,
 ) -> pd.DataFrame:
     """
     Standardize category values by fuzzy-matching non-standard ones.
@@ -302,8 +281,7 @@ def fuzzy_match_GBD_categories(
     ----------
     products_df : DataFrame
         Must contain a 'category' column.
-    openai_client : Any
-        OpenAI API client.
+    llm : LlmClient
 
     Returns
     -------
@@ -336,14 +314,7 @@ def fuzzy_match_GBD_categories(
         logger.info("Fuzzy-matching %d non-standard categories.", n_fuzzy)
         products_df.loc[non_canonical_mask, "category"] = products_df.loc[
             non_canonical_mask, "category_old"
-        ].apply(
-            lambda x: fuzzy_match_category_llm(
-                item=str(x),
-                categories=canonical,
-                openai_client=openai_client,
-                max_tokens=MAX_TOKENS_CATEGORIZATION,
-            )
-        )
+        ].apply(lambda x: llm.fuzzy_match_category(str(x), canonical))
     else:
         logger.info("All categories are standard — no fuzzy matching needed.")
 

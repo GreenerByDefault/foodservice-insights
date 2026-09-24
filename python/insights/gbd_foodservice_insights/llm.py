@@ -1,9 +1,9 @@
 """
 Provider clients and transport for the Foodservice Insights package.
 
-This module owns how we reach OpenAI and Gemini: client construction, the Gemini model registry,
-and the thin call wrappers every LLM-backed helper goes through. Prompt text lives in
-`llm_prompts`; the task-specific helpers live in `categorize_llm` and `llm_extraction`.
+This module owns client construction, the Gemini model registry, and the Gemini call wrapper.
+Prompt text lives in `llm_prompts`; categorization's OpenAI calls, and their retries, live in
+`categorization.llm`.
 """
 
 import json
@@ -56,7 +56,6 @@ def get_gemini_model(config_key: str) -> str:
 
 
 DEFAULT_GEMINI_MODEL = get_gemini_model(DEFAULT_GEMINI_FLASH_MODEL_KEY)
-DEFAULT_CATEGORIZATION_MODEL = "gpt-4.1-mini"
 
 
 def _build_gemini_thinking_config(model: str) -> types.ThinkingConfig:
@@ -131,27 +130,3 @@ def call_gemini_api(
         ),
     )
     return response.text.strip()
-
-
-def openai_chat_completion(
-    openai_client: Any,
-    system_prompt: str,
-    user_prompt: str,
-    model: str = DEFAULT_CATEGORIZATION_MODEL,
-    max_tokens: int = 30,
-    temperature: float = 0.0,
-) -> str:
-    """Shared OpenAI chat completion wrapper."""
-    if openai_client is None:
-        raise ValueError("openai_client is required.")
-
-    response = openai_client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return response.choices[0].message.content.strip()

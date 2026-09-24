@@ -461,7 +461,7 @@ handling.
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [Progress, leases, and reaping](#progress-leases-and-reaping) |
-| A third-party API rate limits us, e.g. Gemini | The child retries with backoff, then fails; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk |
+| A third-party API rate limits us, e.g. OpenAI | The child retries with backoff, then fails as `upstream_api`; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk. Reasoning in `OpenAiLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) |
 | Workers cannot keep up with demand | Alert on attempts waiting too long to be claimed |
 | Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. Alert when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
 | Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. Auth's own OTP email is a separate system this doesn't cover — **Open:** can we alert on that too? |

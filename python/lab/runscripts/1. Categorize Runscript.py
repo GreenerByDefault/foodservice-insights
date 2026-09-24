@@ -17,6 +17,7 @@ import logging
 from typing import Literal
 
 from dotenv import find_dotenv, load_dotenv
+from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_file
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     setup_api_clients,
@@ -78,7 +79,7 @@ def main() -> None:
     # Load .env and set up API clients
     env_path = find_dotenv(usecwd=True)
     load_dotenv(dotenv_path=env_path)
-    clients = setup_api_clients(openai=True, gemini=(args.data_type == "serving"))
+    clients = setup_api_clients(gemini=(args.data_type == "serving"))
 
     logger.info("Input:  %s", args.input)
     logger.info("Output: %s", args.output or "(auto)")
@@ -95,7 +96,7 @@ def main() -> None:
         input_filepath=args.input,
         output_filepath=args.output,
         data_type=args.data_type,
-        openai_client=clients["openai_client"],
+        llm=OpenAiLlmClient.from_env(),
         gemini_client=clients.get("gemini_client"),
         date_format=args.date_format,
         cache_write_mode=cache_write_mode,
