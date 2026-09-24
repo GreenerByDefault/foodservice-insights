@@ -30,24 +30,33 @@ let authPromise: Promise<SupabaseAuth> | null = null;
 async function loadAuth(): Promise<SupabaseAuth> {
   if (!browser) throw new Error('Supabase auth is only reachable from the browser.');
 
-  authPromise ??= import('@supabase/ssr').then(({ createBrowserClient }) => {
-    const url = env.PUBLIC_SUPABASE_URL;
-    const key = env.PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    if (!url || !key) {
-      throw new Error(
-        'PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_PUBLISHABLE_KEY must both be set to sign in.',
-      );
-    }
-
-    return createBrowserClient(url, key, {
-      cookieOptions: { name: AUTH_COOKIE_NAME },
-      // The server hook refreshes the token on every request, through its own `getUser()`. Left
-      // on, the two race for the single-use refresh token and whichever loses is signed out —
-      // supabase/ssr#68.
-      auth: { autoRefreshToken: false },
-    }).auth;
+  authPromise ??= createAuth().catch((error: unknown) => {
+    // A rejected promise is not nullish, so left cached it would be the answer to every later
+    // call. A missing env var fails again straight away; a chunk that 404'd mid-deploy loads on
+    // the next try, and caching it would cost the visitor sign-in and sign-out until a reload.
+    authPromise = null;
+    throw error;
   });
   return authPromise;
+}
+
+async function createAuth(): Promise<SupabaseAuth> {
+  const { createBrowserClient } = await import('@supabase/ssr');
+  const url = env.PUBLIC_SUPABASE_URL;
+  const key = env.PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      'PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_PUBLISHABLE_KEY must both be set to sign in.',
+    );
+  }
+
+  return createBrowserClient(url, key, {
+    cookieOptions: { name: AUTH_COOKIE_NAME },
+    // The server hook refreshes the token on every request, through its own `getUser()`. Left
+    // on, the two race for the single-use refresh token and whichever loses is signed out —
+    // supabase/ssr#68.
+    auth: { autoRefreshToken: false },
+  }).auth;
 }
 
 /** The auth client for this browser.
