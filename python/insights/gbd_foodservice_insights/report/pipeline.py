@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -83,9 +84,10 @@ _STAGE_MESSAGES = {
 }
 
 
-def _log_stage(stage_key: str) -> None:
+def _log_stage(stage_key: str, report_progress: Callable[[], None]) -> None:
     """Write a plain-English progress update for the current stage."""
     logger.info("Step: %s", _STAGE_MESSAGES[stage_key])
+    report_progress()
 
 
 def _resolve_input_file(input_file: str | Path | None) -> Path:
@@ -407,6 +409,7 @@ def run_food_report(
     region: str = "us",
     missing_data_policy: MissingDataPolicy = "hard_fail",
     show_quality_successes: bool = True,
+    report_progress: Callable[[], None] = lambda: None,
 ) -> dict[str, Any]:
     """Run the full food-report pipeline with explicit quality auditing.
 
@@ -479,7 +482,7 @@ def run_food_report(
         mode_for_manifest = mode
         metric_total = metric_for_mode(mode)
 
-        _log_stage("ingestion")
+        _log_stage("ingestion", report_progress)
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
 
@@ -497,7 +500,7 @@ def run_food_report(
         enforce_policy_or_raise(policy, quality_findings)
 
         # Date normalization with explicit diagnostics
-        _log_stage("date_normalization")
+        _log_stage("date_normalization", report_progress)
         dayfirst_preference = REGION_DAYFIRST[region]
 
         if "date" in df.columns:
@@ -570,7 +573,7 @@ def run_food_report(
                 )
             )
 
-        _log_stage("month_normalization")
+        _log_stage("month_normalization", report_progress)
         before = missing_snapshot(df)
         before_rows = len(df)
         try:
@@ -614,7 +617,7 @@ def run_food_report(
 
         enforce_policy_or_raise(policy, quality_findings)
 
-        _log_stage("diner_meal_mapping")
+        _log_stage("diner_meal_mapping", report_progress)
         try:
             dm_mapping = _resolve_diner_meal_mapping(diner_meal_file, diner_meal_mapping)
         except Exception as exc:
@@ -661,7 +664,7 @@ def run_food_report(
                     )
                 )
 
-        _log_stage("emissions")
+        _log_stage("emissions", report_progress)
         emissions_summary = None
         if mode == "procurement" and metric_total in df.columns:
             before = missing_snapshot(df)
@@ -733,7 +736,7 @@ def run_food_report(
                     )
                 )
 
-        _log_stage("aggregation")
+        _log_stage("aggregation", report_progress)
         if dm_mapping:
             try:
                 agg_results = aggregation.run_aggregation_pipeline(
@@ -761,7 +764,7 @@ def run_food_report(
 
         monthly_cat = agg_results["monthly_category_data"]
 
-        _log_stage("emissions_summary")
+        _log_stage("emissions_summary", report_progress)
         if mode == "procurement" and "emissions_kg_co2e" in df.columns:
             try:
                 emissions_summary = emissions.calculate_emissions_summary(df)
@@ -803,7 +806,7 @@ def run_food_report(
                         message=str(exc),
                     )
                 )
-        _log_stage("client_metrics_and_diagnostics")
+        _log_stage("client_metrics_and_diagnostics", report_progress)
         plant_animal_split = None
         plant_protein_share = None
         try:
@@ -847,7 +850,7 @@ def run_food_report(
 
         enforce_policy_or_raise(policy, quality_findings)
 
-        _log_stage("plot_generation")
+        _log_stage("plot_generation", report_progress)
         plot_list = plots.generate_all_report_plots(
             aggregated_data=agg_results,
             diner_meal_mapping=dm_mapping,
@@ -860,7 +863,7 @@ def run_food_report(
             diner_or_meal=diner_or_meal,
         )
 
-        _log_stage("plot_export")
+        _log_stage("plot_export", report_progress)
         graph_paths = plots.export_report_plots(
             plot_list,
             artifact_paths["graphs_dir"],
@@ -960,7 +963,7 @@ def run_food_report(
                 substitution_scenarios
             )
 
-        _log_stage("pdf_build")
+        _log_stage("pdf_build", report_progress)
         # Plain-English executive summary payload. Only built when emissions
         # were computed (procurement runs); legacy/serving runs keep the
         # original key-value summary page.
@@ -1022,7 +1025,7 @@ def run_food_report(
         except Exception as exc:
             logger.warning("Could not compute data profile: %s", exc)
 
-        _log_stage("client_workbook_build")
+        _log_stage("client_workbook_build", report_progress)
         artifact_paths["client_excel_path"] = excel.build_client_excel_report(
             output_path=artifact_paths["client_excel_path"],
             monthly_product_data=agg_results["monthly_product_data"],
@@ -1037,7 +1040,7 @@ def run_food_report(
             diner_or_meal=diner_or_meal,
         )
 
-        _log_stage("qa_workbook_build")
+        _log_stage("qa_workbook_build", report_progress)
         artifact_paths["qa_excel_path"] = excel.build_qa_excel_report(
             output_path=artifact_paths["qa_excel_path"],
             raw_df=df,
@@ -1057,7 +1060,7 @@ def run_food_report(
             diner_or_meal=diner_or_meal,
         )
 
-        _log_stage("metadata_update")
+        _log_stage("metadata_update", report_progress)
         artifacts.update_metadata_with_report_outputs(
             metadata_path,
             artifact_paths=artifact_paths,
@@ -1067,7 +1070,7 @@ def run_food_report(
             graph_paths=graph_paths,
         )
 
-        _log_stage("manifest_write")
+        _log_stage("manifest_write", report_progress)
         artifact_paths["manifest_path"] = artifacts.write_run_manifest(
             artifact_paths["manifest_path"],
             run_id=run_id,

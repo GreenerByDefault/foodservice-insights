@@ -27,8 +27,8 @@ A user can upload a CSV or XLSX file matching a predefined column format.
 
 ### Processing
 
-The server sends requests to a Python worker that runs the existing AI library to process the
-data and generate a PDF and an XLSX file.
+The server sends requests to a Python worker that runs the analysis library
+(`gbd_foodservice_insights`) to process the data and generate a PDF and an XLSX file.
 
 A report never frames a shift from beef or lamb to chicken or fish as a win — not in its wording,
 targets, or metrics. That substitution can greatly increase total animal suffering.

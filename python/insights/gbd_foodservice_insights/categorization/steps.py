@@ -23,6 +23,7 @@ from gbd_foodservice_insights.categorization.cache import (
     get_previously_categorized_items,
 )
 from gbd_foodservice_insights.categorization.llm import LlmClient
+from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.utils import print_progress
 
 MATCH_TYPE_RAW = "raw_product_history"
@@ -377,7 +378,7 @@ def merge_categorizations(
     pct_remaining = n_products_after / n_products_before
 
     if pct_remaining < 0.2:
-        raise AssertionError(
+        raise UnusableDataError(
             "Over 80% of products were eliminated during categorization: "
             f"{n_products_after}/{n_products_before} ({pct_remaining:.1%}) remain."
         )
