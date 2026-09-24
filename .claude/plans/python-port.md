@@ -2,58 +2,36 @@
 
 ## Context
 
-GBD's analysis library lives in the private `catering_analysis` repo. The product half is
-already here: `gbd_foodservice_insights` and its tests were copied into `python/insights/` from
-`catering_analysis@afd0d26` (#322), with `analyze()` still raising `NotImplementedError`. What
-remains is to copy the lab into `python/lab/`, implement the `analyze()` seam the worker already
-calls, wire `WORKER_MODE=mock-llm`, and archive the source repo.
+GBD's analysis library now lives here, copied from the private `catering_analysis` repo: the
+product package in `python/insights/` (`afd0d26`, #322) and the lab in `python/lab/`
+(`b70dddab`). Categorization no longer sees a provider SDK: `categorize_products(df, llm, …)`,
+`categorize_file(input_filepath, llm, …)` and the three LLM steps take an `LlmClient`
+(`categorization/llm.py`) with three operations — clean a product name, match a cleaned name to a
+category, fuzzy-match a label to a category. `OpenAiLlmClient.from_env()` is the real one;
+`testing.KeywordLlmClient`, shipped beside `stub_analysis`, is the offline one and records every
+operation in `calls`. What remains is to implement the `analyze()` seam the worker already calls,
+wire `WORKER_MODE=mock-llm`, and archive the source repo.
 
 The monorepo side is ready. `analysis.py` is the seam (`AnalysisRequest` → `analyze()` →
-`AnalysisOutcome`); `errors.py` and `testing.stub_analysis` exist; `worker_child` calls
+`AnalysisOutcome`), still raising `NotImplementedError`; `worker_child` calls
 `analyze(request, report_progress=…)` and moves the declared files into place;
-`apps/worker/src/modes.ts` reserves `mock-llm` as the slot this fills. The three cache CSVs are
-gitignored by name under any `python/**/data_files/`, each package's `data_files/README.md`
-says they are obtained out-of-band, `python/lab/client_work/.gitignore` exists, `just lint`/`just
-fmt` run nbstripout, `report.organizationName` is in the manifest, `.env.example` carries
-`OPENAI_API_KEY=`, and the child's env allowlist is `PATH, HOME, LANG, TZ, OPENAI_API_KEY`. The
-test suite runs green with no cache CSV present, which is how CI runs it.
+`apps/worker/src/modes.ts` reserves `mock-llm` as the slot this fills. `report.organizationName`
+is in the manifest, and the child's env allowlist is `PATH, HOME, LANG, TZ, OPENAI_API_KEY`. The
+three cache CSVs are gitignored under any `python/**/data_files/` and obtained out-of-band; the
+suite runs green without them, which is how CI runs it.
 
-The source side is ready too. `catering_analysis/Docs/monorepo_migration/prework.md` records the
-PRs that aligned that repo with this one: the same Ruff rule set, Python 3.14, ty-clean, the lab
-split into its own `gbd_foodservice_insights_lab` package with Ruff's `TID251` ban on product →
-lab imports, cache loaders that tolerate a missing file, tests split into `tests/insights/` and
-`tests/lab/` under `--import-mode=importlib`, and `Customer template/` renamed to `runscripts/`
-(#84, after the product copy). **The lab copy is therefore a `cp -r` of directories with no
-import rewriting.**
-
-The source's lab layout may still change before the copy. This plan names functions rather than
-files wherever a PR edits ported code; where a filename appears it is today's name for finding
-the function, not a commitment to the path.
+The source repo is archived once one real client analysis has been run from `python/lab/` —
+one README line there ("archived into `foodservice-insights` at commit …"), then archive it on
+GitHub. Nothing else is done there.
 
 A companion plan, `categorization-cache.md`, moves the product-categorization cache into
 Postgres afterwards. This plan leaves all three caches as gitignored files at the paths the
-library reads them from; that plan's library PR depends on PR 3 here.
+library reads them from; that plan's library PR depends on PR 1 here.
 
 ## Decisions
 
-- **Copy first, change after.** The product copy (#322) and PR 1 are copies plus only what CI
-  needs; every behavioural
-  change is its own PR. *Rejected: refactor during the copy* — it buries the diff that needs the
-  most attention, and the source repo's suite and live client runs are the safety net only until
-  the copy lands.
-- **Copy from a recorded `main` SHA with `git archive`, never the working tree** — `build/` on
-  disk there is a stale, gitignored duplicate of the package. No subtree, no history rewrite:
-  history stays in the archived repo. The lab copy must come from a SHA whose product side
-  matches the one already here: `git diff afd0d26 <SHA> -- gbd_foodservice_insights tests/insights`
-  may touch only `test_runscript.py` (which moves with the lab), otherwise re-copy the product
-  package in the same PR.
-- **Attribution follows `git blame -M -C -C` on the copied files, per PR**, not repo-wide
-  `shortlog`, which credits only whoever did the renames. The repo squash-merges with the PR
-  *body* as the commit message, so the `Co-authored-by:` trailers are the body's final paragraph
-  (trailers on branch commits are discarded). Richie gets two trailers,
-  `data@greenerbydefault.org` and `richie@veganhacktivists.org`, one per GitHub account; the
-  bots and the unlinked laptop email are dropped. Yujia Sun (`yujia@greenerbydefault.org`) had no
-  lines in the product copy; blame the lab copy to confirm theirs are there.
+- **Behavioural changes to ported code are each their own PR**, never folded into a larger
+  one — the copies landed verbatim so their diffs could be reviewed as copies.
 - **Library modules import `PACKAGE_DIR` from the package root**, and `__init__.py` defines it
   *above* the re-export of `analysis`. Keep it there: once `analysis` imports the library, any
   module importing `PACKAGE_DIR` runs while `__init__` is still initializing.
@@ -65,100 +43,22 @@ library reads them from; that plan's library PR depends on PR 3 here.
   `PyPDF2` does for `python/insights/`; the image syncs `--no-dev`.
 - **Serving mode stays in the library, inert.** `analyze()` always runs procurement, and
   `GEMINI_API_KEY` is not in the env allowlist, so no Gemini client is ever built in the child.
-  The cost is that `google-genai` ships as a dependency and `llm.py` reads `gemini_models.json`
+  The cost is that `google-genai` ships as a dependency and `gemini.py` reads `gemini_models.json`
   at import time. Moving entree detection to the lab needs `categorize_products` decomposed — a
   real refactor, listed under later cleanups, not on the path to a working product.
-- **The `LlmClient` protocol is built here, not as prework**, because its shape is dictated by
-  `analyze()` and the keyword fake; the source repo's categorize runscript needs only a one-line
-  wrap. Its OpenAI implementation is the one retry layer (`apps/worker/src/failures.ts` rules it),
-  with the SDK's own retries disabled. *Rejected: an OpenAI-shaped fake that dispatches on prompt
-  text* — routing mocks by prompt content is brittle.
+- **`OpenAiLlmClient` is the one retry layer** (`apps/worker/src/failures.ts` § one-retry-layer):
+  it turns the SDK's retries off on whatever client it is given, then makes five attempts with
+  2/4/8/16 s backoff and a 30 s request timeout. Only
+  transient failures (connection, timeout, 408/409/425/429/5xx) become `UpstreamApiError` on
+  exhaustion; a 400 or 401 propagates unchanged and lands as `unknown`, since `upstream_api` tells
+  the user a retry may help.
+  *Rejected: an OpenAI-shaped fake that dispatches on prompt text* — routing mocks by prompt
+  content is brittle.
 - **Progress is reported without touching the categorization loops**: `analyze()` wraps whatever
   `LlmClient` it was given so every call reports progress, and `run_food_report` reports at each
   stage boundary. So `mock-llm` gets a real cadence for free.
-- **Safe to publish.** The source repo never committed a secret (verified across its history),
-  but it holds one real client's workbooks under `test_data/baseline_comparison/`, and client
-  and staff names and a maintainer's home directory in a handful of files. Those files are not
-  ported, and every copy PR greps its diff against a private denylist kept outside this repo.
-  Known hits still in tracked lab-side files: `Nuffield` in two runscripts' comments and in the
-  source `AGENTS.md`'s filename example, `Carle Health` in one test, `Rush_health` in
-  `test_data/create_test_data_v2.py`.
 
-## PR 1 — Copy the lab into `python/lab/`
-
-Goal: `catering_analysis` can be archived whole; GBD's manual workflow runs from this repo.
-
-- `git archive` at the recorded SHA, extracted with `tar --exclude '*/data_files/previously_*.csv'`
-  (the source commits its caches): the lab package → `python/lab/`; `tests/lab` →
-  `python/lab/tests/`; `runscripts/` → `python/lab/runscripts/` (the four notebooks are already
-  output-stripped by the source's pre-commit hook, and `just lint` verifies that); `test_data/`
-  minus `baseline_comparison/` → `python/lab/test_data/`, the runscripts' anonymized sample
-  dataset (its README says so). Keep the monorepo's `__init__.py` and `data_files/README.md` and
-  `git checkout` them back after extracting, merging in anything the source's `__init__.py` now
-  defines that modules import — the product copy had to add `PACKAGE_DIR` this way.
-- `tests/insights/categorization/test_runscript.py` was held back from the product copy because
-  it loads the categorize runscript. It lands in `python/lab/tests/`, with its
-  `parents[3] / "runscripts"` path adjusted to the new depth.
-- `llm.py`'s deferred `unstract.llmwhisperer` import carries a `# ty: ignore[unresolved-import]`
-  only because `llmwhisperer-client` was not installed; once the lab's dependencies are in the
-  shared venv, delete it.
-- `python/lab/pyproject.toml` dependencies: `chardet`, `google-genai`, `ipython`,
-  `llmwhisperer-client`, `matplotlib`, `numpy`, `openai`, `openpyxl`, `pandas`, `PyPDF2`,
-  `python-dotenv`, `requests` (imported by the extraction module but never declared in the
-  source — it arrives transitively there), `seaborn`, `thefuzz`. Not `python-docx`.
-- `client_work/` is the data scientists' working directory, gitignored except its own
-  `.gitignore`; the `client_metadata.json`-in-cwd convention is unchanged; `.env` is the repo
-  root's. `.env.example` gains `GEMINI_API_KEY=` and `LLM_WHISPERER_API_KEY=` marked lab-only.
-- Gate: `just lint && just check && just test-lab` green **with none of the three cache CSVs
-  present**; the denylist grep on the diff is empty.
-- Docs. New `python/lab/README.md`: what the lab is and is not (ships nothing, carries none of
-  the product's guarantees — `python.md` § The lab boundary has the rule); pipeline steps ↔
-  runscripts as one table (replaces the source's `pipeline_diagram.md`); working in
-  `client_work/`; obtaining the two cache CSVs and where they go; the lab-workflow conventions
-  from the source `AGENTS.md` — CSV intermediates, `client/period/step` filenames, the common
-  shapes of broken client data; `just fmt` before committing a notebook. `python.md`'s
-  lab-conventions Open is deleted. `python/insights/gbd_foodservice_insights/pipeline_diagram.md`
-  rode along with the product package and is deleted too, since the table replaces it.
-- Not ported: `AGENTS.md` and `CLAUDE.md` (bound to one machine and to the Analyses Drive;
-  `python.md` and the two READMEs replace them), `.pre-commit-config.yaml` and `.github/` (this
-  repo's CI), `Docs/dead_code/`, `Docs/monorepo_migration/`, the source `README.md` and
-  `example_dot_env.md` (folded into the READMEs and `.env.example`), both `SCRIPT_DESCRIPTIONS.md`
-  (per-module prose the module docstrings already carry), `Docs/reference/example_client_metadata.json` (no reader), `LICENSE` (this
-  repo's MIT covers the tree, same holder).
-- Source repo afterwards: once one real client analysis has been run from `python/lab/` — the
-  mirror of `prework.md`'s "before the copy" check — add one README line ("archived into
-  `foodservice-insights` at commit …") and archive it on GitHub. Nothing else is done there.
-
-## PR 2 — `LlmClient` protocol, one retry layer, keyword fake
-
-- A `Protocol` with the three operations that are the live contents of `categorization/llm.py`:
-  clean a product name, match a cleaned name to a category, fuzzy-match a label to a category.
-  `OpenAiLlmClient` (frozen dataclass: `client`, `model="gpt-4.1-mini"`, `sleep=time.sleep`)
-  implements it and has `from_env()` reading `OPENAI_API_KEY` into
-  `openai.OpenAI(max_retries=0, timeout=60)`.
-- Retry: five attempts, exponential 2/4/8/16 s plus jitter — about 30 s worst case per call,
-  asserted `< 60 s` in a test, far below the parent's `killAfterNoProgressMs`. Retryable:
-  `APIConnectionError`, `APITimeoutError`, `RateLimitError`, `InternalServerError`, and
-  `APIStatusError` in `{408, 409, 425, 429, 500, 502, 503, 504}`; any other `openai.APIError`
-  → `UpstreamApiError` at once; exhaustion → `UpstreamApiError`. Imports `errors.py` directly,
-  the leaf. Today the categorization path has **no retry at all** — one 429 discards every paid
-  call in the run.
-- Threading it through: `categorize_products(df, llm, …)`, `categorize_file(…, llm)` and the
-  three step functions take an `LlmClient` where they took `openai_client: Any`. The lab's
-  categorize runscript and `LLM_testing.py` wrap `setup_api_clients()["openai_client"]` in
-  `OpenAiLlmClient`. The Gemini entree function is untouched.
-- `testing.KeywordLlmClient`, shipped beside `stub_analysis`: an ordered keyword → category table
-  (specific before generic, else `"No Matches Found"`), a small name-cleaning pass,
-  `difflib.get_close_matches` for fuzzy matching, and a `calls` list so tests can count LLM
-  calls.
-- Tests: the retry schedule with a recording `sleep`; exhaustion; a 401 fails immediately; every
-  keyword-table value is in `get_GBD_categories()`; the `patch.object` stacks in
-  `tests/categorization/test_steps.py` become a tiny in-test `LlmClient`.
-- Docs: `python.md` gains § LLM providers — OpenAI does categorization; GBD prefers Gemini for
-  new work; the OpenAI class is where a swap happens. `ARCHITECTURE.md`'s failure row "e.g.
-  Gemini" → OpenAI.
-
-## PR 3 — `analyze()`
+## PR 1 — `analyze()`
 
 Goal: the seam is implemented; `WORKER_MODE=live` works with a real key. This is the PR
 `categorization-cache.md` waits on.
@@ -250,7 +150,7 @@ def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -
   "once the library is ported" Opens now point at the real shapes (the `summary` dict for
   result metadata, `OpenAiLlmClient` for token counts); its cache Open stays.
 
-## PR 4 — `WORKER_MODE=mock-llm`
+## PR 2 — `WORKER_MODE=mock-llm`
 
 - `python/worker_child/worker_child/mock_llm.py`, on the `worker_child.testing` precedent:
   `main(argv)` → `run(Path(argv[1]), analyze=functools.partial(analyze, llm=KeywordLlmClient()))`.
@@ -271,7 +171,7 @@ def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -
 ## Later cleanups (optional; the product works without them)
 
 - **Serving mode to the lab**: entree detection, the entree cache and its loader, the Gemini
-  helpers in `llm.py` and `setup_api_clients`' Gemini branch. Drops `google-genai` and the
+  helpers in the product's `gemini.py`, and the unused `classify_entree`. Drops `google-genai` and the
   import-time `gemini_models.json` read from the shipped package. Needs `categorize_products`
   split so the lab can run its entree detector on `unique_products_df` before the merge.
 - `run_food_report(df, *, client_name, output_dir, export_graphs)`: no input file, no stem, no
@@ -286,10 +186,8 @@ def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -
 
 - Every PR: `just lint && just check && just test`, plus `just test-lab` when the lab is touched
   and `pnpm lint && pnpm check && pnpm test` when TypeScript is.
-- PR 1: `just test-lab` green with none of the three CSVs present, and `git ls-files python |
-  grep '\.csv$'` shows only test fixtures.
-- PR 3: the live run above, direct call then through the app; `pnpm exec turbo run test:system`.
-- PR 4: the e2e happy path on `mock-llm`, and `pnpm dev` with no API key at all still produces
+- PR 1: the live run above, direct call then through the app; `pnpm exec turbo run test:system`.
+- PR 2: the e2e happy path on `mock-llm`, and `pnpm dev` with no API key at all still produces
   a report.
 
 ## Risks
@@ -299,8 +197,9 @@ def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -
   DejaVu until the fonts ship — in the image (deployment config, not this plan) or in the
   package's `data_files/` via `font_manager.addfont` (both are OFL-licensed). Decide before the
   first real client sees a PDF.
-- **`killAfterNoProgressMs` vs backoff**: about 30 s worst case per LLM call, against a
-  ten-minute kill; progress is reported after every successful call and at every report stage.
+- **`killAfterNoProgressMs` vs backoff**: about 3 min worst case per LLM call (five 30 s
+  timeouts plus 30 s of backoff), against a ten-minute kill; progress is reported after every
+  successful call and at every report stage.
 - **Memory**: a child's RSS is dominated by the pandas, matplotlib and seaborn imports (roughly
   300 MB) — the real constraint on children per worker. Figures are closed by the PDF builder,
   so about fifteen stay alive until then.

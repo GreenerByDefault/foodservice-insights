@@ -26,7 +26,7 @@ let hasReachedCodeStep = $state(false);
   <EmailStep
     {auth}
     bind:email
-    focusOnMount={hasReachedCodeStep}
+    returningFromCodeStep={hasReachedCodeStep}
     onCodeSent={() => {
       hasReachedCodeStep = true;
       step = 'code';

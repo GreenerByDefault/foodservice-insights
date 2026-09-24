@@ -12,21 +12,20 @@ interface Props {
   auth: BrowserAuth;
   /** Bound, so returning here from the code step brings the address back with it. */
   email: string;
-  /** True only when the visitor came back from the code step, where this field is what they asked
-   * for. On first load the page heading is what should be read, not a field torn out of it. */
-  focusOnMount: boolean;
+  /** On first render, this step *is* the page, so the heading should be read, not a field torn out
+   * of it. Coming back from the code step is the exception, where this field is what they asked
+   * for. */
+  returningFromCodeStep: boolean;
   onCodeSent: () => void;
 }
 
-let { auth, email = $bindable(), focusOnMount, onCodeSent }: Props = $props();
+let { auth, email = $bindable(), returningFromCodeStep, onCodeSent }: Props = $props();
 
 type StepState = { status: 'idle' } | { status: 'sending' } | { status: 'failed'; message: string };
 
 let formState: StepState = $state({ status: 'idle' });
 let emailInputElement: HTMLInputElement | null = $state(null);
 
-// The field's id is per instance, unlike the `name` from `FIELD`: the flow mounts in more than one
-// place, and a fixed id collides the moment two of them land on one document.
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
@@ -39,7 +38,7 @@ onDestroy(() => {
 });
 
 $effect(() => {
-  if (focusOnMount) emailInputElement?.focus();
+  if (returningFromCodeStep) emailInputElement?.focus();
 });
 
 async function handleSubmit(event: SubmitEvent) {
@@ -67,7 +66,6 @@ async function handleSubmit(event: SubmitEvent) {
     });
     message = error && describeAuthError(error);
   } catch (cause) {
-    // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
     console.error('Could not send a sign-in code', cause);
     message = describeAuthError({});
   }
