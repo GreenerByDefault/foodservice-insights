@@ -20,9 +20,13 @@ type StepState =
   | { status: 'idle' }
   | { status: 'verifying' }
   | { status: 'failed'; message: string }
-  /** Held after `onSignedIn` resolves too: that call navigates, and re-enabling the form during
-   * the navigation would invite a second `verifyOtp` with a code GoTrue has already spent. */
-  | { status: 'verified' };
+  /** Held until the navigation `onSignedIn` starts takes this step away: re-enabling the form
+   * during it would invite a second `verifyOtp` with a code GoTrue has already spent. */
+  | { status: 'verified' }
+  /** Verified, but `onSignedIn` settled with the step still here, so it did not navigate — a
+   * cookie the server could not read, say. The code is spent, so the way forward is another
+   * `onSignedIn`, never another `verifyOtp`. */
+  | { status: 'stalled' };
 
 type ResendState =
   | { status: 'waiting'; remainingSeconds: number }
@@ -34,6 +38,7 @@ let formState: StepState = $state({ status: 'idle' });
 let resend: ResendState = $state({ status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S });
 let code = $state('');
 let codeInputElement: HTMLInputElement | null = $state(null);
+let retryButton: HTMLButtonElement | null = $state(null);
 
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
@@ -49,7 +54,7 @@ onDestroy(() => {
 // Functions, not inline comparisons: read straight off the state here, TypeScript narrows it to
 // the initialiser it can see above and calls every other status unreachable.
 function isVerifyingOrDone(state: StepState): boolean {
-  return state.status === 'verifying' || state.status === 'verified';
+  return state.status === 'verifying' || state.status === 'verified' || state.status === 'stalled';
 }
 function isResending(state: ResendState): boolean {
   return state.status === 'sending';
@@ -117,8 +122,23 @@ async function submitCode() {
     codeInputElement?.focus();
     return;
   }
+  await finishSigningIn();
+}
+
+async function finishSigningIn() {
   formState = { status: 'verified' };
-  await onSignedIn();
+  try {
+    await onSignedIn();
+  } catch (cause) {
+    console.error('Could not finish signing in', cause);
+  }
+  // A navigation unmounts this step before `onSignedIn` resolves — `invalidateAll()` awaits the
+  // redirect it causes — so still being here means there was none.
+  if (!isMounted) return;
+
+  formState = { status: 'stalled' };
+  await tick();
+  retryButton?.focus();
 }
 
 /** The fallback behind `onComplete`. Nothing renders a submit button, but a form holding a single
@@ -196,11 +216,20 @@ async function handleResend() {
        announced if the screen reader was already watching the node when its text changed, so one
        that appears along with its message is read by nobody. -->
   <p role="status" class="text-sm text-muted-foreground">
-    {#if isBusy}
+    {#if formState.status === 'verifying' || formState.status === 'verified'}
       Signing in…
     {/if}
   </p>
 </form>
+
+{#if formState.status === 'stalled'}
+  <div class="space-y-2">
+    <p role="alert" class="text-sm text-destructive">
+      Your code was verified, but we couldn't finish signing you in.
+    </p>
+    <Button bind:ref={retryButton} onclick={finishSigningIn}>Try again</Button>
+  </div>
+{/if}
 
 <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
   <Button

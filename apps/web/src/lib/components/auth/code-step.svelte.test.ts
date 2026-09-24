@@ -127,6 +127,35 @@ describe('CodeStep', () => {
     expect(onSignedIn).not.toHaveBeenCalled();
   });
 
+  describe('a verified code that does not navigate', () => {
+    test('offers to try again, which re-runs onSignedIn rather than spending the code twice', async () => {
+      const auth = fakeBrowserAuth();
+      const onSignedIn = vi.fn().mockResolvedValue(undefined);
+      const screen = await render(CodeStep, props(auth, { onSignedIn }));
+
+      await codeField(screen).fill('123456');
+      await expect
+        .element(screen.getByRole('alert'))
+        .toHaveTextContent("Your code was verified, but we couldn't finish signing you in.");
+      await expect.element(codeField(screen)).toBeDisabled();
+
+      await screen.getByRole('button', { name: 'Try again' }).click();
+
+      await expect.poll(() => onSignedIn.mock.calls.length).toBe(2);
+      expect(auth.verifyOtp).toHaveBeenCalledOnce();
+    });
+
+    test('an onSignedIn that rejects stalls the same way', async () => {
+      const auth = fakeBrowserAuth();
+      const onSignedIn = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+      const screen = await render(CodeStep, props(auth, { onSignedIn }));
+
+      await codeField(screen).fill('123456');
+
+      await expect.element(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    });
+  });
+
   test('resend is held for the cooldown, then sends without creating a user', async () => {
     // Fake timers only until the countdown is spent: a locator action while they are installed
     // would have its own retries frozen along with the clock.
