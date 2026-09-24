@@ -39,13 +39,20 @@ const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
 
-// A function, not an inline comparison: read straight off `formState` here, TypeScript narrows it
-// to the initialiser it can see above and calls every other status unreachable.
+// Functions, not inline comparisons: read straight off the state here, TypeScript narrows it to
+// the initialiser it can see above and calls every other status unreachable.
 function isVerifyingOrDone(state: StepState): boolean {
   return state.status === 'verifying' || state.status === 'verified';
 }
+function isResending(state: ResendState): boolean {
+  return state.status === 'sending';
+}
 
 const isBusy = $derived(isVerifyingOrDone(formState));
+/** One lock across both requests. A resend that lands during a verify resets the step over the
+ * outcome the verify is about to write, and one after a verify re-enables a field whose code is
+ * spent. */
+const isLocked = $derived(isBusy || isResending(resend));
 const hasFullCode = $derived(code.length === OTP_LENGTH);
 
 // Read through a `$derived` rather than from `resend` directly: the effect would otherwise depend
@@ -78,7 +85,7 @@ function keepDigits(text: string): string {
 }
 
 async function submitCode() {
-  if (isBusy || !hasFullCode) return;
+  if (isLocked || !hasFullCode) return;
 
   formState = { status: 'verifying' };
   let message: string | null;
@@ -115,7 +122,7 @@ function handleSubmit(event: SubmitEvent) {
 }
 
 async function handleResend() {
-  if (resend.status === 'waiting' || resend.status === 'sending') return;
+  if (isLocked || resend.status === 'waiting') return;
 
   resend = { status: 'sending' };
   // `false`, unlike the first send: this address has already been sent a code, so creating a user
@@ -136,6 +143,8 @@ async function handleResend() {
   code = '';
   formState = { status: 'idle' };
   resend = { status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S };
+  // Disabled while the resend was in flight, like every other control.
+  await tick();
   codeInputElement?.focus();
 }
 </script>
@@ -150,7 +159,7 @@ async function handleResend() {
       pattern={REGEXP_ONLY_DIGITS}
       pasteTransformer={keepDigits}
       onComplete={() => void submitCode()}
-      disabled={isBusy}
+      disabled={isLocked}
       aria-invalid={formState.status === 'failed' || undefined}
       aria-describedby={formState.status === 'failed'
         ? `${descriptionId} ${errorId}`
@@ -189,7 +198,7 @@ async function handleResend() {
     variant="link"
     class="px-0"
     onclick={handleResend}
-    disabled={resend.status === 'waiting' || resend.status === 'sending'}
+    disabled={isLocked || resend.status === 'waiting'}
   >
     {#if resend.status === 'waiting'}
       Send a new code in {resend.remainingSeconds}s
@@ -199,7 +208,9 @@ async function handleResend() {
       Send a new code
     {/if}
   </Button>
-  <Button variant="link" class="px-0" onclick={onChangeEmail}>Change email</Button>
+  <Button variant="link" class="px-0" onclick={onChangeEmail} disabled={isLocked}>
+    Change email
+  </Button>
 </div>
 
 {#if resend.status === 'failed'}

@@ -211,6 +211,56 @@ describe('CodeStep', () => {
     await expect.element(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
   });
 
+  describe('one request at a time', () => {
+    /** Rendered with the cooldown already spent, which is the case that matters: anyone who waited
+     * for their email has a live resend button by the time they type the code. */
+    async function renderPastCooldown(auth: FakeBrowserAuth, onSignedIn?: () => Promise<void>) {
+      vi.useFakeTimers();
+      const screen = await render(CodeStep, props(auth, { onSignedIn }));
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
+      vi.useRealTimers();
+      return screen;
+    }
+
+    function expectOtherControlsLocked(screen: Awaited<ReturnType<typeof render>>) {
+      return Promise.all([
+        expect.element(screen.getByRole('button', { name: 'Send a new code' })).toBeDisabled(),
+        expect.element(screen.getByRole('button', { name: 'Change email' })).toBeDisabled(),
+      ]);
+    }
+
+    test('resend and Change email are locked while a code is being verified', async () => {
+      const auth = fakeBrowserAuth();
+      auth.verifyOtp.mockReturnValue(new Promise(() => {}));
+      const screen = await renderPastCooldown(auth);
+
+      await codeField(screen).fill('123456');
+
+      await expectOtherControlsLocked(screen);
+    });
+
+    test('resend and Change email stay locked once the code is verified', async () => {
+      const auth = fakeBrowserAuth();
+      const screen = await renderPastCooldown(auth, () => new Promise(() => {}));
+
+      await codeField(screen).fill('123456');
+
+      await expect.poll(() => auth.verifyOtp.mock.calls.length).toBe(1);
+      await expectOtherControlsLocked(screen);
+    });
+
+    test('the field is locked while a resend is in flight', async () => {
+      const auth = fakeBrowserAuth();
+      auth.signInWithOtp.mockReturnValue(new Promise(() => {}));
+      const screen = await renderPastCooldown(auth);
+
+      await screen.getByRole('button', { name: 'Send a new code' }).click();
+
+      await expect.element(codeField(screen)).toBeDisabled();
+      await expect.element(screen.getByRole('button', { name: 'Change email' })).toBeDisabled();
+    });
+  });
+
   test('a resend that throws reports it and leaves the button ready to try again', async () => {
     vi.useFakeTimers();
     const auth = fakeBrowserAuth();
