@@ -30,6 +30,9 @@ A user can upload a CSV or XLSX file matching a predefined column format.
 The server sends requests to a Python worker that runs the existing AI library to process the
 data and generate a PDF and an XLSX file.
 
+A report never frames a shift from beef or lamb to chicken or fish as a win — not in its wording,
+targets, or metrics. That substitution can greatly increase total animal suffering.
+
 ### Errors during upload and processing
 
 Four distinct failures can reach the user, and each calls for a different answer:

@@ -93,12 +93,10 @@ catalog:
 minimumReleaseAgeExclude:
   - shadcn-svelte@1.5.0
 
-# `PinInput` schedules three timeouts per value change and never clears them, so one that
-# fires after the component is destroyed dispatches `input` on a detached node and writes
-# state belonging to a dead effect (Svelte's `derived_inert` warning). A backport of the fix
-# we sent upstream, unchanged but for being compiled: `syncTimeouts` captures the window and
-# returns a disposer, which is what the `watch` now returns. Capturing matters — reaching the
-# window back through `domContext` from the teardown is the same dead read by another route.
-# Unreleased as of 2.19.2; drop the patch once a release carries it.
+# Fix for https://github.com/huntabyte/bits-ui/pull/2166.
 patchedDependencies:
   bits-ui@2.18.1: patches/bits-ui@2.18.1.patch
+# bits-ui is only a dependency of @gbd/web, so `pnpm deploy --filter @gbd/worker` (apps/worker's
+# Dockerfile) prunes it out of scope entirely — pnpm would otherwise treat the patch above as
+# unused and fail that deploy.
+allowUnusedPatches: true
