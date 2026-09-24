@@ -98,6 +98,11 @@ form actions. A real `<form>` with `onsubmit` and a `<button type="submit">` mea
 blocks an invalid submit and focuses the first bad field; `reportValidity()` is only for a
 programmatic submit. Async failures and hand-written checks render in a `<Field.Error>`.
 
+**The exception is a form that completes itself**, like the sign-in code step: it submits the
+moment its one field is full, so it has no submit button and no `required` field to block on.
+It still wraps the field in a real `<form>`, because Enter submitting it is the fallback when a
+value lands without the component seeing it fill.
+
 **Trap: a hidden or `type="hidden"` control is skipped by constraint validation.** `required` on a
 hidden file input blocks submission with no visible message; on a `RadioGroup`'s hidden input it
 does nothing at all. Those get a check in the handler, an inline message, and a manual
