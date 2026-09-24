@@ -173,26 +173,35 @@ def analyze(request, *, report_progress=_ignore, llm: LlmClient | None = None) -
     if request.unit_system == "lb":
         df["weight"] *= LB_TO_KG
     df_final, summary, ai_review_df = categorize_products(
-        df, llm, historical_categorizations=get_previously_categorized_items(),
-        cache_write_mode="none", dayfirst_preference=False,
+        df,
+        llm,
+        historical_categorizations=get_previously_categorized_items(),
+        cache_write_mode="none",
+        dayfirst_preference=False,
     )
     # The stem names the outputs: food_report_report.{pdf,xlsx}.
     report_input = request.work_directory / "categorized_report.csv"
     df_final.rename(columns={"weight": "kilos_total"})[
         ["date", "product", "category", "kilos_total"]
     ].to_csv(report_input, index=False)
-    (request.work_directory / "client_metadata.json").write_text(json.dumps({
-        "client": _title(request),
-        "baseline_pilot": "baseline",
-        "procurement_serving": "procurement",
-    }))
+    (request.work_directory / "client_metadata.json").write_text(
+        json.dumps(
+            {
+                "client": _title(request),
+                "baseline_pilot": "baseline",
+                "procurement_serving": "procurement",
+            }
+        )
+    )
     result = run_food_report(
         input_file=report_input,
         diner_meal_mapping=dict(request.monthly_counts),  # the library checks isinstance(x, dict)
         output_dir=request.work_directory / "report",
         procurement_serving="procurement",
         diner_or_meal={"people": "diner", "meals": "meal"}[request.counts_basis],
-        region="us", missing_data_policy="warn_continue", show_quality_successes=False,
+        region="us",
+        missing_data_policy="warn_continue",
+        show_quality_successes=False,
         report_progress=report_progress,
     )
     return AnalysisOutcome(
