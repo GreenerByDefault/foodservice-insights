@@ -129,7 +129,7 @@ database still needs.
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
 | Email normalization in the form | Reused `$lib/forms/validation`'s `emailAddress` and `MAX_EMAIL_LENGTH`, not a schema of sign-in's own | It already trims, lowercases and caps at 254, matching `organization_invite_email_is_lowercase` — and GoTrue lowercases anyway, so the address the form sends is the address the fixtures read back |
-| OTP input | Plain `<input inputmode="numeric" autocomplete="one-time-code" pattern maxlength>` | Native constraint validation per `apps/web/README.md` § Forms; no new dependency |
+| OTP input | bits-ui `PinInput`, vendored as shadcn-svelte's `input-otp` in `$lib/components/ui/input-otp/` | `bits-ui` was already a dependency. The step completes itself on the last digit, so it is the self-completing exception in `apps/web/README.md` § Forms |
 | Env vars | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public` (both landed with the form); `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
 | Dependencies | `@supabase/ssr` ^0.12.7, `@supabase/supabase-js` ^2.116.0, both in the catalog, both `dependencies` of `apps/web` | Latest at the time; server code imports them, so not `devDependencies` |
 | Screenshot text the identity owns | A screenshot spec pins what the shell renders — `test.use({ orgName })` today, a `userEmail` equivalent once identities are per-test — and a pinned value is *shared* across the run, never per-test | `organization_name_unique_ci` and `auth.users.email` are globally unique, so two tests holding one pinned value at once collide. Sharing the row is what keeps those specs `fullyParallel`; serializing them behind a name is not an acceptable price for one string. Nothing pinned may be mutated, and nothing is deleted — the run's database is dropped wholesale. `account/menu.png` renders the signed-in address, which is why `identityEmail` defaults to a fixed one and only `tests/e2e` (which asserts on delivered mail, against a shared Mailpit) passes a unique one |
@@ -174,6 +174,10 @@ users, and the seed is deleted. Dev workflow changes with it.
   quiet only for "User from sub claim in JWT does not exist"; `AuthRetryableFetchError` →
   unavailable → 503 `SERVICE_UNAVAILABLE_ERROR`). Keep the `identifyUser(event): Promise<UserId |
   null>` signature so `hooks.server.test.ts`'s mock seam is untouched.
+- Two details from `cfa-app`'s `hooks.server.ts`: pass `global: { fetch: event.fetch }` to the
+  server client, and have `setAll` catch and warn when `event.cookies.set` throws `"after the
+  response has been generated"` — `getUser()` can rotate a token late in a streamed response
+  (`cfa-app` `hooks.server.ts:359-377`).
 - `hooks.server.ts`: a `null` from `loadAuthorization` becomes `console.error` + signed out (replace
   the throw and its comment). Delete the "temporary" test at `hooks.server.test.ts:124`; add one for
   the new branch.
@@ -304,6 +308,10 @@ allow that).
 
 ## Follow-ups (not in this plan)
 
+- Pending-OTP persistence: `cfa-app` keeps `{ email, createdAt }` in `sessionStorage` for an hour
+  and restores the code step on remount (`auth-flow.svelte:66-129`), so a reload does not cost a
+  second code and a second cooldown. Needs a `restoring` state held through hydration, and changes
+  what `sign-in.screenshot.ts` captures.
 - CSP via SvelteKit `kit.csp` with nonces; `connect-src` must allow the runtime Supabase URL.
 - `/account` change-email (`updateUser` + `verifyOtp` type `email_change`; needs the `email_change`
   template with `{{ .Token }}`) and delete-account (`SUPABASE_SECRET_KEY` in the app, last-admin
