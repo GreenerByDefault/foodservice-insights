@@ -6,6 +6,9 @@ export const APP_NAME = 'Foodservice Insights';
 
 export * from './time.ts';
 
+/** The name of the cookie `@supabase/ssr` keeps the session in. */
+export const AUTH_COOKIE_NAME = 'fsi-auth';
+
 /** How long an invite stays live before it expires. */
 export const INVITE_LIFETIME_DAYS = 14;
 

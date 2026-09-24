@@ -23,6 +23,8 @@
     "@gbd/db": "workspace:*",
     "@gbd/email": "workspace:*",
     "@gbd/storage": "workspace:*",
+    "@supabase/ssr": "catalog:",
+    "@supabase/supabase-js": "catalog:",
     "kysely": "catalog:",
     "valibot": "catalog:"
   },
