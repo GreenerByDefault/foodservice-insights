@@ -49,13 +49,21 @@ async function handleSubmit(event: SubmitEvent) {
   formState = { status: 'sending' };
   // Sign-in and sign-up are one flow: anyone may create an organization, so an address we have
   // never seen is a new account, not a mistake to correct.
-  const { error } = await auth.signInWithOtp({
-    email: parsed.output,
-    options: { shouldCreateUser: true },
-  });
+  let message: string | null;
+  try {
+    const { error } = await auth.signInWithOtp({
+      email: parsed.output,
+      options: { shouldCreateUser: true },
+    });
+    message = error && describeAuthError(error);
+  } catch (cause) {
+    // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
+    console.error('Could not send a sign-in code', cause);
+    message = describeAuthError({});
+  }
 
-  if (error) {
-    formState = { status: 'failed', message: describeAuthError(error) };
+  if (message) {
+    formState = { status: 'failed', message };
     emailInputElement?.focus();
     return;
   }

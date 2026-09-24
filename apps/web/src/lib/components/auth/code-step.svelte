@@ -81,12 +81,21 @@ async function submitCode() {
   if (isBusy || !hasFullCode) return;
 
   formState = { status: 'verifying' };
-  const { error } = await auth.verifyOtp({ email, token: code, type: 'email' });
+  let message: string | null;
+  try {
+    const { error } = await auth.verifyOtp({ email, token: code, type: 'email' });
+    message = error && describeAuthError(error);
+  } catch (cause) {
+    // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
+    console.error('Could not verify a sign-in code', cause);
+    message = describeAuthError({});
+  }
 
-  if (error) {
-    formState = { status: 'failed', message: describeAuthError(error) };
-    // Cleared, not left in place: a full field has no room for the next paste to land in, and a
-    // rejected code is never the one that works.
+  if (message) {
+    formState = { status: 'failed', message };
+    // Cleared, not left in place, even when nothing judged the code: a full field has no room for
+    // the next paste to land in, and bits-ui re-runs `onComplete` for a full value whenever its
+    // effect re-runs — so a kept code would retry a failing call in a loop.
     code = '';
     // The field is `disabled` while verifying, and a disabled input cannot take focus.
     await tick();
@@ -111,10 +120,17 @@ async function handleResend() {
   resend = { status: 'sending' };
   // `false`, unlike the first send: this address has already been sent a code, so creating a user
   // here could only mean the visitor changed the address out from under us.
-  const { error } = await auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  let message: string | null;
+  try {
+    const { error } = await auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    message = error && describeAuthError(error);
+  } catch (cause) {
+    console.error('Could not resend a sign-in code', cause);
+    message = describeAuthError({});
+  }
 
-  if (error) {
-    resend = { status: 'failed', message: describeAuthError(error) };
+  if (message) {
+    resend = { status: 'failed', message };
     return;
   }
   code = '';

@@ -85,6 +85,21 @@ describe('CodeStep', () => {
     });
   });
 
+  test('a verify that throws, as it does when the client cannot load, hands the field back', async () => {
+    const auth = fakeBrowserAuth();
+    auth.verifyOtp.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
+    const onSignedIn = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(CodeStep, props(auth, { onSignedIn }));
+
+    await codeField(screen).fill('123456');
+
+    await expect.element(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument();
+    await expect.element(codeField(screen)).toBeEnabled();
+    await expect.element(codeField(screen)).toHaveValue('');
+    expect(auth.verifyOtp).toHaveBeenCalledOnce();
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
   test('stays disabled after a verified code, so the navigation cannot be raced into a second verifyOtp', async () => {
     const auth = fakeBrowserAuth();
     // A real `onSignedIn` navigates; it never resolves back into an interactive form.
@@ -193,6 +208,22 @@ describe('CodeStep', () => {
     await expect
       .element(screen.getByRole('alert'))
       .toHaveTextContent('Too many codes requested. Wait a minute, then try again.');
+    await expect.element(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+  });
+
+  test('a resend that throws reports it and leaves the button ready to try again', async () => {
+    vi.useFakeTimers();
+    const auth = fakeBrowserAuth();
+    auth.signInWithOtp.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
+    const screen = await render(CodeStep, props(auth));
+    await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
+    vi.useRealTimers();
+
+    await screen.getByRole('button', { name: 'Send a new code' }).click();
+
+    await expect
+      .element(screen.getByRole('alert'))
+      .toHaveTextContent('Something went wrong. Try again.');
     await expect.element(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
   });
 });

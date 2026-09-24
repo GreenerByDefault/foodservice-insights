@@ -50,6 +50,20 @@ describe('EmailStep', () => {
     expect(onCodeSent).not.toHaveBeenCalled();
   });
 
+  test('a send that throws, as it does when the client cannot load, leaves the form ready to retry', async () => {
+    const auth = fakeBrowserAuth();
+    auth.signInWithOtp.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
+    const onCodeSent = vi.fn();
+    const screen = await render(EmailStep, { auth, email: '', focusOnMount: false, onCodeSent });
+
+    await screen.getByLabelText('Email address').fill('ada@example.com');
+    await screen.getByRole('button', { name: 'Send code' }).click();
+
+    await expect.element(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument();
+    await expect.element(screen.getByRole('button', { name: 'Send code' })).toBeEnabled();
+    expect(onCodeSent).not.toHaveBeenCalled();
+  });
+
   test('the button disables and swaps its label while the send is in flight', async () => {
     const auth = fakeBrowserAuth();
     auth.signInWithOtp.mockReturnValue(new Promise(() => {}));
