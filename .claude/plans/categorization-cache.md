@@ -12,8 +12,8 @@ per claim, so the next spawn always sees the latest verified rows. Python never 
 database. The library's other two caches (entree classifications, weight patterns) stay
 gitignored files in the lab — only the product cache gets a table.
 
-This plan depends on `python-port.md` PR 4 (`analyze()`) having landed, since PR 5 here edits
-`categorize_cache.py` and the seam it defines. PRs 1–4 touch only `packages/db`, `contract/`, and
+This plan depends on `python-port.md` PR 3 (`analyze()`) having landed, since PR 5 here edits
+`categorization/cache.py` and the seam it defines. PRs 1–4 touch only `packages/db`, `contract/`, and
 `apps/worker`, and can start any time.
 
 Requirement: REQUIREMENTS.md § Product categorization cache. The seam docstring in `analysis.py`
@@ -193,7 +193,7 @@ Both halves + `contract/` together, per `contract/README.md`.
 
 ## PR 5 — library: consume the seam rows, drop the packaged CSV
 
-- `categorize_cache.py` keeps only `normalize_product_name`, `unanimous_index`,
+- `categorization/cache.py` keeps only `_normalize_product_name`, `_unanimous_index`,
   `build_cleaned_name_reuse_index(historical) -> dict[str, str]`. Deleted: the loader and path
   helper (and the `.gitignore` entry), `save_historical_categorizations`, the unreviewed-web-app
   cache functions, both `promote_*`, `_validate_cache_write_mode`/`cache_write_mode`.
@@ -207,7 +207,7 @@ Both halves + `contract/` together, per `contract/README.md`.
 - `categorize_file` (notebook I/O wrapper) → lab `categorize_file.py`. GBD's "categorize →
   review → save to cache" notebook flow becomes a lab tool that emits rows for the import script;
   noted, not designed here.
-- Tests: delete the write/promote/web-app tests in `test_categorize_cache`; keep
+- Tests: delete the write/promote/web-app tests in `tests/categorization/test_cache.py`; keep
   `normalize_product_name` and the reuse-index tests; new `test_frame_from_rows`,
   `test_unknown_category_is_dropped_and_counted`; `test_analysis` cache-hit test now passes rows
   instead of patching a path.
