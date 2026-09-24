@@ -31,6 +31,15 @@ describe('SignInFlow', () => {
     await expect.element(screen.getByLabelText('Email address')).toHaveValue('ada@example.com');
   });
 
+  test('two flows on one document each label their own field', async () => {
+    await render(SignInFlow, { auth: fakeBrowserAuth(), onSignedIn: vi.fn() });
+    await render(SignInFlow, { auth: fakeBrowserAuth(), onSignedIn: vi.fn() });
+
+    const labelled = [...document.querySelectorAll('label')].map((label) => label.control);
+    const inputs = [...document.querySelectorAll('input[name="email"]')];
+    expect(labelled).toEqual(inputs);
+  });
+
   test('each step swapped in takes focus, which the swap itself would otherwise drop on the body', async () => {
     const auth = fakeBrowserAuth();
     const screen = await render(SignInFlow, { auth, onSignedIn: vi.fn() });

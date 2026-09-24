@@ -40,6 +40,8 @@ let code = $state('');
 let codeInputElement: HTMLInputElement | null = $state(null);
 let retryButton: HTMLButtonElement | null = $state(null);
 
+// The field's id is per instance, unlike the `name` from `FIELD`: the flow mounts in more than one
+// place, and a fixed id collides the moment two of them land on one document.
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
@@ -180,9 +182,9 @@ async function handleResend() {
 
 <form onsubmit={handleSubmit} class="w-full space-y-4">
   <Field.Field>
-    <Field.Label for={FIELD.code}>Sign-in code</Field.Label>
+    <Field.Label for={fieldId}>Sign-in code</Field.Label>
     <InputOTP.Root
-      inputId={FIELD.code}
+      inputId={fieldId}
       name={FIELD.code}
       maxlength={OTP_LENGTH}
       pattern={REGEXP_ONLY_DIGITS}

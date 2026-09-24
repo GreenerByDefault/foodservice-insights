@@ -25,6 +25,8 @@ type StepState = { status: 'idle' } | { status: 'sending' } | { status: 'failed'
 let formState: StepState = $state({ status: 'idle' });
 let emailInputElement: HTMLInputElement | null = $state(null);
 
+// The field's id is per instance, unlike the `name` from `FIELD`: the flow mounts in more than one
+// place, and a fixed id collides the moment two of them land on one document.
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
@@ -83,10 +85,10 @@ async function handleSubmit(event: SubmitEvent) {
 
 <form onsubmit={handleSubmit} class="w-full space-y-8">
   <Field.Field>
-    <Field.Label for={FIELD.email}>Email address</Field.Label>
+    <Field.Label for={fieldId}>Email address</Field.Label>
     <Input
       bind:ref={emailInputElement}
-      id={FIELD.email}
+      id={fieldId}
       name={FIELD.email}
       type="email"
       autocomplete="email"
