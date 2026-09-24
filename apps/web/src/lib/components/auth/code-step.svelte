@@ -1,6 +1,6 @@
 <script lang="ts">
 import { REGEXP_ONLY_DIGITS } from 'bits-ui';
-import { tick } from 'svelte';
+import { onDestroy, tick } from 'svelte';
 import type { BrowserAuth } from '$lib/auth/browser';
 import { describeAuthError, FIELD, OTP_LENGTH, RESEND_COOLDOWN_S } from '$lib/auth/sign-in';
 import { Button } from '$lib/components/ui/button';
@@ -38,6 +38,13 @@ let codeInputElement: HTMLInputElement | null = $state(null);
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
+
+// A request can outlive the step — a navigation away mid-send — and a write after that would call
+// back into a parent that has moved on. So every `await` is followed by this check.
+let isMounted = true;
+onDestroy(() => {
+  isMounted = false;
+});
 
 // Functions, not inline comparisons: read straight off the state here, TypeScript narrows it to
 // the initialiser it can see above and calls every other status unreachable.
@@ -97,6 +104,7 @@ async function submitCode() {
     console.error('Could not verify a sign-in code', cause);
     message = describeAuthError({});
   }
+  if (!isMounted) return;
 
   if (message) {
     formState = { status: 'failed', message };
@@ -135,6 +143,7 @@ async function handleResend() {
     console.error('Could not resend a sign-in code', cause);
     message = describeAuthError({});
   }
+  if (!isMounted) return;
 
   if (message) {
     resend = { status: 'failed', message };

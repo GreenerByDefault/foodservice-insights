@@ -1,4 +1,5 @@
 <script lang="ts">
+import { onDestroy } from 'svelte';
 import * as v from 'valibot';
 import type { BrowserAuth } from '$lib/auth/browser';
 import { describeAuthError, FIELD, OTP_LENGTH } from '$lib/auth/sign-in';
@@ -27,6 +28,13 @@ let emailInputElement: HTMLInputElement | null = $state(null);
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
+
+// A request can outlive the step — a navigation away mid-send — and a write after that would call
+// back into a parent that has moved on. So every `await` is followed by this check.
+let isMounted = true;
+onDestroy(() => {
+  isMounted = false;
+});
 
 $effect(() => {
   if (focusOnMount) emailInputElement?.focus();
@@ -61,6 +69,7 @@ async function handleSubmit(event: SubmitEvent) {
     console.error('Could not send a sign-in code', cause);
     message = describeAuthError({});
   }
+  if (!isMounted) return;
 
   if (message) {
     formState = { status: 'failed', message };

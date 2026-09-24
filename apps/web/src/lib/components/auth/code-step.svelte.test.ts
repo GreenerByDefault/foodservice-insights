@@ -111,6 +111,22 @@ describe('CodeStep', () => {
     await expect.element(codeField(screen)).toBeDisabled();
   });
 
+  test('a verify that settles after the step is gone does not sign in from a flow that has moved on', async () => {
+    const auth = fakeBrowserAuth();
+    const verify = Promise.withResolvers<Awaited<ReturnType<FakeBrowserAuth['verifyOtp']>>>();
+    auth.verifyOtp.mockReturnValue(verify.promise);
+    const onSignedIn = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(CodeStep, props(auth, { onSignedIn }));
+
+    await codeField(screen).fill('123456');
+    await expect.poll(() => auth.verifyOtp.mock.calls.length).toBe(1);
+    screen.unmount();
+    verify.resolve({ data: { user: null, session: null }, error: null });
+    await verify.promise;
+
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
   test('resend is held for the cooldown, then sends without creating a user', async () => {
     // Fake timers only until the countdown is spent: a locator action while they are installed
     // would have its own retries frozen along with the clock.

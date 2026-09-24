@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { authError, fakeBrowserAuth } from '$lib/auth/testing/fake';
+import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '$lib/auth/testing/fake';
 import EmailStep from './email-step.svelte';
 
 describe('EmailStep', () => {
@@ -61,6 +61,22 @@ describe('EmailStep', () => {
 
     await expect.element(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument();
     await expect.element(screen.getByRole('button', { name: 'Send code' })).toBeEnabled();
+    expect(onCodeSent).not.toHaveBeenCalled();
+  });
+
+  test('a send that settles after the step is gone does not advance a flow that has moved on', async () => {
+    const auth = fakeBrowserAuth();
+    const send = Promise.withResolvers<Awaited<ReturnType<FakeBrowserAuth['signInWithOtp']>>>();
+    auth.signInWithOtp.mockReturnValue(send.promise);
+    const onCodeSent = vi.fn();
+    const screen = await render(EmailStep, { auth, email: '', focusOnMount: false, onCodeSent });
+
+    await screen.getByLabelText('Email address').fill('ada@example.com');
+    await screen.getByRole('button', { name: 'Send code' }).click();
+    screen.unmount();
+    send.resolve({ data: { user: null, session: null, messageId: null }, error: null });
+    await send.promise;
+
     expect(onCodeSent).not.toHaveBeenCalled();
   });
 
