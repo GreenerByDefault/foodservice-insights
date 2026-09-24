@@ -19,9 +19,8 @@ Python; nothing on the TypeScript side applies, since the two stacks share no to
 Verify a change with `just lint && just check && just test`, plus `just test-lab` if you
 touched the lab.
 
-> **Status:** the packages are scaffolding. The analysis library moves in from the
-> `catering_analysis` repo in a later change, and the conventions its authors already follow
-> merge into this file then — see [Open](#open).
+> **Status:** the analysis library has landed in `gbd_foodservice_insights`; the lab and the
+> `analyze()` implementation follow.
 
 ## The workspace
 
@@ -33,7 +32,10 @@ touched the lab.
   to the *closest* `pyproject.toml` that has one, so a local section silently replaces the
   root config — including the lab ban — rather than extending it.
 - **Packaged assets live inside `<package>/`.** Hatchling ships every non-Python file
-  under the package directory and nothing outside it.
+  under the package directory and nothing outside it. Read them with a plain path from
+  `PACKAGE_DIR` in the package's `__init__.py`: the package is always installed as files on
+  disk (the worker image installs `--no-editable` into site-packages), never zipped.
+  *Rejected: `importlib.resources`, which only pays off for zipped installs.*
 
 ## The lab boundary
 
@@ -54,18 +56,15 @@ constraints, so its code carries none of the product's guarantees.
   library largely is not annotated yet; where a ported module is too noisy to fix now, add a
   scoped `[[tool.ty.overrides]]` entry or inline ignore comment rather than loosening the global rules.
 - **Prefer `pathlib` over `os.path`**, and pass paths as `Path`.
+- **Fail loudly on bad data.** No silent skipping and no deferred error collection: rejecting a
+  report beats delivering a misleading one.
+- **Every pipeline step asserts its row counts and logs its before/after shape.** A step that
+  silently drops or overwrites rows is the failure we fear most.
+- **Plain pandas is fine.** Datasets rarely exceed thousands of rows, so do not vectorize or
+  chunk for performance.
 
 ## Open
 
-**Open:** the analysis library's own conventions have not been merged in yet. When its code
-lands, fold in `catering_analysis`'s `AGENTS.md` §9 (fail loudly on bad data with no silent
-skipping, row-count assertions and before/after shape logging on every pipeline step, avoid
-OOP, CSV for intermediate files, and the client/period/step filename convention) and §10
-(domain knowledge: the common shapes of broken client data, `GBD_categories.yaml` as the
-single source of truth for emissions factors, and the Gemini-first LLM provider preference).
-Decide at that point which of those belong here versus in a comment on the file that enacts
-them.
-
-**Open:** packaged data files are read today with `Path(__file__).parent`, which assumes the
-package is on disk rather than zipped. Decide whether to move to `importlib.resources` during
-the port or to commit to always installing from source.
+**Open:** the lab-workflow conventions from `catering_analysis`'s `AGENTS.md` — CSV for
+intermediate files, the client/period/step filename convention, and the common shapes of broken
+client data — move into the lab's README when the lab lands.

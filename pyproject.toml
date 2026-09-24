@@ -30,6 +30,8 @@ select = [
     "TID", # flake8-tidy-imports, which enforces the lab boundary below
     "RUF", # ruff-specific
 ]
+# Deliberate typography in plot labels.
+allowed-confusables = ["×", "–", "ℹ"]
 
 # Enforce import bans to keep clear boundaries.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

@@ -1,0 +1,270 @@
+categories:
+- name: Beef
+  cool_food_pledge_name: Beef and Buffalo Meat
+  emission_factor_us: 41.35
+  emission_factor_europe: 37.44
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: true
+  serving_weight_oz: 3
+
+- name: Lamb
+  cool_food_pledge_name: Lamb/mutton & goat meat
+  emission_factor_us: 41.62
+  emission_factor_europe: 39.62
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: true
+  serving_weight_oz: 3
+
+- name: Pork
+  cool_food_pledge_name: Pork (pig meat)
+  emission_factor_us: 9.83
+  emission_factor_europe: 8.06
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: true
+  serving_weight_oz: 3
+
+- name: Poultry
+  cool_food_pledge_name: Poultry (Chicken & Turkey)
+  emission_factor_us: 4.4
+  emission_factor_europe: 6.73
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: true
+  serving_weight_oz: 3
+
+- name: Fish & Mollusks
+  cool_food_pledge_name: Fish & Mollusks
+  emission_factor_us: 4.98
+  emission_factor_europe: 4.76
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: true
+  serving_weight_oz: 3
+
+- name: Shellfish (Shrimp & Lobster)
+  cool_food_pledge_name: Shellfish (Shrimp & lobster)
+  emission_factor_us: 21.13
+  emission_factor_europe: 19.34
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: true
+  serving_weight_oz: 3
+
+- name: Liquid Eggs
+  cool_food_pledge_name: Liquid Eggs
+  emission_factor_us: 3.66
+  emission_factor_europe: 3.85
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: false
+  serving_weight_oz: 1.5
+
+- name: Shelled Eggs
+  cool_food_pledge_name: Shelled Eggs
+  emission_factor_us: 3.66
+  emission_factor_europe: 3.85
+  is_animal_product: true
+  template_product_category: Animal Based Proteins
+  type: food
+  meat: false
+  serving_weight_oz: 1.75
+
+- name: Cheese
+  cool_food_pledge_name: Cheese
+  emission_factor_us: 8.69
+  emission_factor_europe: 8.62
+  is_animal_product: true
+  template_product_category: Dairy
+  type: food
+  meat: false
+  serving_weight_oz: 1
+
+- name: Butter
+  cool_food_pledge_name: Butter
+  emission_factor_us: 11.14
+  emission_factor_europe: 11.12
+  is_animal_product: true
+  template_product_category: Dairy
+  type: food
+  meat: false
+  serving_weight_oz: null
+
+- name: Ice Cream
+  cool_food_pledge_name: Ice Cream
+  emission_factor_us: 3.94
+  emission_factor_europe: 3.75
+  is_animal_product: true
+  template_product_category: Dairy
+  type: food
+  meat: false
+  serving_weight_oz: null
+
+- name: Cream
+  cool_food_pledge_name: Cream
+  emission_factor_us: 6.82
+  emission_factor_europe: 6.7
+  is_animal_product: true
+  template_product_category: Dairy
+  type: food
+  meat: false
+  serving_weight_oz: null
+
+- name: Milk
+  cool_food_pledge_name: Milk (Cow's milk)
+  emission_factor_us: 2.17
+  emission_factor_europe: 1.77
+  is_animal_product: true
+  template_product_category: Dairy
+  type: drink
+  meat: false
+  serving_weight_oz: 8
+
+- name: Yogurt
+  cool_food_pledge_name: Yogurt
+  emission_factor_us: 2.93
+  emission_factor_europe: 2.72
+  is_animal_product: true
+  template_product_category: Dairy
+  type: food
+  meat: false
+  serving_weight_oz: 5
+
+- name: Mayo
+  cool_food_pledge_name: Mayo
+  emission_factor_us: 3.36
+  emission_factor_europe: 4.57
+  is_animal_product: true
+  template_product_category: Dairy
+  type: food
+  meat: false
+  serving_weight_oz: null
+
+- name: Whole Grains
+  cool_food_pledge_name: Whole Grains
+  emission_factor_us: 1.77
+  emission_factor_europe: 1.52
+  is_animal_product: false
+  template_product_category: Plant-Based Proteins
+  type: food
+  meat: false
+  serving_weight_oz: 4.5
+
+- name: Plant-based Meats
+  cool_food_pledge_name: Plant-based Meats
+  emission_factor_us: 2.8
+  emission_factor_europe: 3.57
+  is_animal_product: false
+  template_product_category: Plant-Based Proteins
+  type: food
+  meat: false
+  serving_weight_oz: 3
+
+- name: Legumes
+  cool_food_pledge_name: Legumes
+  emission_factor_us: 1.6
+  emission_factor_europe: 1.94
+  is_animal_product: false
+  template_product_category: Plant-Based Proteins
+  type: food
+  meat: false
+  serving_weight_oz: 3
+
+- name: Nuts & Seeds
+  cool_food_pledge_name: Nuts & Seeds
+  emission_factor_us: 4.29
+  emission_factor_europe: 2.42
+  is_animal_product: false
+  template_product_category: Plant-Based Proteins
+  type: food
+  meat: false
+  serving_weight_oz: 3
+
+- name: Almond/Coconut Milk
+  cool_food_pledge_name: Almond/Coconut Milk
+  emission_factor_us: 0.69
+  emission_factor_europe: 0.69
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: drink
+  meat: false
+  serving_weight_oz: 8
+
+- name: Oat Milk
+  cool_food_pledge_name: Oat Milk
+  emission_factor_us: 0.89
+  emission_factor_europe: 0.62
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: drink
+  meat: false
+  serving_weight_oz: 8
+
+- name: Rice Milk
+  cool_food_pledge_name: Rice Milk
+  emission_factor_us: 1.17
+  emission_factor_europe: 0.89
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: drink
+  meat: false
+  serving_weight_oz: 8
+
+- name: Soy Milk
+  cool_food_pledge_name: Soy Milk
+  emission_factor_us: 0.48
+  emission_factor_europe: 0.57
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: drink
+  meat: false
+  serving_weight_oz: 8
+
+- name: Plant-based Cheese
+  cool_food_pledge_name: Plant-Based Cheese
+  emission_factor_us: 2.95
+  emission_factor_europe: 2.29
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: food
+  meat: false
+  serving_weight_oz: 1
+
+- name: Plant-based Yogurt
+  cool_food_pledge_name: Plant-Based Yogurt
+  emission_factor_us: 0.81
+  emission_factor_europe: 0.69
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: food
+  meat: false
+  serving_weight_oz: 5
+
+- name: Plant-based Egg
+  cool_food_pledge_name: Plant-Based Egg
+  emission_factor_us: 2.76
+  emission_factor_europe: 2.89
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: food
+  meat: false
+  serving_weight_oz: 0.11
+
+- name: Dairy Alternative (Unspecified)
+  cool_food_pledge_name: Unspecified non dairy milk
+  emission_factor_us: null
+  emission_factor_europe: null
+  is_animal_product: false
+  template_product_category: Plant-Based Dairy & Egg
+  type: drink
+  meat: false
+  serving_weight_oz: null
