@@ -50,14 +50,17 @@ def test_reports_progress_once_per_report_progress_call(run_directory: Path) -> 
     assert read_json(run_directory / layout.PROGRESS) == {"sequence": 3}
 
 
-def test_the_real_analyze_is_not_ported_yet(run_directory: Path) -> None:
+def test_the_default_analyze_without_an_api_key_fails_as_unknown(
+    run_directory: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
     exit_code = run(run_directory)  # no `analyze` override: exercises the production default
 
     assert exit_code == names.EXIT_WROTE_FAILURE
     failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "unknown"
-    assert failure["detail"] == "gbd_foodservice_insights.analyze is not ported yet"
-    assert "NotImplementedError" in failure["traceback"]
+    assert failure["detail"] == "OPENAI_API_KEY must be set in environment variables"
 
 
 def test_writes_a_contract_violation_when_the_manifest_is_missing(run_directory: Path) -> None:

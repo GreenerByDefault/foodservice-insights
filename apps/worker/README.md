@@ -43,7 +43,7 @@ fast local loop needs different timings than production, which config profile to
 | --- | --- |
 | `stubbed` | `python -m worker_child.testing` — a fake analysis, steered by the report name. See [`worker_child/testing.py`](../../python/worker_child/worker_child/testing.py) for the scenario catalogue (`!slow`, `!hang`, `!fail:<reason>`, …). |
 | `mock-llm` | Not available yet — fails at startup naming why. The slot the analysis library's port fills. |
-| `live` | The real `python -m worker_child`. Raises `NotImplementedError` until the port lands. |
+| `live` | The real `python -m worker_child`. Needs `OPENAI_API_KEY`. |
 | `off` | `pnpm dev` starts no worker. |
 
 ## Layout
