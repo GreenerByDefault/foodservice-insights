@@ -308,6 +308,11 @@ provider, and `EMAIL_TRANSPORT` already selects between implementations. Switchi
 4. Point Supabase Auth at the provider's SMTP credentials, and raise Supabase's own auth email
    rate limit, which defaults to 30/hour once custom SMTP is configured. Set the OTP templates to
    match our copy.
+5. Flip production to `PUBLIC_AUTH_MODE=supabase`, and in the same change flip `tests/e2e`'s run
+   with it — `webContainerCommand` then also needs `PUBLIC_SUPABASE_URL` through `forContainer`,
+   and the publishable key. The placeholder's organization and reports belong to an address nobody
+   can sign in as, so before flipping, add a real admin to that organization in Studio, or accept
+   that its data is abandoned.
 
 **Open:** nothing consumes bounce or complaint webhooks, whichever provider wins. A hard-bouncing
 address will be suppressed provider-side and our sends will silently succeed forever after. Decide
