@@ -117,6 +117,16 @@ def test_food_report_end_to_end_produces_valid_artifacts(staged_report_inputs, t
     assert {"Raw Data", "Data_Quality_Findings"} <= qa_sheets
     assert "Raw Data" not in client_sheets  # internal tabs stay out of the client file
 
+    # The emissions-over-time chart sums "Monthly by Category" per month, so those
+    # rows must partition the raw emissions rather than repeat each month's total.
+    def emissions_by_month(sheet: str) -> pd.Series:
+        frame = pd.read_excel(result["qa_excel_path"], sheet_name=sheet)
+        return frame.groupby(frame["month_year"].astype(str))["emissions_kg_co2e"].sum()
+
+    pd.testing.assert_series_equal(
+        emissions_by_month("Monthly by Category"), emissions_by_month("Raw Data")
+    )
+
     # 6. The manifest is valid JSON and points at the real outputs.
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["run_status"] == "success"
