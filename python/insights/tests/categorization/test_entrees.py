@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import patch
 
 import pandas as pd
@@ -83,7 +84,7 @@ def test_run_entree_detector_uses_historical_before_llm(tmp_path):
     }
 
 
-def test_run_entree_detector_escalates_unsure_items_to_pro_marks_review(capsys, tmp_path):
+def test_run_entree_detector_escalates_unsure_items_to_pro_marks_review(caplog, tmp_path):
     """Ensures uncertain first-pass entree labels are escalated and normalized before merge-back."""
     historical_df = pd.DataFrame(columns=["product", "entree_classification"])
     classified_products = pd.DataFrame(
@@ -118,6 +119,7 @@ def test_run_entree_detector_escalates_unsure_items_to_pro_marks_review(capsys, 
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
         patch("pandas.DataFrame.to_csv") as mock_to_csv,
+        caplog.at_level(logging.INFO, logger=entrees.__name__),
     ):
         result_df = run_entree_detector(
             classified_products,
@@ -140,9 +142,8 @@ def test_run_entree_detector_escalates_unsure_items_to_pro_marks_review(capsys, 
     assert pd.isna(result_df.loc[1, "entree_review_reason"])
     mock_to_csv.assert_called_once()
 
-    captured = capsys.readouterr().out
-    assert "ENTREE CLASSIFICATION SUMMARY" in captured
-    assert "Gemini Pro escalations: 1" in captured
+    assert "ENTREE CLASSIFICATION SUMMARY" in caplog.text
+    assert "Gemini Pro escalations: 1" in caplog.text
 
 
 def test_classify_entrees_using_historical_classifications_cleaned_name_reuse():
