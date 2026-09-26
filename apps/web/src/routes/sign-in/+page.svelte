@@ -4,8 +4,10 @@ import PublicShell from '$lib/components/public-shell.svelte';
 import StubNotice from '$lib/components/stub-notice.svelte';
 </script>
 
-<!-- **Stub:** renders a placeholder. It will hold both steps of email OTP in one page — the
-     address, then the six-digit code, kept in `$state`.
+<!-- **Stub:** renders a placeholder. `$lib/components/auth/sign-in-flow.svelte` already holds both
+     steps of email OTP, ready to mount here — but until `identifyUser` reads a real session, every
+     request arrives signed in as the placeholder user and the `load` below redirects away, so
+     mounting it now would put a form behind a door nobody can open.
      Supabase is called from the browser — `signInWithOtp`, then `verifyOtp` — so no route of ours
      handles a credential and there is no callback route to receive a link. `@supabase/ssr` writes
      the cookie, `onAuthStateChange` fires `invalidateAll()`, and the server sees the session on the
