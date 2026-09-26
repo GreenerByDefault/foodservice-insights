@@ -45,7 +45,7 @@ const progressId = $props.id();
           <Input
             id="monthly-count-{month}"
             type="number"
-            min="0"
+            min="1"
             step="1"
             inputmode="numeric"
             autocomplete="off"

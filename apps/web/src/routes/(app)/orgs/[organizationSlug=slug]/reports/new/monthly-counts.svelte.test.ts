@@ -18,6 +18,8 @@ describe('MonthlyCounts', () => {
     await expect.element(february).toBeInTheDocument();
     await expect.element(january).toHaveAttribute('required');
     await expect.element(february).toHaveAttribute('required');
+    await expect.element(january).toHaveAttribute('min', '1');
+    await expect.element(february).toHaveAttribute('min', '1');
   });
 
   test('shows a year heading only once the months span more than one year', async () => {

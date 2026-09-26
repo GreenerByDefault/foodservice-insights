@@ -22,8 +22,11 @@ env allowlist is `PATH, HOME, LANG, TZ, OPENAI_API_KEY`. The three cache CSVs ar
 any `python/**/data_files/` and obtained out-of-band; the suite runs green without them, which is
 how CI runs it.
 
-What remains is to wire `WORKER_MODE=mock-llm`, require a monthly count of at least 1, and
-archive the source repo.
+A monthly count now has to be at least 1: `apps/web` (`metadata.ts`), the parent's own manifest
+contract (`apps/worker/src/contract/messages.ts`), and the child's contract check
+(`contract/fields.py`) all reject 0, matching what `run_food_report` already required.
+
+What remains is to wire `WORKER_MODE=mock-llm` and archive the source repo.
 
 The source repo is archived once one real client analysis has been run from `python/lab/` —
 one README line there ("archived into `foodservice-insights` at commit …"), then archive it on
@@ -96,12 +99,6 @@ new categorizations to it.
   the worker image already contains it.
 - Docs: `apps/worker/README.md`'s `WORKER_MODE` rows; `tests/e2e/README.md`'s Open resolved;
   `python.md`'s Status banner removed.
-
-## PR 2 — require a monthly count of at least 1
-
-`apps/web` (`v.minValue(0)` in `metadata.ts`) and the child's contract check (`minimum=0` in
-`contract/fields.py`) accept a count of 0, but `run_food_report` rejects a non-positive count, so
-today a 0 lands as `unknown`. Raise both minimums to 1, with a form error naming the month.
 
 ## Later cleanups (optional; the product works without them)
 
