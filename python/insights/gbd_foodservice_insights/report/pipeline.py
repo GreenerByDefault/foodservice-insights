@@ -45,6 +45,7 @@ from gbd_foodservice_insights.report.quality import (
 )
 from gbd_foodservice_insights.report.schema import (
     REGION_DAYFIRST,
+    DinerOrMeal,
     MissingDataPolicy,
     metric_display_label,
     metric_for_mode,
@@ -404,7 +405,7 @@ def run_food_report(
     diner_meal_mapping: Mapping[Any, Any] | None = None,
     output_dir: str | Path | None = None,
     procurement_serving: str | None = None,
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal = "diner",
     top_n_drivers: int = 5,
     region: str = "us",
     missing_data_policy: MissingDataPolicy = "hard_fail",
@@ -1130,18 +1131,3 @@ def run_food_report(
     finally:
         logger.info("Closing the report run log.")
         run_logging.close_report_run_file_handler(log_handler_state)
-
-
-# Backward-compatible wrappers for previous direct imports.
-def normalize_diner_meal_mapping(raw_mapping: dict[Any, Any]) -> dict[pd.Period, float]:
-    """Compatibility wrapper. Prefer
-    ``gbd_foodservice_insights.report.utils.normalize_diner_meal_mapping``.
-    """
-    return _normalize_diner_meal_mapping(raw_mapping)
-
-
-def load_diner_meal_mapping_from_json(diner_meal_file: str | Path | None) -> dict[pd.Period, float]:
-    """Compatibility wrapper. Prefer
-    ``gbd_foodservice_insights.report.utils.load_diner_meal_mapping_from_json``.
-    """
-    return _load_diner_meal_mapping_from_json(diner_meal_file)

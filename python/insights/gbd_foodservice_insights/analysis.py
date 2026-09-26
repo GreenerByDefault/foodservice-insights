@@ -46,6 +46,7 @@ from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataErr
 from gbd_foodservice_insights.errors import UpstreamApiError as UpstreamApiError
 from gbd_foodservice_insights.input_csv import read_input_csv
 from gbd_foodservice_insights.report.pipeline import run_food_report
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 type ReportProgress = Callable[[], None]
 
@@ -74,6 +75,7 @@ class AnalysisOutcome:
 
 
 LB_TO_KG: Final = 0.45359237
+_DINER_OR_MEAL: Final[Mapping[CountsBasis, DinerOrMeal]] = {"people": "diner", "meals": "meal"}
 
 
 def _ignore() -> None:
@@ -125,7 +127,7 @@ def analyze(
         diner_meal_mapping=request.monthly_counts,
         output_dir=request.work_directory / "report",
         procurement_serving="procurement",
-        diner_or_meal={"people": "diner", "meals": "meal"}[request.counts_basis],
+        diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
         region="us",
         missing_data_policy="hard_fail",
         show_quality_successes=False,
