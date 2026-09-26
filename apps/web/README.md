@@ -165,9 +165,25 @@ guarded. When the frontend
 changes auth state, such as logging out, it calls `invalidateAll()` so that SvelteKit re-runs the
 server `load()` functions without a full page refresh.
 
-**Until sign-in exists, only the identity check is stubbed.** `identifyUser` in
-`src/lib/server/auth/identify.ts` returns the seeded placeholder user instead of validating a
-JWT; everything downstream of it is the design above. The reasoning is in that file.
+**`PUBLIC_AUTH_MODE` decides who a request is**, and is required ([`src/lib/auth/mode.ts`](src/lib/auth/mode.ts)).
+In `placeholder`, every request is the seeded user from `pnpm seed:identity`, with no sign-in and
+no Supabase Auth; that is how `pnpm dev` and any hosted environment run until there is an email
+provider. In `supabase`, `identifyUser` in `src/lib/server/auth/identify.ts` validates the session
+cookie with `getUser()` on every request — never `getSession()`, which trusts the cookie unverified.
+Everything downstream of `identifyUser` is the same in both.
+
+`getUser()` fails four ways, and each has its own answer: no cookie is signed out; a deleted user's
+token is signed out and its cookie cleared; any other refusal is the same, plus a log; and an
+unreachable Supabase Auth is a 503, not "signed out". `classifyAuthResult` in `identify.ts` is the
+source of truth.
+
+**The session cookie's name is pinned** to `AUTH_COOKIE_NAME` (`@gbd/core`) on both the server and
+the browser client, rather than the default derived from the Supabase URL, which differs between a
+host process and a container.
+
+**The session cookie is not `HttpOnly`**: the browser client has to read it. So an XSS could steal
+a session; a CSP is the compensating control, and is not in place yet (see `ARCHITECTURE.md`
+§ Auth).
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.

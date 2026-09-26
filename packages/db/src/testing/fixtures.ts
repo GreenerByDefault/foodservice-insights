@@ -58,12 +58,14 @@ export function aChecksum(): Buffer {
 
 export async function insertAppUser(
   database: DatabaseExecutor,
-  overrides: { displayName?: string; isSuperadmin?: boolean; email?: string } = {},
+  overrides: { id?: string; displayName?: string; isSuperadmin?: boolean; email?: string } = {},
 ): Promise<AppUser> {
   const { id } = await database
     .insertInto('auth.users')
     .values({
-      id: crypto.randomUUID() as AppUser['id'],
+      // Set by a caller mirroring a user that already exists in GoTrue, whose id the session's
+      // JWT carries.
+      id: (overrides.id ?? crypto.randomUUID()) as AppUser['id'],
       email: overrides.email ?? `${crypto.randomUUID()}@example.test`,
     })
     .returning('id')

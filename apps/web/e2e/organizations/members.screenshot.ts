@@ -32,7 +32,8 @@
  * Every person's email is fixed rather than the fixture's default random one: unlike a
  * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
  * what's committed, so the text on screen has to be identical on every run. Every image here owns
- * a separate address prefix, so none depends on identities another is creating alongside it.
+ * a separate address prefix, so none depends on identities another is creating alongside it. The
+ * viewer's own row is on the roster too, so the viewer is the run's pinned identity.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -43,6 +44,8 @@ import { organizationInvitesApiHref } from '../../src/lib/hrefs.ts';
 import type { OrganizationAdminSpec, OrganizationMemberSpec } from '../fixtures/organizations.ts';
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
+
+test.use({ identity: 'pinned' });
 
 /** The three people both roster images show around the viewer. Which of them is the
  * *organization's* admin depends on the role the viewer holds, so that one comes back on its own

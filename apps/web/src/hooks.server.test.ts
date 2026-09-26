@@ -2,6 +2,7 @@ import type { UserId } from '@gbd/db';
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import * as mode from '$lib/auth/mode';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
 import { anAuthContext } from '$lib/server/testing/fixtures';
@@ -11,12 +12,14 @@ import { handle, handleError } from './hooks.server.ts';
 // See $lib/server/auth/authorization.test.ts for their tests.
 vi.mock('$lib/server/auth/identify', () => ({ identifyUser: vi.fn() }));
 vi.mock('$lib/server/auth/authorization', () => ({ loadAuthorization: vi.fn() }));
+vi.mock('$lib/auth/mode', () => ({ authMode: vi.fn() }));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 
 beforeEach(() => {
   vi.mocked(identify.identifyUser).mockReset().mockResolvedValue(A_USER_ID);
   vi.mocked(authorization.loadAuthorization).mockReset().mockResolvedValue(anAuthContext());
+  vi.mocked(mode.authMode).mockReset().mockReturnValue('supabase');
 });
 
 /** The parts of a request the hooks actually read. */
@@ -121,13 +124,31 @@ describe('handle', () => {
     await expect(handle({ event: anEvent(), resolve: respond })).rejects.toBe(cause);
   });
 
-  // This test is temporary and should be deleted when adding proper auth with JWTs.
-  test('fails loudly when the identified user has no database row, rather than 401ing silently', async () => {
-    vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
+  describe('an identified user with no database row', () => {
+    beforeEach(() => {
+      vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
+    });
 
-    await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(
-      /pnpm seed:identity/,
-    );
+    test('fails loudly in placeholder mode, pointing at the seed', async () => {
+      vi.mocked(mode.authMode).mockReturnValue('placeholder');
+
+      await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(
+        /pnpm seed:identity/,
+      );
+    });
+
+    test('is signed out in supabase mode, and logged', async () => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const event = anEvent();
+
+      await handle({ event, resolve: respond });
+
+      expect(event.locals.auth).toBeNull();
+      expect(logged).toHaveBeenCalledWith(expect.stringMatching(/no app_user row/), {
+        userId: A_USER_ID,
+      });
+      logged.mockRestore();
+    });
   });
 });
 

@@ -1,5 +1,5 @@
-/** Spin up a fresh per-run database, blob-store bucket and signed-in identity, run Playwright
- * against them, and tear everything down afterward.
+/** Spin up a fresh per-run database, blob-store bucket and identity, run Playwright against them,
+ * and tear everything down afterward.
  *
  * Both `apps/web/scripts/test-run.ts` and `tests/e2e/scripts/test-run.ts` need this: without it,
  * every `pnpm test:e2e` in every worktree would share one database and bucket and truncate them
@@ -14,15 +14,22 @@ import { createServer } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { requireEnv } from '@gbd/core/env';
+import type { UserId } from '@gbd/db';
 import {
   createRunDatabase,
   dropRunDatabase,
   ensureTemplateDatabase,
+  sweepStaleGoTrueUsers,
   sweepStaleRunDatabases,
 } from '@gbd/db/testing';
 import { type BlobStoreConfig, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { createRunBucket, deleteRunBucket, sweepStaleRunBuckets } from '@gbd/storage/testing';
-import { prepareRunIdentity } from './identity.ts';
+import {
+  deleteGoTrueUser,
+  GOTRUE_TEST_DOMAIN,
+  preparePinnedIdentity,
+  prepareRunIdentity,
+} from './identity.ts';
 
 /** Locates the `playwright` binary next to a `scripts/test-run.ts` caller.
  * Pass the caller's own `import.meta.url`. */
@@ -84,6 +91,13 @@ async function sweepStaleResources(connectionString: string, s3: BlobStoreConfig
     console.warn('test-run: sweeping stale run databases failed, continuing anyway', error);
   }
 
+  try {
+    const deleted = await sweepStaleGoTrueUsers(connectionString, GOTRUE_TEST_DOMAIN);
+    if (deleted > 0) console.log(`swept ${deleted} stale GoTrue user(s)`);
+  } catch (error) {
+    console.warn('test-run: sweeping stale GoTrue users failed, continuing anyway', error);
+  }
+
   const store = initializeBlobStore(s3);
   try {
     const dropped = await sweepStaleRunBuckets(store);
@@ -128,27 +142,41 @@ export type BeforePlaywrightResult = {
   afterPlaywright?(): Promise<void>;
 };
 
+/** Who the run's requests are, exported to the app and the fixtures as `PUBLIC_AUTH_MODE`. See
+ * `./identity.ts`. */
+export type RunIdentity =
+  | {
+      mode: 'placeholder';
+      /** The address the run's one identity is given. See `prepareRunIdentity`. */
+      email?: string;
+    }
+  | { mode: 'supabase' };
+
 export type RunAgainstFreshStackOptions = {
   connectionString: string;
   s3: BlobStoreConfig;
   playwrightBin: string;
   playwrightArgs: readonly string[];
-  /** The address the run's one identity is given. See `prepareRunIdentity`. */
-  identityEmail?: string;
+  identity: RunIdentity;
   beforePlaywright?(stack: FreshStack): Promise<BeforePlaywrightResult>;
 };
 
 /** Returns Playwright's own exit code — assign it straight to `process.exitCode`. */
 export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions): Promise<number> {
-  const { connectionString, s3, playwrightBin, playwrightArgs, identityEmail, beforePlaywright } =
+  const { connectionString, s3, playwrightBin, playwrightArgs, identity, beforePlaywright } =
     options;
 
   await sweepStaleResources(connectionString, s3);
 
   const templateName = await ensureTemplateDatabase(connectionString);
   const runDatabase = await createRunDatabase(connectionString, templateName);
+  let pinnedUserId: UserId | undefined;
   try {
-    await prepareRunIdentity(runDatabase.connectionString, identityEmail);
+    if (identity.mode === 'placeholder') {
+      await prepareRunIdentity(runDatabase.connectionString, identity.email);
+    } else {
+      pinnedUserId = await preparePinnedIdentity(runDatabase.connectionString, runDatabase.name);
+    }
 
     const store = initializeBlobStore(s3);
     let runBucket: Awaited<ReturnType<typeof createRunBucket>> | undefined;
@@ -178,6 +206,7 @@ export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions)
           SITE_URL: stack.siteUrl,
           PLAYWRIGHT_PORT: String(port),
           TEST_RUN_ID: stack.name,
+          PUBLIC_AUTH_MODE: identity.mode,
         });
       } finally {
         await before.afterPlaywright?.();
@@ -190,6 +219,7 @@ export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions)
       });
     }
   } finally {
+    if (pinnedUserId !== undefined) await deleteGoTrueUser(pinnedUserId);
     // Same reasoning as the bucket: `sweepStaleRunDatabases` is the backstop. This one usually
     // succeeds even on a hard kill, since Playwright's own webServer teardown — not this
     // process — is what closes the pool holding the run database's last connection.

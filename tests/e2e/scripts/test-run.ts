@@ -76,10 +76,13 @@ async function main(): Promise<void> {
     connectionString: requireEnv('DB_CONNECTION_STRING'),
     s3: blobStoreConfigFromEnv(),
     playwrightBin: resolvePlaywrightBin(import.meta.url),
+    // `placeholder`, the way production is hosted until it flips to `supabase`, and this suite
+    // flips with it: it is the one suite that runs the production images.
+    //
     // The worker's notification sweep joins `analysisAttempt -> appUser -> auth.users.email` to
     // find a recipient, so the run's identity is also the mailbox `report-lifecycle.e2e.ts` reads.
     // Unique per run, because Mailpit is shared across concurrent runs and worktrees.
-    identityEmail: aTestEmailAddress('system-e2e'),
+    identity: { mode: 'placeholder', email: aTestEmailAddress('system-e2e') },
     playwrightArgs: process.argv.slice(2),
     beforePlaywright: startServices,
   });
