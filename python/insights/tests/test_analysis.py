@@ -18,32 +18,14 @@ from gbd_foodservice_insights.analysis import (
     analyze,
 )
 from gbd_foodservice_insights.categorization import cache
-from gbd_foodservice_insights.testing import KeywordLlmClient
-
-MONTHS = ("2025-01", "2025-02", "2025-03")
-KEYWORD_PRODUCTS = (
-    "CHEESE CHEDDAR 5LB",
-    "Chicken Breast Boneless",
-    "Ground Beef 80/20",
-    "Pork Loin",
-    "Salmon Fillet",
-    "Shrimp 21/25",
-    "Oat Milk Barista",
-    "Whole Milk Gallon",
-    "Butter Unsalted",
-    "Greek Yogurt",
-    "Liquid Egg Whites",
-    "Brown Rice",
+from gbd_foodservice_insights.testing import (
+    KEYWORD_PRODUCTS,
+    SAMPLE_MONTHS,
+    UNKNOWN_PRODUCTS,
+    KeywordLlmClient,
+    input_csv_text,
+    sample_input_csv,
 )
-UNKNOWN_PRODUCTS = ("Paper Towels", "Dish Soap")
-
-
-def _write_csv(path: Path, rows: Sequence[tuple[str, str, float]]) -> None:
-    pd.DataFrame(rows, columns=["product", "date", "weight"]).to_csv(path, index=False)
-
-
-def _sample_rows(products: Sequence[str]) -> list[tuple[str, str, float]]:
-    return [(product, f"{month}-15", 10.0) for month in MONTHS for product in products]
 
 
 def _request(
@@ -68,7 +50,7 @@ def _request(
         counts_basis=counts_basis,
         unit_system=unit_system,
         # Not a `dict`: `worker_child` hands over a read-only view.
-        monthly_counts=MappingProxyType(dict.fromkeys(MONTHS, 1000)),
+        monthly_counts=MappingProxyType(dict.fromkeys(SAMPLE_MONTHS, 1000)),
     )
 
 
@@ -116,7 +98,7 @@ def fake_report(monkeypatch: pytest.MonkeyPatch) -> FakeReport:
 
 def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     request = _request(tmp_path)
-    _write_csv(request.input_csv, _sample_rows(KEYWORD_PRODUCTS + UNKNOWN_PRODUCTS))
+    request.input_csv.write_text(sample_input_csv())
     llm = KeywordLlmClient()
     progress_calls = 0
 
@@ -141,7 +123,7 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
         "Substitution_Scenarios",
     ]
     assert workbook["Diners"].to_dict("records") == [
-        {"month_year": month, "diners": 1000} for month in MONTHS
+        {"month_year": month, "diners": 1000} for month in SAMPLE_MONTHS
     ]
     # One per LLM call, plus one per `run_food_report` stage.
     assert llm.calls
@@ -152,13 +134,13 @@ def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
     tmp_path: Path, fake_report: FakeReport
 ) -> None:
     request = _request(tmp_path)
-    _write_csv(request.input_csv, _sample_rows(("Cheddar Cheese", "Dish Soap", "Chicken Thigh")))
+    request.input_csv.write_text(sample_input_csv(("Cheddar Cheese", "Dish Soap", "Chicken Thigh")))
 
     analyze(request, llm=KeywordLlmClient())
 
     assert fake_report.input_df().to_dict("records") == [
         {"date": f"{month}-15", "product": product, "category": category, "kilos_total": 10.0}
-        for month in MONTHS
+        for month in SAMPLE_MONTHS
         for product, category in (
             ("Cheddar Cheese", "Cheese"),
             ("Chicken Thigh", "Poultry (Chicken & Turkey)"),
@@ -168,7 +150,7 @@ def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
 
 def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -> None:
     request = _request(tmp_path, unit_system="lb")
-    _write_csv(request.input_csv, [("Cheddar Cheese", "2025-01-15", 10.0)])
+    request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
     analyze(request, llm=KeywordLlmClient())
 
@@ -192,7 +174,7 @@ def test_hands_the_report_the_forms_answers(
     client: str,
 ) -> None:
     request = _request(tmp_path, counts_basis=counts_basis, site_name=site_name)
-    _write_csv(request.input_csv, [("Cheddar Cheese", "2025-01-15", 10.0)])
+    request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
     def report_progress() -> None:
         pass
@@ -219,7 +201,7 @@ def test_hands_the_report_the_forms_answers(
 
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
     request = _request(tmp_path)
-    _write_csv(request.input_csv, [("Cheddar Cheese", "2025-01-15", 1.0)])
+    request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
     llm = KeywordLlmClient()
     progress: list[int] = []
 
@@ -241,8 +223,8 @@ def test_a_cached_product_skips_the_llm(
         }
     ).to_csv(cache_path, index=False)
     request = _request(tmp_path)
-    _write_csv(
-        request.input_csv, [("House Blend 7", "2025-01-15", 1.0), ("Pork Loin", "2025-01-15", 1.0)]
+    request.input_csv.write_text(
+        input_csv_text([("House Blend 7", "2025-01-15", 1.0), ("Pork Loin", "2025-01-15", 1.0)])
     )
     llm = KeywordLlmClient()
 
@@ -264,7 +246,7 @@ def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Pa
 
 def test_data_with_almost_no_recognizable_products_is_unusable(tmp_path: Path) -> None:
     request = _request(tmp_path)
-    _write_csv(request.input_csv, _sample_rows(UNKNOWN_PRODUCTS))
+    request.input_csv.write_text(sample_input_csv(UNKNOWN_PRODUCTS))
 
     with pytest.raises(UnusableDataError, match="Over 80% of products were eliminated"):
         analyze(request, llm=KeywordLlmClient())
@@ -283,7 +265,7 @@ class UnreachableLlmClient:
 
 def test_an_upstream_failure_propagates(tmp_path: Path) -> None:
     request = _request(tmp_path)
-    _write_csv(request.input_csv, _sample_rows(KEYWORD_PRODUCTS))
+    request.input_csv.write_text(sample_input_csv(KEYWORD_PRODUCTS))
 
     with pytest.raises(UpstreamApiError, match="OpenAI failed 5 times"):
         analyze(request, llm=UnreachableLlmClient())
