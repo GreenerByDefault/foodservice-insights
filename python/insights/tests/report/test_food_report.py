@@ -16,6 +16,11 @@ JAN = pd.Period("2024-01", freq="M")
 FEB = pd.Period("2024-02", freq="M")
 
 
+# ----------------------------------------------------------------------
+# Tests for _attach_monthly_category_emissions
+# ----------------------------------------------------------------------
+
+
 def test_attach_monthly_category_emissions_keeps_each_category_share():
     raw = pd.DataFrame(
         {
@@ -88,6 +93,11 @@ def _build(rows: pd.DataFrame, **overrides: Any) -> FoodReport:
 
 def _findings(report: FoodReport, category: str) -> list[dict[str, Any]]:
     return [finding for finding in report.findings if finding["category"] == category]
+
+
+# ----------------------------------------------------------------------
+# Tests for build_food_report
+# ----------------------------------------------------------------------
 
 
 def test_build_food_report_leaves_the_callers_rows_alone():
