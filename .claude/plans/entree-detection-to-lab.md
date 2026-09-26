@@ -5,8 +5,10 @@
 The Python port split the private repo's code into `python/insights/` (what the web app ships)
 and `python/lab/` (everything else), so the product can be held to more rigor and carry fewer
 supply-chain dependencies. Serving-mode entree detection landed on the product side anyway,
-though `analyze()` only ever runs procurement. `python-port.md` § Decisions ("Serving mode
-stays in the library, inert") explains why, and its § Later cleanups lists this move.
+though `analyze()` only ever runs procurement. The port left it there inert — `analyze()`
+always runs procurement and `GEMINI_API_KEY` is not in the child's env allowlist — because
+moving it needs `categorize_products` decomposed, a real refactor that was not on the path to a
+working product.
 
 Serving mode is two different things, and only one of them moves:
 
@@ -41,7 +43,7 @@ If the web app ever supports serving data, entree detection would be rewritten a
   them. The lab already lists `google-genai` as a dependency.
 - **`categorize_file` moves to the lab.** Its only callers are the lab's categorize runscript
   and `test_pipeline.py`, and it is where the serving orchestration will sit (see PR 1). This
-  follows the precedent `python-port.md` sets for `run_food_report`: the lab owns the
+  follows the precedent `food-report-split.md` sets for `run_food_report`: the lab owns the
   file-reading wrapper.
 - **The cache helpers that both caches share become public in the product**:
   `_normalize_product_name`, `_first_non_empty_value` and `_unanimous_index`, all in `cache.py`.
@@ -111,8 +113,6 @@ If the web app ever supports serving data, entree detection would be rewritten a
   `experiments/gemini_api_examples.py` and `notebook_runscript_setup.py`.
 - Drop `google-genai` from `python/insights/pyproject.toml`, run `uv lock`, add the ruff ban, and
   fix the `gemini.py` docstring's claim about who uses it.
-- If `python-port.md` still exists, delete its § Later cleanups pointer to this plan and its
-  "Serving mode stays in the library, inert" decision.
 
 **Testing:**
 

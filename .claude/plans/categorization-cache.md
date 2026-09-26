@@ -2,7 +2,7 @@
 
 ## Context
 
-`python-port.md` moves the analysis library into `python/`, leaving the product-categorization
+The Python port moved the analysis library into `python/` and left the product-categorization
 cache as a gitignored CSV the library reads from its packaged path; the products each run's LLM
 categorized only reach `result_metadata`. This plan moves that cache into Postgres: the parent
 worker materializes the **verified** rows into each run directory at claim time; the child
