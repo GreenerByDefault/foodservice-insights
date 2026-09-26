@@ -1,6 +1,7 @@
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pandas as pd
@@ -66,7 +67,8 @@ def _request(
         organization_name="Acme Foodservice",
         counts_basis=counts_basis,
         unit_system=unit_system,
-        monthly_counts=dict.fromkeys(MONTHS, 1000),
+        # Not a `dict`: `worker_child` hands over a read-only view.
+        monthly_counts=MappingProxyType(dict.fromkeys(MONTHS, 1000)),
     )
 
 
@@ -127,9 +129,20 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     assert outcome.pdf == request.output_directory / "report.pdf"
     assert outcome.xlsx == request.output_directory / "report.xlsx"
     assert outcome.pdf.read_bytes()[:4] == b"%PDF"
-    assert {"Monthly by Product", "Monthly by Category", "Emissions Summary"} <= set(
-        pd.ExcelFile(outcome.xlsx).sheet_names
-    )
+    workbook = pd.read_excel(outcome.xlsx, sheet_name=None)
+    assert list(workbook) == [
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Diners",
+        "Emissions Summary",
+        "Animal Emissions Intensity",
+        "Decision_KPIs",
+        "Substitution_Scenarios",
+    ]
+    assert workbook["Diners"].to_dict("records") == [
+        {"month_year": month, "diners": 1000} for month in MONTHS
+    ]
     # One per LLM call, plus one per `run_food_report` stage.
     assert llm.calls
     assert progress_calls == len(llm.calls) + 15
@@ -166,6 +179,7 @@ def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -
     ("counts_basis", "site_name", "diner_or_meal", "client"),
     [
         ("people", None, "diner", "Acme Foodservice"),
+        ("people", "", "diner", "Acme Foodservice"),
         ("meals", "North Campus", "meal", "Acme Foodservice — North Campus"),
     ],
 )
@@ -180,15 +194,40 @@ def test_hands_the_report_the_forms_answers(
     request = _request(tmp_path, counts_basis=counts_basis, site_name=site_name)
     _write_csv(request.input_csv, [("Cheddar Cheese", "2025-01-15", 10.0)])
 
-    analyze(request, llm=KeywordLlmClient())
+    def report_progress() -> None:
+        pass
 
-    assert fake_report.kwargs["diner_or_meal"] == diner_or_meal
-    assert fake_report.kwargs["diner_meal_mapping"] == dict.fromkeys(MONTHS, 1000)
+    analyze(request, report_progress=report_progress, llm=KeywordLlmClient())
+
+    assert fake_report.kwargs == {
+        "input_file": request.work_directory / "categorized_report.csv",
+        "diner_meal_mapping": request.monthly_counts,
+        "output_dir": request.work_directory / "report",
+        "procurement_serving": "procurement",
+        "diner_or_meal": diner_or_meal,
+        "region": "us",
+        "missing_data_policy": "hard_fail",
+        "show_quality_successes": False,
+        "report_progress": report_progress,
+    }
     assert fake_report.client_metadata() == {
         "client": client,
         "baseline_pilot": "baseline",
         "procurement_serving": "procurement",
     }
+
+
+def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
+    request = _request(tmp_path)
+    _write_csv(request.input_csv, [("Cheddar Cheese", "2025-01-15", 1.0)])
+    llm = KeywordLlmClient()
+    progress: list[int] = []
+
+    analyze(request, report_progress=lambda: progress.append(len(llm.calls)), llm=llm)
+
+    # Each report comes after its call has been recorded.
+    assert progress == [1, 2]
+    assert llm.calls == [("clean", "Cheddar Cheese"), ("match", "cheddar cheese")]
 
 
 def test_a_cached_product_skips_the_llm(
@@ -209,49 +248,18 @@ def test_a_cached_product_skips_the_llm(
 
     analyze(request, llm=llm)
 
-    assert {item for _, item in llm.calls} == {"Pork Loin", "pork loin"}
+    assert llm.calls == [("clean", "Pork Loin"), ("match", "pork loin")]
     assert fake_report.input_df()["category"].tolist() == ["Cheese", "Pork (pig meat)"]
 
 
-@pytest.mark.parametrize(
-    ("content", "message"),
-    [
-        (b"", "not a readable UTF-8 CSV"),
-        (b"product,date,weight\n\xff\xfe,2025-01-15,1\n", "not a readable UTF-8 CSV"),
-        (b"product,weight,date\nCheese,1,2025-01-15\n", "has columns"),
-        (b"product,date,weight\n", "has no rows"),
-        (b"product,date,weight\nCheese,2025-01-15,1\n  ,2025-01-15,1\n", "line 3 has an empty"),
-        (b"product,date,weight\nCheese,01/15/2025,1\n", "line 2 has a date"),
-        (b"product,date,weight\nCheese,2025-1-15,1\n", "line 2 has a date"),
-        (b"product,date,weight\nCheese,2025-02-30,1\n", "line 2 has a date"),
-        (b"product,date,weight\nCheese,2025-01-15,\n", "line 2 has a weight"),
-        (b"product,date,weight\nCheese,2025-01-15,5 lb\n", "line 2 has a weight"),
-        (b"product,date,weight\nCheese,2025-01-15,-1\n", "line 2 has a weight"),
-        (b"product,date,weight\nCheese,2025-01-15,inf\n", "line 2 has a weight"),
-    ],
-)
-def test_rejects_input_that_breaks_the_contract(
-    tmp_path: Path, content: bytes, message: str
-) -> None:
+def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Path) -> None:
     request = _request(tmp_path)
-    request.input_csv.write_bytes(content)
+    request.input_csv.write_text("product,date,weight\nCheese,01/15/2025,1\n")
     llm = KeywordLlmClient()
 
-    with pytest.raises(InvalidInputError, match=message):
+    with pytest.raises(InvalidInputError, match="line 2 has a date"):
         analyze(request, llm=llm)
     assert llm.calls == []
-
-
-def test_a_product_named_like_a_missing_value_is_still_a_product(
-    tmp_path: Path, fake_report: FakeReport
-) -> None:
-    request = _request(tmp_path)
-    request.input_csv.write_text("product,date,weight\nNA,2025-01-15,1\nCheese,2025-01-15,1\n")
-    llm = KeywordLlmClient()
-
-    analyze(request, llm=llm)
-
-    assert ("clean", "NA") in llm.calls
 
 
 def test_data_with_almost_no_recognizable_products_is_unusable(tmp_path: Path) -> None:

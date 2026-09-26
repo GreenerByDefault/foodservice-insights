@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -117,7 +117,7 @@ def _resolve_input_file(input_file: str | Path | None) -> Path:
 
 def _resolve_diner_meal_mapping(
     diner_meal_file: str | Path | None,
-    diner_meal_mapping: dict[Any, Any] | None,
+    diner_meal_mapping: Mapping[Any, Any] | None,
 ) -> dict[pd.Period, float]:
     """Resolve diner-meal mapping from inline mapping or JSON file."""
     if diner_meal_mapping is not None:
@@ -401,7 +401,7 @@ def _collect_diagnostic_export_sheets(
 def run_food_report(
     input_file: str | Path | None = None,
     diner_meal_file: str | Path | None = None,
-    diner_meal_mapping: dict[Any, Any] | None = None,
+    diner_meal_mapping: Mapping[Any, Any] | None = None,
     output_dir: str | Path | None = None,
     procurement_serving: str | None = None,
     diner_or_meal: str = "diner",

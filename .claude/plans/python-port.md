@@ -22,7 +22,8 @@ env allowlist is `PATH, HOME, LANG, TZ, OPENAI_API_KEY`. The three cache CSVs ar
 any `python/**/data_files/` and obtained out-of-band; the suite runs green without them, which is
 how CI runs it.
 
-What remains is to wire `WORKER_MODE=mock-llm` and archive the source repo.
+What remains is to wire `WORKER_MODE=mock-llm`, require a monthly count of at least 1, and
+archive the source repo.
 
 The source repo is archived once one real client analysis has been run from `python/lab/` —
 one README line there ("archived into `foodservice-insights` at commit …"), then archive it on
@@ -50,7 +51,7 @@ new categorizations to it.
   `GEMINI_API_KEY` is not in the env allowlist, so no Gemini client is ever built in the child.
   The cost is that `google-genai` ships as a dependency and `gemini.py` reads `gemini_models.json`
   at import time. Moving entree detection to the lab needs `categorize_products` decomposed — a
-  real refactor, listed under later cleanups, not on the path to a working product.
+  real refactor, planned in `entree-detection-to-lab.md`, not on the path to a working product.
 - **`OpenAiLlmClient` is the one retry layer** (`apps/worker/src/failures.ts` § one-retry-layer):
   it turns the SDK's retries off on whatever client it is given, then makes five attempts with
   2/4/8/16 s backoff and a 30 s request timeout. Only
@@ -63,13 +64,19 @@ new categorizations to it.
   `LlmClient` it was given so every call reports progress, and `run_food_report` takes a
   `report_progress` keyword it calls at each of its fifteen stages. So `mock-llm` gets a real
   cadence for free.
-- **`input.csv` is checked once, at the seam, and nowhere else.** `_read_input_csv` raises
+- **`input.csv` is checked once, at the seam, and nowhere else.** `input_csv.read_input_csv` raises
   `InvalidInputError` for any broken contract promise; past it, a library `ValueError` is our bug
   and lands as `unknown` with a traceback. *Rejected: mapping library `ValueError`s to
   `InvalidInputError`* — it would report our bugs as `apps/web` validation holes.
 - **`run_food_report`'s file couplings are satisfied inside `work_directory`**, which is
   discarded: its input CSV, the `client_metadata.json` it reads from beside that input, and the
   graphs, QA workbook, manifest and log it writes. Only the two deliverables are moved out.
+- **`run_food_report` runs with `missing_data_policy="hard_fail"`.** Past `read_input_csv` and
+  `apps/web`'s month-coverage check, an error finding can only be our bug, so it lands as
+  `unknown` rather than shipping a report with sheets silently missing. It also aborts on a
+  diagnostics failure, although that only feeds the discarded QA workbook.
+  *Rejected: `warn_continue`* — a rejected `monthly_counts` shipped a report with no per-diner
+  figures and no error.
 
 ## PR 1 — `WORKER_MODE=mock-llm`
 
@@ -90,12 +97,15 @@ new categorizations to it.
 - Docs: `apps/worker/README.md`'s `WORKER_MODE` rows; `tests/e2e/README.md`'s Open resolved;
   `python.md`'s Status banner removed.
 
+## PR 2 — require a monthly count of at least 1
+
+`apps/web` (`v.minValue(0)` in `metadata.ts`) and the child's contract check (`minimum=0` in
+`contract/fields.py`) accept a count of 0, but `run_food_report` rejects a non-positive count, so
+today a 0 lands as `unknown`. Raise both minimums to 1, with a form error naming the month.
+
 ## Later cleanups (optional; the product works without them)
 
-- **Serving mode to the lab**: entree detection, the entree cache and its loader, the Gemini
-  helpers in the product's `gemini.py`, and the unused `classify_entree`. Drops `google-genai` and the
-  import-time `gemini_models.json` read from the shipped package. Needs `categorize_products`
-  split so the lab can run its entree detector on `unique_products_df` before the merge.
+- **Entree detection to the lab**: its own plan, `entree-detection-to-lab.md`.
 - `run_food_report(df, *, client_name, output_dir, export_graphs)`: no input file, no stem, no
   `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
   end-to-end speedup. The lab's report runscript becomes the file-reading wrapper.
@@ -128,8 +138,6 @@ new categorizations to it.
 - **The 80% check as a user-facing failure**: `merge_categorizations` raises `UnusableDataError`
   → "contact GBD". With an empty cache on day one it can fire legitimately; watch the
   `unusable_data` rate.
-- **`warn_continue` still raises for programming errors** (a category not tagged food or drink,
-  say) → `unknown` with a traceback — desired.
 - **Whitespace**: the cache's `product` values are verbatim, some with leading spaces or embedded
   newlines, while `apps/web` trims uploads; expect exact-match misses that the cleaned-name pass
   catches. Do not "fix" it by trimming the cache.
