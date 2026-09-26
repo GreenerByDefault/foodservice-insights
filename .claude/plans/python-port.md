@@ -81,9 +81,8 @@ new categorizations to it.
 ## Later cleanups (optional; the product works without them)
 
 - **Entree detection to the lab**: its own plan, `entree-detection-to-lab.md`.
-- `run_food_report(df, *, client_name, output_dir, export_graphs)`: no input file, no stem, no
-  `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
-  end-to-end speedup. The lab's report runscript becomes the file-reading wrapper.
+- **`run_food_report` split into an in-memory core and a lab bundle**: its own plan,
+  `food-report-split.md`.
 - `ThreadPoolExecutor` over the per-product LLM loops (`writer.py`'s progress reporter is
   already lock-protected).
 - AI usage (model, tokens, cost) onto the seam — `REQUIREMENTS.md` § Persistence's Open.
