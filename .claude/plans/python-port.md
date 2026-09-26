@@ -8,25 +8,18 @@ product package in `python/insights/` (`afd0d26`, #322) and the lab in `python/l
 `categorize_file(input_filepath, llm, …)` and the three LLM steps take an `LlmClient`
 (`categorization/llm.py`) with three operations — clean a product name, match a cleaned name to a
 category, fuzzy-match a label to a category. `OpenAiLlmClient.from_env()` is the real one;
-`testing.KeywordLlmClient`, shipped beside `stub_analysis`, is the offline one and records every
-operation in `calls`.
+`testing.KeywordLlmClient` is the offline one and records every operation in `calls`.
 
-`analyze(request, *, report_progress, llm=None)` in `analysis.py` is implemented, and
-`WORKER_MODE=live` produces a real report with an `OPENAI_API_KEY`. It checks `input.csv` against
-the contract, converts lb to kg, runs `categorize_products` and then `run_food_report`, and moves
-the PDF and workbook into `output_directory`. `llm` defaults to `OpenAiLlmClient.from_env()`, so
-any other `LlmClient` swaps in without touching the seam — which is all `mock-llm` needs.
-`worker_child` calls `analyze(request, report_progress=…)` and places the declared files;
-`apps/worker/src/modes.ts` still reserves `mock-llm` as a named-but-unavailable slot. The child's
-env allowlist is `PATH, HOME, LANG, TZ, OPENAI_API_KEY`. The three cache CSVs are gitignored under
-any `python/**/data_files/` and obtained out-of-band; the suite runs green without them, which is
-how CI runs it.
+`analyze(request, *, report_progress, llm=None)` in `analysis.py` checks `input.csv` against the
+contract, converts lb to kg, runs `categorize_products` and then `run_food_report`, and moves the
+PDF and workbook into `output_directory`. `WORKER_MODE=live` runs it on OpenAI;
+`WORKER_MODE=mock-llm` runs the same `analyze()` through `worker_child.mock_llm` with
+`KeywordLlmClient`, so a real report needs no API key. The child's env allowlist is
+`INVOCATION.environmentVariables` in `apps/worker/src/contract/names.ts`. The three cache CSVs
+are gitignored under any `python/**/data_files/` and obtained out-of-band; the suite runs green
+without them, which is how CI runs it.
 
-A monthly count now has to be at least 1: `apps/web` (`metadata.ts`), the parent's own manifest
-contract (`apps/worker/src/contract/messages.ts`), and the child's contract check
-(`contract/fields.py`) all reject 0, matching what `run_food_report` already required.
-
-What remains is to wire `WORKER_MODE=mock-llm` and archive the source repo.
+What remains is archiving the source repo, plus the optional cleanups below.
 
 The source repo is archived once one real client analysis has been run from `python/lab/` —
 one README line there ("archived into `foodservice-insights` at commit …"), then archive it on
@@ -65,8 +58,8 @@ new categorizations to it.
   content is brittle.
 - **Progress is reported without touching the categorization loops**: `analyze()` wraps whatever
   `LlmClient` it was given so every call reports progress, and `run_food_report` takes a
-  `report_progress` keyword it calls at each of its fifteen stages. So `mock-llm` gets a real
-  cadence for free.
+  `report_progress` keyword it calls at each of its fifteen stages. That is also what gives
+  `mock-llm` a real cadence, so it runs on production timings.
 - **`input.csv` is checked once, at the seam, and nowhere else.** `input_csv.read_input_csv` raises
   `InvalidInputError` for any broken contract promise; past it, a library `ValueError` is our bug
   and lands as `unknown` with a traceback. *Rejected: mapping library `ValueError`s to
@@ -80,25 +73,10 @@ new categorizations to it.
   diagnostics failure, although that only feeds the discarded QA workbook.
   *Rejected: `warn_continue`* — a rejected `monthly_counts` shipped a report with no per-diner
   figures and no error.
-
-## PR 1 — `WORKER_MODE=mock-llm`
-
-- `python/worker_child/worker_child/mock_llm.py`, on the `worker_child.testing` precedent:
-  `main(argv)` → `run(Path(argv[1]), analyze=functools.partial(analyze, llm=KeywordLlmClient()))`.
-  The root per-file-ignores list it under the existing `**/testing.py` TID251 comment. Test: a
-  real run directory with a real `input.csv` → `EXIT_WROTE_RESULT`, `%PDF`, `result.json`. Lift
-  `_sample_rows`/`_write_csv` and the product lists out of `insights/tests/test_analysis.py` into
-  a shared `gbd_foodservice_insights.testing.sample_input_csv()`, so both packages' tests use one.
-- `apps/worker/src/modes.ts`: `MOCK_LLM_MODULE = 'worker_child.mock_llm'`, delete the throw,
-  `ResolvedWorkerMode` gains `'mock-llm'` with `overrides: {}` — it *is* `live` minus the API,
-  and the point is a real `killAfterNoProgressMs` against a real workload. `modes.test.ts`
-  replaces the "not available yet" test.
-- `tests/e2e`: the happy path moves to its own Playwright project on `WORKER_MODE=mock-llm` —
-  own database, bucket and worker, as its README already specifies, since one queue cannot serve
-  two modes. `!fail:unusable-data` stays on `stubbed`. The keyword fake ships in `testing.py`, so
-  the worker image already contains it.
-- Docs: `apps/worker/README.md`'s `WORKER_MODE` rows; `tests/e2e/README.md`'s Open resolved;
-  `python.md`'s Status banner removed.
+- **The system tier (`tests/e2e`) runs on `mock-llm`**, and its failure spec provokes
+  `unusable_data` for real, by uploading a product `KeywordLlmClient` cannot categorize. So a
+  change to the 80% check in `merge_categorizations`, or to `KEYWORD_CATEGORIES`, is one that
+  tier sees.
 
 ## Later cleanups (optional; the product works without them)
 
@@ -107,23 +85,18 @@ new categorizations to it.
   `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
   end-to-end speedup. The lab's report runscript becomes the file-reading wrapper.
 - `ThreadPoolExecutor` over the per-product LLM loops (`writer.py`'s progress reporter is
-  already lock-protected.
+  already lock-protected).
 - AI usage (model, tokens, cost) onto the seam — `REQUIREMENTS.md` § Persistence's Open.
 
 ## Verification
 
 - Every PR: `just lint && just check && just test`, plus `just test-lab` when the lab is touched
   and `pnpm lint && pnpm check && pnpm test` when TypeScript is.
-- PR 1: `pnpm exec turbo run test:system` with the e2e happy path on `mock-llm`, and `pnpm dev`
-  with no API key at all still produces a report. Set `WORKER_MODE` in `.env`, not the shell:
-  turbo drops undeclared env vars before they reach the worker.
+- A change to `analyze()`, `run_food_report` or `worker_child`: also `pnpm test:system`, which
+  runs a real report through both images on `mock-llm`.
 
 ## Risks
 
-- **Fonts — resolved.** The Lato and Montserrat Regular/Bold OFL files ship in
-  `gbd_foodservice_insights/data_files/fonts/` and `setup_gbd_fonts()` registers them via
-  `font_manager.addfont`, so the report no longer depends on the OS or worker image having
-  either font installed.
 - **`killAfterNoProgressMs` vs backoff**: about 3 min worst case per LLM call (five 30 s
   timeouts plus 30 s of backoff), against a ten-minute kill; progress is reported after every
   successful call and at every report stage.

@@ -218,10 +218,9 @@ function sharedEnv(stack: ContainerStack): Record<string, string> {
     S3_BUCKET: stack.s3Bucket,
     // The web app reads this one too, for the report page's support link.
     EMAIL_SUPPORT_ADDRESS: requireEnv('EMAIL_SUPPORT_ADDRESS'),
-    // Also read by the web app, where it picks the report page's poll interval. Missing, that is
-    // not an error — just a page polling every 10s against specs that budget 60s for the whole
-    // lifecycle, which passes locally and flakes on a loaded runner.
-    WORKER_MODE: requireEnv('WORKER_MODE'),
+    // Fixed, not `.env.test`'s: the specs rely on a real analysis — a real PDF, and a failure
+    // provoked by the input itself. The web app reads it too, for the report page's poll interval.
+    WORKER_MODE: 'mock-llm',
   };
 }
 
@@ -279,9 +278,9 @@ export function webContainerCommand(options: {
 
 export type RunningWorker = { stop(): Promise<void> };
 
-/** How long the container gets to drain after SIGTERM. Comfortably above the `stubbed` profile's
- * `killGraceMs` of 5s, so a worker still killing a child is not cut off mid-teardown — though it
- * is below `drainGraceMs` (30s), so what this exercises is a truncated drain. */
+/** How long the container gets to drain after SIGTERM. Above the default `killGraceMs`, so a
+ * worker still killing a child is not cut off mid-teardown, but below `drainGraceMs`, so what this
+ * exercises is a truncated drain — both in `WORKER_DEFAULTS` (`apps/worker/src/config.ts`). */
 const WORKER_SHUTDOWN_TIMEOUT_SECONDS = 15;
 
 /** Starts the worker image, attached, so its logs stay in the run's output.

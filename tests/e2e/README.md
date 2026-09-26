@@ -26,8 +26,12 @@ worker involved, and `apps/worker/src/worker.test.ts` drives the TypeScript `fak
 of a real child. This tier is only the wiring between components — a component's own behaviour
 belongs to its own tier.
 
-The worker runs in `WORKER_MODE=stubbed`, where the report's name selects the scenario the child
-plays out (see [`apps/worker/README.md`](../../apps/worker/README.md#worker_mode)).
+The worker runs in `WORKER_MODE=mock-llm` (see
+[`apps/worker/README.md`](../../apps/worker/README.md#worker_mode)): the real analysis at production
+timings, with a keyword fake for the LLM. So each spec picks its outcome by what it uploads — a
+product the fake cannot categorize is how the failure spec gets `unusable_data`.
+*Rejected: a second stack on `stubbed` for the failure spec — one queue cannot serve two modes, and
+a whole extra database, bucket and worker buys nothing the upload cannot provoke.*
 
 **`@gbd/worker` is a devDependency here even though nothing imports it**, and the `test:system`
 task in [`turbo.json`](../../turbo.json) names the Dockerfiles and `python/**` in its `inputs`.
@@ -38,14 +42,3 @@ invalidates the cache and rebuilds an image instead of replaying a stale pass.
 that ignores SIGTERM, exits with no verdict, or leaks a grandchild. `apps/worker/src/worker.test.ts`
 owns those against `fake-child.ts`, and `apps/web/e2e` owns each failure screen's copy against
 seeded rows. Keep this suite small; every test here costs a real worker and a real child.
-
-## When the analysis library is ported
-
-**Open:** only the happy path moves to `WORKER_MODE=mock-llm` — real content and a real progress
-cadence, so `killAfterNoProgressMs` finally runs against a real workload. The wiring itself doesn't
-change. `!fail:unusable-data` stays on `stubbed` permanently — provoking that failure for real is
-the library's tier, not this one.
-
-Two modes need two workers, since one queue can't serve both (`claimNextAttempt`'s row lock lets
-either claim either report). So the happy path gets its own Playwright project: its own database,
-bucket, and worker.

@@ -1,6 +1,8 @@
+import csv
 import difflib
+import io
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
@@ -10,6 +12,7 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     ReportProgress,
 )
+from gbd_foodservice_insights.input_csv import INPUT_COLUMNS
 
 # Real magic bytes, so a test asserting "this is actually a PDF/xlsx" is not fooled by a
 # stub that only gets the file extension right.
@@ -110,3 +113,46 @@ class KeywordLlmClient:
     def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
         self.calls.append(("fuzzy", item))
         return next(iter(difflib.get_close_matches(item, categories, n=1)), NO_MATCH)
+
+
+# Products `KeywordLlmClient` places in a category, and products it places in none.
+KEYWORD_PRODUCTS: Final = (
+    "CHEESE CHEDDAR 5LB",
+    "Chicken Breast Boneless",
+    "Ground Beef 80/20",
+    "Pork Loin",
+    "Salmon Fillet",
+    "Shrimp 21/25",
+    "Oat Milk Barista",
+    "Whole Milk Gallon",
+    "Butter Unsalted",
+    "Greek Yogurt",
+    "Liquid Egg Whites",
+    "Brown Rice",
+)
+UNKNOWN_PRODUCTS: Final = ("Paper Towels", "Dish Soap")
+
+# The months `contract/fixtures/valid/run.json` has counts for.
+SAMPLE_MONTHS: Final = ("2025-01", "2025-02", "2025-03")
+
+type InputRow = tuple[str, str, float]
+
+
+def input_csv_text(rows: Iterable[InputRow]) -> str:
+    """An `input.csv` holding `rows`, each `(product, date, weight)`."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(INPUT_COLUMNS)
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def sample_input_csv(
+    products: Sequence[str] = KEYWORD_PRODUCTS + UNKNOWN_PRODUCTS,
+    months: Sequence[str] = SAMPLE_MONTHS,
+) -> str:
+    """An `input.csv` buying 10 of every product in every month: enough for a full report
+    under `KeywordLlmClient`, with the unknowns dropped well under the 80% limit."""
+    return input_csv_text(
+        (product, f"{month}-15", 10.0) for month in months for product in products
+    )
