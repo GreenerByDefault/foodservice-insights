@@ -209,11 +209,19 @@ def summarize_findings(findings: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+class QualityPolicyError(ValueError):
+    """`findings` is every finding collected before the abort, not only the errors."""
+
+    def __init__(self, message: str, findings: list[dict[str, Any]]) -> None:
+        super().__init__(message)
+        self.findings = findings
+
+
 def enforce_policy_or_raise(
     policy: MissingDataPolicy,
     findings: Iterable[dict[str, Any]],
 ) -> None:
-    """Raise ValueError if policy requires fail-fast and errors are present."""
+    """Raise `QualityPolicyError` if policy requires fail-fast and errors are present."""
     rows = list(findings)
     if not should_fail_now(policy, rows):
         return
@@ -224,7 +232,8 @@ def enforce_policy_or_raise(
         for item in rows
         if item.get("status") == "error"
     ]
-    raise ValueError(
+    raise QualityPolicyError(
         "missing_data_policy='hard_fail' aborted report generation due to error findings:\n"
-        + "\n".join(messages)
+        + "\n".join(messages),
+        rows,
     )
