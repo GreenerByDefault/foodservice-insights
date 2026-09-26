@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
+from matplotlib.font_manager import FontProperties
+from matplotlib.textpath import text_to_path
 from matplotlib.transforms import Bbox
 
 from gbd_foodservice_insights.utils import rel_path
@@ -23,6 +25,9 @@ _TEXT_PAGE_TOP_Y = 0.88
 _TEXT_PAGE_BOTTOM_Y = 0.06
 _TEXT_PAGE_LINE_HEIGHT = 0.03
 _TEXT_PAGE_WRAP_CHARS = 92
+
+_SUMMARY_MARGIN_IN = 1.0
+_SUMMARY_LINE_HEIGHT = 0.025
 
 
 # ---------------------------------------------------------------------------
@@ -155,10 +160,15 @@ def create_executive_summary_page(
             (list of ``(name, pct_of_footprint)``) and ``quality_status``.
     """
     fig, ax = _new_text_figure(fig_size)
+    # Span the whole page, so axes coordinates are page coordinates: the default subplot
+    # margins are lopsided, pushing left-aligned text off the right edge.
+    ax.set_position((0, 0, 1, 1))
+    text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
+    left_x = _SUMMARY_MARGIN_IN / fig_size[0]
 
     ax.text(
         0.5,
-        0.92,
+        0.82,
         "Executive Summary",
         transform=ax.transAxes,
         ha="center",
@@ -173,10 +183,10 @@ def create_executive_summary_page(
         for label, value in summary_stats.items():
             lines.append(f"{label}:  {value}")
 
-        y = 0.82
+        y = 0.74
         for line in lines:
             ax.text(
-                0.15,
+                left_x,
                 y,
                 line,
                 transform=ax.transAxes,
@@ -185,21 +195,19 @@ def create_executive_summary_page(
                 fontsize=12,
                 fontfamily="Lato",
             )
-            y -= 0.045
+            y -= 0.035
 
         pdf.savefig(fig)
         plt.close(fig)
         return
 
     # --- Plain-English mode -------------------------------------------------
-    import textwrap
-
     # Plain "CO2e" throughout: the report fonts (Montserrat/Lato) lack the
     # subscript-two glyph, which renders as a missing-character box.
     headline = _format_co2e(narrative["total_co2e_kg"])
     ax.text(
         0.5,
-        0.84,
+        0.76,
         f"{headline} CO2e",
         transform=ax.transAxes,
         ha="center",
@@ -209,17 +217,23 @@ def create_executive_summary_page(
         fontfamily="Montserrat",
         color="#006a62",
     )
-    ax.text(
-        0.5,
-        0.775,
-        f"the climate footprint of food purchased by {narrative['client']}, {narrative['period']}",
-        transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=12,
-        fontfamily="Lato",
-        color="#444444",
+    subtitle = (
+        f"the climate footprint of food purchased by {narrative['client']}, {narrative['period']}"
     )
+    y = 0.70
+    for line in _wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily="Lato"):
+        ax.text(
+            0.5,
+            y,
+            line,
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=12,
+            fontfamily="Lato",
+            color="#444444",
+        )
+        y -= _SUMMARY_LINE_HEIGHT
 
     dm = narrative.get("dm_label", "diner")
     paragraphs = []
@@ -265,11 +279,11 @@ def create_executive_summary_page(
         "product. The methodology is explained at the back."
     )
 
-    y = 0.70
+    y -= 0.035  # gap below the subtitle
     for paragraph in paragraphs:
-        for line in textwrap.wrap(paragraph, width=80):
+        for line in _wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily="Lato"):
             ax.text(
-                0.12,
+                left_x,
                 y,
                 line,
                 transform=ax.transAxes,
@@ -278,8 +292,8 @@ def create_executive_summary_page(
                 fontsize=11.5,
                 fontfamily="Lato",
             )
-            y -= 0.032
-        y -= 0.022  # paragraph gap
+            y -= _SUMMARY_LINE_HEIGHT
+        y -= 0.017  # paragraph gap
 
     pdf.savefig(fig)
     plt.close(fig)
@@ -708,6 +722,26 @@ def _quality_to_lines(
         lines.append("No issues were detected.")
 
     return lines
+
+
+def _wrap_to_width(text: str, max_width_in: float, fontsize: float, fontfamily: str) -> list[str]:
+    """Greedily wrap ``text`` so each line's rendered width fits within ``max_width_in``."""
+    prop = FontProperties(family=fontfamily, size=fontsize)
+
+    def width_in(line: str) -> float:
+        width_pt, _, _ = text_to_path.get_text_width_height_descent(line, prop, ismath=False)
+        return width_pt / 72
+
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}" if current else word
+        if current and width_in(candidate) > max_width_in:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    return [*lines, current] if current else lines
 
 
 def _wrap_text_lines(content_lines: list[str], width: int = _TEXT_PAGE_WRAP_CHARS) -> list[str]:
