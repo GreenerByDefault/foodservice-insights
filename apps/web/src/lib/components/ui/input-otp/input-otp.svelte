@@ -4,8 +4,6 @@ import { cn } from '$lib/utils/shadcn.js';
 
 let {
   ref = $bindable(null),
-  // Not in the file shadcn generates. The real focusable control is the hidden input, so a
-  // consumer that has to move focus to this field needs a handle on it.
   inputRef = $bindable(null),
   class: className,
   value = $bindable(''),

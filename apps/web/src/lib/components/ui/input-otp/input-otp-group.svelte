@@ -10,9 +10,6 @@ let {
 }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
 </script>
 
-<!-- `aria-hidden`, which shadcn generates without: the cells are a picture of the value that the
-     sibling `<input>` already carries, and left in the accessibility tree they read as loose text
-     beside the field, one digit at a time. -->
 <div
   bind:this={ref}
   data-slot="input-otp-group"

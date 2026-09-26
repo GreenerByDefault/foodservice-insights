@@ -16,19 +16,16 @@ let { auth, onSignedIn }: Props = $props();
 // Held here, not in the step, so "Change email" returns to a filled-in field.
 let email = $state('');
 let step: 'email' | 'code' = $state('email');
-// Swapping one step for the other leaves focus on the `<body>`, so each step takes it on arrival.
-// The email step is the exception on first render, where it *is* the page rather than a step
-// moved to, so it only claims focus once the visitor has been past it.
-let hasReachedCodeStep = $state(false);
+let returningFromCodeStep = $state(false);
 </script>
 
 {#if step === 'email'}
   <EmailStep
     {auth}
     bind:email
-    returningFromCodeStep={hasReachedCodeStep}
+    {returningFromCodeStep}
     onCodeSent={() => {
-      hasReachedCodeStep = true;
+      returningFromCodeStep = true;
       step = 'code';
     }}
   />

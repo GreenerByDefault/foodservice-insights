@@ -16,7 +16,7 @@ interface Props {
 
 let { auth, email, onSignedIn, onChangeEmail }: Props = $props();
 
-type StepState =
+type VerificationState =
   | { status: 'idle' }
   | { status: 'verifying' }
   | { status: 'failed'; message: string }
@@ -34,14 +34,12 @@ type ResendState =
   | { status: 'sending' }
   | { status: 'failed'; message: string };
 
-let formState: StepState = $state({ status: 'idle' });
-let resend: ResendState = $state({ status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S });
+let verificationState: VerificationState = $state({ status: 'idle' });
+let resendState: ResendState = $state({ status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S });
 let code = $state('');
-let codeInputElement: HTMLInputElement | null = $state(null);
+let codeInput: HTMLInputElement | null = $state(null);
 let retryButton: HTMLButtonElement | null = $state(null);
 
-// The field's id is per instance, unlike the `name` from `FIELD`: the flow mounts in more than one
-// place, and a fixed id collides the moment two of them land on one document.
 const fieldId = $props.id();
 const descriptionId = `${fieldId}-description`;
 const errorId = `${fieldId}-error`;
@@ -53,34 +51,32 @@ onDestroy(() => {
   isMounted = false;
 });
 
-// Functions, not inline comparisons: read straight off the state here, TypeScript narrows it to
-// the initialiser it can see above and calls every other status unreachable.
-function isVerifyingOrDone(state: StepState): boolean {
+function isVerifyingOrDone(state: VerificationState): boolean {
   return state.status === 'verifying' || state.status === 'verified' || state.status === 'stalled';
 }
+
 function isResending(state: ResendState): boolean {
   return state.status === 'sending';
 }
 
-const isBusy = $derived(isVerifyingOrDone(formState));
 /** One lock across both requests. A resend that lands during a verify resets the step over the
  * outcome the verify is about to write, and one after a verify re-enables a field whose code is
  * spent. */
-const isLocked = $derived(isBusy || isResending(resend));
+const isLocked = $derived(isVerifyingOrDone(verificationState) || isResending(resendState));
 const hasFullCode = $derived(code.length === OTP_LENGTH);
 
-// Read through a `$derived` rather than from `resend` directly: the effect would otherwise depend
-// on the whole of `resend` and tear its own interval down and back up on every tick.
-const isCountingDown = $derived(resend.status === 'waiting');
+// Read through a `$derived` rather than from `resendState` directly: the effect would otherwise
+// depend on the whole of `resendState` and tear its own interval down and back up on every tick.
+const isCountingDown = $derived(resendState.status === 'waiting');
 
 $effect(() => {
   if (!isCountingDown) return;
   const interval = setInterval(() => {
-    if (resend.status !== 'waiting') return;
-    resend =
-      resend.remainingSeconds <= 1
+    if (resendState.status !== 'waiting') return;
+    resendState =
+      resendState.remainingSeconds <= 1
         ? { status: 'ready' }
-        : { status: 'waiting', remainingSeconds: resend.remainingSeconds - 1 };
+        : { status: 'waiting', remainingSeconds: resendState.remainingSeconds - 1 };
   }, 1000);
   return () => clearInterval(interval);
 });
@@ -88,7 +84,7 @@ $effect(() => {
 // Taking the code is the whole of this step, and the OS only offers a copied code to the field
 // that already has focus — so arriving here without it would cost the visitor the autofill.
 $effect(() => {
-  codeInputElement?.focus();
+  codeInput?.focus();
 });
 
 /** Digits only. A code lifted out of an email arrives wrapped in whatever surrounded it — a
@@ -101,34 +97,34 @@ function keepDigits(text: string): string {
 async function submitCode() {
   if (isLocked || !hasFullCode) return;
 
-  formState = { status: 'verifying' };
-  let message: string | null;
+  verificationState = { status: 'verifying' };
+  let errorMessage: string | null;
   try {
     const { error } = await auth.verifyOtp({ email, token: code, type: 'email' });
-    message = error && describeAuthError(error);
+    errorMessage = error && describeAuthError(error);
   } catch (cause) {
     // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
     console.error('Could not verify a sign-in code', cause);
-    message = describeAuthError({});
+    errorMessage = describeAuthError({});
   }
   if (!isMounted) return;
 
-  if (message) {
-    formState = { status: 'failed', message };
+  if (errorMessage) {
+    verificationState = { status: 'failed', message: errorMessage };
     // Cleared, not left in place, even when nothing judged the code: a full field has no room for
     // the next paste to land in, and bits-ui re-runs `onComplete` for a full value whenever its
     // effect re-runs — so a kept code would retry a failing call in a loop.
     code = '';
     // The field is `disabled` while verifying, and a disabled input cannot take focus.
     await tick();
-    codeInputElement?.focus();
+    codeInput?.focus();
     return;
   }
   await finishSigningIn();
 }
 
 async function finishSigningIn() {
-  formState = { status: 'verified' };
+  verificationState = { status: 'verified' };
   try {
     await onSignedIn();
   } catch (cause) {
@@ -138,7 +134,7 @@ async function finishSigningIn() {
   // redirect it causes — so still being here means there was none.
   if (!isMounted) return;
 
-  formState = { status: 'stalled' };
+  verificationState = { status: 'stalled' };
   await tick();
   retryButton?.focus();
 }
@@ -151,32 +147,32 @@ function handleSubmit(event: SubmitEvent) {
   void submitCode();
 }
 
-async function handleResend() {
-  if (isLocked || resend.status === 'waiting') return;
+async function resendCode() {
+  if (isLocked || resendState.status === 'waiting') return;
 
-  resend = { status: 'sending' };
-  // `false`, unlike the first send: this address has already been sent a code, so creating a user
-  // here could only mean the visitor changed the address out from under us.
-  let message: string | null;
+  resendState = { status: 'sending' };
+  let errorMessage: string | null;
   try {
+    // `false`, unlike the first send: this address has already been sent a code, so creating a
+    // user here could only mean the visitor changed the address out from under us.
     const { error } = await auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-    message = error && describeAuthError(error);
+    errorMessage = error && describeAuthError(error);
   } catch (cause) {
     console.error('Could not resend a sign-in code', cause);
-    message = describeAuthError({});
+    errorMessage = describeAuthError({});
   }
   if (!isMounted) return;
 
-  if (message) {
-    resend = { status: 'failed', message };
+  if (errorMessage) {
+    resendState = { status: 'failed', message: errorMessage };
     return;
   }
   code = '';
-  formState = { status: 'idle' };
-  resend = { status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S };
+  verificationState = { status: 'idle' };
+  resendState = { status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S };
   // Disabled while the resend was in flight, like every other control.
   await tick();
-  codeInputElement?.focus();
+  codeInput?.focus();
 }
 </script>
 
@@ -191,17 +187,20 @@ async function handleResend() {
       pasteTransformer={keepDigits}
       onComplete={() => void submitCode()}
       disabled={isLocked}
-      aria-invalid={formState.status === 'failed' || undefined}
-      aria-describedby={formState.status === 'failed'
+      aria-invalid={verificationState.status === 'failed' || undefined}
+      aria-describedby={verificationState.status === 'failed'
         ? `${descriptionId} ${errorId}`
         : descriptionId}
-      bind:inputRef={codeInputElement}
+      bind:inputRef={codeInput}
       bind:value={code}
     >
       {#snippet children({ cells })}
         <InputOTP.Group>
           {#each cells as cell, index (index)}
-            <InputOTP.Slot {cell} aria-invalid={formState.status === 'failed' || undefined} />
+            <InputOTP.Slot
+              {cell}
+              aria-invalid={verificationState.status === 'failed' || undefined}
+            />
           {/each}
         </InputOTP.Group>
       {/snippet}
@@ -209,8 +208,8 @@ async function handleResend() {
     <Field.Description id={descriptionId}>
       We sent a code to {email}. It expires shortly. We'll sign you in as soon as you enter it.
     </Field.Description>
-    {#if formState.status === 'failed'}
-      <Field.Error id={errorId}>{formState.message}</Field.Error>
+    {#if verificationState.status === 'failed'}
+      <Field.Error id={errorId}>{verificationState.message}</Field.Error>
     {/if}
   </Field.Field>
 
@@ -218,13 +217,13 @@ async function handleResend() {
        announced if the screen reader was already watching the node when its text changed, so one
        that appears along with its message is read by nobody. -->
   <p role="status" class="text-sm text-muted-foreground">
-    {#if formState.status === 'verifying' || formState.status === 'verified'}
+    {#if verificationState.status === 'verifying' || verificationState.status === 'verified'}
       Signing in…
     {/if}
   </p>
 </form>
 
-{#if formState.status === 'stalled'}
+{#if verificationState.status === 'stalled'}
   <div class="space-y-2">
     <p role="alert" class="text-sm text-destructive">
       Your code was verified, but we couldn't finish signing you in.
@@ -237,12 +236,12 @@ async function handleResend() {
   <Button
     variant="link"
     class="px-0"
-    onclick={handleResend}
-    disabled={isLocked || resend.status === 'waiting'}
+    onclick={resendCode}
+    disabled={isLocked || resendState.status === 'waiting'}
   >
-    {#if resend.status === 'waiting'}
-      Send a new code in {resend.remainingSeconds}s
-    {:else if resend.status === 'sending'}
+    {#if resendState.status === 'waiting'}
+      Send a new code in {resendState.remainingSeconds}s
+    {:else if resendState.status === 'sending'}
       Sending…
     {:else}
       Send a new code
@@ -253,6 +252,6 @@ async function handleResend() {
   </Button>
 </div>
 
-{#if resend.status === 'failed'}
-  <p role="alert" class="text-sm text-destructive">{resend.message}</p>
+{#if resendState.status === 'failed'}
+  <p role="alert" class="text-sm text-destructive">{resendState.message}</p>
 {/if}
