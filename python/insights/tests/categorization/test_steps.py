@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 from gbd_foodservice_insights.categorization import steps
 from gbd_foodservice_insights.categorization.steps import (
     categorize_using_cleaned_name_history,
@@ -8,6 +9,7 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_with_llm,
     merge_categorizations,
 )
+from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
@@ -66,6 +68,31 @@ def test_merge_categorizations_serving_filters_side_add_on():
 
     assert sorted(df_final["product"].tolist()) == ["apple", "carrot"]
     assert summary["row_elimination_details"]["rows_eliminated_non_entree"] == 1
+
+
+def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
+    products = [f"product {i}" for i in range(n_products)]
+    return merge_categorizations(
+        original_df=pd.DataFrame(
+            {"product": products, "date": ["2025-01-01"] * n_products, "weight": 1.0}
+        ),
+        categorized_products_df=pd.DataFrame(
+            {"product": products, "category": ["Cheese"] + ["No Matches Found"] * (n_products - 1)}
+        ),
+        data_type="procurement",
+        n_products_before=n_products,
+        n_rows_before=n_products,
+    )
+
+
+def test_merge_categorizations_accepts_exactly_20_percent_remaining():
+    df_final, _ = _merge_keeping_one_of(5)
+    assert df_final["product"].tolist() == ["product 0"]
+
+
+def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():
+    with pytest.raises(UnusableDataError, match=r"1/6 \(16\.7%\) remain"):
+        _merge_keeping_one_of(6)
 
 
 def test_categorize_using_cleaned_name_history_reuses_unanimous_match():

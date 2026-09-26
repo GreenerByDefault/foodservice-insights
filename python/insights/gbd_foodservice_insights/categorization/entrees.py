@@ -207,24 +207,33 @@ def _print_entree_summary(products_to_check: pd.DataFrame) -> None:
         .to_dict()
     )
 
-    print("\n" + "=" * 60)
-    print("ENTREE CLASSIFICATION SUMMARY")
-    print("=" * 60)
-    print(f"Eligible unique GBD products: {eligible_unique_products}")
-    print(f"Historical cache hits: {cached_products} ({cache_hit_rate:.1f}%)")
-    print(f"New products sent to Gemini: {uncached_products}")
-    print(f"Flash unsure rate: {flash_unsure_count}/{uncached_products} ({flash_unsure_rate:.1f}%)")
-    print(f"Gemini Pro escalations: {pro_escalation_count}")
-    print(f"Items flagged for review: {review_count}")
-    print(
-        f"Final {ENTREE_LABEL_ENTREE} count: {label_counts.get(ENTREE_LABEL_ENTREE, 0)} "
-        f"(quantity total: {quantity_totals.get(ENTREE_LABEL_ENTREE, 0)})"
+    logger.info("=" * 60)
+    logger.info("ENTREE CLASSIFICATION SUMMARY")
+    logger.info("=" * 60)
+    logger.info("Eligible unique GBD products: %d", eligible_unique_products)
+    logger.info("Historical cache hits: %d (%.1f%%)", cached_products, cache_hit_rate)
+    logger.info("New products sent to Gemini: %d", uncached_products)
+    logger.info(
+        "Flash unsure rate: %d/%d (%.1f%%)",
+        flash_unsure_count,
+        uncached_products,
+        flash_unsure_rate,
     )
-    print(
-        f"Final {ENTREE_LABEL_SIDE_ADDON} count: {label_counts.get(ENTREE_LABEL_SIDE_ADDON, 0)} "
-        f"(quantity total: {quantity_totals.get(ENTREE_LABEL_SIDE_ADDON, 0)})"
+    logger.info("Gemini Pro escalations: %d", pro_escalation_count)
+    logger.info("Items flagged for review: %d", review_count)
+    logger.info(
+        "Final %s count: %d (quantity total: %s)",
+        ENTREE_LABEL_ENTREE,
+        label_counts.get(ENTREE_LABEL_ENTREE, 0),
+        quantity_totals.get(ENTREE_LABEL_ENTREE, 0),
     )
-    print("=" * 60)
+    logger.info(
+        "Final %s count: %d (quantity total: %s)",
+        ENTREE_LABEL_SIDE_ADDON,
+        label_counts.get(ENTREE_LABEL_SIDE_ADDON, 0),
+        quantity_totals.get(ENTREE_LABEL_SIDE_ADDON, 0),
+    )
+    logger.info("=" * 60)
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +360,7 @@ def run_entree_detector(
     gbd_categories = set(get_GBD_categories())
     products_to_check = _build_unique_entree_products(classified_products, gbd_categories)
 
-    print(f"Running entree detector, detected {len(products_to_check)} products to check.")
+    logger.info("Running entree detector, detected %d products to check.", len(products_to_check))
     products_to_check = classify_entrees_using_historical_classifications(
         products_to_check,
         historical_df=historical_entree_classifications,
@@ -363,14 +372,15 @@ def run_entree_detector(
 
     num_cached = int(products_to_check["previously_entree_classified"].sum())
     cache_hit_rate = num_cached / len(products_to_check) * 100 if len(products_to_check) > 0 else 0
-    print(
-        f"Found {num_cached} products with historical entree classifications "
-        f"({cache_hit_rate:.1f}%)."
+    logger.info(
+        "Found %d products with historical entree classifications (%.1f%%).",
+        num_cached,
+        cache_hit_rate,
     )
 
     mask_needs_classification = products_to_check["entree_classification"].isna()
     num_to_classify = int(mask_needs_classification.sum())
-    print(f"Calling Gemini Flash for {num_to_classify} new entree classifications.")
+    logger.info("Calling Gemini Flash for %d new entree classifications.", num_to_classify)
 
     if num_to_classify > 0:
         if gemini_client is None:
@@ -420,7 +430,7 @@ def run_entree_detector(
             "entree_first_pass_classification"
         ].eq(ENTREE_LABEL_UNSURE)
         num_to_escalate = int(mask_needs_pro.sum())
-        print(f"Escalating {num_to_escalate} unsure items to Gemini Pro.")
+        logger.info("Escalating %d unsure items to Gemini Pro.", num_to_escalate)
 
         if num_to_escalate > 0:
             pro_results = []

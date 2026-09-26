@@ -23,7 +23,7 @@ export const UNIT_SYSTEMS = exhaustiveArray<UnitSystem>()(['lb', 'kg']);
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(0));
+const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(1, 'needs a count of at least 1'));
 
 /** `report.monthly_counts` as month to count, keyed `YYYY-MM`.*/
 export const MonthlyCountsSchema = v.pipe(

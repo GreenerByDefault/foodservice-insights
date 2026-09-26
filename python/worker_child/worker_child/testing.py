@@ -51,7 +51,7 @@ FAIL_REASONS: Final = {
 
 KNOWN_SCENARIOS: Final = ("slow", "hang", "crash", "fail", "missing-pdf")
 
-USAGE: Final = f"usage: python -m {__name__} <{'> <'.join(names.POSITIONAL_ARGUMENTS)}>"
+USAGE: Final = f"usage: python -m worker_child.testing <{'> <'.join(names.POSITIONAL_ARGUMENTS)}>"
 
 
 @dataclass(frozen=True)

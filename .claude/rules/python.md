@@ -19,9 +19,6 @@ Python; nothing on the TypeScript side applies, since the two stacks share no to
 Verify a change with `just lint && just check && just test`, plus `just test-lab` if you
 touched the lab.
 
-> **Status:** the analysis library has landed in `gbd_foodservice_insights` and the lab in
-> `gbd_foodservice_insights_lab`; the `analyze()` implementation follows.
-
 ## The workspace
 
 - **One virtual environment and one lockfile, both at the repo root.** Every package resolves

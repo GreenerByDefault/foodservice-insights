@@ -39,13 +39,18 @@ describe('resolveWorkerMode', () => {
     });
   });
 
-  test('mock-llm fails at startup with a message naming what to use instead', () => {
-    expect(() =>
-      resolveWorkerMode({ mode: 'mock-llm', pythonBin: '/repo/.venv/bin/python' }),
-    ).toThrow(/mock-llm is not available yet/);
+  test('mock-llm points at the offline-LLM entrypoint with no overrides', () => {
+    expect(resolveWorkerMode({ mode: 'mock-llm', pythonBin: '/repo/.venv/bin/python' })).toEqual({
+      mode: 'mock-llm',
+      childCommand: {
+        executable: '/repo/.venv/bin/python',
+        leadingArguments: ['-m', 'worker_child.mock_llm'],
+      },
+      overrides: {},
+    });
   });
 
-  test.each(['stubbed', 'live'] as const)('%s refuses a missing PYTHON_BIN', (mode) => {
+  test.each(['stubbed', 'mock-llm', 'live'] as const)('%s refuses a missing PYTHON_BIN', (mode) => {
     expect(() => resolveWorkerMode({ mode, pythonBin: undefined })).toThrow(/needs PYTHON_BIN/);
   });
 

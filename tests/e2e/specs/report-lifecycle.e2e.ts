@@ -1,8 +1,9 @@
 /** The whole chain, end to end. See `README.md` for how this tier differs from `apps/web/e2e` and
  * `apps/worker/src/worker.test.ts`.
  *
- * The report's *name* is what selects the scenario the stubbed child plays out; see
- * `python/worker_child/worker_child/testing.py` for the grammar.
+ * The worker runs in `WORKER_MODE=mock-llm`: the real analysis, with
+ * `gbd_foodservice_insights.testing.KeywordLlmClient` categorizing by keyword. So what each spec
+ * uploads is what decides how its run ends.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -10,23 +11,24 @@ import { test } from '@gbd/browser-testing/fixtures';
 import { readMailbox } from '@gbd/email/testing';
 import { expect, type Page } from '@playwright/test';
 
-const CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
+/** A product the keyword fake recognizes, so the run produces a real report. */
+const RECOGNIZED_CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 
-/** What `stub_analysis` writes in place of a real PDF. Copied from
- * `python/insights/gbd_foodservice_insights/testing.py`'s `PDF_MAGIC_BYTES`,
- * which is the source of truth. */
-const STUB_PDF_MAGIC_BYTES = '%PDF-1.4\n%stub\n';
+/** A product the keyword fake places in no category, so every row is eliminated and the library
+ * declares the data unusable. */
+const UNRECOGNIZED_CSV = ['product,date,weight', 'Paper Towels,2026-01-05,12'].join('\n');
 
-/** Long enough for the queue poll, the child, and — for the email — the notification sweep, all at
- * the `stubbed` profile's cadences (`STUBBED_OVERRIDES` in `apps/worker/src/modes.ts`), with room
- * for a loaded CI machine. The page polls itself every second, so nothing here needs a fake clock:
- * these are real waits on a real backend. */
+/** Long enough for the queue poll, the analysis, the report page's own poll and — for the email —
+ * the notification sweep, all at production cadences (`WORKER_DEFAULTS` in
+ * `apps/worker/src/config.ts`, `BASE_POLL_INTERVAL_MS` in `apps/web`), with room for a loaded CI
+ * machine. These are real waits on a real backend, so nothing here needs a fake clock. */
 const LIFECYCLE_TIMEOUT_MS = 60_000;
 
 async function uploadReport(
   page: Page,
   organizationSlug: string,
   reportName: string,
+  csv: string,
 ): Promise<void> {
   await page.goto(`/orgs/${organizationSlug}/reports/new`);
   await ensureHydrated(page);
@@ -35,7 +37,7 @@ async function uploadReport(
   await page.getByLabel('Choose a CSV or Excel file', { exact: false }).setInputFiles({
     name: 'procurement.csv',
     mimeType: 'text/csv',
-    buffer: Buffer.from(CSV),
+    buffer: Buffer.from(csv),
   });
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
   await page.getByRole('radio', { name: 'lb' }).click();
@@ -50,7 +52,7 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
   org,
 }) => {
   const reportName = 'Q1 procurement';
-  await uploadReport(page, org.slug, reportName);
+  await uploadReport(page, org.slug, reportName, RECOGNIZED_CSV);
 
   const downloadPdf = page.getByRole('link', { name: 'Download PDF' });
   await expect(downloadPdf).toBeVisible({ timeout: LIFECYCLE_TIMEOUT_MS });
@@ -61,9 +63,7 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
   const href = await downloadPdf.getAttribute('href');
   const pdf = await page.request.get(href ?? '');
   expect(pdf.ok()).toBe(true);
-  expect((await pdf.body()).subarray(0, STUB_PDF_MAGIC_BYTES.length).toString()).toBe(
-    STUB_PDF_MAGIC_BYTES,
-  );
+  expect((await pdf.body()).subarray(0, 4).toString()).toBe('%PDF');
 
   // The run's identity is pointed at a mailbox no other run sends to (`scripts/test-run.ts`), but
   // both tests here share it — so match on the subject rather than taking whatever arrives first.
@@ -78,7 +78,7 @@ test('a failure the child declares reaches the report page with its own copy', a
   page,
   org,
 }) => {
-  await uploadReport(page, org.slug, '!fail:unusable-data');
+  await uploadReport(page, org.slug, 'Unrecognized procurement', UNRECOGNIZED_CSV);
 
   // Written by the real child as a `failure.json` and parsed by the real parent, rather than a
   // status this test wrote into the database itself.

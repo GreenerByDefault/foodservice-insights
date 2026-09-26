@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -22,13 +22,13 @@ def _to_month_period(value: Any, *, context: str) -> pd.Period:
     return period
 
 
-def normalize_diner_meal_mapping(raw_mapping: dict[Any, Any]) -> dict[pd.Period, float]:
+def normalize_diner_meal_mapping(raw_mapping: Mapping[Any, Any]) -> dict[pd.Period, float]:
     """Normalize a month->count mapping to ``{Period[M]: float}``.
 
     Raises a ``ValueError`` on invalid keys/values.
     """
-    if not isinstance(raw_mapping, dict):
-        raise ValueError("Diner-meal mapping must be a dictionary object.")
+    if not isinstance(raw_mapping, Mapping):
+        raise ValueError("Diner-meal mapping must be a mapping object.")
 
     normalized: dict[pd.Period, float] = {}
     for key, value in raw_mapping.items():
