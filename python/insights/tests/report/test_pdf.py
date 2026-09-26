@@ -2,6 +2,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import pytest
+from gbd_foodservice_insights.report import pdf as pdf_module
 from gbd_foodservice_insights.report.pdf import (
     _wrap_text_lines,
     build_pdf_report,
@@ -88,6 +90,36 @@ def test_build_pdf_report_does_not_render_plot_captions(tmp_path: Path) -> None:
     page_text = "\n".join(page.extract_text() or "" for page in reader.pages)
 
     assert "This chart caption should not appear in the PDF output." not in page_text
+
+
+def test_build_pdf_report_closes_all_figures_when_a_page_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_path = tmp_path / "error-report.pdf"
+    fig = plt.figure()
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(pdf_module, "create_executive_summary_page", _boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        build_pdf_report(
+            output_path=str(output_path),
+            title_info={
+                "client": "test client",
+                "baseline_pilot": "baseline",
+                "procurement_serving": "procurement",
+            },
+            plots=[("caption", fig)],
+            tables={},
+            summary_stats={"Rows": 100},
+            quality_status="pass",
+            quality_summary={"by_status": {"success": 1}},
+            missing_data_findings=[],
+        )
+
+    assert plt.get_fignums() == []
 
 
 def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:

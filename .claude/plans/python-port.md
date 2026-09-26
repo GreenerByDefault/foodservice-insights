@@ -110,8 +110,7 @@ today a 0 lands as `unknown`. Raise both minimums to 1, with a form error naming
   `client_metadata.json`; skipping the 300-dpi PNGs `analyze()` discards is the main
   end-to-end speedup. The lab's report runscript becomes the file-reading wrapper.
 - `ThreadPoolExecutor` over the per-product LLM loops (`writer.py`'s progress reporter is
-  already lock-protected); `print_progress` → logging.
-- `plt.close("all")` after plot export, for the lab's long-lived kernels.
+  already lock-protected.
 - AI usage (model, tokens, cost) onto the seam — `REQUIREMENTS.md` § Persistence's Open.
 
 ## Verification

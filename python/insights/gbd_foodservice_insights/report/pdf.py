@@ -866,49 +866,52 @@ def build_pdf_report(
     """
     output_path = str(Path(output_path).resolve())
 
-    with PdfPages(output_path) as pdf:
-        # 1. Title page
-        create_title_page(
-            pdf,
-            client=title_info.get("client", ""),
-            baseline_pilot=title_info.get("baseline_pilot", ""),
-            procurement_serving=title_info.get("procurement_serving", ""),
-        )
+    try:
+        with PdfPages(output_path) as pdf:
+            # 1. Title page
+            create_title_page(
+                pdf,
+                client=title_info.get("client", ""),
+                baseline_pilot=title_info.get("baseline_pilot", ""),
+                procurement_serving=title_info.get("procurement_serving", ""),
+            )
 
-        # 2. Executive summary (plain-English when a narrative is supplied)
-        create_executive_summary_page(pdf, summary_stats, narrative=narrative)
+            # 2. Executive summary (plain-English when a narrative is supplied)
+            create_executive_summary_page(pdf, summary_stats, narrative=narrative)
 
-        # 3. How to read the charts
-        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
+            # 3. How to read the charts
+            create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
 
-        # 4. Plots
-        for _caption, fig in plots:
-            pdf.savefig(fig)
-            plt.close(fig)
+            # 4. Plots
+            for _caption, fig in plots:
+                pdf.savefig(fig)
+                plt.close(fig)
 
-        # 5. Tables
-        for table_title, df in tables.items():
-            create_table_page(pdf, table_title, df)
+            # 5. Tables
+            for table_title, df in tables.items():
+                create_table_page(pdf, table_title, df)
 
-        # 6. Methodology note
-        create_text_page(
-            pdf,
-            "About This Report",
-            _methodology_lines(diner_or_meal),
-            bold_lines={
-                "What is procurement data?",
-                "How are carbon figures calculated?",
-            },
-        )
+            # 6. Methodology note
+            create_text_page(
+                pdf,
+                "About This Report",
+                _methodology_lines(diner_or_meal),
+                bold_lines={
+                    "What is procurement data?",
+                    "How are carbon figures calculated?",
+                },
+            )
 
-        # 7. Data quality status
-        quality_lines = _quality_to_lines(
-            quality_status=quality_status,
-            quality_summary=quality_summary,
-            missing_data_findings=missing_data_findings,
-            show_successes=show_quality_successes,
-        )
-        create_text_page(pdf, "Data Completeness & Quality", quality_lines)
+            # 7. Data quality status
+            quality_lines = _quality_to_lines(
+                quality_status=quality_status,
+                quality_summary=quality_summary,
+                missing_data_findings=missing_data_findings,
+                show_successes=show_quality_successes,
+            )
+            create_text_page(pdf, "Data Completeness & Quality", quality_lines)
+    finally:
+        plt.close("all")
 
     logger.info("PDF report saved to %s", rel_path(output_path))
     return output_path
