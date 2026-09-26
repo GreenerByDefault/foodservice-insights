@@ -30,8 +30,8 @@ proportions rather than the seconds:
 
 The web app needs none of the last three. The QA workbook is the one that grows: it writes every
 raw row through openpyxl, and the upload cap allows a few hundred thousand. End to end, an
-uncached run is still dominated by LLM calls, which is `python-port.md`'s `ThreadPoolExecutor`
-cleanup, not this one.
+uncached run is still dominated by LLM calls, which is `categorization-pipeline.md`'s concurrency
+PR, not this one.
 
 ## Decisions
 
@@ -117,9 +117,12 @@ cleanup, not this one.
     child's stderr.
 - Check before relying on it: `parse_and_validate_date_column` now sees `datetime64` rather than
   ISO strings. Its docstring says it handles native datetimes; the golden test proves it.
-- In `python-port.md`, delete the Decision "`run_food_report`'s file couplings are satisfied
-  inside `work_directory`", and point the `hard_fail` and progress Decisions at the new
-  functions.
+- Put the `hard_fail` rationale on the `build_food_report` call in `analyze()`, since the port
+  plan that held it is gone: past `read_input_csv` and `apps/web`'s month-coverage check, an error
+  finding can only be our bug, so it lands as `unknown` rather than shipping a report with sheets
+  silently missing. *Rejected: `warn_continue`* — a rejected `monthly_counts` shipped a report
+  with no per-diner figures and no error. (`report-correctness.md` is what makes that sentence
+  true: today two data-driven checks can still raise under `hard_fail`.)
 
 **Testing:**
 
