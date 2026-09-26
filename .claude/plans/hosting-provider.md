@@ -166,6 +166,9 @@ Four things, whichever provider wins:
    [`config.ts`](../../apps/worker/src/config.ts).
 3. Set the production secrets in the provider, and `DB_CONNECTION_STRING` in GitHub Actions
    ([`deploy-migrations.md`](deploy-migrations.md)), both pointing at the Supavisor session pooler.
+   Until there is an email provider, production runs as the placeholder identity behind a site
+   password: set `PUBLIC_AUTH_MODE=placeholder` and run `pnpm seed:identity` once against the
+   hosted database ([`auth.md`](auth.md) § The mode switch).
 4. Set the spend and resource alerts, and on DigitalOcean, log forwarding.
 
 The deployed commit needs no provider-injected variable: every image carries

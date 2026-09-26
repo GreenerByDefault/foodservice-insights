@@ -14,8 +14,11 @@ to extend). The widened `AuditEvent` (`target`, `detail`, `lib/server/audit.ts`)
 yet; this plan's `user.deleted` is the first
 caller with no organization, so its PR 1 also widens that branch to `organizationId: OrganizationId
 | null`. Nothing here is worth landing before real sign-in — `invitee-ui.md` § Sequencing has the
-table and the order across all three plans. It also retires the two `/account` bullets in `auth.md`
-§ Follow-ups.
+table and the order across all three plans.
+
+**Both features are `supabase`-mode only** (`auth.md` § The mode switch). In `placeholder` there is
+no session to change, and deleting the placeholder breaks every request, so `/account` hides both
+sections when `authMode()` is `placeholder`; a component test covers each value.
 
 **Two decisions that read the requirements differently, for you to confirm** (the other three are
 in `invitee-ui.md` § Sequencing):
@@ -36,7 +39,7 @@ in `invitee-ui.md` § Sequencing):
 | How the user is deleted | `DELETE FROM auth.users WHERE id = …` in our transaction | Context, above. `organization_member_at_least_one_admin` fires on the cascade (`organization.test.ts:346`). Rejected: `admin.deleteUser` — not transactional, needs `SUPABASE_SECRET_KEY` in prod |
 | Sole-admin block | Loader lists organizations where the user is the only admin; the UI disables delete and links each org's Members page; the server maps the trigger to 409 `{ code: 'last-admin' }` via `SET CONSTRAINTS … IMMEDIATE` | Same shape as memberships: server side is `attemptMemberWrite` + `lastAdminResponse` (`lib/server/orgs/members.ts`, used by the members `+server.ts`); client side is `ConfirmAction` + the copy in `members/member-write.ts` |
 | Confirmation | `ConfirmAction` with `confirmPhrase` = the user's email | The delete-organization pattern, typing the name |
-| Ending the session | After 204: `browserAuth().signOut({ scope: 'local' })`, then `goto('/', { invalidateAll: true })` | supabase-js tolerates GoTrue's 401/403/404 on logout for a dead user and still clears the local session; server-side, auth PR 3 already treats a deleted user's token as signed-out-and-clear |
+| Ending the session | After 204: `browserAuth().signOut({ scope: 'local' })`, then `goto('/', { invalidateAll: true })` | supabase-js tolerates GoTrue's 401/403/404 on logout for a dead user and still clears the local session; server-side, auth PR 1 already treats a deleted user's token as signed-out-and-clear |
 | The user's reports | Stay, `created_by_user_id → NULL` (existing FK). `lib/server/reports/guards.ts` then grants no member ownership of them; admins still can | REQUIREMENTS; nothing in the UI shows a submitter today, so "displayed as a deleted user" has nowhere to render yet |
 | GBD notice | `gbd-user-deleted` after commit — already defined, no caller | REQUIREMENTS § GBD email notifications |
 | Audit | `user.deleted`, `organizationId: null`, target user | The id survives in `audit_event`, which has no FKs for exactly this |
@@ -75,10 +78,15 @@ in `invitee-ui.md` § Sequencing):
   `$lib/components/auth/code-step.svelte` (its second caller) and `describeAuthError`. Verified →
   `invalidateAll()`; the menu and page show the new address. Component tests with the fake: the
   address is trimmed and sent, a bad code stays on the step with the mapped message.
-- **E2E**: change to `aTestEmailAddress()`, `waitForEmail(newAddress)` for the code, submit, `/account`
-  and the menu show the new email.
-- `account.png` regenerates. Remove the last `**Stub:**` markers on `/account`; `auth.md`
-  § Follow-ups loses its two `/account` bullets. Deletes this plan file.
+- **E2E**: change to `aTestEmailAddress()`, `waitForEmail(newAddress)` for the code, submit, the form
+  reports success, and GoTrue's admin API (`admin.getUserById`) returns the new address. **Not** that
+  `/account` or the menu shows it: GoTrue writes the change to the stack's main database and the app
+  reads the run's clone (`auth.md` § Two facts, 2), so in e2e the page keeps the old address. In
+  production both are one database; the menu updating is the component test's `invalidateAll()`
+  plus the `pnpm dev` check below, and an e2e of it needs the main-database project in `auth.md`
+  § Follow-ups.
+- `account.png` regenerates. Remove the last `**Stub:**` markers on `/account`. Deletes this plan
+  file.
 
 ## Verification
 
@@ -86,4 +94,5 @@ Per PR as usual; PR 2 also `TEST_DB=1 scripts/supabase stop && start` for the te
 dev`: as the only admin of an org, `/account` refuses to delete and links the org; promote someone,
 and the dialog opens; type the wrong email and the button stays disabled; delete → `/`, and Back
 shows no signed-in shell. Change email → a six-digit code and no link arrives at the new address in
-Mailpit → after the code, the menu shows it.
+Mailpit → after the code, the menu shows it. (The dev stack's GoTrue and app share one database, so
+this is the check e2e cannot make.)

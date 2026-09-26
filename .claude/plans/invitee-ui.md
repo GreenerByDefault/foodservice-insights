@@ -50,17 +50,17 @@ can *be* a second person — per-test identities, which arrive with **auth PR 2*
 
 *Rejected: screenshotting `/invites` early through `e2e/lib/stub-page-data.ts`.* It only works on a
 client-side navigation, so it would need the account-menu link to exist first, and it would hang a
-second temporary hack on a file `auth.md` PR 2 already deletes — to get one image weeks earlier
+second temporary hack on a file `auth.md` PR 1 already deletes — to get one image weeks earlier
 that the real fixture then has to reproduce anyway.
 
-**The order that keeps you unblocked:** auth PRs 1–2 → this plan's PR → auth PRs 3–4 →
-account-self-service PRs 1–2 (memberships and the admin/invitee-endpoint side already landed).
+**The order that keeps you unblocked:** auth PRs 1–2 → this plan's PR, while auth PRs 3–5 go on
+in parallel → account-self-service PRs 1–2 once auth PRs 3 and 4 are in (memberships and the
+admin/invitee-endpoint side already landed). `auth.md` § Sequencing has the graph.
 
-Two notes on the auth numbering, which moved when auth's own fixtures prefactor landed as #298:
-per-test identities arrive with **auth PR 2** (the switch-on PR), not PR 3, and the `?email=`
-prefill belongs to the sign-in email step **auth PR 1** builds. After auth PR 3 an invitee with no
-display name meets `/onboarding` before `/invites` — correct, and no change here, since PR 3's
-fixtures mint onboarded users.
+Two notes on the auth numbering, which moved when `auth.md` gained its mode switch: a second
+person in a test arrives with **auth PR 2**, and the `?email=` prefill with **auth PR 3**, which
+mounts the sign-in form. After auth PR 4 an invitee with no display name meets `/onboarding` before
+`/invites` — correct, and no change here, since the fixtures mint onboarded users.
 
 **Requirements this plan changed, confirmed.** Each was a change to the written requirement, not a
 misreading of it. REQUIREMENTS.md already carries all three, landed with the admin side, so the
@@ -92,8 +92,8 @@ here.
 | Accept when already a member | Mark `accepted`, 200 | Landed — the membership insert is a no-op (`onConflict().doNothing()`) if one exists; the outcome the invitee wants is the same |
 | Accept/decline guard | Invite looked up by id and `email = lower(user.email)`; anything else 404 | Landed in `lockInviteFor`. The verified address is the token, so a 404 leaks nothing about an id that belongs to someone else |
 | Audit | `invite.accepted`, `invite.declined`, `invite.expired`; target type `invite` | REQUIREMENTS § Audit trail: invites. Landed alongside the endpoints |
-| Who the email says invited you | `invited_by_user_id`'s display name, `null` → "An admin" | The column is `ON DELETE SET NULL` and display names are nullable until auth PR 3; `renderOrganizationInvite` already has this fallback, so `/invites` must match it |
-| `?email=` prefill on `/sign-in` | Not here — auth PR 1 builds the email step; confirm it reads `?email=`, add it there if not | The invite email already carries it |
+| Who the email says invited you | `invited_by_user_id`'s display name, `null` → "An admin" | The column is `ON DELETE SET NULL` and display names are nullable until auth PR 4; `renderOrganizationInvite` already has this fallback, so `/invites` must match it |
+| `?email=` prefill on `/sign-in` | Not here — auth PR 3 validates `?email=` and passes it to the form as `initialEmail` | The invite email already carries it |
 
 ## PR 1 — The `/invites` page, end to end (after auth PR 2)
 
@@ -120,7 +120,7 @@ With `users.create()` and `users.contextFor(user)`:
   with the inviter's name pinned through the org's `admin` spec) and `invites-empty.png` (the
   no-invitations state, the way `organizations/list-empty.png` owns its own). `account/menu.png`
   regenerates for the new "Invitations" item.
-- Confirm auth PR 1 reads `?email=` into the sign-in email step (add it there if not).
+- Confirm auth PR 3 reads `?email=` into the sign-in email step (add it there if not).
 - Deletes this plan file. By then the § Sequencing question is settled — auth has landed — and
   `account-self-service.md` states its own dependencies.
 
