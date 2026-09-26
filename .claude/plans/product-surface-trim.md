@@ -33,7 +33,7 @@ What the map found:
   heuristic is folder-name parsing the split plan gives to the lab.
   `emissions.get_available_regions` has no callers. `aggregation.py`: `aggregate_data`'s
   `timescale="period"` branch has no callers; `category_highest_vs_lowest_months` feeds only the
-  QA workbook, and `build_client_excel_report` accepts the result and ignores it.
+  QA workbook.
 - `report/plots.py`: the `plot_*` functions `generate_all_report_plots` never reaches have no
   other product caller (`plot_metric_over_time` is used by the lab's `pilot/plots.py`; the rest
   by nobody).
