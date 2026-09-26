@@ -20,7 +20,7 @@ Verify a change with `just lint && just check && just test`, plus `just test-lab
 touched the lab.
 
 > **Status:** the analysis library has landed in `gbd_foodservice_insights` and the lab in
-> `gbd_foodservice_insights_lab`; the `analyze()` implementation follows.
+> `gbd_foodservice_insights_lab`, and `analyze()` is implemented; `WORKER_MODE=mock-llm` follows.
 
 ## The workspace
 
