@@ -32,6 +32,10 @@ from gbd_foodservice_insights.testing import (
 )
 from matplotlib.figure import Figure
 
+# ----------------------------------------------------------------------
+# Shared fixtures
+# ----------------------------------------------------------------------
+
 
 def _request(
     tmp_path: Path,
@@ -99,6 +103,11 @@ def fake_report(monkeypatch: pytest.MonkeyPatch) -> FakeReport:
     fake = FakeReport()
     monkeypatch.setattr(analysis, "run_food_report", fake)
     return fake
+
+
+# ----------------------------------------------------------------------
+# Tests for analyze()'s deliverables
+# ----------------------------------------------------------------------
 
 
 def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
@@ -213,6 +222,11 @@ def test_analyze_golden_deliverables(
     assert actual == json.loads(GOLDEN_PATH.read_text())
 
 
+# ----------------------------------------------------------------------
+# Tests for what analyze() hands run_food_report
+# ----------------------------------------------------------------------
+
+
 def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
     tmp_path: Path, fake_report: FakeReport
 ) -> None:
@@ -282,6 +296,11 @@ def test_hands_the_report_the_forms_answers(
     }
 
 
+# ----------------------------------------------------------------------
+# Tests for progress reporting and the categorization cache
+# ----------------------------------------------------------------------
+
+
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
     request = _request(tmp_path)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
@@ -315,6 +334,11 @@ def test_a_cached_product_skips_the_llm(
 
     assert llm.calls == [("clean", "Pork Loin"), ("match", "pork loin")]
     assert fake_report.input_df()["category"].tolist() == ["Cheese", "Pork (pig meat)"]
+
+
+# ----------------------------------------------------------------------
+# Tests for input validation and upstream failures
+# ----------------------------------------------------------------------
 
 
 def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Path) -> None:
