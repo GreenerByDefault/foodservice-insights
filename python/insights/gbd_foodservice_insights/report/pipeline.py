@@ -405,34 +405,27 @@ def run_food_report(
             report_progress=report_progress,
         )
         quality_findings = list(report.findings)
-        df = report.rows
-        metric_total = report.metric_total
-        dm_mapping = report.diner_meal_mapping
-        agg_results = report.aggregation
-        emissions_summary = report.emissions_summary
-        plant_animal_split = report.plant_animal_split
-        plant_protein_share = report.plant_protein_share
         diagnostics_list = list(report.diagnostics)
 
         diagnostic_export_sheets = _collect_diagnostic_export_sheets(
-            df,
-            dm_mapping,
-            metric_total=metric_total,
-            monthly_product_data=agg_results.get("monthly_product_data"),
-            monthly_category_data=agg_results.get("monthly_category_data"),
+            report.rows,
+            report.diner_meal_mapping,
+            metric_total=report.metric_total,
+            monthly_product_data=report.aggregation.get("monthly_product_data"),
+            monthly_category_data=report.aggregation.get("monthly_category_data"),
             pdf_extracted=metadata.get("pdf_extracted"),
         )
 
         _log_stage("plot_generation", report_progress)
         plot_list = plots.generate_all_report_plots(
-            aggregated_data=agg_results,
-            diner_meal_mapping=dm_mapping,
-            emissions_summary=emissions_summary,
-            metric_total=metric_total,
+            aggregated_data=report.aggregation,
+            diner_meal_mapping=report.diner_meal_mapping,
+            emissions_summary=report.emissions_summary,
+            metric_total=report.metric_total,
             serving=(mode == "serving"),
             quality_findings=quality_findings,
-            plant_animal_split=plant_animal_split,
-            plant_protein_share=plant_protein_share,
+            plant_animal_split=report.plant_animal_split,
+            plant_protein_share=report.plant_protein_share,
             diner_or_meal=diner_or_meal,
         )
 
@@ -442,7 +435,6 @@ def run_food_report(
             artifact_paths["graphs_dir"],
         )
 
-        total_dm = report.total_diner_meals
         summary_stats = dict(report.summary_stats)
 
         quality_summary = summarize_findings(quality_findings)
@@ -456,22 +448,24 @@ def run_food_report(
         }
         animal_emissions_intensity = None
         if mode == "procurement":
-            candidate = agg_results.get("animal_emissions_intensity")
+            candidate = report.aggregation.get("animal_emissions_intensity")
             if isinstance(candidate, pd.DataFrame) and not candidate.empty:
                 animal_emissions_intensity = candidate
         decision_kpis = None
         if mode == "procurement":
-            candidate = agg_results.get("decision_kpis")
+            candidate = report.aggregation.get("decision_kpis")
             if isinstance(candidate, pd.DataFrame) and not candidate.empty:
                 decision_kpis = candidate
         substitution_scenarios = None
         if mode == "procurement":
-            candidate = agg_results.get("substitution_scenarios")
+            candidate = report.aggregation.get("substitution_scenarios")
             if isinstance(candidate, pd.DataFrame) and not candidate.empty:
                 substitution_scenarios = candidate
 
         pdf_tables = {
-            "Category Template": _format_category_template_for_pdf(agg_results["template_data"]),
+            "Category Template": _format_category_template_for_pdf(
+                report.aggregation["template_data"]
+            ),
         }
         if animal_emissions_intensity is not None:
             pdf_tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
@@ -489,23 +483,31 @@ def run_food_report(
         # were computed (procurement runs); legacy/serving runs keep the
         # original key-value summary page.
         exec_narrative = None
-        if emissions_summary is not None and "total_kg_co2e" in emissions_summary:
-            _co2e_by_cat = emissions_summary.dropna(subset=["total_kg_co2e"])
+        if report.emissions_summary is not None and "total_kg_co2e" in report.emissions_summary:
+            _co2e_by_cat = report.emissions_summary.dropna(subset=["total_kg_co2e"])
             _total_co2e = float(_co2e_by_cat["total_kg_co2e"].sum(min_count=1) or 0.0)
             if _total_co2e > 0:
                 _top = _co2e_by_cat.nlargest(3, "total_kg_co2e")
                 exec_narrative = {
                     "client": title_info.get("client", "this institution"),
                     "period": summary_stats.get("Date range", ""),
-                    "total_food_kg": float(df[metric_total].sum()),
+                    "total_food_kg": float(report.rows[report.metric_total].sum()),
                     "total_co2e_kg": _total_co2e,
-                    "per_dm_kg": (_total_co2e / total_dm) if total_dm else None,
+                    "per_dm_kg": (
+                        (_total_co2e / report.total_diner_meals)
+                        if report.total_diner_meals
+                        else None
+                    ),
                     "dm_label": diner_or_meal,
                     "plant_pct": (
-                        plant_animal_split["plant_pct"] if plant_animal_split is not None else None
+                        report.plant_animal_split["plant_pct"]
+                        if report.plant_animal_split is not None
+                        else None
                     ),
                     "animal_pct": (
-                        plant_animal_split["animal_pct"] if plant_animal_split is not None else None
+                        report.plant_animal_split["animal_pct"]
+                        if report.plant_animal_split is not None
+                        else None
                     ),
                     "top_categories": [
                         (str(row["category"]), 100 * row["total_kg_co2e"] / _total_co2e)
@@ -530,31 +532,31 @@ def run_food_report(
 
         dm_df = (
             pd.DataFrame(
-                [(period, value) for period, value in dm_mapping.items()],
+                [(period, value) for period, value in report.diner_meal_mapping.items()],
                 columns=["month_year", f"{diner_or_meal}s"],
             )
-            if dm_mapping
+            if report.diner_meal_mapping
             else pd.DataFrame(columns=["month_year", f"{diner_or_meal}s"])
         )
 
         quality_findings_df = findings_to_frame(quality_findings)
-        missingness_summary_df = missingness_summary_frame(df)
+        missingness_summary_df = missingness_summary_frame(report.rows)
 
         data_profile_df = None
         try:
-            data_profile_df = diagnostics.summarise_numeric_columns(df)
+            data_profile_df = diagnostics.summarise_numeric_columns(report.rows)
         except Exception as exc:
             logger.warning("Could not compute data profile: %s", exc)
 
         _log_stage("client_workbook_build", report_progress)
         artifact_paths["client_excel_path"] = excel.build_client_excel_report(
             output_path=artifact_paths["client_excel_path"],
-            monthly_product_data=agg_results["monthly_product_data"],
-            monthly_category_data=agg_results["monthly_category_data"],
-            template_data=agg_results["template_data"],
-            highest_lowest=agg_results["highest_lowest"],
+            monthly_product_data=report.aggregation["monthly_product_data"],
+            monthly_category_data=report.aggregation["monthly_category_data"],
+            template_data=report.aggregation["template_data"],
+            highest_lowest=report.aggregation["highest_lowest"],
             diner_meals_df=dm_df,
-            emissions_summary=emissions_summary,
+            emissions_summary=report.emissions_summary,
             animal_emissions_intensity=animal_emissions_intensity,
             decision_kpis=decision_kpis,
             substitution_scenarios=substitution_scenarios,
@@ -564,13 +566,13 @@ def run_food_report(
         _log_stage("qa_workbook_build", report_progress)
         artifact_paths["qa_excel_path"] = excel.build_qa_excel_report(
             output_path=artifact_paths["qa_excel_path"],
-            raw_df=df,
-            monthly_product_data=agg_results["monthly_product_data"],
-            monthly_category_data=agg_results["monthly_category_data"],
-            template_data=agg_results["template_data"],
-            highest_lowest=agg_results["highest_lowest"],
+            raw_df=report.rows,
+            monthly_product_data=report.aggregation["monthly_product_data"],
+            monthly_category_data=report.aggregation["monthly_category_data"],
+            template_data=report.aggregation["template_data"],
+            highest_lowest=report.aggregation["highest_lowest"],
             diner_meals_df=dm_df,
-            emissions_summary=emissions_summary,
+            emissions_summary=report.emissions_summary,
             animal_emissions_intensity=animal_emissions_intensity,
             decision_kpis=decision_kpis,
             substitution_scenarios=substitution_scenarios,
