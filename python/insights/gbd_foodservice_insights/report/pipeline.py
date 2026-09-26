@@ -485,6 +485,9 @@ def run_food_report(
         _log_stage("ingestion", report_progress)
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
+
+        # Loaded eagerly and outside the try/except below: a missing file must hard-fail
+        # regardless of policy.
         raw_diner_meal_mapping = (
             diner_meal_mapping
             if diner_meal_mapping is not None
