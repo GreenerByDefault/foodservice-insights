@@ -1,4 +1,7 @@
+import dataclasses
 import json
+import math
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from types import MappingProxyType
@@ -18,6 +21,7 @@ from gbd_foodservice_insights.analysis import (
     analyze,
 )
 from gbd_foodservice_insights.categorization import cache
+from gbd_foodservice_insights.report import pdf
 from gbd_foodservice_insights.testing import (
     KEYWORD_PRODUCTS,
     SAMPLE_MONTHS,
@@ -26,6 +30,11 @@ from gbd_foodservice_insights.testing import (
     input_csv_text,
     sample_input_csv,
 )
+from matplotlib.figure import Figure
+
+# ----------------------------------------------------------------------
+# Shared fixtures
+# ----------------------------------------------------------------------
 
 
 def _request(
@@ -96,6 +105,11 @@ def fake_report(monkeypatch: pytest.MonkeyPatch) -> FakeReport:
     return fake
 
 
+# ----------------------------------------------------------------------
+# Tests for analyze()'s deliverables
+# ----------------------------------------------------------------------
+
+
 def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     request = _request(tmp_path)
     request.input_csv.write_text(sample_input_csv())
@@ -128,6 +142,89 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     # One per LLM call, plus one per `run_food_report` stage.
     assert llm.calls
     assert progress_calls == len(llm.calls) + 15
+
+
+GOLDEN_PATH = Path(__file__).parent / "data" / "analysis_golden.json"
+
+
+def _jsonable(value: Any) -> Any:
+    """`value` as plain JSON, with floats rounded so the last bits of a sum cannot fail the
+    comparison."""
+    if isinstance(value, pd.DataFrame):
+        return _jsonable(
+            json.loads(value.to_json(orient="split", date_format="iso", default_handler=str))
+        )
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, float):
+        return value if not math.isfinite(value) or value == 0 else float(f"{value:.9g}")
+    if value is None or isinstance(value, bool | int | str):
+        return value
+    return str(value)
+
+
+def _chart_titles(figure: Figure) -> list[str]:
+    suptitle = figure.get_suptitle()
+    titles = [ax.get_title() for ax in figure.axes if ax.get_title()]
+    return [suptitle, *titles] if suptitle else titles
+
+
+def test_analyze_golden_deliverables(
+    tmp_path: Path, cache_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pins what the PDF is built from and every workbook sheet. `UPDATE_GOLDEN=1` rewrites
+    the fixture, whose diff is then the review. The PDF's own bytes are not compared: the
+    title page is dated and its fonts vary by machine."""
+    baseline = pd.read_csv(Path(__file__).parent / "data" / "aggregated_baseline.csv")
+    baseline = baseline[baseline["category"].notna() & (baseline["category"] != "No Matches Found")]
+    baseline.assign(cleaned_item_names=baseline["product"].str.lower())[
+        ["product", "category", "cleaned_item_names"]
+    ].drop_duplicates("product").to_csv(cache_path, index=False)
+    request = dataclasses.replace(
+        _request(tmp_path),
+        monthly_counts=MappingProxyType({"2023-10": 900, "2023-11": 1000, "2023-12": 1100}),
+    )
+    request.input_csv.write_text(
+        input_csv_text(baseline[["product", "date", "kilos_total"]].itertuples(index=False))
+    )
+
+    pdf_inputs: dict[str, Any] = {}
+    build_pdf_report = pdf.build_pdf_report
+
+    def record_pdf_inputs(**kwargs: Any) -> str:
+        pdf_inputs.update(
+            {
+                "title_info": kwargs["title_info"],
+                "summary_stats": kwargs["summary_stats"],
+                "quality_status": kwargs["quality_status"],
+                "quality_summary": kwargs["quality_summary"],
+                "narrative": kwargs["narrative"],
+                "tables": kwargs["tables"],
+                "findings": kwargs["missing_data_findings"],
+                "chart_titles": [_chart_titles(figure) for _, figure in kwargs["plots"]],
+            }
+        )
+        return build_pdf_report(**kwargs)
+
+    monkeypatch.setattr(pdf, "build_pdf_report", record_pdf_inputs)
+    llm = KeywordLlmClient()
+
+    outcome = analyze(request, llm=llm)
+
+    assert llm.calls == []
+    actual = _jsonable(
+        {"pdf": pdf_inputs, "workbook": pd.read_excel(outcome.xlsx, sheet_name=None)}
+    )
+    if os.environ.get("UPDATE_GOLDEN"):
+        GOLDEN_PATH.write_text(json.dumps(actual, indent=2, ensure_ascii=False) + "\n")
+    assert actual == json.loads(GOLDEN_PATH.read_text())
+
+
+# ----------------------------------------------------------------------
+# Tests for what analyze() hands run_food_report
+# ----------------------------------------------------------------------
 
 
 def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
@@ -199,6 +296,11 @@ def test_hands_the_report_the_forms_answers(
     }
 
 
+# ----------------------------------------------------------------------
+# Tests for progress reporting and the categorization cache
+# ----------------------------------------------------------------------
+
+
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
     request = _request(tmp_path)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
@@ -232,6 +334,11 @@ def test_a_cached_product_skips_the_llm(
 
     assert llm.calls == [("clean", "Pork Loin"), ("match", "pork loin")]
     assert fake_report.input_df()["category"].tolist() == ["Cheese", "Pork (pig meat)"]
+
+
+# ----------------------------------------------------------------------
+# Tests for input validation and upstream failures
+# ----------------------------------------------------------------------
 
 
 def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Path) -> None:
