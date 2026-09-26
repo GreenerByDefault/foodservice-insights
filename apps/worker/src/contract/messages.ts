@@ -18,7 +18,7 @@ const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
-const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(0));
+const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(1));
 
 const RunManifestSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),

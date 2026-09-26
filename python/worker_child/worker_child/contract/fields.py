@@ -55,7 +55,7 @@ class Fields:
         for name, value in raw.items():
             if not month.fullmatch(name):
                 raise ContractError(f"{self._path}.{key}: '{name}' is not a YYYY-MM month")
-            counts[name] = self._as_integer(f"{key}.{name}", value, minimum=0)
+            counts[name] = self._as_integer(f"{key}.{name}", value, minimum=1)
         return MappingProxyType(counts)
 
     def done(self) -> None:

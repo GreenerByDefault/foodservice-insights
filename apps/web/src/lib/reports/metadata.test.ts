@@ -89,6 +89,7 @@ describe('ReportMetadataSchema', () => {
       ['a month key that is not YYYY-MM', '{"Jan 2026": 1}'],
       ['a month outside 01-12', '{"2026-13": 1}'],
       ['a negative count', '{"2026-01": -1}'],
+      ['a count of zero', '{"2026-01": 0}'],
       ['a fractional count', '{"2026-01": 1.5}'],
       ['a count that is a string', '{"2026-01": "120"}'],
     ] as const)('rejects %s', (_, monthlyCounts) => {
