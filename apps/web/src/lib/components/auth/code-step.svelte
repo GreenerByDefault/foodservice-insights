@@ -51,8 +51,12 @@ onDestroy(() => {
   isMounted = false;
 });
 
-function isVerifyingOrDone(state: VerificationState): boolean {
-  return state.status === 'verifying' || state.status === 'verified' || state.status === 'stalled';
+function isVerifying(state: VerificationState): boolean {
+  return state.status === 'verifying' || state.status === 'verified';
+}
+
+function isStalled(state: VerificationState): boolean {
+  return state.status === 'stalled';
 }
 
 function isResending(state: ResendState): boolean {
@@ -62,7 +66,10 @@ function isResending(state: ResendState): boolean {
 /** One lock across both requests. A resend that lands during a verify resets the step over the
  * outcome the verify is about to write, and one after a verify re-enables a field whose code is
  * spent. */
-const isLocked = $derived(isVerifyingOrDone(verificationState) || isResending(resendState));
+const isLocked = $derived(isVerifying(verificationState) || isResending(resendState));
+/** Stalled leaves only the field locked: its code is spent, but a new code or a new address are
+ * both a way out, and without them a sign-in the server keeps refusing has none. */
+const isCodeLocked = $derived(isLocked || isStalled(verificationState));
 const hasFullCode = $derived(code.length === OTP_LENGTH);
 
 // Read through a `$derived` rather than from `resendState` directly: the effect would otherwise
@@ -95,7 +102,7 @@ function keepDigits(text: string): string {
 }
 
 async function submitCode() {
-  if (isLocked || !hasFullCode) return;
+  if (isCodeLocked || !hasFullCode) return;
 
   verificationState = { status: 'verifying' };
   let errorMessage: string | null;
@@ -153,8 +160,9 @@ async function resendCode() {
   resendState = { status: 'sending' };
   let errorMessage: string | null;
   try {
-    // `false`, unlike the first send: this address has already been sent a code, so creating a
-    // user here could only mean the visitor changed the address out from under us.
+    // Passes `shouldCreateUser: false`, unlike the first send: reaching this step already proved
+    // the account exists (see email-step.svelte), so needing to create one here would be a bug,
+    // not a normal resend.
     const { error } = await auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     errorMessage = error && describeAuthError(error);
   } catch (cause) {
@@ -186,7 +194,7 @@ async function resendCode() {
       pattern={REGEXP_ONLY_DIGITS}
       pasteTransformer={keepDigits}
       onComplete={() => void submitCode()}
-      disabled={isLocked}
+      disabled={isCodeLocked}
       aria-invalid={verificationState.status === 'failed' || undefined}
       aria-describedby={verificationState.status === 'failed'
         ? `${descriptionId} ${errorId}`
@@ -228,7 +236,9 @@ async function resendCode() {
     <p role="alert" class="text-sm text-destructive">
       Your code was verified, but we couldn't finish signing you in.
     </p>
-    <Button bind:ref={retryButton} onclick={finishSigningIn}>Try again</Button>
+    <Button bind:ref={retryButton} onclick={finishSigningIn} disabled={isResending(resendState)}>
+      Try again
+    </Button>
   </div>
 {/if}
 

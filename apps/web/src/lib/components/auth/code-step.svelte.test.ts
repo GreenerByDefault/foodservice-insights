@@ -155,6 +155,52 @@ describe('CodeStep', () => {
 
       await expect.element(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     });
+
+    test('leaves "Change email" open as a way out', async () => {
+      const auth = fakeBrowserAuth();
+      const onChangeEmail = vi.fn();
+      const screen = await render(CodeStep, { ...props(auth), onChangeEmail });
+
+      await codeField(screen).fill('123456');
+      await expect.element(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+      await screen.getByRole('button', { name: 'Change email' }).click();
+
+      expect(onChangeEmail).toHaveBeenCalledOnce();
+    });
+
+    test('a new code clears the stall and opens the field again', async () => {
+      vi.useFakeTimers();
+      const auth = fakeBrowserAuth();
+      const screen = await render(CodeStep, props(auth));
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
+      vi.useRealTimers();
+
+      await codeField(screen).fill('123456');
+      await expect.element(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+      await screen.getByRole('button', { name: 'Send a new code' }).click();
+
+      await expect.element(codeField(screen)).toBeEnabled();
+      await expect.element(codeField(screen)).toHaveValue('');
+      await expect
+        .element(screen.getByRole('button', { name: 'Try again' }))
+        .not.toBeInTheDocument();
+    });
+
+    test('"Try again" is held while a new code is being sent', async () => {
+      vi.useFakeTimers();
+      const auth = fakeBrowserAuth();
+      const resend = Promise.withResolvers<Awaited<ReturnType<FakeBrowserAuth['signInWithOtp']>>>();
+      auth.signInWithOtp.mockReturnValue(resend.promise);
+      const screen = await render(CodeStep, props(auth));
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
+      vi.useRealTimers();
+
+      await codeField(screen).fill('123456');
+      await expect.element(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+      await screen.getByRole('button', { name: 'Send a new code' }).click();
+
+      await expect.element(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
+    });
   });
 
   test('resend is held for the cooldown, then sends without creating a user', async () => {
