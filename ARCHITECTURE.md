@@ -465,7 +465,7 @@ handling.
 | --- | --- |
 | Web server does not respond to the client | The client sets timeouts, and retries automatically only where the request cannot have started an analysis |
 | Web server has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
-| Web server has trouble with Supabase Auth | In `supabase` mode, an unreachable Supabase Auth is a 503 rather than signing the user out; a session it refuses is signed out and its cookie cleared. `classifyAuthResult` (`apps/web/src/lib/server/auth/identify.ts`) |
+| Web server has trouble with Supabase Auth | An unreachable Supabase Auth is a 503 rather than signing the user out; a session it refuses is signed out and its cookie cleared. `classifyAuthResult` (`apps/web/src/lib/server/auth/identify.ts`) |
 | Web server has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
 | Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
