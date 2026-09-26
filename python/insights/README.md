@@ -7,12 +7,13 @@ the one entry point the worker calls; the lab calls the same modules directly.
 
 ## Where a report change goes
 
-`report/pipeline.py`'s `run_food_report()` orchestrates the report. To change:
+`report/food_report.py`'s `build_food_report()` computes the report in memory; `report/pipeline.py`'s
+`run_food_report()` wraps it with file handling and the lab's extra outputs. To change:
 
 | What | Where |
 | --- | --- |
 | PDF text, section wording, page order, quality-summary wording | `report/pdf.py` — `build_pdf_report()` and its `create_*_page()` helpers |
-| Which tables the PDF includes | `report/pipeline.py`, the `tables` passed to `build_pdf_report()` |
+| Which tables the PDF includes | `report/pdf.py` — `write_report_pdf()` |
 | How those tables are computed | `report/aggregation.py` |
 | Chart content and captions | `report/plots.py` — `generate_all_report_plots()`, then the `plot_*` function |
 | Warnings and diagnostics on the quality pages | `report/diagnostics.py` — `run_all_diagnostics()` |

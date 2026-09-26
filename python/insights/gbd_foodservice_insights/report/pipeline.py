@@ -1,9 +1,9 @@
-"""Canonical orchestrator for the food report pipeline.
+"""The data scientists' food report: reads a categorized CSV and writes the full bundle.
 
-This module should stay orchestration-focused. It coordinates loading,
-quality checks, aggregation, plotting, and artifact creation, while delegating
-PDF building, workbook building, manifest writing, and per-run logging to
-their dedicated report modules.
+The report itself is built by `food_report.build_food_report` and `build_report_charts`, and its
+two deliverables by `pdf.write_report_pdf` and `excel.write_client_workbook`. This wrapper adds
+the file handling around them and the rest of the bundle: chart PNGs, the QA workbook, the run
+manifest, the run log, and the write-back into `client_metadata.json`.
 """
 
 from __future__ import annotations
@@ -17,9 +17,7 @@ from typing import Any
 
 import pandas as pd
 
-from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.report import (
-    aggregation,
     artifacts,
     diagnostics,
     excel,
@@ -27,53 +25,31 @@ from gbd_foodservice_insights.report import (
     plots,
     run_logging,
 )
-from gbd_foodservice_insights.report.aggregation import (
-    calculate_plant_animal_split,
-    calculate_plant_protein_share,
+from gbd_foodservice_insights.report.food_report import (
+    Finding,
+    FoodReport,
+    build_food_report,
+    build_report_charts,
 )
 from gbd_foodservice_insights.report.quality import (
-    check_required_columns,
-    check_required_non_null,
-    check_row_count_drift,
-    compare_missing_snapshots,
-    enforce_policy_or_raise,
+    QualityPolicyError,
     findings_to_frame,
-    make_finding,
-    missing_snapshot,
     missingness_summary_frame,
     summarize_findings,
 )
 from gbd_foodservice_insights.report.schema import (
-    REGION_DAYFIRST,
+    DinerOrMeal,
     MissingDataPolicy,
-    metric_display_label,
-    metric_for_mode,
     normalize_report_mode,
     quality_status_from_findings,
-    required_columns_for_mode,
-    required_non_null_columns_for_mode,
     validate_missing_data_policy,
     validate_region,
 )
-from gbd_foodservice_insights.report.utils import compute_month_alignment, ensure_month_year_column
-from gbd_foodservice_insights.report.utils import (
-    load_diner_meal_mapping_from_json as _load_diner_meal_mapping_from_json,
-)
-from gbd_foodservice_insights.report.utils import (
-    normalize_diner_meal_mapping as _normalize_diner_meal_mapping,
-)
+from gbd_foodservice_insights.report.utils import load_diner_meal_mapping_from_json
 
 logger = logging.getLogger(__name__)
 
 _STAGE_MESSAGES = {
-    "ingestion": "Loading the input data.",
-    "date_normalization": "Checking and standardizing dates.",
-    "month_normalization": "Creating the month summary column.",
-    "diner_meal_mapping": "Loading the diner-meal mapping.",
-    "emissions": "Calculating emissions values.",
-    "aggregation": "Summarizing the data for the report.",
-    "emissions_summary": "Preparing the emissions summary tables.",
-    "client_metrics_and_diagnostics": "Running report checks and summary metrics.",
     "plot_generation": "Building the report charts.",
     "plot_export": "Saving the chart files.",
     "pdf_build": "Creating the PDF report.",
@@ -113,215 +89,6 @@ def _resolve_input_file(input_file: str | Path | None) -> Path:
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
     return input_path
-
-
-def _resolve_diner_meal_mapping(
-    diner_meal_file: str | Path | None,
-    diner_meal_mapping: Mapping[Any, Any] | None,
-) -> dict[pd.Period, float]:
-    """Resolve diner-meal mapping from inline mapping or JSON file."""
-    if diner_meal_mapping is not None:
-        return _normalize_diner_meal_mapping(diner_meal_mapping)
-
-    return _load_diner_meal_mapping_from_json(diner_meal_file)
-
-
-def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    """Add each (month, category) row's own ``emissions_kg_co2e`` total."""
-    # Charts sum this column per month. Joining on month alone would copy the month's total onto
-    # every category row, multiplying the charted total by the number of categories.
-    keys = ["month_year", "category"]
-    category_emissions = (
-        df.groupby(keys, dropna=False)["emissions_kg_co2e"].sum(min_count=1).reset_index()
-    )
-    return monthly_cat.merge(category_emissions, on=keys, how="left", validate="one_to_one")
-
-
-def _build_empty_aggregation(metric_total: str) -> dict[str, Any]:
-    """Return empty aggregation payload used when aggregation fails in warn mode."""
-    per_dm_col = metric_total.replace(" total", "") + " per diner-meal"
-    return {
-        "monthly_product_data": pd.DataFrame(
-            columns=["month_year", "product", metric_total, per_dm_col]
-        ),
-        "monthly_category_data": pd.DataFrame(
-            columns=["month_year", "category", metric_total, per_dm_col]
-        ),
-        "template_data": pd.DataFrame(),
-        "overall_drivers": pd.DataFrame(columns=["product", metric_total, "percentage"]),
-        "category_drivers": pd.DataFrame(
-            columns=[
-                "category",
-                "product",
-                metric_total,
-                f"{metric_total}_in_category",
-                "percentage",
-            ]
-        ),
-        "highest_lowest": pd.DataFrame(columns=["category", "times_higher"]),
-        "animal_emissions_intensity": pd.DataFrame(
-            columns=["category", metric_total, "total_kg_co2e", "kg_co2e_per_kg_food"]
-        ),
-        "decision_kpis": pd.DataFrame(
-            columns=[
-                "KPI",
-                "Value",
-                "Unit",
-                "Denominator",
-                "Top products",
-                "Top product emissions (kg CO2e)",
-                "Total animal emissions (kg CO2e)",
-            ]
-        ),
-        "substitution_scenarios": pd.DataFrame(
-            columns=[
-                "scenario",
-                "substitution_pct",
-                "source_categories",
-                "replacement_category",
-                "baseline_ruminant_weight_kg",
-                "baseline_ruminant_emissions_kg_co2e",
-                "replaced_weight_kg",
-                "remaining_ruminant_weight_kg",
-                "replacement_weight_kg",
-                "replacement_emission_factor_kg_co2e_per_kg",
-                "projected_emissions_kg_co2e",
-                "avoidable_kg_co2e",
-                "institution_emissions_avoided_pct",
-            ]
-        ),
-    }
-
-
-def _format_animal_emissions_intensity_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a PDF-friendly copy of the animal emissions table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    display_df = display_df.rename(
-        columns={
-            "category": "Category",
-            "kilos_total": "Kilos of Food",
-            "total_kg_co2e": "Kg CO2e Kg",
-            "kg_co2e_per_kg_food": "CO2e Per Kg Food",
-        }
-    )
-
-    ordered_columns = [
-        column
-        for column in ["Category", "Kilos of Food", "CO2e Per Kg Food", "Kg CO2e Kg"]
-        if column in display_df.columns
-    ]
-    display_df = display_df[ordered_columns]
-
-    for column in ["Kilos of Food", "Kg CO2e Kg"]:
-        if column in display_df.columns:
-            display_df[column] = display_df[column].round().astype("Int64")
-
-    if "CO2e Per Kg Food" in display_df.columns:
-        display_df["CO2e Per Kg Food"] = display_df["CO2e Per Kg Food"].round(2)
-
-    return display_df
-
-
-def _format_category_template_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a PDF-friendly copy of the category template table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    def _format_label(value: object) -> object:
-        if not isinstance(value, str):
-            return value
-        return value.replace("_", " ").title()
-
-    display_df = dataframe.copy()
-    display_df.columns = [_format_label(column) for column in display_df.columns]
-
-    if display_df.index.name is not None:
-        display_df.index = display_df.index.rename(_format_label(display_df.index.name))
-
-    return display_df
-
-
-def _format_decision_kpis_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a compact, client-facing version of the decision KPI table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    display_df = display_df.rename(
-        columns={
-            "KPI": "Focus",
-            "Value": "Share of Animal Emissions (%)",
-            "Top products": "Top Animal Products",
-            "Top product emissions (kg CO2e)": "Top Products Kg CO2e",
-            "Total animal emissions (kg CO2e)": "Total Animal Kg CO2e",
-        }
-    )
-
-    keep_columns = [
-        "Focus",
-        "Share of Animal Emissions (%)",
-        "Top Animal Products",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
-    ]
-    display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
-
-    for column in [
-        "Share of Animal Emissions (%)",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
-    ]:
-        if column in display_df.columns:
-            rounded = pd.to_numeric(display_df[column], errors="coerce")
-            if column == "Share of Animal Emissions (%)":
-                display_df[column] = rounded.round(1)
-            else:
-                display_df[column] = rounded.round().astype("Int64")
-
-    return display_df
-
-
-def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a narrower substitution-scenarios table for the PDF."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    keep_columns = [
-        "scenario",
-        "replaced_weight_kg",
-        "projected_emissions_kg_co2e",
-        "avoidable_kg_co2e",
-        "institution_emissions_avoided_pct",
-    ]
-    display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
-    display_df = display_df.rename(
-        columns={
-            "scenario": "Scenario",
-            "replaced_weight_kg": "Weight Replaced (kg)",
-            "projected_emissions_kg_co2e": "Projected Kg CO2e",
-            "avoidable_kg_co2e": "Avoidable Kg CO2e",
-            "institution_emissions_avoided_pct": "Institution Emissions Averted (%)",
-        }
-    )
-
-    for column in [
-        "Weight Replaced (kg)",
-        "Projected Kg CO2e",
-        "Avoidable Kg CO2e",
-        "Institution Emissions Averted (%)",
-    ]:
-        if column in display_df.columns:
-            numeric = pd.to_numeric(display_df[column], errors="coerce")
-            if column == "Institution Emissions Averted (%)":
-                display_df[column] = numeric.round(2)
-            else:
-                display_df[column] = numeric.round().astype("Int64")
-
-    return display_df
 
 
 def _collect_diagnostic_export_sheets(
@@ -415,7 +182,7 @@ def run_food_report(
     diner_meal_mapping: Mapping[Any, Any] | None = None,
     output_dir: str | Path | None = None,
     procurement_serving: str | None = None,
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal = "diner",
     top_n_drivers: int = 5,
     region: str = "us",
     missing_data_policy: MissingDataPolicy = "hard_fail",
@@ -447,7 +214,8 @@ def run_food_report(
     """
     policy = validate_missing_data_policy(missing_data_policy)
     region = validate_region(region)  # Fails immediately on unrecognised region
-    quality_findings: list[dict[str, Any]] = []
+    # Everything collected so far, for the failure manifest.
+    quality_findings: list[Finding] = []
 
     input_path = _resolve_input_file(input_file)
     metadata_path = input_path.parent / "client_metadata.json"
@@ -481,589 +249,70 @@ def run_food_report(
     logger.info("  Run log: %s", artifact_paths["log_path"])
     logger.info("  Run manifest: %s", artifact_paths["manifest_path"])
 
-    diagnostics_list: list[dict[str, Any]] = []
-    summary_stats: dict[str, Any] = {}
-    quality_status: str | None = None
-    quality_summary: dict[str, Any] | None = None
     graph_paths: list[str] = []
     mode_for_manifest = str(requested_mode) if requested_mode is not None else "unknown"
 
     try:
         mode = normalize_report_mode(requested_mode)
         mode_for_manifest = mode
-        metric_total = metric_for_mode(mode)
 
-        _log_stage("ingestion", report_progress)
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
 
-        # Ingestion checks (month_year is derived from date by this script, not required as input)
-        quality_findings.extend(
-            check_required_columns(df, required_columns_for_mode(mode), stage="ingestion")
-        )
-        quality_findings.extend(
-            check_required_non_null(
-                df,
-                required_non_null_columns_for_mode(mode),
-                stage="ingestion",
-            )
-        )
-        enforce_policy_or_raise(policy, quality_findings)
-
-        # Date normalization with explicit diagnostics
-        _log_stage("date_normalization", report_progress)
-        dayfirst_preference = REGION_DAYFIRST[region]
-
-        if "date" in df.columns:
-            before = missing_snapshot(df)
-            before_rows = len(df)
-            try:
-                parsed_df, date_diag = diagnostics.parse_and_validate_date_column(
-                    df,
-                    date_col="date",
-                    allow_missing=True,
-                    return_diagnostics=True,
-                    dayfirst_preference=dayfirst_preference,
-                )
-                df = parsed_df
-                status_counts = date_diag["parse_status"].value_counts(dropna=False).to_dict()
-                for status, count in status_counts.items():
-                    if status == "parsed":
-                        continue
-                    mapped_status = "warning" if status == "missing" else "error"
-                    quality_findings.append(
-                        make_finding(
-                            stage="date_normalization",
-                            category="date_parse_status",
-                            status=mapped_status,
-                            message=f"Date parsing status '{status}' occurred {int(count)} times.",
-                            count=int(count),
-                            metadata={"parse_status": status},
-                        )
-                    )
-            except ValueError as exc:
-                quality_findings.append(
-                    make_finding(
-                        stage="date_normalization",
-                        category="date_parse_failure",
-                        status="error",
-                        message=str(exc),
-                    )
-                )
-                original = df["date"].copy()
-                df["date"] = pd.to_datetime(df["date"], errors="coerce")
-                coerced_to_missing = int((original.notna() & df["date"].isna()).sum())
-                if coerced_to_missing > 0:
-                    quality_findings.append(
-                        make_finding(
-                            stage="date_normalization",
-                            category="date_coerce_missing",
-                            status="error",
-                            message=(
-                                f"Fallback parsing coerced {coerced_to_missing} non-missing "
-                                "date values to missing."
-                            ),
-                            column="date",
-                            count=coerced_to_missing,
-                        )
-                    )
-
-            quality_findings.extend(
-                compare_missing_snapshots(before, missing_snapshot(df), stage="date_normalization")
-            )
-            quality_findings.extend(
-                check_row_count_drift(before_rows, len(df), stage="date_normalization")
-            )
-        else:
-            quality_findings.append(
-                make_finding(
-                    stage="date_normalization",
-                    category="missing_date_column",
-                    status="error",
-                    message="Column 'date' is missing and cannot be normalized.",
-                )
-            )
-
-        _log_stage("month_normalization", report_progress)
-        before = missing_snapshot(df)
-        before_rows = len(df)
-        try:
-            df = ensure_month_year_column(df, date_col="date", month_col="month_year")
-        except ValueError as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="month_normalization",
-                    category="month_year_generation_failed",
-                    status="error",
-                    message=str(exc),
-                )
-            )
-            if "month_year" not in df.columns:
-                df["month_year"] = pd.NA
-
-        quality_findings.extend(
-            compare_missing_snapshots(before, missing_snapshot(df), stage="month_normalization")
-        )
-        quality_findings.extend(
-            check_row_count_drift(before_rows, len(df), stage="month_normalization")
-        )
-
-        # Re-check full required schema after normalization
-        quality_findings.extend(
-            check_required_columns(
-                df,
-                required_columns_for_mode(mode),
-                stage="post_normalization",
-            )
-        )
-
-        # Re-check required non-null fields after normalization
-        quality_findings.extend(
-            check_required_non_null(
-                df,
-                required_non_null_columns_for_mode(mode),
-                stage="post_normalization",
-            )
-        )
-
-        enforce_policy_or_raise(policy, quality_findings)
-
-        _log_stage("diner_meal_mapping", report_progress)
-        try:
-            dm_mapping = _resolve_diner_meal_mapping(diner_meal_file, diner_meal_mapping)
-        except Exception as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="ingestion",
-                    category="diner_meal_mapping",
-                    status="error",
-                    message=f"Could not load diner-meal mapping: {exc}",
-                )
-            )
-            if policy == "hard_fail":
-                enforce_policy_or_raise(policy, quality_findings)
-            dm_mapping = {}
-
-        if dm_mapping and "month_year" in df.columns:
-            alignment = compute_month_alignment(
-                df["month_year"].dropna().unique(), dm_mapping.keys()
-            )
-            if alignment["missing_in_mapping"]:
-                quality_findings.append(
-                    make_finding(
-                        stage="ingestion",
-                        category="diner_meal_alignment",
-                        status="warning",
-                        message=(
-                            "Months in data but missing in diner-meal mapping: "
-                            f"{alignment['missing_in_mapping']}"
-                        ),
-                        count=len(alignment["missing_in_mapping"]),
-                    )
-                )
-            if alignment["missing_in_data"]:
-                quality_findings.append(
-                    make_finding(
-                        stage="ingestion",
-                        category="diner_meal_alignment",
-                        status="info",
-                        message=(
-                            "Months in diner-meal mapping but absent in data: "
-                            f"{alignment['missing_in_data']}"
-                        ),
-                        count=len(alignment["missing_in_data"]),
-                    )
-                )
-
-        _log_stage("emissions", report_progress)
-        emissions_summary = None
-        if mode == "procurement" and metric_total in df.columns:
-            before = missing_snapshot(df)
-            before_rows = len(df)
-            try:
-                df, emissions_findings = emissions.calculate_emissions(
-                    df,
-                    weight_col=metric_total,
-                    category_col="category",
-                    region=region,
-                    return_findings=True,
-                )
-                quality_findings.extend(emissions_findings)
-                quality_findings.extend(
-                    compare_missing_snapshots(before, missing_snapshot(df), stage="emissions")
-                )
-                quality_findings.extend(
-                    check_row_count_drift(before_rows, len(df), stage="emissions")
-                )
-                missing_emissions = df[df["emissions_kg_co2e"].isna()].copy()
-                if not missing_emissions.empty:
-                    by_category = (
-                        missing_emissions.groupby("category", dropna=False)
-                        .size()
-                        .sort_values(ascending=False)
-                    )
-                    quality_findings.append(
-                        make_finding(
-                            stage="emissions",
-                            category="emissions_missing_by_category",
-                            status="warning",
-                            message=(
-                                f"{len(missing_emissions)} rows have missing emissions values."
-                            ),
-                            column="emissions_kg_co2e",
-                            count=len(missing_emissions),
-                            metadata={"counts_by_category": by_category.head(10).to_dict()},
-                        )
-                    )
-
-                    if "month_year" in missing_emissions.columns:
-                        by_month = (
-                            missing_emissions.groupby("month_year", dropna=False)
-                            .size()
-                            .sort_values(ascending=False)
-                        )
-                        quality_findings.append(
-                            make_finding(
-                                stage="emissions",
-                                category="emissions_missing_by_month",
-                                status="warning",
-                                message=(f"Missing emissions occur in {by_month.shape[0]} months."),
-                                column="emissions_kg_co2e",
-                                count=len(missing_emissions),
-                                metadata={
-                                    "counts_by_month": {
-                                        str(k): int(v) for k, v in by_month.head(10).items()
-                                    }
-                                },
-                            )
-                        )
-            except Exception as exc:
-                quality_findings.append(
-                    make_finding(
-                        stage="emissions",
-                        category="emissions_calculation_failed",
-                        status="error",
-                        message=str(exc),
-                    )
-                )
-
-        _log_stage("aggregation", report_progress)
-        if dm_mapping:
-            try:
-                agg_results = aggregation.run_aggregation_pipeline(
-                    df,
-                    dm_mapping,
-                    metric_total=metric_total,
-                    top_n=top_n_drivers,
-                    strict_diner_meal_coverage=(policy == "hard_fail"),
-                    region=region,
-                )
-            except Exception as exc:
-                quality_findings.append(
-                    make_finding(
-                        stage="aggregation",
-                        category="aggregation_failed",
-                        status="error",
-                        message=str(exc),
-                    )
-                )
-                if policy == "hard_fail":
-                    enforce_policy_or_raise(policy, quality_findings)
-                agg_results = _build_empty_aggregation(metric_total)
-        else:
-            agg_results = _build_empty_aggregation(metric_total)
-
-        monthly_cat = agg_results["monthly_category_data"]
-
-        _log_stage("emissions_summary", report_progress)
-        if mode == "procurement" and "emissions_kg_co2e" in df.columns:
-            try:
-                emissions_summary = emissions.calculate_emissions_summary(df)
-                total_dm = float(sum(dm_mapping.values())) if dm_mapping else 0.0
-                emissions_summary = emissions.calculate_emissions_per_diner_meal(
-                    emissions_summary,
-                    total_dm,
-                )
-
-                if not monthly_cat.empty:
-                    merged = _attach_monthly_category_emissions(monthly_cat, df)
-                    agg_results["monthly_category_data"] = merged
-                    missing_emissions_count = int(merged["emissions_kg_co2e"].isna().sum())
-                    if missing_emissions_count > 0:
-                        quality_findings.append(
-                            make_finding(
-                                stage="aggregation",
-                                category="monthly_emissions_missing",
-                                status="warning",
-                                message=(
-                                    f"Monthly category table has {missing_emissions_count} rows "
-                                    "with missing emissions after merge."
-                                ),
-                                column="emissions_kg_co2e",
-                                count=missing_emissions_count,
-                            )
-                        )
-            except Exception as exc:
-                quality_findings.append(
-                    make_finding(
-                        stage="emissions",
-                        category="emissions_summary_failed",
-                        status="error",
-                        message=str(exc),
-                    )
-                )
-        _log_stage("client_metrics_and_diagnostics", report_progress)
-        plant_animal_split = None
-        plant_protein_share = None
-        try:
-            plant_animal_split = calculate_plant_animal_split(df, metric_col=metric_total)
-        except Exception as exc:
-            logger.warning("Could not calculate plant/animal split: %s", exc)
-        try:
-            plant_protein_share = calculate_plant_protein_share(df, metric_col=metric_total)
-        except Exception as exc:
-            logger.warning("Could not calculate plant protein share: %s", exc)
-
-        try:
-            diagnostics_list = diagnostics.run_all_diagnostics(
-                df=df,
-                diner_meal_mapping=dm_mapping,
-                serving=(mode == "serving"),
-                monthly_product_data=agg_results.get("monthly_product_data"),
-                monthly_category_data=agg_results.get("monthly_category_data"),
-                metric_total=metric_total,
-                pdf_extracted=metadata.get("pdf_extracted"),
-            )
-            quality_findings.extend(diagnostics_list)
-        except Exception as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="diagnostics_failed",
-                    status="error",
-                    message=str(exc),
-                )
-            )
-
-        diagnostic_export_sheets = _collect_diagnostic_export_sheets(
+        report = build_food_report(
             df,
-            dm_mapping,
-            metric_total=metric_total,
-            monthly_product_data=agg_results.get("monthly_product_data"),
-            monthly_category_data=agg_results.get("monthly_category_data"),
+            diner_meal_mapping=(
+                diner_meal_mapping
+                if diner_meal_mapping is not None
+                else load_diner_meal_mapping_from_json(diner_meal_file)
+            ),
+            mode=mode,
+            region=region,
+            diner_or_meal=diner_or_meal,
+            top_n_drivers=top_n_drivers,
             pdf_extracted=metadata.get("pdf_extracted"),
+            missing_data_policy=policy,
+            report_progress=report_progress,
         )
-
-        enforce_policy_or_raise(policy, quality_findings)
+        quality_findings = list(report.findings)
 
         _log_stage("plot_generation", report_progress)
-        plot_list = plots.generate_all_report_plots(
-            aggregated_data=agg_results,
-            diner_meal_mapping=dm_mapping,
-            emissions_summary=emissions_summary,
-            metric_total=metric_total,
-            serving=(mode == "serving"),
-            quality_findings=quality_findings,
-            plant_animal_split=plant_animal_split,
-            plant_protein_share=plant_protein_share,
-            diner_or_meal=diner_or_meal,
-        )
+        charts = build_report_charts(report)
+        quality_findings.extend(charts.findings)
 
         _log_stage("plot_export", report_progress)
         graph_paths = plots.export_report_plots(
-            plot_list,
+            charts.figures,
             artifact_paths["graphs_dir"],
         )
 
-        total_dm = float(sum(dm_mapping.values())) if dm_mapping else 0.0
-        metric_label = metric_display_label(metric_total)
-        metric_label_lower = metric_label.lower()
-        metric_value_unit = "kg" if metric_label_lower == "kilos" else metric_label_lower
-        region_summary_label = {
-            "europe": "EU/UK",
-            "us": "US/Canada",
-        }.get(region, str(region).upper())
-
-        summary_stats = {
-            "Total rows": f"{len(df):,}",
-            "Unique products": f"{df['product'].nunique():,}" if "product" in df.columns else "N/A",
-            "Date range": (
-                f"{df['date'].min().strftime('%b %Y')} – {df['date'].max().strftime('%b %Y')}"
-                if "date" in df.columns and df["date"].notna().any()
-                else "N/A"
-            ),
-            f"Total {diner_or_meal}s": f"{total_dm:,.0f}",
-            "Data type": mode.title(),
-            "Region used for climate emissions factors": region_summary_label,
-        }
-
-        if emissions_summary is not None:
-            total_co2e = emissions_summary["total_kg_co2e"].sum(min_count=1)
-            if pd.notna(total_co2e):
-                summary_stats["Total CO2e"] = f"{float(total_co2e):,.0f} kg"
-                if total_dm > 0:
-                    summary_stats[f"CO2e per {diner_or_meal}"] = (
-                        f"{float(total_co2e) / total_dm:.3f} kg"
-                    )
-
-        if plant_animal_split is not None:
-            summary_stats["Plant-based (% of classified food)"] = (
-                f"{plant_animal_split['plant_pct']:.1f}%"
-            )
-            summary_stats["Animal-based (% of classified food)"] = (
-                f"{plant_animal_split['animal_pct']:.1f}%"
-            )
-            summary_stats["Plant-based total"] = (
-                f"{plant_animal_split['plant_kg']:,.1f} {metric_value_unit}"
-            )
-            summary_stats["Animal-based total"] = (
-                f"{plant_animal_split['animal_kg']:,.1f} {metric_value_unit}"
-            )
-        if plant_protein_share is not None:
-            summary_stats["Plant protein share (% of protein categories)"] = (
-                f"{plant_protein_share['plant_protein_pct']:.1f}%"
-            )
-            summary_stats["Plant protein total"] = (
-                f"{plant_protein_share['plant_protein_total']:,.1f} {metric_value_unit}"
-            )
-            summary_stats["Protein-category total"] = (
-                f"{plant_protein_share['total_protein_metric']:,.1f} {metric_value_unit}"
-            )
-
         quality_summary = summarize_findings(quality_findings)
         quality_status = quality_status_from_findings(quality_findings)
-        summary_stats["Data Quality Status"] = quality_status.upper()
-
-        title_info = {
-            "client": metadata.get("client", input_path.parent.name),
-            "baseline_pilot": metadata.get("baseline_pilot", "baseline"),
-            "procurement_serving": mode,
-        }
-        animal_emissions_intensity = None
-        if mode == "procurement":
-            candidate = agg_results.get("animal_emissions_intensity")
-            if isinstance(candidate, pd.DataFrame) and not candidate.empty:
-                animal_emissions_intensity = candidate
-        decision_kpis = None
-        if mode == "procurement":
-            candidate = agg_results.get("decision_kpis")
-            if isinstance(candidate, pd.DataFrame) and not candidate.empty:
-                decision_kpis = candidate
-        substitution_scenarios = None
-        if mode == "procurement":
-            candidate = agg_results.get("substitution_scenarios")
-            if isinstance(candidate, pd.DataFrame) and not candidate.empty:
-                substitution_scenarios = candidate
-
-        pdf_tables = {
-            "Category Template": _format_category_template_for_pdf(agg_results["template_data"]),
-        }
-        if animal_emissions_intensity is not None:
-            pdf_tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
-                animal_emissions_intensity
-            )
-        if decision_kpis is not None:
-            pdf_tables["Decision KPIs"] = _format_decision_kpis_for_pdf(decision_kpis)
-        if substitution_scenarios is not None:
-            pdf_tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
-                substitution_scenarios
-            )
+        summary_stats = {**report.summary_stats, "Data Quality Status": quality_status.upper()}
 
         _log_stage("pdf_build", report_progress)
-        # Plain-English executive summary payload. Only built when emissions
-        # were computed (procurement runs); legacy/serving runs keep the
-        # original key-value summary page.
-        exec_narrative = None
-        if emissions_summary is not None and "total_kg_co2e" in emissions_summary:
-            _co2e_by_cat = emissions_summary.dropna(subset=["total_kg_co2e"])
-            _total_co2e = float(_co2e_by_cat["total_kg_co2e"].sum(min_count=1) or 0.0)
-            if _total_co2e > 0:
-                _top = _co2e_by_cat.nlargest(3, "total_kg_co2e")
-                exec_narrative = {
-                    "client": title_info.get("client", "this institution"),
-                    "period": summary_stats.get("Date range", ""),
-                    "total_food_kg": float(df[metric_total].sum()),
-                    "total_co2e_kg": _total_co2e,
-                    "per_dm_kg": (_total_co2e / total_dm) if total_dm else None,
-                    "dm_label": diner_or_meal,
-                    "plant_pct": (
-                        plant_animal_split["plant_pct"] if plant_animal_split is not None else None
-                    ),
-                    "animal_pct": (
-                        plant_animal_split["animal_pct"] if plant_animal_split is not None else None
-                    ),
-                    "top_categories": [
-                        (str(row["category"]), 100 * row["total_kg_co2e"] / _total_co2e)
-                        for _, row in _top.iterrows()
-                    ],
-                    "quality_status": quality_status,
-                }
-
-        artifact_paths["pdf_path"] = pdf.build_pdf_report(
-            output_path=artifact_paths["pdf_path"],
-            title_info=title_info,
-            plots=plot_list,
-            tables=pdf_tables,
-            summary_stats=summary_stats,
-            quality_status=quality_status,
-            quality_summary=quality_summary,
-            missing_data_findings=quality_findings,
-            show_quality_successes=show_quality_successes,
-            diner_or_meal=diner_or_meal,
-            narrative=exec_narrative,
-        )
-
-        dm_df = (
-            pd.DataFrame(
-                [(period, value) for period, value in dm_mapping.items()],
-                columns=["month_year", f"{diner_or_meal}s"],
+        artifact_paths["pdf_path"] = str(
+            pdf.write_report_pdf(
+                report,
+                charts,
+                Path(artifact_paths["pdf_path"]),
+                client_name=metadata.get("client", input_path.parent.name),
+                baseline_pilot=metadata.get("baseline_pilot", "baseline"),
+                show_quality_successes=show_quality_successes,
             )
-            if dm_mapping
-            else pd.DataFrame(columns=["month_year", f"{diner_or_meal}s"])
         )
-
-        quality_findings_df = findings_to_frame(quality_findings)
-        missingness_summary_df = missingness_summary_frame(df)
-
-        data_profile_df = None
-        try:
-            data_profile_df = diagnostics.summarise_numeric_columns(df)
-        except Exception as exc:
-            logger.warning("Could not compute data profile: %s", exc)
 
         _log_stage("client_workbook_build", report_progress)
-        artifact_paths["client_excel_path"] = excel.build_client_excel_report(
-            output_path=artifact_paths["client_excel_path"],
-            monthly_product_data=agg_results["monthly_product_data"],
-            monthly_category_data=agg_results["monthly_category_data"],
-            template_data=agg_results["template_data"],
-            highest_lowest=agg_results["highest_lowest"],
-            diner_meals_df=dm_df,
-            emissions_summary=emissions_summary,
-            animal_emissions_intensity=animal_emissions_intensity,
-            decision_kpis=decision_kpis,
-            substitution_scenarios=substitution_scenarios,
-            diner_or_meal=diner_or_meal,
+        artifact_paths["client_excel_path"] = str(
+            excel.write_client_workbook(report, Path(artifact_paths["client_excel_path"]))
         )
 
         _log_stage("qa_workbook_build", report_progress)
-        artifact_paths["qa_excel_path"] = excel.build_qa_excel_report(
-            output_path=artifact_paths["qa_excel_path"],
-            raw_df=df,
-            monthly_product_data=agg_results["monthly_product_data"],
-            monthly_category_data=agg_results["monthly_category_data"],
-            template_data=agg_results["template_data"],
-            highest_lowest=agg_results["highest_lowest"],
-            diner_meals_df=dm_df,
-            emissions_summary=emissions_summary,
-            animal_emissions_intensity=animal_emissions_intensity,
-            decision_kpis=decision_kpis,
-            substitution_scenarios=substitution_scenarios,
-            quality_findings_df=quality_findings_df,
-            missingness_summary_df=missingness_summary_df,
-            data_profile_df=data_profile_df,
-            diagnostic_sheets=diagnostic_export_sheets,
-            diner_or_meal=diner_or_meal,
+        artifact_paths["qa_excel_path"] = _write_qa_workbook(
+            report,
+            artifact_paths["qa_excel_path"],
+            quality_findings=quality_findings,
+            pdf_extracted=metadata.get("pdf_extracted"),
         )
 
         _log_stage("metadata_update", report_progress)
@@ -1099,7 +348,7 @@ def run_food_report(
             artifact_paths=artifact_paths,
             run_id=run_id,
             run_status="success",
-            diagnostics=diagnostics_list,
+            diagnostics=list(report.diagnostics),
             summary=summary_stats,
             quality_status=quality_status,
             missing_data_findings=quality_findings,
@@ -1108,6 +357,8 @@ def run_food_report(
         )
     except Exception as exc:
         logger.exception("Food report run failed.")
+        if isinstance(exc, QualityPolicyError):
+            quality_findings = exc.findings
         failure_quality_summary = summarize_findings(quality_findings) if quality_findings else None
         failure_quality_status = (
             quality_status_from_findings(quality_findings) if quality_findings else None
@@ -1138,16 +389,42 @@ def run_food_report(
         run_logging.close_report_run_file_handler(log_handler_state)
 
 
-# Backward-compatible wrappers for previous direct imports.
-def normalize_diner_meal_mapping(raw_mapping: dict[Any, Any]) -> dict[pd.Period, float]:
-    """Compatibility wrapper. Prefer
-    ``gbd_foodservice_insights.report.utils.normalize_diner_meal_mapping``.
-    """
-    return _normalize_diner_meal_mapping(raw_mapping)
+def _write_qa_workbook(
+    report: FoodReport,
+    path: str,
+    *,
+    quality_findings: list[Finding],
+    pdf_extracted: bool | None,
+) -> str:
+    df = report.rows
+    data_profile_df = None
+    try:
+        data_profile_df = diagnostics.summarise_numeric_columns(df)
+    except Exception as exc:
+        logger.warning("Could not compute data profile: %s", exc)
 
-
-def load_diner_meal_mapping_from_json(diner_meal_file: str | Path | None) -> dict[pd.Period, float]:
-    """Compatibility wrapper. Prefer
-    ``gbd_foodservice_insights.report.utils.load_diner_meal_mapping_from_json``.
-    """
-    return _load_diner_meal_mapping_from_json(diner_meal_file)
+    return excel.build_qa_excel_report(
+        output_path=path,
+        raw_df=df,
+        monthly_product_data=report.aggregation["monthly_product_data"],
+        monthly_category_data=report.aggregation["monthly_category_data"],
+        template_data=report.aggregation["template_data"],
+        highest_lowest=report.aggregation["highest_lowest"],
+        diner_meals_df=excel.diner_meals_frame(report),
+        emissions_summary=report.emissions_summary,
+        animal_emissions_intensity=report.procurement_table("animal_emissions_intensity"),
+        decision_kpis=report.procurement_table("decision_kpis"),
+        substitution_scenarios=report.procurement_table("substitution_scenarios"),
+        quality_findings_df=findings_to_frame(quality_findings),
+        missingness_summary_df=missingness_summary_frame(df),
+        data_profile_df=data_profile_df,
+        diagnostic_sheets=_collect_diagnostic_export_sheets(
+            df,
+            report.diner_meal_mapping,
+            metric_total=report.metric_total,
+            monthly_product_data=report.aggregation.get("monthly_product_data"),
+            monthly_category_data=report.aggregation.get("monthly_category_data"),
+            pdf_extracted=pdf_extracted,
+        ),
+        diner_or_meal=report.diner_or_meal,
+    )

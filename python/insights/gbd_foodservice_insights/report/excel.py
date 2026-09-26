@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from gbd_foodservice_insights.report.food_report import FoodReport
 from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
@@ -200,3 +201,28 @@ def build_qa_excel_report(
     saved_path = _write_excel_workbook(output_path, sheets)
     logger.info("QA Excel report saved to %s", rel_path(saved_path))
     return saved_path
+
+
+def write_client_workbook(report: FoodReport, path: Path) -> Path:
+    return Path(
+        build_client_excel_report(
+            output_path=str(path),
+            monthly_product_data=report.aggregation["monthly_product_data"],
+            monthly_category_data=report.aggregation["monthly_category_data"],
+            template_data=report.aggregation["template_data"],
+            highest_lowest=report.aggregation["highest_lowest"],
+            diner_meals_df=diner_meals_frame(report),
+            emissions_summary=report.emissions_summary,
+            animal_emissions_intensity=report.procurement_table("animal_emissions_intensity"),
+            decision_kpis=report.procurement_table("decision_kpis"),
+            substitution_scenarios=report.procurement_table("substitution_scenarios"),
+            diner_or_meal=report.diner_or_meal,
+        )
+    )
+
+
+def diner_meals_frame(report: FoodReport) -> pd.DataFrame:
+    return pd.DataFrame(
+        list(report.diner_meal_mapping.items()),
+        columns=["month_year", f"{report.diner_or_meal}s"],
+    )
