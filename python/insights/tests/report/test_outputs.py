@@ -5,10 +5,8 @@ from typing import TypedDict, cast
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.excel import (
-    build_client_excel_report,
-    build_qa_excel_report,
-)
+from gbd_foodservice_insights.report.excel import build_qa_excel_report, write_client_workbook
+from gbd_foodservice_insights.report.food_report import build_food_report
 from gbd_foodservice_insights.report.pipeline import run_food_report
 
 
@@ -128,37 +126,37 @@ def food_report_tmp_data(tmp_path: Path):
     return input_path, diner_path, metadata_path
 
 
-def test_build_client_excel_report_excludes_internal_tabs(tmp_path: Path):
-    payload = _sample_excel_payload()
-    output_path = build_client_excel_report(
-        output_path=str(tmp_path / "client.xlsx"),
-        monthly_product_data=payload["monthly_product_data"],
-        monthly_category_data=payload["monthly_category_data"],
-        template_data=payload["template_data"],
-        highest_lowest=payload["highest_lowest"],
-        diner_meals_df=payload["diner_meals_df"],
-        emissions_summary=payload["emissions_summary"],
-        animal_emissions_intensity=payload["animal_emissions_intensity"],
-        decision_kpis=payload["decision_kpis"],
-        substitution_scenarios=payload["substitution_scenarios"],
+def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
+    rows = pd.DataFrame(
+        {
+            "date": ["2024-01-15", "2024-01-20"],
+            "product": ["Ground Beef", "Lentils"],
+            "category": ["Beef and Buffalo Meat", "Legumes"],
+            "kilos_total": [10.0, 20.0],
+        }
     )
+    report = build_food_report(
+        rows,
+        diner_meal_mapping={"2024-01": 100},
+        mode="procurement",
+        region="us",
+        diner_or_meal="diner",
+        top_n_drivers=5,
+    )
+    output_path = tmp_path / "client.xlsx"
 
-    sheet_names = pd.ExcelFile(output_path).sheet_names
+    write_client_workbook(report, output_path)
 
-    assert "Monthly by Product" in sheet_names
-    assert "Monthly by Category" in sheet_names
-    assert "Template" in sheet_names
-    assert "Category Stability" not in sheet_names
-    assert "Diners" in sheet_names
-    assert "Emissions Summary" in sheet_names
-    assert "Animal Emissions Intensity" in sheet_names
-    assert "Decision_KPIs" in sheet_names
-    assert "Substitution_Scenarios" in sheet_names
-    assert "Raw Data" not in sheet_names
-    assert "Data_Quality_Findings" not in sheet_names
-    assert "Missingness_Summary" not in sheet_names
-    assert "Data Profile" not in sheet_names
-    assert "Denominator_QC" not in sheet_names
+    assert pd.ExcelFile(output_path).sheet_names == [
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Diners",
+        "Emissions Summary",
+        "Animal Emissions Intensity",
+        "Decision_KPIs",
+        "Substitution_Scenarios",
+    ]
 
 
 def test_build_qa_excel_report_includes_debug_tabs(tmp_path: Path):

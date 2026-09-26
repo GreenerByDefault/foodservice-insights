@@ -291,21 +291,17 @@ def run_food_report(
         summary_stats = {**report.summary_stats, "Data Quality Status": quality_status.upper()}
 
         _log_stage("pdf_build", report_progress)
-        artifact_paths["pdf_path"] = str(
-            pdf.write_report_pdf(
-                report,
-                charts,
-                Path(artifact_paths["pdf_path"]),
-                client_name=metadata.get("client", input_path.parent.name),
-                baseline_pilot=metadata.get("baseline_pilot", "baseline"),
-                show_quality_successes=show_quality_successes,
-            )
+        pdf.write_report_pdf(
+            report,
+            charts,
+            Path(artifact_paths["pdf_path"]),
+            client_name=metadata.get("client", input_path.parent.name),
+            baseline_pilot=metadata.get("baseline_pilot", "baseline"),
+            show_quality_successes=show_quality_successes,
         )
 
         _log_stage("client_workbook_build", report_progress)
-        artifact_paths["client_excel_path"] = str(
-            excel.write_client_workbook(report, Path(artifact_paths["client_excel_path"]))
-        )
+        excel.write_client_workbook(report, Path(artifact_paths["client_excel_path"]))
 
         _log_stage("qa_workbook_build", report_progress)
         artifact_paths["qa_excel_path"] = _write_qa_workbook(

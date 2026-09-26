@@ -64,10 +64,10 @@ PR, not this one.
   - `food_report.build_report_charts(report) -> ReportCharts`: the figures, plus the findings
     `_safe_plot` adds.
   - `pdf.write_report_pdf(report, charts, path, *, client_name, baseline_pilot,
-    show_quality_successes) -> Path`. The PDF-table formatters and the executive narrative live
+    show_quality_successes) -> None`. The PDF-table formatters and the executive narrative live
     in `pdf.py` beside it. It still closes every figure, error or not (#331), so `ReportCharts`
     is single-use and the lab exports its PNGs first.
-  - `excel.write_client_workbook(report, path) -> Path`.
+  - `excel.write_client_workbook(report, path) -> None`.
 - **Under `hard_fail`, an error finding raises `quality.QualityPolicyError`**, a `ValueError`
   whose `findings` is everything collected before the abort. That is how the lab's failure
   manifest still gets a quality summary, since `build_food_report` returns nothing when it

@@ -77,58 +77,6 @@ def _write_excel_workbook(
     return output_path
 
 
-def build_client_excel_report(
-    output_path: str,
-    monthly_product_data: pd.DataFrame,
-    monthly_category_data: pd.DataFrame,
-    template_data: pd.DataFrame,
-    *,
-    highest_lowest: pd.DataFrame | None = None,
-    diner_meals_df: pd.DataFrame | None = None,
-    emissions_summary: pd.DataFrame | None = None,
-    animal_emissions_intensity: pd.DataFrame | None = None,
-    decision_kpis: pd.DataFrame | None = None,
-    substitution_scenarios: pd.DataFrame | None = None,
-    diner_or_meal: str = "diner",
-) -> str:
-    """Create the lean client-facing Excel workbook.
-
-    This exists so clients get useful final tables without the extra QA and
-    debug tabs that are helpful internally but distracting externally. If a
-    sheet is primarily for debugging, QA, or raw inspection, it belongs in the
-    QA workbook instead.
-
-    Args:
-        output_path: Destination workbook path.
-        monthly_product_data: Monthly totals broken down by product.
-        monthly_category_data: Monthly totals broken down by category.
-        template_data: Category template DataFrame; the index is reset before writing.
-        highest_lowest: Optional category-stability summary (currently unused for client output).
-        diner_meals_df: Optional per-month diner/meal counts.
-        emissions_summary: Optional emissions summary table.
-        animal_emissions_intensity: Optional animal-emissions intensity table.
-        decision_kpis: Optional decision-KPI summary table.
-        substitution_scenarios: Optional substitution-scenarios table.
-        diner_or_meal: Per-unit label used in the diner/meal sheet name.
-
-    Returns:
-        Absolute path of the workbook that was written.
-    """
-    sheets: dict[str, pd.DataFrame | None] = {
-        "Monthly by Product": monthly_product_data,
-        "Monthly by Category": monthly_category_data,
-        "Template": template_data.reset_index(),
-        f"{diner_or_meal.title()}s": diner_meals_df,
-        "Emissions Summary": emissions_summary,
-        "Animal Emissions Intensity": animal_emissions_intensity,
-        "Decision_KPIs": decision_kpis,
-        "Substitution_Scenarios": substitution_scenarios,
-    }
-    saved_path = _write_excel_workbook(output_path, sheets)
-    logger.info("Client Excel report saved to %s", rel_path(saved_path))
-    return saved_path
-
-
 def build_qa_excel_report(
     output_path: str,
     raw_df: pd.DataFrame,
@@ -203,22 +151,19 @@ def build_qa_excel_report(
     return saved_path
 
 
-def write_client_workbook(report: FoodReport, path: Path) -> Path:
-    return Path(
-        build_client_excel_report(
-            output_path=str(path),
-            monthly_product_data=report.aggregation["monthly_product_data"],
-            monthly_category_data=report.aggregation["monthly_category_data"],
-            template_data=report.aggregation["template_data"],
-            highest_lowest=report.aggregation["highest_lowest"],
-            diner_meals_df=diner_meals_frame(report),
-            emissions_summary=report.emissions_summary,
-            animal_emissions_intensity=report.procurement_table("animal_emissions_intensity"),
-            decision_kpis=report.procurement_table("decision_kpis"),
-            substitution_scenarios=report.procurement_table("substitution_scenarios"),
-            diner_or_meal=report.diner_or_meal,
-        )
-    )
+def write_client_workbook(report: FoodReport, path: Path) -> None:
+    sheets: dict[str, pd.DataFrame | None] = {
+        "Monthly by Product": report.aggregation["monthly_product_data"],
+        "Monthly by Category": report.aggregation["monthly_category_data"],
+        "Template": report.aggregation["template_data"].reset_index(),
+        f"{report.diner_or_meal.title()}s": diner_meals_frame(report),
+        "Emissions Summary": report.emissions_summary,
+        "Animal Emissions Intensity": report.procurement_table("animal_emissions_intensity"),
+        "Decision_KPIs": report.procurement_table("decision_kpis"),
+        "Substitution_Scenarios": report.procurement_table("substitution_scenarios"),
+    }
+    saved_path = _write_excel_workbook(str(path), sheets)
+    logger.info("Client Excel report saved to %s", rel_path(saved_path))
 
 
 def diner_meals_frame(report: FoodReport) -> pd.DataFrame:

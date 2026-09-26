@@ -1098,7 +1098,7 @@ def write_report_pdf(
     client_name: str,
     baseline_pilot: str,
     show_quality_successes: bool,
-) -> Path:
+) -> None:
     """Closes every figure in `charts`, even when it fails."""
     findings = [*report.findings, *charts.findings]
     quality_status = quality_status_from_findings(findings)
@@ -1120,24 +1120,22 @@ def write_report_pdf(
             substitution_scenarios
         )
 
-    return Path(
-        build_pdf_report(
-            output_path=str(path),
-            title_info={
-                "client": client_name,
-                "baseline_pilot": baseline_pilot,
-                "procurement_serving": report.mode,
-            },
-            plots=charts.figures,
-            tables=tables,
-            summary_stats={**report.summary_stats, "Data Quality Status": quality_status.upper()},
-            quality_status=quality_status,
-            quality_summary=summarize_findings(findings),
-            missing_data_findings=findings,
-            show_quality_successes=show_quality_successes,
-            diner_or_meal=report.diner_or_meal,
-            narrative=_executive_narrative(report, client_name, quality_status),
-        )
+    build_pdf_report(
+        output_path=str(path),
+        title_info={
+            "client": client_name,
+            "baseline_pilot": baseline_pilot,
+            "procurement_serving": report.mode,
+        },
+        plots=charts.figures,
+        tables=tables,
+        summary_stats={**report.summary_stats, "Data Quality Status": quality_status.upper()},
+        quality_status=quality_status,
+        quality_summary=summarize_findings(findings),
+        missing_data_findings=findings,
+        show_quality_successes=show_quality_successes,
+        diner_or_meal=report.diner_or_meal,
+        narrative=_executive_narrative(report, client_name, quality_status),
     )
 
 

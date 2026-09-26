@@ -240,8 +240,8 @@ def test_run_food_report_warn_continue_returns_quality_payload(
         lambda **kwargs: str(tmp_path / "out.pdf"),
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.excel.build_client_excel_report",
-        lambda **kwargs: str(tmp_path / "out.xlsx"),
+        "gbd_foodservice_insights.report.excel.write_client_workbook",
+        lambda report, path: None,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.excel.build_qa_excel_report",
@@ -283,8 +283,8 @@ def test_run_food_report_flags_unexpected_row_loss_in_emissions_stage(
         lambda **kwargs: str(tmp_path / "out.pdf"),
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.excel.build_client_excel_report",
-        lambda **kwargs: str(tmp_path / "out.xlsx"),
+        "gbd_foodservice_insights.report.excel.write_client_workbook",
+        lambda report, path: None,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.excel.build_qa_excel_report",
@@ -335,8 +335,8 @@ def test_run_food_report_hard_fail_raises_on_required_missing(monkeypatch, tmp_p
         lambda **kwargs: str(tmp_path / "out.pdf"),
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.excel.build_client_excel_report",
-        lambda **kwargs: str(tmp_path / "out.xlsx"),
+        "gbd_foodservice_insights.report.excel.write_client_workbook",
+        lambda report, path: None,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.excel.build_qa_excel_report",
