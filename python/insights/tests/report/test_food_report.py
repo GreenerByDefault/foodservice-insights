@@ -106,6 +106,12 @@ def test_build_food_report_leaves_the_callers_rows_alone():
     report = _build(rows)
 
     pd.testing.assert_frame_equal(rows, _rows())
+    assert "month_year" in report.rows.columns
+
+
+def test_procurement_report_holds_its_normalized_inputs_and_tables():
+    report = _build(_rows())
+
     assert report.rows["month_year"].tolist() == [JAN, JAN, FEB, FEB]
     assert report.diner_meal_mapping == {JAN: 100.0, FEB: 120.0}
     assert report.summary_stats["Data type"] == "Procurement"
