@@ -115,17 +115,6 @@ def _resolve_input_file(input_file: str | Path | None) -> Path:
     return input_path
 
 
-def _resolve_diner_meal_mapping(
-    diner_meal_file: str | Path | None,
-    diner_meal_mapping: Mapping[Any, Any] | None,
-) -> dict[pd.Period, float]:
-    """Resolve diner-meal mapping from inline mapping or JSON file."""
-    if diner_meal_mapping is not None:
-        return _normalize_diner_meal_mapping(diner_meal_mapping)
-
-    return _load_diner_meal_mapping_from_json(diner_meal_file)
-
-
 def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     """Add each (month, category) row's own ``emissions_kg_co2e`` total."""
     # Charts sum this column per month. Joining on month alone would copy the month's total onto
@@ -497,6 +486,14 @@ def run_food_report(
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
 
+        # Loaded eagerly and outside the try/except below: a missing file must hard-fail
+        # regardless of policy.
+        raw_diner_meal_mapping = (
+            diner_meal_mapping
+            if diner_meal_mapping is not None
+            else _load_diner_meal_mapping_from_json(diner_meal_file)
+        )
+
         # Ingestion checks (month_year is derived from date by this script, not required as input)
         quality_findings.extend(
             check_required_columns(df, required_columns_for_mode(mode), stage="ingestion")
@@ -630,7 +627,7 @@ def run_food_report(
 
         _log_stage("diner_meal_mapping", report_progress)
         try:
-            dm_mapping = _resolve_diner_meal_mapping(diner_meal_file, diner_meal_mapping)
+            dm_mapping = _normalize_diner_meal_mapping(raw_diner_meal_mapping)
         except Exception as exc:
             quality_findings.append(
                 make_finding(
