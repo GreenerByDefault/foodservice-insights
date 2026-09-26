@@ -262,6 +262,21 @@ def test_run_food_report_warn_continue_returns_quality_payload(
     assert result["quality_status"] in {"warning", "invalid"}
 
 
+def test_run_food_report_fails_on_a_missing_diner_meal_file_even_under_warn_continue(
+    food_report_tmp_data, tmp_path
+):
+    input_path, _ = food_report_tmp_data
+
+    with pytest.raises(FileNotFoundError, match="Diner-meal JSON not found"):
+        run_food_report(
+            input_file=input_path,
+            diner_meal_file=tmp_path / "missing.json",
+            output_dir=tmp_path,
+            procurement_serving="procurement",
+            missing_data_policy="warn_continue",
+        )
+
+
 def test_run_food_report_flags_unexpected_row_loss_in_emissions_stage(
     monkeypatch, food_report_tmp_data, tmp_path
 ):
