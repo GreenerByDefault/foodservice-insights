@@ -14,9 +14,12 @@ import pandas as pd
 matplotlib.use("Agg")
 import textwrap
 
+import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.patches import Rectangle
+
+from gbd_foodservice_insights import PACKAGE_DIR
 
 # ----------------------------------------------------------------------
 # Color Palette & Style Constants
@@ -40,13 +43,27 @@ GBD_colors = [
 TITLE_FONT = "Montserrat"
 BODY_FONT = "Lato"
 
+# Registered with matplotlib's font_manager below rather than relied on from the OS: the worker
+# image ships neither font, so without this the report silently renders in DejaVu Sans.
+FONT_FILES = [
+    "Lato-Regular.ttf",
+    "Lato-Bold.ttf",
+    "Montserrat-Regular.ttf",
+    "Montserrat-Bold.ttf",
+]
+
 
 def setup_gbd_fonts() -> None:
     """
     Configure matplotlib to use GBD fonts: Montserrat for titles, Lato for body text.
 
-    Falls back to sans-serif if fonts are not installed.
+    Registers the packaged Regular/Bold font files so this holds regardless of what fonts the
+    OS has installed; falls back to sans-serif only if that registration is somehow missing.
     """
+    fonts_dir = PACKAGE_DIR / "data_files" / "fonts"
+    for font_file in FONT_FILES:
+        font_manager.fontManager.addfont(str(fonts_dir / font_file))
+
     plt.rcParams.update(
         {
             # Default font family (Lato for body text)

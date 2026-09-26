@@ -70,6 +70,14 @@ class TestFontConfiguration:
         # Should not raise any exceptions
         setup_gbd_fonts()
 
+    def test_setup_gbd_fonts_registers_title_and_body_fonts(self):
+        import matplotlib.font_manager as font_manager
+
+        setup_gbd_fonts()
+        registered_names = {f.name for f in font_manager.fontManager.ttflist}
+        assert TITLE_FONT in registered_names
+        assert BODY_FONT in registered_names
+
     def test_set_title_font_sets_title(self):
         fig, ax = plt.subplots()
         set_title_font(ax, "Test Title")

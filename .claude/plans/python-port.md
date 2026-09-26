@@ -124,11 +124,10 @@ today a 0 lands as `unknown`. Raise both minimums to 1, with a form error naming
 
 ## Risks
 
-- **Fonts.** The report asks for Lato and Montserrat and falls back to DejaVu Sans, which
-  matplotlib bundles — confirmed on the first live run. The worker image has neither GBD font,
-  so production PDFs render in DejaVu until the fonts ship — in the image (deployment config,
-  not this plan) or in the package's `data_files/` via `font_manager.addfont` (both are
-  OFL-licensed). Decide before the first real client sees a PDF.
+- **Fonts — resolved.** The Lato and Montserrat Regular/Bold OFL files ship in
+  `gbd_foodservice_insights/data_files/fonts/` and `setup_gbd_fonts()` registers them via
+  `font_manager.addfont`, so the report no longer depends on the OS or worker image having
+  either font installed.
 - **`killAfterNoProgressMs` vs backoff**: about 3 min worst case per LLM call (five 30 s
   timeouts plus 30 s of backoff), against a ten-minute kill; progress is reported after every
   successful call and at every report stage.
