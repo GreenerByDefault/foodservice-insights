@@ -7,16 +7,18 @@ from collections.abc import Iterable
 from typing import Any, Literal
 
 ReportMode = Literal["procurement", "serving"]
+Region = Literal["us", "europe", "uk"]
+DinerOrMeal = Literal["diner", "meal"]
 MissingDataPolicy = Literal["warn_continue", "hard_fail"]
 DiagnosticStatus = Literal["success", "info", "warning", "error"]
 QualityStatus = Literal["pass", "warning", "invalid"]
 
 VALID_REPORT_MODES: tuple[ReportMode, ...] = ("procurement", "serving")
-VALID_REGIONS: tuple[str, ...] = ("us", "europe", "uk")
+VALID_REGIONS: tuple[Region, ...] = ("us", "europe", "uk")
 
 # Maps each valid region to whether dates should be parsed day-first (DD/MM/YYYY).
 # When adding a new region, add it to VALID_REGIONS above and to this dict.
-REGION_DAYFIRST: dict[str, bool] = {
+REGION_DAYFIRST: dict[Region, bool] = {
     "us": False,
     "europe": True,
     "uk": True,
@@ -110,7 +112,7 @@ def per_diner_metric_name(total_metric: str) -> str:
     raise ValueError(f"Expected metric name to end with '_total' or ' total', got '{total_metric}'")
 
 
-def validate_region(region: str) -> str:
+def validate_region(region: str) -> Region:
     """Validate and normalize region identifier."""
     normalized = str(region).strip().lower()
     if normalized not in VALID_REGIONS:
