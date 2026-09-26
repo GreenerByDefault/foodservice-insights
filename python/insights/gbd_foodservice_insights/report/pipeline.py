@@ -126,6 +126,17 @@ def _resolve_diner_meal_mapping(
     return _load_diner_meal_mapping_from_json(diner_meal_file)
 
 
+def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
+    """Add each (month, category) row's own ``emissions_kg_co2e`` total."""
+    # Charts sum this column per month. Joining on month alone would copy the month's total onto
+    # every category row, multiplying the charted total by the number of categories.
+    keys = ["month_year", "category"]
+    category_emissions = (
+        df.groupby(keys, dropna=False)["emissions_kg_co2e"].sum(min_count=1).reset_index()
+    )
+    return monthly_cat.merge(category_emissions, on=keys, how="left", validate="one_to_one")
+
+
 def _build_empty_aggregation(metric_total: str) -> dict[str, Any]:
     """Return empty aggregation payload used when aggregation fails in warn mode."""
     per_dm_col = metric_total.replace(" total", "") + " per diner-meal"
@@ -775,12 +786,7 @@ def run_food_report(
                 )
 
                 if not monthly_cat.empty:
-                    monthly_emissions = (
-                        df.groupby("month_year", dropna=False)["emissions_kg_co2e"]
-                        .sum(min_count=1)
-                        .reset_index()
-                    )
-                    merged = monthly_cat.merge(monthly_emissions, on="month_year", how="left")
+                    merged = _attach_monthly_category_emissions(monthly_cat, df)
                     agg_results["monthly_category_data"] = merged
                     missing_emissions_count = int(merged["emissions_kg_co2e"].isna().sum())
                     if missing_emissions_count > 0:
