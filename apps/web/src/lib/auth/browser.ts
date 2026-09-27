@@ -1,9 +1,10 @@
 /** The browser's half of Supabase Auth: a lazily loaded, deliberately narrow view of
  * `supabase.auth`.
  *
- * Narrow for two reasons. It keeps supabase-js out of the root chunk — the module is only fetched
- * once a visitor actually submits the sign-in form — and it makes the seam a component test has to
- * fake four functions wide instead of a whole client (`testing/fake.ts`).
+ * Narrow for two reasons. It keeps supabase-js out of the root chunk — in `supabase` mode it is
+ * fetched after hydration, when the root layout subscribes to the session, and in `placeholder`
+ * mode never — and it makes the seam a component test has to fake four functions wide instead of a
+ * whole client (`testing/fake.ts`).
  *
  * Supabase is a token service here and nothing else: no `locals.supabase`, no callback route, no
  * RLS. See `ARCHITECTURE.md` § Supabase.
@@ -61,9 +62,8 @@ async function createAuth(): Promise<SupabaseAuth> {
 
 /** The auth client for this browser.
  *
- * Safe to call during SSR — nothing happens until one of its methods is called, and that only
- * happens in response to a user interaction — so a page can pass it to a component it also
- * server-renders.
+ * Safe to call during SSR — nothing happens until one of its methods is called, and none is called
+ * outside the browser — so a page can pass it to a component it also server-renders.
  */
 export function browserAuth(): BrowserAuth {
   return {

@@ -99,6 +99,7 @@ describe('UserMenu', () => {
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
       expect(auth.current?.signOut.mock.calls).toEqual([[{ scope: 'local' }]]);
       expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
+      expect(auth.current?.signOut).toHaveBeenCalledBefore(vi.mocked(goto));
     });
 
     test('goes to / even when GoTrue refuses to revoke the session', async () => {
@@ -108,6 +109,18 @@ describe('UserMenu', () => {
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
       expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
+    });
+
+    test('stays put when the client itself could not load', async () => {
+      const cause = new Error('chunk failed to load');
+      auth.current?.signOut.mockRejectedValue(cause);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await clickSignOut();
+
+      await expect.poll(() => consoleError.mock.calls).toEqual([['Could not sign out', cause]]);
+      expect(goto).not.toHaveBeenCalled();
+      consoleError.mockRestore();
     });
   });
 });

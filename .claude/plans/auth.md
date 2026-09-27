@@ -33,8 +33,8 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 - **Server hook:** `createServerClient` from `@supabase/ssr` with `getAll`/`setAll`, then
   `auth.getUser()`. Never `getSession()`. Any auth *error* degrades to signed out, never a 500
   (cfa-web-app #115, #210, #255). `getClaims()` is a later optimization — see Follow-ups.
-- **`onAuthStateChange` → `invalidateAll()`** in the root layout, skipping `INITIAL_SESSION`
-  (cfa-app `auth-state-change.ts`), plus a reload when Back restores the browser's saved snapshot
+- **`onAuthStateChange` → `invalidateAll()`** in the root layout (cfa-app `auth-state-change.ts`,
+  though we invalidate on a change of user rather than skipping only `INITIAL_SESSION`), plus a reload when Back restores the browser's saved snapshot
   of a page (cfa-app `bfcache-auth-revalidate.ts`), so Back after sign-out cannot show a signed-in
   shell. Both landed; § Following the session.
 - **E2E identities are real GoTrue sessions, made through its admin API**, not a test-only backdoor
@@ -114,24 +114,37 @@ Sign out is the account menu's last item, shown only when `(app)/+layout.svelte`
 then `goto('/', { invalidateAll: true })`, **without checking the error**: auth-js 2.117 clears the
 device's session even when GoTrue answers the logout with a 5xx, so the device is signed out
 either way. The one failure that keeps a session — auth-js could not read it at all — lands on `/`,
-whose `locals.auth` redirect sends a still-signed-in visitor back to `/orgs`. So there is no
-failed state to render, and no screenshot of one. Anything else that ends a session (delete
+whose `locals.auth` redirect sends a still-signed-in visitor back to `/orgs`. If the client itself
+cannot load, the rejection is logged and the menu simply closes; the next click fetches it afresh.
+So there is no failed state to render, and no screenshot of one. Anything else that ends a session (delete
 account, `account-self-service.md`) can rely on the same behavior.
 
 The root `+layout.svelte`, in `supabase` mode only, subscribes `browserAuth().onAuthStateChange`
-and calls `invalidateAll()` for every event `shouldInvalidate` passes (all but `INITIAL_SESSION`),
-and adds a `pageshow` listener, `refreshWhenRestoredByBack(() => location.reload())`. Both pure
-halves are in `$lib/auth/follow-session.ts`. Two details constrain what comes next:
+and calls `invalidateAll()` whenever `sessionUserChanged` says the event's session belongs to
+someone other than the root `+layout.server.ts`'s `sessionUserId`, the user the page was rendered
+for. It also adds a `pageshow` listener, `refreshWhenRestoredByBack(() => location.reload())`. Both
+pure halves are in `$lib/auth/follow-session.ts`. So in `supabase` mode every page fetches
+supabase-js after hydration, anonymous ones included. Four details constrain what comes next:
 
+- **Events are compared by user, never by name.** auth-js 2.117 emits `SIGNED_IN` for a session it
+  merely confirmed — on every client start and every time a hidden tab is shown again — and
+  broadcasts it to the other tabs. Invalidating on it re-ran every load in every tab on each tab
+  switch. The server's answer is the baseline, rather than the previous event, because a session
+  that ended while a page's client was still loading emits no `SIGNED_OUT` there.
+- **Other tabs follow for free.** auth-js broadcasts `SIGNED_OUT` over a `BroadcastChannel`, so
+  signing out in one tab turns every other tab's `(app)` page into the 401 in place.
 - **The callback does not await `invalidateAll()`.** supabase-js awaits its subscribers, so an
   awaited reload would hold `signOut()` — or `verifyOtp()` — until every load had re-run.
 - **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={invalidateAll}` and the
   listener's `SIGNED_IN`. Harmless, and the 401 page (PR 3) inherits it.
 
-The e2e signs out of an `(app)` page, lands on `/`, presses Back to the 401 page with no account
-menu, and reloads for a 401, so the cookie is proven gone and not just hidden. Back there is a
-client-side navigation, not a snapshot restore; the reload-on-restore is covered only by its unit
-test.
+`auth.e2e.ts` covers both halves of sign-out. One signs out of an `(app)` page, lands on `/`, presses
+Back to the 401 page with no account menu, and reloads for a 401, so the cookie is proven gone and
+not just hidden. That one passes without the listener, since Back there is a client-side
+navigation; the other proves the listener: a second tab on the same page turns into the 401
+untouched. `routes/layout.svelte.test.ts` holds the wiring — `placeholder` never calls
+`browserAuth()`, and the subscription is dropped on unmount. The reload-on-restore is covered only by
+its unit test.
 
 ### Where a test identity comes from
 
@@ -255,7 +268,7 @@ instead.
 | Valid token, no `app_user` row | Throw → 500 | The trigger writes the row in GoTrue's own transaction, so only a setup error gets here: the app reading a different database than GoTrue, users that predate the migration, or a fixture that skipped `mintUser`'s mirror. Signing out instead would loop a user who just entered a correct code back to the form |
 | Cookie name | Pinned: `AUTH_COOKIE_NAME` in `@gbd/core`, passed as `cookieOptions.name` to both clients | Default derives from the Supabase URL hostname, which differs between host (`127`) and Docker (`host`) tiers; pinning also survives project-ref changes |
 | Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`), `secure` left to SvelteKit | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. *Rejected: `secure: event.url.protocol === 'https:'`* — it fails open, since adapter-node reports `http:` behind a TLS-terminating proxy when `ORIGIN` is unset. SvelteKit's default already relaxes for the test browsers, whose `ORIGIN` is `http://localhost` |
-| Sign-out scope | `local`, error ignored | Signs out this device; matches CFA. The error is ignored because auth-js clears the local session regardless (§ Following the session). *Rejected: a "Could not sign out" alert* — by the time it rendered, the `SIGNED_OUT` reload had replaced the page with the 401 |
+| Sign-out scope | `local`, error ignored | Signs out this device; matches CFA. The error is ignored because auth-js clears the local session regardless (§ Following the session). *Rejected: a "Could not sign out" alert* — by the time it rendered, the `SIGNED_OUT` invalidation had replaced the page with the 401 |
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
 | Email normalization in the form | Reused `$lib/forms/validation`'s `emailAddress` and `MAX_EMAIL_LENGTH`, not a schema of sign-in's own | It already trims, lowercases and caps at 254, matching `organization_invite_email_is_lowercase` — and GoTrue lowercases anyway, so the address the form sends is the address the fixtures read back |
@@ -375,8 +388,6 @@ minted identities:
   second code and a second cooldown. Needs a `restoring` state held through hydration, and changes
   what `sign-in.screenshot.ts` captures.
 - CSP and `getClaims()`: both **Open** in `ARCHITECTURE.md` § Auth.
-- Signing out in one tab should sign a second tab out on its next interaction. Nothing automated
-  covers that path yet, and no manual check was recorded when sign-out landed.
 
 ## Verification
 
