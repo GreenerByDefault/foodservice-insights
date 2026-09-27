@@ -42,13 +42,7 @@ logger = logging.getLogger("gbd_foodservice_insights.food_report_cli")
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for the food report CLI.
-
-    Returns:
-        The parsed ``argparse.Namespace`` containing the input file, diner-meals
-        file, output directory, region, top-N driver count, and other report
-        configuration flags.
-    """
+    """Parse command-line arguments for the food report CLI."""
     parser = argparse.ArgumentParser(
         description=(
             "Generate a food report bundle from categorized data. Requires a categorized "

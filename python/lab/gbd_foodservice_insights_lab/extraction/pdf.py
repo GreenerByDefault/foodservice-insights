@@ -169,43 +169,17 @@ def _tuning_cache_dir(data_location: Path) -> Path:
 
 
 def _page_metadata_path(data_location: Path, file_name: str, page: int) -> Path:
-    """Return the JSON sidecar path for a single page's extraction metadata.
-
-    Args:
-        data_location: Root data directory for the dataset.
-        file_name: PDF file name the page belongs to.
-        page: 1-indexed page number.
-
-    Returns:
-        Path under ``page_metadata/`` for the page's metadata JSON.
-    """
+    """Return the ``page_metadata/`` JSON path for a 1-indexed page's extraction metadata."""
     return _page_metadata_dir(data_location) / f"{Path(file_name).stem}_page_{page}_metadata.json"
 
 
 def _page_audit_manifest_path(data_location: Path, file_name: str, page: int) -> Path:
-    """Return the JSON path for a single page's audit manifest.
-
-    Args:
-        data_location: Root data directory for the dataset.
-        file_name: PDF file name the page belongs to.
-        page: 1-indexed page number.
-
-    Returns:
-        Path under ``audit_manifests/`` for the page's audit JSON.
-    """
+    """Return the ``audit_manifests/`` JSON path for a 1-indexed page's audit manifest."""
     return _audit_manifest_dir(data_location) / f"{Path(file_name).stem}_page_{page}_audit.json"
 
 
 def _qa_flags_path(data_location: Path, file_name: str) -> Path:
-    """Return the JSON path for a file's QA-flag artifact.
-
-    Args:
-        data_location: Root data directory for the dataset.
-        file_name: PDF file name the flags apply to.
-
-    Returns:
-        Path under ``qa_flags/`` for the file's QA flags JSON.
-    """
+    """Return the ``qa_flags/`` JSON path for a file's QA-flag artifact."""
     return _qa_flags_dir(data_location) / f"{Path(file_name).stem}_qa_flags.json"
 
 
@@ -258,17 +232,7 @@ def _normalize_parser_mode(parser_mode: str, CBORD: bool) -> str:
 
 
 def _normalize_extraction_profile(extraction_profile: str) -> str:
-    """Validate and return a known extraction-profile name.
-
-    Args:
-        extraction_profile: Caller-supplied profile name.
-
-    Returns:
-        The same profile string if it is valid.
-
-    Raises:
-        ValueError: If the profile is not one of the supported values.
-    """
+    """Validate and return a known extraction-profile name, else raise ``ValueError``."""
     valid_profiles = {"auto", *WHISPER_PROFILE_OPTIONS.keys()}
     if extraction_profile not in valid_profiles:
         raise ValueError(f"extraction_profile must be one of {sorted(valid_profiles)}")
@@ -696,14 +660,7 @@ def _extract_json_blob(text: str) -> str:
 
 
 def _looks_like_no_table_response(text: str) -> bool:
-    """Return ``True`` when an LLM response signals no table was found.
-
-    Args:
-        text: Raw LLM response text.
-
-    Returns:
-        ``True`` if the response contains a known "no table" sentinel.
-    """
+    """Return ``True`` when an LLM response contains a known "no table" sentinel."""
     lowered = (text or "").strip().lower()
     return "no table found" in lowered or "no_table_detected" in lowered
 
@@ -1048,29 +1005,14 @@ def _estimate_ocr_confidence(confidence_metadata: Any) -> float:
 
 
 def _summarize_nulls(page_df: pd.DataFrame) -> dict[str, int]:
-    """Return a per-column count of null values for a page DataFrame.
-
-    Args:
-        page_df: DataFrame produced for a single PDF page.
-
-    Returns:
-        Mapping of column name to null count, or an empty dict if the input is empty.
-    """
+    """Return a per-column null count for a page DataFrame (empty dict if the frame is empty)."""
     if page_df.empty:
         return {}
     return {column: int(page_df[column].isna().sum()) for column in page_df.columns}
 
 
 def _build_parsed_preview(page_df: pd.DataFrame, limit: int = 3) -> str:
-    """Build a JSON-encoded preview of the first rows of a page DataFrame.
-
-    Args:
-        page_df: DataFrame produced for a single PDF page.
-        limit: Maximum number of rows to include in the preview.
-
-    Returns:
-        JSON string of the preview rows, or an empty string if the input is empty.
-    """
+    """Return a JSON preview of the first ``limit`` rows of a page DataFrame, or "" if empty."""
     if page_df.empty:
         return ""
     return json.dumps(page_df.head(limit).to_dict(orient="records"), ensure_ascii=True)
@@ -1482,14 +1424,7 @@ def _build_pipeline_context(
 
 
 def _candidate_needs_repair(candidate: dict[str, Any]) -> bool:
-    """Return ``True`` if a parser candidate did not produce an acceptable result.
-
-    Args:
-        candidate: Candidate result dictionary produced by the parser pipeline.
-
-    Returns:
-        ``True`` when the candidate is empty, did not complete, or failed audit.
-    """
+    """Return ``True`` if a parser candidate is empty, did not complete, or failed audit."""
     if not candidate:
         return True
     if candidate.get("status") not in COMPLETED_PAGE_STATUSES:
@@ -2167,21 +2102,9 @@ def _process_pdf_page(
 def validate_cbord_date_column(
     page_df: pd.DataFrame, page: int, file_name: str, debug: bool = False
 ) -> None:
-    """
-    Validates CBORD-specific requirements for the date column in extracted PDF data.
+    """Warn if a page's CBORD date column has "missing" values or more than one unique date.
 
-    This function performs two validation checks:
-    1. Warns if any date values are set to "missing"
-    2. Warns if the date column contains multiple unique dates (expects 1 date per file)
-
-    Args:
-        page_df: DataFrame containing the extracted data for a single page
-        page: Page number being validated
-        file_name: Name of the PDF file being processed
-        debug: If True, prints additional debugging information
-
-    Returns:
-        None. Prints warnings but does not raise exceptions.
+    CBORD expects one date per file. Prints warnings only; never raises.
     """
     if "date" not in page_df.columns:
         print(
@@ -2215,19 +2138,9 @@ def check_missing_literal_values(
 ) -> pd.DataFrame:
     """Report rows containing an exact placeholder literal and return the flagged rows.
 
-    This is mainly useful for CBORD extraction QA, where the parser may emit the exact
-    string "missing" instead of a real value. The function prints a compact summary and
-    returns the subset of rows containing the literal so notebooks can display or inspect
-    them without duplicating the masking logic.
-
-    Args:
-        full_data: Combined extracted PDF data.
-        literal: Exact string to search for. Matching is case-sensitive to preserve the
-            notebook's previous behavior.
-
-    Returns:
-        DataFrame containing only rows where at least one cell equals the exact literal.
-        Returns an empty DataFrame when no matches are found.
+    Mainly for CBORD extraction QA, where the parser may emit the exact string "missing"
+    instead of a real value. Matching is case-sensitive to preserve the notebook's previous
+    behavior.
     """
     missing_mask = full_data.eq(literal)
     has_missing_literal = missing_mask.any().any()
@@ -2251,13 +2164,7 @@ def check_missing_literal_values(
 def _write_qa_flags_artifact(
     data_location: Path, file_name: str, page_statuses: list[dict[str, Any]]
 ) -> None:
-    """Write the per-file QA-flags JSON artifact summarising failed pages.
-
-    Args:
-        data_location: Root data directory for the dataset.
-        file_name: PDF file name the QA flags apply to.
-        page_statuses: Per-page status dictionaries produced by the pipeline.
-    """
+    """Write the per-file QA-flags JSON artifact summarising failed pages."""
     warnings = [
         {
             "page": status["page"],
@@ -2643,37 +2550,12 @@ def combine_extracted_pdf_pages(
     intended_columns: list[str],
     file_name: str | None = None,
 ) -> pd.DataFrame:
-    """
-    Combines all CSV files from the 'extracted_pages' subdirectory into a single pandas DataFrame.
+    """Combine all CSV files from the 'extracted_pages' subdirectory into a single DataFrame.
 
-    This function is used in the PDF extraction workflow to aggregate data from multiple
-    per-page CSV files.
-
-    For each CSV file found in 'extracted_pages':
-        1. Reads the CSV into a pandas DataFrame.
-        2. Standardizes column names: strips leading/trailing whitespace and converts to
-           lowercase.
-        3. Asserts that the loaded DataFrame is not empty.
-        4. Checks if the DataFrame's columns match `intended_columns` (case-insensitive).
-           - If columns are missing from `intended_columns`, a warning is printed.
-           - If there are extra columns not in `intended_columns`, they are dropped.
-           The DataFrame is then subset to only include columns from `intended_columns`.
-        5. Appends the processed DataFrame to a list for later concatenation.
-
-    Args:
-        data_location: The directory path (string or Path object) containing the CSV files
-            to be combined.
-        intended_columns: A list of column names (case-insensitive) that are expected to be
-            present in each CSV file. The final combined DataFrame will only contain these
-            columns.
-
-    Returns:
-        pandas.DataFrame: A DataFrame containing the combined and cleaned data from all valid
-            CSV files found in 'extracted_pages'. Returns an empty DataFrame if no CSV files
-            are found or if no data is successfully processed from the found CSVs.
-
-    Raises:
-        AssertionError: If a DataFrame loaded from a CSV file is empty.
+    Column names are stripped and lowercased. Columns not in `intended_columns`
+    (case-insensitive) are dropped, and a warning is printed for missing or extra columns.
+    Returns an empty DataFrame if no CSVs are found or none yield data. Raises
+    ``AssertionError`` if a CSV loads empty.
     """
 
     data_location = Path(data_location)
@@ -2719,50 +2601,19 @@ def markdown_to_df(
     desired_columns: list[str] | None = None,
     debug: bool = True,
 ) -> pd.DataFrame:
-    """
-    Converts a Markdown string, expected to represent a table, into a cleaned pandas DataFrame.
+    """Convert a Markdown table string into a cleaned DataFrame.
 
-    The function performs the following operations:
-    1.  Reads the Markdown table: Uses `pd.read_csv` with '|' as a separator.
-        Column names are stripped of leading/trailing whitespace.
-    2.  Product name column handling (if `product_name_column` exists):
-        - Asserts that the `product_name_column` does not have more than 10% null values.
-        - Converts the `product_name_column` to string type.
-        - Removes rows where `product_name_column` contains '---' (often a Markdown separator line).
-    3.  Drops columns that consist entirely of null values.
-    4.  Desired columns validation (if `desired_columns` are provided):
-        - Asserts that all `desired_columns` are present in the DataFrame after the previous steps.
-        - Subsets the DataFrame to only include `desired_columns`.
-    5.  Strips leading/trailing whitespace from all string cell values in the DataFrame.
-    6.  Numeric column conversion (if `numeric_columns` are provided):
-        - For each column name in `numeric_columns`, the function attempts to convert
-          that column in the DataFrame to a numeric type. It specifically handles
-          string columns by first removing commas (e.g., "1,000" -> "1000") before
-          conversion. Any values that cannot be converted will become NaN. A debug
-          message is printed for each column that is converted.
+    Cleaning steps, in order:
+    1. Read with ``|`` as the separator and strip column names.
+    2. If `product_name_column` exists: assert it is at most 10% null, cast it to str, and
+       drop rows containing ``---`` (Markdown separator lines).
+    3. Drop all-null columns.
+    4. If `desired_columns` is given: assert all are present, then subset to them.
+    5. Strip whitespace from string cells.
+    6. Convert `numeric_columns` to numeric, removing commas first ("1,000" -> "1000");
+       unconvertible values become NaN.
 
-    Args:
-        markdown (str): A string containing a Markdown-formatted table.
-        numeric_columns (Union[List[str], None], optional): A list of column names
-            that should be converted to numeric types. Defaults to None.
-        product_name_column (str, optional): The name of the column expected to
-            contain product names. This column undergoes specific cleaning and validation.
-            Defaults to "Product name".
-        desired_columns (Union[List[str], None], optional): A list of column names
-            that are expected to be in the final DataFrame. If provided, the DataFrame
-            will be filtered to include only these columns. Defaults to None.
-        debug (bool, optional): If True, prints messages during processing, such as
-            columns being dropped or converted. Defaults to True.
-
-    Returns:
-        pd.DataFrame: A pandas DataFrame derived from the Markdown table, having undergone
-                      the cleaning and validation steps described above.
-
-    Raises:
-        AssertionError:
-            - If `product_name_column` (when present) has over 10% null values.
-            - If any `desired_columns` (when provided) are not found in the DataFrame
-              after initial cleaning.
+    `debug` prints messages such as columns being dropped or converted.
     """
 
     pulled_data = pd.read_csv(
@@ -2792,40 +2643,12 @@ def LLM_process_extracted_pdf_text(
     extracted_text: str | LLMWhispererClientException,
     prompt: str | None = None,
 ) -> str:
-    """
-    Processes raw text, typically from a single PDF page, using the shared OpenAI
-    PDF parser model to convert it into a Markdown table.
+    """Convert one PDF page's raw text into a Markdown table with the shared OpenAI parser model.
 
-    This function is intended for processing text extracted from individual PDF pages.
-    It handles cases where `extracted_text` might be an `LLMWhispererClientException`
-    by printing the exception and returning an empty string. It also returns an
-    empty string if the input `extracted_text` is empty.
-
-    If no custom `prompt` is provided, a default system prompt is used. This default
-    prompt instructs the LLM to:
-    - Identify table data within the single page's text.
-    - Handle multi-line rows and messy formatting.
-    - Output a clean Markdown table.
-    - If no table is found, state "No table found on this page."
-    - Output only the Markdown table or the "No table found" message, without
-      additional explanations or Markdown code blocks.
-
-    Args:
-        OpenAI_client: An initialized OpenAI API client instance.
-        extracted_text: The raw text string from a single PDF page. Can also be an
-                        `LLMWhispererClientException` if the prior extraction failed.
-        prompt: Optional. A custom system prompt for the LLM. If None (default),
-                the function uses a built-in default prompt suitable for single-page
-                table extraction.
-
-    Returns:
-        str: A string containing the LLM-generated Markdown table or the message
-             "No table found on this page."
-             Returns an empty string if:
-             - `extracted_text` is an `LLMWhispererClientException`.
-             - `extracted_text` is an empty string.
-             - The LLM response content is empty.
-             - An exception occurs during the LLM API call.
+    Without a custom `prompt`, a built-in single-page prompt asks for only a Markdown table or
+    the exact message "No table found on this page." Returns "" if `extracted_text` is an
+    ``LLMWhispererClientException`` (which is printed) or empty, if the LLM response is empty,
+    or if the API call raises.
     """
 
     if prompt is None:
@@ -2914,25 +2737,12 @@ def find_most_deviating_file_page_combos(
 ) -> pd.DataFrame:
     """Return the file-page combinations with the largest row-count deviations.
 
-    This helper is intended to pair with ``plot_rows_by_page_for_each_pdf`` when
-    plotting ``deviation_from_pdf_median``. It ranks the individual
-    ``original_file`` x ``page`` combinations by the absolute distance from that
-    PDF's median row count, making it easy to see which exact pages produced the
-    most unusual dips or spikes.
-
-    Args:
-        page_file_counts: DataFrame with at least ``original_file``, ``page``, and
-            ``row_count``. If ``median_row_count`` or ``deviation_from_pdf_median``
-            are missing, they are calculated inside the function.
-        n: Number of most deviant file-page combinations to return.
-        exclude_last_page: Whether to exclude the final page of each PDF before
-            ranking deviations. Defaults to True because last pages are often
-            naturally shorter.
-        include_zero_deviation: Whether to keep rows whose deviation is exactly
-            zero. Defaults to False so the output focuses on actual spikes or dips.
-
-    Returns:
-        DataFrame sorted by largest absolute deviation first.
+    Pairs with ``plot_rows_by_page_for_each_pdf`` when plotting ``deviation_from_pdf_median``:
+    ranks each ``original_file`` x ``page`` by absolute distance from that PDF's median row
+    count, largest first. `page_file_counts` needs ``original_file``, ``page``, and
+    ``row_count``; ``median_row_count`` and ``deviation_from_pdf_median`` are computed if
+    missing. Last pages are excluded by default because they are often naturally shorter, and
+    zero-deviation rows are dropped by default so the output focuses on actual spikes or dips.
     """
     required_columns = {"original_file", "page", "row_count"}
     missing_columns = required_columns.difference(page_file_counts.columns)
@@ -3021,19 +2831,9 @@ def plot_total_rows_by_page_across_pdfs(page_counts: pd.Series) -> None:
 def summarize_pdf_validation_data(
     combined_df: pd.DataFrame,
 ) -> dict[str, pd.Series | pd.DataFrame]:
-    """
-    Build row-count summaries used for PDF extraction QA plots.
+    """Build row-count summaries used for page- and file-level PDF extraction QA plots.
 
-    This consolidates the notebook-level aggregation step into a reusable package
-    helper so notebooks can stay focused on orchestration and plotting.
-
-    Args:
-        combined_df: The pandas DataFrame (typically from `combine_extracted_pdf_pages`)
-            to summarize.
-
-    Returns:
-        Dictionary containing the Series/DataFrames needed for page-level and
-        file-level QA plots.
+    `combined_df` is typically the output of `combine_extracted_pdf_pages`.
     """
     page_file_counts = (
         combined_df.groupby(["original_file", "page"]).size().to_frame("row_count").reset_index()
@@ -3065,34 +2865,11 @@ def summarize_pdf_validation_data(
 def sample_files_and_rows(
     df: pd.DataFrame, num_files: int = 5, rows_per_file: int = 5
 ) -> pd.DataFrame:
-    """
-    Samples a subset of data from a DataFrame for manual validation of PDF extractions.
+    """Sample consecutive rows from a few random files for manual PDF-extraction validation.
 
-    This function is designed to help users quickly check the quality of PDF data
-    extraction by providing a manageable sample. It works by:
-    1. Randomly selecting a specified number of unique 'original_file' values from the input
-       DataFrame.
-    2. For each selected file, it randomly chooses a starting row index.
-    3. It then extracts a specified number of consecutive rows starting from that index.
-       If a file has fewer rows than `rows_per_file`, all its rows are taken.
-
-    The use of `random.sample` for file selection and `random.randint` for start index
-    selection means the sampling is random. For reproducible samples, ensure the global
-    random seed is set before calling this function.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame containing extracted data. Must include
-                           an 'original_file' column to identify source files.
-        num_files (int, optional): The number of unique files to sample from.
-                                   Defaults to 5. If `df` contains fewer unique
-                                   files, all unique files will be sampled.
-        rows_per_file (int, optional): The number of consecutive rows to sample
-                                       from each selected file. Defaults to 5.
-
-    Returns:
-        pd.DataFrame: A new DataFrame consisting of the sampled rows from the
-                      selected files. A message is printed indicating the number
-                      of rows and files sampled.
+    Picks `num_files` random 'original_file' values (all of them if there are fewer), then
+    `rows_per_file` consecutive rows from a random start in each (all rows if the file is
+    shorter). Uses the global ``random`` module, so seed it first for reproducible samples.
     """
 
     # Random sample of filenames
@@ -3127,19 +2904,7 @@ def sample_files_and_rows(
 
 
 def check_duplicates(combined_df: pd.DataFrame) -> bool:
-    """
-    Checks for duplicate rows in a DataFrame.
-
-    Args:
-        combined_df: The pandas DataFrame to check for duplicates.
-
-    Returns:
-        True if no duplicate rows are found (i.e., the assertion passes).
-
-    Raises:
-        AssertionError: If duplicate rows are found, an error is raised
-                        with the count of duplicate rows.
-    """
+    """Assert that a DataFrame has no duplicate rows; return ``True`` when it passes."""
 
     duplicate_rows = combined_df.duplicated()
     num_duplicates = duplicate_rows.sum()
@@ -3149,24 +2914,11 @@ def check_duplicates(combined_df: pd.DataFrame) -> bool:
 
 
 def every_pdf_page_extracted_check(pdf_full_path: str | Path, debug: bool = True) -> bool:
-    """
-    Checks if all pages of a PDF have corresponding extracted CSV files.
+    """Assert that every page of a PDF has a corresponding extracted CSV; return ``True`` if so.
 
-    It determines the number of pages in the PDF and looks for CSV files named
-    `{pdf_name_without_extension}_page_{page_number}_extracted.csv` in the same directory
-    as the PDF file.
-
-    Args:
-        pdf_full_path: The full path to the PDF file.
-        debug: If True, prints detailed messages about missing pages or success.
-                 Defaults to True.
-
-    Returns:
-        True if a CSV file exists for every page of the PDF and the assertion passes.
-
-    Raises:
-        FileNotFoundError: If the specified PDF file does not exist.
-        AssertionError: If any page-specific CSV files are missing.
+    Looks for CSV files named `{pdf_name_without_extension}_page_{page_number}_extracted.csv`
+    in the same directory as the PDF file. Raises ``FileNotFoundError`` if the PDF does not
+    exist.
     """
 
     pdf_path_obj = Path(pdf_full_path)
@@ -3210,33 +2962,13 @@ def every_pdf_page_extracted_check(pdf_full_path: str | Path, debug: bool = True
 
 
 def check_high_duplicate_pages(df: pd.DataFrame, product_name_col: str) -> pd.DataFrame:
-    """
-    Identifies and reports pages within PDF files that have strong product repetition.
+    """Identify and report pages within PDF files that have strong product repetition.
 
-    For each page of each file it calculates:
-    - The percentage of duplicate rows (identical rows).
-    - The count of product names that appear 3 or more times.
-
-    Pages are returned when they look suspicious by either signal:
-    - duplicate rows make up at least half of the page, or
-    - more than one product name appears 3 or more times.
-
-    The output includes both signals so analysts can tell whether the page looks
-    duplicated because of exact repeated rows, repeated product names, or both.
-
-    Args:
-        df (pd.DataFrame): A DataFrame containing extracted PDF data, requiring
-                           'original_file' and 'page' columns. It should also
-                           contain the data rows to be checked for duplicates.
-                           Assumes that each row in `df` represents an extracted line or item.
-        product_name_col (str): The name of the column containing product names to check
-                               for repetition patterns.
-
-    Returns:
-        pd.DataFrame: A DataFrame with columns 'original_file', 'page', 'duplicate_percentage',
-                     'repeated_products_count', and 'warning' containing information about pages
-                     with suspicious duplication patterns. Returns an empty DataFrame with
-                     those columns if no such pages are found.
+    A page is flagged when duplicate rows make up at least half of it, or when more than one
+    product name appears 3 or more times. `df` needs 'original_file' and 'page' columns, with
+    one extracted item per row. The result has 'original_file', 'page',
+    'duplicate_percentage', 'repeated_products_count', and 'warning' so analysts can tell
+    which signal fired; it is empty (with those columns) when no page is flagged.
     """
     output_columns = [
         "original_file",
@@ -3310,40 +3042,12 @@ def check_high_duplicate_pages(df: pd.DataFrame, product_name_col: str) -> pd.Da
 
 
 def check_extraction_by_page(data: pd.DataFrame, n: int = 10) -> pd.DataFrame:
-    """
-    Identifies pages with potentially abnormal mean row counts across all extracted PDF data.
+    """Identify pages with potentially abnormal mean row counts across all extracted PDF data.
 
-    This function is used to spot pages that might have extraction issues, such as
-    extracting too few rows (potential missed data) or too many rows (potential
-    duplicates or errors). It calculates the mean number of rows for each page number
-    across all processed files.
-
-    It then returns a DataFrame showing:
-    - The `n` pages with the highest mean row counts.
-    - The `n` pages with the lowest mean row counts.
-    If the total number of unique pages is less than `2 * n`, it returns all unique
-    pages sorted by their mean row counts.
-
-    Additionally, creates a line plot showing the mean row count by page number to
-    visualize extraction patterns across pages.
-
-    This allows for a quick comparison of mean row counts per page number to identify
-    pages that are outliers.
-
-    Args:
-        data (pd.DataFrame): A DataFrame containing extracted PDF data, requiring
-                             a 'page' column (numeric, representing page numbers)
-                             and 'original_file' column (to identify different files).
-                             Each row typically represents an extracted item/line.
-        n (int, optional): The number of pages to return from both the top (highest
-                           mean counts) and bottom (lowest mean counts) of the sorted page counts.
-                           Defaults to 10.
-
-    Returns:
-        pd.DataFrame: A DataFrame with columns 'page' and 'mean_count', showing the
-                      pages with the `n` highest and `n` lowest mean row counts.
-                      If fewer than `2*n` unique pages exist, all are returned,
-                      sorted by mean_count.
+    Averages row counts per page number across files to spot missed data (too few rows) or
+    duplicates (too many), plots mean row count by page number, and returns the `n` highest
+    and `n` lowest pages as 'page' and 'mean_count' (all pages, sorted, if there are fewer
+    than ``2 * n``). `data` needs a numeric 'page' column and an 'original_file' column.
     """
     # Count rows per page per file, then calculate mean across files
     page_file_counts = (
@@ -3379,11 +3083,7 @@ def plot_rowcount_against_pagenum(data: pd.DataFrame) -> None:
     the expected pattern where files with more pages also have proportionally more
     extracted rows.
 
-    Args:
-        data: DataFrame containing at least ``original_file`` and ``page`` columns.
-
-    Returns:
-        None. The function only renders a plot.
+    `data` needs at least ``original_file`` and ``page`` columns.
     """
     counts = data.value_counts("original_file").reset_index()
     max_page_per_file = data.groupby("original_file")["page"].max().reset_index(name="max_page")
@@ -3447,32 +3147,14 @@ def find_possible_misspellings(
     threshold: int = DEFAULT_MISSPELLING_SIMILARITY_THRESHOLD,
     product_name_col: str = "product",
 ) -> pd.DataFrame:
-    """
-    Find pairs of product names within a DataFrame that might be misspellings
-    of each other, based on a similarity ratio threshold.
+    """Find pairs of product names that might be misspellings of each other.
 
-    It calculates the similarity (using `thefuzz.fuzz.ratio`) between all unique
-    pairs of product names in the 'product' column. Pairs with a similarity
-    score greater than or equal to the specified `threshold` are considered
-    potential misspellings. While the 'date' column is a required input,
-    it is not used in the similarity calculation.
-
-    Args:
-        df (pd.DataFrame): Input DataFrame. Must contain 'product' and 'date' columns.
-        threshold (int, optional): Similarity ratio threshold (0-100) for considering
-                                   a pair as a potential misspelling.
-                                   Defaults to `DEFAULT_MISSPELLING_SIMILARITY_THRESHOLD` (85).
-
-    Returns:
-        pd.DataFrame: A DataFrame containing potential misspelling pairs, with columns:
-                      'Product 1', 'Product 2', and 'Similarity Score (%)'.
-                      The DataFrame is sorted by 'Similarity Score (%)' in descending order.
-                      Returns an empty DataFrame with these columns if no pairs meet the
-                      threshold.
-
-    Raises:
-        TypeError: If `df` is not a pandas DataFrame.
-        ValueError: If `df` does not have 'product' or 'date' columns.
+    Compares every unique pair in the 'product' column with ``thefuzz.fuzz.ratio`` and keeps
+    pairs scoring at least `threshold` (0-100). `df` must contain 'product' and 'date'
+    columns, though 'date' is not used in the similarity calculation. Returns columns
+    'Product 1', 'Product 2', and 'Similarity Score (%)', sorted by score descending (empty
+    with those columns if no pair qualifies). Raises ``TypeError`` if `df` is not a DataFrame
+    and ``ValueError`` if a required column is missing.
     """
     # --- Input Validation ---
     if not isinstance(df, pd.DataFrame):
@@ -3537,19 +3219,9 @@ def find_possible_misspellings(
 def identify_unique_product_names(
     df: pd.DataFrame, product_name_col: str = "product"
 ) -> pd.DataFrame:
-    """
-    Identify and return products that appear only once in the 'product' column,
-    as these might indicate misspellings or unique entries.
+    """Return rows whose product name appears only once, as these may be misspellings.
 
-    Args:
-        df (pd.DataFrame): The input DataFrame. Must contain a 'product' column.
-
-    Returns:
-        pd.DataFrame: A DataFrame containing only the rows where the product name
-                      appears exactly once in the entire 'product' column.
-
-    Raises:
-        AssertionError: If the 'product' column is not found in the DataFrame.
+    `df` must contain a 'product' column (``AssertionError`` otherwise).
     """
 
     assert product_name_col in df.columns, f"The DataFrame must have a '{product_name_col}' column."

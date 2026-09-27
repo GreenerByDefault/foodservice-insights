@@ -39,37 +39,19 @@ def categorize_spreadsheet_to_csvs(
     cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
     update_historical_entree_classifications: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
-    """
-    Read a file, categorize products, and write results.
+    """Read a file, categorize products, and write results.
 
-    Parameters
-    ----------
-    input_filepath : str or Path
-        Path to input file (.csv, .xlsx, .xls, or .xlsm).
-    llm : LlmClient
-        Categorization and name cleaning.
-    output_filepath : str or Path, optional
-        Path for output file. If None, generates name from input file.
-    data_type : Literal["procurement", "serving"]
-        Serving data also runs entree detection, and keeps only the entree rows.
-    gemini_client : Any, optional
-        Gemini API client. Required for serving data.
-    date_format : str, optional
-        Date format string. If None, auto-detects.
-    cache_write_mode : Literal["none", "reviewed", "web_app_unreviewed"]
-        Controls where new categorizations are persisted:
-        - "none": do not persist category cache updates
-        - "reviewed": append to reviewed historical cache
-        - "web_app_unreviewed": append to unreviewed web-app cache
-    update_historical_entree_classifications : bool
-        Whether to append new entree classifications to the historical file.
+    The input may be .csv, .xlsx, .xls, or .xlsm; ``output_filepath`` defaults to the input name
+    with a ``_categorized`` suffix, and ``date_format`` is auto-detected when ``None``. Serving
+    data also runs entree detection, keeps only the entree rows, and requires ``gemini_client``.
 
-    Returns
-    -------
-    tuple[DataFrame, dict]
-        - The categorized DataFrame.
-        - Summary dict: `MergeCounts.to_summary()`, plus `match_type_counts` and the
-          output file keys.
+    ``cache_write_mode`` controls where new categorizations are persisted: ``"none"`` skips it,
+    ``"reviewed"`` appends to the reviewed historical cache, and ``"web_app_unreviewed"`` appends
+    to the unreviewed web-app cache. ``update_historical_entree_classifications`` appends new
+    entree classifications to the historical file.
+
+    Returns the categorized frame and a summary dict: ``MergeCounts.to_summary()``, plus
+    ``match_type_counts`` and the output file keys.
     """
     if data_type not in ("procurement", "serving"):
         raise ValueError(f"Invalid data_type: {data_type!r}. Must be 'procurement' or 'serving'.")

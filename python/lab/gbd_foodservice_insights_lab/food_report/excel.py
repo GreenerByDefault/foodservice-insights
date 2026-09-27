@@ -36,27 +36,8 @@ def build_qa_excel_report(
     exports without overloading the client-facing workbook. This workbook is
     intentionally the internal superset artifact.
 
-    Args:
-        output_path: Destination workbook path.
-        raw_df: Raw input rows used to build the report.
-        monthly_product_data: Monthly totals broken down by product.
-        monthly_category_data: Monthly totals broken down by category.
-        template_data: Category template DataFrame; the index is reset before writing.
-        highest_lowest: Optional category-stability summary table.
-        diner_meals_df: Optional per-month diner/meal counts.
-        emissions_summary: Optional emissions summary table.
-        animal_emissions_intensity: Optional animal-emissions intensity table.
-        decision_kpis: Optional decision-KPI summary table.
-        substitution_scenarios: Optional substitution-scenarios table.
-        quality_findings_df: Optional table of automated data-quality findings.
-        missingness_summary_df: Optional table summarising missingness per column.
-        data_profile_df: Optional column-level data profile table.
-        diagnostic_sheets: Optional extra named diagnostic DataFrames; empty
-            frames and ``None`` values are skipped.
-        diner_or_meal: Per-unit label used in the diner/meal sheet name.
-
-    Returns:
-        Absolute path of the workbook that was written.
+    Empty or ``None`` ``diagnostic_sheets`` entries are skipped. Returns the workbook's
+    absolute path.
     """
     sheets: dict[str, pd.DataFrame | None] = {
         "Raw Data": raw_df,

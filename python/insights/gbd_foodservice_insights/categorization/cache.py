@@ -109,13 +109,9 @@ def _empty_historical_cache() -> pd.DataFrame:
 
 
 def get_previously_categorized_items() -> pd.DataFrame:
-    """
-    Load the previously categorized items from the cache CSV.
+    """Load the previously categorized items from the cache CSV.
 
-    Returns
-    -------
-    DataFrame
-        Historical categorizations with at least 'product' and 'category' columns.
+    Has at least 'product' and 'category' columns.
     """
     path = _historical_cache_path()
     if not path.exists():
@@ -132,15 +128,9 @@ def get_previously_categorized_items() -> pd.DataFrame:
 
 
 def save_historical_categorizations(new_df: pd.DataFrame) -> None:
-    """
-    Append new categorizations to the historical cache and de-duplicate.
+    """Append new categorizations to the historical cache and de-duplicate.
 
     New entries overwrite existing entries for the same product.
-
-    Parameters
-    ----------
-    new_df : DataFrame
-        DataFrame containing new/updated product categorizations.
     """
     path = _historical_cache_path()
     existing = get_previously_categorized_items()
@@ -179,14 +169,7 @@ def _empty_unreviewed_web_app_cache() -> pd.DataFrame:
 
 
 def get_web_app_unreviewed_categorizations() -> pd.DataFrame:
-    """
-    Load unreviewed web-app categorizations.
-
-    Returns
-    -------
-    DataFrame
-        Unreviewed cache rows with fixed schema columns.
-    """
+    """Load unreviewed web-app categorizations, with the fixed schema columns."""
     path = _web_app_unreviewed_cache_path()
     if not path.exists():
         logger.info("Unreviewed web-app cache not found at %s; returning empty table.", path)

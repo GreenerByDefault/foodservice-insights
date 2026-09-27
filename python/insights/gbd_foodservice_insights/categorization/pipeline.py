@@ -67,27 +67,12 @@ def categorize_unique_products(
     cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
     date_format: str | None = None,
 ) -> CategorizedProducts:
-    """
-    Clean the input and assign a GBD emissions category to each unique product.
+    """Clean the input and assign a GBD emissions category to each unique product.
 
-    Reads the packaged category cache when `historical_categorizations` is None, and writes
-    new categorizations to a cache according to `cache_write_mode`.
-
-    Parameters
-    ----------
-    df : DataFrame
-        Input data with columns: product, date, weight.
-    llm : LlmClient
-        Categorization and name cleaning.
-    historical_categorizations : DataFrame, optional
-        Pre-loaded historical categorizations. If None, loads from default CSV.
-    cache_write_mode : Literal["none", "reviewed", "web_app_unreviewed"]
-        Controls where new categorizations are persisted:
-        - "none": do not persist category cache updates
-        - "reviewed": append to reviewed historical cache
-        - "web_app_unreviewed": append to unreviewed web-app cache
-    date_format : str, optional
-        Date format string. If None, auto-detects.
+    `df` needs product, date, and weight columns. Reads the packaged category cache when
+    `historical_categorizations` is None. `cache_write_mode` picks where new categorizations
+    are appended: nowhere, the reviewed historical cache, or the unreviewed web-app cache.
+    `date_format=None` auto-detects the date format.
     """
     cache_write_mode = _validate_cache_write_mode(cache_write_mode)
 

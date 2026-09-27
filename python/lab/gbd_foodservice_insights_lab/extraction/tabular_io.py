@@ -38,13 +38,6 @@ def filter_hidden_and_temp_files(
 
     Hidden files start with ``.`` and temporary files start with ``~``. Excel
     temp files additionally start with ``~$``.
-
-    Args:
-        files: Candidate file paths to filter.
-        file_type: File family the rules apply to (``"csv"``, ``"excel"``, or ``"pdf"``).
-
-    Returns:
-        Paths that are not hidden or temporary.
     """
     if file_type == "excel":
         return [f for f in files if not f.name.startswith((".", "~$", "~"))]
@@ -58,14 +51,8 @@ def get_filtered_data_files(
 ) -> dict[str, list[Path]]:
     """List data files in a directory, grouped by file family.
 
-    Args:
-        path: Directory to search.
-        file_types: File families to include; defaults to all three.
-        recursive: Whether to search subdirectories.
-
-    Returns:
-        Mapping with keys ``"csv"``, ``"excel"``, and ``"pdf"`` and lists of
-        matching paths as values.
+    The result always has ``"csv"``, ``"excel"``, and ``"pdf"`` keys; ``file_types``
+    defaults to all three.
     """
     base = Path(path)
     globber = base.rglob if recursive else base.glob
@@ -92,15 +79,7 @@ def detect_single_multi_sheet_excel(
     path: str | Path,
     min_sheets: int = 2,
 ) -> tuple[bool, Path | None]:
-    """Detect if a directory contains exactly one Excel file with multiple sheets.
-
-    Args:
-        path: Directory to inspect.
-        min_sheets: Minimum sheet count to qualify as multi-sheet.
-
-    Returns:
-        Tuple of (matched flag, the Excel file path if matched else ``None``).
-    """
+    """Detect if a directory contains exactly one Excel file with multiple sheets."""
     files = get_filtered_data_files(path, file_types=["excel"])
     excel_files = files["excel"]
 
@@ -121,14 +100,7 @@ def detect_single_multi_sheet_excel(
 
 
 def detect_file_encoding(filepath: str | Path) -> str:
-    """Detect a file's text encoding with the chardet library.
-
-    Args:
-        filepath: Path of the file to sniff.
-
-    Returns:
-        Detected encoding string, falling back to ``"utf-8"`` on error.
-    """
+    """Detect a file's text encoding with chardet, falling back to ``"utf-8"`` on error."""
     try:
         with open(filepath, "rb") as f:
             raw_data = f.read(100000)
@@ -139,15 +111,7 @@ def detect_file_encoding(filepath: str | Path) -> str:
 
 
 def get_excel_headers(worksheet: Any, header_row: int = 1) -> list[Any]:
-    """Extract header values from an Excel worksheet.
-
-    Args:
-        worksheet: An openpyxl worksheet instance.
-        header_row: 1-indexed row number to read headers from.
-
-    Returns:
-        List of cell values from the header row.
-    """
+    """Extract header values from an openpyxl worksheet; ``header_row`` is 1-indexed."""
     return [c.value for c in worksheet[header_row]]
 
 
@@ -181,12 +145,7 @@ def detect_excel_header_row(
 ) -> int:
     """Guess the most likely header row in the first part of an Excel worksheet.
 
-    Args:
-        worksheet: An openpyxl worksheet instance.
-        scan_rows: Number of leading rows to score.
-
-    Returns:
-        1-indexed row number that scored highest as a likely header.
+    Scores the first ``scan_rows`` rows of an openpyxl worksheet; returns a 1-indexed row.
     """
     best_row = 1
     best_score = float("-inf")
@@ -235,12 +194,7 @@ def detect_excel_header_row(
 def extract_excel_sheet_info(filepath: str | Path) -> tuple[dict[str, list], int]:
     """Extract column names and total row counts from all sheets in an Excel file.
 
-    Args:
-        filepath: Excel file to inspect.
-
-    Returns:
-        Tuple of (mapping of sheet name to header columns, total data-row count
-        across all sheets).
+    Returns each sheet's header columns and the data-row count summed across all sheets.
     """
     try:
         wb = openpyxl.load_workbook(filepath, read_only=True)
@@ -267,12 +221,7 @@ def read_csv_with_auto_detection(
 ) -> tuple[pd.DataFrame, str, str]:
     """Read a CSV file with automatic encoding and delimiter detection.
 
-    Args:
-        filepath: Path of the CSV file to read.
-        nrows: Optional row cap, useful for previews.
-
-    Returns:
-        Tuple of (loaded DataFrame, detected encoding, detected delimiter).
+    Returns the DataFrame along with the detected encoding and delimiter.
     """
     encoding = detect_file_encoding(filepath)
 
@@ -295,12 +244,7 @@ def extract_month_year_from_filename(
 ) -> pd.Timestamp | None:
     """Extract month and year from a filename using common date patterns.
 
-    Args:
-        filename: Filename or path to inspect.
-        date_format: Optional explicit ``strptime`` format to try first.
-
-    Returns:
-        Parsed ``pd.Timestamp`` or ``None`` when no pattern matched.
+    ``date_format`` is an explicit ``strptime`` format tried before the common patterns.
     """
     filename_str = str(Path(filename).stem)
 
@@ -368,20 +312,12 @@ def extract_dates_from_sheet_filenames(
 ) -> pd.DataFrame:
     """Extract dates from sheet or file names and add a ``date`` column.
 
-    Args:
-        df: DataFrame containing the filename column.
-        filename_column: Name of the column holding filenames.
-        default_year: Year to use when filenames contain only a month.
-        date_format: Optional explicit ``strptime`` format to try first.
-        show_warnings: Whether to print extraction-failure warnings.
+    Returns a copy of ``df``, with ``NaT`` where extraction failed. ``default_year`` applies
+    to filenames that contain only a month; ``date_format`` is an explicit ``strptime``
+    format tried first.
 
-    Returns:
-        Copy of the input DataFrame with an added ``date`` column (``NaT`` where
-        extraction failed).
-
-    Raises:
-        ValueError: If ``filename_column`` is missing, or if month-only filenames
-            were found and no ``default_year`` was supplied.
+    Raises ``ValueError`` if ``filename_column`` is missing, or if month-only filenames
+    were found and no ``default_year`` was supplied.
     """
     if filename_column not in df.columns:
         raise ValueError(
@@ -502,16 +438,9 @@ def experimental_excel_extraction_code(
 ) -> pd.DataFrame:
     """Extract structured data from a CSV file using a large language model.
 
-    Args:
-        csv_filename: Path of the CSV file to process.
-        OpenAI_client: Initialized OpenAI client used for the LLM call.
-        model: Model identifier to use.
-        desired_columns: Reserved for future use; currently ignored.
-        numeric_columns: Reserved for future use; currently ignored.
-        product_name_column: Reserved for future use; currently ignored.
-
-    Returns:
-        DataFrame parsed from the LLM-generated markdown table.
+    ``OpenAI_client`` is an initialized OpenAI client. The DataFrame is parsed from the
+    LLM-generated markdown table. ``desired_columns``, ``numeric_columns``, and
+    ``product_name_column`` are reserved for future use; currently ignored.
     """
     del desired_columns, numeric_columns, product_name_column
 
@@ -535,17 +464,11 @@ def read_in_all_data_files(
 ) -> tuple[list[pd.DataFrame], list[Path]]:
     """Read all CSV or Excel files from a directory into a list of DataFrames.
 
-    Args:
-        data_location: Directory to read files from.
-        file_type: ``"csv"``, ``"excel"``, or ``None`` for auto-detection.
-        **read_kwargs: Extra keyword arguments forwarded to the pandas reader.
+    ``file_type=None`` auto-detects; ``read_kwargs`` are forwarded to the pandas reader.
+    Returns the DataFrames alongside their source paths.
 
-    Returns:
-        Tuple of (list of loaded DataFrames, list of source file paths).
-
-    Raises:
-        ValueError: If both file types are present without an explicit choice,
-            no files are found, or ``file_type`` is invalid.
+    Raises ``ValueError`` if both file types are present without an explicit choice,
+    no files are found, or ``file_type`` is invalid.
     """
     if data_location is None:
         raise ValueError("data_location is required and must point to a data directory")

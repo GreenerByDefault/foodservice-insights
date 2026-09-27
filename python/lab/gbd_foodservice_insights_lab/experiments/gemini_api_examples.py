@@ -53,9 +53,6 @@ def initialize_client_basic() -> genai.Client:
     """Initialize a Gemini client using the ``GEMINI_API_KEY`` environment variable.
 
     This is the recommended approach for most use cases.
-
-    Returns:
-        Initialized ``genai.Client`` instance.
     """
     client = genai.Client()
     return client
@@ -65,9 +62,6 @@ def initialize_client_with_api_key() -> genai.Client:
     """Initialize a Gemini client by explicitly passing an API key.
 
     Use this when you need to override the environment variable.
-
-    Returns:
-        Initialized ``genai.Client`` instance.
     """
     client = genai.Client(api_key="your_api_key_here")
     return client
@@ -77,9 +71,6 @@ def initialize_vertex_ai_client() -> genai.Client:
     """Initialize a Gemini client for Vertex AI on Google Cloud.
 
     Use this when deploying on Google Cloud Platform.
-
-    Returns:
-        Initialized ``genai.Client`` configured for Vertex AI.
     """
     client = genai.Client(vertexai=True, project="your-project-id", location="us-central1")
     return client
@@ -94,12 +85,6 @@ def basic_text_generation(client: genai.Client) -> str:
     """Generate text from a simple prompt.
 
     Equivalent to OpenAI's ``client.chat.completions.create()``.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The generated text response.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL, contents="Why is the sky blue?"
@@ -111,12 +96,6 @@ def text_generation_with_config(client: genai.Client) -> str:
     """Generate text using configuration options like temperature and max tokens.
 
     This is the Gemini equivalent of OpenAI's completion parameters.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The generated text response.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
@@ -136,13 +115,6 @@ def text_generation_with_thinking_config(client: genai.Client) -> str:
     """Generate text while controlling the Gemini 3 thinking level.
 
     Setting ``thinking_level='minimal'`` keeps latency low for simple tasks.
-    This is useful when you want faster responses.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The generated text response.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
@@ -164,9 +136,6 @@ def streaming_text_generation(client: genai.Client) -> None:
     """Stream model responses to stdout as they are generated.
 
     Equivalent to OpenAI's ``stream=True`` parameter.
-
-    Args:
-        client: The Gemini API client.
     """
     for chunk in client.models.generate_content_stream(
         model=EXAMPLE_FLASH_MODEL,
@@ -176,11 +145,7 @@ def streaming_text_generation(client: genai.Client) -> None:
 
 
 async def async_streaming_text_generation(client: genai.Client) -> None:
-    """Asynchronously stream model responses to stdout as they are generated.
-
-    Args:
-        client: The Gemini API client.
-    """
+    """Asynchronously stream model responses to stdout as they are generated."""
     async for chunk in await client.aio.models.generate_content_stream(
         model=EXAMPLE_FLASH_MODEL,
         contents="Tell me a story about a robot learning to feel emotions.",
@@ -214,12 +179,6 @@ def function_calling_automatic(client: genai.Client) -> str:
 
     Gemini automatically extracts the schema from docstrings and type hints.
     This is similar to OpenAI's function calling but more automatic.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The model's text response after any function calls.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
@@ -232,16 +191,7 @@ def function_calling_automatic(client: genai.Client) -> str:
 
 
 def function_calling_manual(client: genai.Client) -> str:
-    """Demonstrate manual function declaration for precise schema control.
-
-    Use this when you need precise control over function definitions.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The model's text response after any function calls.
-    """
+    """Demonstrate manual function declaration for precise schema control."""
     function = types.FunctionDeclaration(
         name="get_current_weather",
         description="Get the current weather in a given location",
@@ -304,12 +254,6 @@ def structured_output_pydantic(client: genai.Client) -> dict[str, Any]:
 
     Extremely useful for data extraction and categorization tasks.
     Similar to OpenAI's ``response_format`` parameter but more powerful.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The parsed JSON response as a dict.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
@@ -329,12 +273,6 @@ def structured_output_json_schema(client: genai.Client) -> dict[str, Any]:
     """Force the model to output JSON matching a raw JSON schema.
 
     This gives more flexibility than Pydantic when you don't want to use it.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The parsed JSON response as a dict.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
@@ -362,12 +300,6 @@ def structured_list_output(client: genai.Client) -> dict[str, Any]:
     """Extract a structured list from free text using a Pydantic schema.
 
     Useful for categorization tasks where you need multiple items.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The parsed JSON response as a dict containing the list.
     """
 
     class FoodItem(BaseModel):
@@ -403,12 +335,6 @@ def analyze_image_from_url(client: genai.Client) -> str:
     """Analyze an image stored at a Google Cloud Storage URL.
 
     Useful when images are already in cloud storage.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The model's text description of the image.
     """
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
@@ -427,13 +353,6 @@ def analyze_local_image(client: genai.Client, image_path: str) -> str:
     """Analyze a local image file by uploading its bytes.
 
     This is the most common use case for image analysis.
-
-    Args:
-        client: The Gemini API client.
-        image_path: Path to the image file on disk.
-
-    Returns:
-        The model's text description of the image.
     """
     with open(image_path, "rb") as f:
         image_bytes = f.read()
@@ -452,13 +371,6 @@ def analyze_multiple_images(client: genai.Client, image_paths: list[str]) -> str
     """Analyze multiple images in a single request.
 
     Useful for comparing images or analyzing a sequence.
-
-    Args:
-        client: The Gemini API client.
-        image_paths: List of paths to image files to analyze.
-
-    Returns:
-        The model's text response comparing the images.
     """
     content_parts: list[types.PartUnionDict] = [
         "Compare these images and describe the differences:"
@@ -487,9 +399,6 @@ def chat_session_basic(client: genai.Client) -> None:
     """Create a stateful chat session that maintains conversation history.
 
     Similar to OpenAI's chat completions but with automatic history management.
-
-    Args:
-        client: The Gemini API client.
     """
     chat = client.chats.create(model=EXAMPLE_FLASH_MODEL)
 
@@ -507,9 +416,6 @@ def chat_session_streaming(client: genai.Client) -> None:
     """Create a chat session with streaming responses to stdout.
 
     Best for user-facing applications where you want to show responses as they arrive.
-
-    Args:
-        client: The Gemini API client.
     """
     chat = client.chats.create(model=EXAMPLE_FLASH_MODEL)
 
@@ -521,14 +427,7 @@ def chat_session_streaming(client: genai.Client) -> None:
 
 
 def chat_session_with_system_prompt(client: genai.Client) -> str:
-    """Create a chat with a system instruction that persists across messages.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The model's text response.
-    """
+    """Create a chat with a system instruction that persists across messages."""
     chat = client.chats.create(
         model=EXAMPLE_FLASH_MODEL,
         config=types.GenerateContentConfig(
@@ -553,13 +452,6 @@ def analyze_pdf_document(client: genai.Client, pdf_path: str) -> str:
     """Upload and analyze a PDF document.
 
     Useful for extracting information from invoices, menus, reports, etc.
-
-    Args:
-        client: The Gemini API client.
-        pdf_path: Path to the PDF file to upload.
-
-    Returns:
-        The model's text response describing the document contents.
     """
     # Upload the file first
     uploaded_file = client.files.upload(file=pdf_path)
@@ -576,13 +468,6 @@ def analyze_multiple_pdfs(client: genai.Client, pdf_paths: list[str]) -> str:
     """Upload and analyze multiple PDFs in a single request.
 
     Useful for comparing documents or extracting data from multiple sources.
-
-    Args:
-        client: The Gemini API client.
-        pdf_paths: List of paths to PDF files to analyze.
-
-    Returns:
-        The model's text comparison of the documents.
     """
     uploaded_files = [client.files.upload(file=path) for path in pdf_paths]
 
@@ -602,16 +487,7 @@ def analyze_multiple_pdfs(client: genai.Client, pdf_paths: list[str]) -> str:
 
 
 def generate_with_safety_settings(client: genai.Client) -> str:
-    """Generate text while configuring safety settings for content filtering.
-
-    Use this to adjust the model's behavior for your use case.
-
-    Args:
-        client: The Gemini API client.
-
-    Returns:
-        The model's text response.
-    """
+    """Generate text while configuring safety settings for content filtering."""
     response = client.models.generate_content(
         model=EXAMPLE_FLASH_MODEL,
         contents="Write about controversial food topics.",
@@ -640,9 +516,6 @@ def use_context_manager() -> str:
     """Use a context manager for automatic Gemini client resource cleanup.
 
     This is the recommended way to use the client in production.
-
-    Returns:
-        The model's text response.
     """
     with genai.Client() as client:
         response = client.models.generate_content(
@@ -653,11 +526,7 @@ def use_context_manager() -> str:
 
 
 async def use_async_context_manager() -> str:
-    """Use an async context manager for the Gemini client.
-
-    Returns:
-        The model's text response.
-    """
+    """Use an async context manager for the Gemini client."""
     async with genai.Client().aio as aclient:
         response = await aclient.models.generate_content(
             model=EXAMPLE_FLASH_MODEL,
@@ -674,14 +543,8 @@ async def use_async_context_manager() -> str:
 def openai_style_call(client: genai.Client, messages: list[dict[str, str]]) -> str:
     """Make a call similar to OpenAI's ``chat.completions.create()``.
 
-    Use this as a starting point when migrating from OpenAI.
-
-    Args:
-        client: The Gemini API client.
-        messages: List of message dicts like ``[{"role": "user", "content": "..."}]``.
-
-    Returns:
-        The model's text response.
+    Use this as a starting point when migrating from OpenAI. `messages` are dicts like
+    ``[{"role": "user", "content": "..."}]``.
     """
     # Extract system message if present
     system_instruction = None
@@ -716,12 +579,7 @@ class GeminiWrapper:
     """
 
     def __init__(self, api_key: str | None = None) -> None:
-        """Initialize the wrapper with an optional explicit API key.
-
-        Args:
-            api_key: Optional Gemini API key. If ``None``, the client falls
-                back to the ``GEMINI_API_KEY`` environment variable.
-        """
+        """Initialize the wrapper; with no `api_key`, the client uses ``GEMINI_API_KEY``."""
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
     def chat_completion(
@@ -731,17 +589,7 @@ class GeminiWrapper:
         temperature: float = 0.0,
         max_tokens: int = 1000,
     ) -> dict[str, Any]:
-        """Make an OpenAI-style chat completion call against Gemini.
-
-        Args:
-            messages: List of OpenAI-style message dicts.
-            model: Gemini model name to use. Defaults to ``EXAMPLE_FLASH_MODEL``.
-            temperature: Sampling temperature. Defaults to ``0.0``.
-            max_tokens: Maximum tokens to generate. Defaults to ``1000``.
-
-        Returns:
-            Dict shaped like an OpenAI chat completion response.
-        """
+        """Make an OpenAI-style chat completion against Gemini; return an OpenAI-shaped dict."""
         system_instruction = None
         user_content = []
 
@@ -828,18 +676,8 @@ def categorize_food_item_structured(
 ) -> dict[str, Any]:
     """Categorize a food item into one of the provided categories.
 
-    Returns structured output with the category and confidence. This is a
-    better approach than the current name-cleaning LLM calls in
-    ``categorization/steps.py``.
-
-    Args:
-        client: The Gemini API client.
-        item_name: The food item to categorize.
-        categories: Allowed category labels.
-
-    Returns:
-        Parsed JSON response as a dict with original/cleaned name, category,
-        and confidence.
+    Returns a dict with the original and cleaned name, category, and confidence. This is a
+    better approach than the current name-cleaning LLM calls in ``categorization/steps.py``.
     """
 
     class FoodCategory(BaseModel):
@@ -881,14 +719,6 @@ def batch_categorize_food_items(
 
     Much more efficient than calling the API for each item individually.
     Can reduce API calls by 10x or more.
-
-    Args:
-        client: The Gemini API client.
-        items: List of food item names to categorize.
-        categories: Allowed category labels.
-
-    Returns:
-        Parsed JSON response as a dict containing the categorized items list.
     """
 
     class FoodItem(BaseModel):
@@ -927,16 +757,9 @@ If none match, use "No Matches Found".
 
 
 def extract_pdf_menu_items(client: genai.Client, pdf_path: str) -> dict[str, Any]:
-    """Extract menu items from a PDF with structured output.
+    """Extract the restaurant name and menu items from a PDF with structured output.
 
     Better than the current PDF extraction approach because it uses structured output.
-
-    Args:
-        client: The Gemini API client.
-        pdf_path: Path to the PDF file to upload.
-
-    Returns:
-        Parsed JSON response as a dict with restaurant name and menu items.
     """
 
     class MenuItem(BaseModel):

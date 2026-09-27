@@ -198,14 +198,8 @@ def run_food_report(
     - ``log_path``: internal per-run debug log
 
     For backward compatibility, ``excel_path`` is kept and points to the same
-    file as ``client_excel_path``.
-
-    Returns
-    -------
-    dict
-        Includes client PDF, client workbook, QA workbook, exported chart
-        paths, manifest, log path, and the quality payload used by the
-        report and UI layers.
+    file as ``client_excel_path``. The result also carries the quality payload used by the
+    report and UI layers.
     """
     region = validate_region(region)  # Fails immediately on unrecognised region
     # Everything collected so far, for the failure manifest.

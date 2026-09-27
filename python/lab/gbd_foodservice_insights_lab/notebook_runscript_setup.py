@@ -348,17 +348,7 @@ def detect_client_structure(
     | None = None,
     base_filepath_override: str | Path | None = None,
 ) -> dict[str, Any]:
-    """
-    Detect client context from cwd and generate step-specific file paths.
-
-    Step options:
-    - prepare_tabular
-    - prepare_pdf
-    - categorize
-    - clean_units
-    - produce_food_report
-    - pilot
-    """
+    """Detect client context from cwd and generate step-specific file paths."""
     assert isinstance(has_sub_client, bool), "has_sub_client must be True or False"
     _validate_step(step)
 
@@ -441,9 +431,7 @@ def detect_client_structure(
 
 
 def save_client_metadata(config: dict[str, Any], env_path: str | Path, pdf_extracted: bool) -> None:
-    """
-    Save client metadata and ENV_PATH to client_metadata.json in the data type folder.
-    """
+    """Save client metadata and ENV_PATH to client_metadata.json in the data type folder."""
     config_serializable = config.copy()
     if "data_location" in config_serializable:
         config_serializable["data_location"] = str(config_serializable["data_location"])
@@ -469,9 +457,7 @@ def load_client_metadata(
     *,
     analysis_context: AnalysisContext | None = None,
 ) -> tuple[dict[str, Any], str, bool]:
-    """
-    Load client metadata from client_metadata.json in the current data folder.
-    """
+    """Load client metadata from client_metadata.json in the current data folder."""
     _validate_step(step)
 
     cwd = Path.cwd()
@@ -509,19 +495,10 @@ def load_client_metadata(
 def setup_api_clients(
     openai: bool = False, whisper: bool = False, gemini: bool = False
 ) -> dict[str, Any]:
-    """
-    Initialize API clients based on requested services.
+    """Initialize the requested API clients, keyed ``openai_client``, ``whisper_client``, and
+    ``gemini_client``.
 
-    Args:
-        openai: Whether to initialize OpenAI client.
-        whisper: Whether to initialize LLM Whisperer client.
-        gemini: Whether to initialize Gemini client.
-
-    Returns:
-        Dictionary with requested clients (keys: openai_client, whisper_client, gemini_client).
-
-    Raises:
-        ValueError: If required API keys are not set in environment variables.
+    Raises ``ValueError`` if a requested service's API key is not set in the environment.
     """
     clients: dict[str, Any] = {}
 
@@ -547,9 +524,7 @@ def setup_api_clients(
 
 
 def setup_cli_environment(env_path: str | Path | None = None) -> dict[str, Any]:
-    """
-    Load .env configuration for CLI scripts and initialize API clients.
-    """
+    """Load .env configuration for CLI scripts and initialize API clients."""
     from dotenv import find_dotenv, load_dotenv
 
     if env_path is None:
@@ -564,18 +539,10 @@ def setup_cli_environment(env_path: str | Path | None = None) -> dict[str, Any]:
 
 
 def update_metadata(updates: dict) -> None:
-    """
-    Update specific fields in client_metadata.json.
+    """Set or overwrite fields in client_metadata.json.
 
-    Reads the existing metadata file, applies the given key-value updates,
-    and writes it back. Use this to record outputs from any pipeline step
-    so subsequent steps can auto-detect the correct input file.
-
-    Args:
-        updates: A dict of keys and values to set or overwrite in the metadata.
-
-    Example:
-        >>> update_metadata({"report_input_file": output_file})
+    Use this to record outputs from any pipeline step so subsequent steps can auto-detect the
+    correct input file, e.g. ``update_metadata({"report_input_file": output_file})``.
     """
     metadata_path = Path.cwd() / "client_metadata.json"
     if not metadata_path.exists():
@@ -590,9 +557,7 @@ def update_metadata(updates: dict) -> None:
 
 
 def update_metadata_with_categorization_stats(summary: dict[str, Any]) -> None:
-    """
-    Update client_metadata.json with categorization statistics.
-    """
+    """Update client_metadata.json with categorization statistics."""
     output_file = summary.get("output_file", "")
     human_review_file = summary.get("human_review_file", "")
     update_metadata(

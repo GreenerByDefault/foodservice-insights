@@ -3069,14 +3069,9 @@ def parse_and_validate_date_column(
     5. dateutil fallback for remaining non-ambiguous strings
     6. Date range validation
 
-    Returns:
-        DataFrame with normalized datetime values in ``date_col``.
-        If ``return_diagnostics=True``, also returns a diagnostics DataFrame with:
-        ``original_value``, ``parsed_date``, ``parse_status``, and ``parser_used``.
-
-    Raises:
-        ValueError: If parsing fails, values are ambiguous, missing dates are disallowed,
-                    or parsed values are out of allowed range.
+    With ``return_diagnostics=True``, also returns a diagnostics frame with ``original_value``,
+    ``parsed_date``, ``parse_status``, and ``parser_used``. Raises ValueError if parsing fails,
+    values are ambiguous, missing dates are disallowed, or dates are out of range.
     """
     if date_col not in df.columns:
         raise ValueError(f"Column '{date_col}' not found in DataFrame.")
