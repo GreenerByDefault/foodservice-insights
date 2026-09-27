@@ -278,6 +278,39 @@ def test_aggregation_failure_raises_from_the_original_exception(
     assert str(excinfo.value.__cause__) == "aggregation exploded"
 
 
+def test_a_category_bought_at_zero_weight_has_no_share_or_intensity():
+    zero_pork = pd.DataFrame(
+        {
+            "date": ["2024-01-10"],
+            "product": ["Pork Chop"],
+            "category": ["Pork (pig meat)"],
+            "kilos_total": [0.0],
+        }
+    )
+
+    report = _build(pd.concat([_rows(), zero_pork], ignore_index=True))
+
+    drivers = report.aggregation["category_drivers"]
+    assert drivers[drivers["category"] == "Pork (pig meat)"].to_dict("records") == [
+        {
+            "category": "Pork (pig meat)",
+            "product": "Pork Chop",
+            "kilos_total": 0.0,
+            "kilos_total_in_category": 0.0,
+            "percentage": pytest.approx(np.nan, nan_ok=True),
+        }
+    ]
+    intensity = report.aggregation["animal_emissions_intensity"]
+    assert intensity[intensity["category"] == "Pork (pig meat)"].to_dict("records") == [
+        {
+            "category": "Pork (pig meat)",
+            "kilos_total": 0.0,
+            "total_kg_co2e": 0.0,
+            "kg_co2e_per_kg_food": pytest.approx(np.nan, nan_ok=True),
+        }
+    ]
+
+
 def test_a_data_month_missing_from_the_mapping_aborts():
     with pytest.raises(QualityCheckError) as excinfo:
         _build(_rows(), diner_meal_mapping={"2024-01": 100})

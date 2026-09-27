@@ -84,6 +84,13 @@ describe('normalizeCsv', () => {
     ]);
   });
 
+  test('refuses a file whose every weight is 0', () => {
+    expect(rejected(`${HEADER}\nbeef,2026-01-05,0\nCarrots,2026-01-06,0.0`)).toEqual({
+      reason: 'empty',
+      summary: 'Every weight in that file is 0.',
+    });
+  });
+
   describe('refuses a file before reading a row', () => {
     test.for([
       ['an Excel file renamed to .csv', 'PK\x03\x04rest of the zip', 'unparseable'],

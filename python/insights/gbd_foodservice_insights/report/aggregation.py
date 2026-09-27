@@ -134,8 +134,8 @@ def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd
 
 def _safe_percentage(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     """Compute percentage with zero/NaN-safe behavior."""
-    pct = (numerator / denominator.replace({0: pd.NA})) * 100
-    return pct.astype(float).round(1)
+    pct = (numerator / denominator.mask(denominator == 0)) * 100
+    return pct.round(1)
 
 
 def identify_category_drivers(
@@ -417,9 +417,9 @@ def summarize_animal_emissions_intensity(
         .reset_index()
         .rename(columns={emissions_col: "total_kg_co2e"})
     )
-    summary["kg_co2e_per_kg_food"] = (
-        summary["total_kg_co2e"] / summary[weight_col].replace({0: pd.NA})
-    ).astype(float)
+    summary["kg_co2e_per_kg_food"] = summary["total_kg_co2e"] / summary[weight_col].mask(
+        summary[weight_col] == 0
+    )
 
     return summary.sort_values("total_kg_co2e", ascending=False).reset_index(drop=True)
 

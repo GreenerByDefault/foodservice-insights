@@ -21,6 +21,7 @@ export type UnreadableFile =
   | { kind: 'layout'; fault: LayoutFault }
   | { kind: 'parse'; error: CsvParseError }
   | { kind: 'no-data-rows' }
+  | { kind: 'all-weights-zero' }
   | { kind: 'too-many-rows'; limit: number };
 
 export function describeUnreadableFile(file: UnreadableFile): RejectedUploadRecord {
@@ -41,6 +42,8 @@ export function describeUnreadableFile(file: UnreadableFile): RejectedUploadReco
       return csvParseErrorRejection(file.error);
     case 'no-data-rows':
       return { reason: 'empty', summary: 'That file has a header but no rows under it.' };
+    case 'all-weights-zero':
+      return { reason: 'empty', summary: 'Every weight in that file is 0.' };
     case 'too-many-rows':
       return {
         reason: 'too_large',

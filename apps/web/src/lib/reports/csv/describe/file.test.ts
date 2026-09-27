@@ -170,6 +170,13 @@ describe('describeUnreadableFile', () => {
     });
   });
 
+  test('a file whose every weight is 0', () => {
+    expect(describeUnreadableFile({ kind: 'all-weights-zero' })).toEqual({
+      reason: 'empty',
+      summary: 'Every weight in that file is 0.',
+    });
+  });
+
   test('a file over the size cap', () => {
     expect(describeUnreadableFile({ kind: 'too-large', byteSize: 12_345 })).toEqual({
       reason: 'too_large',
