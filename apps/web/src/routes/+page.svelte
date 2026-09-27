@@ -1,5 +1,6 @@
 <script lang="ts">
 import { APP_NAME } from '@gbd/core';
+import PublicHeader from '$lib/components/public-header.svelte';
 import { Button } from '$lib/components/ui/button/index.js';
 
 const steps = [
@@ -29,12 +30,11 @@ const steps = [
 <!-- The marketing page, and the only path `static/robots.txt` lets a crawler have. The copy is our
      draft; GBD comms will supply the real language and design (REQUIREMENTS.md § Landing page). -->
 <div class="flex min-h-svh flex-col">
-  <header class="border-b">
-    <div class="mx-auto flex w-full max-w-4xl items-center gap-3 px-6 py-3 sm:px-8">
-      <span class="text-sm font-medium">{APP_NAME}</span>
-      <Button href="/sign-in" variant="outline" class="ml-auto">Sign in</Button>
-    </div>
-  </header>
+  <PublicHeader>
+    {#snippet actions()}
+      <Button href="/sign-in" variant="outline">Sign in</Button>
+    {/snippet}
+  </PublicHeader>
 
   <main class="flex flex-1 flex-col">
     <section
