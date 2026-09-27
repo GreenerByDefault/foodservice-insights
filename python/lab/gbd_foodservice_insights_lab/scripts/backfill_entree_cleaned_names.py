@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import logging
 
-from gbd_foodservice_insights.categorization.cache import (
+from gbd_foodservice_insights_lab.categorization.entree_cache import (
     backfill_entree_cleaned_names,
 )
 

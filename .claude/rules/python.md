@@ -51,7 +51,8 @@ constraints, so its code carries none of the product's guarantees.
 - **Categorization runs on OpenAI, behind `LlmClient`** in `categorization/llm.py`. Pipeline
   code takes an `LlmClient`, never a provider SDK client; `OpenAiLlmClient` is where a provider
   swap happens.
-- **GBD prefers Gemini for new LLM work.** Entree detection (serving data) already uses it.
+- **GBD prefers Gemini for new LLM work**, but only the lab calls it — entree detection and
+  extraction. Ruff bans `google.genai` from product code.
 - **Tests use `testing.KeywordLlmClient`**, never the network.
 
 ## Style

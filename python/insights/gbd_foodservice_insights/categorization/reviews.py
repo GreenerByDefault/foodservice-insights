@@ -2,63 +2,12 @@
 Categorization Review Tables
 ==============================
 
-Human-review table construction for both main categorization
-and entree classification.
+Human-review table construction for AI categorizations.
 """
 
 from __future__ import annotations
 
 import pandas as pd
-
-
-def build_entree_human_review_table(
-    original_df: pd.DataFrame,
-    unique_products_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Build a product-level human-review table for newly LLM-classified entree rows.
-    """
-    required_original_cols = {"product"}
-    required_unique_cols = {
-        "product",
-        "category",
-        "entree_classification",
-        "previously_entree_classified",
-    }
-
-    missing_original = required_original_cols - set(original_df.columns)
-    if missing_original:
-        raise ValueError(f"original_df missing required columns: {sorted(missing_original)}")
-
-    missing_unique = required_unique_cols - set(unique_products_df.columns)
-    if missing_unique:
-        raise ValueError(f"unique_products_df missing required columns: {sorted(missing_unique)}")
-
-    product_counts = (
-        original_df["product"]
-        .value_counts()
-        .rename("occurrence_count")
-        .to_frame()
-        .reset_index()
-        .rename(columns={"index": "product"})
-    )
-
-    llm_only = unique_products_df.loc[
-        (~unique_products_df["previously_entree_classified"].fillna(False))
-        & unique_products_df["entree_classification"].notna(),
-        ["entree_classification", "product", "category"],
-    ].copy()
-
-    review_df = llm_only.merge(product_counts, on="product", how="left")
-    review_df["occurrence_count"] = review_df["occurrence_count"].fillna(0).astype(int)
-
-    review_df = review_df[["entree_classification", "product", "category", "occurrence_count"]]
-    review_df = review_df.sort_values(
-        by=["entree_classification", "occurrence_count", "product"],
-        ascending=[True, False, True],
-    ).reset_index(drop=True)
-
-    return review_df
 
 
 def build_ai_review_table(

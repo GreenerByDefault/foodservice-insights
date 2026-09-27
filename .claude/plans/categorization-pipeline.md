@@ -9,9 +9,9 @@ the 80% cut. `analyze()` composes the two stages itself. An audit of the ported 
 September 2026 found that the step meant to rescue near-miss model answers is dead, that the
 prompt coaches the model toward answers the pipeline then drops, that the product re-parses
 input the seam already parsed, and that every LLM call runs serially.
-`entree-detection-to-lab.md` PR 1 moves `categorize_spreadsheet_to_csvs` to the lab and
-`categorization-cache.md` PR 5 replaces the cache this path reads, so the PRs here are sequenced
-around them.
+`categorize_spreadsheet_to_csvs` now lives in the lab
+(`gbd_foodservice_insights_lab/categorization/spreadsheet.py`). `categorization-cache.md` PR 5
+replaces the cache this path reads, so the PRs here are sequenced around it.
 
 Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
@@ -63,8 +63,7 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
   `"No Matches Found"`, and the list is one category per line.
 - **`categorize_unique_products` parses nothing.** It requires a `datetime64` `date` column and
   a float `weight` column and raises `ValueError` otherwise; `date_format` goes. The lab's
-  `categorize_spreadsheet_to_csvs` (moving to the lab in `entree-detection-to-lab.md` PR 2) parses
-  messy input before calling it. *Rejected: passing `max_future_days` through from `analyze()`* —
+  `categorize_spreadsheet_to_csvs` parses messy input before calling it. *Rejected: passing `max_future_days` through from `analyze()`* —
   it keeps a second copy of a web rule in the library.
 - **`validate="many_to_one"` on the merge-back**, the b531ca1 lesson.
 - **Two test clients, both in `testing.py`.** `KeywordLlmClient` honours `categories` (returns
@@ -109,7 +108,7 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
 ## PR 3 — typed input, guarded merge
 
-- After `entree-detection-to-lab.md` PR 1. `categorize_unique_products` asserts dtypes and
+- `categorize_unique_products` asserts dtypes and
   drops the parsing parameters, `check_GBD_categories` call and the dead NaN check; the lab's
   `categorize_spreadsheet_to_csvs` calls `parse_and_validate_date_column` and
   `clean_weight_column` itself.
@@ -140,5 +139,5 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 - The prompt rewrite changes categorizations on real data; the runscript diff is the check.
 - Rate limits: with N threads a 429 storm costs N × 5 attempts before `upstream_api`; start
   with a small constant.
-- Conflicts: `entree-detection-to-lab.md` PR 1 and `categorization-cache.md` PR 5 edit the same
-  functions; whichever lands second rebases.
+- Conflicts: `categorization-cache.md` PR 5 edits the same functions; whichever lands second
+  rebases.

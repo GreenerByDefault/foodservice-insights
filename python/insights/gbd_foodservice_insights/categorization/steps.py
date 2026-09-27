@@ -17,9 +17,9 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
-    _normalize_product_name,
     build_cleaned_name_reuse_index,
     get_previously_categorized_items,
+    normalize_product_name,
 )
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.errors import UnusableDataError
@@ -187,7 +187,7 @@ def categorize_using_cleaned_name_history(
         return products_df
 
     candidates = products_df.loc[mask_uncategorized]
-    normalized = candidates["cleaned_item_names"].map(_normalize_product_name)
+    normalized = candidates["cleaned_item_names"].map(normalize_product_name)
     reused_category = normalized.map(reuse_index)
     hit_index = reused_category.dropna().index
 

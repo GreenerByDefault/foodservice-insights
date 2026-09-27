@@ -450,7 +450,6 @@ name = "gbd-foodservice-insights"
 version = "0.0.0"
 source = { editable = "python/insights" }
 dependencies = [
-    { name = "google-genai" },
     { name = "levenshtein" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -468,7 +467,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "google-genai", specifier = ">=1.62,<2" },
     { name = "levenshtein", specifier = ">=0.27,<1" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "numpy", specifier = ">=2.2,<3" },

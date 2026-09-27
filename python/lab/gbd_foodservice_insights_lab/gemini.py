@@ -1,8 +1,9 @@
 """
-The Gemini model registry and call wrapper, for serving-mode entree detection and the lab.
+The Gemini model registry and call wrapper, for the lab's entree detection and extraction.
 
-Prompt text lives in `llm_prompts`; categorization's OpenAI calls live in `categorization.llm`;
-the lab builds its provider clients with `notebook_runscript_setup.setup_api_clients`.
+The product never calls Gemini: its categorization runs on OpenAI, in
+`gbd_foodservice_insights.categorization.llm`. Provider clients are built with
+`notebook_runscript_setup.setup_api_clients`.
 """
 
 import json
@@ -11,7 +12,7 @@ from typing import Any
 
 from google.genai import types
 
-from gbd_foodservice_insights import PACKAGE_DIR
+from gbd_foodservice_insights_lab import PACKAGE_DIR
 
 GEMINI_MODEL_CONFIG_PATH = PACKAGE_DIR / "data_files" / "gemini_models.json"
 DEFAULT_GEMINI_FLASH_MODEL_KEY = "utils.call_gemini_api_default"

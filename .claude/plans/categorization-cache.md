@@ -193,7 +193,8 @@ Both halves + `contract/` together, per `contract/README.md`.
 
 ## PR 5 — library: consume the seam rows, drop the packaged CSV
 
-- `categorization/cache.py` keeps only `_normalize_product_name`, `_unanimous_index`,
+- `categorization/cache.py` keeps only `normalize_product_name`, `unanimous_index` (the lab's
+  `entree_cache.py` imports both),
   `build_cleaned_name_reuse_index(historical) -> dict[str, str]`. Deleted: the loader and path
   helper (and the `.gitignore` entry), `save_historical_categorizations`, the unreviewed-web-app
   cache functions, both `promote_*`, `_validate_cache_write_mode`/`cache_write_mode`.
@@ -204,9 +205,11 @@ Both halves + `contract/` together, per `contract/README.md`.
   `get_GBD_categories()` + `"No Matches Found"` are dropped with a warning and counted in
   `metadata` — a reviewer's typo in Studio must not fail every run. `new_categorizations` moves
   from `metadata` into `AnalysisOutcome.new_categorizations` via `rows_from_review_table(ai_review_df)`.
-- `categorize_spreadsheet_to_csvs` (notebook I/O wrapper) → lab
-  `categorize_spreadsheet_to_csvs.py`. GBD's "categorize → review → save to cache" notebook flow
-  becomes a lab tool that emits rows for the import script; noted, not designed here.
+- The lab still reads the packaged CSV: `categorize_spreadsheet_to_csvs`
+  (`categorization/spreadsheet.py`) through `categorize_unique_products`, and
+  `entree_cache.backfill_entree_cleaned_names` through `get_previously_categorized_items`, so the
+  loader moves to the lab rather than being deleted. GBD's "categorize → review → save to cache"
+  notebook flow becomes a lab tool that emits rows for the import script; noted, not designed here.
 - Tests: delete the write/promote/web-app tests in `tests/categorization/test_cache.py`; keep
   `normalize_product_name` and the reuse-index tests; new `test_frame_from_rows`,
   `test_unknown_category_is_dropped_and_counted`; `test_analysis` cache-hit test now passes rows

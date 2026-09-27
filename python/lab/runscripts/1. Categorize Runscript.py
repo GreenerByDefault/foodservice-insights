@@ -4,7 +4,7 @@ Categorization CLI Script
 =========================
 
 Thin CLI entrypoint around
-gbd_foodservice_insights.categorization.pipeline.categorize_spreadsheet_to_csvs().
+gbd_foodservice_insights_lab.categorization.spreadsheet.categorize_spreadsheet_to_csvs().
 
 Usage:
     python "1. Categorize Runscript.py" --input data.csv --analysis-context baseline
@@ -19,7 +19,7 @@ from typing import Literal
 
 from dotenv import find_dotenv, load_dotenv
 from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
-from gbd_foodservice_insights.categorization.pipeline import categorize_spreadsheet_to_csvs
+from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     setup_api_clients,
     update_metadata_with_categorization_stats,

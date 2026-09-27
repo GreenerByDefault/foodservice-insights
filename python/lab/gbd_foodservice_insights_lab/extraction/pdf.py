@@ -39,7 +39,6 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from gbd_foodservice_insights.gemini import get_gemini_model
 from gbd_foodservice_insights.plotting_utils import GBD_colors
 from matplotlib.ticker import MaxNLocator
 from PyPDF2 import PdfReader
@@ -55,6 +54,7 @@ from gbd_foodservice_insights_lab.extraction.llm import (
 from gbd_foodservice_insights_lab.extraction.llm import (
     extract_pdf_text_whisper_with_metadata as shared_extract_pdf_text_whisper_with_metadata,
 )
+from gbd_foodservice_insights_lab.gemini import get_gemini_model
 from gbd_foodservice_insights_lab.llm_prompts import load_prompt
 from gbd_foodservice_insights_lab.notebook_utils import get_head_and_tail
 
