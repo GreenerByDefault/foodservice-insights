@@ -60,8 +60,8 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 - **The prompt names categories exactly**: every rule uses the YAML name, the no-match answer is
   `"No Matches Found"`, and the list is one category per line.
 - **`categorize_unique_products` parses nothing.** It requires a `datetime64` `date` column and
-  a float `weight` column and raises `ValueError` otherwise; `date_format` goes.
-  The lab's `categorize_file` (moving to the lab in `entree-detection-to-lab.md` PR 2) parses
+  a float `weight` column and raises `ValueError` otherwise; `date_format` goes. The lab's
+  `categorize_spreadsheet_to_csvs` (moving to the lab in `entree-detection-to-lab.md` PR 2) parses
   messy input before calling it. *Rejected: passing `max_future_days` through from `analyze()`* —
   it keeps a second copy of a web rule in the library.
 - **`validate="many_to_one"` on the merge-back**, the b531ca1 lesson.
@@ -107,7 +107,8 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
 - After `entree-detection-to-lab.md` PR 1. `categorize_unique_products` asserts dtypes and
   drops the parsing parameters, `check_GBD_categories` call and the dead NaN check; the lab's
-  `categorize_file` calls `parse_and_validate_date_column` and `clean_weight_column` itself.
+  `categorize_spreadsheet_to_csvs` calls `parse_and_validate_date_column` and
+  `clean_weight_column` itself.
 - `merge_categorizations` gets `validate="many_to_one"`.
 - Tests: `test_pipeline.py` hands typed frames; a `str` date column is rejected; a duplicate
   product in `categorized_products_df` raises; lab `test_runscript.py` unchanged.

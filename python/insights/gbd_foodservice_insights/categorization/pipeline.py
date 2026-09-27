@@ -4,10 +4,11 @@ Food Product Categorization — Orchestrator
 
 Public entry points for categorization:
 
-    categorize_unique_products() — clean the input and categorize each unique product
-    categorize_rows()            — the above, merged back onto the input rows
-    categorize_file()            — file I/O wrapper, which also runs serving data's
-                                   entree detection
+    categorize_unique_products()     — clean the input and categorize each unique product
+    categorize_rows()                — the above, merged back onto the input rows
+    categorize_spreadsheet_to_csvs() — read a CSV or Excel file and write the categorized
+                                       rows and the human-review sheets as CSVs; also runs
+                                       serving data's entree detection
 
 All helper logic lives in sibling modules:
 
@@ -227,7 +228,7 @@ def categorize_rows(
 # ----------------------------------------------------------------------
 # File I/O wrapper
 # ----------------------------------------------------------------------
-def categorize_file(
+def categorize_spreadsheet_to_csvs(
     input_filepath: str | Path,
     llm: LlmClient,
     output_filepath: str | Path | None = None,

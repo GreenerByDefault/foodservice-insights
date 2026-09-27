@@ -3,7 +3,8 @@
 Categorization CLI Script
 =========================
 
-Thin CLI entrypoint around gbd_foodservice_insights.categorization.pipeline.categorize_file().
+Thin CLI entrypoint around
+gbd_foodservice_insights.categorization.pipeline.categorize_spreadsheet_to_csvs().
 
 Usage:
     python "1. Categorize Runscript.py" --input data.csv --analysis-context baseline
@@ -18,7 +19,7 @@ from typing import Literal
 
 from dotenv import find_dotenv, load_dotenv
 from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
-from gbd_foodservice_insights.categorization.pipeline import categorize_file
+from gbd_foodservice_insights.categorization.pipeline import categorize_spreadsheet_to_csvs
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     setup_api_clients,
     update_metadata_with_categorization_stats,
@@ -41,7 +42,7 @@ def main() -> None:
     """Run the categorization CLI for procurement or serving data.
 
     Parses command-line arguments, sets up logging and API clients, calls
-    ``categorize_file`` to assign GBD categories to every line item, and
+    ``categorize_spreadsheet_to_csvs`` to assign GBD categories to every line item, and
     persists categorization statistics back into ``client_metadata.json``.
     """
     parser = argparse.ArgumentParser(
@@ -89,10 +90,10 @@ def main() -> None:
     cache_write_mode = ANALYSIS_CONTEXT_TO_CACHE_WRITE_MODE[args.analysis_context]
     logger.info("Category cache write mode: %s", cache_write_mode)
 
-    # Basically, all the functionality in this script is nested inside the `categorize_file`
-    # function because it separates "CLI stuff"
+    # Basically, all the functionality in this script is nested inside the
+    # `categorize_spreadsheet_to_csvs` function because it separates "CLI stuff"
     # e.g. this allows for unit testing without having to fake CLI arguments.
-    _df, summary = categorize_file(
+    _df, summary = categorize_spreadsheet_to_csvs(
         input_filepath=args.input,
         output_filepath=args.output,
         data_type=args.data_type,

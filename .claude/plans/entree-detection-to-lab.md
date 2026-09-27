@@ -12,11 +12,12 @@ child's env allowlist.
 The categorization entry point has already been decomposed so the move is mechanical. Steps 1–4,
 the AI review table and the category-cache write are `categorize_unique_products` in
 `categorization/pipeline.py`, which returns a frozen `CategorizedProducts` (the cleaned input,
-`unique_products_df`, `ai_review_df`, `match_type_counts`). `categorize_rows` is that followed
-by `merge_categorizations`, which takes only the cleaned input and the unique products and
-derives its own before-counts. The whole serving branch — `run_entree_detector`, the entree
-review table, the entree-cache write and the post-merge filter `filter_to_entrees` — lives in
-`categorize_file`, the one product function that still takes `data_type` and `gemini_client`.
+`unique_products_df`, `ai_review_df`, `match_type_counts`). `categorize_rows` is that followed by
+`merge_categorizations`, which takes only the cleaned input and the unique products and derives
+its own before-counts. The whole serving branch — `run_entree_detector`, the entree review table,
+the entree-cache write and the post-merge filter `filter_to_entrees` — lives in
+`categorize_spreadsheet_to_csvs`, the one product function that still takes `data_type` and
+`gemini_client`.
 
 Serving mode is two different things, and only one of them moves:
 
@@ -39,7 +40,7 @@ Why move it:
 - It removes a second LLM provider, and a second retry loop (`_call_gemini_with_retry`), from a
   product whose rule is "`OpenAiLlmClient` is the one retry layer".
 - It removes the last `data_type` / `gemini_client: Any` branching from the product, in
-  `categorize_file`.
+  `categorize_spreadsheet_to_csvs`.
 
 If the web app ever supports serving data, entree detection would be rewritten against
 `LlmClient` rather than moved back as is.
@@ -50,27 +51,29 @@ If the web app ever supports serving data, entree detection would be rewritten a
   only the lab uses them (`extraction/llm.py`, `extraction/pdf.py`, `experiments/`), and most
   keys in the JSON are lab keys. `test_gemini.py` and the `mock_gemini_client` fixture move with
   them. The lab already lists `google-genai` as a dependency.
-- **`categorize_file` moves to the lab.** Its only callers are the lab's categorize runscript
-  and the tests, and it is where the serving orchestration sits. This follows the precedent
-  `run_food_report` set when it moved: the lab owns the file-reading wrapper. The product keeps
-  `categorize_unique_products`, `CategorizedProducts` and `categorize_rows`, and the lab's
-  `categorize_file` composes them with `merge_categorizations` exactly as it does today.
-- **Open: delete `categorize_rows` instead of keeping it.** It is four lines —
+- **`categorize_spreadsheet_to_csvs` moves to the lab.** Its only callers are the lab's categorize
+  runscript and the tests, and it is where the serving orchestration sits. This follows the
+  precedent `run_food_report` set when it moved: the lab owns the file-reading wrapper. The
+  product keeps `categorize_unique_products`, `CategorizedProducts` and `merge_categorizations`,
+  and the lab's `categorize_spreadsheet_to_csvs` composes them exactly as it does today.
+- **Delete `categorize_rows`; `analyze()` calls the two stages itself.** It is four lines —
   `categorize_unique_products`, `merge_categorizations`, `counts.to_summary()`, attach
-  `match_type_counts` — and `categorize_file` repeats them. Its one product caller, `analyze()`,
-  keeps `df_final` and discards the summary and `ai_review_df`. Decide before or alongside PR 1,
-  since PR 1 is what leaves `categorize_rows` as the product's only row-level entry point.
-  - For deleting: `analyze()` calls the two stages itself, and the product loses a public name
-    and the duplication with `categorize_file`. Most `test_pipeline.py` tests of
-    `categorize_rows` (cache write mode, date and weight cleaning, cleaned-name reuse) exercise
-    stage 1 only and would retarget to `categorize_unique_products`.
-  - For keeping: `categorization-cache.md` PR 5 routes `ai_review_df` through `analyze()` into
-    `AnalysisOutcome.new_categorizations`, and `analysis.py`'s module docstring wants the
-    summary in `AnalysisOutcome` too. Then `analyze()` needs all three outputs, which is what
-    the wrapper bundles.
-  - Worth weighing alongside: whether `analyze()` would rather read `CategorizedProducts` and
-    `MergeCounts` directly than the untyped `summary` dict. That argues for deleting even if
-    `analyze()` grows the outputs.
+  `match_type_counts` — with one caller, `analyze()`. `categorize_spreadsheet_to_csvs` cannot
+  use it, because serving puts `filter_to_entrees` between the merge and `to_summary()`, so once
+  that function moves to the lab nothing else ever will.
+  - `categorization-cache.md` PR 5 makes `analyze()` want more than `df_final`: `ai_review_df`
+    for `AnalysisOutcome.new_categorizations`, and maybe the counts for metadata. That argues
+    *for* deleting. `CategorizedProducts` and `MergeCounts` hand those over typed and named,
+    where the wrapper returns an untyped 3-tuple and a string-keyed dict. PR 5 also changes
+    `categorize_unique_products`' signature (`historical_categorizations` required,
+    `cache_write_mode` gone), which the wrapper would have to mirror.
+  - The one thing the wrapper protects: `merge_categorizations` must get
+    `categorized.cleaned_df`, not the raw input, or product/date/weight cleaning is silently
+    skipped. With two call sites that is not worth a type; `test_analysis.py`'s
+    categorized-rows test catches it end to end.
+  - *Rejected: keeping it as a notebook convenience.* `python/lab/test_data/README.md`'s two
+    snippets are its only other mention, and they already fail — `validated_data.csv` has
+    `weight_lbs`, not `weight`. A one-call helper for notebooks would belong in the lab anyway.
 - **The cache helpers that both caches share become public in the product**:
   `_normalize_product_name`, `_first_non_empty_value` and `_unanimous_index`, all in `cache.py`.
   The lab's entree cache imports them. *Rejected: copying them into the lab, because two copies
@@ -90,14 +93,40 @@ If the web app ever supports serving data, entree detection would be rewritten a
   import of Gemini: the workspace venv installs every member's dependencies, so product tests
   would still pass.
 
+## PR: delete `categorize_rows`
+
+Independent of the move below; either can land first. If the move lands first, the lab's
+`categorize_spreadsheet_to_csvs` is already off `categorize_rows`, so nothing there changes.
+
+- `analyze()`: call `categorize_unique_products(...)` and then
+  `merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)`, keeping
+  `df_final`. Don't grow `AnalysisOutcome` here; that is `categorization-cache.md` PR 5.
+- `analysis.py` module docstring, § structured result metadata: point at `CategorizedProducts`
+  (`match_type_counts`) and `MergeCounts` instead of `categorize_rows`' `summary` dict.
+- `pipeline.py`: delete `categorize_rows`, its line in the module docstring, and the
+  "same as categorize_rows" in `categorize_spreadsheet_to_csvs`' Returns.
+- `python/lab/test_data/README.md`, the Step 3 snippets (§ 3 Usage and § Test Step 3): rewrite
+  as the two calls, renaming `weight_lbs` to `weight` so they run.
+
+**Testing:** retarget the `categorize_rows` tests in `test_pipeline.py` to
+`categorize_unique_products`. None of them depend on the merge:
+
+- The required-column, date-NaN and weight-NaN tests: just the function name.
+- `test_categorize_rows_cache_write_mode_controls_destination`: drop the
+  `merge_categorizations` patch. `categorization-cache.md` PR 5 deletes it anyway.
+- `test_categorize_rows_reuses_cleaned_names_and_skips_llm`: read `match_type_counts` and
+  `ai_review_df` off `CategorizedProducts`; check categories on `unique_products_df`.
+
+`test_analysis.py` covers the composition in `analyze()` as it stands.
+
 ## PR 1: move entree detection to the lab
 
 - Move `entrees.py`, the entree half of `cache.py`, `build_entree_human_review_table`,
-  `gemini.py`, `categorize_file` (with its serving orchestration) and `entree_detector_prompt.md`
-  into `gbd_foodservice_insights_lab`. Prompts load through the lab's `llm_prompts.py`.
-  `previously_classified_entrees.csv` resolves under the lab's `data_files/`: move its line from
-  the product's `data_files/README.md` to the lab's. Update `pipeline.py`'s module docstring,
-  which still lists `categorize_file` and `entrees.py`.
+  `gemini.py`, `categorize_spreadsheet_to_csvs` (with its serving orchestration) and
+  `entree_detector_prompt.md` into `gbd_foodservice_insights_lab`. Prompts load through the lab's
+  `llm_prompts.py`. `previously_classified_entrees.csv` resolves under the lab's `data_files/`:
+  move its line from the product's `data_files/README.md` to the lab's. Update `pipeline.py`'s
+  module docstring, which still lists `categorize_spreadsheet_to_csvs` and `entrees.py`.
 - Delete `classify_entree`. Make the shared cache helpers public.
 - Point the lab's imports at their new homes: the categorize runscript,
   `scripts/backfill_entree_cleaned_names.py`, `extraction/llm.py`, `extraction/pdf.py` and
@@ -106,8 +135,8 @@ If the web app ever supports serving data, entree detection would be rewritten a
   fix the `gemini.py` docstring's claim about who uses it.
 - Worth doing while it moves: `run_entree_detector` writes its review sheet to
   `classified_products_with_entree.csv` in the working directory by default, and
-  `categorize_file` never overrides it. Writing it next to the other review CSVs would let
-  `test_serving.py` drop its `monkeypatch.chdir`.
+  `categorize_spreadsheet_to_csvs` never overrides it. Writing it next to the other review CSVs
+  would let `test_serving.py` drop its `monkeypatch.chdir`.
 
 **Testing:**
 
@@ -119,9 +148,10 @@ If the web app ever supports serving data, entree detection would be rewritten a
   by patching `cache._historical_cache_path`, `cache._web_app_unreviewed_cache_path` and
   `cache.get_previously_classified_entrees_location`, and patches `entrees.call_gemini_api`; only
   those targets change.
-- `test_runscript.py` already fakes `categorize_file`. Update the monkeypatch target to the
-  module's new name.
-- `test_pipeline.py::test_categorize_file_writes_human_review_csv` moves with `categorize_file`.
+- `test_runscript.py` already fakes `categorize_spreadsheet_to_csvs`. Update the monkeypatch
+  target to the module's new name.
+- `test_pipeline.py::test_categorize_spreadsheet_to_csvs_writes_human_review_csv` moves with
+  `categorize_spreadsheet_to_csvs`.
 - Add a test that `uv sync --package worker-child` resolves without `google-genai`: assert it is
   absent from `uv tree --package gbd-foodservice-insights`. **Open:** is this worth a test,
   given the ruff ban already stops the import? A lockfile check catches the dependency coming

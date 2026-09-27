@@ -25,8 +25,8 @@ What the map found:
   (three `print` calls between them, and they mutate their input) and
   `get_plant_based_dairy_categories` have no callers; `get_dairy_categories` and
   `clean_GBD_category_name` are lab-only. `utils.py`: `remove_file` has no callers;
-  `get_default_output_file` follows `categorize_file` to the lab; `rel_path` shortens two log
-  lines.
+  `get_default_output_file` follows `categorize_spreadsheet_to_csvs` to the lab; `rel_path`
+  shortens two log lines.
 - `report/schema.py`: `validate_report_mode` has no callers; `REQUIRED_NON_NULL_COLUMNS_BY_MODE`
   equals `REQUIRED_COLUMNS_BY_MODE`; `normalize_report_mode`'s `"serv" in text`
   heuristic is folder-name parsing the split plan gives to the lab.

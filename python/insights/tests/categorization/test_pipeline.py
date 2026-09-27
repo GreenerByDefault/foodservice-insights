@@ -5,8 +5,8 @@ import pytest
 from gbd_foodservice_insights.categorization import cache, pipeline, steps
 from gbd_foodservice_insights.categorization.pipeline import (
     CategorizedProducts,
-    categorize_file,
     categorize_rows,
+    categorize_spreadsheet_to_csvs,
 )
 from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
@@ -146,7 +146,7 @@ def test_categorize_rows_raises_when_weight_cleaning_leaves_missing_values():
         )
 
 
-def test_categorize_file_writes_human_review_csv(tmp_path):
+def test_categorize_spreadsheet_to_csvs_writes_human_review_csv(tmp_path):
     input_path = tmp_path / "input.csv"
     output_path = tmp_path / "output_categorized.csv"
     input_df = pd.DataFrame(
@@ -169,7 +169,7 @@ def test_categorize_file_writes_human_review_csv(tmp_path):
     )
 
     with patch.object(pipeline, "categorize_unique_products", return_value=categorized):
-        _, result_summary = categorize_file(
+        _, result_summary = categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
             output_filepath=output_path,
             llm=KeywordLlmClient(),
@@ -186,39 +186,41 @@ def test_categorize_file_writes_human_review_csv(tmp_path):
     pd.testing.assert_frame_equal(written_review_df, human_review_df)
 
 
-def test_categorize_file_raises_for_an_unsupported_file_type(tmp_path):
+def test_categorize_spreadsheet_to_csvs_raises_for_an_unsupported_file_type(tmp_path):
     input_path = tmp_path / "input.txt"
     input_path.write_text("not real data")
 
     with pytest.raises(ValueError, match=r"Unsupported file type: \.txt"):
-        categorize_file(input_filepath=input_path, llm=KeywordLlmClient())
+        categorize_spreadsheet_to_csvs(input_filepath=input_path, llm=KeywordLlmClient())
 
 
-def test_categorize_file_raises_for_serving_data_without_a_gemini_client(tmp_path):
+def test_categorize_spreadsheet_to_csvs_raises_for_serving_data_without_a_gemini_client(tmp_path):
     input_path = tmp_path / "input.csv"
     pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]}).to_csv(
         input_path, index=False
     )
 
     with pytest.raises(ValueError, match="gemini_client is required for serving data"):
-        categorize_file(input_filepath=input_path, llm=KeywordLlmClient(), data_type="serving")
+        categorize_spreadsheet_to_csvs(
+            input_filepath=input_path, llm=KeywordLlmClient(), data_type="serving"
+        )
 
 
-def test_categorize_file_raises_for_an_invalid_data_type(tmp_path):
+def test_categorize_spreadsheet_to_csvs_raises_for_an_invalid_data_type(tmp_path):
     input_path = tmp_path / "input.csv"
     pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]}).to_csv(
         input_path, index=False
     )
 
     with pytest.raises(ValueError, match=r"Invalid data_type: 'bogus'"):
-        categorize_file(
+        categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
             llm=KeywordLlmClient(),
             data_type="bogus",  # ty: ignore[invalid-argument-type]  # Deliberately invalid data_type verifies the runtime check fires.
         )
 
 
-def test_categorize_file_reads_xlsx_input(tmp_path):
+def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
     input_path = tmp_path / "input.xlsx"
     output_path = tmp_path / "output_categorized.csv"
     input_df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.5]})
@@ -237,7 +239,7 @@ def test_categorize_file_reads_xlsx_input(tmp_path):
     with patch.object(
         pipeline, "categorize_unique_products", return_value=categorized
     ) as mock_categorize_unique_products:
-        categorize_file(
+        categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
             output_filepath=output_path,
             llm=KeywordLlmClient(),

@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache, entrees
-from gbd_foodservice_insights.categorization.pipeline import categorize_file
+from gbd_foodservice_insights.categorization.pipeline import categorize_spreadsheet_to_csvs
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
@@ -18,8 +18,9 @@ def _run_serving(
     pro_labels: dict[str, str],
     update_historical_entree_classifications: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
-    """Run `categorize_file(data_type="serving")` with every cache redirected into `tmp_path`
-    and Gemini answering from `flash_labels` / `pro_labels`, keyed by the product name."""
+    """Run `categorize_spreadsheet_to_csvs(data_type="serving")` with every cache redirected
+    into `tmp_path` and Gemini answering from `flash_labels` / `pro_labels`, keyed by the product
+    name."""
     # `run_entree_detector` writes its review sheet to the working directory.
     monkeypatch.chdir(tmp_path)
     pd.DataFrame(
@@ -51,7 +52,7 @@ def _run_serving(
             return_value=tmp_path / "entrees.csv",
         ),
     ):
-        return categorize_file(
+        return categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
             output_filepath=tmp_path / "output.csv",
             llm=KeywordLlmClient(),
@@ -62,7 +63,7 @@ def _run_serving(
         )
 
 
-def test_categorize_file_serving_end_to_end(tmp_path, monkeypatch):
+def test_serving_end_to_end(tmp_path, monkeypatch):
     df_final, summary = _run_serving(
         tmp_path,
         monkeypatch,
@@ -165,9 +166,7 @@ def test_categorize_file_serving_end_to_end(tmp_path, monkeypatch):
     )
 
 
-def test_categorize_file_serving_side_add_ons_do_not_count_toward_unusable_data(
-    tmp_path, monkeypatch
-):
+def test_serving_side_add_ons_do_not_count_toward_unusable_data(tmp_path, monkeypatch):
     """The 80% elimination check sees only uncategorized products, so a file that is mostly
     sides still produces a report."""
     sides = [
@@ -191,7 +190,7 @@ def test_categorize_file_serving_side_add_ons_do_not_count_toward_unusable_data(
     assert summary["row_elimination_details"]["rows_eliminated_non_entree"] == 5
 
 
-def test_categorize_file_serving_skips_updating_entree_history_when_disabled(tmp_path, monkeypatch):
+def test_serving_skips_updating_entree_history_when_disabled(tmp_path, monkeypatch):
     _run_serving(
         tmp_path,
         monkeypatch,
@@ -207,7 +206,7 @@ def test_categorize_file_serving_skips_updating_entree_history_when_disabled(tmp
     assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
 
 
-def test_categorize_file_serving_unusable_data_fails_before_entree_detection(tmp_path, monkeypatch):
+def test_serving_unusable_data_fails_before_entree_detection(tmp_path, monkeypatch):
     unknown = ["Paper Towels", "Dish Soap", "Napkins", "Trash Bags", "Foil Wrap"]
 
     # `flash_labels` is empty, so any Gemini call would raise KeyError instead.
@@ -225,9 +224,7 @@ def test_categorize_file_serving_unusable_data_fails_before_entree_detection(tmp
     assert not (tmp_path / "classified_products_with_entree.csv").exists()
 
 
-def test_categorize_file_serving_keeps_category_cache_when_entree_detection_fails(
-    tmp_path, monkeypatch
-):
+def test_serving_keeps_category_cache_when_entree_detection_fails(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="Unexpected entree classification"):
         _run_serving(
             tmp_path,
