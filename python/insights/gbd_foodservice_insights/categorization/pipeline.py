@@ -5,7 +5,6 @@ Food Product Categorization — Orchestrator
 Public entry points for categorization:
 
     categorize_unique_products()     — clean the input and categorize each unique product
-    categorize_rows()                — the above, merged back onto the input rows
     categorize_spreadsheet_to_csvs() — read a CSV or Excel file and write the categorized
                                        rows and the human-review sheets as CSVs; also runs
                                        serving data's entree detection
@@ -190,41 +189,6 @@ def categorize_unique_products(
     )
 
 
-def categorize_rows(
-    df: pd.DataFrame,
-    llm: LlmClient,
-    historical_categorizations: pd.DataFrame | None = None,
-    cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
-    date_format: str | None = None,
-) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
-    """
-    Give each input row its product's GBD emissions category, dropping uncategorized rows.
-
-    This is the main entry point for programmatic use (web app, scripts). Parameters are
-    those of `categorize_unique_products`.
-
-    Returns
-    -------
-    tuple[DataFrame, dict, DataFrame]
-        - Categorized DataFrame (filtered, cleaned, ready for aggregation)
-        - Summary dict with keys: n_products_before, n_products_after,
-          pct_remaining, n_rows_before, n_rows_after, row_elimination_details,
-          match_type_counts
-        - AI-only review table (excludes historically categorized products)
-    """
-    categorized = categorize_unique_products(
-        df,
-        llm,
-        historical_categorizations=historical_categorizations,
-        cache_write_mode=cache_write_mode,
-        date_format=date_format,
-    )
-    df_final, counts = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
-    summary = counts.to_summary()
-    summary["match_type_counts"] = categorized.match_type_counts
-    return df_final, summary, categorized.ai_review_df
-
-
 # ----------------------------------------------------------------------
 # File I/O wrapper
 # ----------------------------------------------------------------------
@@ -267,7 +231,8 @@ def categorize_spreadsheet_to_csvs(
     -------
     tuple[DataFrame, dict]
         - The categorized DataFrame.
-        - Summary dict (same as categorize_rows, plus output file keys).
+        - Summary dict: `MergeCounts.to_summary()`, plus `match_type_counts` and the
+          output file keys.
     """
     if data_type not in ("procurement", "serving"):
         raise ValueError(f"Invalid data_type: {data_type!r}. Must be 'procurement' or 'serving'.")

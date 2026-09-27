@@ -5,14 +5,13 @@ import pytest
 from gbd_foodservice_insights.categorization import cache, pipeline, steps
 from gbd_foodservice_insights.categorization.pipeline import (
     CategorizedProducts,
-    categorize_rows,
     categorize_spreadsheet_to_csvs,
+    categorize_unique_products,
 )
-from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
-def test_categorize_rows_cache_write_mode_controls_destination():
+def test_categorize_unique_products_cache_write_mode_controls_destination():
     df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
     unique_products = pd.DataFrame(
         {
@@ -22,16 +21,6 @@ def test_categorize_rows_cache_write_mode_controls_destination():
             "cleaned_item_names": ["apple"],
             "match_type": ["llm"],
         }
-    )
-    final_df = pd.DataFrame(
-        {"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0], "category": ["Fruit"]}
-    )
-    counts = MergeCounts(
-        n_rows_before=1,
-        n_rows_after=1,
-        n_products_before=1,
-        n_products_after=1,
-        n_rows_uncategorized=0,
     )
 
     with (
@@ -60,18 +49,13 @@ def test_categorize_rows_cache_write_mode_controls_destination():
             "build_ai_review_table",
             return_value=pd.DataFrame(),
         ),
-        patch.object(
-            pipeline,
-            "merge_categorizations",
-            return_value=(final_df, counts),
-        ),
         patch.object(pipeline, "save_historical_categorizations") as save_reviewed,
         patch.object(
             pipeline,
             "save_unreviewed_web_app_categorizations",
         ) as save_unreviewed,
     ):
-        categorize_rows(
+        categorize_unique_products(
             df=df,
             llm=KeywordLlmClient(),
             cache_write_mode="none",
@@ -79,7 +63,7 @@ def test_categorize_rows_cache_write_mode_controls_destination():
         assert save_reviewed.call_count == 0
         assert save_unreviewed.call_count == 0
 
-        categorize_rows(
+        categorize_unique_products(
             df=df,
             llm=KeywordLlmClient(),
             cache_write_mode="reviewed",
@@ -87,7 +71,7 @@ def test_categorize_rows_cache_write_mode_controls_destination():
         assert save_reviewed.call_count == 1
         assert save_unreviewed.call_count == 0
 
-        categorize_rows(
+        categorize_unique_products(
             df=df,
             llm=KeywordLlmClient(),
             cache_write_mode="web_app_unreviewed",
@@ -96,7 +80,7 @@ def test_categorize_rows_cache_write_mode_controls_destination():
         assert save_unreviewed.call_count == 1
 
         with pytest.raises(ValueError, match="Invalid cache_write_mode"):
-            categorize_rows(
+            categorize_unique_products(
                 df=df,
                 llm=KeywordLlmClient(),
                 cache_write_mode="invalid-mode",
@@ -104,15 +88,15 @@ def test_categorize_rows_cache_write_mode_controls_destination():
 
 
 @pytest.mark.parametrize("missing_column", ["product", "date", "weight"])
-def test_categorize_rows_raises_when_a_required_column_is_missing(missing_column):
+def test_categorize_unique_products_raises_when_a_required_column_is_missing(missing_column):
     columns = [c for c in ("product", "date", "weight") if c != missing_column]
     df = pd.DataFrame({col: ["x"] for col in columns})
 
     with pytest.raises(ValueError, match=f"Column '{missing_column}' not found"):
-        categorize_rows(df=df, llm=KeywordLlmClient())
+        categorize_unique_products(df=df, llm=KeywordLlmClient())
 
 
-def test_categorize_rows_raises_when_date_cleaning_leaves_missing_values():
+def test_categorize_unique_products_raises_when_date_cleaning_leaves_missing_values():
     df = pd.DataFrame({"product": ["apple"], "date": ["not a date"], "weight": [1.0]})
     parsed_df = df.copy()
     parsed_df["date"] = pd.NaT
@@ -122,13 +106,13 @@ def test_categorize_rows_raises_when_date_cleaning_leaves_missing_values():
         patch.object(pipeline, "clean_weight_column", return_value=parsed_df),
         pytest.raises(ValueError, match=r"Column 'date' contains NaN values after cleaning."),
     ):
-        categorize_rows(
+        categorize_unique_products(
             df=df,
             llm=KeywordLlmClient(),
         )
 
 
-def test_categorize_rows_raises_when_weight_cleaning_leaves_missing_values():
+def test_categorize_unique_products_raises_when_weight_cleaning_leaves_missing_values():
     df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": ["unknown"]})
     parsed_df = df.copy()
     parsed_df["date"] = pd.to_datetime(parsed_df["date"])
@@ -140,7 +124,7 @@ def test_categorize_rows_raises_when_weight_cleaning_leaves_missing_values():
         patch.object(pipeline, "clean_weight_column", return_value=cleaned_df),
         pytest.raises(ValueError, match=r"Column 'weight' contains NaN values after cleaning."),
     ):
-        categorize_rows(
+        categorize_unique_products(
             df=df,
             llm=KeywordLlmClient(),
         )
@@ -248,7 +232,7 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
     pd.testing.assert_frame_equal(mock_categorize_unique_products.call_args.kwargs["df"], input_df)
 
 
-def test_categorize_rows_reuses_cleaned_names_and_skips_llm():
+def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     df = pd.DataFrame(
         {
             "product": ["MLK WHOLE 2L", "Whole Milk Carton"],
@@ -287,7 +271,7 @@ def test_categorize_rows_reuses_cleaned_names_and_skips_llm():
         patch.object(pipeline, "check_GBD_categories"),
         patch.object(steps, "print_progress", return_value=None),
     ):
-        df_final, summary, ai_review_df = categorize_rows(
+        categorized = categorize_unique_products(
             df=df,
             llm=llm,
             historical_categorizations=historical,
@@ -296,7 +280,7 @@ def test_categorize_rows_reuses_cleaned_names_and_skips_llm():
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
     assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
-    assert summary["match_type_counts"].get("cleaned_name_history") == 2
-    assert set(df_final["category"]) == {"Dairy"}
+    assert categorized.match_type_counts.get("cleaned_name_history") == 2
+    assert set(categorized.unique_products_df["category"]) == {"Dairy"}
     # Trusted reuse -> nothing queued for human review.
-    assert ai_review_df.empty
+    assert categorized.ai_review_df.empty

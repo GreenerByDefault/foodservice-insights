@@ -2,14 +2,16 @@
 
 ## Context
 
-`categorize_rows` (`categorization/pipeline.py`) and its steps (`categorization/steps.py`)
-are the product's categorization path: exact cache match, LLM name cleaning, cleaned-name reuse,
-LLM category match, then the merge-back with the 80% cut. An audit of the ported code in
+`categorize_unique_products` (`categorization/pipeline.py`), its steps and the merge-back
+`merge_categorizations` (`categorization/steps.py`) are the product's categorization path: exact
+cache match, LLM name cleaning, cleaned-name reuse, LLM category match, then the merge-back with
+the 80% cut. `analyze()` composes the two stages itself. An audit of the ported code in
 September 2026 found that the step meant to rescue near-miss model answers is dead, that the
 prompt coaches the model toward answers the pipeline then drops, that the product re-parses
 input the seam already parsed, and that every LLM call runs serially.
-`entree-detection-to-lab.md` PR 1 splits the same function and `categorization-cache.md` PR 5
-replaces the cache it reads, so the PRs here are sequenced around them.
+`entree-detection-to-lab.md` PR 1 moves `categorize_spreadsheet_to_csvs` to the lab and
+`categorization-cache.md` PR 5 replaces the cache this path reads, so the PRs here are sequenced
+around them.
 
 Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
@@ -82,10 +84,12 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
 - `testing.py`: `ScriptedLlmClient`; `KeywordLlmClient.match_product_to_category` honours
   `categories`. `test_testing.py` pins both.
-- A characterization test in `tests/categorization/test_pipeline.py`: `categorize_rows` on an
-  inline frame with scripted answers `Cheese.`, `pork`, `"Butter"`, `Cow's Milk`, `None`, plus a
-  cache row categorized `cheese`, asserting today's output with `assert_frame_equal` (every one
-  dropped; the cache row absent from the review table). PR 2's diff of this test is the review.
+- A characterization test in `tests/categorization/test_pipeline.py`:
+  `categorize_unique_products` on an inline frame with scripted answers `Cheese.`, `pork`,
+  `"Butter"`, `Cow's Milk`, `None`, plus a cache row categorized `cheese`, asserting today's
+  `unique_products_df` and `ai_review_df` with `assert_frame_equal` (every one
+  `No Matches Found`; the cache row absent from the review table). Stop short of
+  `merge_categorizations`: with every product uncategorized, its 80% cut raises. PR 2's diff of this test is the review.
 
 ## PR 2 — accept what the model means
 
