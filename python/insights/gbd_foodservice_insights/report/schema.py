@@ -28,20 +28,6 @@ STATUS_SEVERITY: dict[DiagnosticStatus, int] = {
 }
 
 
-def normalize_report_mode(value: str | None) -> ReportMode:
-    """Normalize arbitrary procurement/serving text into a canonical mode."""
-    if value is None:
-        return "procurement"
-
-    normalized = str(value).strip().lower()
-    if normalized in VALID_REPORT_MODES:
-        return normalized
-
-    if "serv" in normalized:
-        return "serving"
-    return "procurement"
-
-
 def metric_for_mode(mode: ReportMode) -> str:
     """Return canonical total metric column for a report mode."""
     return "servings total" if mode == "serving" else "kilos_total"

@@ -19,10 +19,7 @@ from Levenshtein import distance
 from gbd_foodservice_insights import PACKAGE_DIR
 from gbd_foodservice_insights.categories import get_GBD_categories, get_meat_categories
 from gbd_foodservice_insights.report.quality import make_finding
-from gbd_foodservice_insights.report.schema import (
-    normalize_report_mode,
-    required_columns_for_mode,
-)
+from gbd_foodservice_insights.report.schema import ReportMode, required_columns_for_mode
 from gbd_foodservice_insights.report.utils import compute_month_alignment, ensure_month_year_column
 
 logger = logging.getLogger(__name__)
@@ -152,19 +149,6 @@ def resolve_diagnostic_threshold(
     if override is not None:
         return float(override)
     return get_diagnostic_threshold(diagnostic_name, threshold_name)
-
-
-def clean_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean the column names of a pandas DataFrame.
-
-    Strips whitespace, lowercases, and replaces spaces with underscores.
-    """
-    if df.columns.empty:
-        return df
-    print(f"columns before:  {list(df.columns)}")
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-    print(f"columns after:   {list(df.columns)}\n\n")
-    return df
 
 
 def _duplicate_row_status(duplicate_share: float) -> str:
@@ -2492,16 +2476,9 @@ def clean_weight_column(
     return out
 
 
-def check_required_columns(
-    df: pd.DataFrame,
-    serving: bool = False,
-    report_mode: str | None = None,
-) -> bool:
+def check_required_columns(df: pd.DataFrame, serving: bool = False) -> bool:
     """Verify that DataFrame includes required report columns."""
-    if report_mode is None:
-        report_mode = "serving" if serving else "procurement"
-
-    mode = normalize_report_mode(report_mode)
+    mode: ReportMode = "serving" if serving else "procurement"
     required = required_columns_for_mode(mode)
     missing = [column for column in required if column not in df.columns]
     return len(missing) == 0
@@ -2741,7 +2718,7 @@ def run_all_diagnostics(
             )
         )
     else:
-        mode = normalize_report_mode("serving" if serving else "procurement")
+        mode: ReportMode = "serving" if serving else "procurement"
         missing = [column for column in required_columns_for_mode(mode) if column not in df.columns]
         findings.append(
             make_finding(

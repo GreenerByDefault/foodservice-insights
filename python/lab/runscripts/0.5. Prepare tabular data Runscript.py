@@ -11,7 +11,6 @@ from dotenv import find_dotenv, load_dotenv
 ENV_PATH = find_dotenv(usecwd=True)
 load_dotenv(dotenv_path=ENV_PATH)
 
-from gbd_foodservice_insights.report.diagnostics import clean_column_names
 from gbd_foodservice_insights_lab.extraction.tabular_inspection import (
     compare_component_datasets,
     detect_component_duplicate_risk,
@@ -22,6 +21,7 @@ from gbd_foodservice_insights_lab.extraction.tabular_inspection import (
     suggest_tabular_import_settings,
 )
 from gbd_foodservice_insights_lab.extraction.tabular_io import (
+    clean_column_names,
     extract_dates_from_sheet_filenames,
     read_in_all_data_files,
 )

@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 from gbd_foodservice_insights.utils import (
-    get_default_output_file,
     print_progress,
     rel_path,
 )
@@ -36,15 +35,6 @@ class TestRelPath:
         monkeypatch.chdir(tmp_path)
 
         assert rel_path(nested_file) == Path("nested/file.csv")
-
-
-class TestDefaultOutputFile:
-    """Tests for output filename helper."""
-
-    def test_appends_suffix_before_extension(self):
-        """The helper should keep the extension and add the suffix to the stem."""
-        assert get_default_output_file("sample.csv") == "sample_categorized.csv"
-        assert get_default_output_file("sample.csv", suffix="_cleaned") == "sample_cleaned.csv"
 
 
 # ----------------------------------------------------------------------

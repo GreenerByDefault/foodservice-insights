@@ -29,21 +29,6 @@ def rel_path(p: str | Path | None) -> str | Path | None:
         return p
 
 
-def get_default_output_file(input_file: str, suffix: str = "_categorized") -> str:
-    """
-    Generate a default output file path based on the input file.
-
-    Args:
-        input_file: Path to the input file.
-        suffix: Suffix to add before the file extension.
-
-    Returns:
-        Output file path with the suffix added.
-    """
-    input_path = Path(input_file)
-    return str(input_path.with_stem(input_path.stem + suffix))
-
-
 # ----------------------------------------------------------------------
 # Progress reporting
 # ----------------------------------------------------------------------

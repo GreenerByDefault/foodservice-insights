@@ -6,7 +6,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from gbd_foodservice_insights.categories import clean_GBD_category_name
-from gbd_foodservice_insights.plotting_utils import GBD_colors
+from gbd_foodservice_insights.plotting_utils import (
+    GBD_colors,
+    add_grid,
+    format_month_labels,
+    set_title_font,
+)
 
 GBD_cmap = mcolors.ListedColormap(GBD_colors)
 
@@ -167,4 +172,128 @@ def create_category_subplot_grid(
 
     hide_unused_subplots(axes, n_categories)
 
+    return fig
+
+
+def plot_time_series_with_periods(
+    data: pd.DataFrame,
+    y_col: str,
+    y_label: str,
+    title: str,
+    figsize: tuple[int, int] = (12, 4),
+    x_col: str = "month_year",
+    period_col: str | None = "period",
+    ylim_padding_factor: float | None = 0.1,
+    marker: str = "o",
+    markersize: int = 8,
+    linewidth: int = 2,
+    x_label: str = "",
+    use_period_hue: bool = True,
+) -> plt.Figure:
+    """
+    Create a standardized time series line plot, optionally comparing baseline vs pilot periods.
+
+    This is a reusable helper for creating consistent time series plots across the codebase.
+    It handles all common formatting: period colors, legend styling, month label formatting,
+    gridlines, and axis configuration.
+
+    Supports two modes:
+    - Baseline + Pilot comparison (use_period_hue=True): Different colored lines for each period
+    - Single time series (use_period_hue=False): One line, no period grouping
+
+    Args:
+        data (pd.DataFrame): DataFrame with time series data. Must contain x_col and y_col.
+                            If use_period_hue=True, must also contain period_col.
+        y_col (str): Column name for y-axis values.
+        y_label (str): Label for y-axis.
+        title (str): Plot title.
+        figsize (Tuple[int, int], optional): Figure size. Defaults to (12, 4).
+        x_col (str, optional): Column name for x-axis (time). Defaults to "month_year".
+        period_col (Optional[str], optional): Column name for period grouping. Defaults to "period".
+                                             Ignored if use_period_hue=False.
+        ylim_padding_factor (Optional[float], optional): Y-axis padding as fraction of max value.
+                                                         If None, no ylim is set. Defaults to 0.1.
+        marker (str, optional): Marker style. Defaults to "o".
+        markersize (int, optional): Marker size. Defaults to 8.
+        linewidth (int, optional): Line width. Defaults to 2.
+        x_label (str, optional): Label for x-axis. Defaults to "" (empty string).
+        use_period_hue (bool, optional): Whether to use period column for different colored lines.
+                                        Defaults to True.
+
+    Returns:
+        plt.Figure: The matplotlib Figure object.
+
+    Examples:
+        >>> # Baseline + Pilot comparison
+        >>> fig = plot_time_series_with_periods(
+        ...     data=monthly_data,
+        ...     y_col="kilos_per_diner_meal",
+        ...     y_label="Kilos per Diner-Meal",
+        ...     title="Food Consumption Over Time"
+        ... )
+        >>>
+        >>> # Single time series (baseline only)
+        >>> fig = plot_time_series_with_periods(
+        ...     data=baseline_data,
+        ...     y_col="diner-meals",
+        ...     y_label="Number of Diner-Meals",
+        ...     title="Diner-Meal Numbers Over Time",
+        ...     use_period_hue=False
+        ... )
+    """
+    data_sorted = data.sort_values(x_col).copy()
+
+    # Convert Period objects to strings for plotting compatibility
+    if pd.api.types.is_period_dtype(data_sorted[x_col]):
+        data_sorted[x_col] = data_sorted[x_col].astype(str)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Create line plot with or without period hue
+    if use_period_hue and period_col and period_col in data_sorted.columns:
+        sns.lineplot(
+            data=data_sorted,
+            x=x_col,
+            y=y_col,
+            hue=period_col,
+            marker=marker,
+            markersize=markersize,
+            linewidth=linewidth,
+            ax=ax,
+        )
+    else:
+        # Single time series without period grouping
+        sns.lineplot(
+            data=data_sorted,
+            x=x_col,
+            y=y_col,
+            marker=marker,
+            markersize=markersize,
+            linewidth=linewidth,
+            color=GBD_colors[0] if isinstance(GBD_colors, list) and GBD_colors else None,
+            ax=ax,
+        )
+
+    ax.set_xlabel(x_label, fontsize=12)
+    ax.set_ylabel(y_label, fontsize=12)
+    set_title_font(ax, title, fontsize=14)
+
+    unique_months = sorted(data_sorted[x_col].unique())
+    formatted_labels = format_month_labels(unique_months)
+    ax.set_xticks(unique_months)
+    ax.set_xticklabels(formatted_labels, rotation=45)
+
+    if ylim_padding_factor is not None:
+        y_max = data_sorted[y_col].max()
+        ax.set_ylim(0, y_max * (1 + ylim_padding_factor))
+
+    # Apply consistent styling
+    if use_period_hue and period_col and period_col in data_sorted.columns:
+        legend = ax.legend() if hasattr(ax, "legend") else None
+        if legend is not None:
+            for text in legend.get_texts():
+                text.set_text(text.get_text().title())
+    add_grid(ax)
+
+    plt.tight_layout()
     return fig
