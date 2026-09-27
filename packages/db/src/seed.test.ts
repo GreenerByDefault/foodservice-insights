@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from './env.ts';
+import type { DatabaseExecutor } from './schema.ts';
 import {
   PLACEHOLDER_ORGANIZATION_ID,
+  PLACEHOLDER_USER_DISPLAY_NAME,
   PLACEHOLDER_USER_ID,
   seedPlaceholderIdentity,
 } from './seed.ts';
@@ -21,6 +23,40 @@ describe('seedPlaceholderIdentity', () => {
       expect(memberships).toMatchObject([
         { organizationId: PLACEHOLDER_ORGANIZATION_ID, role: 'admin' },
       ]);
+    });
+  });
+
+  describe('the display name', () => {
+    async function displayName(transaction: DatabaseExecutor): Promise<string | null> {
+      const user = await transaction
+        .selectFrom('appUser')
+        .select('displayName')
+        .where('id', '=', PLACEHOLDER_USER_ID)
+        .executeTakeFirstOrThrow();
+      return user.displayName;
+    }
+
+    test('names the user it creates', async () => {
+      await withRollback(DATABASE, async (transaction) => {
+        await seedPlaceholderIdentity(transaction);
+
+        expect(await displayName(transaction)).toBe(PLACEHOLDER_USER_DISPLAY_NAME);
+      });
+    });
+
+    test('keeps a name the user chose', async () => {
+      await withRollback(DATABASE, async (transaction) => {
+        await seedPlaceholderIdentity(transaction);
+        await transaction
+          .updateTable('appUser')
+          .set({ displayName: 'Dana Cook' })
+          .where('id', '=', PLACEHOLDER_USER_ID)
+          .execute();
+
+        await seedPlaceholderIdentity(transaction);
+
+        expect(await displayName(transaction)).toBe('Dana Cook');
+      });
     });
   });
 

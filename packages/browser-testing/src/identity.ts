@@ -24,7 +24,11 @@
 import { AUTH_COOKIE_NAME } from '@gbd/core';
 import { requireEnv } from '@gbd/core/env';
 import { type Database, initializeDatabase, shutdownDatabase, type UserId } from '@gbd/db';
-import { PLACEHOLDER_USER_EMAIL, PLACEHOLDER_USER_ID } from '@gbd/db/seed';
+import {
+  PLACEHOLDER_USER_DISPLAY_NAME,
+  PLACEHOLDER_USER_EMAIL,
+  PLACEHOLDER_USER_ID,
+} from '@gbd/db/seed';
 import { insertAppUser } from '@gbd/db/testing';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -43,6 +47,10 @@ export const GOTRUE_TEST_DOMAIN = 'gotrue.example.test';
 
 /** The address the pinned identity shows. Only the run database has it; see the file header. */
 export const PINNED_IDENTITY_EMAIL = 'sam.cook@example.test';
+
+/** Every minted user's display name, the pinned identity's included. One fixed name, so a
+ * screenshot's monogram is the same whoever the test is. */
+export const MINTED_USER_DISPLAY_NAME = 'Sam Cook';
 
 const TEST_USER_PASSWORD = 'test-user-password';
 
@@ -69,8 +77,11 @@ export async function prepareRunIdentity(
 ): Promise<void> {
   const database = initializeDatabase({ connectionString });
   try {
-    // The matching `app_user` row is written by the `on_auth_user_created` trigger, not here.
-    await database.insertInto('auth.users').values({ id: PLACEHOLDER_USER_ID, email }).execute();
+    await insertAppUser(database, {
+      id: PLACEHOLDER_USER_ID,
+      email,
+      displayName: PLACEHOLDER_USER_DISPLAY_NAME,
+    });
   } finally {
     await shutdownDatabase(database);
   }
@@ -113,7 +124,7 @@ export async function mintUser(
   const signInEmail = data.user.email;
   if (signInEmail === undefined) throw new Error('GoTrue created a user with no email');
   const email = options.email ?? signInEmail;
-  await insertAppUser(db, { id: data.user.id, email });
+  await insertAppUser(db, { id: data.user.id, email, displayName: MINTED_USER_DISPLAY_NAME });
 
   return { id: data.user.id as UserId, email, signInEmail };
 }
