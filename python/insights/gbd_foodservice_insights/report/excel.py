@@ -8,8 +8,6 @@ workbook only, which stays lean and decision-useful; the lab's QA workbook
 on top of `write_excel_workbook` below.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 

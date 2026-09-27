@@ -1,7 +1,5 @@
 """File-reading helpers for the lab's food-report wrapper."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

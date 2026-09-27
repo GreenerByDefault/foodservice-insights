@@ -4,8 +4,6 @@ This module decides what the output files are called, saves report metadata,
 writes the run manifest, and returns the final set of artifact paths.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from datetime import datetime

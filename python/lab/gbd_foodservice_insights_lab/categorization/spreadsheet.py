@@ -5,8 +5,6 @@ Composes the product's `categorize_unique_products` and `merge_categorizations` 
 `gbd_foodservice_insights.analysis` does, then, for serving data, keeps only the entree rows.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any, Literal

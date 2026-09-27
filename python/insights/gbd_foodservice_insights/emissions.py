@@ -1,7 +1,5 @@
 """Emission factor lookup and carbon metric calculations."""
 
-from __future__ import annotations
-
 from typing import Any, Literal, overload
 
 import pandas as pd

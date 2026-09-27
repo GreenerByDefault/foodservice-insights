@@ -1,7 +1,5 @@
 """Exporting food-report charts to image files, for the lab's chart bundle."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

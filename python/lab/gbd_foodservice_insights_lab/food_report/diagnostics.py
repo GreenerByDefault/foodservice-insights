@@ -1,7 +1,5 @@
 """QA-workbook-only diagnostics for the food-report bundle."""
 
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 

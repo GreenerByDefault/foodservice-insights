@@ -1,7 +1,5 @@
 """Shared schema and enums for food report generation."""
 
-from __future__ import annotations
-
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any, Literal

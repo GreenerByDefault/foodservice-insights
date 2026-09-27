@@ -1,7 +1,5 @@
 """PDF report assembly for food reports."""
 
-from __future__ import annotations
-
 import logging
 import re
 import textwrap

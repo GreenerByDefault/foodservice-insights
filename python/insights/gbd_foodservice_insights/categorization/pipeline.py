@@ -16,8 +16,6 @@ All helper logic lives in sibling modules:
     cache.py    — reviewed/unreviewed cache persistence, promotion
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from typing import Literal

@@ -5,8 +5,6 @@ Categorization Cache & Persistence
 Historical reviewed cache, unreviewed web-app cache, and promotion workflows.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from datetime import datetime

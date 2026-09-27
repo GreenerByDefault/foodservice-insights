@@ -1,7 +1,5 @@
 """All matplotlib figure generation for food reports."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Backfill cleaned_item_names in the historical entree cache from the category cache."""
 
-from __future__ import annotations
-
 import argparse
 import logging
 
