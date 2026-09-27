@@ -185,6 +185,8 @@ def _merged_rows(products: list[str]) -> pd.DataFrame:
 
 
 def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
+    # Real entrees, a side, and one product `filter_to_entrees` doesn't recognise at all
+    # (e.g. dropped upstream as uncategorized) — its classification is NA, not a label.
     counts = MergeCounts(
         n_rows_before=5,
         n_rows_after=4,
@@ -193,11 +195,11 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
         n_rows_uncategorized=1,
     )
     df_final, filtered_counts = filter_to_entrees(
-        _merged_rows(["apple", "banana", "carrot", "apple"]),
+        _merged_rows(["steak", "bread roll", "pot roast", "steak"]),
         counts,
         classified_products=pd.DataFrame(
             {
-                "product": ["apple", "banana", "carrot", "durian"],
+                "product": ["steak", "bread roll", "pot roast", "unrecognized item"],
                 "entree_classification": ["entree", "side/add-on", "entree", pd.NA],
             }
         ),
@@ -205,7 +207,7 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
 
     pd.testing.assert_frame_equal(
         df_final,
-        _merged_rows(["apple", "carrot", "apple"])
+        _merged_rows(["steak", "pot roast", "steak"])
         .set_axis([0, 2, 3])
         .assign(entree_classification="entree"),
     )
