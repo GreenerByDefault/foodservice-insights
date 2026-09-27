@@ -1,5 +1,6 @@
 <script lang="ts">
 import LogOutIcon from '@lucide/svelte/icons/log-out';
+import MailIcon from '@lucide/svelte/icons/mail';
 import UserIcon from '@lucide/svelte/icons/user';
 import UserRoundIcon from '@lucide/svelte/icons/user-round';
 import { Button } from '$lib/components/ui/button';
@@ -51,6 +52,15 @@ const monogram = $derived(initials(displayName));
         <a {...props} href="/account" class={cnChildProps(props, 'flex items-center gap-2')}>
           <UserIcon class="size-4 shrink-0" />
           Account
+        </a>
+      {/snippet}
+    </DropdownMenu.Item>
+
+    <DropdownMenu.Item class="px-3 py-2">
+      {#snippet child({ props })}
+        <a {...props} href="/invites" class={cnChildProps(props, 'flex items-center gap-2')}>
+          <MailIcon class="size-4 shrink-0" />
+          Invitations
         </a>
       {/snippet}
     </DropdownMenu.Item>

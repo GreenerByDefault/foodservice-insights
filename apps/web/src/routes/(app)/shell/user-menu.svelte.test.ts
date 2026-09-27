@@ -49,6 +49,14 @@ describe('UserMenu', () => {
       .toHaveAttribute('href', '/account');
   });
 
+  test('the open menu links Invitations to /invites', async () => {
+    const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
+
+    await expect
+      .element(screen.getByRole('menuitem', { name: 'Invitations' }))
+      .toHaveAttribute('href', '/invites');
+  });
+
   test('sign out is present but disabled', async () => {
     const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
 
