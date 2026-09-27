@@ -13,8 +13,7 @@ from worker_child.mock_llm import main
 def absent_caches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Points the categorization caches at files that do not exist, so the LLM calls made here
     do not depend on the developer's local copy of GBD's cache."""
-    monkeypatch.setattr(cache, "_historical_cache_path", lambda: tmp_path / "absent.csv")
-    monkeypatch.setattr(cache, "_web_app_unreviewed_cache_path", lambda: tmp_path / "absent.csv")
+    monkeypatch.setattr(cache, "categorization_cache_path", lambda: tmp_path / "absent.csv")
 
 
 def test_main_with_no_arguments_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:

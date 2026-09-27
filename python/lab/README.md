@@ -44,6 +44,9 @@ The categorization, entree and weight caches are handed out privately; ask GBD f
 [lab](gbd_foodservice_insights_lab/data_files/README.md). Without them everything still runs,
 with every item going to the LLM.
 
+Nothing adds to the categorization cache automatically. Once you have checked step 1's
+`_for_human_review.csv`, promote it with the cell at the end of step 0.5's runscript.
+
 ## Conventions
 
 - **Intermediate files are CSV**, never parquet — datasets are small.

@@ -40,10 +40,7 @@ def _run_serving(
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
         patch.object(entrees, "load_prompt", return_value="Prompt"),
-        patch.object(cache, "_historical_cache_path", return_value=tmp_path / "categories.csv"),
-        patch.object(
-            cache, "_web_app_unreviewed_cache_path", return_value=tmp_path / "web_app.csv"
-        ),
+        patch.object(cache, "categorization_cache_path", return_value=tmp_path / "categories.csv"),
         patch.object(
             entree_cache,
             "get_previously_classified_entrees_location",
@@ -56,7 +53,6 @@ def _run_serving(
             llm=KeywordLlmClient(),
             gemini_client=object(),
             data_type="serving",
-            cache_write_mode="reviewed",
             update_historical_entree_classifications=update_historical_entree_classifications,
         )
 
@@ -146,14 +142,7 @@ def test_serving_end_to_end(tmp_path):
         "entree,Salmon Fillet,Fish & Mollusks,1\n"
         "side/add-on,Brown Rice,Whole Grains,3\n"
     )
-    assert (tmp_path / "categories.csv").read_text() == (
-        "product,category,cleaned_item_names\n"
-        "Chicken Breast Boneless,Poultry (Chicken & Turkey),chicken breast boneless\n"
-        "Ground Beef 80/20,Beef and Buffalo Meat,ground beef\n"
-        "Brown Rice,Whole Grains,brown rice\n"
-        "Salmon Fillet,Fish & Mollusks,salmon fillet\n"
-        "Paper Towels,No Matches Found,paper towels\n"
-    )
+    assert not (tmp_path / "categories.csv").exists()
     assert (tmp_path / "entrees.csv").read_text() == (
         "product,entree_classification,cleaned_item_names\n"
         "Chicken Breast Boneless,entree,chicken breast boneless\n"
@@ -218,7 +207,7 @@ def test_serving_unusable_data_fails_before_entree_detection(tmp_path):
     assert not (tmp_path / "output_classified_with_entree.csv").exists()
 
 
-def test_serving_keeps_category_cache_when_entree_detection_fails(tmp_path):
+def test_serving_keeps_entree_cache_when_entree_detection_fails(tmp_path):
     with pytest.raises(ValueError, match="Unexpected entree classification"):
         _run_serving(
             tmp_path,
@@ -228,7 +217,4 @@ def test_serving_keeps_category_cache_when_entree_detection_fails(tmp_path):
             pro_labels={},
         )
 
-    assert (tmp_path / "categories.csv").read_text() == (
-        "product,category,cleaned_item_names\nPork Loin,Pork (pig meat),pork loin\n"
-    )
     assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"

@@ -14,7 +14,6 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
-    build_cleaned_name_reuse_index,
     get_previously_categorized_items,
     normalize_product_name,
 )
@@ -117,7 +116,7 @@ def clean_product_names(
 # ----------------------------------------------------------------------
 def categorize_using_cleaned_name_history(
     products_df: pd.DataFrame,
-    reuse_index: dict[str, str] | None = None,
+    reuse_index: dict[str, str],
 ) -> pd.DataFrame:
     """Second historical lookup: reuse categories for *cleaned* names.
 
@@ -133,12 +132,9 @@ def categorize_using_cleaned_name_history(
 
     `products_df` needs 'category', 'cleaned_item_names', 'previously_categorized' and
     'match_type', which are updated for matches. `reuse_index` maps normalized cleaned name to
-    category, and is built from the default caches when None.
+    category.
     """
     products_df = products_df.copy()
-
-    if reuse_index is None:
-        reuse_index = build_cleaned_name_reuse_index()
 
     mask_uncategorized = products_df["category"].isna()
     n_candidates = int(mask_uncategorized.sum())

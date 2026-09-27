@@ -214,7 +214,9 @@ Both halves + `contract/` together, per `contract/README.md`.
   non-cached rows, not from `ai_review_df`, because the review table carries no cleaned name and
   the harvested row must carry the LLM's cleaned name — the CSV shows what happens otherwise:
   20,008 rows where the "cleaned name" is the raw SKU, from cache hits written back with
-  `cleaned_item_names = product`.
+  `cleaned_item_names = product`. "Non-cached" is `match_type != "raw_product_history"`, not
+  `~previously_categorized`: a cleaned-name reuse hit is flagged previously categorized, but its
+  product is new and its cleaned name is the LLM's.
 - The lab still reads its CSV: `categorize_spreadsheet_to_csvs` and
   `entree_cache.backfill_entree_cleaned_names` through the moved loader. GBD's "categorize →
   review → promote" flow (`product_cache.promote_local_review_file_to_reviewed_cache`) becomes a

@@ -107,7 +107,7 @@ def test_backfill_entree_cleaned_names_borrows_from_category_cache(tmp_path):
         patch.object(
             entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
         ),
-        patch.object(cache, "_historical_cache_path", return_value=category_path),
+        patch.object(cache, "categorization_cache_path", return_value=category_path),
     ):
         summary = backfill_entree_cleaned_names()
 
