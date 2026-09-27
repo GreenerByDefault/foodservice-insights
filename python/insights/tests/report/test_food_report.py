@@ -315,38 +315,81 @@ def test_a_data_month_missing_from_the_mapping_aborts():
     with pytest.raises(QualityCheckError) as excinfo:
         _build(_rows(), diner_meal_mapping={"2024-01": 100})
 
-    assert excinfo.value.findings[-2:] == [
-        {
-            "stage": "ingestion",
-            "category": "diner_meal_alignment",
-            "status": "warning",
-            "message": "Months in data but missing in diner-meal mapping: [Period('2024-02', 'M')]",
-            "count": 1,
-        },
-        {
-            "stage": "aggregation",
-            "category": "aggregation_failed",
-            "status": "error",
-            "message": (
-                "Cannot compute per-diner metrics: missing months in diner_meal_mapping: "
-                "[Period('2024-02', 'M')]"
-            ),
-        },
-    ]
+    assert excinfo.value.findings[-1] == {
+        "stage": "aggregation",
+        "category": "aggregation_failed",
+        "status": "error",
+        "message": (
+            "Cannot compute per-diner metrics: missing months in diner_meal_mapping: "
+            "[Period('2024-02', 'M')]"
+        ),
+    }
 
 
-def test_a_mapping_month_absent_from_the_data_is_an_info_finding():
+def test_a_mapping_month_absent_from_the_data_is_one_info_finding():
     report = _build(_rows(), diner_meal_mapping={"2024-01": 100, "2024-02": 120, "2024-03": 90})
 
-    assert _findings(report, "diner_meal_alignment") == [
+    assert _findings(report, "date_alignment") == [
         {
-            "stage": "ingestion",
-            "category": "diner_meal_alignment",
+            "stage": "diagnostics",
+            "category": "date_alignment",
             "status": "info",
-            "message": "Months in diner-meal mapping but absent in data: [Period('2024-03', 'M')]",
+            "message": "Months in diner-meals but not in data: [Period('2024-03', 'M')]",
             "count": 1,
         }
     ]
+    assert _findings(report, "diner_meal_alignment") == []
+
+
+def test_a_category_bought_in_some_months_only_is_an_info_finding():
+    lamb = pd.DataFrame(
+        {
+            "date": ["2024-01-10"],
+            "product": ["Lamb Shoulder"],
+            "category": ["Lamb/mutton & goat meat"],
+            "kilos_total": [5.0],
+        }
+    )
+
+    report = _build(pd.concat([_rows(), lamb], ignore_index=True))
+
+    assert _findings(report, "missing_category_month_combos") == [
+        {
+            "stage": "diagnostics",
+            "category": "missing_category_month_combos",
+            "status": "info",
+            "message": "Missing 1 category×month combinations.",
+            "count": 1,
+            "sample_values": ["Lamb/mutton and goat meat missing during Feb 2024"],
+        }
+    ]
+
+
+def test_an_unfactored_category_files_no_new_missing_values():
+    typo = pd.DataFrame(
+        {
+            "date": ["2024-01-10"],
+            "product": ["Oat Milk"],
+            "category": ["Mlik"],
+            "kilos_total": [5.0],
+        }
+    )
+
+    report = _build(pd.concat([_rows(), typo], ignore_index=True))
+
+    assert _findings(report, "unmatched_emission_factors") == [
+        {
+            "stage": "emissions",
+            "category": "unmatched_emission_factors",
+            "status": "warning",
+            "message": (
+                "Some categories have no emission factor and produced missing emissions values."
+            ),
+            "count": 1,
+            "sample_values": ["Mlik"],
+        }
+    ]
+    assert _findings(report, "new_missing_values") == []
 
 
 def test_serving_mode_computes_no_emissions():

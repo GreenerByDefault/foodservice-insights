@@ -1424,5 +1424,5 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         ("aggregation_reconciliation", "success"),
         ("gbd_categories", "success"),
         ("gbd_categories_absent", "info"),
-        ("missing_category_month_combos", "warning"),
+        ("missing_category_month_combos", "info"),
     ]

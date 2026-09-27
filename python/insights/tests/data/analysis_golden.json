@@ -28,8 +28,8 @@
       "total_findings": 18,
       "by_status": {
         "success": 12,
-        "info": 3,
-        "warning": 3,
+        "info": 4,
+        "warning": 2,
         "error": 0
       },
       "by_stage": {
@@ -642,7 +642,7 @@
       {
         "stage": "diagnostics",
         "category": "missing_category_month_combos",
-        "status": "warning",
+        "status": "info",
         "message": "Missing 12 category×month combinations.",
         "count": 12,
         "sample_values": [
