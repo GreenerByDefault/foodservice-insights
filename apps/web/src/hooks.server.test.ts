@@ -137,17 +137,8 @@ describe('handle', () => {
       );
     });
 
-    test('is signed out in supabase mode, and logged', async () => {
-      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const event = anEvent();
-
-      await handle({ event, resolve: respond });
-
-      expect(event.locals.auth).toBeNull();
-      expect(logged).toHaveBeenCalledWith(expect.stringMatching(/no app_user row/), {
-        userId: A_USER_ID,
-      });
-      logged.mockRestore();
+    test('fails loudly in supabase mode, pointing at the database', async () => {
+      await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(/DATABASE_URL/);
     });
   });
 });

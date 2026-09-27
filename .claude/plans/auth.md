@@ -149,7 +149,7 @@ environment themselves.
 | | `placeholder` | `supabase` |
 | --- | --- | --- |
 | Who a request is | `PLACEHOLDER_USER_ID`, always | The session cookie, through `getUser()` |
-| Identified user has no `app_user` row | Throw, pointing at `pnpm seed:identity`: a setup error | Signed out + `console.error` |
+| Identified user has no `app_user` row | Throw, pointing at `pnpm seed:identity`: a setup error | Throw, pointing at `DATABASE_URL`: also a setup error |
 | Contacts Supabase Auth | Never — `PUBLIC_SUPABASE_*` need not even be set | On every request |
 | `/sign-in` | Redirects to `/orgs`, as today | The form |
 | Sign out | Hidden: there is no session to end | `signOut({ scope: 'local' })` |
@@ -190,7 +190,7 @@ instead.
 | Session validation | `auth.getUser()` per request | Catches deleted/banned users; local CLI signs HS256 so `getClaims()` gains nothing locally |
 | Unreachable GoTrue | 503 (`AuthRetryableFetchError`) | An outage is not "signed out"; mirrors `withDbErrorHandling` |
 | Invalid/stale session | Signed out, cookie cleared via `signOut({ scope: 'local' })` on the server client, no log for `user_not_found` | A deleted user's token is normal; stop re-sending a dead cookie |
-| Valid token, no `app_user` row | Signed out + `console.error` | Impossible in prod (trigger is SECURITY DEFINER and fails the insert if it fails); means a misconfigured test |
+| Valid token, no `app_user` row | Throw → 500 | The trigger writes the row in GoTrue's own transaction, so only a setup error gets here: the app reading a different database than GoTrue, users that predate the migration, or a fixture that skipped `mintUser`'s mirror. Signing out instead would loop a user who just entered a correct code back to the form |
 | Cookie name | Pinned: `AUTH_COOKIE_NAME` in `@gbd/core`, passed as `cookieOptions.name` to both clients | Default derives from the Supabase URL hostname, which differs between host (`127`) and Docker (`host`) tiers; pinning also survives project-ref changes |
 | Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`) + `secure: event.url.protocol === 'https:'` | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. SvelteKit's default `secure` would drop cookies on `http://host.docker.internal` |
 | Sign-out scope | `local` | Signs out this device; matches CFA |

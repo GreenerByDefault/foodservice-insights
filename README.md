@@ -119,8 +119,7 @@ TEST_DB=1 scripts/supabase stop
 ```
 
 First time only, set up the dev stack's database schema and blob store bucket, then seed the
-placeholder identity — the one user `PUBLIC_AUTH_MODE=placeholder`, the `.env.example` default,
-runs every request as. The app will not serve a request without it:
+placeholder user identity:
 
 ```sh
 pnpm migrate

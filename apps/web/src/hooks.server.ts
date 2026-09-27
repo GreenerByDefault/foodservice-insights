@@ -31,22 +31,14 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
 
   if (auth) return auth;
 
-  if (authMode() === 'placeholder') {
-    // The placeholder is seeded, not signed up, so a missing row means an unseeded database.
-    throw new Error(
-      `The placeholder user ${userId} has no row in the database. ` +
-        'Run `pnpm seed:identity` (or `TEST_DB=1 pnpm seed:identity`).',
-    );
-  }
-  // `on_auth_user_created` writes the row in the same transaction as the GoTrue user, so a real
-  // session cannot get here. A test that mints a GoTrue user without mirroring it can.
-  console.error(
-    'A valid Supabase session names a user with no app_user row; treating as signed out',
-    {
-      userId,
-    },
+  // A setup error in either mode, never a signed-out visitor: in `supabase` mode,
+  // `on_auth_user_created` writes the row in the same transaction as the GoTrue user.
+  throw new Error(
+    `The identified user ${userId} has no app_user row. ` +
+      (authMode() === 'placeholder'
+        ? 'Run `pnpm seed:identity` (or `TEST_DB=1 pnpm seed:identity`).'
+        : 'Is DATABASE_URL the database Supabase Auth writes to, with migrations applied?'),
   );
-  return null;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
