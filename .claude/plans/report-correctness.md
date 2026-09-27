@@ -100,7 +100,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 - A plant/animal split or plant-protein share failure is logged and the page and narrative
   sentence are dropped; a chart failure prints the Python exception on a placeholder page and
-  files a `warning` (`_safe_plot`, `plots.py`). Neither can fail a run.
+  files a `warning` (`_safe_plot`, `report/plots/report.py`). Neither can fail a run.
 - `build_food_report` catches an exception from emissions, the emissions summary or diagnostics,
   files it as an `error` finding and keeps going; the final `raise_on_error_findings` then raises
   without the cause, so the traceback is lost, and later stages run on the broken frame: an
@@ -156,7 +156,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - **Meal mode changes the prose, not the workbook columns.** Every sentence that says diners or
   people takes the basis; `kilos per diner-meal` and `kg_co2e_per_diner_meal` stay, as the
   generic name the lab already reads. *Rejected: `per_diner_metric_name` taking the basis* —
-  it renames columns across `aggregation.py`, `plots.py`, the lab and every notebook for a
+  it renames columns across `aggregation.py`, `report/plots/`, the lab and every notebook for a
   header nobody has misread.
 - **Every sentence the narrative prints is conditional on the data it describes**: no animal
   sentence at 0% animal, one month prints once, tonnes carry one decimal below 10 t.

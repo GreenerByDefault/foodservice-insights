@@ -21,13 +21,13 @@ What the map found:
   serving CSVs carry (the lab hands the whole CSV to `build_food_report`); and
   `detect_numeric_coercion_loss` looks redundant on the product path, where the metric is already
   float, but the golden file pins its finding.
-- `report/plots.py`: `generate_all_report_plots` reaches every `plot_*` function left.
+- `report/plots/`: `generate_all_report_plots` reaches every `plot_*` function left.
   `prepare_monthly_trend_data` is public because the lab's `pilot/plots.py` builds
   `plot_metric_over_time` on it, so the lab's trend numbers are the report's. `plotting_utils.py`
   is shared with five lab modules and sets the backend, the seaborn palette and the fonts at
-  import. `aggregation.py` formats percentages as strings that `plots.py` parses back. The
-  multi-panel pages are layout over public `draw_*` panel drawers that take an `Axes`; nothing
-  outside `plots.py` calls them, and that is not a reason to trim them, since they exist so a
+  import. `aggregation.py` formats percentages as strings that `figures.py` parses back. The
+  multi-panel pages are layout over the public `draw_*` drawers in `panels.py`; nothing outside
+  `report/plots/` calls them, and that is not a reason to trim them, since they exist so a
   notebook draws one panel exactly as the client sees it.
 - Tests follow the code. About a quarter of `test_diagnostics.py` targets lab-only paths: the
   `TestParseAndValidateDateColumn` string, numeric and ambiguous cases, and the meat check's two

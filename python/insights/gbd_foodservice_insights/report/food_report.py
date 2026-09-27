@@ -17,11 +17,12 @@ from matplotlib.figure import Figure
 
 from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
-from gbd_foodservice_insights.report import aggregation, diagnostics, plots
+from gbd_foodservice_insights.report import aggregation, diagnostics
 from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
     calculate_plant_protein_share,
 )
+from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import (
     QualityCheckError,
     check_required_columns,
@@ -465,7 +466,7 @@ def build_food_report(
 def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
     findings: list[Finding] = []
     with close_new_figures_on_error():
-        figures = plots.generate_all_report_plots(
+        figures = report_plots.generate_all_report_plots(
             aggregated_data=report.aggregation,
             diner_meal_mapping=report.diner_meal_mapping,
             emissions_summary=report.emissions_summary,

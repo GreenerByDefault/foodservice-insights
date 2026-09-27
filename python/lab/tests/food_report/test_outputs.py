@@ -183,7 +183,7 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
         fake_build_pdf_report,
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.plots.generate_all_report_plots",
+        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
         lambda **kwargs: [("", fig)],
     )
 
@@ -278,7 +278,7 @@ def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
         fake_build_pdf_report,
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.plots.generate_all_report_plots",
+        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
         lambda **kwargs: [],
     )
     monkeypatch.setattr(
@@ -309,7 +309,7 @@ def test_run_food_report_defaults_outputs_to_named_subdirectory(monkeypatch, foo
         fake_build_pdf_report,
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.plots.generate_all_report_plots",
+        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
         lambda **kwargs: [],
     )
 
@@ -337,7 +337,7 @@ def test_run_food_report_writes_failure_manifest_and_log(
     input_path, diner_path, _ = food_report_tmp_data
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.plots.generate_all_report_plots",
+        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("plot boom")),
     )
 
@@ -380,7 +380,7 @@ def test_run_food_report_does_not_duplicate_log_lines_across_repeated_runs(
         fake_build_pdf_report,
     )
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.plots.generate_all_report_plots",
+        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
         lambda **kwargs: [],
     )
 
