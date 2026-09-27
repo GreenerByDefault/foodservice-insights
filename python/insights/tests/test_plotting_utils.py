@@ -18,6 +18,7 @@ from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
     calculate_figure_height_for_wrapped_labels,
+    close_new_figures_on_error,
     convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -330,6 +331,27 @@ class TestCreateHorizontalPercentageBarplot:
         create_horizontal_percentage_barplot(ax, data, "product")
         assert len(ax.patches) == 3
         plt.close(fig)
+
+
+def test_close_new_figures_on_error_closes_only_the_figures_opened_in_the_block():
+    before = set(plt.get_fignums())
+    kept = plt.figure()
+
+    with pytest.raises(RuntimeError, match="boom"), close_new_figures_on_error():
+        plt.figure()
+        plt.figure()
+        raise RuntimeError("boom")
+
+    assert set(plt.get_fignums()) == before | {kept.number}
+
+
+def test_close_new_figures_on_error_leaves_figures_open_on_success():
+    before = set(plt.get_fignums())
+
+    with close_new_figures_on_error():
+        fig = plt.figure()
+
+    assert set(plt.get_fignums()) == before | {fig.number}
 
 
 # Clean up matplotlib

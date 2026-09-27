@@ -277,28 +277,28 @@ def run_food_report(
         quality_findings = list(report.findings)
 
         _log_stage("plot_generation", report_progress)
-        charts = build_report_charts(report)
-        quality_findings.extend(charts.findings)
+        with build_report_charts(report) as charts:
+            quality_findings.extend(charts.findings)
 
-        _log_stage("plot_export", report_progress)
-        graph_paths = plots.export_report_plots(
-            charts.figures,
-            artifact_paths["graphs_dir"],
-        )
+            _log_stage("plot_export", report_progress)
+            graph_paths = plots.export_report_plots(
+                charts.figures,
+                artifact_paths["graphs_dir"],
+            )
+
+            _log_stage("pdf_build", report_progress)
+            pdf.write_report_pdf(
+                report,
+                charts,
+                Path(artifact_paths["pdf_path"]),
+                client_name=metadata.get("client", input_path.parent.name),
+                baseline_pilot=metadata.get("baseline_pilot", "baseline"),
+                show_quality_successes=show_quality_successes,
+            )
 
         quality_summary = summarize_findings(quality_findings)
         quality_status = quality_status_from_findings(quality_findings)
         summary_stats = {**report.summary_stats, "Data Quality Status": quality_status.upper()}
-
-        _log_stage("pdf_build", report_progress)
-        pdf.write_report_pdf(
-            report,
-            charts,
-            Path(artifact_paths["pdf_path"]),
-            client_name=metadata.get("client", input_path.parent.name),
-            baseline_pilot=metadata.get("baseline_pilot", "baseline"),
-            show_quality_successes=show_quality_successes,
-        )
 
         _log_stage("client_workbook_build", report_progress)
         excel.write_client_workbook(report, Path(artifact_paths["client_excel_path"]))

@@ -130,15 +130,18 @@ def test_build_pdf_report_does_not_render_plot_captions(tmp_path: Path) -> None:
     page_text = "\n".join(page.extract_text() or "" for page in reader.pages)
 
     assert "This chart caption should not appear in the PDF output." not in page_text
+    plt.close(fig)
 
 
-def test_build_pdf_report_closes_all_figures_when_a_page_raises(
+def test_build_pdf_report_closes_its_own_figures_when_a_page_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output_path = tmp_path / "error-report.pdf"
+    before = set(plt.get_fignums())
     fig = plt.figure()
 
     def _boom(*_args: object, **_kwargs: object) -> None:
+        plt.figure()
         raise RuntimeError("boom")
 
     monkeypatch.setattr(pdf_module, "create_executive_summary_page", _boom)
@@ -159,7 +162,28 @@ def test_build_pdf_report_closes_all_figures_when_a_page_raises(
             missing_data_findings=[],
         )
 
-    assert plt.get_fignums() == []
+    assert set(plt.get_fignums()) == before | {fig.number}
+    plt.close(fig)
+
+
+def test_build_pdf_report_leaves_the_callers_plots_open(tmp_path: Path) -> None:
+    before = set(plt.get_fignums())
+    fig = plt.figure()
+
+    build_pdf_report(
+        output_path=str(tmp_path / "report.pdf"),
+        title_info={
+            "client": "test client",
+            "baseline_pilot": "baseline",
+            "procurement_serving": "procurement",
+        },
+        plots=[("caption", fig)],
+        tables={},
+        summary_stats={"Rows": 100},
+    )
+
+    assert set(plt.get_fignums()) == before | {fig.number}
+    plt.close(fig)
 
 
 def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:
@@ -514,7 +538,7 @@ def test_write_report_pdf_serving_has_only_the_template_table_and_no_narrative(
     assert kwargs["diner_or_meal"] == "meal"
 
 
-def test_write_report_pdf_writes_the_pdf_and_closes_the_chart_figures(tmp_path: Path) -> None:
+def test_write_report_pdf_writes_the_pdf(tmp_path: Path) -> None:
     fig = plt.figure()
     path = tmp_path / "report.pdf"
 
@@ -528,7 +552,7 @@ def test_write_report_pdf_writes_the_pdf_and_closes_the_chart_figures(tmp_path: 
     )
 
     assert len(PdfReader(str(path)).pages) > 0
-    assert plt.get_fignums() == []
+    plt.close(fig)
 
 
 # ----------------------------------------------------------------------

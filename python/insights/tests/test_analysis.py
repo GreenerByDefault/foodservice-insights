@@ -2,7 +2,8 @@ import dataclasses
 import json
 import math
 import os
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -83,8 +84,9 @@ class FakeReport:
         self.kwargs = kwargs
         return object()
 
-    def build_report_charts(self, report: object) -> object:
-        return object()
+    @contextmanager
+    def build_report_charts(self, report: object) -> Iterator[object]:
+        yield object()
 
     def write_report_pdf(self, report: object, charts: object, path: Path, **kwargs: Any) -> None:
         self.pdf_kwargs = kwargs

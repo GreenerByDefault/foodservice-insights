@@ -268,6 +268,23 @@ class TestPlotCategoryTotals:
         assert findings[-1]["category"] == "plot_generation"
         plt.close(fig)
 
+    def test_safe_plot_closes_the_figure_a_failed_plot_opened(self):
+        before = set(plt.get_fignums())
+
+        def plot_fn():
+            plt.figure()
+            raise ValueError("boom")
+
+        _caption, fig = plots._safe_plot(
+            caption="Carbon Emissions by Category",
+            plot_fn=plot_fn,
+            quality_findings=[],
+            warning_message="Could not plot emissions by category",
+        )
+
+        assert set(plt.get_fignums()) == before | {fig.number}
+        plt.close(fig)
+
 
 class TestPlotMetricOverTime:
     """Tests for plot_metric_over_time function."""
@@ -414,6 +431,49 @@ class TestPlotMetricOverTime:
         assert combined_trend_fig.axes[1].get_title() == "Kilos per Diner"
         assert len(combined_trend_fig.axes[0].lines) == 2
         assert len(combined_trend_fig.axes[1].lines) == 2
+        for _, fig in plots_output:
+            plt.close(fig)
+
+    @patch("gbd_foodservice_insights.report.plots.plot_category_drivers")
+    @patch("gbd_foodservice_insights.report.plots.get_food_categories")
+    @patch("gbd_foodservice_insights.report.plots.get_drink_categories")
+    def test_generate_all_report_plots_replaces_every_category_driver_chart_on_failure(
+        self,
+        mock_get_drink_categories,
+        mock_get_food_categories,
+        mock_plot_category_drivers,
+    ):
+        mock_get_food_categories.return_value = ["fruit"]
+        mock_get_drink_categories.return_value = []
+
+        def plot_category_drivers(*_args, **_kwargs):
+            plt.figure()
+            raise ValueError("boom")
+
+        mock_plot_category_drivers.side_effect = plot_category_drivers
+        before = set(plt.get_fignums())
+
+        plots_output = plots.generate_all_report_plots(
+            aggregated_data={
+                "monthly_category_data": pd.DataFrame(
+                    {"month_year": ["2023-01"], "category": ["fruit"], "kilos_total": [100]}
+                ),
+                "category_drivers": pd.DataFrame(
+                    {
+                        "category": ["fruit"],
+                        "product": ["apple"],
+                        "percentage": ["100.0%"],
+                        "kilos_total": [100],
+                    }
+                ),
+            },
+            diner_meal_mapping={"2023-01": 100},
+            metric_total="kilos_total",
+        )
+
+        placeholder = plots_output[-1][1]
+        assert placeholder.axes[0].texts[0].get_text() == "Top Products by Category"
+        assert set(plt.get_fignums()) - before == {fig.number for _, fig in plots_output}
         for _, fig in plots_output:
             plt.close(fig)
 

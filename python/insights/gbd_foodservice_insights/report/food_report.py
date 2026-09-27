@@ -8,14 +8,17 @@ wrapper that also writes the data scientists' bundle.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights import emissions
+from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
 from gbd_foodservice_insights.report import aggregation, diagnostics, plots
 from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
@@ -101,7 +104,7 @@ class FoodReport:
 
 @dataclass(frozen=True)
 class ReportCharts:
-    """Single use: `pdf.write_report_pdf` closes every figure."""
+    """Closed when the `build_report_charts` block exits."""
 
     figures: list[tuple[str, Figure]]
     findings: tuple[Finding, ...]
@@ -506,20 +509,26 @@ def build_food_report(
     )
 
 
-def build_report_charts(report: FoodReport) -> ReportCharts:
+@contextmanager
+def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
     findings: list[Finding] = []
-    figures = plots.generate_all_report_plots(
-        aggregated_data=report.aggregation,
-        diner_meal_mapping=report.diner_meal_mapping,
-        emissions_summary=report.emissions_summary,
-        metric_total=report.metric_total,
-        serving=(report.mode == "serving"),
-        quality_findings=findings,
-        plant_animal_split=report.plant_animal_split,
-        plant_protein_share=report.plant_protein_share,
-        diner_or_meal=report.diner_or_meal,
-    )
-    return ReportCharts(figures=figures, findings=tuple(findings))
+    with close_new_figures_on_error():
+        figures = plots.generate_all_report_plots(
+            aggregated_data=report.aggregation,
+            diner_meal_mapping=report.diner_meal_mapping,
+            emissions_summary=report.emissions_summary,
+            metric_total=report.metric_total,
+            serving=(report.mode == "serving"),
+            quality_findings=findings,
+            plant_animal_split=report.plant_animal_split,
+            plant_protein_share=report.plant_protein_share,
+            diner_or_meal=report.diner_or_meal,
+        )
+    try:
+        yield ReportCharts(figures=figures, findings=tuple(findings))
+    finally:
+        for _caption, figure in figures:
+            plt.close(figure)
 
 
 def _summary_stats(

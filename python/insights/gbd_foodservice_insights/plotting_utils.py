@@ -5,6 +5,8 @@ This module provides common plotting functions, styles, and utilities used acros
 aggregate.py and results.py to reduce code duplication and ensure consistent styling.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Literal
 
 import matplotlib
@@ -51,6 +53,20 @@ FONT_FILES = [
     "Montserrat-Regular.ttf",
     "Montserrat-Bold.ttf",
 ]
+
+
+@contextmanager
+def close_new_figures_on_error() -> Iterator[None]:
+    """On an exception, closes every pyplot figure opened inside the block, since none of them
+    reached an owner who would close it. Wrap only our own code: a caller's figure opened inside
+    the block would be closed too."""
+    before = set(plt.get_fignums())
+    try:
+        yield
+    except BaseException:
+        for number in set(plt.get_fignums()) - before:
+            plt.close(number)
+        raise
 
 
 def setup_gbd_fonts() -> None:

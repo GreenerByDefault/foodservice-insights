@@ -1,15 +1,17 @@
 from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.report import aggregation
+from gbd_foodservice_insights.report import aggregation, plots
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     _attach_monthly_category_emissions,
     _build_empty_aggregation,
     build_food_report,
+    build_report_charts,
 )
 from gbd_foodservice_insights.report.quality import QualityPolicyError
 
@@ -383,3 +385,42 @@ def test_summary_stats_names_the_emissions_factor_region(region, label):
     report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal", region=region)
 
     assert report.summary_stats["Region used for climate emissions factors"] == label
+
+
+# ----------------------------------------------------------------------
+# Tests for build_report_charts
+# ----------------------------------------------------------------------
+
+
+def test_report_charts_stay_open_until_the_block_exits():
+    before = set(plt.get_fignums())
+
+    with build_report_charts(_build(_rows())) as charts:
+        assert set(plt.get_fignums()) - before == {fig.number for _, fig in charts.figures}
+
+    assert set(plt.get_fignums()) == before
+
+
+def test_report_charts_close_when_the_block_raises():
+    before = set(plt.get_fignums())
+
+    with pytest.raises(RuntimeError, match="boom"), build_report_charts(_build(_rows())):
+        raise RuntimeError("boom")
+
+    assert set(plt.get_fignums()) == before
+
+
+def test_report_charts_close_what_was_drawn_when_generation_raises(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def generate_all_report_plots(**_kwargs: Any):
+        plt.figure()
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(plots, "generate_all_report_plots", generate_all_report_plots)
+    before = set(plt.get_fignums())
+
+    with pytest.raises(RuntimeError, match="boom"), build_report_charts(_build(_rows())):
+        pass
+
+    assert set(plt.get_fignums()) == before

@@ -53,12 +53,17 @@ makes `just test` faster.
     emissions summary, the plant splits, `diagnostics`, `findings` and `summary_stats`, which
     leaves out "Data Quality Status". It also has `metric_total`, `total_diner_meals` and
     `procurement_table(name)`, which returns the procurement-only tables or `None`.
-  - `food_report.build_report_charts(report) -> ReportCharts`: the figures, plus the findings
-    `_safe_plot` adds.
+  - `with food_report.build_report_charts(report) as charts:` yields a `ReportCharts`: the
+    figures, plus the findings `_safe_plot` adds. The block owns the figures and closes them on
+    exit, error or not; no writer closes what it is handed, so the PNG export and the PDF can
+    run in either order. A figure that never reaches an owner (a plot that failed partway, a
+    PDF page that raised) is closed by `plotting_utils.close_new_figures_on_error` around the
+    code that opened it. *Rejected: `plt.close("all")`, which in a notebook also closes the
+    data scientist's own figures; and closing in the writers, which leaks every chart when a
+    step before the PDF fails.*
   - `pdf.write_report_pdf(report, charts, path, *, client_name, baseline_pilot,
     show_quality_successes) -> None`. The PDF-table formatters and the executive narrative live
-    in `pdf.py` beside it. It still closes every figure, error or not (#331), so `ReportCharts`
-    is single-use and the lab exports its PNGs first.
+    in `pdf.py` beside it.
   - `excel.write_client_workbook(report, path) -> None`.
 - **Under `hard_fail`, an error finding raises `quality.QualityPolicyError`**, a `ValueError`
   whose `findings` is everything collected before the abort. That is how the lab's failure
@@ -73,7 +78,7 @@ makes `just test` faster.
   that plot findings arrive late: the quality status and summary, the "Data Quality Status"
   stat and the narrative's status are computed from `report.findings + charts.findings` where
   they are used. *Rejected: figures inside `FoodReport`, because every numbers-only caller would
-  render them, and the report would outlive the figures the PDF closes.*
+  render them, and the report would outlive its figures.*
 - **The product keeps what `analyze()` reaches, and the rest of the bundle moves to the lab**:
   all of `pipeline.py` (`run_food_report`, `_write_qa_workbook`,
   `_collect_diagnostic_export_sheets`, and `_resolve_input_file`, the cwd `report_input_file`
