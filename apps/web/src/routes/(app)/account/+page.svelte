@@ -10,7 +10,7 @@ let { data }: PageProps = $props();
 
 <PageHeading>Account</PageHeading>
 
-<div class="flex max-w-md flex-col gap-8">
+<div class="flex w-full max-w-md flex-col gap-8">
   <Field.Field>
     <Field.Title>Email</Field.Title>
     <p class="text-sm text-muted-foreground">{data.user.email}</p>

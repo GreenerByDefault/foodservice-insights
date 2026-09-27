@@ -14,3 +14,18 @@ test('the account page', async ({ page }) => {
 
   await expectScreenshots(page, 'account.png');
 });
+
+test('saving a name, failed', async ({ page }) => {
+  await page.route('**/api/account', (route) =>
+    route.fulfill({ status: 500, json: { message: 'Internal Error' } }),
+  );
+
+  await page.goto('/account');
+  await ensureHydrated(page);
+
+  await page.getByLabel('Your name').fill('Alex Baker');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('alert')).toContainText('not sure whether your name was saved');
+
+  await expectScreenshots(page, 'account-save-failed.png');
+});
