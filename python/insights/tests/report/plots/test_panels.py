@@ -16,6 +16,40 @@ def _texts(ax: plt.Axes) -> list[str]:
     return [text.get_text() for text in ax.texts]
 
 
+def test_prepare_monthly_trend_data_totals_by_month(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    plot_data, label = panels.prepare_monthly_trend_data(
+        fruit_and_juice_months(), "kilos_total", per_diner_meal=False, diner_meal_mapping=None
+    )
+
+    assert label == "Total Kilos"
+    assert plot_data.to_dict("list") == {"month_year": ["2023-01", "2023-02"], "value": [125, 190]}
+
+
+def test_prepare_monthly_trend_data_divides_by_diner_meals(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    plot_data, label = panels.prepare_monthly_trend_data(
+        fruit_and_juice_months(),
+        "kilos_total",
+        per_diner_meal=True,
+        diner_meal_mapping={"2023-01": 100, "2023-02": 50},
+    )
+
+    assert label == "kilos per diner-meal"
+    assert plot_data.to_dict("list") == {"month_year": ["2023-01", "2023-02"], "value": [1.25, 3.8]}
+
+
+def test_prepare_monthly_trend_data_requires_diner_meals_per_diner(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    with pytest.raises(ValueError, match="diner_meal_mapping is required"):
+        panels.prepare_monthly_trend_data(
+            fruit_and_juice_months(), "kilos_total", per_diner_meal=True, diner_meal_mapping=None
+        )
+
+
 def test_draw_food_and_drink_totals_draws_food_only_then_food_and_drink(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
@@ -26,6 +60,29 @@ def test_draw_food_and_drink_totals_draws_food_only_then_food_and_drink(
     assert ax.get_title() == "Total Kilos"
     assert [line.get_label() for line in ax.lines] == ["Food Only", "Food + Drink"]
     assert _y_values(ax) == [[100, 150], [125, 190]]
+    assert ax.get_ylim() == (0, 190 * 1.2)
+
+
+def test_draw_food_and_drink_totals_leaves_out_food_only_when_there_is_none(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    months = fruit_and_juice_months()
+    _fig, ax = plt.subplots()
+
+    panels.draw_food_and_drink_totals(ax, months[months["category"] == "juice"])
+
+    assert [line.get_label() for line in ax.lines] == ["Food + Drink"]
+    assert _y_values(ax) == [[25, 40]]
+
+
+def test_draw_food_and_drink_totals_gives_an_all_zero_trend_a_unit_axis(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    _fig, ax = plt.subplots()
+
+    panels.draw_food_and_drink_totals(ax, fruit_and_juice_months().assign(kilos_total=0))
+
+    assert ax.get_ylim() == (0, 1)
 
 
 def test_draw_food_and_drink_per_diner_divides_by_diner_meals(
@@ -45,12 +102,21 @@ def test_draw_food_and_drink_per_diner_divides_by_diner_meals(
     assert _y_values(ax) == [[1.0, 1.5], [1.25, 1.9]]
 
 
+@pytest.mark.parametrize(
+    "without_data",
+    [
+        lambda months: months.iloc[0:0],
+        lambda months: months.drop(columns="category"),
+    ],
+    ids=["no rows", "no category column"],
+)
 def test_draw_food_and_drink_totals_says_so_when_no_category_matches(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
+    without_data: Callable[[pd.DataFrame], pd.DataFrame],
 ):
     _fig, ax = plt.subplots()
 
-    panels.draw_food_and_drink_totals(ax, fruit_and_juice_months().iloc[0:0])
+    panels.draw_food_and_drink_totals(ax, without_data(fruit_and_juice_months()))
 
     assert not ax.axison
     assert _texts(ax) == ["No matching category data available."]
@@ -75,7 +141,12 @@ def test_draw_total_emissions_abbreviates_large_values(
     assert ax.get_title() == "Total Carbon Emissions Over Time"
     assert _y_values(ax) == [[2.5e6, 3012.0]]
     formatter = ax.yaxis.get_major_formatter()
-    assert [formatter(value, None) for value in (2.5e6, 3012, 12)] == ["2.5M", "3k", "12"]
+    assert [formatter(value, None) for value in (2.5e6, 1e6, 1000, 999)] == [
+        "2.5M",
+        "1.0M",
+        "1k",
+        "999",
+    ]
 
 
 def test_draw_emissions_per_diner_divides_by_diner_meals(
@@ -112,6 +183,7 @@ def test_draw_plant_protein_share_labels_both_shares():
     panels.draw_plant_protein_share(ax, {"plant_protein_pct": 55.0})
 
     assert ax.get_title() == "Plant Protein Share"
+    assert ax.get_xlabel() == "% of total kilos in protein categories"
     assert ax.get_legend_handles_labels()[1] == [
         "Plant protein (55.0%)",
         "Other protein (45.0%)",
@@ -174,6 +246,11 @@ def test_monthly_plant_drawers_plot_the_share_in_month_order(
             panels.draw_plant_share_by_month,
             {"plant_pct": 52.0},
             ["Plant-Based % by Month", "Monthly plant/animal data was not available."],
+        ),
+        (
+            panels.draw_plant_protein_share_by_month,
+            {"plant_protein_pct": 55.0, "monthly": pd.DataFrame({"month_year": ["2023-01"]})},
+            ["Plant Protein % by Month", "Monthly plant protein data was not available."],
         ),
         (
             panels.draw_plant_protein_share_by_month,
