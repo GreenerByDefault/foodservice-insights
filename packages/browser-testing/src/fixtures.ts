@@ -31,14 +31,14 @@ export type TestOrganization = {
 };
 
 /** Who a test is. See `SharedTestOptions.identity`. */
-export type IdentityOption = 'minted' | 'pinned' | 'anonymous';
+export type IdentityOption = 'onboarded' | 'pinned' | 'anonymous';
 
 export type SharedTestOptions = {
   /** Who this test's browser is signed in as. `placeholder` mode has one identity, the run's, so
    * there anything but the default throws.
    *
-   * - `minted` (the default): a GoTrue user of this test's own. Its address is unique, so a
-   *   screenshot must not render it.
+   * - `onboarded` (the default): a GoTrue user of this test's own, named
+   *   `MINTED_USER_DISPLAY_NAME`. Its address is unique, so a screenshot must not render it.
    * - `pinned`: the run's one shared identity, whose address (`PINNED_IDENTITY_EMAIL`) is fixed,
    *   for a screenshot that renders it. Shared by every test that asks, the way a pinned
    *   `orgName` is, so a spec using it must not mutate it.
@@ -62,8 +62,8 @@ export type SharedTestOptions = {
 /** More people than the one `user` a test is signed in as. `supabase` mode only: `placeholder`
  * has one identity per run. */
 export interface UserFactory {
-  /** A GoTrue user of this test's own, like `identity: 'minted'`'s. Deleted from GoTrue when the
-   * test ends. It belongs to no organization until the spec gives it one. */
+  /** A GoTrue user of this test's own, like `identity: 'onboarded'`'s. Deleted from GoTrue when
+   * the test ends. It belongs to no organization until the spec gives it one. */
   create(): Promise<MintedUser>;
 
   /** A second browser context signed in as `user`, alongside the test's own `context`. Closed
@@ -112,11 +112,11 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
     { scope: 'worker' },
   ],
 
-  identity: ['minted', { option: true }],
+  identity: ['onboarded', { option: true }],
 
   signedInAs: async ({ db, identity }, use) => {
     if (runAuthMode() === 'placeholder') {
-      if (identity !== 'minted') {
+      if (identity !== 'onboarded') {
         throw new Error(`identity: '${identity}' needs a run in supabase mode.`);
       }
       await use({ user: await readRunIdentity(db), signInEmail: null });
@@ -132,7 +132,7 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
         await use({ user, signInEmail });
         return;
       }
-      case 'minted': {
+      case 'onboarded': {
         const { signInEmail, ...user } = await mintUser(db);
         await use({ user, signInEmail });
         await deleteGoTrueUser(user.id);
