@@ -1,4 +1,4 @@
-import { insertOrganizationInvite, withRollback } from '@gbd/db/testing';
+import { DB_NOW, dbMsAgo, insertOrganizationInvite, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
 import { anOrganizationWithMembers } from '$lib/server/testing/fixtures';
@@ -12,11 +12,13 @@ describe('_loadPendingInvites', () => {
         organizationId,
         email: 'older@example.test',
         role: 'member',
+        createdAt: dbMsAgo(1000),
       });
       const newer = await insertOrganizationInvite(transaction, {
         organizationId,
         email: 'newer@example.test',
         role: 'admin',
+        createdAt: DB_NOW,
       });
 
       const rows = await _loadPendingInvites(transaction, { organizationId });

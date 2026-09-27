@@ -178,6 +178,10 @@ const INVITE_LIFETIME_INTERVAL = sql`make_interval(days => ${INVITE_LIFETIME_DAY
  * strictly before `expires_at`, and comparing in SQL against Postgres's clock — rather than the
  * process's — is the same reason `DB_NOW`/`dbMsAgo` exist: a JS-clock comparison can land on the
  * wrong side of "now" under load.
+ *
+ * Pass `createdAt` explicitly (e.g. `dbMsAgo`) whenever a test orders several invites against
+ * each other: `now()` is fixed for a whole transaction, so invites left to the default all land
+ * on the same `created_at`, and `withRollback` runs the whole test in one transaction.
  */
 export async function insertOrganizationInvite(
   database: DatabaseExecutor,
@@ -187,10 +191,17 @@ export async function insertOrganizationInvite(
     role?: OrganizationRole;
     status?: OrganizationInviteStatus;
     expiresAt?: Date | RawBuilder<Date>;
+    createdAt?: Date | RawBuilder<Date>;
     invitedByUserId?: AppUser['id'] | null;
   },
 ): Promise<OrganizationInvite> {
   const expiresAt = overrides.expiresAt ?? sql<Date>`now() + ${INVITE_LIFETIME_INTERVAL}`;
+  const createdAt =
+    overrides.createdAt ??
+    sql<Date>`CASE WHEN (${expiresAt})::timestamptz <= now()
+        THEN (${expiresAt})::timestamptz - ${INVITE_LIFETIME_INTERVAL}
+        ELSE now()
+      END`;
 
   return await database
     .insertInto('organizationInvite')
@@ -201,10 +212,7 @@ export async function insertOrganizationInvite(
       status: overrides.status ?? 'pending',
       invitedByUserId: overrides.invitedByUserId ?? null,
       expiresAt,
-      createdAt: sql<Date>`CASE WHEN (${expiresAt})::timestamptz <= now()
-        THEN (${expiresAt})::timestamptz - ${INVITE_LIFETIME_INTERVAL}
-        ELSE now()
-      END`,
+      createdAt,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

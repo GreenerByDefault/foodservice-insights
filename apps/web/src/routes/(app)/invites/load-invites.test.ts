@@ -1,4 +1,6 @@
 import {
+  DB_NOW,
+  dbMsAgo,
   insertAppUser,
   insertOrganization,
   insertOrganizationInvite,
@@ -21,12 +23,14 @@ describe('_loadInvites', () => {
         email,
         role: 'member',
         invitedByUserId: inviter.id,
+        createdAt: dbMsAgo(1000),
       });
       const newer = await insertOrganizationInvite(transaction, {
         organizationId: newerOrganization.id,
         email,
         role: 'admin',
         invitedByUserId: inviter.id,
+        createdAt: DB_NOW,
       });
 
       const offers = await _loadInvites(transaction, email.toUpperCase());

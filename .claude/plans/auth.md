@@ -387,11 +387,6 @@ minted identities:
 - **`createBrowserClient`'s cookie has no `Secure` flag** (`lib/auth/browser.ts`'s
   `cookieOptions: { name }` — `@supabase/ssr`'s default omits it). Non-Secure until the server
   hook next rotates the token. Add `secure: location.protocol === 'https:'`.
-- **Latent flake in `load-invites.test.ts` and `load-pending-invites.test.ts`**: two invites
-  inserted in `withRollback` share `now()` as `created_at`, so ordering falls to the `id`
-  tiebreaker — `uuidv7()` is only millisecond-precise with a random tail, so two inserts in the
-  same millisecond sort randomly. Give the fixture distinct `created_at`s, or sort by an
-  explicit column instead of relying on id order.
 
 ## Verification
 
