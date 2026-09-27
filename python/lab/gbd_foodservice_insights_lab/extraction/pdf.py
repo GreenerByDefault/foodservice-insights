@@ -2550,9 +2550,11 @@ def combine_extracted_pdf_pages(
     intended_columns: list[str],
     file_name: str | None = None,
 ) -> pd.DataFrame:
-    """Combine all CSV files from the 'extracted_pages' subdirectory into a single DataFrame.
+    """Combine the extracted CSVs under `data_location` into a single DataFrame.
 
-    Column names are stripped and lowercased. Columns not in `intended_columns`
+    With `file_name`, reads that PDF's `extracted_pages/<stem>_page_*_extracted.csv`. Without it,
+    reads `extracted_files/*_combined_extracted.csv` when any exist, else every CSV in
+    `extracted_pages/`. Column names are stripped and lowercased. Columns not in `intended_columns`
     (case-insensitive) are dropped, and a warning is printed for missing or extra columns.
     Returns an empty DataFrame if no CSVs are found or none yield data. Raises
     ``AssertionError`` if a CSV loads empty.
@@ -2916,9 +2918,9 @@ def check_duplicates(combined_df: pd.DataFrame) -> bool:
 def every_pdf_page_extracted_check(pdf_full_path: str | Path, debug: bool = True) -> bool:
     """Assert that every page of a PDF has a corresponding extracted CSV; return ``True`` if so.
 
-    Looks for CSV files named `{pdf_name_without_extension}_page_{page_number}_extracted.csv`
-    in the same directory as the PDF file. Raises ``FileNotFoundError`` if the PDF does not
-    exist.
+    Looks for `extracted_pages/{pdf_stem}_page_{page_number}_extracted.csv` beside the PDF. A
+    page without one still counts when its metadata sidecar records no table or a skip. Raises
+    ``FileNotFoundError`` if the PDF does not exist.
     """
 
     pdf_path_obj = Path(pdf_full_path)
@@ -3149,9 +3151,9 @@ def find_possible_misspellings(
 ) -> pd.DataFrame:
     """Find pairs of product names that might be misspellings of each other.
 
-    Compares every unique pair in the 'product' column with ``thefuzz.fuzz.ratio`` and keeps
-    pairs scoring at least `threshold` (0-100). `df` must contain 'product' and 'date'
-    columns, though 'date' is not used in the similarity calculation. Returns columns
+    Compares every unique pair in `product_name_col` with ``thefuzz.fuzz.ratio`` and keeps
+    pairs scoring at least `threshold` (0-100). `df` must contain that column and 'date',
+    though 'date' is not used in the similarity calculation. Returns columns
     'Product 1', 'Product 2', and 'Similarity Score (%)', sorted by score descending (empty
     with those columns if no pair qualifies). Raises ``TypeError`` if `df` is not a DataFrame
     and ``ValueError`` if a required column is missing.
@@ -3221,7 +3223,7 @@ def identify_unique_product_names(
 ) -> pd.DataFrame:
     """Return rows whose product name appears only once, as these may be misspellings.
 
-    `df` must contain a 'product' column (``AssertionError`` otherwise).
+    `df` must contain `product_name_col` (``AssertionError`` otherwise).
     """
 
     assert product_name_col in df.columns, f"The DataFrame must have a '{product_name_col}' column."

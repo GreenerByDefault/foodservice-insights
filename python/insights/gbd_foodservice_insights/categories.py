@@ -204,10 +204,8 @@ def get_drink_categories(lowercase: bool = False) -> list[str]:
 def check_GBD_categories(df: pd.DataFrame) -> None:
     """Check a DataFrame's 'category' column against the predefined GBD categories.
 
-    Logs warnings if:
-    - GBD categories (or "No Matches Found") are missing from the DataFrame.
-    - Categories in the DataFrame are not valid GBD categories.
-    - The 'category' column is missing from the DataFrame.
+    Logs a warning when the 'category' column is missing or holds non-GBD categories, and an
+    info message listing GBD categories (or "No Matches Found") absent from the data.
 
     Categories are compared case-insensitively (lowercase is acceptable).
     """

@@ -1088,19 +1088,10 @@ def print_baseline_pilot_percent_changes(
 def plot_monthly_category_trends(
     monthly_category_data: pd.DataFrame, per_diner_meal: bool = True
 ) -> plt.Figure:
-    """
-    DEPRECATED: This function has been removed.
+    """DEPRECATED: removed. Use ``plot_category_trends(monthly_category_data, per_diner_meal=...)``.
 
-    Migration:
-    ----------
-    Replace:
-        plot_monthly_category_trends(monthly_category_data, per_diner_meal=True)
-
-    With:
-        plot_category_trends(monthly_category_data, per_diner_meal=True, category_type="both")
-
-    Or simply:
-        plot_category_trends(monthly_category_data)  # per_diner_meal=True is the default
+    ``per_diner_meal=True`` (the default) needs a 'kilos per diner-meal' column in
+    `monthly_category_data`.
     """
     warnings.warn(
         (
@@ -1122,31 +1113,16 @@ def plot_category_per_diner_by_month(
     category_type: str = "both",
     figsize_per_plot: tuple = (5, 3),
 ) -> plt.Figure:
-    """
-    DEPRECATED: This function has been removed.
+    """DEPRECATED: removed. Use ``plot_category_trends(monthly_category_data)``.
 
-    Migration:
-    ----------
-    Replace:
-        plot_category_per_diner_by_month(
-            monthly_category_data=monthly_category_data,
-            diner_meal_data=diner_meal_data,
-            category_type="food"
-        )
-
-    With:
-        plot_category_trends(
-            monthly_category_data=monthly_category_data,
-            diner_meal_data=diner_meal_data,
-            per_diner_meal=True,
-            category_type="food"
-        )
+    `plot_category_trends` takes no diner-meal data and no `category_type`: add a
+    'kilos per diner-meal' column to `monthly_category_data` first, and filter its categories
+    yourself.
     """
     warnings.warn(
         (
             "plot_category_per_diner_by_month() is deprecated and has been removed.\n"
-            "Use plot_category_trends(monthly_category_data, diner_meal_data=diner_meal_data, "
-            "per_diner_meal=True, category_type=...) instead."
+            "Use plot_category_trends(monthly_category_data) instead."
         ),
         DeprecationWarning,
         stacklevel=2,
