@@ -28,7 +28,7 @@ What the map found:
   import. `aggregation.py` formats percentages as strings that `plots.py` parses back.
 - Tests follow the code. About a quarter of `test_diagnostics.py` targets lab-only paths: the
   `TestParseAndValidateDateColumn` string, numeric and ambiguous cases, and the meat check's two
-  tests, which sit side by side at the end of the file. Threshold overrides go through one
+  tests, in the outliers and thresholds sections. Threshold overrides go through one
   parametrized test, `test_checks_read_their_thresholds_from_yaml`, whose inputs each land on the
   opposite side of the checked-in default from the override, so a case fails if its check ignores
   the YAML; its `_override_thresholds` helper monkeypatches
