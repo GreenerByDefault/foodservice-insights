@@ -41,8 +41,12 @@ What the map found:
   `rotate_x_labels` are lab-only. `aggregation.py` formats percentages as strings that `plots.py`
   parses back. `plotting_utils.py` sets the backend, the seaborn palette and the fonts at import.
 - `report/pdf.py`: the Decision KPIs branch inside `create_table_page` is unreachable (the function
-  returns for that title earlier); `_QUALITY_STATUS_SENTENCES["error"]` can never be selected
-  (the vocabulary is `invalid`). `report/pipeline.py`: `summary_stats` is built for a summary page
+  returns for that title earlier). The quality page's error handling is all dead: any `error`
+  finding aborts the run before a PDF exists (the report always hard-fails), so
+  `_QUALITY_STATUS_SENTENCES["error"]` (never selected anyway: the vocabulary is `invalid`),
+  `_STATUS_LABELS["error"]`, the `n_err` "issues" count in `_quality_to_lines` and the
+  `Data check result: invalid.` fallback cannot render. `invalid` itself stays: the lab's failure
+  manifest records it. `report/pipeline.py`: `summary_stats` is built for a summary page
   the product never renders, since the narrative replaces it; only "Date range" survives, and
   `test_outputs.py` asserts on the rest.
 - Tests follow the code. About a quarter of `test_diagnostics.py` targets lab-only paths;
@@ -69,8 +73,8 @@ What the map found:
   **Open:** whether the export tables move with the QA workbook or stay because most checks
   compute them on the way to their findings. Measure per check before deciding.
 - **Typed inputs at the boundary.** `categorize_products` takes `datetime64` dates and float
-  weights (`categorization-pipeline.md` PR 3) and the report takes `Literal` modes, regions and
-  policies (`build_food_report`). Parsing text is the lab's.
+  weights (`categorization-pipeline.md` PR 3) and the report takes `Literal` modes and regions
+  (`build_food_report`). Parsing text is the lab's.
 - **Tests move with the code, assertions unchanged.** A trivial assertion is deleted rather than
   moved unless it is the only test of a lab function. Templated tests collapse to one
   parametrized test.
@@ -81,8 +85,8 @@ What the map found:
 Everything with no callers: the four `categories.py` functions and `remove_file`,
 `schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`, `uk`,
 `emissions.get_available_regions`, the `timescale="period"` branch, the unreachable `plot_*`
-functions, the two unreachable `pdf.py` branches, `validate_date_column`,
-`baseline_pre_flight_checks`, the meat check and block, the second token set, the
+functions, the unreachable Decision KPIs branch and the quality page's error handling in
+`pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the meat check and block, the second token set, the
 `highest_lowest` parameter of the client workbook, `summary_stats` down to what is used, and
 `temp_dir`. Tests go with them. No product behaviour changes: the golden test passes unchanged.
 

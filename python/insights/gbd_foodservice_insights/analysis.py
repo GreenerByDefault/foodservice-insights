@@ -114,7 +114,6 @@ def analyze(
         region="us",
         diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
         top_n_drivers=5,
-        missing_data_policy="hard_fail",
         report_progress=report_progress,
     )
 

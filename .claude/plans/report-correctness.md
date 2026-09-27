@@ -3,7 +3,7 @@
 ## Context
 
 An audit of the ported report code in September 2026 ran `run_food_report` with `analyze()`'s
-exact arguments (`hard_fail`, procurement, `us`, both count bases) on inputs `apps/web` accepts,
+exact arguments (procurement, `us`, both count bases) on inputs `apps/web` accepts,
 rendered every PDF page, and read back every workbook sheet. The deliverable crashes on ordinary
 data, carries wrong numbers, and says things the data does not support. This plan fixes what it
 computes. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's output: every
@@ -23,7 +23,7 @@ Verified facts, each reproduced through `analyze()` or `run_food_report` with pr
   ordinary procurement data, and `apps/web` does not dedupe.
 - `check_diner_meal_reasonableness` returns an `error` when two or more months' counts fall
   outside 0.5× to 2× the median. Two low summer months abort the run over numbers the user typed.
-- All three classify as `unknown` (`worker_child/failures.py`): `enforce_policy_or_raise` raises
+- All three classify as `unknown` (`worker_child/failures.py`): `raise_on_error_findings` raises
   a bare `ValueError`, and REQUIREMENTS.md § Errors says an unknown failure tells the user it was
   not their file and offers a retry.
 
@@ -74,7 +74,14 @@ Verified facts, each reproduced through `analyze()` or `run_food_report` with pr
 
 - A plant/animal split or plant-protein share failure is logged and the page and narrative
   sentence are dropped; a chart failure prints the Python exception on a placeholder page and
-  files a `warning`. Neither can fail a `hard_fail` run.
+  files a `warning`. Neither can fail a run.
+- `build_food_report` catches an exception from emissions, the emissions summary or diagnostics,
+  files it as an `error` finding and keeps going; the final checkpoint then raises
+  `QualityCheckError` with only the message string, so the traceback is lost, and later stages
+  run on the broken frame: an emissions crash also files a misleading
+  `aggregation_failed: 'emissions_kg_co2e'`. These blocks existed so `warn_continue` could keep
+  going; that policy is gone, and date, month, mapping and aggregation failures already raise
+  `from exc` on the spot.
 - `compare_missing_snapshots` (`quality.py`) counts a column that did not exist before the stage
   as "newly introduced missing values", so the emissions stage files two findings per null factor.
 
@@ -94,7 +101,7 @@ Verified facts, each reproduced through `analyze()` or `run_food_report` with pr
 
 - **Behavioural changes to ported code are each their own PR**, so a fixture diff reviews one
   thing.
-- **No data-driven check may abort a product run.** A `hard_fail` error is for our bugs (a
+- **No data-driven check may abort a product run.** An `error` finding is for our bugs (a
   missing column, row drift, a stage raising), which correctly land as `unknown` with a
   traceback. The two escalations become warnings in `diagnostic_thresholds.yaml`, for the lab
   too. *Rejected: a product-only threshold profile* — two vocabularies for one check.
@@ -120,8 +127,9 @@ Verified facts, each reproduced through `analyze()` or `run_food_report` with pr
   category pages it wants at all.
 - **Every sentence the narrative prints is conditional on the data it describes**: no animal
   sentence at 0% animal, one month prints once, tonnes carry one decimal below 10 t.
-- **A split, share or chart failure fails a `hard_fail` run.** `_safe_plot`'s placeholder page is
-  `warn_continue` only.
+- **A split, share, chart or stage failure fails the run, with its own traceback.** `_safe_plot`'s
+  placeholder page goes, and the emissions, emissions-summary and diagnostics `except` blocks go
+  rather than filing a finding.
 
 ## PRs
 
@@ -129,8 +137,8 @@ Roughly in order of user impact. Each is small.
 
 1. **Zero-weight categories.** `_safe_percentage` and the intensity table mask a zero denominator
    to NaN. Tests: a zero-total category among normal rows and an all-zero file, both through
-   `run_food_report(hard_fail)`, both succeed.
-2. **Thresholds.** The two escalations become warnings. Tests through `hard_fail`: 15% duplicate
+   `run_food_report`, both succeed.
+2. **Thresholds.** The two escalations become warnings. Tests: 15% duplicate
    lines and two outlier months succeed with a `warning` finding; a missing column still raises.
 3. **Per-diner denominator.** One helper for the total; `kg_co2e_per_diner_meal` unrounded, rounded
    only where displayed. Tests: an extra count month leaves the headline, the narrative and the
@@ -150,17 +158,17 @@ Roughly in order of user impact. Each is small.
    the sheet column names, in both count bases.
 8. **Pages.** Fixed sizes, capped label wrapping, a measured label column and rotated or paged
    month headers in the Category Template, category pages grouped and ordered by emissions.
-9. **Fail loudly.** Split, share and chart failures raise under `hard_fail`.
+9. **Fail loudly.** Split, share and chart failures raise, and so do emissions, emissions-summary
+   and diagnostics crashes, uncaught. The lab's failure manifest then records no findings for a
+   crash (only `QualityCheckError` carries them); its log keeps the traceback. Tests: each stage
+   monkeypatched to raise surfaces that exception, not `QualityCheckError`.
 10. **Diagnostics cost.** `find_close_product_pairs` with `score_cutoff`, a length prefilter and
     digit-insensitive comparison; `ensure_month_year_column` returns early on `PeriodDtype`; the
     palette warning. Timings at 30k rows / 2k products and at `MAX_DATA_ROWS` in the PR body, and
     the `python.md` sentence about dataset size corrected to name `MAX_DATA_ROWS`.
 
-Testing, generally: today no test runs the report with `analyze()`'s arguments end to end
-(`test_outputs.py`, `test_quality_contract.py` and `test_integration_food_report.py` all use
-`warn_continue`), which is why none of the aborts above was caught. New tests use the product
-arguments and assert what `build_pdf_report` is handed and what the sheets contain, not that
-files exist.
+Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
+handed and what the sheets contain, not that files exist.
 
 ## Verification
 
@@ -174,4 +182,6 @@ files exist.
 - The golden test pins numbers, so every PR here regenerates it; review the fixture diff rather
   than accept it.
 - Threshold and `info` changes alter the lab's QA output; tell the data scientists.
+- Until PR 2 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
+  positive: `--missing-data-policy warn_continue` was removed first. Land PR 2 soon.
 - The GBD questions block PR 4 and parts of PRs 7 and 8 only.

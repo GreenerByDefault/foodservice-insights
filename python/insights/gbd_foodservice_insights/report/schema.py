@@ -9,7 +9,6 @@ from typing import Any, Literal
 ReportMode = Literal["procurement", "serving"]
 Region = Literal["us", "europe", "uk"]
 DinerOrMeal = Literal["diner", "meal"]
-MissingDataPolicy = Literal["warn_continue", "hard_fail"]
 DiagnosticStatus = Literal["success", "info", "warning", "error"]
 QualityStatus = Literal["pass", "warning", "invalid"]
 
@@ -23,10 +22,6 @@ REGION_DAYFIRST: dict[Region, bool] = {
     "europe": True,
     "uk": True,
 }
-VALID_MISSING_DATA_POLICIES: tuple[MissingDataPolicy, ...] = (
-    "warn_continue",
-    "hard_fail",
-)
 
 REQUIRED_COLUMNS_BY_MODE: dict[ReportMode, tuple[str, ...]] = {
     "procurement": ("date", "product", "category", "kilos_total"),
@@ -120,19 +115,6 @@ def validate_region(region: str) -> Region:
     return normalized
 
 
-def validate_missing_data_policy(policy: str | None) -> MissingDataPolicy:
-    """Validate missing-data policy string."""
-    if policy is None:
-        return "warn_continue"
-    normalized = str(policy).strip().lower()
-    if normalized not in VALID_MISSING_DATA_POLICIES:
-        raise ValueError(
-            f"missing_data_policy must be one of {list(VALID_MISSING_DATA_POLICIES)}, "
-            f"got '{policy}'"
-        )
-    return normalized  # type: ignore[return-value]
-
-
 def quality_status_from_findings(findings: Iterable[dict[str, Any]]) -> QualityStatus:
     """Compute overall quality status from finding severities."""
     statuses = [str(item.get("status", "info")) for item in findings]
@@ -152,10 +134,3 @@ def summarize_status_counts(findings: Iterable[dict[str, Any]]) -> dict[str, int
         "warning": counter.get("warning", 0),
         "error": counter.get("error", 0),
     }
-
-
-def should_fail_now(policy: MissingDataPolicy, findings: Iterable[dict[str, Any]]) -> bool:
-    """Whether execution should abort under the chosen missing-data policy."""
-    if policy != "hard_fail":
-        return False
-    return any(str(item.get("status", "")) == "error" for item in findings)

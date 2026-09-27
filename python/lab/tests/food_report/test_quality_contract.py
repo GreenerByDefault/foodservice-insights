@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.quality import QualityCheckError
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
 
@@ -37,43 +38,25 @@ def food_report_tmp_data(tmp_path: Path):
     return input_path, diner_path
 
 
-def test_run_food_report_warn_continue_returns_quality_payload(
-    monkeypatch, food_report_tmp_data, tmp_path
-):
-    """Checks warn-continue mode returns quality metadata needed for downstream diagnostics/UI
-    display."""
-    input_path, diner_path = food_report_tmp_data
-
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        lambda **kwargs: str(tmp_path / "out.pdf"),
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.excel.write_client_workbook",
-        lambda report, path: None,
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights_lab.food_report.excel.build_qa_excel_report",
-        lambda **kwargs: str(tmp_path / "out_qa.xlsx"),
-    )
-
-    result = run_food_report(
-        input_file=input_path,
-        diner_meal_file=diner_path,
-        output_dir=tmp_path,
-        procurement_serving="procurement",
-        missing_data_policy="warn_continue",
-    )
-
-    assert "quality_status" in result
-    assert "missing_data_findings" in result
-    assert "quality_summary" in result
-    assert result["quality_status"] in {"warning", "invalid"}
-
-
-def test_run_food_report_fails_on_a_missing_diner_meal_file_even_under_warn_continue(
+def test_run_food_report_writes_a_failed_manifest_when_a_check_aborts(
     food_report_tmp_data, tmp_path
 ):
+    input_path, diner_path = food_report_tmp_data
+
+    with pytest.raises(QualityCheckError, match=r"\[date_normalization::date_parse_failure\]"):
+        run_food_report(
+            input_file=input_path,
+            diner_meal_file=diner_path,
+            output_dir=tmp_path,
+            procurement_serving="procurement",
+        )
+
+    manifest = json.loads((tmp_path / "food_report_test_manifest.json").read_text())
+    assert manifest["run_status"] == "failed"
+    assert manifest["quality_status"] == "invalid"
+
+
+def test_run_food_report_fails_on_a_missing_diner_meal_file(food_report_tmp_data, tmp_path):
     input_path, _ = food_report_tmp_data
 
     with pytest.raises(FileNotFoundError, match="Diner-meal JSON not found"):
@@ -82,63 +65,10 @@ def test_run_food_report_fails_on_a_missing_diner_meal_file_even_under_warn_cont
             diner_meal_file=tmp_path / "missing.json",
             output_dir=tmp_path,
             procurement_serving="procurement",
-            missing_data_policy="warn_continue",
         )
 
 
-def test_run_food_report_flags_unexpected_row_loss_in_emissions_stage(
-    monkeypatch, food_report_tmp_data, tmp_path
-):
-    """Warn-continue mode should still surface silent row loss as an invalid-quality run."""
-    input_path, diner_path = food_report_tmp_data
-
-    def fake_calculate_emissions(df, **kwargs):
-        out = df.iloc[:-1].copy()
-        out["emission_factor_used"] = 1.0
-        out["emissions_kg_co2e"] = 1.0
-        return out, []
-
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.emissions.calculate_emissions",
-        fake_calculate_emissions,
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        lambda **kwargs: str(tmp_path / "out.pdf"),
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.excel.write_client_workbook",
-        lambda report, path: None,
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights_lab.food_report.excel.build_qa_excel_report",
-        lambda **kwargs: str(tmp_path / "out_qa.xlsx"),
-    )
-
-    result = run_food_report(
-        input_file=input_path,
-        diner_meal_file=diner_path,
-        output_dir=tmp_path,
-        procurement_serving="procurement",
-        missing_data_policy="warn_continue",
-    )
-
-    row_drift_finding = next(
-        finding
-        for finding in result["missing_data_findings"]
-        if finding.get("category") == "row_count_drift" and finding.get("stage") == "emissions"
-    )
-
-    assert row_drift_finding["status"] == "error"
-    assert row_drift_finding["metadata"]["before_rows"] == 2
-    assert row_drift_finding["metadata"]["after_rows"] == 1
-    assert result["quality_status"] == "invalid"
-
-
-def test_run_food_report_hard_fail_raises_on_required_missing(monkeypatch, tmp_path):
-    """Checks hard-fail mode blocks report generation when required fields are missing. This
-    matters because report pipeline contracts must remain stable across ingestion, quality
-    checks, and outputs."""
+def test_run_food_report_raises_on_a_missing_required_column(monkeypatch, tmp_path):
     bad_df = pd.DataFrame(
         {
             "date": ["2024-01-01"],
@@ -167,11 +97,10 @@ def test_run_food_report_hard_fail_raises_on_required_missing(monkeypatch, tmp_p
         lambda **kwargs: str(tmp_path / "out_qa.xlsx"),
     )
 
-    with pytest.raises(ValueError, match="hard_fail"):
+    with pytest.raises(QualityCheckError, match=r"\[ingestion::required_columns\]"):
         run_food_report(
             input_file=input_path,
             diner_meal_file=diner_path,
             output_dir=tmp_path,
             procurement_serving="procurement",
-            missing_data_policy="hard_fail",
         )

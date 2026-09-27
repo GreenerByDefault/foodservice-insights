@@ -25,17 +25,15 @@ from gbd_foodservice_insights.report.food_report import (
     build_report_charts,
 )
 from gbd_foodservice_insights.report.quality import (
-    QualityPolicyError,
+    QualityCheckError,
     findings_to_frame,
     missingness_summary_frame,
     summarize_findings,
 )
 from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
-    MissingDataPolicy,
     normalize_report_mode,
     quality_status_from_findings,
-    validate_missing_data_policy,
     validate_region,
 )
 
@@ -182,7 +180,6 @@ def run_food_report(
     diner_or_meal: DinerOrMeal = "diner",
     top_n_drivers: int = 5,
     region: str = "us",
-    missing_data_policy: MissingDataPolicy = "hard_fail",
     show_quality_successes: bool = True,
     report_progress: Callable[[], None] = lambda: None,
 ) -> dict[str, Any]:
@@ -209,7 +206,6 @@ def run_food_report(
         paths, manifest, log path, and the quality payload used by the
         report and UI layers.
     """
-    policy = validate_missing_data_policy(missing_data_policy)
     region = validate_region(region)  # Fails immediately on unrecognised region
     # Everything collected so far, for the failure manifest.
     quality_findings: list[Finding] = []
@@ -268,7 +264,6 @@ def run_food_report(
             diner_or_meal=diner_or_meal,
             top_n_drivers=top_n_drivers,
             pdf_extracted=metadata.get("pdf_extracted"),
-            missing_data_policy=policy,
             report_progress=report_progress,
         )
         quality_findings = list(report.findings)
@@ -350,7 +345,7 @@ def run_food_report(
         )
     except Exception as exc:
         logger.exception("Food report run failed.")
-        if isinstance(exc, QualityPolicyError):
+        if isinstance(exc, QualityCheckError):
             quality_findings = exc.findings
         failure_quality_summary = summarize_findings(quality_findings) if quality_findings else None
         failure_quality_status = (

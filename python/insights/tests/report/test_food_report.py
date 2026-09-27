@@ -9,11 +9,10 @@ from gbd_foodservice_insights.report import aggregation, plots
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     _attach_monthly_category_emissions,
-    _build_empty_aggregation,
     build_food_report,
     build_report_charts,
 )
-from gbd_foodservice_insights.report.quality import QualityPolicyError
+from gbd_foodservice_insights.report.quality import QualityCheckError
 
 JAN = pd.Period("2024-01", freq="M")
 FEB = pd.Period("2024-02", freq="M")
@@ -138,10 +137,10 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
     assert report.procurement_table("animal_emissions_intensity") is not None
 
 
-def test_hard_fail_raises_with_every_finding_so_far():
+def test_an_error_finding_raises_with_every_finding_so_far():
     rows = _rows().assign(category=["Legumes", None, "Legumes", "Legumes"])
 
-    with pytest.raises(QualityPolicyError, match=r"\[ingestion::required_non_null\]") as excinfo:
+    with pytest.raises(QualityCheckError, match=r"\[ingestion::required_non_null\]") as excinfo:
         _build(rows)
 
     assert excinfo.value.findings == [
@@ -159,41 +158,23 @@ def test_hard_fail_raises_with_every_finding_so_far():
     ]
 
 
-def test_missing_date_column_reports_required_column_and_normalization_findings():
-    rows = _rows().drop(columns=["date"])
+def test_missing_date_column_aborts_at_ingestion():
+    with pytest.raises(QualityCheckError, match=r"\[ingestion::required_columns\]") as excinfo:
+        _build(_rows().drop(columns=["date"]))
 
-    report = _build(rows, missing_data_policy="warn_continue")
-
-    assert _findings(report, "required_columns") == [
+    assert excinfo.value.findings == [
         {
-            "stage": stage,
+            "stage": "ingestion",
             "category": "required_columns",
             "status": "error",
             "message": "Missing required columns: ['date']",
             "metadata": {"missing_columns": ["date"]},
         }
-        for stage in ("ingestion", "post_normalization", "diagnostics")
-    ]
-    assert _findings(report, "missing_date_column") == [
-        {
-            "stage": "date_normalization",
-            "category": "missing_date_column",
-            "status": "error",
-            "message": "Column 'date' is missing and cannot be normalized.",
-        }
-    ]
-    assert _findings(report, "month_year_generation_failed") == [
-        {
-            "stage": "month_normalization",
-            "category": "month_year_generation_failed",
-            "status": "error",
-            "message": "Cannot create 'month_year' without 'date'. Both columns are missing.",
-        }
     ]
 
 
-def test_hard_fail_aborts_immediately_on_unusable_diner_meal_mapping():
-    with pytest.raises(QualityPolicyError, match=r"\[ingestion::diner_meal_mapping\]") as excinfo:
+def test_unusable_diner_meal_mapping_aborts_immediately():
+    with pytest.raises(QualityCheckError, match=r"\[ingestion::diner_meal_mapping\]") as excinfo:
         _build(_rows(), diner_meal_mapping={})
 
     assert excinfo.value.findings == [
@@ -209,7 +190,7 @@ def test_hard_fail_aborts_immediately_on_unusable_diner_meal_mapping():
     ]
 
 
-def test_emissions_that_drop_a_row_leave_a_row_count_drift_finding(
+def test_emissions_that_drop_a_row_abort_with_a_row_count_drift_finding(
     monkeypatch: pytest.MonkeyPatch,
 ):
     calculate_emissions = emissions.calculate_emissions
@@ -220,9 +201,11 @@ def test_emissions_that_drop_a_row_leave_a_row_count_drift_finding(
 
     monkeypatch.setattr(emissions, "calculate_emissions", drop_last_row)
 
-    report = _build(_rows(), missing_data_policy="warn_continue")
+    with pytest.raises(QualityCheckError) as excinfo:
+        _build(_rows())
 
-    assert [f for f in _findings(report, "row_count_drift") if f["stage"] == "emissions"] == [
+    findings = excinfo.value.findings
+    assert [f for f in findings if f["category"] == "row_count_drift"] == [
         {
             "stage": "emissions",
             "category": "row_count_drift",
@@ -237,24 +220,16 @@ def test_emissions_that_drop_a_row_leave_a_row_count_drift_finding(
     ]
 
 
-def test_emissions_calculation_exception_produces_a_finding(monkeypatch: pytest.MonkeyPatch):
+def test_emissions_calculation_exception_aborts(monkeypatch: pytest.MonkeyPatch):
     def boom(*args: Any, **kwargs: Any) -> Any:
         raise ValueError("emissions exploded")
 
     monkeypatch.setattr(emissions, "calculate_emissions", boom)
 
-    report = _build(_rows(), missing_data_policy="warn_continue")
-
-    assert _findings(report, "emissions_calculation_failed") == [
-        {
-            "stage": "emissions",
-            "category": "emissions_calculation_failed",
-            "status": "error",
-            "message": "emissions exploded",
-        }
-    ]
-    assert report.emissions_summary is None
-    assert "emissions_kg_co2e" not in report.rows.columns
+    with pytest.raises(
+        QualityCheckError, match=r"\[emissions::emissions_calculation_failed\] emissions exploded"
+    ):
+        _build(_rows())
 
 
 def test_unmatched_emission_factors_produce_category_and_month_findings():
@@ -262,7 +237,7 @@ def test_unmatched_emission_factors_produce_category_and_month_findings():
         category=["Beef and Buffalo Meat", "Mystery", "Beef and Buffalo Meat", "Mystery"]
     )
 
-    report = _build(rows, missing_data_policy="warn_continue")
+    report = _build(rows)
 
     assert _findings(report, "emissions_missing_by_category") == [
         {
@@ -288,17 +263,7 @@ def test_unmatched_emission_factors_produce_category_and_month_findings():
     ]
 
 
-def test_aggregation_failure_raises_under_hard_fail(monkeypatch: pytest.MonkeyPatch):
-    def boom(*args: Any, **kwargs: Any) -> Any:
-        raise ValueError("aggregation exploded")
-
-    monkeypatch.setattr(aggregation, "run_aggregation_pipeline", boom)
-
-    with pytest.raises(QualityPolicyError, match=r"\[aggregation::aggregation_failed\]"):
-        _build(_rows())
-
-
-def test_aggregation_failure_falls_back_to_empty_aggregation_under_warn_continue(
+def test_aggregation_failure_raises_from_the_original_exception(
     monkeypatch: pytest.MonkeyPatch,
 ):
     def boom(*args: Any, **kwargs: Any) -> Any:
@@ -306,28 +271,17 @@ def test_aggregation_failure_falls_back_to_empty_aggregation_under_warn_continue
 
     monkeypatch.setattr(aggregation, "run_aggregation_pipeline", boom)
 
-    report = _build(_rows(), missing_data_policy="warn_continue")
+    with pytest.raises(QualityCheckError, match=r"\[aggregation::aggregation_failed\]") as excinfo:
+        _build(_rows())
 
-    assert _findings(report, "aggregation_failed") == [
-        {
-            "stage": "aggregation",
-            "category": "aggregation_failed",
-            "status": "error",
-            "message": "aggregation exploded",
-        }
-    ]
-    for name, table in _build_empty_aggregation("kilos_total").items():
-        pd.testing.assert_frame_equal(report.aggregation[name], table)
+    assert str(excinfo.value.__cause__) == "aggregation exploded"
 
 
-def test_months_missing_from_either_side_are_reported():
-    report = _build(
-        _rows(),
-        diner_meal_mapping={"2024-01": 100, "2024-03": 90},
-        missing_data_policy="warn_continue",
-    )
+def test_a_data_month_missing_from_the_mapping_aborts():
+    with pytest.raises(QualityCheckError) as excinfo:
+        _build(_rows(), diner_meal_mapping={"2024-01": 100})
 
-    assert _findings(report, "diner_meal_alignment") == [
+    assert excinfo.value.findings[-2:] == [
         {
             "stage": "ingestion",
             "category": "diner_meal_alignment",
@@ -336,34 +290,29 @@ def test_months_missing_from_either_side_are_reported():
             "count": 1,
         },
         {
+            "stage": "aggregation",
+            "category": "aggregation_failed",
+            "status": "error",
+            "message": (
+                "Cannot compute per-diner metrics: missing months in diner_meal_mapping: "
+                "[Period('2024-02', 'M')]"
+            ),
+        },
+    ]
+
+
+def test_a_mapping_month_absent_from_the_data_is_an_info_finding():
+    report = _build(_rows(), diner_meal_mapping={"2024-01": 100, "2024-02": 120, "2024-03": 90})
+
+    assert _findings(report, "diner_meal_alignment") == [
+        {
             "stage": "ingestion",
             "category": "diner_meal_alignment",
             "status": "info",
             "message": "Months in diner-meal mapping but absent in data: [Period('2024-03', 'M')]",
             "count": 1,
-        },
-    ]
-
-
-def test_warn_continue_without_a_usable_mapping_builds_an_empty_aggregation():
-    report = _build(_rows(), diner_meal_mapping={}, missing_data_policy="warn_continue")
-
-    assert _findings(report, "diner_meal_mapping") == [
-        {
-            "stage": "ingestion",
-            "category": "diner_meal_mapping",
-            "status": "error",
-            "message": (
-                "Could not load diner-meal mapping: Diner-meal mapping is empty after "
-                "normalization."
-            ),
         }
     ]
-    assert report.diner_meal_mapping == {}
-    assert list(report.aggregation) == list(_build_empty_aggregation("kilos_total"))
-    for name, table in _build_empty_aggregation("kilos_total").items():
-        pd.testing.assert_frame_equal(report.aggregation[name], table)
-    assert report.procurement_table("decision_kpis") is None
 
 
 def test_serving_mode_computes_no_emissions():
