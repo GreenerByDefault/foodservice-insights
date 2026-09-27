@@ -37,12 +37,12 @@ describe('_renameSelf', () => {
   });
 
   test.for([
-    { displayName: null },
-    { displayName: '' },
-    { displayName: '   ' },
-    { displayName: 'x'.repeat(101) },
-    {},
-  ])('answers 400 for %j', async (body) => {
+    ['null', { displayName: null }],
+    ['empty', { displayName: '' }],
+    ['blank', { displayName: '   ' }],
+    ['over 100 chars', { displayName: 'x'.repeat(101) }],
+    ['missing', {}],
+  ] as const)('answers 400 for a %s displayName', async ([, body]) => {
     await withRollback(database(), async (transaction) => {
       const user = await insertAppUser(transaction, { displayName: 'Sam Cook' });
 
