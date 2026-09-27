@@ -196,10 +196,10 @@ Email OTP (one-time passcode).
   existing account.
 - The invitee gets an email linking to the site, with their email pre-filled. No magic token. They
   log in with OTP as normal.
-- On login, the server checks for pending invites matching the user's email:
-  - Invites still within `expires_at` are shown on an accept/decline screen.
-  - Invites past `expires_at` transition to expired at that moment, and the user sees the expired
-    state shown until they dismiss it, which is what records the expiry.
+- On login, a user with a live invite for their email lands on an accept/decline screen, also
+  reachable any time from the account menu as "Invitations".
+- An invite past `expires_at` shows there as expired, until the user dismisses it — which is what
+  records the expiry. It does not redirect on login by itself.
 - Only the person who controls the invited email address can accept. Forwarding the link does
   not grant access.
 - Invites expire after `INVITE_LIFETIME_DAYS` days
@@ -213,7 +213,7 @@ Email OTP (one-time passcode).
 
 After OTP verification, where the user lands (a live invite, an org, the org picker, or
 `/orgs/new`) is decided by
-[`_resolvePostSignInDestination`](apps/web/src/routes/(app)/orgs/+page.server.ts). The invite
+[`_organizationsPageRedirect`](apps/web/src/routes/(app)/orgs/+page.server.ts). The invite
 branch's own behavior — accept/decline, the one-time expiry notice — is the Invite flow section
 above.
 

@@ -73,7 +73,10 @@ Three details of that seam constrain what is left:
 `describeAuthError({ code })`, which maps `otp_expired` / `over_email_send_rate_limit` / anything
 else to copy of ours — Supabase's own `message` is never rendered.
 
-It has no `initialEmail` yet, which the invite email's `/sign-in?email=…` needs (PR 1).
+It has no `initialEmail` yet, which the invite email's `/sign-in?email=…` needs (PR 1). The link
+comes from `signInUrl` (`packages/email/src/messages/links.ts`), which `encodeURIComponent`s the
+address; the invitee page it leads to has landed (`/invites`), so this prefill is the last
+invite-flow step left.
 
 **Nothing mounts any of it yet.** `/sign-in`'s `load` redirects to `/orgs` whenever `locals.auth`
 is set. In `placeholder` mode that is every request; in the `apps/web` suite, which runs in
@@ -171,7 +174,7 @@ which exports it to Playwright's environment, so the web server and the fixtures
 
 | Suite | Mode | Why |
 | --- | --- | --- |
-| `apps/web` e2e and screenshots | `supabase` | Every auth flow is driven here, and per-test identities are what `invitee-ui.md` waits on |
+| `apps/web` e2e and screenshots | `supabase` | Every auth flow is driven here, and the invitee specs need a second person per test |
 | `tests/e2e` (system) | `placeholder`, until production flips | The one suite that runs the production images, so it runs them the way they are hosted, and the only e2e coverage `placeholder` gets |
 | vitest | Mocked per test | — |
 
@@ -218,8 +221,7 @@ PR 1  sign-in, sign-out ─┬──── PR 3  401 in place
 PR 2  onboarding, rename ┴──── account-self-service.md (needs 1 and 2)
 ```
 
-PRs 1 and 2 are independent; PR 3 needs only PR 1. Hosting needs none of them. `invitee-ui.md` was
-waiting on the second person in a test, which has landed.
+PRs 1 and 2 are independent; PR 3 needs only PR 1. Hosting needs none of them.
 
 ## PR 1 — Sign-in and sign-out
 
@@ -246,10 +248,20 @@ After this, a developer can set `PUBLIC_AUTH_MODE=supabase` and sign in through 
   `shouldInvalidate(event)` says `INITIAL_SESSION` (pure, tested); and `window.addEventListener(
   'pageshow', bfcacheRevalidator(() => location.reload()))` (pure factory, tested). Replace the
   "When auth lands" comment.
-- `/sign-in`: `+page.server.ts` validates `?email=` with `emailAddress` (dropping a bad one
-  silently) and returns it; the page mounts `SignInFlow` with `auth={browserAuth()}`, the new
-  `initialEmail`, and `onSignedIn: () => invalidateAll()` — the existing redirect to `/orgs` does
-  the rest. Drop `StubNotice` and the stub comments.
+- `/sign-in`: `+page.server.ts` validates `?email=` with `emailAddress` (`$lib/forms/validation.ts`,
+  which also trims and lowercases) via `v.safeParse`, returning `initialEmail: string | null` —
+  `null` for a missing or bad one, dropped silently rather than shown as an error, since it arrived
+  from outside. Put the validation in an exported `_`-prefixed pure function and unit-test it:
+  missing, valid, mixed-case/padded, invalid, over `MAX_EMAIL_LENGTH`. Keep the `locals.auth`
+  redirect first. The page mounts `SignInFlow` with `auth={browserAuth()}`, `initialEmail`, and
+  `onSignedIn: () => invalidateAll()` — the existing redirect to `/orgs` does the rest, and `/orgs`
+  already forwards someone with a live invite to `/invites`. Drop `StubNotice` and the stub comments
+  in both `+page.svelte` and `+page.server.ts`.
+- `SignInFlow` takes `initialEmail?: string | null` and seeds its own `let email = $state(…)` from
+  it; `email-step.svelte` needs no change, since it binds `email`. Seeding `$state` from a prop
+  trips `state_referenced_locally`, which `svelte-check --fail-on-warnings` fails on — the
+  precedent is `$lib/components/orgs/organization-name-form.svelte`'s `svelte-ignore` with its
+  reason. Component test: the field arrives filled, and Send code sends that address.
 - `(app)/shell/user-menu.svelte`: a `canSignOut` prop, which `(app)/+layout.svelte` sets from
   `authMode() === 'supabase'`. Sign out → `browserAuth().signOut({ scope: 'local' })` then
   `goto('/', { invalidateAll: true })`; hidden when `canSignOut` is false. Replace the `'sign out is
@@ -260,7 +272,10 @@ After this, a developer can set `PUBLIC_AUTH_MODE=supabase` and sign in through 
 `waitForEmail`, anchored on our template's copy. `auth.e2e.ts` gets the real flow: `identity:
 'anonymous'` → `/sign-in` → enter `users.create()`'s email → `waitForSignInCode` → enter the code →
 lands on `/orgs/new` → the account menu shows the email → Sign out → `/`, and Back does not show the
-signed-in shell.
+signed-in shell. A second spec closes the invite loop: an organization with `invites: [{ email:
+invitee.email }]` for a `users.create()` invitee, the invite email's link read from Mailpit
+(`waitForEmail`, as `e2e/organizations/invites.e2e.ts` does), opened while anonymous → the email
+field is prefilled → code → lands on `/invites` with the offer listed.
 
 **Screenshots:** `sign-in.screenshot.ts`, one spec covering both steps on one navigation. It needs
 two things the other specs don't. `page.clock.install()` before `page.goto`, because the code step's
@@ -296,7 +311,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - **`/onboarding`** (outside `(app)`, `PublicShell`): `+page.server.ts` does `requireAuth(locals)`
   and redirects to `/orgs` when a name already exists; the page explains it is the only question,
   mounts the form, and on save does `goto('/orgs', { invalidateAll: true })` — from there
-  `_resolvePostSignInDestination` lands them.
+  `_organizationsPageRedirect` lands them.
 - **`(app)/+layout.server.ts`:** `if (auth.user.displayName === null) redirect(303, '/onboarding')`
   after `requireAuth`, and return `displayName` as `string`. Narrow `user-menu.svelte`'s prop and
   `initials()` to `string`; simplify their tests.
