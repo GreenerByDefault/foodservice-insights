@@ -136,28 +136,7 @@ def test_food_and_drink_comparison_page_uses_two_lines_on_each_chart():
     assert np.asarray(fig.axes[1].lines[1].get_ydata()).tolist() == [1.25, 1.9]
 
 
-@pytest.mark.usefixtures("fruit_and_juice")
-def test_generate_all_report_plots_uses_combined_trend_charts():
-    plots_output = plots.generate_all_report_plots(
-        aggregated_data=_aggregated_data(
-            _fruit_and_juice_months(), product="apple", category="fruit", total=250
-        ),
-        diner_meal_mapping={"2023-01": 100, "2023-02": 100},
-        metric_total="kilos_total",
-    )
-
-    assert all(caption == "" for caption, _ in plots_output)
-
-    combined_trend_fig = plots_output[1][1]
-
-    assert _figure_title(combined_trend_fig) == "Kilos Over Time"
-    assert combined_trend_fig.axes[0].get_title() == "Total Kilos"
-    assert combined_trend_fig.axes[1].get_title() == "Kilos per Diner"
-    assert len(combined_trend_fig.axes[0].lines) == 2
-    assert len(combined_trend_fig.axes[1].lines) == 2
-
-
-def test_generate_all_report_plots_replaces_every_category_driver_chart_on_failure(
+def test_generate_all_report_plots_substitutes_one_placeholder_when_driver_charts_fail(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(plots, "get_food_categories", lambda **_: ["fruit"])
@@ -190,6 +169,7 @@ def test_generate_all_report_plots_replaces_every_category_driver_chart_on_failu
 
     placeholder = plots_output[-1][1]
     assert placeholder.axes[0].texts[0].get_text() == "Top Products by Category"
+    # The figure the failed plot opened is closed; only the returned pages stay open.
     assert set(plt.get_fignums()) - before == {fig.number for _, fig in plots_output}
 
 
@@ -213,9 +193,8 @@ def test_generate_all_report_plots_raises_for_untyped_categories():
         )
 
 
-@pytest.mark.usefixtures("fruit_and_juice")
-def test_generate_all_report_plots_places_category_totals_before_carbon_pages():
-    plots_output = plots.generate_all_report_plots(
+def _report_plots_with_emissions() -> list[tuple[str, Figure]]:
+    return plots.generate_all_report_plots(
         aggregated_data=_aggregated_data(
             _fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
             product="apple",
@@ -226,6 +205,11 @@ def test_generate_all_report_plots_places_category_totals_before_carbon_pages():
         emissions_summary=pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]}),
         metric_total="kilos_total",
     )
+
+
+@pytest.mark.usefixtures("fruit_and_juice")
+def test_generate_all_report_plots_places_category_totals_before_carbon_pages():
+    plots_output = _report_plots_with_emissions()
 
     page_titles = [_figure_title(fig) for _, fig in plots_output]
 
@@ -236,17 +220,7 @@ def test_generate_all_report_plots_places_category_totals_before_carbon_pages():
 
 @pytest.mark.usefixtures("fruit_and_juice")
 def test_generate_all_report_plots_combines_emissions_trends_onto_one_page():
-    plots_output = plots.generate_all_report_plots(
-        aggregated_data=_aggregated_data(
-            _fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-            product="apple",
-            category="fruit",
-            total=250,
-        ),
-        diner_meal_mapping={"2023-01": 100, "2023-02": 100},
-        emissions_summary=pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]}),
-        metric_total="kilos_total",
-    )
+    plots_output = _report_plots_with_emissions()
 
     assert all(caption == "" for caption, _ in plots_output)
 
@@ -317,9 +291,9 @@ def test_generate_all_report_plots_combines_plant_share_panels_onto_one_page():
 
     assert len(matching_figs) == 1
     combined_fig = matching_figs[0]
-    assert len(combined_fig.axes) == 4
-    panel_titles = [ax.get_title() for ax in combined_fig.axes]
-    assert "Plant vs. Animal Split" in panel_titles
-    assert "Plant-Based % by Month" in panel_titles
-    assert "Plant Protein Share" in panel_titles
-    assert "Plant Protein % by Month" in panel_titles
+    assert [ax.get_title() for ax in combined_fig.axes] == [
+        "Plant vs. Animal Split",
+        "Plant-Based % by Month",
+        "Plant Protein Share",
+        "Plant Protein % by Month",
+    ]

@@ -12,6 +12,7 @@ from gbd_foodservice_insights.plotting_utils import (
     format_percentage_column,
     set_suptitle_font,
     set_title_font,
+    set_ylim_with_padding,
     setup_gbd_fonts,
     standardize_title_case,
     wrap_labels,
@@ -39,6 +40,14 @@ def test_titles_use_the_title_font():
 
     assert (ax.title.get_fontname(), ax.title.get_fontsize()) == (TITLE_FONT, 20)
     assert fig.texts[0].get_fontname() == TITLE_FONT
+
+
+def test_set_ylim_with_padding_scales_each_limit_by_the_padding():
+    _fig, ax = plt.subplots()
+
+    set_ylim_with_padding(ax, pd.Series([10, 20, 30]), padding=0.2)
+
+    assert ax.get_ylim() == pytest.approx((8, 36))
 
 
 @pytest.mark.parametrize(

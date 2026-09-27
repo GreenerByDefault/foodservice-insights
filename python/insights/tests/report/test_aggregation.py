@@ -17,101 +17,41 @@ from gbd_foodservice_insights.report.aggregation import (
     summarize_animal_emissions_intensity,
 )
 
+# ----------------------------------------------------------------------
+# Aggregation and drivers
+# ----------------------------------------------------------------------
 
-def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():
-    """Ensures the swap table quantifies avoided emissions for ruminant-to-legume swaps only."""
-    df = pd.DataFrame(
+
+@pytest.fixture
+def fruit_rows():
+    return pd.DataFrame(
         {
-            "month_year": ["2024-01", "2024-01", "2024-02"],
-            "category": [
-                "Beef and Buffalo Meat",
-                "Lamb/mutton & goat meat",
-                "Legumes",
-            ],
-            "product": ["beef mince", "lamb shoulder", "lentils"],
-            "kilos_total": [10.0, 5.0, 8.0],
-            "emissions_kg_co2e": [413.5, 208.1, 12.8],
+            "date": pd.to_datetime(["2023-01-01", "2023-01-15", "2023-02-01"]),
+            "product": ["apple", "banana", "apple"],
+            "kilos_total": [10, 20, 15],
+            "category": ["fruit", "fruit", "fruit"],
+            "month_year": ["2023-01", "2023-01", "2023-02"],
         }
     )
 
-    result = calculate_ruminant_legume_swap_scenarios(df, region="us")
 
-    assert result["scenario"].tolist() == [
-        "10% ruminant-to-legume swap",
-        "25% ruminant-to-legume swap",
-        "50% ruminant-to-legume swap",
-        "100% ruminant-to-legume swap",
+def test_aggregate_data_sums_by_month_and_group(fruit_rows):
+    assert aggregate_data(fruit_rows, group_by="product").to_dict("records") == [
+        {"month_year": "2023-01", "product": "apple", "kilos_total": 10},
+        {"month_year": "2023-01", "product": "banana", "kilos_total": 20},
+        {"month_year": "2023-02", "product": "apple", "kilos_total": 15},
     ]
-    assert result["baseline_ruminant_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
-    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [621.6] * 4
-    assert result.loc[0, "replaced_weight_kg"] == pytest.approx(1.5)
-    assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(59.76)
-    assert result.loc[0, "projected_emissions_kg_co2e"] == pytest.approx(561.84)
-    assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(9.42)
-    assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(24.0)
-    assert result.loc[3, "replacement_category"] == "Legumes"
 
 
-def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
-    """Milk substitutions should quantify avoided emissions against total institution emissions."""
-    df = pd.DataFrame(
-        {
-            "month_year": ["2024-01", "2024-02", "2024-02"],
-            "category": ["Milk (Cow's milk)", "Oat Milk", "Legumes"],
-            "product": ["whole milk", "oat milk", "lentils"],
-            "kilos_total": [20.0, 4.0, 8.0],
-            "emissions_kg_co2e": [43.4, 3.56, 12.8],
-        }
+def test_aggregate_data_divides_by_the_months_diner_meals(fruit_rows):
+    agg_df = aggregate_data(
+        fruit_rows,
+        group_by="product",
+        per_diner_meal=True,
+        diner_meal_mapping={"2023-01": 100, "2023-02": 120},
     )
 
-    result = calculate_milk_oat_swap_scenarios(df, region="us")
-
-    assert result["scenario"].tolist() == [
-        "10% cow's-milk-to-oat-milk swap",
-        "20% cow's-milk-to-oat-milk swap",
-        "50% cow's-milk-to-oat-milk swap",
-        "100% cow's-milk-to-oat-milk swap",
-    ]
-    assert result["replacement_category"].tolist() == ["Oat Milk"] * 4
-    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [43.4] * 4
-    assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(2.56)
-    assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(4.28)
-    assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(17.8)
-
-
-def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement():
-    """Ensures procurement aggregation payloads carry the substitution sheet to Excel writers."""
-    df = pd.DataFrame(
-        {
-            "month_year": ["2024-01", "2024-02", "2024-02"],
-            "category": ["Beef and Buffalo Meat", "Lamb/mutton & goat meat", "Milk (Cow's milk)"],
-            "product": ["beef mince", "lamb shoulder", "whole milk"],
-            "kilos_total": [10.0, 5.0, 20.0],
-            "emissions_kg_co2e": [413.5, 208.1, 65.6],
-        }
-    )
-
-    result = run_aggregation_pipeline(
-        df,
-        diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
-        region="us",
-    )
-
-    substitution_scenarios = result["substitution_scenarios"]
-
-    assert not substitution_scenarios.empty
-    assert "avoidable_kg_co2e" in substitution_scenarios.columns
-    assert "institution_emissions_avoided_pct" in substitution_scenarios.columns
-    assert substitution_scenarios["scenario"].tolist() == [
-        "10% ruminant-to-legume swap",
-        "25% ruminant-to-legume swap",
-        "50% ruminant-to-legume swap",
-        "100% ruminant-to-legume swap",
-        "10% cow's-milk-to-oat-milk swap",
-        "20% cow's-milk-to-oat-milk swap",
-        "50% cow's-milk-to-oat-milk swap",
-        "100% cow's-milk-to-oat-milk swap",
-    ]
+    assert agg_df["kilos per diner-meal"].tolist() == pytest.approx([0.1, 0.2, 0.125])
 
 
 def test_create_template_data_preserves_values_when_category_case_differs():
@@ -130,6 +70,70 @@ def test_create_template_data_preserves_values_when_category_case_differs():
     assert template.loc["Cheese", "2024-01"] == pytest.approx(8.0)
     assert template.loc["Milk (Cow's milk)", "2024-02"] == pytest.approx(30.0)
     assert template.loc["total", "total"] == pytest.approx(50.5)
+
+
+@patch("gbd_foodservice_insights.report.aggregation.get_GBD_categories")
+def test_create_template_data_zero_fills_absent_categories(mock_get_gbd_categories, fruit_rows):
+    """Report templates include every category so chart tables keep a stable shape."""
+    mock_get_gbd_categories.return_value = ["fruit", "vegetable"]
+    agg_df = aggregate_data(fruit_rows, group_by="category")
+    template_df = create_template_data(agg_df, metric="kilos_total")
+    assert "total" in template_df.columns
+    assert "fruit" in template_df.index
+    assert "vegetable" in template_df.index
+    assert template_df.loc["vegetable", "total"] == 0
+
+
+def test_identify_category_drivers_ranks_products_within_each_category(fruit_rows):
+    drivers_df = identify_category_drivers(fruit_rows, metric="kilos_total", top_n=1)
+    assert "percentage" in drivers_df.columns
+    assert len(drivers_df) == 1
+    assert drivers_df["product"].iloc[0] == "apple"
+    assert drivers_df["percentage"].iloc[0] == "55.6%"
+
+
+def test_identify_overall_drivers_ranks_products_across_categories(fruit_rows):
+    drivers_df = identify_overall_drivers(fruit_rows, metric="kilos_total", top_n=1)
+    assert "percentage" in drivers_df.columns
+    assert len(drivers_df) == 1
+    assert drivers_df["product"].iloc[0] == "apple"
+    assert drivers_df["percentage"].iloc[0] == "55.6%"
+
+
+def test_category_highest_vs_lowest_months_reports_the_peak_to_trough_ratio():
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-01", "2023-02-01", "2023-03-01"]),
+            "product": ["apple", "apple", "apple"],
+            "kilos": [10, 40, 5],
+            "category": ["fruit", "fruit", "fruit"],
+            "month_year": ["2023-01", "2023-02", "2023-03"],
+            "kilos per diner_meal": [0.1, 0.4, 0.05],
+        }
+    )
+    ratio_df = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
+    assert len(ratio_df) == 1
+    assert ratio_df["times_higher"].iloc[0] == 8.0
+
+
+def test_category_highest_vs_lowest_months_returns_empty_frame_when_no_category_hits_threshold():
+    """Keeps the aggregation pipeline usable when no category has a 2x month spread."""
+    df = pd.DataFrame(
+        {
+            "category": ["legumes", "legumes"],
+            "kilos per diner_meal": [0.1, 0.12],
+        }
+    )
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
+
+    assert result.empty
+    assert result.columns.tolist() == ["category", "times_higher"]
+
+
+# ----------------------------------------------------------------------
+# Plant and protein shares
+# ----------------------------------------------------------------------
 
 
 def test_calculate_plant_animal_split_is_case_insensitive_and_keeps_one_sided_months():
@@ -252,6 +256,11 @@ def test_calculate_plant_protein_share_returns_none_when_total_protein_metric_is
     assert result is None
 
 
+# ----------------------------------------------------------------------
+# Animal emissions
+# ----------------------------------------------------------------------
+
+
 def test_calculate_animal_emissions_concentration_only_uses_animal_rows():
     """The animal-emissions KPI should ignore non-animal rows in its denominator and ranking."""
     df = pd.DataFrame(
@@ -333,168 +342,7 @@ def test_calculate_animal_emissions_concentration_uses_missing_product_name_fall
     assert result["Top products"].iloc[0] == "Missing product name | cheddar"
 
 
-def test_calculate_ruminant_legume_swap_scenarios_returns_empty_when_no_source_rows_exist():
-    """If no ruminant rows are present, the swap table should be empty rather than erroring."""
-    df = pd.DataFrame(
-        {
-            "category": ["Legumes", "Vegetables"],
-            "kilos_total": [10.0, 5.0],
-            "emissions_kg_co2e": [16.0, 3.0],
-        }
-    )
-
-    result = calculate_ruminant_legume_swap_scenarios(df, region="us")
-
-    assert result.empty
-    assert "scenario" in result.columns
-
-
-def test_calculate_ruminant_legume_swap_scenarios_raises_for_missing_source_emission_factors():
-    """A missing factor for a source category should fail loudly instead of fabricating a
-    scenario."""
-    df = pd.DataFrame(
-        {
-            "category": ["Beef and Buffalo Meat"],
-            "kilos_total": [10.0],
-            "emissions_kg_co2e": [413.5],
-        }
-    )
-
-    def fake_emission_factor(category: str, region: str = "us"):
-        if category == "Legumes":
-            return 1.6
-        if category == "Beef and Buffalo Meat":
-            return None
-        return 1.0
-
-    with (
-        patch(
-            "gbd_foodservice_insights.report.aggregation.get_emission_factor",
-            side_effect=fake_emission_factor,
-        ),
-        pytest.raises(ValueError, match="Missing ruminant emission factors"),
-    ):
-        calculate_ruminant_legume_swap_scenarios(df, region="us")
-
-
-def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emissions_zero():
-    """Swap tables should avoid divide-by-zero when the institution emissions column sums to
-    zero."""
-    df = pd.DataFrame(
-        {
-            "category": ["Milk (Cow's milk)"],
-            "kilos_total": [20.0],
-            "emissions_kg_co2e": [0.0],
-        }
-    )
-
-    result = calculate_milk_oat_swap_scenarios(df, region="us")
-
-    assert not result.empty
-    assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0, 0.0]
-
-
-@pytest.fixture
-def fruit_rows():
-    return pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2023-01-01", "2023-01-15", "2023-02-01"]),
-            "product": ["apple", "banana", "apple"],
-            "kilos_total": [10, 20, 15],
-            "category": ["fruit", "fruit", "fruit"],
-            "month_year": ["2023-01", "2023-01", "2023-02"],
-        }
-    )
-
-
-def test_aggregate_data(fruit_rows):
-    agg_df = aggregate_data(fruit_rows, group_by="product")
-    assert "kilos_total" in agg_df.columns
-    assert len(agg_df) == 3
-    jan_apple = agg_df.loc[
-        (agg_df["month_year"] == "2023-01") & (agg_df["product"] == "apple"),
-        "kilos_total",
-    ].iloc[0]
-    assert jan_apple == 10
-
-    agg_per_diner_meal_df = aggregate_data(
-        fruit_rows,
-        group_by="product",
-        per_diner_meal=True,
-        diner_meal_mapping={"2023-01": 100, "2023-02": 120},
-    )
-    assert "kilos per diner-meal" in agg_per_diner_meal_df.columns
-    feb_apple_per_dm = agg_per_diner_meal_df.loc[
-        (agg_per_diner_meal_df["month_year"] == "2023-02")
-        & (agg_per_diner_meal_df["product"] == "apple"),
-        "kilos per diner-meal",
-    ].iloc[0]
-    assert feb_apple_per_dm == pytest.approx(15 / 120)
-
-
-@patch("gbd_foodservice_insights.report.aggregation.get_GBD_categories")
-def test_create_template_data_zero_fills_absent_categories(mock_get_gbd_categories, fruit_rows):
-    """Report templates include every category so chart tables keep a stable shape."""
-    mock_get_gbd_categories.return_value = ["fruit", "vegetable"]
-    agg_df = aggregate_data(fruit_rows, group_by="category")
-    template_df = create_template_data(agg_df, metric="kilos_total")
-    assert "total" in template_df.columns
-    assert "fruit" in template_df.index
-    assert "vegetable" in template_df.index
-    assert template_df.loc["vegetable", "total"] == 0
-
-
-def test_identify_category_drivers(fruit_rows):
-    drivers_df = identify_category_drivers(fruit_rows, metric="kilos_total", top_n=1)
-    assert "percentage" in drivers_df.columns
-    assert len(drivers_df) == 1  # Only one category
-    assert drivers_df["product"].iloc[0] == "apple"
-    assert drivers_df["percentage"].iloc[0] == "55.6%"
-
-
-def test_identify_overall_drivers(fruit_rows):
-    drivers_df = identify_overall_drivers(fruit_rows, metric="kilos_total", top_n=1)
-    assert "percentage" in drivers_df.columns
-    assert len(drivers_df) == 1
-    assert drivers_df["product"].iloc[0] == "apple"
-    assert drivers_df["percentage"].iloc[0] == "55.6%"
-
-
-def test_category_highest_vs_lowest_months():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2023-01-01", "2023-02-01", "2023-03-01"]),
-            "product": ["apple", "apple", "apple"],
-            "kilos": [10, 40, 5],
-            "category": ["fruit", "fruit", "fruit"],
-            "month_year": ["2023-01", "2023-02", "2023-03"],
-            "kilos per diner_meal": [0.1, 0.4, 0.05],
-        }
-    )
-    ratio_df = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
-    assert len(ratio_df) == 1
-    assert ratio_df["times_higher"].iloc[0] == 8.0
-
-
-def test_category_highest_vs_lowest_months_returns_empty_frame_when_no_category_hits_threshold():
-    """Keeps the aggregation pipeline usable when no category has a 2x month spread."""
-    df = pd.DataFrame(
-        {
-            "category": ["legumes", "legumes"],
-            "kilos per diner_meal": [0.1, 0.12],
-        }
-    )
-
-    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
-
-    assert result.empty
-    assert result.columns.tolist() == ["category", "times_higher"]
-
-
-def test_summarize_animal_emissions_intensity():
-    """Procurement summaries include weight, total emissions, and intensity for animal
-    categories only.
-    """
+def test_summarize_animal_emissions_intensity_covers_only_animal_categories():
     df = pd.DataFrame(
         {
             "category": [
@@ -540,3 +388,160 @@ def test_summarize_animal_emissions_intensity_normalizes_case_variants():
     ]
     assert summary["kilos_total"].tolist() == [5.0, 4.0]
     assert summary["total_kg_co2e"].tolist() == [206.75, 17.6]
+
+
+# ----------------------------------------------------------------------
+# Substitution scenarios
+# ----------------------------------------------------------------------
+
+
+def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():
+    """Ensures the swap table quantifies avoided emissions for ruminant-to-legume swaps only."""
+    df = pd.DataFrame(
+        {
+            "month_year": ["2024-01", "2024-01", "2024-02"],
+            "category": [
+                "Beef and Buffalo Meat",
+                "Lamb/mutton & goat meat",
+                "Legumes",
+            ],
+            "product": ["beef mince", "lamb shoulder", "lentils"],
+            "kilos_total": [10.0, 5.0, 8.0],
+            "emissions_kg_co2e": [413.5, 208.1, 12.8],
+        }
+    )
+
+    result = calculate_ruminant_legume_swap_scenarios(df, region="us")
+
+    assert result["scenario"].tolist() == [
+        "10% ruminant-to-legume swap",
+        "25% ruminant-to-legume swap",
+        "50% ruminant-to-legume swap",
+        "100% ruminant-to-legume swap",
+    ]
+    assert result["baseline_ruminant_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
+    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [621.6] * 4
+    assert result.loc[0, "replaced_weight_kg"] == pytest.approx(1.5)
+    assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(59.76)
+    assert result.loc[0, "projected_emissions_kg_co2e"] == pytest.approx(561.84)
+    assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(9.42)
+    assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(24.0)
+    assert result.loc[3, "replacement_category"] == "Legumes"
+
+
+def test_calculate_ruminant_legume_swap_scenarios_returns_empty_when_no_source_rows_exist():
+    """If no ruminant rows are present, the swap table should be empty rather than erroring."""
+    df = pd.DataFrame(
+        {
+            "category": ["Legumes", "Vegetables"],
+            "kilos_total": [10.0, 5.0],
+            "emissions_kg_co2e": [16.0, 3.0],
+        }
+    )
+
+    result = calculate_ruminant_legume_swap_scenarios(df, region="us")
+
+    assert result.empty
+    assert "scenario" in result.columns
+
+
+def test_calculate_ruminant_legume_swap_scenarios_raises_for_missing_source_emission_factors():
+    """A missing factor for a source category should fail loudly instead of fabricating a
+    scenario."""
+    df = pd.DataFrame(
+        {
+            "category": ["Beef and Buffalo Meat"],
+            "kilos_total": [10.0],
+            "emissions_kg_co2e": [413.5],
+        }
+    )
+
+    def fake_emission_factor(category: str, region: str = "us"):
+        if category == "Legumes":
+            return 1.6
+        if category == "Beef and Buffalo Meat":
+            return None
+        return 1.0
+
+    with (
+        patch(
+            "gbd_foodservice_insights.report.aggregation.get_emission_factor",
+            side_effect=fake_emission_factor,
+        ),
+        pytest.raises(ValueError, match="Missing ruminant emission factors"),
+    ):
+        calculate_ruminant_legume_swap_scenarios(df, region="us")
+
+
+def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
+    """Milk substitutions should quantify avoided emissions against total institution emissions."""
+    df = pd.DataFrame(
+        {
+            "month_year": ["2024-01", "2024-02", "2024-02"],
+            "category": ["Milk (Cow's milk)", "Oat Milk", "Legumes"],
+            "product": ["whole milk", "oat milk", "lentils"],
+            "kilos_total": [20.0, 4.0, 8.0],
+            "emissions_kg_co2e": [43.4, 3.56, 12.8],
+        }
+    )
+
+    result = calculate_milk_oat_swap_scenarios(df, region="us")
+
+    assert result["scenario"].tolist() == [
+        "10% cow's-milk-to-oat-milk swap",
+        "20% cow's-milk-to-oat-milk swap",
+        "50% cow's-milk-to-oat-milk swap",
+        "100% cow's-milk-to-oat-milk swap",
+    ]
+    assert result["replacement_category"].tolist() == ["Oat Milk"] * 4
+    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [43.4] * 4
+    assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(2.56)
+    assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(4.28)
+    assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(17.8)
+
+
+def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emissions_zero():
+    """Swap tables should avoid divide-by-zero when the institution emissions column sums to
+    zero."""
+    df = pd.DataFrame(
+        {
+            "category": ["Milk (Cow's milk)"],
+            "kilos_total": [20.0],
+            "emissions_kg_co2e": [0.0],
+        }
+    )
+
+    result = calculate_milk_oat_swap_scenarios(df, region="us")
+
+    assert not result.empty
+    assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0, 0.0]
+
+
+def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement():
+    """Ensures procurement aggregation payloads carry the substitution sheet to Excel writers."""
+    df = pd.DataFrame(
+        {
+            "month_year": ["2024-01", "2024-02", "2024-02"],
+            "category": ["Beef and Buffalo Meat", "Lamb/mutton & goat meat", "Milk (Cow's milk)"],
+            "product": ["beef mince", "lamb shoulder", "whole milk"],
+            "kilos_total": [10.0, 5.0, 20.0],
+            "emissions_kg_co2e": [413.5, 208.1, 65.6],
+        }
+    )
+
+    result = run_aggregation_pipeline(
+        df,
+        diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
+        region="us",
+    )
+
+    assert result["substitution_scenarios"]["scenario"].tolist() == [
+        "10% ruminant-to-legume swap",
+        "25% ruminant-to-legume swap",
+        "50% ruminant-to-legume swap",
+        "100% ruminant-to-legume swap",
+        "10% cow's-milk-to-oat-milk swap",
+        "20% cow's-milk-to-oat-milk swap",
+        "50% cow's-milk-to-oat-milk swap",
+        "100% cow's-milk-to-oat-milk swap",
+    ]

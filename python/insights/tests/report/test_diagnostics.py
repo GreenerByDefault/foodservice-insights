@@ -28,40 +28,35 @@ from gbd_foodservice_insights.report.diagnostics import (
     run_all_diagnostics,
 )
 
+# ----------------------------------------------------------------------
+# Product names and duplicate rows
+# ----------------------------------------------------------------------
 
-@pytest.fixture
-def close_pairs_df():
-    """
-    Fixture for creating a sample DataFrame for testing find_close_product_pairs.
-    """
+
+def test_find_close_product_pairs_pairs_names_within_two_edits():
     products = ["testing", "testin", "test", "tesing", "producta", "productb"]  # codespell:ignore
-    data = {"product": products}
-    return pd.DataFrame(data)
+
+    close_pairs = find_close_product_pairs(pd.DataFrame({"product": products}), "product")
+
+    assert close_pairs[["Product 1", "Product 2", "Levenshtein Distance"]].values.tolist() == [
+        ["testin", "testing", 1],  # codespell:ignore
+        ["tesing", "testing", 1],  # codespell:ignore
+        ["test", "testin", 2],  # codespell:ignore
+        ["tesing", "testin", 2],  # codespell:ignore
+        ["producta", "productb", 1],
+    ]
 
 
-def test_find_close_product_pairs_finds_pairs(close_pairs_df):
-    close_pairs = find_close_product_pairs(close_pairs_df, "product")
-    assert len(close_pairs) == 5
-    # Examples of pairs that should be found
-    # ('testing', 'testin') -> dist 1
-    # ('testing', 'tesing') -> dist 1
-    # ('testin', 'tesing') -> dist 2
-    # ('testin', 'test') -> dist 2
+def test_find_close_product_pairs_sorts_by_row_count_gap_descending():
+    # Pairs are found in row-count order, so the sort has to move grape/grope ahead.
+    df = pd.DataFrame({"product": ["apple"] * 10 + ["apply"] * 9 + ["grape"] * 8 + ["grope"]})
 
-    # Check for one specific pair
-    pair = close_pairs[close_pairs["Product 1"] == "tesing"]
-    assert pair["Product 2"].iloc[0] == "testing"
-
-
-def test_find_close_product_pairs_sorting():
-    df = pd.DataFrame(
-        {"product": ["apple"] * 10 + ["apply"] * 2 + ["apricot"] * 8 + ["apriot"] * 1}
-    )
     close_pairs = find_close_product_pairs(df, "product")
-    assert close_pairs["distance_between_counts"].is_monotonic_decreasing
-    assert close_pairs.iloc[0]["Product 1"] == "apple"
-    assert close_pairs.iloc[0]["Product 2"] == "apply"
-    assert close_pairs.iloc[0]["distance_between_counts"] == 8
+
+    assert close_pairs[["Product 1", "Product 2", "distance_between_counts"]].values.tolist() == [
+        ["grape", "grope", 7],
+        ["apple", "apply", 1],
+    ]
 
 
 def test_find_close_product_pairs_includes_combined_metric_share_when_requested():
@@ -83,11 +78,195 @@ def test_find_close_product_pairs_includes_combined_metric_share_when_requested(
     assert apple_pair["Combined Metric Share"] == pytest.approx(0.75)
 
 
+def test_find_close_product_pairs_returns_empty_for_no_products():
+    df = pd.DataFrame({"product": pd.Series(dtype="str")})
+    result_df = find_close_product_pairs(df, "product")
+    assert result_df.empty
+
+
+def test_find_close_product_pairs_returns_empty_for_one_distinct_product():
+    df = pd.DataFrame({"product": ["apple", "apple"]})
+    result_df = find_close_product_pairs(df, "product")
+    assert result_df.empty
+
+
+def _curry_split_across_two_names() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
+            "kilos_total": [20.0, 15.0, 65.0],
+        }
+    )
+
+
+def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
+    """PDF/OCR extracts should warn when likely name splits affect a meaningful share of volume."""
+    df = _curry_split_across_two_names()
+
+    findings, export_df = detect_near_duplicate_product_names(
+        df,
+        metric_total="kilos_total",
+        pdf_extracted=True,
+    )
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["count"] == 1
+    assert "Chicken Curry" in findings[0]["sample_values"][0]
+    assert "Ch1cken Curry" in findings[0]["sample_values"][0]
+    assert not export_df.empty
+    assert export_df.iloc[0]["Combined Metric Share"] == pytest.approx(0.35)
+
+
+def test_detect_near_duplicate_product_names_keeps_tabular_pairs_as_info():
+    """The same likely split is lower-severity in tabular data because OCR risk is lower."""
+    df = _curry_split_across_two_names()
+
+    findings, _ = detect_near_duplicate_product_names(
+        df,
+        metric_total="kilos_total",
+        pdf_extracted=False,
+    )
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+
+
+def _three_duplicates_in_100_rows(duplicate_date: object, other_date: object) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": [duplicate_date] * 3 + [other_date] * 97,
+            "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
+            "category": ["Legumes"] * 100,
+            "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
+        }
+    )
+
+
+def test_detect_exact_duplicate_rows_warns_and_returns_export_table():
+    """
+    Flags duplicate line items because duplicate transactions can overstate totals and emissions.
+    """
+    df = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2025-01-01")] * 3 + [pd.Timestamp("2025-01-02")] * 197,
+            "product": ["Tofu"] * 3 + [f"Item {i}" for i in range(197)],
+            "category": ["Legumes"] * 3 + ["Legumes"] * 197,
+            "kilos_total": [5.0] * 3 + [float(i + 1) for i in range(197)],
+            "quantity": [2] * 3 + [1] * 197,
+        }
+    )
+    df.loc[1:2, ["product", "kilos_total", "quantity"]] = ["Tofu", 5.0, 2]
+
+    findings, duplicate_rows = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding["status"] == "warning"
+    assert finding["count"] == 3
+    assert finding["metadata"]["duplicate_group_count"] == 1
+    assert not duplicate_rows.empty
+    assert "duplicate_group_size" in duplicate_rows.columns
+    assert duplicate_rows["duplicate_group_size"].eq(3).all()
+
+
+def test_detect_exact_duplicate_rows_errors_above_threshold():
+    """Escalates when duplicate rows are common enough to suggest a serious data issue."""
+    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"))
+
+    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+
+    assert findings[0]["status"] == "error"
+    assert findings[0]["metadata"]["duplicate_row_share"] == pytest.approx(0.03)
+
+
+def test_detect_exact_duplicate_rows_caps_month_bucketed_dates_at_warning():
+    """
+    Month/year-only client data should not hard-fail because transaction-level duplicate detection
+    is ambiguous.
+    """
+    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))
+
+    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["metadata"]["month_bucketed_dates"] is True
+    assert "month-level placeholders" in findings[0]["message"]
+
+
+def test_detect_exact_duplicate_rows_treats_month_only_string_dates_as_month_bucketed():
+    """
+    Month-only strings should be recognized as month-bucketed so duplicate severity is not
+    overstated.
+    """
+    df = _three_duplicates_in_100_rows("04/2025", "05/2025")
+
+    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["metadata"]["month_bucketed_dates"] is True
+
+
+def test_detect_exact_duplicate_rows_success_when_none_found():
+    df = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")],
+            "product": ["Beans", "Tofu"],
+            "category": ["Legumes", "Legumes"],
+            "kilos_total": [2.0, 3.0],
+        }
+    )
+
+    findings, duplicate_rows = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["count"] == 0
+    assert duplicate_rows.empty
+
+
+# ----------------------------------------------------------------------
+# Required columns and numeric parsing
+# ----------------------------------------------------------------------
+
+
+def test_check_required_columns_requires_the_metric_column():
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-01"]),
+            "product": ["apple"],
+            "category": ["fruit"],
+            "kilos_total": [10.0],
+        }
+    )
+
+    assert check_required_columns(df) is True
+    assert check_required_columns(df.drop(columns=["kilos_total"])) is False
+
+
+def test_detect_numeric_coercion_loss_errors_for_unreadable_required_metric_tokens():
+    """Unreadable numeric tokens should fail loudly before they silently reduce totals."""
+    df = pd.DataFrame(
+        {
+            "kilos_total": ["12.5", "two cases", None, " "],
+        }
+    )
+
+    findings, export_df = detect_numeric_coercion_loss(df, ["kilos_total"])
+
+    assert findings[0]["status"] == "error"
+    assert findings[0]["count"] == 1
+    assert "two cases" in findings[0]["sample_values"][0]
+    assert export_df.to_dict("records") == [
+        {"row_index": 1, "column": "kilos_total", "raw_value": "two cases"}
+    ]
+
+
+# ----------------------------------------------------------------------
+# Outliers and weight bounds
+# ----------------------------------------------------------------------
+
+
 @pytest.fixture
 def unusual_sales_df():
-    """
-    Fixture for creating a sample DataFrame for testing detect_unusual_sales.
-    """
     data = {
         "date": pd.to_datetime(
             [
@@ -115,8 +294,7 @@ def unusual_sales_df():
     return pd.DataFrame(data)
 
 
-def test_detect_unusual_sales(unusual_sales_df):
-    """Flags category-level line-item outliers and returns an export-ready table."""
+def test_detect_unusual_sales_flags_category_outliers_with_export_table(unusual_sales_df):
     findings, outlier_rows = detect_unusual_sales(
         unusual_sales_df,
         summary_col="quantity_sold",
@@ -133,8 +311,7 @@ def test_detect_unusual_sales(unusual_sales_df):
     assert outlier_rows["flag_reason"].str.len().gt(0).all()
 
 
-def test_detect_unusual_sales_no_abnormal():
-    """Returns no flagged products when category-level values stay within the normal range."""
+def test_detect_unusual_sales_returns_nothing_within_normal_range():
     df = pd.DataFrame(
         {
             "product_name": ["A"] * 5,
@@ -205,137 +382,236 @@ def test_detect_unusual_sales_flags_severe_small_category_outlier():
     assert "small-category severe ratio fallback" in outlier_rows["flag_reason"].iloc[0]
 
 
-def test_detect_exact_duplicate_rows_warns_and_returns_export_table():
-    """
-    Flags duplicate line items because duplicate transactions can overstate totals and emissions.
-    """
+def test_detect_unusual_sales_returns_empty_list_for_no_rows():
+    df = pd.DataFrame({"product_name": [], "category": [], "quantity_sold": []})
+    result = detect_unusual_sales(df, "quantity_sold", "product_name")
+    assert result == []
+
+
+def test_detect_unusual_sales_raises_for_missing_columns():
+    df = pd.DataFrame({"p": ["A"], "q": [1]})
+    with pytest.raises(KeyError):
+        detect_unusual_sales(df, "quantity_sold", "product_name")
+
+
+def test_detect_unusual_sales_returns_legacy_product_list():
+    """Keeps the legacy return shape for callers that only need product names."""
     df = pd.DataFrame(
         {
-            "date": [pd.Timestamp("2025-01-01")] * 3 + [pd.Timestamp("2025-01-02")] * 197,
-            "product": ["Tofu"] * 3 + [f"Item {i}" for i in range(197)],
-            "category": ["Legumes"] * 3 + ["Legumes"] * 197,
-            "kilos_total": [5.0] * 3 + [float(i + 1) for i in range(197)],
-            "quantity": [2] * 3 + [1] * 197,
-        }
-    )
-    df.loc[1:2, ["product", "kilos_total", "quantity"]] = ["Tofu", 5.0, 2]
-
-    findings, duplicate_rows = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert len(findings) == 1
-    finding = findings[0]
-    assert finding["status"] == "warning"
-    assert finding["count"] == 3
-    assert finding["metadata"]["duplicate_group_count"] == 1
-    assert not duplicate_rows.empty
-    assert "duplicate_group_size" in duplicate_rows.columns
-    assert duplicate_rows["duplicate_group_size"].eq(3).all()
-
-
-def _three_duplicates_in_100_rows(duplicate_date: object, other_date: object) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "date": [duplicate_date] * 3 + [other_date] * 97,
-            "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
-            "category": ["Legumes"] * 100,
-            "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
+            "product_name": ["A"] * 5 + ["B"] * 5,
+            "category": ["Legumes"] * 5 + ["Poultry"] * 5,
+            "quantity_sold": [10, 11, 12, 10, 50, 5, 5, 5, 5, 60],
         }
     )
 
+    flagged_products = detect_unusual_sales(df, "quantity_sold", "product_name")
 
-def test_detect_exact_duplicate_rows_errors_above_threshold():
-    """Escalates when duplicate rows are common enough to suggest a serious data issue."""
-    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"))
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "error"
-    assert findings[0]["metadata"]["duplicate_row_share"] == pytest.approx(0.03)
+    assert flagged_products == ["A", "B"]
 
 
-def test_detect_exact_duplicate_rows_caps_month_bucketed_dates_at_warning():
-    """
-    Month/year-only client data should not hard-fail because transaction-level duplicate detection
-    is ambiguous.
-    """
-    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"]["month_bucketed_dates"] is True
-    assert "month-level placeholders" in findings[0]["message"]
-
-
-def test_detect_exact_duplicate_rows_treats_month_only_string_dates_as_month_bucketed():
-    """
-    Month-only strings should be recognized as month-bucketed so duplicate severity is not
-    overstated.
-    """
-    df = _three_duplicates_in_100_rows("04/2025", "05/2025")
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"]["month_bucketed_dates"] is True
-
-
-def test_detect_exact_duplicate_rows_success_when_none_found():
+def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
+    """Hard bounds should catch near-certain unit errors and preserve row traceability."""
     df = pd.DataFrame(
         {
-            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")],
+            "date": pd.to_datetime(["2025-01-01", "2025-01-02", "2025-01-03"]),
+            "product": ["Chickpeas", "Tofu", "Beans"],
+            "category": ["Legumes", "Plant-based meats", "Legumes"],
+            "kilos_total": [0.0005, 500.0, 700.0],
+        },
+        index=[10, 11, 12],
+    )
+
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["count"] == 2
+    assert findings[0]["metadata"]["low"] == pytest.approx(0.001)
+    assert findings[0]["metadata"]["high"] == pytest.approx(500.0)
+    assert "Row 10: Chickpeas has 0.0005 kg" in findings[0]["sample_values"][0]
+    assert list(flagged_rows["row_index"]) == [10, 12]
+    assert list(flagged_rows["breached_bound"]) == ["lower", "upper"]
+    assert list(flagged_rows["metric_value"]) == pytest.approx([0.0005, 700.0])
+
+
+def test_check_per_product_weight_bounds_treats_boundaries_as_in_range():
+    df = pd.DataFrame(
+        {
             "product": ["Beans", "Tofu"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": [2.0, 3.0],
+            "kilos_total": [0.001, 500.0],
         }
     )
 
-    findings, duplicate_rows = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
 
     assert findings[0]["status"] == "success"
     assert findings[0]["count"] == 0
-    assert duplicate_rows.empty
+    assert flagged_rows.empty
 
 
-def _curry_split_across_two_names() -> pd.DataFrame:
-    return pd.DataFrame(
+def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_metric():
+    df = pd.DataFrame(
         {
-            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
-            "kilos_total": [20.0, 15.0, 65.0],
+            "product": ["Beans", "Soup", "Salad"],
+            "servings total": [0.5, 600.0, 1200.0],
+        },
+        index=[20, 21, 22],
+    )
+
+    findings, flagged_rows = check_per_product_weight_bounds(df, "servings total")
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["metadata"]["low"] == pytest.approx(1.0)
+    assert findings[0]["metadata"]["high"] == pytest.approx(1000.0)
+    assert findings[0]["metadata"]["unit_label"] == "servings"
+    assert "0.5000 servings" in findings[0]["sample_values"][0]
+    assert list(flagged_rows["row_index"]) == [20, 22]
+
+
+def test_identify_potentially_abnormal_weight_meat_items_flags_large_or_fractional_quantities():
+    df = pd.DataFrame(
+        {
+            "product": ["beef steak", "pork chop", "tofu", "beef stew"],
+            "quantity": [5, 50, 10, 2.5],
+            "category": [
+                "beef and buffalo meat",
+                "pork (pig meat)",
+                "legumes",
+                "beef and buffalo meat",
+            ],
         }
     )
 
+    result = identify_potentially_abnormal_weight_meat_items(df)
 
-def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
-    """PDF/OCR extracts should warn when likely name splits affect a meaningful share of volume."""
-    df = _curry_split_across_two_names()
+    assert isinstance(result, pd.DataFrame)
+    assert sorted(result["product"].tolist()) == ["beef stew", "pork chop"]
 
-    findings, export_df = detect_near_duplicate_product_names(
-        df,
-        metric_total="kilos_total",
-        pdf_extracted=True,
+
+# ----------------------------------------------------------------------
+# Dates and months
+# ----------------------------------------------------------------------
+
+
+class TestParseAndValidateDateColumn:
+    def test_parses_mixed_date_formats_with_diagnostics(self):
+        df = pd.DataFrame(
+            {
+                "date": [
+                    "2024-01-01",
+                    "January 2, 2024",
+                    "03 Jan 2024",
+                    "20240104",
+                    45296,
+                    1704499200,
+                    1704585600000,
+                    pd.Timestamp("2024-01-08 12:30:00-0500"),
+                ]
+            }
+        )
+
+        parsed_df, diagnostics = parse_and_validate_date_column(
+            df,
+            date_col="date",
+            return_diagnostics=True,
+        )
+
+        expected = pd.to_datetime(
+            [
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-03",
+                "2024-01-04",
+                "2024-01-05",
+                "2024-01-06",
+                "2024-01-07",
+                "2024-01-08",
+            ]
+        )
+
+        pd.testing.assert_series_equal(
+            parsed_df["date"].reset_index(drop=True),
+            pd.Series(expected, name="date"),
+        )
+        assert diagnostics["parse_status"].eq("parsed").all()
+        assert {"original_value", "parsed_date", "parse_status", "parser_used"}.issubset(
+            set(diagnostics.columns)
+        )
+
+    @pytest.mark.parametrize(
+        "value", ["03/04/2025", "01/03/2025 00:00", "3/4/25 10:30:15", "3/4/2025 12:00:00 AM"]
     )
+    def test_raises_on_ambiguous_numeric_dates(self, value):
+        df = pd.DataFrame({"date": [value]})
 
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 1
-    assert "Chicken Curry" in findings[0]["sample_values"][0]
-    assert "Ch1cken Curry" in findings[0]["sample_values"][0]
-    assert not export_df.empty
-    assert export_df.iloc[0]["Combined Metric Share"] == pytest.approx(0.35)
+        with pytest.raises(ValueError, match="ambiguous"):
+            parse_and_validate_date_column(df, date_col="date")
 
+    def test_parses_an_unambiguous_date_with_a_time(self):
+        df = pd.DataFrame({"date": ["13/04/2025 10:30"]})
 
-def test_detect_near_duplicate_product_names_keeps_tabular_pairs_as_info():
-    """The same likely split is lower-severity in tabular data because OCR risk is lower."""
-    df = _curry_split_across_two_names()
+        parsed = parse_and_validate_date_column(df, date_col="date")
 
-    findings, _ = detect_near_duplicate_product_names(
-        df,
-        metric_total="kilos_total",
-        pdf_extracted=False,
-    )
+        assert parsed["date"].iloc[0] == pd.Timestamp("2025-04-13")
 
-    assert findings[0]["status"] == "info"
-    assert findings[0]["count"] == 1
+    def test_resolves_ambiguous_dates_with_date_format(self):
+        df = pd.DataFrame({"date": ["03/04/2025"]})
+
+        parsed = parse_and_validate_date_column(df, date_col="date", date_format="%d/%m/%Y")
+
+        assert parsed["date"].iloc[0] == pd.Timestamp("2025-04-03")
+
+    def test_accepts_month_only_dates(self):
+        """
+        Month-only client dates should parse cleanly so monthly datasets do not fail ingestion.
+        """
+        df = pd.DataFrame({"date": ["04/2025", "2025-05", "Jun 2025"]})
+
+        parsed_df, diagnostics = parse_and_validate_date_column(
+            df,
+            date_col="date",
+            return_diagnostics=True,
+        )
+
+        expected = pd.to_datetime(["2025-04-01", "2025-05-01", "2025-06-01"])
+        pd.testing.assert_series_equal(
+            parsed_df["date"].reset_index(drop=True),
+            pd.Series(expected, name="date"),
+        )
+        assert diagnostics["parse_status"].tolist() == ["parsed", "parsed", "parsed"]
+
+    def test_missing_dates_can_be_allowed_or_blocked(self):
+        df = pd.DataFrame({"date": ["2024-01-01", None]})
+
+        with pytest.raises(ValueError, match="missing"):
+            parse_and_validate_date_column(df, date_col="date", allow_missing=False)
+
+        parsed_df, diagnostics = parse_and_validate_date_column(
+            df,
+            date_col="date",
+            allow_missing=True,
+            return_diagnostics=True,
+        )
+        assert pd.isna(parsed_df["date"].iloc[1])
+        assert diagnostics["parse_status"].tolist() == ["parsed", "missing"]
+
+    def test_out_of_range_dates_raise(self):
+        df = pd.DataFrame({"date": ["2099-01-01"]})
+
+        with pytest.raises(ValueError, match="out_of_range"):
+            parse_and_validate_date_column(
+                df,
+                date_col="date",
+                max_future_days=30,
+            )
+
+    def test_missing_configured_date_boundary_raises_clear_error(self):
+        """
+        A NaT-like configured boundary should fail as bad configuration, not with an AttributeError.
+        """
+        df = pd.DataFrame({"date": ["2024-01-01"]})
+
+        with pytest.raises(ValueError, match="Date boundary cannot be missing"):
+            parse_and_validate_date_column(df, min_date="NaT")
 
 
 def test_detect_month_over_month_total_volatility_warns_for_large_swings():
@@ -612,6 +888,26 @@ def test_detect_category_discontinuity_succeeds_when_categories_are_continuous()
     assert export_df.empty
 
 
+def test_check_zero_category_month_combos_names_missing_months_in_plain_english():
+    df = pd.DataFrame(
+        {
+            "month_year": ["2024-01", "2024-02", "2024-01"],
+            "category": ["Lamb/mutton & goat meat", "Legumes", "Legumes"],
+            "kilos_total": [10, 5, 7],
+        }
+    )
+
+    findings = check_zero_category_month_combos(df, "kilos_total")
+    missing_finding = next(f for f in findings if f["category"] == "missing_category_month_combos")
+
+    assert "Lamb/mutton and goat meat missing during Feb 2024" in missing_finding["sample_values"]
+
+
+# ----------------------------------------------------------------------
+# Diner meals, reconciliation and concentration
+# ----------------------------------------------------------------------
+
+
 def test_check_diner_meal_reasonableness_respects_boundary_ratios():
     findings, export_df = check_diner_meal_reasonableness(
         {
@@ -642,270 +938,112 @@ def test_check_diner_meal_reasonableness_flags_outside_boundary_ratios_and_escal
     assert export_df["is_flagged"].tolist() == [True, False, True]
 
 
-def test_find_close_product_pairs_empty_df():
-    df = pd.DataFrame({"product": pd.Series(dtype="str")})
-    result_df = find_close_product_pairs(df, "product")
-    assert result_df.empty
+def test_check_aggregation_reconciliation_passes_at_exact_point_one_percent_threshold():
+    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
+    monthly_product_df = pd.DataFrame({"kilos_total": [999.0]})
+    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
 
-
-def test_find_close_product_pairs_one_product():
-    df = pd.DataFrame({"product": ["apple", "apple"]})
-    result_df = find_close_product_pairs(df, "product")
-    assert result_df.empty
-
-
-def test_detect_unusual_sales_empty_df():
-    df = pd.DataFrame({"product_name": [], "category": [], "quantity_sold": []})
-    result = detect_unusual_sales(df, "quantity_sold", "product_name")
-    assert result == []
-
-
-def test_detect_unusual_sales_key_error():
-    df = pd.DataFrame({"p": ["A"], "q": [1]})
-    with pytest.raises(KeyError):
-        detect_unusual_sales(df, "quantity_sold", "product_name")
-
-
-def test_detect_unusual_sales_returns_legacy_product_list():
-    """Keeps the legacy return shape for callers that only need product names."""
-    df = pd.DataFrame(
-        {
-            "product_name": ["A"] * 5 + ["B"] * 5,
-            "category": ["Legumes"] * 5 + ["Poultry"] * 5,
-            "quantity_sold": [10, 11, 12, 10, 50, 5, 5, 5, 5, 60],
-        }
+    findings, export_df = check_aggregation_reconciliation(
+        raw_df,
+        monthly_product_df,
+        monthly_category_df,
+        "kilos_total",
     )
-
-    flagged_products = detect_unusual_sales(df, "quantity_sold", "product_name")
-
-    assert flagged_products == ["A", "B"]
-
-
-def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
-    """Hard bounds should catch near-certain unit errors and preserve row traceability."""
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2025-01-01", "2025-01-02", "2025-01-03"]),
-            "product": ["Chickpeas", "Tofu", "Beans"],
-            "category": ["Legumes", "Plant-based meats", "Legumes"],
-            "kilos_total": [0.0005, 500.0, 700.0],
-        },
-        index=[10, 11, 12],
-    )
-
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 2
-    assert findings[0]["metadata"]["low"] == pytest.approx(0.001)
-    assert findings[0]["metadata"]["high"] == pytest.approx(500.0)
-    assert "Row 10: Chickpeas has 0.0005 kg" in findings[0]["sample_values"][0]
-    assert list(flagged_rows["row_index"]) == [10, 12]
-    assert list(flagged_rows["breached_bound"]) == ["lower", "upper"]
-    assert list(flagged_rows["metric_value"]) == pytest.approx([0.0005, 700.0])
-
-
-def test_check_per_product_weight_bounds_treats_boundaries_as_in_range():
-    df = pd.DataFrame(
-        {
-            "product": ["Beans", "Tofu"],
-            "kilos_total": [0.001, 500.0],
-        }
-    )
-
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
 
     assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
-    assert flagged_rows.empty
+    assert findings[0]["metadata"]["relative_difference"] == pytest.approx(0.001)
+    assert findings[0]["metadata"]["rel_error_threshold"] == pytest.approx(0.001)
+    assert export_df["is_flagged"].tolist() == [False]
 
 
-def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_metric():
-    df = pd.DataFrame(
-        {
-            "product": ["Beans", "Soup", "Salad"],
-            "servings total": [0.5, 600.0, 1200.0],
-        },
-        index=[20, 21, 22],
+def test_check_aggregation_reconciliation_errors_above_point_one_percent_threshold():
+    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
+    monthly_product_df = pd.DataFrame({"kilos_total": [998.999]})
+    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
+
+    findings, export_df = check_aggregation_reconciliation(
+        raw_df,
+        monthly_product_df,
+        monthly_category_df,
+        "kilos_total",
     )
-
-    findings, flagged_rows = check_per_product_weight_bounds(df, "servings total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"]["low"] == pytest.approx(1.0)
-    assert findings[0]["metadata"]["high"] == pytest.approx(1000.0)
-    assert findings[0]["metadata"]["unit_label"] == "servings"
-    assert "0.5000 servings" in findings[0]["sample_values"][0]
-    assert list(flagged_rows["row_index"]) == [20, 22]
-
-
-# ----------------------------------------------------------------------
-# Tests for parse_and_validate_date_column (moved from test_utils.py)
-# ----------------------------------------------------------------------
-
-
-class TestParseAndValidateDateColumn:
-    """Tests for parse_and_validate_date_column function."""
-
-    def test_parses_mixed_date_formats_with_diagnostics(self):
-        df = pd.DataFrame(
-            {
-                "date": [
-                    "2024-01-01",
-                    "January 2, 2024",
-                    "03 Jan 2024",
-                    "20240104",
-                    45296,
-                    1704499200,
-                    1704585600000,
-                    pd.Timestamp("2024-01-08 12:30:00-0500"),
-                ]
-            }
-        )
-
-        parsed_df, diagnostics = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            return_diagnostics=True,
-        )
-
-        expected = pd.to_datetime(
-            [
-                "2024-01-01",
-                "2024-01-02",
-                "2024-01-03",
-                "2024-01-04",
-                "2024-01-05",
-                "2024-01-06",
-                "2024-01-07",
-                "2024-01-08",
-            ]
-        )
-
-        pd.testing.assert_series_equal(
-            parsed_df["date"].reset_index(drop=True),
-            pd.Series(expected, name="date"),
-        )
-        assert diagnostics["parse_status"].eq("parsed").all()
-        assert {"original_value", "parsed_date", "parse_status", "parser_used"}.issubset(
-            set(diagnostics.columns)
-        )
-
-    @pytest.mark.parametrize(
-        "value", ["03/04/2025", "01/03/2025 00:00", "3/4/25 10:30:15", "3/4/2025 12:00:00 AM"]
-    )
-    def test_raises_on_ambiguous_numeric_dates(self, value):
-        df = pd.DataFrame({"date": [value]})
-
-        with pytest.raises(ValueError, match="ambiguous"):
-            parse_and_validate_date_column(df, date_col="date")
-
-    def test_parses_an_unambiguous_date_with_a_time(self):
-        df = pd.DataFrame({"date": ["13/04/2025 10:30"]})
-
-        parsed = parse_and_validate_date_column(df, date_col="date")
-
-        assert parsed["date"].iloc[0] == pd.Timestamp("2025-04-13")
-
-    def test_resolves_ambiguous_dates_with_date_format(self):
-        df = pd.DataFrame({"date": ["03/04/2025"]})
-
-        parsed = parse_and_validate_date_column(df, date_col="date", date_format="%d/%m/%Y")
-
-        assert parsed["date"].iloc[0] == pd.Timestamp("2025-04-03")
-
-    def test_accepts_month_only_dates(self):
-        """
-        Month-only client dates should parse cleanly so monthly datasets do not fail ingestion.
-        """
-        df = pd.DataFrame({"date": ["04/2025", "2025-05", "Jun 2025"]})
-
-        parsed_df, diagnostics = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            return_diagnostics=True,
-        )
-
-        expected = pd.to_datetime(["2025-04-01", "2025-05-01", "2025-06-01"])
-        pd.testing.assert_series_equal(
-            parsed_df["date"].reset_index(drop=True),
-            pd.Series(expected, name="date"),
-        )
-        assert diagnostics["parse_status"].tolist() == ["parsed", "parsed", "parsed"]
-
-    def test_missing_dates_can_be_allowed_or_blocked(self):
-        df = pd.DataFrame({"date": ["2024-01-01", None]})
-
-        with pytest.raises(ValueError, match="missing"):
-            parse_and_validate_date_column(df, date_col="date", allow_missing=False)
-
-        parsed_df, diagnostics = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            allow_missing=True,
-            return_diagnostics=True,
-        )
-        assert pd.isna(parsed_df["date"].iloc[1])
-        assert diagnostics["parse_status"].tolist() == ["parsed", "missing"]
-
-    def test_out_of_range_dates_raise(self):
-        df = pd.DataFrame({"date": ["2099-01-01"]})
-
-        with pytest.raises(ValueError, match="out_of_range"):
-            parse_and_validate_date_column(
-                df,
-                date_col="date",
-                max_future_days=30,
-            )
-
-    def test_missing_configured_date_boundary_raises_clear_error(self):
-        """
-        A NaT-like configured boundary should fail as bad configuration, not with an AttributeError.
-        """
-        df = pd.DataFrame({"date": ["2024-01-01"]})
-
-        with pytest.raises(ValueError, match="Date boundary cannot be missing"):
-            parse_and_validate_date_column(df, min_date="NaT")
-
-
-def test_run_all_diagnostics_excludes_no_matches_from_missing_categories():
-    """
-    `No Matches Found` is valid when present but should never appear in missing GBD category
-    diagnostics.
-    """
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")],
-            "product": ["example product"],
-            "category": ["No Matches Found"],
-            "kilos_total": [1.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-    missing_categories_finding = next(
-        finding for finding in findings if finding.get("category") == "gbd_categories_absent"
-    )
-
-    assert "No Matches Found" not in missing_categories_finding["message"]
-
-
-def test_detect_numeric_coercion_loss_errors_for_unreadable_required_metric_tokens():
-    """Unreadable numeric tokens should fail loudly before they silently reduce totals."""
-    df = pd.DataFrame(
-        {
-            "kilos_total": ["12.5", "two cases", None, " "],
-        }
-    )
-
-    findings, export_df = detect_numeric_coercion_loss(df, ["kilos_total"])
 
     assert findings[0]["status"] == "error"
     assert findings[0]["count"] == 1
-    assert "two cases" in findings[0]["sample_values"][0]
-    assert export_df.to_dict("records") == [
-        {"row_index": 1, "column": "kilos_total", "raw_value": "two cases"}
-    ]
+    assert findings[0]["metadata"]["relative_difference"] == pytest.approx(0.001001)
+    assert (
+        findings[0]["metadata"]["relative_difference"]
+        > findings[0]["metadata"]["rel_error_threshold"]
+    )
+    assert export_df["is_flagged"].tolist() == [True]
+
+
+def test_check_single_product_dominance_does_not_flag_at_exact_thirty_percent():
+    """Exactly-on-threshold product concentration should not create a false positive."""
+    df = pd.DataFrame(
+        {
+            "product": ["Tofu", "Beans", "Tempeh", "Lentils"],
+            "kilos_total": [30.0, 25.0, 25.0, 20.0],
+        }
+    )
+
+    findings = check_single_product_dominance(df, "kilos_total")
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["count"] == 0
+    assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.30)
+
+
+def test_check_single_product_dominance_flags_above_thirty_percent():
+    df = pd.DataFrame(
+        {
+            "product": ["Tofu", "Beans", "Tempeh", "Lentils"],
+            "kilos_total": [30.01, 24.99, 25.0, 20.0],
+        }
+    )
+
+    findings = check_single_product_dominance(df, "kilos_total", threshold_pct=0.30)
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+    assert findings[0]["metadata"]["top_product"] == "Tofu"
+    assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.3001)
+
+
+def test_check_category_concentration_does_not_flag_at_exact_thirty_percent():
+    df = pd.DataFrame(
+        {
+            "category": ["Legumes", "Plant-based meats", "Poultry", "Eggs"],
+            "kilos_total": [30.0, 25.0, 25.0, 20.0],
+        }
+    )
+
+    findings = check_category_concentration(df, "kilos_total")
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["count"] == 0
+    assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.30)
+
+
+def test_check_category_concentration_flags_above_thirty_percent():
+    df = pd.DataFrame(
+        {
+            "category": ["Legumes", "Plant-based meats", "Poultry", "Eggs"],
+            "kilos_total": [30.01, 24.99, 25.0, 20.0],
+        }
+    )
+
+    findings = check_category_concentration(df, "kilos_total")
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+    assert findings[0]["metadata"]["top_category"] == "Legumes"
+    assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.3001)
+
+
+# ----------------------------------------------------------------------
+# Thresholds YAML
+# ----------------------------------------------------------------------
 
 
 def _override_thresholds(
@@ -1163,107 +1301,44 @@ def test_checks_read_their_thresholds_from_yaml(
     assert observe() == expected
 
 
-def test_check_aggregation_reconciliation_passes_at_exact_point_one_percent_threshold():
-    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
-    monthly_product_df = pd.DataFrame({"kilos_total": [999.0]})
-    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
-
-    findings, export_df = check_aggregation_reconciliation(
-        raw_df,
-        monthly_product_df,
-        monthly_category_df,
-        "kilos_total",
+def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
+    tmp_path, monkeypatch
+):
+    _override_thresholds(
+        monkeypatch,
+        tmp_path / "diagnostic_thresholds.yaml",
+        {"meat_quantity_reasonableness": {"large_quantity_threshold": 50}},
     )
+    df = pd.DataFrame({"category": ["Poultry (Chicken & Turkey)"] * 2, "quantity": [40, 2]})
 
-    assert findings[0]["status"] == "success"
-    assert findings[0]["metadata"]["relative_difference"] == pytest.approx(0.001)
-    assert findings[0]["metadata"]["rel_error_threshold"] == pytest.approx(0.001)
-    assert export_df["is_flagged"].tolist() == [False]
+    assert identify_potentially_abnormal_weight_meat_items(df) is True
 
 
-def test_check_aggregation_reconciliation_errors_above_point_one_percent_threshold():
-    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
-    monthly_product_df = pd.DataFrame({"kilos_total": [998.999]})
-    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
-
-    findings, export_df = check_aggregation_reconciliation(
-        raw_df,
-        monthly_product_df,
-        monthly_category_df,
-        "kilos_total",
-    )
-
-    assert findings[0]["status"] == "error"
-    assert findings[0]["count"] == 1
-    assert findings[0]["metadata"]["relative_difference"] == pytest.approx(0.001001)
-    assert (
-        findings[0]["metadata"]["relative_difference"]
-        > findings[0]["metadata"]["rel_error_threshold"]
-    )
-    assert export_df["is_flagged"].tolist() == [True]
+# ----------------------------------------------------------------------
+# run_all_diagnostics
+# ----------------------------------------------------------------------
 
 
-def test_check_single_product_dominance_does_not_flag_at_exact_thirty_percent():
-    """Exactly-on-threshold product concentration should not create a false positive."""
+def test_run_all_diagnostics_excludes_no_matches_from_missing_categories():
+    """
+    `No Matches Found` is valid when present but should never appear in missing GBD category
+    diagnostics.
+    """
     df = pd.DataFrame(
         {
-            "product": ["Tofu", "Beans", "Tempeh", "Lentils"],
-            "kilos_total": [30.0, 25.0, 25.0, 20.0],
+            "date": [pd.Timestamp("2025-01-01")],
+            "product": ["example product"],
+            "category": ["No Matches Found"],
+            "kilos_total": [1.0],
         }
     )
 
-    findings = check_single_product_dominance(df, "kilos_total")
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
-    assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.30)
-
-
-def test_check_single_product_dominance_flags_above_thirty_percent():
-    df = pd.DataFrame(
-        {
-            "product": ["Tofu", "Beans", "Tempeh", "Lentils"],
-            "kilos_total": [30.01, 24.99, 25.0, 20.0],
-        }
+    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
+    missing_categories_finding = next(
+        finding for finding in findings if finding.get("category") == "gbd_categories_absent"
     )
 
-    findings = check_single_product_dominance(df, "kilos_total", threshold_pct=0.30)
-
-    assert findings[0]["status"] == "info"
-    assert findings[0]["count"] == 1
-    assert findings[0]["metadata"]["top_product"] == "Tofu"
-    assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.3001)
-
-
-def test_check_category_concentration_does_not_flag_at_exact_thirty_percent():
-    df = pd.DataFrame(
-        {
-            "category": ["Legumes", "Plant-based meats", "Poultry", "Eggs"],
-            "kilos_total": [30.0, 25.0, 25.0, 20.0],
-        }
-    )
-
-    findings = check_category_concentration(df, "kilos_total")
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
-    assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.30)
-
-
-def test_check_category_concentration_flags_above_thirty_percent():
-    df = pd.DataFrame(
-        {
-            "category": ["Legumes", "Plant-based meats", "Poultry", "Eggs"],
-            "kilos_total": [30.01, 24.99, 25.0, 20.0],
-        }
-    )
-
-    findings = check_category_concentration(df, "kilos_total")
-
-    assert findings[0]["status"] == "info"
-    assert findings[0]["count"] == 1
-    assert findings[0]["metadata"]["top_category"] == "Legumes"
-    assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.3001)
+    assert "No Matches Found" not in missing_categories_finding["message"]
 
 
 def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
@@ -1351,65 +1426,3 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         ("gbd_categories_absent", "info"),
         ("missing_category_month_combos", "warning"),
     ]
-
-
-def test_check_required_columns():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2023-01-01"]),
-            "product": ["apple"],
-            "category": ["fruit"],
-            "kilos_total": [10.0],
-        }
-    )
-
-    assert check_required_columns(df) is True
-    assert check_required_columns(df.drop(columns=["kilos_total"])) is False
-
-
-def test_check_zero_category_month_combos_names_missing_months_in_plain_english():
-    df = pd.DataFrame(
-        {
-            "month_year": ["2024-01", "2024-02", "2024-01"],
-            "category": ["Lamb/mutton & goat meat", "Legumes", "Legumes"],
-            "kilos_total": [10, 5, 7],
-        }
-    )
-
-    findings = check_zero_category_month_combos(df, "kilos_total")
-    missing_finding = next(f for f in findings if f["category"] == "missing_category_month_combos")
-
-    assert "Lamb/mutton and goat meat missing during Feb 2024" in missing_finding["sample_values"]
-
-
-def test_identify_potentially_abnormal_weight_meat_items():
-    df = pd.DataFrame(
-        {
-            "product": ["beef steak", "pork chop", "tofu", "beef stew"],
-            "quantity": [5, 50, 10, 2.5],  # 50 is > 30, 2.5 has decimal
-            "category": [
-                "beef and buffalo meat",
-                "pork (pig meat)",
-                "legumes",
-                "beef and buffalo meat",
-            ],
-        }
-    )
-
-    result = identify_potentially_abnormal_weight_meat_items(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert sorted(result["product"].tolist()) == ["beef stew", "pork chop"]
-
-
-def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
-    tmp_path, monkeypatch
-):
-    _override_thresholds(
-        monkeypatch,
-        tmp_path / "diagnostic_thresholds.yaml",
-        {"meat_quantity_reasonableness": {"large_quantity_threshold": 50}},
-    )
-    df = pd.DataFrame({"category": ["Poultry (Chicken & Turkey)"] * 2, "quantity": [40, 2]})
-
-    assert identify_potentially_abnormal_weight_meat_items(df) is True
