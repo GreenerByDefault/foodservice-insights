@@ -13,8 +13,10 @@ from gbd_foodservice_insights.report.pdf import (
     _executive_narrative,
     _format_animal_emissions_intensity_for_pdf,
     _format_category_template_for_pdf,
+    _format_co2e,
     _format_decision_kpis_for_pdf,
     _format_substitution_scenarios_for_pdf,
+    _narrative_paragraphs,
     _quality_to_lines,
     _wrap_text_lines,
     _wrap_to_width,
@@ -677,3 +679,60 @@ def test_executive_narrative_is_omitted_without_positive_emissions(
     report = replace(_report(), emissions_summary=emissions_summary)
 
     assert _executive_narrative(report, "Acme", "pass") is None
+
+
+@pytest.mark.parametrize(
+    ("kg", "expected"),
+    [
+        (1999.4, "1,999 kg"),
+        (2000, "2.0 tonnes"),
+        (2501, "2.5 tonnes"),
+        (9949, "9.9 tonnes"),
+        (9960, "10 tonnes"),
+        (12_499, "12 tonnes"),
+        (1_234_567, "1,235 tonnes"),
+    ],
+)
+def test_format_co2e(kg: float, expected: str) -> None:
+    assert _format_co2e(kg) == expected
+
+
+def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
+    rows = pd.DataFrame(
+        {
+            "date": ["2024-01-15", "2024-02-15"],
+            "product": ["Lentils", "Chickpeas"],
+            "category": ["Legumes", "Legumes"],
+            "kilos_total": [20.0, 18.0],
+        }
+    )
+    report = build_food_report(
+        rows,
+        diner_meal_mapping={"2024-01": 100, "2024-02": 120},
+        mode="procurement",
+        region="us",
+        diner_or_meal="diner",
+        top_n_drivers=5,
+    )
+    narrative = _executive_narrative(report, "Acme", "pass")
+    assert narrative is not None
+
+    paragraphs = _narrative_paragraphs(narrative)
+
+    assert "All of the categorised food was plant-based." in paragraphs
+    assert not any("nimal" in paragraph for paragraph in paragraphs)
+
+
+def test_narrative_paragraphs_describe_a_mixed_split() -> None:
+    narrative = _executive_narrative(_report(), "Acme", "pass")
+    assert narrative is not None
+
+    paragraphs = _narrative_paragraphs(narrative)
+
+    assert any(
+        p.startswith(
+            "Plant-based items made up 63% of the categorised food by weight, and animal "
+            "products 37%."
+        )
+        for p in paragraphs
+    )

@@ -368,6 +368,13 @@ def test_summary_stats_names_the_emissions_factor_region(region, label):
     assert report.summary_stats["Region used for climate emissions factors"] == label
 
 
+def test_summary_stats_prints_a_single_month_once():
+    dates = ["2024-01-15", "2024-01-20", "2024-01-25", "2024-01-30"]
+    report = _build(_rows().assign(date=dates), diner_meal_mapping={"2024-01": 100})
+
+    assert report.summary_stats["Date range"] == "Jan 2024"
+
+
 @pytest.mark.parametrize("region", ["us", "europe"])
 def test_ambiguous_dates_abort_whatever_the_region(region):
     rows = _rows().assign(date=["01/01/2024", "01/01/2024", "01/02/2024", "01/02/2024"])

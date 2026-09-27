@@ -512,11 +512,7 @@ def _summary_stats(
     summary_stats = {
         "Total rows": f"{len(df):,}",
         "Unique products": f"{df['product'].nunique():,}" if "product" in df.columns else "N/A",
-        "Date range": (
-            f"{df['date'].min().strftime('%b %Y')} – {df['date'].max().strftime('%b %Y')}"
-            if "date" in df.columns and df["date"].notna().any()
-            else "N/A"
-        ),
+        "Date range": _date_range(df),
         f"Total {diner_or_meal}s": f"{total_dm:,.0f}",
         "Data type": mode.title(),
         "Region used for climate emissions factors": region_summary_label,
@@ -567,3 +563,10 @@ def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFra
         df.groupby(keys, dropna=False)["emissions_kg_co2e"].sum(min_count=1).reset_index()
     )
     return monthly_cat.merge(category_emissions, on=keys, how="left", validate="one_to_one")
+
+
+def _date_range(df: pd.DataFrame) -> str:
+    if "date" not in df.columns or not df["date"].notna().any():
+        return "N/A"
+    first, last = df["date"].min().strftime("%b %Y"), df["date"].max().strftime("%b %Y")
+    return first if first == last else f"{first} – {last}"

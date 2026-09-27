@@ -119,10 +119,13 @@ def create_title_page(
 
 
 def _format_co2e(kg: float) -> str:
-    """Human-scale CO2e: tonnes above 2,000 kg, else kilograms."""
-    if kg >= 2000:
-        return f"{kg / 1000:,.0f} tonnes"
-    return f"{kg:,.0f} kg"
+    """Human-scale CO2e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
+    if kg < 2000:
+        return f"{kg:,.0f} kg"
+    tonnes = kg / 1000
+    if round(tonnes, 1) < 10:
+        return f"{tonnes:.1f} tonnes"
+    return f"{tonnes:,.0f} tonnes"
 
 
 def create_executive_summary_page(
@@ -220,6 +223,28 @@ def create_executive_summary_page(
         )
         y -= _SUMMARY_LINE_HEIGHT
 
+    y -= 0.035  # gap below the subtitle
+    for paragraph in _narrative_paragraphs(narrative):
+        for line in _wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily="Lato"):
+            ax.text(
+                left_x,
+                y,
+                line,
+                transform=ax.transAxes,
+                ha="left",
+                va="top",
+                fontsize=11.5,
+                fontfamily="Lato",
+            )
+            y -= _SUMMARY_LINE_HEIGHT
+        y -= 0.017  # paragraph gap
+
+    pdf.savefig(fig)
+    plt.close(fig)
+
+
+def _narrative_paragraphs(narrative: dict[str, Any]) -> list[str]:
+    headline = _format_co2e(narrative["total_co2e_kg"])
     dm = narrative.get("dm_label", "diner")
     paragraphs = []
 
@@ -244,7 +269,9 @@ def create_executive_summary_page(
             top_text = " and ".join(f"{n} ({p:.0f}%)" for n, p in top)
         paragraphs.append(f"The biggest contributors were {top_text}.")
 
-    if narrative.get("plant_pct") is not None:
+    if narrative.get("animal_pct") == 0:
+        paragraphs.append("All of the categorised food was plant-based.")
+    elif narrative.get("plant_pct") is not None:
         paragraphs.append(
             f"Plant-based items made up {narrative['plant_pct']:.0f}% of the categorised food "
             f"by weight, and animal products {narrative['animal_pct']:.0f}%. Animal products "
@@ -263,25 +290,7 @@ def create_executive_summary_page(
         "The pages that follow show how the footprint breaks down by month, category and "
         "product. The methodology is explained at the back."
     )
-
-    y -= 0.035  # gap below the subtitle
-    for paragraph in paragraphs:
-        for line in _wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily="Lato"):
-            ax.text(
-                left_x,
-                y,
-                line,
-                transform=ax.transAxes,
-                ha="left",
-                va="top",
-                fontsize=11.5,
-                fontfamily="Lato",
-            )
-            y -= _SUMMARY_LINE_HEIGHT
-        y -= 0.017  # paragraph gap
-
-    pdf.savefig(fig)
-    plt.close(fig)
+    return paragraphs
 
 
 def create_text_page(
