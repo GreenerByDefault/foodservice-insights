@@ -6,7 +6,7 @@ import {
 } from '@gbd/storage';
 import { error } from '@sveltejs/kit';
 import { SERVICE_UNAVAILABLE_ERROR } from '$lib/errors/messages';
-import { requireVar } from './env.ts';
+import { requirePrivateVar } from './env.ts';
 
 let handle: BlobStore | undefined;
 
@@ -19,11 +19,11 @@ let handle: BlobStore | undefined;
  */
 export function blobStore(): BlobStore {
   handle ??= initializeBlobStore({
-    endpoint: requireVar('S3_ENDPOINT'),
-    region: requireVar('S3_REGION'),
-    accessKeyId: requireVar('S3_ACCESS_KEY_ID'),
-    secretAccessKey: requireVar('S3_SECRET_ACCESS_KEY'),
-    bucket: requireVar('S3_BUCKET'),
+    endpoint: requirePrivateVar('S3_ENDPOINT'),
+    region: requirePrivateVar('S3_REGION'),
+    accessKeyId: requirePrivateVar('S3_ACCESS_KEY_ID'),
+    secretAccessKey: requirePrivateVar('S3_SECRET_ACCESS_KEY'),
+    bucket: requirePrivateVar('S3_BUCKET'),
   });
   return handle;
 }
