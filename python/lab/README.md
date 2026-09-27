@@ -17,7 +17,7 @@ Each step's runscript is in [`runscripts/`](runscripts/). Steps 0.5, 1.5 and 3 a
 | 0 | `0 setup_folder_structure.ipynb`, `0 initial_data_check.ipynb` | Lay out a client folder; first look at the raw files |
 | 0.5 | `0.5 Prepare PDF data.ipynb` *or* `0.5. Prepare tabular data Runscript.py` | Turn the client's PDFs, or messy CSV and Excel files, into one clean CSV. Launches step 1 |
 | 1 | `1. Categorize Runscript.py` | Assign every product a GBD category — cache first, then the LLM |
-| 1.5 | `1.5. Clean Units Runscript.py` | Normalize weights to kilos or pounds, LLM-assisted. Launches step 2 |
+| 1.5 | `1.5. Clean Units Runscript.py` | Normalize weights to kilos or pounds, LLM-assisted. Runs step 2 in-process |
 | 2 | `2. Produce Food Report.py` | Emissions, aggregation, and the report bundle — `food_report.pipeline.run_food_report()` wraps the product's in-memory core and writes the rest: chart PNGs, the QA workbook, the run manifest, and the run log |
 | 3 | `3. Compare baseline procurement vs serving.py` | Only when a client sent both for the same baseline |
 | 5 | `5 pilot_analysis.ipynb` | Pilot vs baseline |
@@ -31,6 +31,9 @@ Work in [`client_work/`](client_work/), which git ignores. Give each client a fo
 the runscripts you need with `cp -n` so you never overwrite edits, and run them cell by cell
 from the client's data folder. The runscripts read `client_metadata.json` from the working
 directory, and find the repo root's `.env` by walking up from it.
+
+The kernel holds whatever lab code it imported, and step 1.5 runs step 2 in that kernel. After
+editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autoreload 2` first.
 
 The lab reads three keys from `.env`: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and
 `LLM_WHISPERER_API_KEY` (PDF extraction only). See [`.env.example`](../../.env.example).
