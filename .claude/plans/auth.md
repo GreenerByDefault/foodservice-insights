@@ -4,8 +4,8 @@
 
 The server already reads a real Supabase Auth session when `PUBLIC_AUTH_MODE=supabase`, and the
 `apps/web` browser suite already signs every test in as a GoTrue user of its own. What is left is
-the frontend: sign-in and sign-out, a one-question onboarding step (display name, required), a
-working rename on `/account`, a second person in a test, and sign-in on the 401 page.
+the frontend: a one-question onboarding step (display name, required), a working rename on
+`/account`, the invite link's prefilled address, and sign-in on the 401 page.
 
 **Supabase Auth arrives beside the placeholder, not in place of it.** `PUBLIC_AUTH_MODE` picks one
 per environment (§ The mode switch). That lets hosting go ahead before there is an email provider —
@@ -15,10 +15,10 @@ working as it does today — one seeded identity, no sign-in, no mail — and ma
 it.** The system suite runs in `placeholder` to hold that line end to end.
 
 What has landed: the mode switch and server sessions (§ The mode switch), per-test identities for
-both browser suites and a second person in a test (§ Where a test identity comes from), and the
+both browser suites and a second person in a test (§ Where a test identity comes from), the
 sign-in form, mounted on `/sign-in` with a real-OTP e2e and screenshots of both steps (§ The
-sign-in form). In `supabase` mode a developer can sign in through Mailpit today; signing *out* is
-PR 1.
+sign-in form), and sign-out with a root layout that follows the session (§ Following the session).
+In `supabase` mode a developer can sign in through Mailpit and out again today.
 
 Invites, memberships, CSP, and the site password itself are out of scope. Change-email and
 delete-account are `account-self-service.md`; CSP becomes an Open item in `ARCHITECTURE.md`.
@@ -34,8 +34,9 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
   `auth.getUser()`. Never `getSession()`. Any auth *error* degrades to signed out, never a 500
   (cfa-web-app #115, #210, #255). `getClaims()` is a later optimization — see Follow-ups.
 - **`onAuthStateChange` → `invalidateAll()`** in the root layout, skipping `INITIAL_SESSION`
-  (cfa-app `auth-state-change.ts`), plus a bfcache `pageshow`/`persisted` reload guard (cfa-app
-  `bfcache-auth-revalidate.ts`) so Back after sign-out cannot show a signed-in shell.
+  (cfa-app `auth-state-change.ts`), plus a reload when Back restores the browser's saved snapshot
+  of a page (cfa-app `bfcache-auth-revalidate.ts`), so Back after sign-out cannot show a signed-in
+  shell. Both landed; § Following the session.
 - **E2E identities are real GoTrue sessions, made through its admin API**, not a test-only backdoor
   in the app; one real-OTP spec reads the code from Mailpit. How the session is made differs from
   CFA's `generateLink` → `verifyOtp` — see § Settled decisions, Test sessions.
@@ -56,7 +57,7 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 `$lib/components/auth/sign-in-flow.svelte` holds both steps of email OTP — `email-step.svelte` then
 `code-step.svelte` — behind two props: `auth: BrowserAuth` and `onSignedIn: () => Promise<void>`. It
 keeps the address in its own `$state` so "Change email" returns to a filled field, and it lives in
-`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 4).
+`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 3).
 
 `/sign-in` passes `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, and needs nothing more:
 the invalidation re-runs its `load`, whose `locals.auth` redirect to `/orgs` takes over, and `/orgs`
@@ -76,13 +77,16 @@ Three details of that seam constrain what is left:
   reaches for the environment and throws. A server-rendered page can pass it straight to the flow.
 - **`$lib/auth/testing/fake.ts`** gives component tests `fakeBrowserAuth()` (a `FakeBrowserAuth`,
   every method a typed `vi.fn()`) and `authError(code)`. Anything mounting the flow in a component
-  test uses those rather than a client.
+  test uses those rather than a client. A component that calls `browserAuth()` itself rather than
+  taking `auth` as a prop cannot even be imported in a component test — `$env/dynamic/public` has
+  no environment there — so its test `vi.mock`s `$lib/auth/browser` to hand back a fake, as
+  `(app)/shell/user-menu.svelte.test.ts` does.
 
 `$lib/auth/sign-in.ts` holds `FIELD`, `OTP_LENGTH`, `RESEND_COOLDOWN_S`, and the pure
 `describeAuthError({ code })`, which maps `otp_expired` / `over_email_send_rate_limit` / anything
 else to copy of ours — Supabase's own `message` is never rendered.
 
-It has no `initialEmail` yet, which the invite email's `/sign-in?email=…` needs (PR 2). The link
+It has no `initialEmail` yet, which the invite email's `/sign-in?email=…` needs (PR 1). The link
 comes from `signInUrl` (`packages/email/src/messages/links.ts`), which `encodeURIComponent`s the
 address; the invitee page it leads to has landed (`/invites`), so this prefill is the last
 invite-flow step left.
@@ -102,6 +106,32 @@ Two test helpers the later PRs reuse:
   `page.route('**/auth/v1/otp*', …)` fulfilled with a 200 and `{}`, since the containerized browser
   cannot reach GoTrue on the host's `127.0.0.1`. Its shots are `sign-in-email.png` and
   `sign-in-code.png`, flat under `e2e/__screenshots__`.
+
+### Following the session
+
+Sign out is the account menu's last item, shown only when `(app)/+layout.svelte` passes
+`canSignOut={authMode() === 'supabase'}`. It calls `browserAuth().signOut({ scope: 'local' })` and
+then `goto('/', { invalidateAll: true })`, **without checking the error**: auth-js 2.117 clears the
+device's session even when GoTrue answers the logout with a 5xx, so the device is signed out
+either way. The one failure that keeps a session — auth-js could not read it at all — lands on `/`,
+whose `locals.auth` redirect sends a still-signed-in visitor back to `/orgs`. So there is no
+failed state to render, and no screenshot of one. Anything else that ends a session (delete
+account, `account-self-service.md`) can rely on the same behavior.
+
+The root `+layout.svelte`, in `supabase` mode only, subscribes `browserAuth().onAuthStateChange`
+and calls `invalidateAll()` for every event `shouldInvalidate` passes (all but `INITIAL_SESSION`),
+and adds a `pageshow` listener, `refreshWhenRestoredByBack(() => location.reload())`. Both pure
+halves are in `$lib/auth/follow-session.ts`. Two details constrain what comes next:
+
+- **The callback does not await `invalidateAll()`.** supabase-js awaits its subscribers, so an
+  awaited reload would hold `signOut()` — or `verifyOtp()` — until every load had re-run.
+- **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={invalidateAll}` and the
+  listener's `SIGNED_IN`. Harmless, and the 401 page (PR 3) inherits it.
+
+The e2e signs out of an `(app)` page, lands on `/`, presses Back to the 401 page with no account
+menu, and reloads for a 401, so the cookie is proven gone and not just hidden. Back there is a
+client-side navigation, not a snapshot restore; the reload-on-restore is covered only by its unit
+test.
 
 ### Where a test identity comes from
 
@@ -136,7 +166,7 @@ Two consequences later PRs inherit:
   refuses to remove the last admin of a pinned organization. Anything that deletes a minted user
   through the app (`account-self-service.md`) has the same constraint to reckon with.
 - **Minted users have no display name yet**, like the placeholder, so every `(app)` screenshot still
-  shows the icon, not a monogram. PR 3 gives them one fixed name and re-baselines.
+  shows the icon, not a monogram. PR 2 gives them one fixed name and re-baselines.
 
 `apps/web/e2e` extends that shared `test` with `reports.create(state)` — into `org` — and
 `organizations.create(spec)` for an organization built to a spec (members, invites, a whole list of
@@ -185,7 +215,7 @@ environment themselves.
 | Contacts Supabase Auth | Never — `PUBLIC_SUPABASE_*` need not even be set | On every request |
 | `/sign-in` | Redirects to `/orgs`, as today | The form |
 | Sign out | Hidden: there is no session to end | `signOut({ scope: 'local' })` |
-| `onAuthStateChange`, bfcache guard | Not subscribed | Subscribed |
+| `onAuthStateChange`, reload on Back restore | Not subscribed | Subscribed |
 | The 401 page's form | Unreachable: no request is signed out | Shown |
 | Onboarding, `/account` rename | Same code; the seed names the placeholder, so it never meets onboarding | Same code |
 | Delete account, change email | Hidden: deleting the placeholder breaks every request, and there is no session to change | Shown |
@@ -225,7 +255,7 @@ instead.
 | Valid token, no `app_user` row | Throw → 500 | The trigger writes the row in GoTrue's own transaction, so only a setup error gets here: the app reading a different database than GoTrue, users that predate the migration, or a fixture that skipped `mintUser`'s mirror. Signing out instead would loop a user who just entered a correct code back to the form |
 | Cookie name | Pinned: `AUTH_COOKIE_NAME` in `@gbd/core`, passed as `cookieOptions.name` to both clients | Default derives from the Supabase URL hostname, which differs between host (`127`) and Docker (`host`) tiers; pinning also survives project-ref changes |
 | Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`), `secure` left to SvelteKit | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. *Rejected: `secure: event.url.protocol === 'https:'`* — it fails open, since adapter-node reports `http:` behind a TLS-terminating proxy when `ORIGIN` is unset. SvelteKit's default already relaxes for the test browsers, whose `ORIGIN` is `http://localhost` |
-| Sign-out scope | `local` | Signs out this device; matches CFA |
+| Sign-out scope | `local`, error ignored | Signs out this device; matches CFA. The error is ignored because auth-js clears the local session regardless (§ Following the session). *Rejected: a "Could not sign out" alert* — by the time it rendered, the `SIGNED_OUT` reload had replaced the page with the 401 |
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
 | Email normalization in the form | Reused `$lib/forms/validation`'s `emailAddress` and `MAX_EMAIL_LENGTH`, not a schema of sign-in's own | It already trims, lowercases and caps at 254, matching `organization_invite_email_is_lowercase` — and GoTrue lowercases anyway, so the address the form sends is the address the fixtures read back |
@@ -233,45 +263,23 @@ instead.
 | Env vars | `PUBLIC_AUTH_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public` (the last two landed with the form); `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
 | Dependencies | `@supabase/ssr` ^0.12.7, `@supabase/supabase-js` ^2.116.0, both in the catalog, both `dependencies` of `apps/web` | Latest at the time; server code imports them, so not `devDependencies` |
 | Test sessions | `admin.createUser({ email, password, email_confirm: true })` once per user, then `signInWithPassword` per test, on the test stack only | Every password sign-in is an independent session, so any number of tests can be one user at once with nothing to coordinate. *Rejected: `generateLink` → `verifyOtp`, as CFA does.* GoTrue keeps one outstanding code per user (`one_time_tokens_user_id_token_type_key`), so two tests signing in as one user cancel each other's code. No real user has a password, and the Mailpit spec covers the real OTP path |
-| Screenshot text the identity owns | Minted users will share one fixed display name (PR 3), so a monogram is stable. A spec whose image shows the *address* runs as the run's pinned identity, `test.use({ identity: 'pinned' })`. Its GoTrue address is unique to the run; the fixed address it shows exists only in the run database, which is where `loadAuthorization` reads `auth.users.email` and where GoTrue never writes (§ Two facts, 2) | Every GoTrue address is unique, so nothing is shared across runs or worktrees and the two-hour sweep needs no exceptions. Within a run, specs share the pinned identity the way they share a pinned `orgName`, which keeps them `fullyParallel`; nothing pinned is mutated or deleted |
+| Screenshot text the identity owns | Minted users will share one fixed display name (PR 2), so a monogram is stable. A spec whose image shows the *address* runs as the run's pinned identity, `test.use({ identity: 'pinned' })`. Its GoTrue address is unique to the run; the fixed address it shows exists only in the run database, which is where `loadAuthorization` reads `auth.users.email` and where GoTrue never writes (§ Two facts, 2) | Every GoTrue address is unique, so nothing is shared across runs or worktrees and the two-hour sweep needs no exceptions. Within a run, specs share the pinned identity the way they share a pinned `orgName`, which keeps them `fullyParallel`; nothing pinned is mutated or deleted |
 | Local keys | Fixed CLI defaults committed in `.env.example`/`.env.test`: `sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`, `sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz` | Same on every machine and in CI |
 
 ## Sequencing
 
 ```
-PR 1  sign out, auth listener ───┐
-PR 2  ?email= prefill, invite loop
-PR 3  onboarding, rename ────────┴── account-self-service.md (needs 1 and 3)
-PR 4  401 in place
-PR 5  e2e/README.md catches up with per-test identities
+PR 1  ?email= prefill, invite loop
+PR 2  onboarding, rename ──────── account-self-service.md (needs 2)
+PR 3  401 in place
+PR 4  e2e/README.md catches up with per-test identities
 ```
 
-All five are independent of each other. PR 1 needs no sign-in UI: the fixtures' minted identities
-already carry real session cookies (`signInCookies`), so its specs start signed in. PRs 2 and 4
-build on the mounted `/sign-in` and `waitForSignInCode`, both landed. Hosting needs none of them,
-and every one keeps `placeholder` untouched: it never reaches `/sign-in` and hides sign out.
+All four are independent of each other. PRs 1 and 3 build on the mounted `/sign-in` and
+`waitForSignInCode`, both landed. Hosting needs none of them, and every one keeps `placeholder`
+untouched: it never reaches `/sign-in` and hides sign out.
 
-## PR 1 — Sign out, and the root layout follows the session
-
-The listener and the bfcache guard ship with sign out rather than sign-in because Back after sign
-out is the e2e that proves them; alone they would land untested end to end.
-
-- `(app)/shell/user-menu.svelte`: a `canSignOut` prop, which `(app)/+layout.svelte` sets from
-  `authMode() === 'supabase'`. Sign out → `browserAuth().signOut({ scope: 'local' })` then
-  `goto('/', { invalidateAll: true })`; hidden when `canSignOut` is false. Replace the `'sign out is
-  present but disabled'` test with one per value.
-- Root `+layout.svelte`, in `supabase` mode only: an `$effect` subscribing
-  `browserAuth().onAuthStateChange` — which resolves a promise, so the effect awaits it and guards
-  against unmounting before the subscription arrives — calling `invalidateAll()` unless
-  `shouldInvalidate(event)` says `INITIAL_SESSION` (pure, tested); and `window.addEventListener(
-  'pageshow', bfcacheRevalidator(() => location.reload()))` (pure factory, tested). Replace the
-  "When auth lands" comment.
-
-**E2E:** in `auth.e2e.ts`, a minted (signed-in) user opens an `(app)` page → Sign out → `/`, and
-Back does not show the signed-in shell. **Screenshots:** `account/menu.png` regenerates for the
-enabled Sign out.
-
-## PR 2 — `?email=` prefill, closing the invite loop
+## PR 1 — `?email=` prefill, closing the invite loop
 
 - `/sign-in`'s `+page.server.ts` validates `?email=` with `emailAddress` (`$lib/forms/validation.ts`,
   which also trims and lowercases) via `v.safeParse`, returning `initialEmail: string | null` —
@@ -290,7 +298,7 @@ the invite email's link read from Mailpit (`waitForEmail`, as `e2e/organizations
 does), opened while anonymous → the email field is prefilled → `waitForSignInCode` → code → lands on
 `/invites` with the offer listed.
 
-## PR 3 — Onboarding: the display name is required, and `/account` can change it
+## PR 2 — Onboarding: the display name is required, and `/account` can change it
 
 The `app_user_display_name_trimmed_length` CHECK already exists on `display_name` — folded into
 `001_initial_schema.ts` as a prefactor, since 001 hadn't shipped yet — with `MAX_DISPLAY_NAME_LENGTH
@@ -315,7 +323,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   `_organizationsPageRedirect` lands them.
 - **`(app)/+layout.server.ts`:** `if (auth.user.displayName === null) redirect(303, '/onboarding')`
   after `requireAuth`, and return `displayName` as `string`. Narrow `user-menu.svelte`'s prop and
-  `initials()` to `string`; simplify their tests.
+  `initials()` to `string`; simplify their tests. The menu also takes `canSignOut`, which stays.
 - **`/account`:** `+page.server.ts` returns the user; the page shows the email and the rename form
   (`onSaved: invalidateAll`), then the still-stubbed change-email and delete sections with their
   existing comments. Remove `StubNotice` from the page. Sign out stays in the menu.
@@ -328,7 +336,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   `/account` rename changes the menu's name. Screenshots: `onboarding.png`, `account.png` (new —
   stubs get their first shot when implemented).
 
-## PR 4 — 401 in place
+## PR 3 — 401 in place
 
 - `error-page.svelte`: for `status === 401`, mount `SignInFlow` under the heading with
   `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, as `/sign-in` does — the page the user
@@ -343,7 +351,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   its URL → 401 page with the form → sign in as that user with the code from Mailpit → the org page
   renders at the same URL.
 
-## PR 5 — `e2e/README.md` catches up with per-test identities
+## PR 4 — `e2e/README.md` catches up with per-test identities
 
 A docs-only fix for two paragraphs of `apps/web/e2e/README.md` § Database state that predate
 minted identities:
@@ -367,6 +375,8 @@ minted identities:
   second code and a second cooldown. Needs a `restoring` state held through hydration, and changes
   what `sign-in.screenshot.ts` captures.
 - CSP and `getClaims()`: both **Open** in `ARCHITECTURE.md` § Auth.
+- Signing out in one tab should sign a second tab out on its next interaction. Nothing automated
+  covers that path yet, and no manual check was recorded when sign-out landed.
 
 ## Verification
 
@@ -379,11 +389,9 @@ e2e/auth.e2e.ts`). Re-baseline screenshots only when Playwright asks:
 with no sign-in, and `/sign-in` sends you to `/orgs`. Then set `PUBLIC_AUTH_MODE=supabase` and walk
 it with Mailpit (55324) open:
 
-- PR 1: Sign out returns to `/`; Back does not show the signed-in header. A second tab signing out
-  signs the first out on its next interaction.
-- PR 2: `/sign-in?email=a@b.test` arrives prefilled; `/sign-in?email=nope` arrives empty.
-- PR 3: a fresh address is sent to `/onboarding` before anything else; an empty or 101-character
+- PR 1: `/sign-in?email=a@b.test` arrives prefilled; `/sign-in?email=nope` arrives empty.
+- PR 2: a fresh address is sent to `/onboarding` before anything else; an empty or 101-character
   name is refused inline; the menu shows the monogram; `/account` renames. In `placeholder`, no
   onboarding.
-- PR 4: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
+- PR 3: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
   the same URL.

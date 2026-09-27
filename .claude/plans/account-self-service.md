@@ -7,8 +7,8 @@ screenshot; this plan adds the other two rows of the roles table — change emai
 and the rule REQUIREMENTS § Data deletion attaches to the second: an admin is blocked from deleting
 their account until they promote someone or delete the organization.
 
-**Depends on** `auth.md`'s sign-out and onboarding PRs (a real session to end; the `/account` page and `BrowserAuth`
-to extend). The widened `AuditEvent` (`target`, `detail`, `lib/server/audit.ts`) and
+**Depends on** `auth.md`'s onboarding PR (the `/account` page to extend). Sign-out and `BrowserAuth`
+have landed; `auth.md` § Following the session says how ending a session behaves. The widened `AuditEvent` (`target`, `detail`, `lib/server/audit.ts`) and
 `isCheckViolation` (`lib/server/db.ts`) this plan needs have already landed — except
 `AuditTarget`'s `'user'` branch requires a real `organizationId`, since nothing needed a null one
 yet; this plan's `user.deleted` is the first
