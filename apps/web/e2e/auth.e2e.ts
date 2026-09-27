@@ -27,7 +27,7 @@ test.describe('signed out', () => {
   test('/ is the marketing page', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
   });
 
   test('an organization answers 401', async ({ page }) => {
