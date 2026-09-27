@@ -282,7 +282,7 @@ def classify_entrees_using_historical_classifications(
     )
 
     # Second lookup: reuse labels for recognised cleaned names (mirrors the
-    # category pipeline's Step 2.5). Only runs when cleaned names are present
+    # category pipeline's cleaned-name reuse step). Only runs when cleaned names are present
     # both on the rows and in the historical cache; unanimous matches only.
     n_cleaned_matched = 0
     if "cleaned_item_names" in classified_products.columns:

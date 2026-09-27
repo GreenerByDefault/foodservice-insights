@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------
-# Step 1 — Historical reuse
+# Historical reuse
 # ----------------------------------------------------------------------
 def categorize_using_historical_classifications(
     unique_products_df: pd.DataFrame,
@@ -68,7 +68,7 @@ def categorize_using_historical_classifications(
 
 
 # ----------------------------------------------------------------------
-# Step 2 — Name cleaning
+# Name cleaning
 # ----------------------------------------------------------------------
 def clean_product_names(
     products_df: pd.DataFrame,
@@ -113,7 +113,7 @@ def clean_product_names(
 
 
 # ----------------------------------------------------------------------
-# Step 2.5 — Historical reuse on cleaned names
+# Historical reuse on cleaned names
 # ----------------------------------------------------------------------
 def categorize_using_cleaned_name_history(
     products_df: pd.DataFrame,
@@ -171,7 +171,7 @@ def categorize_using_cleaned_name_history(
 
 
 # ----------------------------------------------------------------------
-# Step 3 — LLM categorization
+# LLM categorization
 # ----------------------------------------------------------------------
 def categorize_with_llm(
     products_df: pd.DataFrame,
@@ -222,7 +222,7 @@ def categorize_with_llm(
 
 
 # ----------------------------------------------------------------------
-# Step 7 — Merge and filter
+# Merge and filter
 # ----------------------------------------------------------------------
 @dataclass(frozen=True)
 class MergeCounts:
