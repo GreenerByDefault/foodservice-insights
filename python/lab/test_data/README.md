@@ -114,9 +114,9 @@ assert (df["total_amount"] > 0).all()  # FAILS - 1 negative value
 # Step 3 would categorize these products
 df = pd.read_csv("step_2_output/validated_data.csv")
 
-from gbd_foodservice_insights.categorization.pipeline import categorize_products
+from gbd_foodservice_insights.categorization.pipeline import categorize_rows
 
-df_categorized, summary, review_df = categorize_products(
+df_categorized, summary, review_df = categorize_rows(
     df=df,
     data_type="procurement",
     openai_client=client,
@@ -265,13 +265,13 @@ assert len(df_clean) == len(df_expected)
 ### Test Step 3 (Categorize)
 
 ```python
-from gbd_foodservice_insights.categorization.pipeline import categorize_products
+from gbd_foodservice_insights.categorization.pipeline import categorize_rows
 
 # Load validated data
 df = pd.read_csv("test_data/step_2_output/validated_data.csv")
 
 # Run categorization
-df_cat, summary, review_df = categorize_products(
+df_cat, summary, review_df = categorize_rows(
     df=df,
     data_type="procurement",
     openai_client=your_client,

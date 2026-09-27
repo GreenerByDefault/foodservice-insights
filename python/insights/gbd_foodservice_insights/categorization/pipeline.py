@@ -4,8 +4,8 @@ Food Product Categorization — Orchestrator
 
 Public entry points for categorization:
 
-    categorize_products()  — main in-memory pipeline
-    categorize_file()      — file I/O wrapper around categorize_products()
+    categorize_rows()      — main in-memory pipeline
+    categorize_file()      — file I/O wrapper around categorize_rows()
 
 All helper logic lives in sibling modules:
 
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 # Main in-memory pipeline
 # ----------------------------------------------------------------------
-def categorize_products(
+def categorize_rows(
     df: pd.DataFrame,
     llm: LlmClient,
     gemini_client: Any | None = None,
@@ -246,7 +246,7 @@ def categorize_file(
     """
     Read a file, categorize products, and write results.
 
-    Thin I/O wrapper around categorize_products().
+    Thin I/O wrapper around categorize_rows().
 
     Parameters
     ----------
@@ -274,7 +274,7 @@ def categorize_file(
     -------
     tuple[DataFrame, dict]
         - The categorized DataFrame.
-        - Summary dict (same as categorize_products, plus output file keys).
+        - Summary dict (same as categorize_rows, plus output file keys).
     """
     input_filepath = Path(input_filepath)
 
@@ -296,7 +296,7 @@ def categorize_file(
     logger.info("Read %d rows from %s", len(df), input_filepath.name)
 
     # Run core pipeline
-    df_result, summary, ai_review_df = categorize_products(
+    df_result, summary, ai_review_df = categorize_rows(
         df=df,
         llm=llm,
         gemini_client=gemini_client,

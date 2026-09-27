@@ -3,12 +3,12 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache, pipeline, steps
-from gbd_foodservice_insights.categorization.pipeline import categorize_file, categorize_products
+from gbd_foodservice_insights.categorization.pipeline import categorize_file, categorize_rows
 from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
-def test_categorize_products_cache_write_mode_controls_destination():
+def test_categorize_rows_cache_write_mode_controls_destination():
     df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
     unique_products = pd.DataFrame(
         {
@@ -67,7 +67,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
             "save_unreviewed_web_app_categorizations",
         ) as save_unreviewed,
     ):
-        categorize_products(
+        categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
             data_type="procurement",
@@ -76,7 +76,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
         assert save_reviewed.call_count == 0
         assert save_unreviewed.call_count == 0
 
-        categorize_products(
+        categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
             data_type="procurement",
@@ -85,7 +85,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
         assert save_reviewed.call_count == 1
         assert save_unreviewed.call_count == 0
 
-        categorize_products(
+        categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
             data_type="procurement",
@@ -95,7 +95,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
         assert save_unreviewed.call_count == 1
 
         with pytest.raises(ValueError, match="Invalid cache_write_mode"):
-            categorize_products(
+            categorize_rows(
                 df=df,
                 llm=KeywordLlmClient(),
                 data_type="procurement",
@@ -103,7 +103,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
             )
 
 
-def test_categorize_products_raises_when_date_cleaning_leaves_missing_values():
+def test_categorize_rows_raises_when_date_cleaning_leaves_missing_values():
     df = pd.DataFrame({"product": ["apple"], "date": ["not a date"], "weight": [1.0]})
     parsed_df = df.copy()
     parsed_df["date"] = pd.NaT
@@ -113,14 +113,14 @@ def test_categorize_products_raises_when_date_cleaning_leaves_missing_values():
         patch.object(pipeline, "clean_weight_column", return_value=parsed_df),
         pytest.raises(ValueError, match=r"Column 'date' contains NaN values after cleaning."),
     ):
-        categorize_products(
+        categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
             data_type="procurement",
         )
 
 
-def test_categorize_products_raises_when_weight_cleaning_leaves_missing_values():
+def test_categorize_rows_raises_when_weight_cleaning_leaves_missing_values():
     df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": ["unknown"]})
     parsed_df = df.copy()
     parsed_df["date"] = pd.to_datetime(parsed_df["date"])
@@ -132,7 +132,7 @@ def test_categorize_products_raises_when_weight_cleaning_leaves_missing_values()
         patch.object(pipeline, "clean_weight_column", return_value=cleaned_df),
         pytest.raises(ValueError, match=r"Column 'weight' contains NaN values after cleaning."),
     ):
-        categorize_products(
+        categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
             data_type="procurement",
@@ -168,7 +168,7 @@ def test_categorize_file_writes_human_review_csv(tmp_path):
 
     with patch.object(
         pipeline,
-        "categorize_products",
+        "categorize_rows",
         return_value=(categorized_df, summary, human_review_df),
     ):
         _, result_summary = categorize_file(
@@ -224,7 +224,7 @@ def test_categorize_file_writes_entree_human_review_csv(tmp_path):
 
     with patch.object(
         pipeline,
-        "categorize_products",
+        "categorize_rows",
         return_value=(categorized_df, summary, human_review_df),
     ):
         _, result_summary = categorize_file(
@@ -241,7 +241,7 @@ def test_categorize_file_writes_entree_human_review_csv(tmp_path):
     assert result_summary["entree_human_review_n_unique_products"] == 1
 
 
-def test_categorize_products_reuses_cleaned_names_and_skips_llm():
+def test_categorize_rows_reuses_cleaned_names_and_skips_llm():
     df = pd.DataFrame(
         {
             "product": ["MLK WHOLE 2L", "Whole Milk Carton"],
@@ -280,7 +280,7 @@ def test_categorize_products_reuses_cleaned_names_and_skips_llm():
         patch.object(pipeline, "check_GBD_categories"),
         patch.object(steps, "print_progress", return_value=None),
     ):
-        df_final, summary, ai_review_df = categorize_products(
+        df_final, summary, ai_review_df = categorize_rows(
             df=df,
             llm=llm,
             data_type="procurement",

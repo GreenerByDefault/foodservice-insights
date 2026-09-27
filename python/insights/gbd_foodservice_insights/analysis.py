@@ -19,7 +19,7 @@ read-only.
 sees the response's `usage`.
 
 **Open:** structured result metadata (rows in, rows categorized, products uncategorized, ...) is
-dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. `categorize_products`
+dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. `categorize_rows`
 already returns it as its `summary` dict (`n_rows_before`, `n_products_after`,
 `row_elimination_details`, `match_type_counts`, ...); `AnalysisOutcome` is where it would arrive.
 """
@@ -37,7 +37,7 @@ matplotlib.use("Agg")
 
 from gbd_foodservice_insights.categorization.cache import get_previously_categorized_items
 from gbd_foodservice_insights.categorization.llm import LlmClient, OpenAiLlmClient
-from gbd_foodservice_insights.categorization.pipeline import categorize_products
+from gbd_foodservice_insights.categorization.pipeline import categorize_rows
 from gbd_foodservice_insights.errors import AnalysisError as AnalysisError
 from gbd_foodservice_insights.errors import InvalidInputError as InvalidInputError
 from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataError
@@ -96,7 +96,7 @@ def analyze(
     if request.unit_system == "lb":
         df = df.assign(weight=df["weight"] * LB_TO_KG)
 
-    df_final, _summary, _ai_review_df = categorize_products(
+    df_final, _summary, _ai_review_df = categorize_rows(
         df,
         llm,
         historical_categorizations=get_previously_categorized_items(),
