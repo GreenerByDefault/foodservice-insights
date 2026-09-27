@@ -26,13 +26,20 @@ What the map found:
   `plot_metric_over_time` on it, so the lab's trend numbers are the report's. `plotting_utils.py`
   is shared with five lab modules and sets the backend, the seaborn palette and the fonts at
   import. `aggregation.py` formats percentages as strings that `plots.py` parses back.
-- Tests follow the code. About a quarter of `test_diagnostics.py` targets lab-only paths;
-  the `*_reads_*_from_yaml` tests are one template, and the loader's own test already shows
-  their `cache_clear()` calls unnecessary; the `test_run_all_diagnostics_includes_*` tests
-  re-assert what each check's unit test asserts, with an empty mapping the product never passes.
-  `test_aggregate.py` is a legacy grab-bag of aggregation and diagnostics tests (the meat check's
-  among them) and about fifteen plot tests, several asserting only `isinstance(fig, plt.Figure)`;
-  `test_plotting_utils.py` is mostly "runs without error".
+- Tests follow the code. About a quarter of `test_diagnostics.py` targets lab-only paths: the
+  `TestParseAndValidateDateColumn` string, numeric and ambiguous cases, and the meat check's two
+  tests, in the outliers and thresholds sections. Threshold overrides go through one
+  parametrized test, `test_checks_read_their_thresholds_from_yaml`, whose inputs each land on the
+  opposite side of the checked-in default from the override, so a case fails if its check ignores
+  the YAML; its `_override_thresholds` helper monkeypatches
+  `report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH`. `run_all_diagnostics` has one aggregate test of
+  its ordered findings on product-shaped input, beside the tests of its own inline logic.
+- Two things in `diagnostics.py` are left with no caller now that the tests stopped reaching for
+  them: the `_ThresholdLoader` Protocol that bolts `cache_clear` and `cache_info` onto
+  `load_diagnostic_thresholds` (the cache keys on path and mtime, so no test clears it), and
+  `detect_unusual_sales`'s legacy list-returning path, since `run_all_diagnostics` and the lab's
+  `food_report/pipeline.py` both pass `return_details=True`. The legacy path is also what prints
+  "Checking for products..." to stdout.
 - Mechanical: `Any` in
   about 145 places where `dict[str, str]` or a `Literal` is easy; two hand-rolled module caches
   (`categories.py`, `emissions.py`) that `functools.cache` expresses;
@@ -65,34 +72,29 @@ What the map found:
   `food_report/pipeline.py`, and `run_all_diagnostics` builds its `ReportMode` from its `serving`
   flag.
 - **Tests move with the code, assertions unchanged.** A trivial assertion is deleted rather than
-  moved unless it is the only test of a lab function. Templated tests collapse to one
-  parametrized test.
+  moved unless it is the only test of a lab function.
 - **The mechanical sweep is one PR per kind**, never folded into a behaviour PR. It follows code
   that has moved to the lab.
 
 ## PR 1 — split `diagnostics.py`
 
 Thresholds and checks stay in the product; the messy-input parsing and the meat check go to the
-lab, per the decision, and the meat check's test leaves `test_aggregate.py` with it. `parse_and_validate_date_column` keeps only its `datetime64`
-pass in the product if any product caller remains after `categorization-pipeline.md` PR 6;
-otherwise it moves whole.
+lab, per the decision, and the meat check's two tests leave `test_diagnostics.py` with it.
+`parse_and_validate_date_column` keeps only its `datetime64` pass in the product if any product
+caller remains after `categorization-pipeline.md` PR 6; otherwise it moves whole.
 
-## PR 2 — test consolidation
+`thresholds.py` takes the loader without the `_ThresholdLoader` shim, and `_override_thresholds`
+patches the path where it now lives. `checks.py` takes `detect_unusual_sales` without its legacy
+path, and that path's two tests and its threshold case go with it.
 
-The YAML template tests become one parametrized test; the `run_all_diagnostics_includes` tests
-become one test that the aggregate returns every check's findings in order, given the
-Period-keyed mapping the product passes; `test_aggregate.py` splits into `test_plots.py` (keeping
-the `generate_all_report_plots` tests, the strongest in the suite) and its other tests merge into
-their modules' files; `test_plotting_utils.py` keeps font registration and the wrapping helpers.
-
-## PR 3 — mechanical
+## PR 2 — mechanical
 
 `Any` to real types where trivial; `functools.cache` for the two YAML
 caches; `isinstance(dtype, pd.PeriodDtype)` in the three lab modules. **Open:** keep percentages
 numeric in `aggregation.py` and format them at draw time; it changes the workbook's percentage cells
 from text to numbers, so it is a behaviour change for GBD to want.
 
-## PR 4 — report pages composed from public panel drawers
+## PR 3 — report pages composed from public panel drawers
 
 The three combined report pages already draw through private per-axis helpers
 (`_draw_metric_over_time_on_axis`, `_draw_multi_series_metric_over_time_on_axis`,
@@ -112,19 +114,19 @@ without threading a matplotlib `SubFigure` through every chart function, and tho
 drifted from what the report renders: a seaborn line path, different bar labels, no trend for a
 single month.
 
-After PR 2, so its tests land in `test_plots.py`; independent of PRs 1 and 3. No behaviour
-changes, but the golden pins chart titles, not pixels.
+Its tests go in `test_plots.py`; independent of PRs 1 and 2. No behaviour changes, but the golden
+pins chart titles, not pixels.
 
 ## Verification
 
 - Every PR: `just lint && just check && just test && just test-lab`; the golden test unchanged
-  through PR 2.
+  through PR 1.
 - PR 1: `uv sync --package worker-child --no-dev --no-editable` into a fresh venv, where the lab
   is not importable, and `python -m worker_child.mock_llm` still writes a PDF and workbook,
   proving nothing product-side imports a moved symbol.
 - PR 1: run `1. Categorize Runscript.py` and `2. Produce Food Report.py` on
   `python/lab/test_data` in a scratch client folder, since no CI job runs the lab against data.
-- PR 4: render every `generate_all_report_plots` figure on the golden input before and after, and
+- PR 3: render every `generate_all_report_plots` figure on the golden input before and after, and
   compare the PNGs pixel for pixel.
 
 ## Risks
