@@ -22,15 +22,17 @@ export const PLACEHOLDER_USER_ID = '00000000-0000-7000-8000-000000000001' as Use
 export const PLACEHOLDER_ORGANIZATION_ID = '00000000-0000-7000-8000-000000000002' as OrganizationId;
 
 export const PLACEHOLDER_USER_EMAIL = 'phase-one@example.test';
+export const PLACEHOLDER_USER_DISPLAY_NAME = 'Phase One';
 export const PLACEHOLDER_ORGANIZATION_NAME = 'Phase One Foodservice';
 // What `deriveOrganizationSlug` (apps/web/src/lib/server/orgs/slug.ts) would produce for
 // PLACEHOLDER_ORGANIZATION_NAME — hardcoded rather than derived, since this package cannot import
 // apps/web and the slug must not drift from a name that itself never changes.
 export const PLACEHOLDER_ORGANIZATION_SLUG = 'phase-one-foodservice';
 
-/** Create the placeholder rows, or leave them exactly as they are.
+/** Create the placeholder rows, or leave them as they are — except that an unnamed user is given
+ * `PLACEHOLDER_USER_DISPLAY_NAME`, so a database seeded before the name existed catches up.
  *
- * Idempotent by way of `ON CONFLICT DO NOTHING`.
+ * Idempotent by way of `ON CONFLICT DO NOTHING`, and by never overwriting a name.
  */
 export async function seedPlaceholderIdentity(db: DatabaseExecutor): Promise<void> {
   // One transaction, because `organization_has_a_member` is deferred to commit: an organization
@@ -41,6 +43,13 @@ export async function seedPlaceholderIdentity(db: DatabaseExecutor): Promise<voi
       .insertInto('auth.users')
       .values({ id: PLACEHOLDER_USER_ID, email: PLACEHOLDER_USER_EMAIL })
       .onConflict((conflict) => conflict.doNothing())
+      .execute();
+
+    await transaction
+      .updateTable('appUser')
+      .set({ displayName: PLACEHOLDER_USER_DISPLAY_NAME })
+      .where('id', '=', PLACEHOLDER_USER_ID)
+      .where('displayName', 'is', null)
       .execute();
 
     await transaction
