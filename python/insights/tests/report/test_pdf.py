@@ -26,6 +26,7 @@ from gbd_foodservice_insights.report.pdf import (
     write_report_pdf,
 )
 from gbd_foodservice_insights.report.quality import summarize_findings
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
@@ -290,6 +291,35 @@ def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.Monk
         "How should I interpret the monthly figures?",
         "How should I use this report?",
     ]
+
+
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_text_pages_normalise_by_the_counts_basis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, diner_or_meal: DinerOrMeal
+) -> None:
+    pdf = _RecordingPdf()
+    monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
+
+    build_pdf_report(
+        output_path=str(tmp_path / "report.pdf"),
+        title_info={"client": "Acme", "baseline_pilot": "baseline", "procurement_serving": ""},
+        plots=[],
+        tables={},
+        summary_stats={"Rows": 100},
+        diner_or_meal=diner_or_meal,
+    )
+
+    words = [
+        word
+        for page in pdf.pages
+        if page and page[0].text in {"How to Read This Report", "About This Report"}
+        for t in page
+        for word in t.text.split()
+    ]
+    text = " ".join(words)
+    assert f"how many {diner_or_meal}s were served each month" in text
+    assert f"the number of {diner_or_meal}s served" in text
+    assert "people" not in text
 
 
 def test_quality_lines_explain_an_invalid_status() -> None:
