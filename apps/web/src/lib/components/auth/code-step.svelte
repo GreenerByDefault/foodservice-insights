@@ -65,10 +65,6 @@ function isResending(state: ResendState): boolean {
   return state.status === 'sending';
 }
 
-function resendStateMessage(state: ResendState): string | undefined {
-  return state.status === 'failed' || state.status === 'waiting' ? state.message : undefined;
-}
-
 /** One lock across both requests. A resend that lands during a verify resets the step over the
  * outcome the verify is about to write, and one after a verify re-enables a field whose code is
  * spent. */
@@ -77,7 +73,11 @@ const isLocked = $derived(isVerifying(verificationState) || isResending(resendSt
  * both a way out, and without them a sign-in the server keeps refusing has none. */
 const isCodeLocked = $derived(isLocked || isStalled(verificationState));
 const hasFullCode = $derived(code.length === OTP_LENGTH);
-const resendErrorMessage = $derived(resendStateMessage(resendState));
+const resendErrorMessage = $derived(
+  resendState.status === 'failed' || resendState.status === 'waiting'
+    ? resendState.message
+    : undefined,
+);
 
 // Read through a `$derived` rather than from `resendState` directly: the effect would otherwise
 // depend on the whole of `resendState` and tear its own interval down and back up on every tick.
