@@ -56,7 +56,6 @@ def _run_serving(
             gemini_client=object(),
             data_type="serving",
             cache_write_mode="reviewed",
-            dayfirst_preference=False,
         )
 
 
