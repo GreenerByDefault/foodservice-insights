@@ -51,7 +51,8 @@ export function classifyAuthResult(result: {
       : { kind: 'signed-in', userId: user.id as UserId };
   }
 
-  // No cookie at all: the ordinary signed-out visitor.
+  // No cookie, or a session GoTrue no longer has: auth-js reports `session_not_found` as this
+  // same error, after clearing the cookie itself. Either way there is nothing left for us to clear.
   if (isAuthSessionMissingError(cause)) {
     return { kind: 'signed-out', reason: 'no-session', action: { clearCookie: false } };
   }
@@ -110,29 +111,23 @@ async function identifyFromSession(event: RequestEvent): Promise<UserId | null> 
   }
 }
 
-/** `getUser()` rotates an expired access token as a side effect, so this can run on any request. */
+/** `getUser()` rotates an expired access token as a side effect, so this can run on any request.
+ * It always runs inside `getUser()` or `signOut()`, before `resolve`, so the response can still take
+ * cookies and headers.
+ */
 function writeSessionCookies(
   event: RequestEvent,
   cookies: { name: string; value: string; options: CookieOptions }[],
   headers: Record<string, string>,
 ): void {
-  try {
-    for (const { name, value, options } of cookies) {
-      // `secure` is left to SvelteKit's default, which fails closed. Don't derive it from
-      // `event.url.protocol`: behind a TLS-terminating proxy without `ORIGIN`, that reads `http:`.
-      event.cookies.set(name, value, { ...options, path: '/' });
-    }
-    // `Cache-Control: no-store` and friends, so no shared cache ever hands one person's session
-    // cookie to another. Only the first write carries them.
-    event.setHeaders(headers);
-  } catch (cause) {
-    // A token can rotate after a streamed response has already sent its headers, and then there is
-    // nowhere left to write the cookie. The browser keeps the old one, which the next request
-    // refreshes again, so this is survivable.
-    if (cause instanceof Error && cause.message.includes('after the response has been generated')) {
-      console.warn('Could not write a refreshed session cookie: the response had already started');
-      return;
-    }
-    throw cause;
+  for (const { name, value, options } of cookies) {
+    // `secure` is left to SvelteKit's default, which fails closed. Don't derive it from
+    // `event.url.protocol`: behind a TLS-terminating proxy without `ORIGIN`, that reads `http:`.
+    // `httpOnly: false` arrives from `@supabase/ssr` and stays: the browser client has to read this
+    // cookie to sign out, which SvelteKit's default of `true` would make impossible.
+    event.cookies.set(name, value, { ...options, path: '/' });
   }
+  // `Cache-Control: no-store` and friends, so no shared cache ever hands one person's session
+  // cookie to another. Only the first write carries them.
+  event.setHeaders(headers);
 }

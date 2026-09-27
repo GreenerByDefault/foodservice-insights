@@ -33,7 +33,7 @@ describe('classifyAuthResult', () => {
     });
   });
 
-  test('no cookie is signed out, with nothing to clear', () => {
+  test('no cookie, or a session GoTrue no longer has, is signed out with nothing to clear', () => {
     expect(classifyAuthResult({ user: null, error: new AuthSessionMissingError() })).toEqual({
       kind: 'signed-out',
       reason: 'no-session',
@@ -179,44 +179,35 @@ describe('identifyUser', () => {
       answer(aUser(), null);
     });
 
-    const cookie = { name: `${AUTH_COOKIE_NAME}.0`, value: 'base64-abc', options: { maxAge: 60 } };
-    const headers = { 'Cache-Control': 'private, no-store' };
+    // Exactly what `@supabase/ssr` hands `setAll`: its own defaults, and no `secure`.
+    const cookie = {
+      name: `${AUTH_COOKIE_NAME}.0`,
+      value: 'base64-abc',
+      options: { path: '/', sameSite: 'lax', httpOnly: false, maxAge: 34_560_000 },
+    };
+    const headers = {
+      'Cache-Control': 'private, no-cache, no-store, must-revalidate, max-age=0',
+      Expires: '0',
+      Pragma: 'no-cache',
+    };
 
-    test('sets the cookie, leaving `secure` to SvelteKit, and the no-cache headers', async () => {
+    test('writes the cookie as sent, `httpOnly: false` included, and the no-cache headers', async () => {
       const event = anEvent();
       await identifyUser(event);
 
       setAllFromClient()([cookie], headers);
 
-      // Strict, so even `secure: undefined` fails: it would override SvelteKit's default.
+      // Strict, so even `secure: undefined` fails: it would override SvelteKit's default. And
+      // `httpOnly` has to stay `false`: SvelteKit's default of `true` would lock the browser client
+      // out of the cookie it signs out with.
       expect(vi.mocked(event.cookies.set).mock.calls).toStrictEqual([
-        [cookie.name, cookie.value, { maxAge: 60, path: '/' }],
+        [
+          cookie.name,
+          cookie.value,
+          { path: '/', sameSite: 'lax', httpOnly: false, maxAge: 34_560_000 },
+        ],
       ]);
       expect(event.setHeaders).toHaveBeenCalledWith(headers);
-    });
-
-    test('warns instead of failing once the response has started', async () => {
-      const event = anEvent();
-      vi.mocked(event.cookies.set).mockImplementation(() => {
-        throw new Error('Cannot use `cookies.set(...)` after the response has been generated');
-      });
-      const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      await identifyUser(event);
-
-      expect(() => setAllFromClient()([cookie], headers)).not.toThrow();
-      expect(warned).toHaveBeenCalledOnce();
-      warned.mockRestore();
-    });
-
-    test('rethrows any other failure', async () => {
-      const event = anEvent();
-      const cause = new Error('"cache-control" header is already set');
-      vi.mocked(event.setHeaders).mockImplementation(() => {
-        throw cause;
-      });
-      await identifyUser(event);
-
-      expect(() => setAllFromClient()([cookie], headers)).toThrow(cause);
     });
   });
 });
