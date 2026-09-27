@@ -7,45 +7,57 @@ import pytest
 from gbd_foodservice_insights.report.plots import panels, report
 from matplotlib.figure import Figure
 
+DINER_MEALS = {"2023-01": 100, "2023-02": 100}
+EMISSIONS_SUMMARY = pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]})
+
 
 def _figure_title(fig: Figure) -> str:
     """Return a figure-level title when present, otherwise its first panel title."""
-    return fig.texts[0].get_text() if fig.texts else fig.axes[0].get_title()
+    return fig.get_suptitle() or fig.axes[0].get_title()
 
 
 def _aggregated_data(
-    monthly_category_data: pd.DataFrame, *, product: str, category: str, total: float
+    monthly_category_data: pd.DataFrame,
+    *,
+    category_drivers: pd.DataFrame | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Aggregates where one product drives everything, for tests that only vary the months."""
+    """Aggregates where apple drives everything, for tests that only vary the months."""
     return {
         "monthly_category_data": monthly_category_data,
-        "overall_drivers": pd.DataFrame(
-            {"product": [product], "percentage": ["100.0%"], "kilos_total": [total]}
-        ),
-        "category_drivers": pd.DataFrame(
-            {
-                "category": [category],
-                "product": [product],
-                "percentage": ["100.0%"],
-                "kilos_total": [total],
-            }
+        "overall_drivers": pd.DataFrame({"product": ["apple"], "percentage": ["100.0%"]}),
+        "category_drivers": (
+            category_drivers
+            if category_drivers is not None
+            else pd.DataFrame(
+                {"category": ["fruit"], "product": ["apple"], "percentage": ["100.0%"]}
+            )
         ),
     }
 
 
-def test_remove_duplicate_xlabels_clears_an_x_label_that_repeats_the_title():
+@pytest.mark.parametrize(
+    ("x_label", "expected"),
+    [
+        ("carbon  emissions by CATEGORY ", ""),
+        ("Total kg CO2e", "Total kg CO2e"),
+    ],
+    ids=["repeats the title", "says something else"],
+)
+def test_remove_duplicate_xlabels_clears_only_an_x_label_that_repeats_the_title(
+    x_label: str, expected: str
+):
     fig, ax = plt.subplots()
     ax.set_title("Carbon Emissions by Category")
-    ax.set_xlabel("Carbon Emissions by Category")
+    ax.set_xlabel(x_label)
 
     cleaned = report._remove_duplicate_xlabels(fig)
 
-    assert cleaned.axes[0].get_xlabel() == ""
+    assert cleaned.axes[0].get_xlabel() == expected
 
 
 def test_safe_plot_marks_placeholder_figures_with_data_warning():
     """A fallback chart should still show a visible warning label in the PDF itself."""
-    findings = []
+    findings: list[dict[str, Any]] = []
 
     caption, fig = report._safe_plot(
         caption="Carbon Emissions by Category",
@@ -56,7 +68,18 @@ def test_safe_plot_marks_placeholder_figures_with_data_warning():
 
     assert caption == "Carbon Emissions by Category [DATA WARNING]"
     assert _figure_title(fig) == "Carbon Emissions by Category [DATA WARNING]"
-    assert findings[-1]["category"] == "plot_generation"
+    assert [text.get_text() for text in fig.axes[0].texts] == [
+        "Carbon Emissions by Category",
+        "Could not generate plot due to data issue:\nboom",
+    ]
+    assert findings == [
+        {
+            "stage": "plots",
+            "category": "plot_generation",
+            "status": "warning",
+            "message": "Could not plot emissions by category: boom",
+        }
+    ]
 
 
 def test_safe_plot_closes_the_figure_a_failed_plot_opened():
@@ -76,41 +99,113 @@ def test_safe_plot_closes_the_figure_a_failed_plot_opened():
     assert set(plt.get_fignums()) == before | {fig.number}
 
 
-def test_generate_all_report_plots_substitutes_one_placeholder_when_driver_charts_fail(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("column", "expected_finding"),
+    [
+        (
+            "percentage",
+            {
+                "stage": "plots",
+                "category": "plot_input_missing_column",
+                "status": "warning",
+                "message": "Plot 'Drivers' cannot validate 'percentage' because the column is "
+                "missing.",
+                "column": "percentage",
+            },
+        ),
+        (
+            "product",
+            {
+                "stage": "plots",
+                "category": "plot_input_missing_values",
+                "status": "warning",
+                "message": "Plot 'Drivers' input column 'product' contains 1 missing values.",
+                "column": "product",
+                "count": 1,
+            },
+        ),
+    ],
+    ids=["missing column", "missing values"],
+)
+def test_safe_plot_keeps_the_chart_but_marks_it_when_its_input_is_incomplete(
+    column: str, expected_finding: dict[str, Any]
 ):
-    monkeypatch.setattr(panels, "get_food_categories", lambda **_: ["fruit"])
-    monkeypatch.setattr(panels, "get_drink_categories", lambda **_: [])
+    findings: list[dict[str, Any]] = []
+    chart, _ax = plt.subplots()
 
-    def plot_category_drivers(*_args: Any, **_kwargs: Any):
-        plt.figure()
-        raise ValueError("boom")
-
-    monkeypatch.setattr(report, "plot_category_drivers", plot_category_drivers)
-    before = set(plt.get_fignums())
-
-    plots_output = report.generate_all_report_plots(
-        aggregated_data={
-            "monthly_category_data": pd.DataFrame(
-                {"month_year": ["2023-01"], "category": ["fruit"], "kilos_total": [100]}
-            ),
-            "category_drivers": pd.DataFrame(
-                {
-                    "category": ["fruit"],
-                    "product": ["apple"],
-                    "percentage": ["100.0%"],
-                    "kilos_total": [100],
-                }
-            ),
-        },
-        diner_meal_mapping={"2023-01": 100},
-        metric_total="kilos_total",
+    caption, fig = report._safe_plot(
+        caption="Drivers",
+        plot_fn=lambda: chart,
+        quality_findings=findings,
+        warning_message="Could not plot drivers",
+        input_checks=[(pd.DataFrame({"product": ["apple", None]}), column)],
     )
 
-    placeholder = plots_output[-1][1]
-    assert placeholder.axes[0].texts[0].get_text() == "Top Products by Category"
-    # The figure the failed plot opened is closed; only the returned pages stay open.
-    assert set(plt.get_fignums()) - before == {fig.number for _, fig in plots_output}
+    assert fig is chart
+    assert caption == "Drivers [DATA WARNING]"
+    assert fig.get_suptitle() == "Drivers [DATA WARNING]"
+    assert findings == [expected_finding]
+
+
+def test_generate_all_report_plots_orders_every_page(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    plots_output = report.generate_all_report_plots(
+        aggregated_data=_aggregated_data(fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])),
+        diner_meal_mapping=DINER_MEALS,
+        emissions_summary=EMISSIONS_SUMMARY,
+        metric_total="kilos_total",
+        plant_animal_split={"plant_pct": 52.0},
+    )
+
+    assert [caption for caption, _ in plots_output] == [""] * len(plots_output)
+    assert [_figure_title(fig) for _, fig in plots_output] == [
+        "Number of Diners by Month",
+        "Kilos Over Time",
+        "Kilos by Category Across All Months",
+        "Carbon Emissions by Category",
+        "Carbon Emissions Over Time",
+        "Plant and Protein Breakdown",
+        "Top Products Driving Overall (Kilos)",
+        "Top Products Driving Fruit",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("options", "drop_emissions_column", "expected_carbon_pages"),
+    [
+        ({"emissions_summary": EMISSIONS_SUMMARY, "serving": True}, False, []),
+        ({}, False, []),
+        ({"emissions_summary": EMISSIONS_SUMMARY}, True, ["Carbon Emissions by Category"]),
+    ],
+    ids=["serving report", "no emissions summary", "no monthly emissions"],
+)
+def test_generate_all_report_plots_leaves_out_pages_without_their_data(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+    options: dict[str, Any],
+    drop_emissions_column: bool,
+    expected_carbon_pages: list[str],
+):
+    months = fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])
+    if drop_emissions_column:
+        months = months.drop(columns="emissions_kg_co2e")
+
+    plots_output = report.generate_all_report_plots(
+        aggregated_data=_aggregated_data(months),
+        diner_meal_mapping=DINER_MEALS,
+        metric_total="kilos_total",
+        **options,
+    )
+
+    # No plant inputs either, so every case also leaves out the plant page.
+    assert [_figure_title(fig) for _, fig in plots_output] == [
+        "Number of Diners by Month",
+        "Kilos Over Time",
+        "Kilos by Category Across All Months",
+        *expected_carbon_pages,
+        "Top Products Driving Overall (Kilos)",
+        "Top Products Driving Fruit",
+    ]
 
 
 @pytest.mark.usefixtures("fruit_and_juice")
@@ -125,120 +220,81 @@ def test_generate_all_report_plots_raises_for_untyped_categories():
 
     with pytest.raises(ValueError, match="Unknown categories"):
         report.generate_all_report_plots(
-            aggregated_data=_aggregated_data(
-                monthly_category_data, product="apple", category="fruit", total=100
-            ),
+            aggregated_data=_aggregated_data(monthly_category_data),
             diner_meal_mapping={"2023-01": 100},
             metric_total="kilos_total",
         )
 
 
-@pytest.fixture
-def report_plots_with_emissions(
+def test_generate_all_report_plots_marks_driver_charts_whose_input_is_incomplete(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
-) -> list[tuple[str, Figure]]:
-    return report.generate_all_report_plots(
-        aggregated_data=_aggregated_data(
-            fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-            product="apple",
-            category="fruit",
-            total=250,
-        ),
-        diner_meal_mapping={"2023-01": 100, "2023-02": 100},
-        emissions_summary=pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]}),
-        metric_total="kilos_total",
-    )
-
-
-def test_generate_all_report_plots_places_category_totals_before_carbon_pages(
-    report_plots_with_emissions: list[tuple[str, Figure]],
 ):
-    plots_output = report_plots_with_emissions
-
-    page_titles = [_figure_title(fig) for _, fig in plots_output]
-
-    assert page_titles.index("Kilos by Category Across All Months") < page_titles.index(
-        "Carbon Emissions by Category"
-    )
-
-
-def test_generate_all_report_plots_combines_emissions_trends_onto_one_page(
-    report_plots_with_emissions: list[tuple[str, Figure]],
-):
-    plots_output = report_plots_with_emissions
-
-    assert all(caption == "" for caption, _ in plots_output)
-
-    matching_figs = [
-        fig for _, fig in plots_output if _figure_title(fig) == "Carbon Emissions Over Time"
-    ]
-
-    assert len(matching_figs) == 1
-    combined_fig = matching_figs[0]
-    assert len(combined_fig.axes) == 2
-    assert combined_fig.axes[0].get_title() == "Total Carbon Emissions Over Time"
-    assert combined_fig.axes[1].get_title() == "Carbon Emissions per Diner Over Time"
-    first_pos = combined_fig.axes[0].get_position()
-    second_pos = combined_fig.axes[1].get_position()
-    assert first_pos.x0 < second_pos.x0
-    assert abs(first_pos.y0 - second_pos.y0) < 0.05
-
-
-def test_generate_all_report_plots_combines_plant_share_panels_onto_one_page():
-    monthly_category_data = pd.DataFrame(
-        {
-            "month_year": ["2023-01", "2023-02"],
-            "category": ["legumes", "legumes"],
-            "kilos_total": [100, 120],
-        }
-    )
+    findings: list[dict[str, Any]] = []
 
     plots_output = report.generate_all_report_plots(
         aggregated_data=_aggregated_data(
-            monthly_category_data, product="beans", category="legumes", total=220
+            fruit_and_juice_months(),
+            category_drivers=pd.DataFrame(
+                {
+                    "category": ["fruit", "fruit"],
+                    "product": ["apple", "pear"],
+                    "percentage": ["60.0%", None],
+                }
+            ),
         ),
-        diner_meal_mapping={"2023-01": 100, "2023-02": 100},
+        diner_meal_mapping=DINER_MEALS,
         metric_total="kilos_total",
-        plant_animal_split={
-            "plant_pct": 52.0,
-            "animal_pct": 48.0,
-            "plant_kg": 114.4,
-            "animal_kg": 105.6,
-            "monthly": pd.DataFrame(
-                {
-                    "month_year": ["2023-01", "2023-02"],
-                    "plant": [48.0, 66.4],
-                    "animal": [52.0, 53.6],
-                    "plant_pct": [48.0, 55.3],
-                }
-            ),
-        },
-        plant_protein_share={
-            "plant_protein_pct": 55.0,
-            "plant_protein_total": 121.0,
-            "total_protein_metric": 220.0,
-            "monthly": pd.DataFrame(
-                {
-                    "month_year": ["2023-01", "2023-02"],
-                    "plant_protein_metric": [50.0, 71.0],
-                    "total_protein_metric": [100.0, 120.0],
-                    "plant_protein_pct": [50.0, 59.2],
-                }
-            ),
-        },
+        quality_findings=findings,
     )
 
-    assert all(caption == "" for caption, _ in plots_output)
-
-    matching_figs = [
-        fig for _, fig in plots_output if _figure_title(fig) == "Plant and Protein Breakdown"
+    assert _figure_title(plots_output[-1][1]) == "Top Products — Fruit [DATA WARNING]"
+    assert findings == [
+        {
+            "stage": "plots",
+            "category": "plot_input_missing_values",
+            "status": "warning",
+            "message": "Category-driver plots input column 'percentage' contains 1 missing values.",
+            "column": "percentage",
+            "count": 1,
+        }
     ]
 
-    assert len(matching_figs) == 1
-    combined_fig = matching_figs[0]
-    assert [ax.get_title() for ax in combined_fig.axes] == [
-        "Plant vs. Animal Split",
-        "Plant-Based % by Month",
-        "Plant Protein Share",
-        "Plant Protein % by Month",
+
+def test_generate_all_report_plots_substitutes_one_placeholder_when_driver_charts_fail(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(panels, "get_food_categories", lambda **_: ["fruit"])
+    monkeypatch.setattr(panels, "get_drink_categories", lambda **_: [])
+
+    def plot_category_drivers(*_args: Any, **_kwargs: Any):
+        plt.figure()
+        raise ValueError("boom")
+
+    monkeypatch.setattr(report, "plot_category_drivers", plot_category_drivers)
+    findings: list[dict[str, Any]] = []
+    before = set(plt.get_fignums())
+
+    plots_output = report.generate_all_report_plots(
+        aggregated_data=_aggregated_data(
+            pd.DataFrame({"month_year": ["2023-01"], "category": ["fruit"], "kilos_total": [100]})
+        ),
+        diner_meal_mapping={"2023-01": 100},
+        metric_total="kilos_total",
+        quality_findings=findings,
+    )
+
+    placeholder = plots_output[-1][1]
+    assert [text.get_text() for text in placeholder.axes[0].texts] == [
+        "Top Products by Category",
+        "Could not generate category-driver plots due to data issue:\nboom",
     ]
+    assert findings == [
+        {
+            "stage": "plots",
+            "category": "plot_generation",
+            "status": "warning",
+            "message": "Could not generate category-driver plots: boom",
+        }
+    ]
+    # The figure the failed plot opened is closed; only the returned pages stay open.
+    assert set(plt.get_fignums()) - before == {fig.number for _, fig in plots_output}
