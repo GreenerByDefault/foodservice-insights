@@ -97,6 +97,13 @@ export function createPlaywrightConfig(
         // container) overrides it via `webServer.env`.
         ORIGIN: baseURL,
         TEST_DB: '1',
+        // Off, so only the client ever closes an idle connection. Playwright's API client
+        // (`request`, `page.request`) pools keep-alive sockets per worker and ignores the server's
+        // `Keep-Alive: timeout` hint, so it will reuse one right as the server's 6s idle timer
+        // expires. If the server's event loop is busy with another worker's request at that
+        // moment, its timer runs before it reads the new request, and the client gets
+        // `write EPIPE`.
+        KEEP_ALIVE_TIMEOUT: '0',
         ...webServer?.env,
       },
       // `url` waits for a 2xx response; `port` only waits for a listening socket.
