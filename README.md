@@ -31,6 +31,9 @@ pnpm seed:identity
 `pnpm seed:identity` creates the placeholder user that every request runs as in the default
 `PUBLIC_AUTH_MODE=placeholder`. The app will not serve a request without it.
 
+Optionally, you can also get the `previously_categorized_items.csv` cache from Geener By Default and place it in
+[`python/insights/gbd_foodservice_insights/data_files/`](python/insights/gbd_foodservice_insights/data_files/).
+
 ### Start it
 
 If the databases have stopped, for example after a computer restart, start them first:
