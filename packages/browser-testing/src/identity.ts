@@ -172,19 +172,19 @@ export async function readPinnedIdentity(db: Kysely<Database>): Promise<MintedUs
 export async function signInCookies(
   signInEmail: string,
 ): Promise<{ name: string; value: string }[]> {
-  const jar = new Map<string, string>();
+  const cookieJar = new Map<string, string>();
   const client = createServerClient(
     requireEnv('PUBLIC_SUPABASE_URL'),
     requireEnv('PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
     {
       cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
-        getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+        getAll: () => [...cookieJar].map(([name, value]) => ({ name, value })),
         setAll: (cookies) => {
           // An empty value is a deletion: `@supabase/ssr` clears stale chunks that way.
           for (const { name, value } of cookies) {
-            if (value === '') jar.delete(name);
-            else jar.set(name, value);
+            if (value === '') cookieJar.delete(name);
+            else cookieJar.set(name, value);
           }
         },
       },
@@ -196,9 +196,9 @@ export async function signInCookies(
     password: TEST_USER_PASSWORD,
   });
   if (error) throw error;
-  if (jar.size === 0) throw new Error(`Signing in as ${signInEmail} wrote no session cookie`);
+  if (cookieJar.size === 0) throw new Error(`Signing in as ${signInEmail} wrote no session cookie`);
 
-  return [...jar].map(([name, value]) => ({ name, value }));
+  return [...cookieJar].map(([name, value]) => ({ name, value }));
 }
 
 function adminClient(): SupabaseClient {
