@@ -133,18 +133,6 @@ class TestCreateLinePlotWithPeriods:
         plt.close(fig)
 
 
-# Clean up matplotlib
-@pytest.fixture(autouse=True)
-def cleanup_plt():
-    """Clean up matplotlib figures after each test."""
-    yield
-    plt.close("all")
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
-
-
 class TestPlotTimeSeriesWithPeriods:
     """Tests for plot_time_series_with_periods function."""
 
@@ -160,3 +148,15 @@ class TestPlotTimeSeriesWithPeriods:
         assert isinstance(fig, plt.Figure)
         assert len(fig.axes[0].lines) > 0
         plt.close(fig)
+
+
+# Clean up matplotlib
+@pytest.fixture(autouse=True)
+def cleanup_plt():
+    """Clean up matplotlib figures after each test."""
+    yield
+    plt.close("all")
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
