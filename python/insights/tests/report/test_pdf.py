@@ -1,5 +1,6 @@
 from collections.abc import Callable
-from dataclasses import replace
+from contextlib import nullcontext
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +22,11 @@ from gbd_foodservice_insights.report.pdf import (
     _wrap_text_lines,
     _wrap_to_width,
     build_pdf_report,
+    create_title_page,
     write_report_pdf,
 )
 from gbd_foodservice_insights.report.quality import summarize_findings
+from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
 from PyPDF2 import PdfReader
@@ -214,6 +217,81 @@ def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:
     assert "Data Completeness & Quality" in page_titles[-1]
 
 
+@dataclass(frozen=True)
+class _PageText:
+    text: str
+    y: float
+    bold: bool
+
+
+class _RecordingPdf:
+    """Stands in for ``PdfPages``, keeping each page's text instead of writing a file."""
+
+    def __init__(self) -> None:
+        self.pages: list[list[_PageText]] = []
+
+    def savefig(self, fig: Figure) -> None:
+        self.pages.append(
+            [
+                _PageText(t.get_text(), t.get_position()[1], t.get_fontweight() == "bold")
+                for ax in fig.axes
+                for t in ax.texts
+            ]
+        )
+
+
+def _title_page(client: str) -> list[_PageText]:
+    pdf = _RecordingPdf()
+    create_title_page(pdf, client, "baseline", "procurement")  # ty: ignore[invalid-argument-type]
+    return pdf.pages[0]
+
+
+def test_title_page_shows_the_client_name_as_typed() -> None:
+    assert [t.text for t in _title_page("McDonald's")][:3] == [
+        "Food Report",
+        "McDonald's",
+        "Baseline | Procurement",
+    ]
+
+
+def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
+    client = (
+        "The University of Somewhere Hospitality and Conference Services — "
+        "North Campus Main Dining Hall"
+    )
+    texts = _title_page(client)
+    name_lines, subtitle, generated = texts[1:-3], texts[-3], texts[-2]
+    prop = FontProperties(family="Montserrat", size=20)
+
+    assert len(name_lines) > 1
+    assert " ".join(t.text for t in name_lines) == client
+    for line in name_lines:
+        width_pt, _, _ = text_to_path.get_text_width_height_descent(line.text, prop, ismath=False)
+        assert width_pt / 72 <= 6.5
+    assert name_lines[-1].y > subtitle.y > generated.y
+
+
+def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = _RecordingPdf()
+    monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
+
+    build_pdf_report(
+        output_path=str(tmp_path / "report.pdf"),
+        title_info={"client": "Acme", "baseline_pilot": "baseline", "procurement_serving": ""},
+        plots=[],
+        tables={},
+        summary_stats={"Rows": 100},
+    )
+
+    (about,) = [page for page in pdf.pages if page and page[0].text == "About This Report"]
+    assert [t.text for t in about[1:] if t.bold] == [
+        "What is procurement data?",
+        "How are carbon figures calculated?",
+        "How should I interpret the monthly figures?",
+        "How should I use this report?",
+    ]
+
+
 def test_quality_lines_explain_an_invalid_status() -> None:
     assert _quality_to_lines(
         "invalid",
@@ -350,7 +428,7 @@ def test_format_animal_emissions_intensity_renames_orders_and_rounds() -> None:
                 "Category": ["Beef and Buffalo Meat"],
                 "Kilos of Food": pd.array([22], dtype="Int64"),
                 "CO2e Per Kg Food": [41.35],
-                "Kg CO2e Kg": pd.array([910], dtype="Int64"),
+                "Kg CO2e": pd.array([910], dtype="Int64"),
             }
         ),
     )

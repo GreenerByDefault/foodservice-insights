@@ -31,6 +31,8 @@ _TEXT_PAGE_WRAP_CHARS = 92
 _SUMMARY_MARGIN_IN = 1.0
 _SUMMARY_LINE_HEIGHT = 0.025
 
+_TITLE_CLIENT_LINE_HEIGHT = 0.04
+
 
 # ---------------------------------------------------------------------------
 # PDF helpers
@@ -67,23 +69,34 @@ def create_title_page(
         fontweight="bold",
         fontfamily="Montserrat",
     )
-    ax.text(
-        0.5,
-        0.55,
-        client.replace("_", " ").title(),
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
+    # The client name is shown as typed: title-casing turns "McDonald's" into "Mcdonald'S".
+    client_lines = _wrap_to_width(
+        client.replace("_", " "),
+        fig_size[0] - 2 * _SUMMARY_MARGIN_IN,
         fontsize=20,
         fontfamily="Montserrat",
     )
+    y = 0.55
+    for line in client_lines:
+        ax.text(
+            0.5,
+            y,
+            line,
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=20,
+            fontfamily="Montserrat",
+        )
+        y -= _TITLE_CLIENT_LINE_HEIGHT
     subtitle_parts = [
         baseline_pilot.replace("_", " ").title(),
         procurement_serving.replace("_", " ").replace("-", " ").title(),
     ]
+    subtitle_y = min(0.47, y - 0.02)
     ax.text(
         0.5,
-        0.47,
+        subtitle_y,
         " | ".join(subtitle_parts),
         transform=ax.transAxes,
         ha="center",
@@ -94,7 +107,7 @@ def create_title_page(
     )
     ax.text(
         0.5,
-        0.38,
+        subtitle_y - 0.09,
         f"Generated {datetime.now().strftime('%d %B %Y')}",
         transform=ax.transAxes,
         ha="center",
@@ -745,8 +758,9 @@ def _how_to_read_lines(diner_or_meal: str = "diner") -> list[str]:
         "plant-based vs. animal-based sources. Shifting this ratio is one of the most",
         "effective ways to reduce your carbon footprint.",
         "",
-        "The top driver products are the items most worth reviewing first when planning",
-        "menu changes — they have the largest impact on your overall carbon figures.",
+        "The top driver products are the ones you bought the most of by weight, which makes",
+        "them a good place to start when planning menu changes. They are not ranked by carbon:",
+        "a heavy, low-carbon item can outrank a lighter, high-carbon one.",
     ]
 
 
@@ -806,19 +820,19 @@ def _format_animal_emissions_intensity_for_pdf(dataframe: pd.DataFrame) -> pd.Da
         columns={
             "category": "Category",
             "kilos_total": "Kilos of Food",
-            "total_kg_co2e": "Kg CO2e Kg",
+            "total_kg_co2e": "Kg CO2e",
             "kg_co2e_per_kg_food": "CO2e Per Kg Food",
         }
     )
 
     ordered_columns = [
         column
-        for column in ["Category", "Kilos of Food", "CO2e Per Kg Food", "Kg CO2e Kg"]
+        for column in ["Category", "Kilos of Food", "CO2e Per Kg Food", "Kg CO2e"]
         if column in display_df.columns
     ]
     display_df = display_df[ordered_columns]
 
-    for column in ["Kilos of Food", "Kg CO2e Kg"]:
+    for column in ["Kilos of Food", "Kg CO2e"]:
         if column in display_df.columns:
             display_df[column] = display_df[column].round().astype("Int64")
 
@@ -977,14 +991,12 @@ def build_pdf_report(
             create_table_page(pdf, table_title, df)
 
         # 6. Methodology note
+        methodology = _methodology_lines(diner_or_meal)
         create_text_page(
             pdf,
             "About This Report",
-            _methodology_lines(diner_or_meal),
-            bold_lines={
-                "What is procurement data?",
-                "How are carbon figures calculated?",
-            },
+            methodology,
+            bold_lines={line for line in methodology if line.endswith("?")},
         )
 
         # 7. Data quality status
