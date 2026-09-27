@@ -146,6 +146,28 @@ their modules' files; `test_plotting_utils.py` keeps font registration and the w
 format them at draw time; it changes the workbook's percentage cells from text to numbers, so it
 is a behaviour change for GBD to want.
 
+## PR 6 — report pages composed from public panel drawers
+
+The three combined report pages already draw through private per-axis helpers
+(`_draw_metric_over_time_on_axis`, `_draw_multi_series_metric_over_time_on_axis`,
+`_draw_share_bar_axis`, `_draw_monthly_share_axis`), but each page still does every panel's data
+prep, titles, axis formatting and empty state itself, and `plot_plant_breakdown_overview` has two
+copies of its "not available" block. Give each panel a public drawer, named for what it draws,
+that takes an `Axes` and owns all of that: `draw_food_and_drink_totals`,
+`draw_food_and_drink_per_diner`, `draw_total_emissions`, `draw_emissions_per_diner`,
+`draw_plant_animal_split`, `draw_plant_share_by_month`, `draw_plant_protein_share` and
+`draw_plant_protein_share_by_month`. Each page becomes layout only, and a notebook draws any one
+panel with `plt.subplots()` and one call, getting exactly the chart the client sees.
+
+*Rejected: restoring the figure-level functions PR 1 deleted (`plot_emissions_over_time`,
+`plot_plant_protein_share`, ...) and having the pages call them.* A page cannot embed a figure
+without threading a matplotlib `SubFigure` through every chart function, and those copies had
+drifted from what the report renders: a seaborn line path, different bar labels, no trend for a
+single month.
+
+After PR 4, so its tests land in `test_plots.py`; independent of PRs 3 and 5. No behaviour
+changes, but the golden pins chart titles, not pixels.
+
 ## Verification
 
 - Every PR: `just lint && just check && just test && just test-lab`; the golden test unchanged
@@ -154,6 +176,8 @@ is a behaviour change for GBD to want.
   `WORKER_MODE=mock-llm`, proving nothing product-side imports a moved symbol.
 - PRs 2 and 3: run `1. Categorize Runscript.py` and `2. Produce Food Report.py` on
   `python/lab/test_data` in a scratch client folder, since no CI job runs the lab against data.
+- PR 6: render every `generate_all_report_plots` figure on the golden input before and after, and
+  compare the PNGs pixel for pixel.
 
 ## Risks
 
