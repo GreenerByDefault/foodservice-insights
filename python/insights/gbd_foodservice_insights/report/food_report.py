@@ -1,7 +1,8 @@
 """The in-memory core of the food report: categorized rows in, report numbers and charts out.
 
 Nothing here reads or writes a file. `pdf.write_report_pdf` and `excel.write_client_workbook`
-turn a `FoodReport` into the deliverables; `pipeline.run_food_report` is the file-reading
+turn a `FoodReport` into the deliverables; the lab's
+`gbd_foodservice_insights_lab.food_report.pipeline.run_food_report` is the file-reading
 wrapper that also writes the data scientists' bundle.
 """
 
