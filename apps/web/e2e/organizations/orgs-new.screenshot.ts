@@ -1,5 +1,6 @@
 import { ensureHydrated } from '@gbd/browser-testing';
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
 test('the new organization form, before anything is typed', async ({ page }) => {

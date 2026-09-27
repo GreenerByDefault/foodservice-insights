@@ -1,7 +1,7 @@
 /** Wraps `playwright test` via `@gbd/browser-testing/test-run` — see that module for the
  * per-run database/bucket lifecycle, shared with `tests/e2e/scripts/test-run.ts`. This script's
- * own job is just naming the app's env vars and locating its own `playwright` binary; it needs
- * nothing else alive before the browser starts.
+ * own job is just naming the app's env vars, choosing the auth mode, and locating its own
+ * `playwright` binary; it needs nothing else alive before the browser starts.
  *
  * `pnpm test:e2e`, `test:screenshots`, `test:playwright`, and `screenshots:update` all route
  * through this rather than calling `playwright test` directly — `playwright.config.ts` throws if
@@ -27,6 +27,8 @@ async function main(): Promise<void> {
     s3: blobStoreConfigFromEnv(),
     playwrightBin: resolvePlaywrightBin(import.meta.url),
     playwrightArgs: process.argv.slice(2),
+    // Every auth flow is driven from this suite, so it runs with real sessions, one user per test.
+    identity: { mode: 'supabase' },
   });
 }
 

@@ -32,7 +32,8 @@
     "formatter": {
       "enabled": true,
       "indentScriptAndStyle": false
-    }
+    },
+    "parser": { "interpolation": true }
   },
   "linter": {
     "enabled": true,

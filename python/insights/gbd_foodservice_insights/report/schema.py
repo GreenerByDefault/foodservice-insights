@@ -7,21 +7,13 @@ from collections.abc import Iterable
 from typing import Any, Literal
 
 ReportMode = Literal["procurement", "serving"]
-Region = Literal["us", "europe", "uk"]
+Region = Literal["us", "europe"]
 DinerOrMeal = Literal["diner", "meal"]
 DiagnosticStatus = Literal["success", "info", "warning", "error"]
 QualityStatus = Literal["pass", "warning", "invalid"]
 
 VALID_REPORT_MODES: tuple[ReportMode, ...] = ("procurement", "serving")
-VALID_REGIONS: tuple[Region, ...] = ("us", "europe", "uk")
-
-# Maps each valid region to whether dates should be parsed day-first (DD/MM/YYYY).
-# When adding a new region, add it to VALID_REGIONS above and to this dict.
-REGION_DAYFIRST: dict[Region, bool] = {
-    "us": False,
-    "europe": True,
-    "uk": True,
-}
+VALID_REGIONS: tuple[Region, ...] = ("us", "europe")
 
 REQUIRED_COLUMNS_BY_MODE: dict[ReportMode, tuple[str, ...]] = {
     "procurement": ("date", "product", "category", "kilos_total"),

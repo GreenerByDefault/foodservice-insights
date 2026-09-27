@@ -9,6 +9,8 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@gbd/web...",
+    "dev:worker": "turbo run dev --filter=@gbd/worker",
     "build": "turbo run build",
     "check": "turbo run check",
     "test:unit": "turbo run test:unit",

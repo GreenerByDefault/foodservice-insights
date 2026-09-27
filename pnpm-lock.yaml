@@ -316,6 +316,12 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.1
+      '@supabase/ssr':
+        specifier: 'catalog:'
+        version: 0.12.7(@supabase/supabase-js@2.117.0)
+      '@supabase/supabase-js':
+        specifier: 'catalog:'
+        version: 2.117.0
       kysely:
         specifier: 'catalog:'
         version: 0.29.5

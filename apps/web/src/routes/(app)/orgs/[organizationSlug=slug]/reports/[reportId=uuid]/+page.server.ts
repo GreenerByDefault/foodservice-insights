@@ -18,7 +18,7 @@ import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
 import { screenStatus } from '$lib/reports/attempt-status';
 import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
-import { requireVar } from '$lib/server/env';
+import { requirePrivateVar } from '$lib/server/env';
 import type { PageServerLoad } from './$types';
 import { type FailureCopy, toFailureCopy } from './failure/failure-copy.ts';
 
@@ -43,7 +43,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
  */
 export function _reportEnvironment(): { supportEmail: string; pollIntervalMs: number } {
   return {
-    supportEmail: requireVar('EMAIL_SUPPORT_ADDRESS'),
+    supportEmail: requirePrivateVar('EMAIL_SUPPORT_ADDRESS'),
     pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
   };
 }

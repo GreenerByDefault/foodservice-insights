@@ -71,7 +71,6 @@ def categorize_products(
     historical_entree_classifications: pd.DataFrame | None = None,
     update_historical_entree_classifications: bool = True,
     date_format: str | None = None,
-    dayfirst_preference: bool | None = None,
 ) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """
     Categorize food products into GBD emissions categories.
@@ -103,11 +102,6 @@ def categorize_products(
         Whether to append new entree classifications to the historical file.
     date_format : str, optional
         Date format string. If None, auto-detects.
-    dayfirst_preference : bool, optional
-        Day/month parsing preference for ambiguous numeric dates.
-        - None: fail on ambiguous values (recommended for strict validation)
-        - False: interpret as month/day
-        - True: interpret as day/month
 
     Returns
     -------
@@ -137,7 +131,6 @@ def categorize_products(
         df=df,
         date_col="date",
         date_format=date_format,
-        dayfirst_preference=dayfirst_preference,
         allow_missing=False,
     )
     df = clean_weight_column(df, "weight")
@@ -249,7 +242,6 @@ def categorize_file(
     data_type: str = "procurement",
     gemini_client: Any = None,
     date_format: str | None = None,
-    dayfirst_preference: bool | None = None,
     cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
     update_historical_entree_classifications: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
@@ -272,11 +264,6 @@ def categorize_file(
         Gemini API client. Required for serving data.
     date_format : str, optional
         Date format string. If None, auto-detects.
-    dayfirst_preference : bool, optional
-        Day/month parsing preference for ambiguous numeric dates.
-        - None: fail on ambiguous values
-        - False: interpret as month/day
-        - True: interpret as day/month
     cache_write_mode : Literal["none", "reviewed", "web_app_unreviewed"]
         Controls where new categorizations are persisted:
         - "none": do not persist category cache updates
@@ -317,7 +304,6 @@ def categorize_file(
         gemini_client=gemini_client,
         data_type=data_type,
         date_format=date_format,
-        dayfirst_preference=dayfirst_preference,
         cache_write_mode=cache_write_mode,
         update_historical_entree_classifications=update_historical_entree_classifications,
     )

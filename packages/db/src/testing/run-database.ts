@@ -341,6 +341,33 @@ function isStale(name: string): boolean {
   return Date.now() - createdAt > RUN_STALE_AFTER_MS;
 }
 
+/** Delete every GoTrue user at `@domain` old enough that no still-running test could own it, and
+ * report how many it deleted.
+ *
+ * The browser suites mint these into the stack's main `postgres` database, where GoTrue writes,
+ * not into a run database, so dropping a run database leaves them behind. Each run deletes its
+ * own; this is the backstop for a hard kill, on the same age bound as `sweepStaleRunDatabases`.
+ * As the superuser because `auth.users` belongs to GoTrue's role, not the app's.
+ */
+export async function sweepStaleGoTrueUsers(
+  connectionString: string,
+  domain: string,
+): Promise<number> {
+  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
+  await maintenance.connect();
+  try {
+    const { rowCount } = await maintenance.query(
+      `DELETE FROM auth.users
+       WHERE split_part(email, '@', 2) = $1
+         AND created_at < now() - make_interval(secs => $2)`,
+      [domain, RUN_STALE_AFTER_MS / 1000],
+    );
+    return rowCount ?? 0;
+  } finally {
+    await maintenance.end();
+  }
+}
+
 /** Drop every template staging database (`..._building_<timestamp>_<suffix>`) old enough and idle
  * enough that its build must have been abandoned, and report which ones it dropped.
  *

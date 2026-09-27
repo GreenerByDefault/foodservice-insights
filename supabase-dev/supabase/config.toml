@@ -30,6 +30,11 @@ port = 55321
 enabled = true
 site_url = "http://localhost:5173"
 
+# GoTrue's built-in template sends a link; the sign-in form needs a code instead.
+[auth.email.template.magic_link]
+subject = "Your Foodservice Insights sign-in code"
+content_path = "./supabase/templates/sign-in-code.html"
+
 # Mailpit: catches outbound email so nothing escapes locally.
 #
 # There's a web UI on `port`, which also serves the REST API

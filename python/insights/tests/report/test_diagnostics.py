@@ -1036,7 +1036,7 @@ class TestParseAndValidateDateColumn:
             {
                 "date": [
                     "2024-01-01",
-                    "01/02/2024",
+                    "January 2, 2024",
                     "03 Jan 2024",
                     "20240104",
                     45296,
@@ -1050,7 +1050,6 @@ class TestParseAndValidateDateColumn:
         parsed_df, diagnostics = parse_and_validate_date_column(
             df,
             date_col="date",
-            dayfirst_preference=False,
             return_diagnostics=True,
         )
 
@@ -1076,28 +1075,28 @@ class TestParseAndValidateDateColumn:
             set(diagnostics.columns)
         )
 
-    def test_raises_on_ambiguous_numeric_dates_without_preference(self):
-        df = pd.DataFrame({"date": ["03/04/2025"]})
+    @pytest.mark.parametrize(
+        "value", ["03/04/2025", "01/03/2025 00:00", "3/4/25 10:30:15", "3/4/2025 12:00:00 AM"]
+    )
+    def test_raises_on_ambiguous_numeric_dates(self, value):
+        df = pd.DataFrame({"date": [value]})
 
         with pytest.raises(ValueError, match="ambiguous"):
             parse_and_validate_date_column(df, date_col="date")
 
-    def test_resolves_ambiguous_dates_with_dayfirst_preference(self):
+    def test_parses_an_unambiguous_date_with_a_time(self):
+        df = pd.DataFrame({"date": ["13/04/2025 10:30"]})
+
+        parsed = parse_and_validate_date_column(df, date_col="date")
+
+        assert parsed["date"].iloc[0] == pd.Timestamp("2025-04-13")
+
+    def test_resolves_ambiguous_dates_with_date_format(self):
         df = pd.DataFrame({"date": ["03/04/2025"]})
 
-        us_parsed = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            dayfirst_preference=False,
-        )
-        eu_parsed = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            dayfirst_preference=True,
-        )
+        parsed = parse_and_validate_date_column(df, date_col="date", date_format="%d/%m/%Y")
 
-        assert us_parsed["date"].iloc[0] == pd.Timestamp("2025-03-04")
-        assert eu_parsed["date"].iloc[0] == pd.Timestamp("2025-04-03")
+        assert parsed["date"].iloc[0] == pd.Timestamp("2025-04-03")
 
     def test_accepts_month_only_dates(self):
         """

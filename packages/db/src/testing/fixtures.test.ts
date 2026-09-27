@@ -1,7 +1,24 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../env.ts';
-import { insertAnalysisAttempt, insertOrganization, insertOrganizationInvite } from './fixtures.ts';
+import {
+  insertAnalysisAttempt,
+  insertAppUser,
+  insertOrganization,
+  insertOrganizationInvite,
+} from './fixtures.ts';
 import { withRollback } from './transactions.ts';
+
+describe('insertAppUser', () => {
+  test('takes the id it is given, for a user mirrored from GoTrue', async () => {
+    await withRollback(DATABASE, async (transaction) => {
+      const id = crypto.randomUUID();
+
+      const user = await insertAppUser(transaction, { id, displayName: 'Dana Cook' });
+
+      expect(user).toMatchObject({ id, displayName: 'Dana Cook' });
+    });
+  });
+});
 
 describe('insertAnalysisAttempt', () => {
   test.for(['succeeded', 'failed'] as const)(

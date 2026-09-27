@@ -3,6 +3,9 @@ import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
+// The menu renders the signed-in address, so it has to be the same one on every run.
+test.use({ identity: 'pinned' });
+
 test('the account menu, open', async ({ page, organizations }) => {
   const { slug: organizationSlug } = await organizations.create({
     name: 'Northgate Provisions',
