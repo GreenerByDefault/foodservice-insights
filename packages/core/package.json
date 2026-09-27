@@ -6,6 +6,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./env": "./dist/env.js",
+    "./log": "./dist/log.js",
     "./testing": "./dist/testing.js"
   },
   "scripts": {
@@ -15,8 +16,12 @@
     "test:unit": "vitest run",
     "test": "pnpm run test:unit"
   },
+  "dependencies": {
+    "pino": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
+    "pino-pretty": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

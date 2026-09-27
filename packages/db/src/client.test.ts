@@ -1,9 +1,17 @@
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
+import { collectingLogger } from '@gbd/core/testing';
 import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
 import { DatabaseError } from 'pg';
-import { expect, test } from 'vitest';
-import { buildPoolConfig, DEFAULT_LIMITS, initializeDatabase, shutdownDatabase } from './client.ts';
+import { describe, expect, test, vi } from 'vitest';
+import {
+  buildPoolConfig,
+  DEFAULT_LIMITS,
+  initializeDatabase,
+  logConnectionError,
+  shutdownDatabase,
+} from './client.ts';
+import { DATABASE } from './env.ts';
 import type { Database } from './schema.ts';
 
 loadLocalEnv();
@@ -74,6 +82,7 @@ test('a custom statementTimeoutMs is enforced by the real database', async () =>
   const database = initializeDatabase({
     connectionString: requireEnv('DB_CONNECTION_STRING'),
     limits: { statementTimeoutMs: 100 },
+    log: 'console',
   });
 
   try {
@@ -90,4 +99,63 @@ test('a custom statementTimeoutMs is enforced by the real database', async () =>
   } finally {
     await shutdownDatabase(database);
   }
+});
+
+describe('a dropped connection', () => {
+  test('an idle connection the server terminates is logged once, as a warning', async () => {
+    const sink = collectingLogger();
+    const database = initializeDatabase({
+      connectionString: requireEnv('DB_CONNECTION_STRING'),
+      limits: { minConnections: 1, maxConnections: 1 },
+      log: sink.log,
+    });
+
+    try {
+      const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(database);
+      await sql`select pg_terminate_backend(${rows[0]?.pid})`.execute(DATABASE);
+
+      await vi.waitFor(() => expect(sink.records).not.toEqual([]));
+      expect(sink.records).toEqual([
+        {
+          level: 'warn',
+          err: expect.objectContaining({ type: 'DatabaseError', code: '57P01' }),
+          msg: 'Database connection dropped',
+        },
+      ]);
+    } finally {
+      await shutdownDatabase(database);
+    }
+  });
+
+  test('anything not transient is logged as an error', () => {
+    const sink = collectingLogger();
+
+    logConnectionError(sink.log, new Error('boom'));
+
+    expect(sink.records).toEqual([
+      {
+        level: 'error',
+        err: { type: 'Error', message: 'boom', stack: expect.any(String) },
+        msg: 'Unexpected database connection error',
+      },
+    ]);
+  });
+
+  test("with 'console', a drop is a one-line warning and anything else an error", () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const dropped = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+    const unexpected = new Error('boom');
+
+    try {
+      logConnectionError('console', dropped);
+      logConnectionError('console', unexpected);
+
+      expect(warn.mock.calls).toEqual([['Database connection dropped:', 'read ECONNRESET']]);
+      expect(error.mock.calls).toEqual([['Unexpected database connection error:', unexpected]]);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
 });

@@ -23,6 +23,8 @@ export const WORKER_DB_LIMITS: DatabaseLimits = DEFAULT_LIMITS;
 export const WORKER_DATABASE: Kysely<Database> = initializeDatabase({
   connectionString: requireEnv('DB_CONNECTION_STRING'),
   limits: WORKER_DB_LIMITS,
+  // TODO: The worker's logger, once it has one.
+  log: 'console',
 });
 
 /** Close `WORKER_DATABASE`. Call this at the end of every script, or it will hang. */

@@ -33,7 +33,9 @@
     "WORKER_RUN_ROOT",
     "WORKER_MAX_CONCURRENT_ATTEMPTS",
     "PYTHON_BIN",
-    "OPENAI_API_KEY"
+    "OPENAI_API_KEY",
+    "LOG_LEVEL",
+    "LOG_FORMAT"
   ],
   "tasks": {
     "dev": {
