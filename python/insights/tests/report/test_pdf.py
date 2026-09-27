@@ -234,6 +234,28 @@ def test_quality_lines_explain_an_invalid_status() -> None:
     ]
 
 
+def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
+    assert _quality_to_lines(
+        "warning",
+        {"by_status": {"success": 1, "info": 1, "warning": 1}},
+        [
+            {"status": "success", "message": "All required columns present."},
+            {"status": "info", "message": "GBD categories absent from data: ['Butter']"},
+            {"status": "warning", "message": "Found 1 month with a large swing."},
+        ],
+        show_successes=False,
+    ) == [
+        "This section summarises the automated checks run on your data before this report "
+        "was produced.",
+        "",
+        "Your data passed most checks, but a few things are worth noting. See the details below.",
+        "  1 passed  ·  1 warning",
+        "",
+        "Check details:",
+        "  • Warning:  Found 1 month with a large swing.",
+    ]
+
+
 def test_build_pdf_report_renders_table_index_as_a_regular_column(tmp_path: Path) -> None:
     output_path = tmp_path / "table-report.pdf"
 
@@ -559,6 +581,34 @@ def test_write_report_pdf_serving_has_only_the_template_table_and_no_narrative(
     assert list(kwargs["tables"]) == ["Category Template"]
     assert kwargs["narrative"] is None
     assert kwargs["diner_or_meal"] == "meal"
+
+
+@pytest.mark.parametrize(
+    ("extra_status", "caveat_shown"),
+    [(None, False), ("info", False), ("warning", True)],
+)
+def test_write_report_pdf_caveats_only_a_warning(
+    tmp_path: Path, extra_status: str | None, caveat_shown: bool
+) -> None:
+    report = _report()
+    findings = tuple(f for f in report.findings if f["status"] == "success")
+    if extra_status is not None:
+        findings += ({"status": extra_status, "category": "x", "message": "Extra finding"},)
+    path = tmp_path / "report.pdf"
+
+    write_report_pdf(
+        replace(report, findings=findings),
+        ReportCharts(figures=[], findings=()),
+        path,
+        client_name="Acme",
+        baseline_pilot="pilot",
+        show_quality_successes=False,
+    )
+
+    pages = ["".join((page.extract_text() or "").split()) for page in PdfReader(str(path)).pages]
+    assert ("Somedata-qualitynotesapply" in pages[1]) is caveat_shown
+    assert ("Extrafinding" in pages[-1]) is caveat_shown
+    assert ("Allautomateddatacheckspassed" in pages[-1]) is not caveat_shown
 
 
 def test_write_report_pdf_writes_the_pdf(tmp_path: Path) -> None:

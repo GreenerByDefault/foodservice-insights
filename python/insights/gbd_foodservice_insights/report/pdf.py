@@ -608,7 +608,8 @@ def _quality_to_lines(
     """Turn quality-check results into plain lines for the PDF report.
 
     ``quality_status`` is ``"pass"``, ``"warning"``, or ``"invalid"``; ``quality_summary`` has
-    a ``"by_status"`` count breakdown; each finding has ``status``/``message`` keys.
+    a ``"by_status"`` count breakdown; each finding has ``status``/``message`` keys. Without
+    ``show_successes`` (the customer's report), only warnings and issues are listed or counted.
     """
     status_sentence = _QUALITY_STATUS_SENTENCES.get(
         quality_status.lower(),
@@ -626,7 +627,7 @@ def _quality_to_lines(
     if quality_summary:
         by_status = quality_summary.get("by_status", {})
         n_pass = by_status.get("success", 0)
-        n_info = by_status.get("info", 0)
+        n_info = by_status.get("info", 0) if show_successes else 0
         n_warn = by_status.get("warning", 0)
         n_err = by_status.get("error", 0)
         parts = []
@@ -642,7 +643,7 @@ def _quality_to_lines(
             lines.append("  " + "  ·  ".join(parts))
 
     findings = missing_data_findings or []
-    visible = [f for f in findings if show_successes or f.get("status") != "success"]
+    visible = [f for f in findings if show_successes or f.get("status") in {"warning", "error"}]
 
     if visible:
         lines.append("")
@@ -938,8 +939,8 @@ def build_pdf_report(
     """Assemble the full PDF report and return its absolute path.
 
     ``title_info`` has keys ``client``, ``baseline_pilot``, ``procurement_serving``. With
-    ``show_quality_successes`` (notebook/data scientist mode), passed checks are shown in the
-    quality section; without it (web app mode), only notes, warnings, and issues are shown.
+    ``show_quality_successes`` (notebook/data scientist mode), passed checks and notes are shown
+    in the quality section; without it (web app mode), only warnings and issues are shown.
     """
     output_path = str(Path(output_path).resolve())
 

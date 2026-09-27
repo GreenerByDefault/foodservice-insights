@@ -78,11 +78,11 @@ def validate_region(region: str) -> Region:
 
 
 def quality_status_from_findings(findings: Iterable[dict[str, Any]]) -> QualityStatus:
-    """Compute overall quality status from finding severities."""
-    statuses = [str(item.get("status", "info")) for item in findings]
-    if any(status == "error" for status in statuses):
+    """Compute overall quality status from finding severities; ``info`` never counts."""
+    statuses = {str(item.get("status", "info")) for item in findings}
+    if "error" in statuses:
         return "invalid"
-    if any(status in {"warning", "info"} for status in statuses):
+    if "warning" in statuses:
         return "warning"
     return "pass"
 

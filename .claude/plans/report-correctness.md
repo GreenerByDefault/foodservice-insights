@@ -65,10 +65,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 **Wrong status and wording.**
 
-- `quality_status_from_findings` (`schema.py`) grades `info` as `warning`, and
-  `gbd_categories_absent` (`run_all_diagnostics`) fires whenever any category is unbought, so
-  every report says "Some data-quality notes apply" and its quality page prints the finding
-  verbatim: `GBD categories absent from data: ['Almond/Coconut Milk', …]`.
 - `check_zero_category_month_combos` files a `warning` whenever a bought category is absent
   from any month ("Missing 12 category×month combinations" on the 19-row golden), which is
   seasonal purchasing, not a data problem; `detect_category_discontinuity` already warns on the
@@ -112,7 +108,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 - `find_close_product_pairs` is O(n²) in unique products: 0.5 s at 2k products, 3 s at 5k, so
   roughly 50 s at the 20k a 500,000-row upload could carry. On the product path its finding is
-  `info` on tabular data, which after PR 3 no customer sees; the lab runs it a second time for
+  `info` on tabular data, which no customer sees; the lab runs it a second time for
   the QA workbook.
 - `ensure_month_year_column` (`report/utils.py`) re-parses every row through `pd.Period(str(v))`
   when the column is already `period[M]`, and three checks call it on a copy of the whole frame:
@@ -135,7 +131,10 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   `UnusableDataError`* — duplicates and unusual headcounts are not unusable data, and "contact
   GBD" would be the wrong advice.
 - **`info` never changes a report's status or wording, and the customer PDF lists warnings and
-  errors only.** `info` findings stay for the lab's QA workbook. *Rejected: deleting `info`
+  errors only.** `quality_status_from_findings` ignores `info`, and with
+  `show_quality_successes` off (`analyze()`) the quality page neither lists nor counts notes, so
+  demoting a finding to `info` is how a later PR takes it off the customer's page. `info`
+  findings stay for the lab's QA workbook and its PDF, which shows everything. *Rejected: deleting `info`
   findings* — the lab reads them. **Open:** which warnings a customer should see at all (month
   volatility, partial first or last month, outlier line items, duplicates) is GBD's call; this
   plan only stops `info` leaking.
@@ -188,15 +187,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the only aborts a real upload is likely to hit, and the lab has no override since
   `warn_continue` went.
 
-## PR 3 — `info` never reaches the customer
-
-- `quality_status_from_findings` ignores `info`; `_quality_to_lines` lists warnings and errors
-  only when `show_successes` is off, and the count line omits notes.
-- Tests: a clean run and an `info`-only run hand `build_pdf_report` status `pass` and no caveat
-  paragraph; a warning run gets both.
-- Worth it: every report today carries a caveat and a Python list on its quality page.
-
-## PR 4 — finding noise
+## PR 3 — finding noise
 
 - `check_zero_category_month_combos`'s missing-combos finding becomes `info`; the
   `diner_meal_alignment` block in `build_food_report` goes, since `run_all_diagnostics` files
@@ -205,7 +196,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: three one-line changes that each put a wrong or duplicate line on the customer's
   quality page.
 
-## PR 5 — null emission factor
+## PR 4 — null emission factor
 
 - `GBD_categories.yaml` loses `Unspecified non dairy milk`; `test_emissions.py` asserts every
   category has a factor in every region; `test_categories.py`'s exact plant-based-dairy list
@@ -213,7 +204,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the one category that can make kilos vanish from the CO2e figures, and one line.
   Blocked only on telling GBD.
 
-## PR 6 — emissions-over-time axes
+## PR 5 — emissions-over-time axes
 
 - `plot_emissions_summary_over_time` passes `y_max` to both axes as the kilos page does, and
   `_millions_formatter` becomes a thousands-separator formatter.
@@ -221,7 +212,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the carbon trend chart, the report's main chart, currently exaggerates any swing
   and labels every tick the same.
 
-## PR 7 — narrative sentences
+## PR 6 — narrative sentences
 
 - `_format_co2e` keeps one decimal below 10 t; the animal sentence is skipped at 0% animal;
   `_summary_stats` prints a single month once.
@@ -229,14 +220,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   reports, and the tonnes boundary.
 - Worth it: three sentences the customer reads first, each wrong on a plausible upload.
 
-## PR 8 — meal-mode prose
+## PR 7 — meal-mode prose
 
 - `_how_to_read_lines` and `_methodology_lines` take the basis for every mention of diners or
   people.
 - Tests: with `"meal"`, neither contains "diner" or "people"; the golden is unchanged.
 - Worth it: a report that says "diners served" to a customer who chose meals.
 
-## PR 9 — title page and static text
+## PR 8 — title page and static text
 
 - `create_title_page` drops `.title()` and wraps the client name with `_wrap_to_width`;
   "Kg CO2e Kg" becomes "Kg CO2e"; all four methodology headings are bold; the "How to Read"
@@ -245,7 +236,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   `test_pdf.py` formatter test flips; the bold set equals the heading lines.
 - Worth it: the client's own name misspelled on page one.
 
-## PR 10 — Category Template layout
+## PR 9 — Category Template layout
 
 - `create_table_page` measures the label column (as `_wrap_to_width` measures text) and shares
   the rest among month columns; past a month count the page cannot fit, the months split across
@@ -254,7 +245,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   category name.
 - Worth it: category names clip at six months, and twelve-month uploads are allowed.
 
-## PR 11 — fail loudly
+## PR 10 — fail loudly
 
 - The emissions, emissions-summary and diagnostics `except` blocks in `build_food_report` go,
   with `raise_on_error_findings` after each stage's checks so row drift still aborts there;
@@ -267,7 +258,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 12 — per-diner denominator
+## PR 11 — per-diner denominator
 
 - One `total_diner_meals` over the months present in `rows`, used by the summary, the narrative
   and the Emissions Summary sheet; `calculate_emissions_per_diner_meal` stops rounding.
@@ -275,7 +266,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: only when a whole month is uncategorized, so last among the number fixes; a dozen
   lines.
 
-## PR 13 — noise and cost
+## PR 12 — noise and cost
 
 - `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
   `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
@@ -286,7 +277,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `product-surface-trim.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 14 — fixed page sizes and category pages
+## PR 13 — fixed page sizes and category pages
 
 - Per the decision: Letter throughout, capped label wrapping, category pages grouped and ordered
   by emissions.
@@ -300,11 +291,10 @@ handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 2, 3, 4, 5, 11 and
-  13, which change what the lab's QA workbook and manifest say; `pnpm test:system` for any PR
+- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 2, 3, 4, 10 and 12, which change what the lab's QA workbook and manifest say; `pnpm test:system` for any PR
   that changes what `analyze()` writes.
-- PRs 6, 9, 10 and 14: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; PR 14 also `2. Produce Food Report.py` on
+- PRs 5, 8, 9 and 13: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; PR 13 also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
 ## Risks
@@ -314,6 +304,6 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 2 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `product-surface-trim.md` PR 1 moves `diagnostics.py`; PRs 2, 4 and 13 here touch it, and
-  whichever lands second rebases. PR 14 waits for its PR 4.
-- GBD's answers block PR 5 (a confirmation) and PR 14 only.
+- `product-surface-trim.md` PR 1 moves `diagnostics.py`; PRs 2, 3 and 12 here touch it, and
+  whichever lands second rebases. PR 13 waits for its PR 4.
+- GBD's answers block PR 4 (a confirmation) and PR 13 only.
