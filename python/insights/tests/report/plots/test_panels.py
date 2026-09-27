@@ -131,22 +131,19 @@ def test_draw_food_and_drink_totals_rejects_a_metric_without_food_and_drink(
         panels.draw_food_and_drink_totals(ax, fruit_and_juice_months(), metric="emissions_kg_co2e")
 
 
-def test_draw_total_emissions_abbreviates_large_values(
+def test_draw_total_emissions_labels_a_narrow_range_from_zero(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
     _fig, ax = plt.subplots()
 
-    panels.draw_total_emissions(ax, fruit_and_juice_months(emissions_kg_co2e=[2e6, 5e5, 3e3, 12]))
+    panels.draw_total_emissions(ax, fruit_and_juice_months(emissions_kg_co2e=[1000, 67, 1100, 92]))
 
     assert ax.get_title() == "Total Carbon Emissions Over Time"
-    assert _y_values(ax) == [[2.5e6, 3012.0]]
-    formatter = ax.yaxis.get_major_formatter()
-    assert [formatter(value, None) for value in (2.5e6, 1e6, 1000, 999)] == [
-        "2.5M",
-        "1.0M",
-        "1k",
-        "999",
-    ]
+    assert _y_values(ax) == [[1067.0, 1192.0]]
+    assert ax.get_ylim()[0] == 0
+    labels = ax.yaxis.get_major_formatter().format_ticks(ax.get_yticks().tolist())
+    assert len(set(labels)) == len(labels)
+    assert "1,200" in labels
 
 
 def test_draw_emissions_per_diner_divides_by_diner_meals(
@@ -162,6 +159,7 @@ def test_draw_emissions_per_diner_divides_by_diner_meals(
 
     assert ax.get_title() == "Carbon Emissions per Diner Over Time"
     assert _y_values(ax) == [[3.5, 2.65]]
+    assert ax.get_ylim()[0] == 0
 
 
 def test_draw_plant_animal_split_labels_both_shares():

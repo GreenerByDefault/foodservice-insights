@@ -91,6 +91,22 @@ def _draw_unavailable(ax: plt.Axes, title: str, message: str) -> None:
     ax.text(0.5, 0.42, message, ha="center", va="center", fontsize=10, color="gray")
 
 
+def _set_ylim_from_zero(ax: plt.Axes, series: list[pd.Series]) -> None:
+    """Anchor the y-axis at 0 so a small swing is not drawn as a large one."""
+    y_max = max(
+        (
+            float(max_value)
+            for values in series
+            if pd.notna(max_value := pd.to_numeric(values, errors="coerce").max())
+        ),
+        default=0.0,
+    )
+    if y_max > 0:
+        ax.set_ylim(0, y_max * 1.2)
+    elif y_max == 0:
+        ax.set_ylim(0, 1)
+
+
 def _draw_metric_over_time_on_axis(
     ax: plt.Axes,
     plot_data: pd.DataFrame,
@@ -114,6 +130,7 @@ def _draw_metric_over_time_on_axis(
     ax.set_ylabel(y_label)
     set_title_font(ax, title)
     add_grid(ax)
+    _set_ylim_from_zero(ax, [data_sorted["value"]])
 
 
 def _draw_multi_series_metric_over_time_on_axis(
@@ -168,19 +185,7 @@ def _draw_multi_series_metric_over_time_on_axis(
     set_title_font(ax, title)
     add_grid(ax)
     ax.legend(frameon=False)
-
-    y_max = max(
-        (
-            float(max_value)
-            for _, plot_data in non_empty_payloads
-            if pd.notna(max_value := pd.to_numeric(plot_data["value"], errors="coerce").max())
-        ),
-        default=0.0,
-    )
-    if y_max > 0:
-        ax.set_ylim(0, y_max * 1.2)
-    elif y_max == 0:
-        ax.set_ylim(0, 1)
+    _set_ylim_from_zero(ax, [plot_data["value"] for _, plot_data in non_empty_payloads])
 
 
 def _food_and_drink_trends(
@@ -253,14 +258,6 @@ def draw_food_and_drink_per_diner(
     )
 
 
-def _format_with_magnitude_suffix(x: float, _pos: int | None) -> str:
-    if abs(x) >= 1e6:
-        return f"{x / 1e6:,.1f}M"
-    if abs(x) >= 1e3:
-        return f"{x / 1e3:,.0f}k"
-    return f"{x:,.0f}"
-
-
 def draw_total_emissions(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
@@ -275,7 +272,7 @@ def draw_total_emissions(
         title="Total Carbon Emissions Over Time",
         y_label="Total kg CO₂e",
     )
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_format_with_magnitude_suffix))
+    ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:,.0f}"))
 
 
 def draw_emissions_per_diner(
