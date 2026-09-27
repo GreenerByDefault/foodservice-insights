@@ -32,7 +32,13 @@ def staged_report_inputs(tmp_path):
     repository. Working from a copy under ``tmp_path`` keeps every write
     confined to pytest's temp dir.
     """
-    src = Path(__file__).parent / "data" / "aggregated_baseline.csv"
+    src = (
+        Path(__file__).resolve().parents[3]
+        / "insights"
+        / "tests"
+        / "data"
+        / "aggregated_baseline.csv"
+    )
     df = pd.read_csv(src)
 
     # Mirror the canonical end-of-categorization cleanup (see
