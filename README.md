@@ -11,8 +11,8 @@ worker runs each analysis in Python.
 
 ### Prerequisites
 
-- **Node 24** (the version in [`.nvmrc`](.nvmrc)). Run `nvm use` if you use nvm.
-- **pnpm**, via Corepack, which reads the version from `package.json`: `corepack enable`
+- **Node 24**. Run `nvm use` if you use nvm.
+- **pnpm**: `corepack enable`
 - **[uv](https://docs.astral.sh/uv/)** and **[just](https://just.systems)**: `brew install uv just`
 - **Docker**, running. Docker Desktop, Rancher Desktop, and OrbStack all work.
 - **The Supabase CLI**: `brew install supabase/tap/supabase`
@@ -33,22 +33,27 @@ exists. The app will not serve a request without it.
 
 ### Start it
 
-Use two terminal tabs so the web app's logs and the worker's logs stay separate. Start the
-first tab before the second, because it builds the shared packages that the worker imports.
+If the databases have stopped, for example after a computer restart, start them first:
 
 ```sh
-# Tab 1: the web app, and a rebuild of the shared packages on every change
-scripts/supabase start   # only if it has stopped, e.g. after a restart
+scripts/supabase start
+```
+
+Then use two terminal tabs, in either order, so the web app's logs and the worker's logs stay
+separate:
+
+```sh
+# Tab 1: the web app
 pnpm dev:web
 
-# Tab 2: the worker, which runs the analyses
+# Tab 2: the worker
 pnpm dev:worker
 ```
 
-`pnpm dev` runs both in one terminal, with their logs interleaved.
+Alternatively, `pnpm dev` runs both in one terminal, with their logs interleaved.
 
 Open <http://localhost:5173> and upload a CSV.
-[`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) works. The report page
+You can use [`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) for an example CSV. The report page
 updates on its own once the analysis finishes. Emails the app sends arrive at
 <http://localhost:55324>. When you're done, run `scripts/supabase stop` to free the memory the
 databases use.
@@ -173,7 +178,7 @@ Turborepo.
 | Command | What it does |
 | --- | --- |
 | `pnpm dev:web` | Dev server at <http://localhost:5173>, and a `tsc --watch` per package it imports |
-| `pnpm dev:worker` | The worker, in [`WORKER_MODE`](#analysis-modes). Start it after `dev:web` |
+| `pnpm dev:worker` | The worker, in [`WORKER_MODE`](#analysis-modes) |
 | `pnpm dev` | Both of the above, in one terminal |
 | `pnpm check` | `svelte-check` on the web app, `tsc --noEmit` on packages |
 | `pnpm lint` | Biome: formatting, lint rules, and import sorting |
