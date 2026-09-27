@@ -4,6 +4,70 @@ Greener by Default's foodservice emissions analysis tool. Customers upload procu
 data and get back a report on the climate impact of their food purchasing, with
 recommendations.
 
+## Run the app locally
+
+The app needs both of the repo's stacks. The web app and the worker are TypeScript, and the
+worker runs each analysis in Python.
+
+### Prerequisites
+
+- **Node 24** (the version in [`.nvmrc`](.nvmrc)). Run `nvm use` if you use nvm.
+- **pnpm**, via Corepack, which reads the version from `package.json`: `corepack enable`
+- **[uv](https://docs.astral.sh/uv/)** and **[just](https://just.systems)**: `brew install uv just`
+- **Docker**, running. Docker Desktop, Rancher Desktop, and OrbStack all work.
+- **The Supabase CLI**: `brew install supabase/tap/supabase`
+
+### First time
+
+```sh
+pnpm install
+just sync
+cp .env.example .env
+scripts/supabase start
+pnpm migrate
+pnpm seed:identity
+```
+
+`pnpm seed:identity` creates the placeholder user that every request runs as until sign-in
+exists. The app will not serve a request without it.
+
+### Start it
+
+Use two terminal tabs so the web app's logs and the worker's logs stay separate. Start the
+first tab before the second, because it builds the shared packages that the worker imports.
+
+```sh
+# Tab 1: the web app, and a rebuild of the shared packages on every change
+scripts/supabase start   # only if it has stopped, e.g. after a restart
+pnpm dev:web
+
+# Tab 2: the worker, which runs the analyses
+pnpm dev:worker
+```
+
+`pnpm dev` runs both in one terminal, with their logs interleaved.
+
+Open <http://localhost:5173> and upload a CSV.
+[`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) works. The report page
+updates on its own once the analysis finishes. Emails the app sends arrive at
+<http://localhost:55324>. When you're done, run `scripts/supabase stop` to free the memory the
+databases use.
+
+### Analysis modes
+
+`WORKER_MODE` in `.env` chooses which analysis runs when a report is uploaded. Restart both
+tabs after you change it, because the web app reads it too, to decide how often the report
+page checks for a result.
+
+| `WORKER_MODE` | What you get | Use it for |
+| --- | --- | --- |
+| `mock-llm` (default) | The real analysis, with a real PDF and workbook. A keyword list categorizes products instead of OpenAI, so products it does not recognize are left uncategorized. No API key needed. | Demos with the sample data, and most development |
+| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. | Real procurement data |
+| `stubbed` | A fake analysis that finishes in seconds. Its PDF and workbook are placeholders that will not open. The report name drives failure scenarios such as `!slow` and `!fail:<reason>`; see [`testing.py`](python/worker_child/worker_child/testing.py) for the full list. | Working on the report lifecycle and its error states |
+| `off` | No worker, so reports stay queued. | UI work that doesn't need a result |
+
+## Developing
+
 Two stacks live here, and they share no toolchain. Pick yours:
 
 | Working on | Start here |
@@ -11,7 +75,7 @@ Two stacks live here, and they share no toolchain. Pick yours:
 | **TypeScript** — the web app, the worker parent, `packages/*` | [TypeScript](#typescript), below |
 | **Python** — the analysis library, the worker child, the lab | [`python/README.md`](python/README.md) |
 
-Everything above that heading is common to both.
+Everything above the TypeScript heading applies to both.
 
 ## Documentation
 
@@ -58,43 +122,24 @@ TypeScript-only change skips every Python job, and vice versa. See
 Everything from here down is the TypeScript stack: pnpm, Turborepo, Supabase, vitest, and
 Playwright. For the Python equivalents, see [`python/README.md`](python/README.md).
 
-### Prerequisites
+### Setup
 
-- **Node 24** (the version in [`.nvmrc`](.nvmrc)). `nvm use` if you use nvm.
-- **pnpm**, via Corepack, which reads the version from `package.json`:
+Beyond [Run the app locally](#run-the-app-locally):
 
-  ```sh
-  corepack enable
-  ```
-
-- **Docker**, running — Docker Desktop, Rancher Desktop, or OrbStack.
-- **The Supabase CLI**:
-
-  ```sh
-  brew install supabase/tap/supabase
-  ```
-
-- **A `host.docker.internal` entry**, once per machine. `pnpm test:system` needs your machine to
-  resolve `host.docker.internal` to itself (`127.0.0.1`):
+- Install the browser the tests use: `pnpm --filter @gbd/web exec playwright install chromium`
+- `pnpm test:system` needs your machine to resolve `host.docker.internal` to itself. Add the
+  entry once per machine:
 
   ```sh
   sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
   ```
 
-### Install
+- If you're using LLMs, set up the [Svelte MCP server](https://svelte.dev/docs/ai/local-setup).
 
-```sh
-pnpm install
-pnpm --filter @gbd/web exec playwright install chromium
-cp .env.example .env
-```
+### The two databases
 
-If you're using LLMs, set up the [Svelte MCP server](https://svelte.dev/docs/ai/local-setup).
-
-### Start the databases
-
-There are two independent Supabase stacks. Start only the one you need — running both at once
-is supported but competes for the same memory and CPU, especially across concurrent sessions.
+There are two independent Supabase stacks. Start only the one you need. Running both at once
+works, but they compete for the same memory and CPU, especially across concurrent sessions.
 
 | Stack | For | Ports | Yours to modify? |
 | --- | --- | --- | --- |
@@ -111,22 +156,14 @@ TEST_DB=1 scripts/supabase start
 ```
 
 Containers stop when your machine restarts, but stop a stack yourself once you're done with
-it — the dev stack in particular, if you're not hand-editing data — to free it up:
+it to free up memory:
 
 ```sh
 scripts/supabase stop
 TEST_DB=1 scripts/supabase stop
 ```
 
-First time only, set up the dev stack's database schema and blob store bucket, then seed the
-placeholder user identity:
-
-```sh
-pnpm migrate
-pnpm seed:identity
-```
-
-The test stack does both for itself whenever you run the tests.
+The test stack migrates and seeds itself whenever you run the tests.
 
 ### Everyday commands
 
@@ -135,7 +172,9 @@ Turborepo.
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Dev server at <http://localhost:5173>, a `tsc --watch` per package, and the worker — see [Running the worker locally](#running-the-worker-locally) |
+| `pnpm dev:web` | Dev server at <http://localhost:5173>, and a `tsc --watch` per package it imports |
+| `pnpm dev:worker` | The worker, in [`WORKER_MODE`](#analysis-modes). Start it after `dev:web` |
+| `pnpm dev` | Both of the above, in one terminal |
 | `pnpm check` | `svelte-check` on the web app, `tsc --noEmit` on packages |
 | `pnpm lint` | Biome: formatting, lint rules, and import sorting |
 | `pnpm fmt` | Biome, applying fixes |
@@ -153,15 +192,12 @@ To run the production build, use `pnpm --filter @gbd/web start`, then go to
 <http://localhost:3000> — not the `0.0.0.0:3000` the server logs, which is unreachable on
 macOS.
 
-### Running the worker locally
+### Uploading reports by hand
 
-`pnpm dev` also starts the worker, so an uploaded report moves through the whole lifecycle. See
-[`apps/worker/README.md`](apps/worker/README.md#worker_mode) for `WORKER_MODE` and driving
-scenarios like `!slow` and `!fail:<reason>` by report name. `REPORT_RATE_LIMIT=off` in `.env`
-bypasses the report limits, which walking the scenarios by hand hits fast.
-
-[`apps/web/sample-reports/`](apps/web/sample-reports/) has CSVs to upload by hand — one that's
-accepted, a few rejected for different reasons.
+[`apps/web/sample-reports/`](apps/web/sample-reports/) has CSVs to upload: one that is
+accepted, and a few that are rejected for different reasons. `REPORT_RATE_LIMIT=off` in `.env`
+turns off the report limits, which you hit quickly when walking the
+[`stubbed`](#analysis-modes) scenarios by hand.
 
 ### Testing
 
