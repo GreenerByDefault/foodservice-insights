@@ -4,8 +4,7 @@
 
 The server already reads a real Supabase Auth session when `PUBLIC_AUTH_MODE=supabase`, and the
 `apps/web` browser suite already signs every test in as a GoTrue user of its own. What is left is
-the frontend: a one-question onboarding step (display name, required), a working rename on
-`/account`, and sign-in on the 401 page.
+the frontend: a one-question onboarding step (display name, required) and sign-in on the 401 page.
 
 **Supabase Auth arrives beside the placeholder, not in place of it.** `PUBLIC_AUTH_MODE` picks one
 per environment (§ The mode switch). That lets hosting go ahead before there is an email provider —
@@ -20,8 +19,10 @@ sign-in form, mounted on `/sign-in` with a real-OTP e2e and screenshots of both 
 sign-in form), the invite email's link arriving there with the address filled in, and sign-out with
 a root layout that follows the session (§ Following the session). Every identity the app can run as
 already has a display name — the placeholder and every test user — so nothing existing meets
-onboarding when its gate arrives (§ Where a test identity comes from). In `supabase` mode a developer
-can sign in through Mailpit and out again today, and an invitee can go from the email to `/invites`.
+onboarding when its gate arrives (§ Where a test identity comes from). `/account` renames the
+signed-in user through the form onboarding will mount (§ The display-name form). In `supabase`
+mode a developer can sign in through Mailpit and out again today, and an invitee can go from the
+email to `/invites`.
 
 Invites, memberships, CSP, and the site password itself are out of scope. Change-email and
 delete-account are `account-self-service.md`; CSP becomes an Open item in `ARCHITECTURE.md`.
@@ -60,7 +61,7 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 `$lib/components/auth/sign-in-flow.svelte` holds both steps of email OTP — `email-step.svelte` then
 `code-step.svelte` — behind two props: `auth: BrowserAuth` and `onSignedIn: () => Promise<void>`. It
 keeps the address in its own `$state` so "Change email" returns to a filled field, and it lives in
-`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 3).
+`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 2).
 
 `/sign-in` passes `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, and needs nothing more:
 the invalidation re-runs its `load`, whose `locals.auth` redirect to `/orgs` takes over, and `/orgs`
@@ -141,7 +142,7 @@ supabase-js after hydration, anonymous ones included. Four details constrain wha
 - **The callback does not await `invalidateAll()`.** supabase-js awaits its subscribers, so an
   awaited reload would hold `signOut()` — or `verifyOtp()` — until every load had re-run.
 - **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={invalidateAll}` and the
-  listener's `SIGNED_IN`. Harmless, and the 401 page (PR 3) inherits it.
+  listener's `SIGNED_IN`. Harmless, and the 401 page (PR 2) inherits it.
 
 `auth.e2e.ts` covers both halves of sign-out. One signs out of an `(app)` page, lands on `/`, presses
 Back to the 401 page with no account menu, and reloads for a 401, so the cookie is proven gone and
@@ -150,6 +151,29 @@ navigation; the other proves the listener: a second tab on the same page turns i
 untouched. `routes/layout.svelte.test.ts` holds the wiring — `placeholder` never calls
 `browserAuth()`, and the subscription is dropped on unmount. The reload-on-restore is covered only by
 its unit test.
+
+### The display-name form
+
+`$lib/components/account/display-name-form.svelte` is the one form both screens mount: `/account`
+today, `/onboarding` next. Its props are `initialName: string`, `submitLabel` and
+`onSaved: () => Promise<void>`; it calls `renameSelf` (`$lib/account/api/rename-self.ts`) itself,
+so a caller only decides what happens after a save. The field is labelled "Your name" with
+`autocomplete="name"`, and `required` plus `maxlength={MAX_DISPLAY_NAME_LENGTH}` are what refuse
+an empty or over-long name inline. The only failure it renders is an unknown outcome — nothing the
+server answers has a meaning of its own once the browser has validated — with copy telling the
+user to reload and check.
+
+`PATCH /api/account` takes `{ displayName }`: `requireAuth`, then `_renameSelf(db, userId, body)`,
+which answers `parseBody`'s shared 400 for a bad name and 204 after the `UPDATE app_user`. The
+schema is `DisplayNameSchema` in `$lib/account/display-name.ts`, with `MAX_DISPLAY_NAME_LENGTH`
+mirrored from `@gbd/db` (which now exports it) and pinned by a test, as `$lib/orgs/name.ts` does.
+
+`/account` reads the user from the `(app)` layout's data — its own `load` still returns nothing —
+and passes `initialName={data.user.displayName ?? ''}`, since that type is still nullable. It
+shows the email above the form and saves with `onSaved={invalidateAll}`, which is what makes the
+account menu follow. Change email and delete account remain a `**Stub:**` comment at the foot of
+its `+page.svelte`; `StubNotice` is gone. `account.e2e.ts` renames and reads the new name in the
+menu and after a reload; `account.screenshot.ts` runs as `pinned` for `account.png`.
 
 ### Where a test identity comes from
 
@@ -292,14 +316,13 @@ instead.
 ## Sequencing
 
 ```
-PR 1  rename on /account ──┬─ PR 2  onboarding gate
-                           └─ account-self-service.md (needs 1)
-PR 3  401 in place
-PR 4  e2e/README.md catches up with per-test identities
+PR 1  onboarding gate
+PR 2  401 in place
+PR 3  e2e/README.md catches up with per-test identities
 ```
 
-PR 2 needs PR 1 for the form it mounts. PR 3 and PR 4 are independent of everything. PR 3 builds on
-the mounted `/sign-in` flow and `waitForSignInCode`, both landed. Hosting needs none of them, and
+All three are independent. PR 1 mounts the landed display-name form; PR 2 builds on the mounted
+`/sign-in` flow and `waitForSignInCode`, both landed. Hosting needs none of them, and
 every one keeps `placeholder` untouched: it never reaches `/sign-in` and hides sign out.
 
 The `app_user_display_name_trimmed_length` CHECK already exists on `display_name` — folded into
@@ -307,39 +330,22 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 = 100` in `packages/db/src/types.ts` and tests in `packages/db/tests/organization.test.ts`'s
 `app_user` block. The trigger still creates the row with NULL, and the CHECK allows that.
 
-## PR 1 — `/account` can change the display name
-
-- **`apps/web/src/lib/account/display-name.ts`:** `FIELD = { displayName: 'display-name' }`,
-  `DisplayNameSchema = requiredText(MAX_DISPLAY_NAME_LENGTH)` with the constant mirrored and pinned
-  by a test, exactly as `$lib/orgs/name.ts` does.
-- **`PATCH /api/account`** in `api/account/+server.ts`, replacing its 501 stub: `requireAuth`, then
-  exported `_renameSelf(db, userId, body)` — 400 with `fieldsWithIssues` on a bad body,
-  `UPDATE app_user`, 204. Test file `rename-self.test.ts`. Client `$lib/account/api/rename-self.ts`
-  over `apiCall`. `/api/account` stays a literal (no id — `hrefs.ts` rule).
-- **`$lib/components/account/display-name-form.svelte`:** the one form both screens mount (PR 2
-  adds the second); props for the initial value, the button label, and `onSaved`. Component test.
-- **`/account`:** `+page.server.ts` returns the user; the page shows the email and the rename form
-  (`onSaved: invalidateAll`), then the still-stubbed change-email and delete sections with their
-  existing comments. Remove `StubNotice` from the page. Sign out stays in the menu.
-- **E2E:** `/account` rename changes the menu's name. Every minted user starts as
-  `MINTED_USER_DISPLAY_NAME`, so assert on the new name, not on a change from an unnamed state.
-  Screenshot: `account.png` (new — stubs get their first shot when implemented).
-
-## PR 2 — Onboarding: the display name is required
+## PR 1 — Onboarding: the display name is required
 
 - **`/onboarding`** (outside `(app)`, `PublicShell`): `+page.server.ts` does `requireAuth(locals)`
   and redirects to `/orgs` when a name already exists; the page explains it is the only question,
-  mounts PR 1's form, and on save does `goto('/orgs', { invalidateAll: true })` — from there
+  mounts `DisplayNameForm` with `initialName=''`, and on save does `goto('/orgs', { invalidateAll: true })` — from there
   `_organizationsPageRedirect` lands them.
 - **`(app)/+layout.server.ts`:** `if (auth.user.displayName === null) redirect(303, '/onboarding')`
   after `requireAuth`, and return `displayName` as `string`. Narrow `user-menu.svelte`'s prop and
   `initials()` to `string`; simplify their tests. The menu also takes `canSignOut`, which stays.
+  `/account`'s `?? ''` goes with the nullable type.
 - **The `identity` option gains `'new'`:** a minted user with `display_name = NULL` — `mintUser`
   grows an option to skip `MINTED_USER_DISPLAY_NAME`.
 - **E2E:** `'new'` visiting `/orgs` lands on `/onboarding`, submits a name, arrives at `/orgs/new`.
   Screenshot: `onboarding.png`.
 
-## PR 3 — 401 in place
+## PR 2 — 401 in place
 
 - `error-page.svelte`: for `status === 401`, mount `SignInFlow` under the heading with
   `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, as `/sign-in` does — the page the user
@@ -354,7 +360,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   its URL → 401 page with the form → sign in as that user with the code from Mailpit → the org page
   renders at the same URL.
 
-## PR 4 — `e2e/README.md` catches up with per-test identities
+## PR 3 — `e2e/README.md` catches up with per-test identities
 
 A docs-only fix for two paragraphs of `apps/web/e2e/README.md` § Database state that predate
 minted identities:
@@ -390,8 +396,7 @@ e2e/auth.e2e.ts`). Re-baseline screenshots only when Playwright asks:
 with no sign-in, and `/sign-in` sends you to `/orgs`. Then set `PUBLIC_AUTH_MODE=supabase` and walk
 it with Mailpit (55324) open:
 
-- PR 1: `/account` renames and the menu follows; an empty or 101-character name is refused inline.
-- PR 2: a fresh address is sent to `/onboarding` before anything else; the same name rules hold
+- PR 1: a fresh address is sent to `/onboarding` before anything else; the same name rules hold
   there. In `placeholder`, no onboarding.
-- PR 3: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
+- PR 2: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
   the same URL.
