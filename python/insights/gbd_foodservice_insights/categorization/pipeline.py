@@ -4,8 +4,10 @@ Food Product Categorization — Orchestrator
 
 Public entry points for categorization:
 
-    categorize_rows()      — main in-memory pipeline
-    categorize_file()      — file I/O wrapper around categorize_rows()
+    categorize_unique_products() — clean the input and categorize each unique product
+    categorize_rows()            — the above, merged back onto the input rows, plus
+                                   entree detection for serving data
+    categorize_file()            — file I/O wrapper around categorize_rows()
 
 All helper logic lives in sibling modules:
 
@@ -20,6 +22,7 @@ All helper logic lives in sibling modules:
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -58,25 +61,29 @@ from gbd_foodservice_insights.utils import get_default_output_file
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class CategorizedProducts:
+    cleaned_df: pd.DataFrame  # the input rows, with product, date and weight cleaned
+    unique_products_df: pd.DataFrame  # one row per product, with its category
+    ai_review_df: pd.DataFrame  # the products an LLM categorized, for human review
+    match_type_counts: dict[str, int]
+
+
 # ----------------------------------------------------------------------
-# Main in-memory pipeline
+# Main pipeline
 # ----------------------------------------------------------------------
-def categorize_rows(
+def categorize_unique_products(
     df: pd.DataFrame,
     llm: LlmClient,
-    gemini_client: Any | None = None,
-    data_type: str = "procurement",
     historical_categorizations: pd.DataFrame | None = None,
     cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
-    historical_entree_classifications: pd.DataFrame | None = None,
-    update_historical_entree_classifications: bool = True,
     date_format: str | None = None,
-) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+) -> CategorizedProducts:
     """
-    Categorize food products into GBD emissions categories.
+    Clean the input and assign a GBD emissions category to each unique product.
 
-    This is the main entry point for programmatic use (web app, scripts).
-    It operates entirely in-memory — no intermediate files are written.
+    Reads the packaged category cache when `historical_categorizations` is None, and writes
+    new categorizations to a cache according to `cache_write_mode`.
 
     Parameters
     ----------
@@ -84,10 +91,6 @@ def categorize_rows(
         Input data with columns: product, date, weight.
     llm : LlmClient
         Categorization and name cleaning.
-    gemini_client : Any, optional
-        Gemini API client. Required when data_type="serving".
-    data_type : str
-        "procurement" or "serving". Serving data also runs entree detection.
     historical_categorizations : DataFrame, optional
         Pre-loaded historical categorizations. If None, loads from default CSV.
     cache_write_mode : Literal["none", "reviewed", "web_app_unreviewed"]
@@ -95,27 +98,10 @@ def categorize_rows(
         - "none": do not persist category cache updates
         - "reviewed": append to reviewed historical cache
         - "web_app_unreviewed": append to unreviewed web-app cache
-    historical_entree_classifications : DataFrame, optional
-        Pre-loaded historical entree classifications.
-        If None, loads from default CSV.
-    update_historical_entree_classifications : bool
-        Whether to append new entree classifications to the historical file.
     date_format : str, optional
         Date format string. If None, auto-detects.
-
-    Returns
-    -------
-    tuple[DataFrame, dict, DataFrame]
-        - Categorized DataFrame (filtered, cleaned, ready for aggregation)
-        - Summary dict with keys: n_products_before, n_products_after,
-          pct_remaining, n_rows_before, n_rows_after, row_elimination_details
-        - AI-only review table (excludes historically categorized products)
     """
-    if data_type == "serving" and gemini_client is None:
-        raise ValueError("gemini_client is required for serving data.")
-
-    if data_type not in ("procurement", "serving"):
-        raise ValueError(f"Invalid data_type: {data_type!r}. Must be 'procurement' or 'serving'.")
+    cache_write_mode = _validate_cache_write_mode(cache_write_mode)
 
     # --- Validate required columns ---
     for col in ("product", "date", "weight"):
@@ -178,44 +164,13 @@ def categorize_rows(
         include_no_matches=True,
     )
 
-    entree_human_review_df = pd.DataFrame(
-        columns=["entree_classification", "product", "category", "occurrence_count"]
-    )
-
-    # --- Step 5: Entree detection for serving data ---
-    if data_type == "serving":
-        if historical_entree_classifications is None:
-            historical_entree_classifications = get_previously_classified_entrees()
-
-        unique_products_df = run_entree_detector(
-            unique_products_df,
-            gemini_client,
-            historical_entree_classifications=historical_entree_classifications,
-        )
-        entree_human_review_df = build_entree_human_review_table(
-            original_df=df,
-            unique_products_df=unique_products_df,
-        )
-
-    # --- Step 6: Update historical cache ---
-    cache_write_mode = _validate_cache_write_mode(cache_write_mode)
+    # --- Update historical cache ---
     if cache_write_mode == "reviewed":
         save_historical_categorizations(unique_products_df)
     elif cache_write_mode == "web_app_unreviewed":
         save_unreviewed_web_app_categorizations(unique_products_df)
     else:
         logger.info("Category cache writes disabled (cache_write_mode='none').")
-
-    if data_type == "serving" and update_historical_entree_classifications:
-        save_historical_entree_classifications(unique_products_df)
-
-    # --- Step 7: Merge categorizations back and filter ---
-    df_final, counts = merge_categorizations(df, unique_products_df)
-    if data_type == "serving":
-        df_final, counts = filter_to_entrees(df_final, counts, unique_products_df)
-    summary = counts.to_summary()
-    if data_type == "serving":
-        summary["_entree_human_review_df"] = entree_human_review_df
 
     # Provenance breakdown (raw-history / cleaned-name-history / llm) for the
     # cleaned-name reuse hit-rate. Cast to plain str/int so the summary stays
@@ -224,10 +179,94 @@ def categorize_rows(
         str(k): int(v)
         for k, v in unique_products_df["match_type"].fillna("unknown").value_counts().items()
     }
-    summary["match_type_counts"] = match_type_counts
     logger.info("Match-type breakdown (unique products): %s", match_type_counts)
 
-    return df_final, summary, ai_review_df
+    return CategorizedProducts(
+        cleaned_df=df,
+        unique_products_df=unique_products_df,
+        ai_review_df=ai_review_df,
+        match_type_counts=match_type_counts,
+    )
+
+
+def categorize_rows(
+    df: pd.DataFrame,
+    llm: LlmClient,
+    gemini_client: Any | None = None,
+    data_type: str = "procurement",
+    historical_categorizations: pd.DataFrame | None = None,
+    cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
+    historical_entree_classifications: pd.DataFrame | None = None,
+    update_historical_entree_classifications: bool = True,
+    date_format: str | None = None,
+) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+    """
+    Give each input row its product's GBD emissions category, dropping uncategorized rows.
+
+    This is the main entry point for programmatic use (web app, scripts).
+
+    Parameters
+    ----------
+    df, llm, historical_categorizations, cache_write_mode, date_format
+        As for `categorize_unique_products`.
+    gemini_client : Any, optional
+        Gemini API client. Required when data_type="serving".
+    data_type : str
+        "procurement" or "serving". Serving data also runs entree detection.
+    historical_entree_classifications : DataFrame, optional
+        Pre-loaded historical entree classifications.
+        If None, loads from default CSV.
+    update_historical_entree_classifications : bool
+        Whether to append new entree classifications to the historical file.
+
+    Returns
+    -------
+    tuple[DataFrame, dict, DataFrame]
+        - Categorized DataFrame (filtered, cleaned, ready for aggregation)
+        - Summary dict with keys: n_products_before, n_products_after,
+          pct_remaining, n_rows_before, n_rows_after, row_elimination_details,
+          match_type_counts
+        - AI-only review table (excludes historically categorized products)
+    """
+    if data_type == "serving" and gemini_client is None:
+        raise ValueError("gemini_client is required for serving data.")
+
+    if data_type not in ("procurement", "serving"):
+        raise ValueError(f"Invalid data_type: {data_type!r}. Must be 'procurement' or 'serving'.")
+
+    categorized = categorize_unique_products(
+        df,
+        llm,
+        historical_categorizations=historical_categorizations,
+        cache_write_mode=cache_write_mode,
+        date_format=date_format,
+    )
+    df_final, counts = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
+
+    # --- Entree detection for serving data ---
+    entree_human_review_df = None
+    if data_type == "serving":
+        if historical_entree_classifications is None:
+            historical_entree_classifications = get_previously_classified_entrees()
+
+        classified_products = run_entree_detector(
+            categorized.unique_products_df,
+            gemini_client,
+            historical_entree_classifications=historical_entree_classifications,
+        )
+        entree_human_review_df = build_entree_human_review_table(
+            original_df=categorized.cleaned_df,
+            unique_products_df=classified_products,
+        )
+        if update_historical_entree_classifications:
+            save_historical_entree_classifications(classified_products)
+        df_final, counts = filter_to_entrees(df_final, counts, classified_products)
+
+    summary = counts.to_summary()
+    if entree_human_review_df is not None:
+        summary["_entree_human_review_df"] = entree_human_review_df
+    summary["match_type_counts"] = categorized.match_type_counts
+    return df_final, summary, categorized.ai_review_df
 
 
 # ----------------------------------------------------------------------

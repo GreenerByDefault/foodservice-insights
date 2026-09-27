@@ -7,7 +7,7 @@ and `python/lab/` (everything else), so the product can be held to more rigor an
 supply-chain dependencies. Serving-mode entree detection landed on the product side anyway,
 though `analyze()` only ever runs procurement. The port left it there inert — `analyze()`
 always runs procurement and `GEMINI_API_KEY` is not in the child's env allowlist — because
-moving it needs `categorize_products` decomposed, a real refactor that was not on the path to a
+moving it needs `categorize_rows` decomposed, a real refactor that was not on the path to a
 working product.
 
 Serving mode is two different things, and only one of them moves:
@@ -63,11 +63,11 @@ If the web app ever supports serving data, entree detection would be rewritten a
   Gemini: the workspace venv installs every member's dependencies, so product tests would still
   pass.
 
-## PR 1: take serving out of `categorize_products` (prefactor, product only)
+## PR 1: take serving out of `categorize_rows` (prefactor, product only)
 
-- Split `categorize_products` at step 5. Steps 1–4, the AI review table and the category-cache
+- Split `categorize_rows` at step 5. Steps 1–4, the AI review table and the category-cache
   write become a public stage that returns the cleaned input, `unique_products_df`,
-  `ai_review_df` and the before-counts. `categorize_products` keeps procurement's behavior as
+  `ai_review_df` and the before-counts. `categorize_rows` keeps procurement's behavior as
   that stage followed by `merge_categorizations`, and loses `data_type`, `gemini_client` and
   `historical_entree_*`. `analyze()`'s call site barely changes.
 - The serving branch (entree detection, the entree review table, the entree-cache write, the
@@ -77,12 +77,27 @@ If the web app ever supports serving data, entree detection would be rewritten a
   entree detection has added columns. `save_historical_categorizations` keeps only the existing
   cache columns, so moving the write earlier should change nothing. Confirm it for the
   `web_app_unreviewed` saver too.
+- **Open: delete `categorize_rows` instead of keeping it.** Once serving is out, it is four
+  lines — `categorize_unique_products`, `merge_categorizations`, `counts.to_summary()`, attach
+  `match_type_counts` — and `categorize_file` repeats them. Its one product caller, `analyze()`,
+  keeps `df_final` and discards the summary and `ai_review_df`.
+  - For deleting: `analyze()` calls the two stages itself, and the product loses a public name
+    and the duplication with `categorize_file`. Most `test_pipeline.py` tests of
+    `categorize_rows` (cache write mode, date and weight cleaning, cleaned-name reuse) exercise
+    stage 1 only and would retarget to `categorize_unique_products`.
+  - For keeping: `categorization-cache.md` PR 5 routes `ai_review_df` through `analyze()` into
+    `AnalysisOutcome.new_categorizations`, and `analysis.py`'s module docstring wants the
+    summary in `AnalysisOutcome` too. Then `analyze()` needs all three outputs, which is what
+    the wrapper bundles.
+  - Worth weighing alongside: whether `analyze()` would rather read `CategorizedProducts` and
+    `MergeCounts` directly than the untyped `summary` dict. That argues for deleting even if
+    `analyze()` grows the outputs.
 
 **Testing:**
 
 - **First commit, before touching any code: a serving characterization test.** No test runs
   serving end to end today. `test_categorize_file_writes_entree_human_review_csv` patches out
-  `categorize_products` entirely. Add one that runs `categorize_file(data_type="serving")` on a
+  `categorize_rows` entirely. Add one that runs `categorize_file(data_type="serving")` on a
   small fixture CSV, with:
   - `KeywordLlmClient` (from `gbd_foodservice_insights.testing`)
   - `call_gemini_api` patched as `test_entrees.py` does, returning `entree`, `side/add-on` and

@@ -2,7 +2,7 @@
 
 ## Context
 
-`categorize_products` (`categorization/pipeline.py`) and its steps (`categorization/steps.py`)
+`categorize_rows` (`categorization/pipeline.py`) and its steps (`categorization/steps.py`)
 are the product's categorization path: exact cache match, LLM name cleaning, cleaned-name reuse,
 LLM category match, then the merge-back with the 80% cut. An audit of the ported code in
 September 2026 found that the step meant to rescue near-miss model answers is dead, that the
@@ -41,7 +41,7 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
   the category, and `test_llm.py` pins it as intended.
 - `check_GBD_categories` (`categories.py`) logs every category absent from the upload on every
   run and can never warn on the product path; `categorize_with_llm`'s `nan_categories` list and
-  the NaN check that follows `astype(str)` in `categorize_products` are dead.
+  the NaN check that follows `astype(str)` in `categorize_unique_products` are dead.
 - ARCHITECTURE.md § Concurrency and scaling names a `ThreadPoolExecutor` inside the library as
   the lever for a faster individual attempt; the loops in `clean_product_names` and
   `categorize_with_llm` are one call at a time.
@@ -59,8 +59,8 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
   method in one PR.
 - **The prompt names categories exactly**: every rule uses the YAML name, the no-match answer is
   `"No Matches Found"`, and the list is one category per line.
-- **`categorize_products` parses nothing.** It requires a `datetime64` `date` column and a float
-  `weight` column and raises `ValueError` otherwise; `date_format` goes.
+- **`categorize_unique_products` parses nothing.** It requires a `datetime64` `date` column and
+  a float `weight` column and raises `ValueError` otherwise; `date_format` goes.
   The lab's `categorize_file` (moving to the lab in `entree-detection-to-lab.md` PR 2) parses
   messy input before calling it. *Rejected: passing `max_future_days` through from `analyze()`* —
   it keeps a second copy of a web rule in the library.
@@ -82,7 +82,7 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
 - `testing.py`: `ScriptedLlmClient`; `KeywordLlmClient.match_product_to_category` honours
   `categories`. `test_testing.py` pins both.
-- A characterization test in `tests/categorization/test_pipeline.py`: `categorize_products` on an
+- A characterization test in `tests/categorization/test_pipeline.py`: `categorize_rows` on an
   inline frame with scripted answers `Cheese.`, `pork`, `"Butter"`, `Cow's Milk`, `None`, plus a
   cache row categorized `cheese`, asserting today's output with `assert_frame_equal` (every one
   dropped; the cache row absent from the review table). PR 2's diff of this test is the review.
@@ -105,8 +105,8 @@ Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
 
 ## PR 3 — typed input, guarded merge
 
-- After `entree-detection-to-lab.md` PR 1. `categorize_products` asserts dtypes and drops the
-  parsing parameters, `check_GBD_categories` call and the dead NaN check; the lab's
+- After `entree-detection-to-lab.md` PR 1. `categorize_unique_products` asserts dtypes and
+  drops the parsing parameters, `check_GBD_categories` call and the dead NaN check; the lab's
   `categorize_file` calls `parse_and_validate_date_column` and `clean_weight_column` itself.
 - `merge_categorizations` gets `validate="many_to_one"`.
 - Tests: `test_pipeline.py` hands typed frames; a `str` date column is rejected; a duplicate

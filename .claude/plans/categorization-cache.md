@@ -197,8 +197,8 @@ Both halves + `contract/` together, per `contract/README.md`.
   `build_cleaned_name_reuse_index(historical) -> dict[str, str]`. Deleted: the loader and path
   helper (and the `.gitignore` entry), `save_historical_categorizations`, the unreviewed-web-app
   cache functions, both `promote_*`, `_validate_cache_write_mode`/`cache_write_mode`.
-  `categorize_products(df, llm, historical_categorizations: pd.DataFrame, *, ...)` — required
-  (an empty frame with the three columns is allowed).
+  `categorize_unique_products(df, llm, historical_categorizations: pd.DataFrame, *, ...)` —
+  required (an empty frame with the three columns is allowed).
 - `analyze()`: `cache = frame_from_rows(request.categorization_cache)` (the one place the seam's
   `cleaned_name` meets the library's `cleaned_item_names`); rows whose `category` is not in
   `get_GBD_categories()` + `"No Matches Found"` are dropped with a warning and counted in
