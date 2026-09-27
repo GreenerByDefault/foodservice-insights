@@ -2515,7 +2515,7 @@ def check_zero_category_month_combos(
             make_finding(
                 stage="diagnostics",
                 category="missing_category_month_combos",
-                status="warning",
+                status="info",
                 message=f"Missing {len(missing)} category×month combinations.",
                 count=len(missing),
                 sample_values=[

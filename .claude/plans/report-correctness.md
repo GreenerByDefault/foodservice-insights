@@ -13,8 +13,8 @@ output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff
 
 Other plans own neighbouring problems and are referenced where the sequencing matters:
 `categorization-cache.md` PR 5 (what reaches the report from the cache),
-`categorization-pipeline.md` (what the model may answer), `product-surface-trim.md` (splitting
-`diagnostics.py`, plot panel drawers, typed inputs).
+`categorization-pipeline.md` (what the model may answer), `diagnostics-split.md` (splitting
+`diagnostics.py`, typed inputs).
 
 **Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
 because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
@@ -30,7 +30,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - `build_food_report` re-runs `parse_and_validate_date_column` on dates `read_input_csv`
   already parsed, so its `max_future_days=30` against the container's local date can reject a
   date the web accepted against UTC. Only a non-UTC container (a developer's machine) can hit
-  it; the fix is typed inputs at the report boundary, which `product-surface-trim.md` owns.
+  it; the fix is typed inputs at the report boundary, which `diagnostics-split.md` owns.
 
 **Wrong numbers.**
 
@@ -51,16 +51,8 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - `calculate_emissions_per_diner_meal` rounds to four decimals, so minor categories at a large
   site show `0.0` in the workbook.
 
-**Wrong status and wording.**
+**Wrong wording.**
 
-- `check_zero_category_month_combos` files a `warning` whenever a bought category is absent
-  from any month ("Missing 12 category×month combinations" on the 19-row golden), which is
-  seasonal purchasing, not a data problem; `detect_category_discontinuity` already warns on the
-  present-gap-present pattern that check exists for.
-- A count month with no rows is reported twice, by `build_food_report`
-  (`diner_meal_alignment`) and `run_all_diagnostics` (`date_alignment`).
-- `compare_missing_snapshots` (`quality.py`) counts a column that did not exist before the
-  stage as "newly introduced missing values", so one unfactored row files two findings.
 - Meal mode still says "normalising against the number of diners served" and "how many people
   were served" (`_methodology_lines`, `_how_to_read_lines`).
 
@@ -133,7 +125,8 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   becomes an `error`. *Rejected: excluding factorless categories from the model's list while
   keeping the category* — a second notion of "valid category" for one dead entry.
 - **Per-diner denominators sum only months with rows**, computed once, so the headline equals
-  what the monthly charts show. A count for a month with no rows stays an `info` finding.
+  what the monthly charts show. A count for a month with no rows stays an `info` finding, the
+  `date_alignment` one `run_all_diagnostics` files.
 - **Drivers stay ranked by kilos; the prose says so.** The Decision KPIs page is where carbon
   ranking lives. **Open:** GBD may want procurement drivers ranked by CO2e instead. Also for
   GBD: the Animal Emissions Intensity table lists animal categories with poultry and fish at the
@@ -149,8 +142,8 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   diagnostics `except` blocks. `ReportCharts` then carries no findings.
 - **Fixed page sizes.** Every page is US Letter, portrait for text and tables and landscape for
   charts; wrapped labels shrink the font or truncate rather than grow the page. Category pages
-  are ordered by emissions and grouped several to a page. This lands after
-  `product-surface-trim.md` PR 4, whose panel drawers are what a fixed-size page composes.
+  are ordered by emissions and grouped several to a page, composed from the panel drawers in
+  `report/plots/`.
   **Open:** GBD says how many category pages it wants at all.
 
 ## PR 1 — the two escalations become warnings
@@ -164,16 +157,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the only aborts a real upload is likely to hit, and the lab has no override since
   `warn_continue` went.
 
-## PR 2 — finding noise
-
-- `check_zero_category_month_combos`'s missing-combos finding becomes `info`; the
-  `diner_meal_alignment` block in `build_food_report` goes, since `run_all_diagnostics` files
-  the same two findings; `compare_missing_snapshots` skips columns absent from `before`.
-- Tests: each through `build_food_report` on inline rows, asserting the findings list.
-- Worth it: three one-line changes that each put a wrong or duplicate line on the customer's
-  quality page.
-
-## PR 3 — null emission factor
+## PR 2 — null emission factor
 
 - `GBD_categories.yaml` loses `Unspecified non dairy milk`; `test_emissions.py` asserts every
   category has a factor in every region; `test_categories.py`'s exact plant-based-dairy list
@@ -181,14 +165,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the one category that can make kilos vanish from the CO2e figures, and one line.
   Blocked only on telling GBD.
 
-## PR 4 — meal-mode prose
+## PR 3 — meal-mode prose
 
 - `_how_to_read_lines` and `_methodology_lines` take the basis for every mention of diners or
   people.
 - Tests: with `"meal"`, neither contains "diner" or "people"; the golden is unchanged.
 - Worth it: a report that says "diners served" to a customer who chose meals.
 
-## PR 5 — Category Template layout
+## PR 4 — Category Template layout
 
 - `create_table_page` measures the label column (as `_wrap_to_width` measures text) and shares
   the rest among month columns; past a month count the page cannot fit, the months split across
@@ -197,7 +181,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   category name.
 - Worth it: category names clip at six months, and twelve-month uploads are allowed.
 
-## PR 6 — fail loudly
+## PR 5 — fail loudly
 
 - The emissions, emissions-summary and diagnostics `except` blocks in `build_food_report` go,
   with `raise_on_error_findings` after each stage's checks so row drift still aborts there;
@@ -210,7 +194,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 7 — per-diner denominator
+## PR 6 — per-diner denominator
 
 - One `total_diner_meals` over the months present in `rows`, used by the summary, the narrative
   and the Emissions Summary sheet; `calculate_emissions_per_diner_meal` stops rounding.
@@ -218,7 +202,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: only when a whole month is uncategorized, so last among the number fixes; a dozen
   lines.
 
-## PR 8 — noise and cost
+## PR 7 — noise and cost
 
 - `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
   `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
@@ -226,16 +210,16 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   size names `MAX_DATA_ROWS`.
 - Tests: pair results unchanged on a fixture with near pairs; timings at 30k rows / 2k products
   and at the cap in the PR body.
-- Lands after `product-surface-trim.md` PR 1 splits `diagnostics.py`.
+- Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 9 — fixed page sizes and category pages
+## PR 8 — fixed page sizes and category pages
 
 - Per the decision: Letter throughout, capped label wrapping, category pages grouped and ordered
   by emissions.
 - Tests: every page of a `mock_llm` run is one of two sizes; a 200-character product name does
   not change the page count.
-- Lands after `product-surface-trim.md` PR 4 and GBD's answer on category pages.
+- Lands after GBD's answer on category pages.
 - Worth it: the PDF a customer downloads is what GBD is selling.
 
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
@@ -243,10 +227,10 @@ handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2, 3, 6 and 8, which change what the lab's QA workbook and manifest say; `pnpm test:system` for any PR
-  that changes what `analyze()` writes.
-- PRs 5 and 9: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; PR 9 also `2. Produce Food Report.py` on
+- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2, 5 and 7, which change what the lab's QA
+  workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
+- PRs 4 and 8: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; PR 8 also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
 ## Risks
@@ -256,6 +240,6 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `product-surface-trim.md` PR 1 moves `diagnostics.py`; PRs 1, 2 and 8 here touch it, and
-  whichever lands second rebases. PR 9 waits for its PR 4.
-- GBD's answers block PR 3 (a confirmation) and PR 9 only.
+- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 7 here touch it, and whichever
+  lands second rebases.
+- GBD's answers block PR 2 (a confirmation) and PR 8 only.

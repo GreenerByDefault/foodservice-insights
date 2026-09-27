@@ -44,7 +44,6 @@ from gbd_foodservice_insights.report.schema import (
     required_non_null_columns_for_mode,
 )
 from gbd_foodservice_insights.report.utils import (
-    compute_month_alignment,
     ensure_month_year_column,
     normalize_diner_meal_mapping,
 )
@@ -252,35 +251,6 @@ def build_food_report(
         )
         raise QualityCheckError(quality_findings) from exc
     total_dm = float(sum(dm_mapping.values()))
-
-    if "month_year" in df.columns:
-        alignment = compute_month_alignment(df["month_year"].dropna().unique(), dm_mapping.keys())
-        if alignment["missing_in_mapping"]:
-            quality_findings.append(
-                make_finding(
-                    stage="ingestion",
-                    category="diner_meal_alignment",
-                    status="warning",
-                    message=(
-                        "Months in data but missing in diner-meal mapping: "
-                        f"{alignment['missing_in_mapping']}"
-                    ),
-                    count=len(alignment["missing_in_mapping"]),
-                )
-            )
-        if alignment["missing_in_data"]:
-            quality_findings.append(
-                make_finding(
-                    stage="ingestion",
-                    category="diner_meal_alignment",
-                    status="info",
-                    message=(
-                        "Months in diner-meal mapping but absent in data: "
-                        f"{alignment['missing_in_data']}"
-                    ),
-                    count=len(alignment["missing_in_data"]),
-                )
-            )
 
     _log_stage("emissions", report_progress)
     emissions_summary = None
