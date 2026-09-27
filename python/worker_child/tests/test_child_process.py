@@ -16,6 +16,12 @@ No test waits on wall-clock time to synchronize with the child. `wait_until` pol
 the child itself writes at a known point (`progress.json`, `grandchild.pid`) — the same
 technique `apps/worker/src/child/spawn.test.ts` uses against `fake-child.ts`. The SIGTERM test
 is deterministic by construction: a child with no handler can only die by SIGTERM.
+
+Every wait shares one deadline, `CHILD_TIMEOUT_SECONDS`, and it is generous on purpose: a
+healthy child clears it in about a second, but the deadline must also cover a cold one. The
+child imports the whole analysis library before it can write anything, and on a fresh
+worktree with no bytecode compiled yet, with every xdist worker spawning a child at once,
+that takes several seconds. A tighter deadline only turns a slow machine into a failed test.
 """
 
 import contextlib
@@ -34,6 +40,7 @@ from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID
 from worker_child.contract import layout, names
 
 CHILD_SCRIPT = Path(__file__).resolve().parent / "support" / "child.py"
+CHILD_TIMEOUT_SECONDS = 30
 
 
 def spawn_child(scenario: Mapping[str, Any], run_directory: Path) -> subprocess.Popen[bytes]:
@@ -54,8 +61,8 @@ def spawn_child(scenario: Mapping[str, Any], run_directory: Path) -> subprocess.
     )
 
 
-def wait_until(predicate: Callable[[], bool], description: str, *, timeout: float = 5.0) -> None:
-    deadline = time.monotonic() + timeout
+def wait_until(predicate: Callable[[], bool], description: str) -> None:
+    deadline = time.monotonic() + CHILD_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if predicate():
             return
@@ -80,7 +87,7 @@ def kill_group_if_alive(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is None:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
-    process.wait(timeout=5)
+    process.wait(timeout=CHILD_TIMEOUT_SECONDS)
 
 
 def test_a_successful_analysis_exits_zero_and_writes_the_contracts_result(
@@ -88,7 +95,7 @@ def test_a_successful_analysis_exits_zero_and_writes_the_contracts_result(
 ) -> None:
     process = spawn_child({}, run_directory)
 
-    stdout, _ = process.communicate(timeout=30)
+    stdout, _ = process.communicate(timeout=CHILD_TIMEOUT_SECONDS)
 
     assert process.returncode == names.EXIT_WROTE_RESULT
     assert stdout == b""
@@ -103,7 +110,7 @@ def test_an_analysis_error_reaches_failure_json_through_a_real_process(
 ) -> None:
     process = spawn_child({"raises": "unusable_data"}, run_directory)
 
-    process.communicate(timeout=30)
+    process.communicate(timeout=CHILD_TIMEOUT_SECONDS)
 
     assert process.returncode == names.EXIT_WROTE_FAILURE
     assert read_json(run_directory / layout.FAILURE)["reason"] == "unusable_data"
@@ -119,7 +126,7 @@ def test_a_child_with_no_handler_dies_of_sigterm(run_directory: Path) -> None:
 
         os.killpg(process.pid, signal.SIGTERM)
 
-        process.wait(timeout=5)
+        process.wait(timeout=CHILD_TIMEOUT_SECONDS)
         assert process.returncode == -signal.SIGTERM
     finally:
         kill_group_if_alive(process)
@@ -134,7 +141,7 @@ def test_everything_the_child_spawned_dies_with_it(run_directory: Path) -> None:
         assert is_running(grandchild_pid)
 
         os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=5)
+        process.wait(timeout=CHILD_TIMEOUT_SECONDS)
 
         wait_until(lambda: not is_running(grandchild_pid), "the grandchild has gone too")
     finally:
