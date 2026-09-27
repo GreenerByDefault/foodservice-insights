@@ -54,8 +54,6 @@ def aggregate_data(
     per_diner_meal: bool = False,
     metrics: list[str] | str = "kilos_total",
     timescale: str = "month_year",
-    *,
-    strict_diner_meal_coverage: bool = True,
 ) -> pd.DataFrame:
     """Aggregate metrics by timescale and group.
 
@@ -94,7 +92,7 @@ def aggregate_data(
     missing_months = alignment["missing_in_mapping"]
     invalid_counts = [month for month, value in dm_mapping.items() if value <= 0]
 
-    if strict_diner_meal_coverage and (missing_months or invalid_counts):
+    if missing_months or invalid_counts:
         details: list[str] = []
         if missing_months:
             details.append(f"missing months in diner_meal_mapping: {missing_months}")
@@ -660,7 +658,6 @@ def run_aggregation_pipeline(
     metric_total: str = "kilos_total",
     top_n: int = 5,
     *,
-    strict_diner_meal_coverage: bool = True,
     region: str = "us",
 ) -> dict[str, Any]:
     """Run the full report aggregation pipeline."""
@@ -672,7 +669,6 @@ def run_aggregation_pipeline(
         diner_meal_mapping=diner_meal_mapping,
         per_diner_meal=True,
         metrics=metrics,
-        strict_diner_meal_coverage=strict_diner_meal_coverage,
     )
 
     monthly_category_data = aggregate_data(
@@ -681,7 +677,6 @@ def run_aggregation_pipeline(
         diner_meal_mapping=diner_meal_mapping,
         per_diner_meal=True,
         metrics=metrics,
-        strict_diner_meal_coverage=strict_diner_meal_coverage,
     )
 
     template_data = create_template_data(monthly_category_data, metric_total)

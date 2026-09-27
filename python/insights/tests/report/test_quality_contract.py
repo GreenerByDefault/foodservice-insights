@@ -9,9 +9,7 @@ from gbd_foodservice_insights.report.quality import (
     check_required_non_null,
 )
 from gbd_foodservice_insights.report.schema import (
-    per_diner_metric_name,
     quality_status_from_findings,
-    validate_missing_data_policy,
 )
 from gbd_foodservice_insights.report.utils import (
     divide_by_diner_meals,
@@ -126,9 +124,19 @@ def test_emissions_returns_structured_findings_for_unmatched_category():
     assert any(f["category"] == "unmatched_emission_factors" for f in findings)
 
 
-def test_aggregate_data_no_default_divide_by_one_behavior():
-    """Guards against misleading per-diner metrics by preserving NaN when month coverage is
-    missing."""
+@pytest.mark.parametrize(
+    ("mapping", "detail"),
+    [
+        ({"2024-01": 10}, r"missing months in diner_meal_mapping: \[Period\('2024-02', 'M'\)\]"),
+        (
+            {"2024-01": 10, "2024-02": 0},
+            r"non-positive diner-meal counts: \[Period\('2024-02', 'M'\)\]",
+        ),
+    ],
+)
+def test_aggregate_data_refuses_per_diner_metrics_without_a_positive_count_per_month(
+    mapping: dict[str, int], detail: str
+):
     df = pd.DataFrame(
         {
             "month_year": [pd.Period("2024-01", freq="M"), pd.Period("2024-02", freq="M")],
@@ -137,20 +145,14 @@ def test_aggregate_data_no_default_divide_by_one_behavior():
         }
     )
 
-    out = aggregate_data(
-        df,
-        group_by="product",
-        diner_meal_mapping={"2024-01": 10},
-        per_diner_meal=True,
-        metrics=["kilos_total"],
-        strict_diner_meal_coverage=False,
-    )
-
-    col = per_diner_metric_name("kilos_total")
-    jan_val = out.loc[out["month_year"] == pd.Period("2024-01", freq="M"), col].iloc[0]
-    feb_val = out.loc[out["month_year"] == pd.Period("2024-02", freq="M"), col].iloc[0]
-    assert jan_val == 1.0
-    assert pd.isna(feb_val)
+    with pytest.raises(ValueError, match=f"Cannot compute per-diner metrics: {detail}"):
+        aggregate_data(
+            df,
+            group_by="product",
+            diner_meal_mapping=mapping,
+            per_diner_meal=True,
+            metrics=["kilos_total"],
+        )
 
 
 def test_aggregate_data_keeps_rows_with_missing_group_keys():
@@ -184,11 +186,7 @@ def test_monthly_totals_preserve_all_missing_month_as_missing():
     assert pd.isna(totals.iloc[0])
 
 
-def test_schema_helpers_validate_policy_and_quality_status():
-    """Verifies policy validation and status rollup encode the expected report schema behavior.
-    This matters because report pipeline schema must remain stable across ingestion, quality
-    checks, and outputs."""
-    assert validate_missing_data_policy("warn_continue") == "warn_continue"
+def test_quality_status_rolls_up_the_worst_finding():
     assert quality_status_from_findings([{"status": "success"}]) == "pass"
     assert quality_status_from_findings([{"status": "warning"}]) == "warning"
     assert quality_status_from_findings([{"status": "error"}]) == "invalid"

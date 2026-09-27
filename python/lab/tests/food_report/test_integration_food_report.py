@@ -77,7 +77,6 @@ def test_food_report_end_to_end_produces_valid_artifacts(staged_report_inputs, t
         output_dir=tmp_path,
         procurement_serving="procurement",
         region="us",
-        missing_data_policy="warn_continue",
     )
 
     # 1. The run completed and reported a recognised quality status. The staged

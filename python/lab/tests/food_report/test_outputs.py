@@ -192,7 +192,6 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
         diner_meal_file=diner_path,
         output_dir=tmp_path,
         procurement_serving="procurement",
-        missing_data_policy="warn_continue",
     )
 
     assert result["run_status"] == "success"
@@ -291,7 +290,6 @@ def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
         diner_meal_file=diner_path,
         output_dir=tmp_path,
         procurement_serving="procurement",
-        missing_data_policy="warn_continue",
     )
 
     assert result["run_status"] == "success"
@@ -319,7 +317,6 @@ def test_run_food_report_defaults_outputs_to_named_subdirectory(monkeypatch, foo
         input_file=input_path,
         diner_meal_file=diner_path,
         procurement_serving="procurement",
-        missing_data_policy="warn_continue",
     )
 
     expected_output_dir = (
@@ -350,7 +347,6 @@ def test_run_food_report_writes_failure_manifest_and_log(
             diner_meal_file=diner_path,
             output_dir=tmp_path,
             procurement_serving="procurement",
-            missing_data_policy="warn_continue",
         )
 
     manifest_path = tmp_path / "food_report_test_manifest.json"
@@ -393,14 +389,12 @@ def test_run_food_report_does_not_duplicate_log_lines_across_repeated_runs(
         diner_meal_file=diner_path,
         output_dir=tmp_path,
         procurement_serving="procurement",
-        missing_data_policy="warn_continue",
     )
     result = run_food_report(
         input_file=input_path,
         diner_meal_file=diner_path,
         output_dir=tmp_path,
         procurement_serving="procurement",
-        missing_data_policy="warn_continue",
     )
 
     log_text = Path(result["log_path"]).read_text()

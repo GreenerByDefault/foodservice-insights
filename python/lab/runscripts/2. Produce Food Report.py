@@ -111,15 +111,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable debug logging.",
     )
-    parser.add_argument(
-        "--missing-data-policy",
-        default="hard_fail",
-        choices=["warn_continue", "hard_fail"],
-        help=(
-            "How to handle missing/invalid required data: 'hard_fail' (default, raises on "
-            "errors) or 'warn_continue' (produce a diagnostic report even with errors)."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -155,7 +146,6 @@ def main() -> None:
         diner_or_meal=args.diner_or_meal,
         top_n_drivers=args.top_n,
         region=args.region,
-        missing_data_policy=args.missing_data_policy,
     )
 
     print("\n" + "=" * 60)

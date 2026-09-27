@@ -8,11 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from gbd_foodservice_insights.report.schema import (
-    MissingDataPolicy,
-    should_fail_now,
-    summarize_status_counts,
-)
+from gbd_foodservice_insights.report.schema import summarize_status_counts
 
 
 def make_finding(
@@ -209,31 +205,20 @@ def summarize_findings(findings: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-class QualityPolicyError(ValueError):
+class QualityCheckError(ValueError):
     """`findings` is every finding collected before the abort, not only the errors."""
 
-    def __init__(self, message: str, findings: list[dict[str, Any]]) -> None:
-        super().__init__(message)
+    def __init__(self, findings: list[dict[str, Any]]) -> None:
+        messages = [
+            f"[{item.get('stage', 'unknown')}::{item.get('category', 'unknown')}] "
+            f"{item.get('message', '')}"
+            for item in findings
+            if item.get("status") == "error"
+        ]
+        super().__init__("Report generation aborted due to error findings:\n" + "\n".join(messages))
         self.findings = findings
 
 
-def enforce_policy_or_raise(
-    policy: MissingDataPolicy,
-    findings: Iterable[dict[str, Any]],
-) -> None:
-    """Raise `QualityPolicyError` if policy requires fail-fast and errors are present."""
-    rows = list(findings)
-    if not should_fail_now(policy, rows):
-        return
-
-    messages = [
-        f"[{item.get('stage', 'unknown')}::{item.get('category', 'unknown')}] "
-        f"{item.get('message', '')}"
-        for item in rows
-        if item.get("status") == "error"
-    ]
-    raise QualityPolicyError(
-        "missing_data_policy='hard_fail' aborted report generation due to error findings:\n"
-        + "\n".join(messages),
-        rows,
-    )
+def raise_on_error_findings(findings: list[dict[str, Any]]) -> None:
+    if any(item.get("status") == "error" for item in findings):
+        raise QualityCheckError(list(findings))

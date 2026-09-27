@@ -25,18 +25,18 @@ from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_protein_share,
 )
 from gbd_foodservice_insights.report.quality import (
+    QualityCheckError,
     check_required_columns,
     check_required_non_null,
     check_row_count_drift,
     compare_missing_snapshots,
-    enforce_policy_or_raise,
     make_finding,
     missing_snapshot,
+    raise_on_error_findings,
 )
 from gbd_foodservice_insights.report.schema import (
     REGION_DAYFIRST,
     DinerOrMeal,
-    MissingDataPolicy,
     Region,
     ReportMode,
     metric_display_label,
@@ -93,7 +93,7 @@ class FoodReport:
 
     @property
     def total_diner_meals(self) -> float:
-        return float(sum(self.diner_meal_mapping.values())) if self.diner_meal_mapping else 0.0
+        return float(sum(self.diner_meal_mapping.values()))
 
     def procurement_table(self, name: ProcurementTable) -> pd.DataFrame | None:
         if self.mode != "procurement":
@@ -128,14 +128,11 @@ def build_food_report(
     diner_or_meal: DinerOrMeal,
     top_n_drivers: int,
     pdf_extracted: bool | None = None,
-    missing_data_policy: MissingDataPolicy = "hard_fail",
     report_progress: Callable[[], None] = _ignore,
 ) -> FoodReport:
-    """Under `hard_fail`, an error finding raises `QualityPolicyError`."""
-    policy = missing_data_policy
+    """An error finding raises `QualityCheckError`."""
     metric_total = metric_for_mode(mode)
     quality_findings: list[Finding] = []
-    # The fallback paths below assign columns in place.
     df = rows.copy()
 
     _log_stage("ingestion", report_progress)
@@ -150,81 +147,51 @@ def build_food_report(
             stage="ingestion",
         )
     )
-    enforce_policy_or_raise(policy, quality_findings)
+    raise_on_error_findings(quality_findings)
 
     # Date normalization with explicit diagnostics
     _log_stage("date_normalization", report_progress)
     dayfirst_preference = REGION_DAYFIRST[region]
 
-    if "date" in df.columns:
-        before = missing_snapshot(df)
-        before_rows = len(df)
-        try:
-            parsed_df, date_diag = diagnostics.parse_and_validate_date_column(
-                df,
-                date_col="date",
-                allow_missing=True,
-                return_diagnostics=True,
-                dayfirst_preference=dayfirst_preference,
-            )
-            df = parsed_df
-            status_counts = date_diag["parse_status"].value_counts(dropna=False).to_dict()
-            for status, count in status_counts.items():
-                if status == "parsed":
-                    continue
-                mapped_status = "warning" if status == "missing" else "error"
-                quality_findings.append(
-                    make_finding(
-                        stage="date_normalization",
-                        category="date_parse_status",
-                        status=mapped_status,
-                        message=f"Date parsing status '{status}' occurred {int(count)} times.",
-                        count=int(count),
-                        metadata={"parse_status": status},
-                    )
-                )
-        except ValueError as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="date_normalization",
-                    category="date_parse_failure",
-                    status="error",
-                    message=str(exc),
-                )
-            )
-            original = df["date"].copy()
-            df["date"] = pd.to_datetime(df["date"], errors="coerce")
-            coerced_to_missing = int((original.notna() & df["date"].isna()).sum())
-            if coerced_to_missing > 0:
-                quality_findings.append(
-                    make_finding(
-                        stage="date_normalization",
-                        category="date_coerce_missing",
-                        status="error",
-                        message=(
-                            f"Fallback parsing coerced {coerced_to_missing} non-missing "
-                            "date values to missing."
-                        ),
-                        column="date",
-                        count=coerced_to_missing,
-                    )
-                )
-
-        quality_findings.extend(
-            compare_missing_snapshots(before, missing_snapshot(df), stage="date_normalization")
+    before = missing_snapshot(df)
+    before_rows = len(df)
+    try:
+        df, date_diag = diagnostics.parse_and_validate_date_column(
+            df,
+            date_col="date",
+            allow_missing=True,
+            return_diagnostics=True,
+            dayfirst_preference=dayfirst_preference,
         )
-        quality_findings.extend(
-            check_row_count_drift(before_rows, len(df), stage="date_normalization")
-        )
-    else:
+    except ValueError as exc:
         quality_findings.append(
             make_finding(
                 stage="date_normalization",
-                category="missing_date_column",
+                category="date_parse_failure",
                 status="error",
-                message="Column 'date' is missing and cannot be normalized.",
+                message=str(exc),
             )
         )
+        raise QualityCheckError(quality_findings) from exc
+    status_counts = date_diag["parse_status"].value_counts(dropna=False).to_dict()
+    for status, count in status_counts.items():
+        if status == "parsed":
+            continue
+        mapped_status = "warning" if status == "missing" else "error"
+        quality_findings.append(
+            make_finding(
+                stage="date_normalization",
+                category="date_parse_status",
+                status=mapped_status,
+                message=f"Date parsing status '{status}' occurred {int(count)} times.",
+                count=int(count),
+                metadata={"parse_status": status},
+            )
+        )
+    quality_findings.extend(
+        compare_missing_snapshots(before, missing_snapshot(df), stage="date_normalization")
+    )
+    quality_findings.extend(check_row_count_drift(before_rows, len(df), stage="date_normalization"))
 
     _log_stage("month_normalization", report_progress)
     before = missing_snapshot(df)
@@ -240,8 +207,7 @@ def build_food_report(
                 message=str(exc),
             )
         )
-        if "month_year" not in df.columns:
-            df["month_year"] = pd.NA
+        raise QualityCheckError(quality_findings) from exc
 
     quality_findings.extend(
         compare_missing_snapshots(before, missing_snapshot(df), stage="month_normalization")
@@ -268,7 +234,7 @@ def build_food_report(
         )
     )
 
-    enforce_policy_or_raise(policy, quality_findings)
+    raise_on_error_findings(quality_findings)
 
     _log_stage("diner_meal_mapping", report_progress)
     try:
@@ -282,12 +248,10 @@ def build_food_report(
                 message=f"Could not load diner-meal mapping: {exc}",
             )
         )
-        if policy == "hard_fail":
-            enforce_policy_or_raise(policy, quality_findings)
-        dm_mapping = {}
-    total_dm = float(sum(dm_mapping.values())) if dm_mapping else 0.0
+        raise QualityCheckError(quality_findings) from exc
+    total_dm = float(sum(dm_mapping.values()))
 
-    if dm_mapping and "month_year" in df.columns:
+    if "month_year" in df.columns:
         alignment = compute_month_alignment(df["month_year"].dropna().unique(), dm_mapping.keys())
         if alignment["missing_in_mapping"]:
             quality_findings.append(
@@ -385,30 +349,24 @@ def build_food_report(
             )
 
     _log_stage("aggregation", report_progress)
-    if dm_mapping:
-        try:
-            agg_results = aggregation.run_aggregation_pipeline(
-                df,
-                dm_mapping,
-                metric_total=metric_total,
-                top_n=top_n_drivers,
-                strict_diner_meal_coverage=(policy == "hard_fail"),
-                region=region,
+    try:
+        agg_results = aggregation.run_aggregation_pipeline(
+            df,
+            dm_mapping,
+            metric_total=metric_total,
+            top_n=top_n_drivers,
+            region=region,
+        )
+    except Exception as exc:
+        quality_findings.append(
+            make_finding(
+                stage="aggregation",
+                category="aggregation_failed",
+                status="error",
+                message=str(exc),
             )
-        except Exception as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="aggregation",
-                    category="aggregation_failed",
-                    status="error",
-                    message=str(exc),
-                )
-            )
-            if policy == "hard_fail":
-                enforce_policy_or_raise(policy, quality_findings)
-            agg_results = _build_empty_aggregation(metric_total)
-    else:
-        agg_results = _build_empty_aggregation(metric_total)
+        )
+        raise QualityCheckError(quality_findings) from exc
 
     monthly_cat = agg_results["monthly_category_data"]
 
@@ -482,7 +440,7 @@ def build_food_report(
             )
         )
 
-    enforce_policy_or_raise(policy, quality_findings)
+    raise_on_error_findings(quality_findings)
 
     return FoodReport(
         rows=df,
@@ -607,59 +565,3 @@ def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFra
         df.groupby(keys, dropna=False)["emissions_kg_co2e"].sum(min_count=1).reset_index()
     )
     return monthly_cat.merge(category_emissions, on=keys, how="left", validate="one_to_one")
-
-
-def _build_empty_aggregation(metric_total: str) -> dict[str, pd.DataFrame]:
-    """Return empty aggregation payload used when aggregation fails in warn mode."""
-    per_dm_col = metric_total.replace(" total", "") + " per diner-meal"
-    return {
-        "monthly_product_data": pd.DataFrame(
-            columns=["month_year", "product", metric_total, per_dm_col]
-        ),
-        "monthly_category_data": pd.DataFrame(
-            columns=["month_year", "category", metric_total, per_dm_col]
-        ),
-        "template_data": pd.DataFrame(),
-        "overall_drivers": pd.DataFrame(columns=["product", metric_total, "percentage"]),
-        "category_drivers": pd.DataFrame(
-            columns=[
-                "category",
-                "product",
-                metric_total,
-                f"{metric_total}_in_category",
-                "percentage",
-            ]
-        ),
-        "highest_lowest": pd.DataFrame(columns=["category", "times_higher"]),
-        "animal_emissions_intensity": pd.DataFrame(
-            columns=["category", metric_total, "total_kg_co2e", "kg_co2e_per_kg_food"]
-        ),
-        "decision_kpis": pd.DataFrame(
-            columns=[
-                "KPI",
-                "Value",
-                "Unit",
-                "Denominator",
-                "Top products",
-                "Top product emissions (kg CO2e)",
-                "Total animal emissions (kg CO2e)",
-            ]
-        ),
-        "substitution_scenarios": pd.DataFrame(
-            columns=[
-                "scenario",
-                "substitution_pct",
-                "source_categories",
-                "replacement_category",
-                "baseline_ruminant_weight_kg",
-                "baseline_ruminant_emissions_kg_co2e",
-                "replaced_weight_kg",
-                "remaining_ruminant_weight_kg",
-                "replacement_weight_kg",
-                "replacement_emission_factor_kg_co2e_per_kg",
-                "projected_emissions_kg_co2e",
-                "avoidable_kg_co2e",
-                "institution_emissions_avoided_pct",
-            ]
-        ),
-    }

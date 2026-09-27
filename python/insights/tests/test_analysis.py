@@ -314,7 +314,6 @@ def test_hands_the_report_the_forms_answers(
         "region": "us",
         "diner_or_meal": diner_or_meal,
         "top_n_drivers": 5,
-        "missing_data_policy": "hard_fail",
         "report_progress": report_progress,
     }
     assert fake_report.pdf_kwargs == {
