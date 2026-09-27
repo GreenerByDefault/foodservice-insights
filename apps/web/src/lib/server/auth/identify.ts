@@ -31,11 +31,13 @@ export async function identifyUser(event: RequestEvent): Promise<UserId | null> 
   return await identifyFromSession(event);
 }
 
+/** What we observed (`kind`, `reason`) versus what the caller must do about it (`action`). */
 export type AuthResult =
   | { kind: 'signed-in'; userId: UserId }
-  /** `clearCookie` stops the browser re-sending a session Supabase has already refused. */
-  | { kind: 'signed-out'; clearCookie: boolean; log?: string }
+  | { kind: 'signed-out'; reason: 'no-session' | 'refused'; action: SignedOutAction }
   | { kind: 'unavailable' };
+
+type SignedOutAction = { clearCookie: boolean; log?: string };
 
 /** What a `getUser()` answer means for this request. */
 export function classifyAuthResult(result: {
@@ -45,12 +47,14 @@ export function classifyAuthResult(result: {
   const { user, error: cause } = result;
   if (cause === null) {
     return user === null
-      ? { kind: 'signed-out', clearCookie: false }
+      ? { kind: 'signed-out', reason: 'no-session', action: { clearCookie: false } }
       : { kind: 'signed-in', userId: user.id as UserId };
   }
 
   // No cookie at all: the ordinary signed-out visitor.
-  if (isAuthSessionMissingError(cause)) return { kind: 'signed-out', clearCookie: false };
+  if (isAuthSessionMissingError(cause)) {
+    return { kind: 'signed-out', reason: 'no-session', action: { clearCookie: false } };
+  }
 
   // An outage is not "signed out" — answering with a sign-in form would ask someone already signed
   // in to sign in again, and fail. Mirrors `withDbErrorHandling`'s 503.
@@ -58,13 +62,16 @@ export function classifyAuthResult(result: {
 
   // A deleted user's token is still well-formed until it expires. That is normal, not worth a log.
   if (isAuthApiError(cause) && cause.code === 'user_not_found') {
-    return { kind: 'signed-out', clearCookie: true };
+    return { kind: 'signed-out', reason: 'refused', action: { clearCookie: true } };
   }
 
   return {
     kind: 'signed-out',
-    clearCookie: true,
-    log: `Supabase Auth refused the session: ${cause.name} ${cause.status ?? ''} ${cause.code ?? ''} ${cause.message}`,
+    reason: 'refused',
+    action: {
+      clearCookie: true,
+      log: `Supabase Auth refused the session: ${cause.name} ${cause.status ?? ''} ${cause.code ?? ''} ${cause.message}`,
+    },
   };
 }
 
@@ -73,8 +80,6 @@ async function identifyFromSession(event: RequestEvent): Promise<UserId | null> 
     requirePublicVar('PUBLIC_SUPABASE_URL'),
     requirePublicVar('PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
     {
-      // Pinned, because the default is derived from the Supabase URL's hostname, which differs
-      // between a host process (`127.0.0.1`) and a container (`host.docker.internal`).
       cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
         getAll: () => event.cookies.getAll(),
@@ -98,9 +103,9 @@ async function identifyFromSession(event: RequestEvent): Promise<UserId | null> 
       error(503, SERVICE_UNAVAILABLE_ERROR);
       break;
     case 'signed-out':
-      if (result.log) console.warn(result.log, { path: event.url.pathname });
+      if (result.action.log) console.warn(result.action.log, { path: event.url.pathname });
       // `local` touches this cookie only, not the user's sessions on other devices.
-      if (result.clearCookie) await supabase.auth.signOut({ scope: 'local' });
+      if (result.action.clearCookie) await supabase.auth.signOut({ scope: 'local' });
       return null;
   }
 }

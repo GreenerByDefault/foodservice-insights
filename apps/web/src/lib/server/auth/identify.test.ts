@@ -36,7 +36,8 @@ describe('classifyAuthResult', () => {
   test('no cookie is signed out, with nothing to clear', () => {
     expect(classifyAuthResult({ user: null, error: new AuthSessionMissingError() })).toEqual({
       kind: 'signed-out',
-      clearCookie: false,
+      reason: 'no-session',
+      action: { clearCookie: false },
     });
   });
 
@@ -49,7 +50,8 @@ describe('classifyAuthResult', () => {
 
     expect(classifyAuthResult({ user: null, error })).toEqual({
       kind: 'signed-out',
-      clearCookie: true,
+      reason: 'refused',
+      action: { clearCookie: true },
     });
   });
 
@@ -62,8 +64,11 @@ describe('classifyAuthResult', () => {
 
     expect(classifyAuthResult({ user: null, error })).toEqual({
       kind: 'signed-out',
-      clearCookie: true,
-      log: 'Supabase Auth refused the session: AuthApiError 400 refresh_token_already_used Invalid Refresh Token: Already Used',
+      reason: 'refused',
+      action: {
+        clearCookie: true,
+        log: 'Supabase Auth refused the session: AuthApiError 400 refresh_token_already_used Invalid Refresh Token: Already Used',
+      },
     });
   });
 
@@ -73,7 +78,11 @@ describe('classifyAuthResult', () => {
       error: new AuthUnknownError('bad JSON', new SyntaxError()),
     });
 
-    expect(result).toEqual({ kind: 'signed-out', clearCookie: true, log: expect.any(String) });
+    expect(result).toEqual({
+      kind: 'signed-out',
+      reason: 'refused',
+      action: { clearCookie: true, log: expect.any(String) },
+    });
   });
 
   test('an unreachable Supabase Auth is unavailable, not signed out', () => {
