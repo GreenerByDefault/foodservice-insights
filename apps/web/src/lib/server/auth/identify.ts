@@ -118,14 +118,9 @@ function writeSessionCookies(
 ): void {
   try {
     for (const { name, value, options } of cookies) {
-      event.cookies.set(name, value, {
-        ...options,
-        path: '/',
-        // Not SvelteKit's default of always-secure: the browser container reaches the app over
-        // plain `http://host.docker.internal`, which is not a secure context, so a `Secure` cookie
-        // would never come back.
-        secure: event.url.protocol === 'https:',
-      });
+      // `secure` is left to SvelteKit's default, which fails closed. Don't derive it from
+      // `event.url.protocol`: behind a TLS-terminating proxy without `ORIGIN`, that reads `http:`.
+      event.cookies.set(name, value, { ...options, path: '/' });
     }
     // `Cache-Control: no-store` and friends, so no shared cache ever hands one person's session
     // cookie to another. Only the first write carries them.

@@ -103,9 +103,9 @@ describe('identifyUser', () => {
     createServerClient.mockReset().mockReturnValue({ auth: { getUser, signOut } });
   });
 
-  function anEvent(protocol = 'http:'): RequestEvent {
+  function anEvent(): RequestEvent {
     return {
-      url: new URL(`${protocol}//localhost/orgs`),
+      url: new URL('http://localhost/orgs'),
       cookies: { getAll: vi.fn(() => []), set: vi.fn() },
       setHeaders: vi.fn(),
       fetch: vi.fn(),
@@ -182,25 +182,18 @@ describe('identifyUser', () => {
     const cookie = { name: `${AUTH_COOKIE_NAME}.0`, value: 'base64-abc', options: { maxAge: 60 } };
     const headers = { 'Cache-Control': 'private, no-store' };
 
-    test.each([
-      ['http:', false],
-      ['https:', true],
-    ])(
-      'over %s, sets the cookie with secure: %s, and the no-cache headers',
-      async (protocol, secure) => {
-        const event = anEvent(protocol);
-        await identifyUser(event);
+    test('sets the cookie, leaving `secure` to SvelteKit, and the no-cache headers', async () => {
+      const event = anEvent();
+      await identifyUser(event);
 
-        setAllFromClient()([cookie], headers);
+      setAllFromClient()([cookie], headers);
 
-        expect(event.cookies.set).toHaveBeenCalledWith(cookie.name, cookie.value, {
-          maxAge: 60,
-          path: '/',
-          secure,
-        });
-        expect(event.setHeaders).toHaveBeenCalledWith(headers);
-      },
-    );
+      // Strict, so even `secure: undefined` fails: it would override SvelteKit's default.
+      expect(vi.mocked(event.cookies.set).mock.calls).toStrictEqual([
+        [cookie.name, cookie.value, { maxAge: 60, path: '/' }],
+      ]);
+      expect(event.setHeaders).toHaveBeenCalledWith(headers);
+    });
 
     test('warns instead of failing once the response has started', async () => {
       const event = anEvent();
