@@ -20,7 +20,6 @@ from gbd_foodservice_insights import PACKAGE_DIR
 from gbd_foodservice_insights.categories import get_GBD_categories, get_meat_categories
 from gbd_foodservice_insights.report.quality import make_finding
 from gbd_foodservice_insights.report.schema import (
-    metric_for_mode,
     normalize_report_mode,
     required_columns_for_mode,
 )
@@ -2493,15 +2492,6 @@ def clean_weight_column(
     return out
 
 
-def validate_date_column(df: pd.DataFrame, date_col: str) -> None:
-    """Validate that date column exists and has no missing values."""
-    if date_col not in df.columns:
-        raise ValueError(f"Column '{date_col}' not found in DataFrame.")
-    na_count = int(df[date_col].isna().sum())
-    if na_count > 0:
-        raise AssertionError(f"There are {na_count} missing values in the date column.")
-
-
 def check_required_columns(
     df: pd.DataFrame,
     serving: bool = False,
@@ -2515,38 +2505,6 @@ def check_required_columns(
     required = required_columns_for_mode(mode)
     missing = [column for column in required if column not in df.columns]
     return len(missing) == 0
-
-
-def baseline_pre_flight_checks(
-    df: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
-    serving: bool = False,
-) -> pd.DataFrame:
-    """Run strict baseline checks and raise on violations."""
-    out = df.copy()
-
-    if not pd.api.types.is_datetime64_any_dtype(out["date"]):
-        out["date"] = pd.to_datetime(out["date"], errors="coerce")
-
-    if out["date"].isna().any():
-        raise AssertionError("There are missing (NA/NaT) values in the 'date' column.")
-
-    if not check_required_columns(out, serving=serving):
-        raise AssertionError("Required columns are missing.")
-
-    metric_col = metric_for_mode("serving" if serving else "procurement")
-    if (out[metric_col] <= 0).sum() > 0:
-        raise AssertionError(f"There are zero or negative values in '{metric_col}'.")
-
-    alignment = compute_month_alignment(
-        out["month_year"].dropna().unique(), diner_meal_mapping.keys()
-    )
-    if alignment["missing_in_mapping"]:
-        raise AssertionError(
-            f"Dates not found in diner_meal_mapping: {alignment['missing_in_mapping']}"
-        )
-
-    return out
 
 
 def ensure_date_alignment(
@@ -2939,7 +2897,6 @@ def run_all_diagnostics(
 # Date parsing (moved from utils.py)
 # ---------------------------------------------------------------------------
 
-_MISSING_DATE_TOKENS = {"", "na", "n/a", "nan", "none", "null", "nat", "missing"}
 
 # The optional time is so `01/03/2025 00:00`, a common spreadsheet export, cannot slip past to the
 # dateutil fallback, which reads it month-first without complaint.
@@ -2955,7 +2912,7 @@ def _is_missing_date_value(value: Any) -> bool:
         return True
 
     if isinstance(value, str):
-        return value.strip().lower() in _MISSING_DATE_TOKENS
+        return value.strip().lower() in MISSING_TEXT_TOKENS
 
     return False
 

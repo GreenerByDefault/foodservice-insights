@@ -8,7 +8,7 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_gbd_categories_metadata
 from gbd_foodservice_insights.report.quality import make_finding
-from gbd_foodservice_insights.report.schema import VALID_REGIONS, validate_region
+from gbd_foodservice_insights.report.schema import validate_region
 
 _EMISSION_FACTORS: dict[str, dict[str, float | None]] | None = None
 
@@ -29,11 +29,6 @@ def load_emission_factors() -> dict[str, dict[str, float | None]]:
         }
 
     return _EMISSION_FACTORS
-
-
-def get_available_regions() -> list[str]:
-    """Return supported emission-factor regions."""
-    return list(VALID_REGIONS)
 
 
 def get_emission_factor(category: str, region: str = "us") -> float | None:

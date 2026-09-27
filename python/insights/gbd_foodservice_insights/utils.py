@@ -5,7 +5,6 @@ Includes file I/O helpers, progress reporting, and environment detection.
 """
 
 import logging
-import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -14,22 +13,6 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 # File helpers
 # ----------------------------------------------------------------------
-
-
-def remove_file(file_path: str) -> None:
-    """
-    Remove a file from the filesystem.
-
-    Args:
-        file_path: The path to the file to be removed.
-    """
-    try:
-        os.remove(file_path)
-        logger.info("File %s deleted successfully.", file_path)
-    except FileNotFoundError:
-        logger.debug("File %s not found (nothing to delete).", file_path)
-    except Exception as e:
-        logger.warning("Error deleting file %s: %s", file_path, e)
 
 
 def rel_path(p: str | Path | None) -> str | Path | None:

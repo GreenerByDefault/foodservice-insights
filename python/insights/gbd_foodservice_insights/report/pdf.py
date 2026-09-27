@@ -414,27 +414,6 @@ def create_table_page(
 
     display_df = display_df.map(_format_pdf_table_value)
 
-    if title == "Decision KPIs" and "Top Animal Products" in display_df.columns:
-        display_df = display_df.copy()
-        if "Focus" in display_df.columns:
-            display_df["Focus"] = display_df["Focus"].map(
-                lambda value: (
-                    textwrap.fill(
-                        str(value), width=30, break_long_words=False, break_on_hyphens=False
-                    )
-                    if pd.notna(value)
-                    else value
-                )
-            )
-        display_df["Top Animal Products"] = display_df["Top Animal Products"].map(
-            lambda value: (
-                textwrap.fill(str(value), width=34, break_long_words=False, break_on_hyphens=False)
-                if pd.notna(value)
-                else value
-            )
-        )
-        col_widths = [0.20, 0.16, 0.30, 0.17, 0.17]
-
     if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
         display_df = display_df.copy()
         display_df["Scenario"] = display_df["Scenario"].map(
@@ -647,10 +626,6 @@ _QUALITY_STATUS_SENTENCES = {
     "pass": "All automated data checks passed — your data looks complete and consistent.",
     "warning": (
         "Your data passed most checks, but a few things are worth noting. See the details below."
-    ),
-    "error": (
-        "One or more data issues were found that may affect the accuracy of these results. "
-        "Please review the notes below before sharing this report."
     ),
 }
 

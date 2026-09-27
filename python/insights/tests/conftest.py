@@ -8,8 +8,6 @@ import os
 import tempfile
 from pathlib import Path
 
-import pytest
-
 # Keep matplotlib out of the user home directory during tests so imports do not
 # spend time trying to build caches in an unwritable location.
 _TEST_TMP_ROOT = Path(tempfile.gettempdir()) / "gbd_pytest"
@@ -25,9 +23,3 @@ os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE_DIR))
 # ----------------------------------------------------------------------
 # Sample Data Fixtures
 # ----------------------------------------------------------------------
-
-
-@pytest.fixture
-def temp_dir(tmp_path):
-    """Temporary directory for file operations."""
-    return tmp_path

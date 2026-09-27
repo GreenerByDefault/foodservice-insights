@@ -65,6 +65,10 @@ What the map found:
 
 - **The product keeps what `analyze()` reaches.** Code the lab alone imports moves to the lab;
   code nobody imports is deleted with its tests, since git has it.
+- **"No caller in the repo" is not proof of dead.** Data scientists keep gitignored notebooks in
+  `client_work/` that grep cannot see. GBD's lead data scientist has accepted breaking changes, so
+  the test is usefulness: delete what is superseded or a one-liner over something that stays, and
+  restore from git if she needs it back.
 - **`diagnostics.py` splits along the seams above**: `report/thresholds.py`, `report/checks.py`
   (the checks and `run_all_diagnostics`), and the lab gets the messy-input parsing. Findings stay
   `dict[str, Any]`; a `Finding` type belongs beside `report.food_report.FoodReport`.
@@ -83,17 +87,37 @@ What the map found:
 Everything with no callers: the four `categories.py` functions and `remove_file`,
 `schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`,
 `emissions.get_available_regions`, the `timescale="period"` branch, the unreachable `plot_*`
-functions, the unreachable Decision KPIs branch and the quality page's error handling in
-`pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the meat check and block, the second token set, the
-`highest_lowest` parameter of the client workbook, `summary_stats` down to what is used, and
-`temp_dir`. Tests go with them. No product behaviour changes: the golden test passes unchanged.
+functions (each superseded by a combined page the report renders, or a one-line pandas
+profile), the unreachable Decision KPIs branch and the never-selected `"error"` status sentence
+in `pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the second token set, and both
+`temp_dir` fixtures. Tests go with them. No product behaviour changes: the golden test passes
+unchanged.
+
+Dropped from this PR after review:
+
+- **The meat check is lab code, not dead.** The lab hands its full CSV to `build_food_report`,
+  and serving data carries the `quantity` column the check needs. It moves in PR 3.
+- **`summary_stats` is rendered.** `_executive_narrative` returns `None` when total CO2e is
+  missing or zero (missing emissions are only a warning), and the PDF falls back to the
+  key-value page. The golden file pins every key.
+- **The quality page's per-finding `error` label and count stay**: `build_pdf_report` is public,
+  and only the status sentence is unreachable by construction.
+- **`highest_lowest` feeds the lab's QA workbook**, not the client workbook; the lab uses it.
 
 ## PR 2 — lab-only code to the lab
 
 `get_dairy_categories`, `clean_GBD_category_name`, `plot_metric_over_time`,
 `plot_time_series_with_periods`, `rotate_x_labels`, `clean_column_names`,
-`get_default_output_file`, `normalize_report_mode`, and `detect_numeric_coercion_loss` if the lab
-wants it. Lab imports repointed; lab tests move, assertions unchanged.
+`get_default_output_file` and `normalize_report_mode`. Lab imports repointed; lab tests move,
+assertions unchanged. Stacks on PR 1, which deletes the product callers of
+`clean_GBD_category_name`, `plot_time_series_with_periods`, `rotate_x_labels` and
+`normalize_report_mode`.
+
+- `normalize_report_mode` is still reached by `run_all_diagnostics` → `check_required_columns`,
+  which only ever passes the two literals, so the product builds the `ReportMode` itself.
+- `plot_metric_over_time` calls `_prepare_monthly_trend_data`, which the report also uses.
+- `detect_numeric_coercion_loss` stays: `run_all_diagnostics` calls it and the golden file pins
+  its finding, so dropping it from the product path is a behaviour change.
 
 ## PR 3 — split `diagnostics.py`
 

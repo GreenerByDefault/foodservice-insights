@@ -10,10 +10,8 @@ import logging
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categories import (
-    GBD_categories_check,
     check_GBD_categories,
     clean_GBD_category_name,
-    clean_GBD_category_names,
     get_animal_product_categories,
     get_categories_by_product_category,
     get_dairy_categories,
@@ -23,10 +21,8 @@ from gbd_foodservice_insights.categories import (
     get_GBD_categories,
     get_meat_categories,
     get_plant_based_categories,
-    get_plant_based_dairy_categories,
     get_plant_protein_categories,
     get_protein_categories,
-    order_GBD_categories,
 )
 
 # ----------------------------------------------------------------------
@@ -140,18 +136,6 @@ class TestGetDairyCategories:
 
     def test_lowercase_option(self):
         lower = get_dairy_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetPlantBasedDairyCategories:
-    """Tests for get_plant_based_dairy_categories function."""
-
-    def test_returns_list(self):
-        result = get_plant_based_dairy_categories()
-        assert isinstance(result, list)
-
-    def test_lowercase_option(self):
-        lower = get_plant_based_dairy_categories(lowercase=True)
         assert all(item.lower() == item for item in lower)
 
 
@@ -288,16 +272,6 @@ class TestCheckGBDCategories:
         assert "category" in caplog.text.lower() and "not found" in caplog.text.lower()
 
 
-class TestGBDCategoriesCheckDeprecated:
-    """Tests for deprecated GBD_categories_check function."""
-
-    def test_prints_deprecation_warning(self, capsys):
-        df = pd.DataFrame({"category": ["Beef"]})
-        GBD_categories_check(df)
-        captured = capsys.readouterr()
-        assert "DEPRECATED" in captured.out
-
-
 # ----------------------------------------------------------------------
 # Tests for category cleaning functions
 # ----------------------------------------------------------------------
@@ -329,68 +303,9 @@ class TestCleanGBDCategoryName:
             assert result_normal == result_lower == result_upper
 
 
-class TestCleanGBDCategoryNames:
-    """Tests for clean_GBD_category_names function."""
-
-    def test_cleans_category_column(self):
-        gbd_cats = get_GBD_categories()
-        if len(gbd_cats) >= 2:
-            df = pd.DataFrame({"category": [gbd_cats[0], gbd_cats[1]]})
-            result = clean_GBD_category_names(df)
-            assert "category" in result.columns
-            # Values should be cleaned
-            assert all(isinstance(val, str) for val in result["category"])
-
-    def test_raises_on_missing_column(self):
-        df = pd.DataFrame({"other_col": [1, 2, 3]})
-        with pytest.raises(ValueError, match="category"):
-            clean_GBD_category_names(df)
-
-
 # ----------------------------------------------------------------------
 # Tests for category ordering functions
 # ----------------------------------------------------------------------
-
-
-class TestOrderGBDCategories:
-    """Tests for order_GBD_categories function."""
-
-    def test_converts_to_categorical(self):
-        gbd_cats = get_GBD_categories(lowercase=True)
-        if len(gbd_cats) >= 3:
-            df = pd.DataFrame(
-                {"category": [gbd_cats[2], gbd_cats[0], gbd_cats[1]], "value": [1, 2, 3]}
-            )
-            result = order_GBD_categories(df)
-            assert isinstance(result["category"].dtype, pd.CategoricalDtype)
-
-    def test_sorts_df_when_sort_df_true(self):
-        gbd_cats = get_GBD_categories(lowercase=True)
-        if len(gbd_cats) >= 3:
-            df = pd.DataFrame(
-                {"category": [gbd_cats[2], gbd_cats[0], gbd_cats[1]], "value": [1, 2, 3]}
-            )
-            result = order_GBD_categories(df, sort_df=True)
-            assert result["category"].astype(str).tolist() == [
-                gbd_cats[0],
-                gbd_cats[1],
-                gbd_cats[2],
-            ]
-            assert result["value"].tolist() == [2, 3, 1]
-
-    def test_does_not_sort_when_sort_df_false(self):
-        gbd_cats = get_GBD_categories(lowercase=True)
-        if len(gbd_cats) >= 3:
-            df = pd.DataFrame(
-                {"category": [gbd_cats[2], gbd_cats[0], gbd_cats[1]], "value": [1, 2, 3]}
-            )
-            result = order_GBD_categories(df.copy(), sort_df=False)
-            assert result["category"].astype(str).tolist() == [
-                gbd_cats[2],
-                gbd_cats[0],
-                gbd_cats[1],
-            ]
-            assert result["value"].tolist() == [1, 2, 3]
 
 
 if __name__ == "__main__":

@@ -28,12 +28,6 @@ os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE_DIR))
 # ----------------------------------------------------------------------
 
 
-@pytest.fixture
-def temp_dir(tmp_path):
-    """Temporary directory for file operations."""
-    return tmp_path
-
-
 # ----------------------------------------------------------------------
 # Mock API Clients
 # ----------------------------------------------------------------------

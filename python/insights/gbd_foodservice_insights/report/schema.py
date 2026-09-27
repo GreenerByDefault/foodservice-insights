@@ -20,12 +20,6 @@ REQUIRED_COLUMNS_BY_MODE: dict[ReportMode, tuple[str, ...]] = {
     "serving": ("date", "product", "category", "servings total"),
 }
 
-# Required non-null fields are stricter than required columns.
-REQUIRED_NON_NULL_COLUMNS_BY_MODE: dict[ReportMode, tuple[str, ...]] = {
-    "procurement": ("date", "product", "category", "kilos_total"),
-    "serving": ("date", "product", "category", "servings total"),
-}
-
 STATUS_SEVERITY: dict[DiagnosticStatus, int] = {
     "success": 0,
     "info": 1,
@@ -48,14 +42,6 @@ def normalize_report_mode(value: str | None) -> ReportMode:
     return "procurement"
 
 
-def validate_report_mode(mode: str) -> ReportMode:
-    """Validate and return report mode."""
-    normalized = normalize_report_mode(mode)
-    if normalized not in VALID_REPORT_MODES:
-        raise ValueError(f"Unsupported report mode '{mode}'. Valid modes: {VALID_REPORT_MODES}")
-    return normalized
-
-
 def metric_for_mode(mode: ReportMode) -> str:
     """Return canonical total metric column for a report mode."""
     return "servings total" if mode == "serving" else "kilos_total"
@@ -68,7 +54,7 @@ def required_columns_for_mode(mode: ReportMode) -> tuple[str, ...]:
 
 def required_non_null_columns_for_mode(mode: ReportMode) -> tuple[str, ...]:
     """Return columns that must not contain missing values for mode."""
-    return REQUIRED_NON_NULL_COLUMNS_BY_MODE[mode]
+    return REQUIRED_COLUMNS_BY_MODE[mode]
 
 
 def metric_display_label(metric: str) -> str:
