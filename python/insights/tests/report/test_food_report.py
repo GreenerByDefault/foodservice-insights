@@ -327,13 +327,19 @@ def test_serving_mode_computes_no_emissions():
     assert "Total CO2e" not in report.summary_stats
 
 
-@pytest.mark.parametrize(
-    ("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK"), ("uk", "UK")]
-)
+@pytest.mark.parametrize(("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK")])
 def test_summary_stats_names_the_emissions_factor_region(region, label):
-    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal", region=region)
+    report = _build(_rows(), region=region)
 
     assert report.summary_stats["Region used for climate emissions factors"] == label
+
+
+@pytest.mark.parametrize("region", ["us", "europe"])
+def test_ambiguous_dates_abort_whatever_the_region(region):
+    rows = _rows().assign(date=["01/01/2024", "01/01/2024", "01/02/2024", "01/02/2024"])
+
+    with pytest.raises(QualityCheckError, match=r"\[date_normalization::date_parse_failure\]"):
+        _build(rows, region=region)
 
 
 # ----------------------------------------------------------------------

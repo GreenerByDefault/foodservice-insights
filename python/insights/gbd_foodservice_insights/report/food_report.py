@@ -35,7 +35,6 @@ from gbd_foodservice_insights.report.quality import (
     raise_on_error_findings,
 )
 from gbd_foodservice_insights.report.schema import (
-    REGION_DAYFIRST,
     DinerOrMeal,
     Region,
     ReportMode,
@@ -151,8 +150,6 @@ def build_food_report(
 
     # Date normalization with explicit diagnostics
     _log_stage("date_normalization", report_progress)
-    dayfirst_preference = REGION_DAYFIRST[region]
-
     before = missing_snapshot(df)
     before_rows = len(df)
     try:
@@ -161,7 +158,6 @@ def build_food_report(
             date_col="date",
             allow_missing=True,
             return_diagnostics=True,
-            dayfirst_preference=dayfirst_preference,
         )
     except ValueError as exc:
         quality_findings.append(
@@ -505,7 +501,7 @@ def _summary_stats(
     region_summary_label = {
         "europe": "EU/UK",
         "us": "US/Canada",
-    }.get(region, str(region).upper())
+    }[region]
 
     summary_stats = {
         "Total rows": f"{len(df):,}",

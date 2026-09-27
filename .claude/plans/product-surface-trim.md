@@ -28,8 +28,7 @@ What the map found:
   `get_default_output_file` follows `categorize_file` to the lab; `rel_path` shortens two log
   lines.
 - `report/schema.py`: `validate_report_mode` has no callers; `REQUIRED_NON_NULL_COLUMNS_BY_MODE`
-  equals `REQUIRED_COLUMNS_BY_MODE`; `VALID_REGIONS` lists `uk`, for which `emissions.py` has no
-  factors, so `region="uk"` raises `KeyError`; `normalize_report_mode`'s `"serv" in text`
+  equals `REQUIRED_COLUMNS_BY_MODE`; `normalize_report_mode`'s `"serv" in text`
   heuristic is folder-name parsing the split plan gives to the lab.
   `emissions.get_available_regions` has no callers. `aggregation.py`: `aggregate_data`'s
   `timescale="period"` branch has no callers; `category_highest_vs_lowest_months` feeds only the
@@ -83,7 +82,7 @@ What the map found:
 ## PR 1 — delete the dead
 
 Everything with no callers: the four `categories.py` functions and `remove_file`,
-`schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`, `uk`,
+`schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`,
 `emissions.get_available_regions`, the `timescale="period"` branch, the unreachable `plot_*`
 functions, the unreachable Decision KPIs branch and the quality page's error handling in
 `pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the meat check and block, the second token set, the

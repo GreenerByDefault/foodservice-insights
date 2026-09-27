@@ -101,7 +101,6 @@ def analyze(
         llm,
         historical_categorizations=get_previously_categorized_items(),
         cache_write_mode="none",
-        dayfirst_preference=False,
     )
 
     rows = df_final.rename(columns={"weight": "kilos_total"})[
