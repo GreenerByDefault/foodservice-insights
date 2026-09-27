@@ -18,7 +18,7 @@ Each step's runscript is in [`runscripts/`](runscripts/). Steps 0.5, 1.5 and 3 a
 | 0.5 | `0.5 Prepare PDF data.ipynb` *or* `0.5. Prepare tabular data Runscript.py` | Turn the client's PDFs, or messy CSV and Excel files, into one clean CSV. Launches step 1 |
 | 1 | `1. Categorize Runscript.py` | Assign every product a GBD category — cache first, then the LLM |
 | 1.5 | `1.5. Clean Units Runscript.py` | Normalize weights to kilos or pounds, LLM-assisted. Launches step 2 |
-| 2 | `2. Produce Food Report.py` | Emissions, aggregation, and the report bundle |
+| 2 | `2. Produce Food Report.py` | Emissions, aggregation, and the report bundle — `food_report.pipeline.run_food_report()` wraps the product's in-memory core and writes the rest: chart PNGs, the QA workbook, the run manifest, and the run log |
 | 3 | `3. Compare baseline procurement vs serving.py` | Only when a client sent both for the same baseline |
 | 5 | `5 pilot_analysis.ipynb` | Pilot vs baseline |
 

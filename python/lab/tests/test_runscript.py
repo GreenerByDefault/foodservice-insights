@@ -15,6 +15,16 @@ def _load_categorize_runscript_module():
     return module
 
 
+def _load_produce_food_report_runscript_module():
+    script_path = Path(__file__).resolve().parents[1] / "runscripts" / "2. Produce Food Report.py"
+    spec = importlib.util.spec_from_file_location("produce_food_report_runscript", script_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _summary(output_file: str) -> dict:
     return {
         "n_products_before": 1,
@@ -111,3 +121,47 @@ def test_runscript_sets_unreviewed_cache_mode_for_web_app(monkeypatch, tmp_path)
     module.main()
 
     assert called["cache_write_mode"] == "web_app_unreviewed"
+
+
+def test_produce_food_report_runscript_passes_input_and_diner_meals_straight_through(
+    monkeypatch, tmp_path
+):
+    """Every client folder's copy of step 1.5 launches this CLI with --input and
+    --diner-meals; pin that contract so it keeps mapping onto run_food_report's keyword
+    arguments."""
+    module = _load_produce_food_report_runscript_module()
+    input_path = tmp_path / "categorized.csv"
+    diner_meals_path = tmp_path / "diner_meals.json"
+
+    called = {}
+
+    def _fake_run_food_report(**kwargs):
+        called.update(kwargs)
+        return {
+            "pdf_path": "report.pdf",
+            "client_excel_path": "report.xlsx",
+            "qa_excel_path": "report_qa.xlsx",
+            "manifest_path": "report_manifest.json",
+            "log_path": "report.log",
+            "diagnostics": [],
+            "quality_status": "pass",
+            "summary": {},
+        }
+
+    monkeypatch.setattr(module, "run_food_report", _fake_run_food_report)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "2. Produce Food Report.py",
+            "--input",
+            str(input_path),
+            "--diner-meals",
+            str(diner_meals_path),
+        ],
+    )
+
+    module.main()
+
+    assert called["input_file"] == str(input_path)
+    assert called["diner_meal_file"] == str(diner_meals_path)

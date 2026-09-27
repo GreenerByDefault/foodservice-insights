@@ -7,8 +7,11 @@ the one entry point the worker calls; the lab calls the same modules directly.
 
 ## Where a report change goes
 
-`report/food_report.py`'s `build_food_report()` computes the report in memory; `report/pipeline.py`'s
-`run_food_report()` wraps it with file handling and the lab's extra outputs. To change:
+`report/food_report.py`'s `build_food_report()` computes the report in memory, and
+`report/pdf.write_report_pdf()` / `report/excel.write_client_workbook()` write the client-facing
+PDF and workbook. The lab's `gbd_foodservice_insights_lab.food_report.pipeline.run_food_report()`
+wraps those with file handling and the rest of the bundle (chart PNGs, the QA workbook, the run
+manifest, the run log) — see its README. To change:
 
 | What | Where |
 | --- | --- |
@@ -17,8 +20,6 @@ the one entry point the worker calls; the lab calls the same modules directly.
 | How those tables are computed | `report/aggregation.py` |
 | Chart content and captions | `report/plots.py` — `generate_all_report_plots()`, then the `plot_*` function |
 | Warnings and diagnostics on the quality pages | `report/diagnostics.py` — `run_all_diagnostics()` |
-| Client or QA workbook tabs | `report/excel.py` |
-| Manifest fields, output filenames, returned artifact paths | `report/artifacts.py` |
-| The per-run log file | `report/run_logging.py` |
+| Client workbook tabs | `report/excel.py` — `write_client_workbook()` |
 
 `report/pdf.py` is PDF-only. Never edit a generated PDF; change the code and regenerate.

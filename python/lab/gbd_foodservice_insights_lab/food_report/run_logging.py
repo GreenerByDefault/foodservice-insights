@@ -10,6 +10,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
+# Both packages' logs belong in the run log, so this can't be derived from this module's own
+# `__name__`.
+_CAPTURED_PACKAGE_NAMES = ("gbd_foodservice_insights", "gbd_foodservice_insights_lab")
+
 
 class HumanReadableReportFormatter(logging.Formatter):
     """Format report-run logs as plain progress notes rather than raw telemetry."""
@@ -55,10 +59,9 @@ def attach_report_run_file_handler(
     This exists so each run has its own persistent debug trail without leaking
     handlers across repeated calls in notebooks, scripts, or the web app. The
     resulting log file is part of the internal artifact bundle only. The
-    handler is attached to the top-level package logger
-    (``__name__.partition(".")[0]``), so every module's
-    `logging.getLogger(__name__)` propagates into it, including sibling
-    subpackages such as ``categorization``.
+    handler is attached to both `_CAPTURED_PACKAGE_NAMES` loggers, so every
+    module's `logging.getLogger(__name__)` in either package propagates into
+    it, including sibling subpackages such as ``categorization``.
 
     Args:
         log_path: Path to the per-run log file; the parent directory is created.
@@ -66,26 +69,28 @@ def attach_report_run_file_handler(
             permissive than ``level``.
 
     Returns:
-        Handler-state dict with keys ``logger``, ``handler``, ``previous_level``,
+        Handler-state dict with keys ``loggers``, ``handler``, ``previous_levels``,
         and ``log_path`` for later passing to ``close_report_run_file_handler``.
     """
     resolved_log_path = Path(log_path).resolve()
     resolved_log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logger = logging.getLogger(__name__.partition(".")[0])
-    previous_level = logger.level
-    if previous_level == logging.NOTSET or previous_level > level:
-        logger.setLevel(level)
-
     handler = logging.FileHandler(resolved_log_path, mode="w", encoding="utf-8")
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(HumanReadableReportFormatter())
-    logger.addHandler(handler)
+
+    loggers = [logging.getLogger(name) for name in _CAPTURED_PACKAGE_NAMES]
+    previous_levels: dict[str, int] = {}
+    for package_logger in loggers:
+        previous_levels[package_logger.name] = package_logger.level
+        if package_logger.level == logging.NOTSET or package_logger.level > level:
+            package_logger.setLevel(level)
+        package_logger.addHandler(handler)
 
     return {
-        "logger": logger,
+        "loggers": loggers,
         "handler": handler,
-        "previous_level": previous_level,
+        "previous_levels": previous_levels,
         "log_path": str(resolved_log_path),
     }
 
@@ -100,8 +105,9 @@ def close_report_run_file_handler(handler_state: dict[str, Any] | None) -> None:
     if not handler_state:
         return
 
-    logger = handler_state["logger"]
     handler = handler_state["handler"]
-    logger.removeHandler(handler)
+    previous_levels = handler_state["previous_levels"]
+    for package_logger in handler_state["loggers"]:
+        package_logger.removeHandler(handler)
+        package_logger.setLevel(previous_levels[package_logger.name])
     handler.close()
-    logger.setLevel(handler_state["previous_level"])

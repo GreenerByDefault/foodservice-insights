@@ -244,10 +244,8 @@ df_expected = pd.read_csv("test_data/step_1b_output/extracted_data.csv")
 ### Test Step 2 (Diagnostics & Clean)
 
 ```python
-from gbd_foodservice_insights.report.diagnostics import (
-    clean_column_names,
-    summarise_numeric_columns,
-)
+from gbd_foodservice_insights.report.diagnostics import clean_column_names
+from gbd_foodservice_insights_lab.food_report.diagnostics import summarise_numeric_columns
 
 # Load data with known issues
 df = pd.read_csv("test_data/step_1b_output/extracted_data.csv")

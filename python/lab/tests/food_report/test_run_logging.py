@@ -1,5 +1,5 @@
 from gbd_foodservice_insights.categorization import cache, entrees, steps
-from gbd_foodservice_insights.report import run_logging
+from gbd_foodservice_insights_lab.food_report import run_logging
 
 
 class TestAttachReportRunFileHandler:
