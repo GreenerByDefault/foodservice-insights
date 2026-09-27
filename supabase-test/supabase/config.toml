@@ -41,6 +41,10 @@ token_verifications = 1000
 [auth.email]
 max_frequency = "1s"
 
+[auth.email.template.magic_link]
+subject = "Your Foodservice Insights sign-in code"
+content_path = "../supabase-dev/supabase/templates/sign-in-code.html"
+
 # Mailpit: catches outbound email so nothing escapes locally.
 #
 # There's a web UI on `port`, which also serves the REST API
