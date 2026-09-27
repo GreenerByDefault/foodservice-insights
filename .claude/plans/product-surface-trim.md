@@ -87,8 +87,7 @@ What the map found:
 Everything with no callers: the four `categories.py` functions and `remove_file`,
 `schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`,
 `emissions.get_available_regions`, the `timescale="period"` branch, the unreachable `plot_*`
-functions (each superseded by a combined page the report renders, or a one-line pandas
-profile), the unreachable Decision KPIs branch and the never-selected `"error"` status sentence
+functions that a combined page the report renders supersedes, the unreachable Decision KPIs branch and the never-selected `"error"` status sentence
 in `pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the second token set, and both
 `temp_dir` fixtures. Tests go with them. No product behaviour changes: the golden test passes
 unchanged.
@@ -103,6 +102,10 @@ Dropped from this PR after review:
 - **The quality page's per-finding `error` label and count stay**: `build_pdf_report` is public,
   and only the status sentence is unreachable by construction.
 - **`highest_lowest` feeds the lab's QA workbook**, not the client workbook; the lab uses it.
+- **The data-profiling plots move to the lab in PR 2** (`plot_date_value_counts`,
+  `plot_metric(s)_by_date`, `plot_metric(s)_by_month`, `plot_category_distribution`). The data
+  scientists' validate and categorize notebooks called them until those notebooks became
+  runscripts in February 2026, and nothing in the lab replaces them.
 
 ## PR 2 — lab-only code to the lab
 

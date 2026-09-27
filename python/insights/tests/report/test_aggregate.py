@@ -660,6 +660,66 @@ class TestPlotMetricOverTime:
         plt.close(fig)
 
 
+class TestProfileDatePlots:
+    """Tests for date-profile helper plots used in validation-style workflows."""
+
+    def test_plot_date_value_counts_returns_figure_with_expected_labels(self):
+        df = pd.DataFrame(
+            {
+                "date": ["2024-01-01", "2024-01-01", "2024-01-02"],
+            }
+        )
+
+        fig = plots.plot_date_value_counts(df)
+
+        assert isinstance(fig, plt.Figure)
+        assert len(fig.axes) == 1
+        assert fig.axes[0].get_title() == "Date Value Counts"
+        assert fig.axes[0].get_xlabel() == "Date"
+        assert fig.axes[0].get_ylabel() == "Counts"
+        plt.close(fig)
+
+    def test_plot_date_value_counts_returns_placeholder_when_date_column_missing(self):
+        fig = plots.plot_date_value_counts(pd.DataFrame({"weight": [1.0, 2.0]}))
+
+        assert isinstance(fig, plt.Figure)
+        assert len(fig.axes) == 1
+        assert fig.axes[0].texts[0].get_text() == "Date Value Counts"
+        assert fig.axes[0].texts[1].get_text() == "Missing 'date' column."
+        plt.close(fig)
+
+    def test_plot_metric_by_date_returns_three_panel_figure(self):
+        """Metric-by-date should build the three summary panels rather than silently omitting
+        one.
+        """
+        df = pd.DataFrame(
+            {
+                "date": ["2024-01-01", "2024-01-01", "2024-01-02"],
+                "kilos_total": [10.0, 14.0, 6.0],
+            }
+        )
+
+        fig = plots.plot_metric_by_date(df, "kilos_total")
+
+        assert isinstance(fig, plt.Figure)
+        assert len(fig.axes) == 3
+        assert [ax.get_title() for ax in fig.axes] == [
+            "Mean kilos_total by date",
+            "Median kilos_total by date",
+            "Sum kilos_total by date",
+        ]
+        plt.close(fig)
+
+    def test_plot_metric_by_date_raises_when_metric_column_missing(self):
+        """Missing metric columns should fail clearly instead of returning an empty-looking
+        chart.
+        """
+        df = pd.DataFrame({"date": ["2024-01-01", "2024-01-02"]})
+
+        with pytest.raises(KeyError, match="kilos_total"):
+            plots.plot_metric_by_date(df, "kilos_total")
+
+
 class TestCheckZeroCategoryMonthCombos:
     """Tests for check_zero_category_month_combos function."""
 
