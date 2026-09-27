@@ -1,7 +1,5 @@
 """The lab's internal QA workbook, built on top of the product's Excel writer."""
 
-from __future__ import annotations
-
 import logging
 
 import pandas as pd

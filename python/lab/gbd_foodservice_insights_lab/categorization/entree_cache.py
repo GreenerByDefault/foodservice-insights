@@ -6,8 +6,6 @@ Historical entree-classification persistence for serving data, plus the entree-l
 constants and the label normalizer used during cache I/O.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from pathlib import Path

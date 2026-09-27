@@ -7,8 +7,6 @@ Gemini Flash/Pro two-pass classification, normalization, serving-size
 assignment, and review-sheet construction.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import logging
 import time

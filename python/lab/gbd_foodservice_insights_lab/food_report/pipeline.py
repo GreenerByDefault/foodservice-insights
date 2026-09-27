@@ -7,8 +7,6 @@ the bundle, all lab-only: chart PNGs, the QA workbook, the run manifest, the run
 write-back into `client_metadata.json`.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Callable, Mapping

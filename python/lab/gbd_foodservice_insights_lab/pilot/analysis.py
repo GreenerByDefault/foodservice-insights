@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pandas as pd
 from gbd_foodservice_insights.categories import (
     get_animal_product_categories,

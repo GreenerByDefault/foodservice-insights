@@ -1,7 +1,5 @@
 """Legacy compatibility facade for tabular extraction helpers."""
 
-from __future__ import annotations
-
 import warnings
 from pathlib import Path
 from typing import Any, Literal

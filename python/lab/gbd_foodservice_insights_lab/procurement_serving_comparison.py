@@ -6,8 +6,6 @@ procurement and serving, and returns display-ready tables plus matplotlib
 figures for interactive review.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

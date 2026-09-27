@@ -20,8 +20,6 @@ Setup:
     Get your API key at: https://aistudio.google.com/apikey
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from google import genai

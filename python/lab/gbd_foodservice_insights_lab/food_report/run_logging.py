@@ -4,8 +4,6 @@ This module owns the internal operational log for one report run. These log
 files are for debugging and observability, not for client communication.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any

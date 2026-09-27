@@ -65,8 +65,6 @@ Instructions for AI agents running this analysis:
        or meal number comparison, top share gaps, and top rank gaps.
 """
 
-from __future__ import annotations
-
 import io
 from pathlib import Path
 
