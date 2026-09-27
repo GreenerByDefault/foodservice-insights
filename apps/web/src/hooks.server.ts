@@ -1,4 +1,5 @@
 import type { Handle, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
+import { authMode } from '$lib/auth/mode';
 import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
@@ -28,16 +29,16 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
     context: { userId },
   });
 
-  if (!auth) {
-    // Temporary: with the placeholder `identifyUser`, a missing row only means an unseeded
-    // database, so we throw loudly. Once it reads a real JWT, a missing row is a deleted user's
-    // still-valid token — a normal case — so replace this throw with `error(401, ...)`.
-    throw new Error(
-      `Identified user ${userId} has no row in the database. ` +
-        'If this is the phase-one placeholder, run `pnpm seed:identity` (or `TEST_DB=1 pnpm seed:identity`).',
-    );
-  }
-  return auth;
+  if (auth) return auth;
+
+  // A setup error in either mode, never a signed-out visitor: in `supabase` mode,
+  // `on_auth_user_created` writes the row in the same transaction as the GoTrue user.
+  throw new Error(
+    `The identified user ${userId} has no app_user row. ` +
+      (authMode() === 'placeholder'
+        ? 'Run `pnpm seed:identity` (or `TEST_DB=1 pnpm seed:identity`).'
+        : 'Is DATABASE_URL the database Supabase Auth writes to, with migrations applied?'),
+  );
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -76,6 +77,13 @@ export const init: ServerInit = () => {
   // production's single long-lived instance — so without this guard every request in a dev
   // session would add another listener and eventually trip MaxListenersExceededWarning.
   if (process.listenerCount('sveltekit:shutdown') > 0) return;
+
+  // Stops the server on an unset or unknown value, rather than on its first request.
+  if (authMode() === 'placeholder') {
+    console.warn(
+      'PUBLIC_AUTH_MODE=placeholder: every request is the one seeded user, with no sign-in.',
+    );
+  }
 
   process.on('sveltekit:shutdown', async (reason) => {
     console.log('Shutting down:', reason);

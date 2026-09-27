@@ -1,4 +1,4 @@
-/** Create the phase-one placeholder identity. `TEST_DB=1` targets the test stack.
+/** Create the identity `PUBLIC_AUTH_MODE=placeholder` runs as. `TEST_DB=1` targets the test stack.
  *
  *   pnpm seed:identity
  *   TEST_DB=1 pnpm seed:identity

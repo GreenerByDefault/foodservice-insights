@@ -5,6 +5,7 @@ import {
   createRunDatabase,
   dropRunDatabase,
   ensureTemplateDatabase,
+  sweepStaleGoTrueUsers,
   sweepStaleRunDatabases,
   sweepStaleTemplateBuilds,
   templateFingerprint,
@@ -123,6 +124,44 @@ describe('sweepStaleRunDatabases', () => {
       await liveConnection?.end();
       await maintenance.query(`DROP DATABASE IF EXISTS "${oldLive}"`);
       await maintenance.query(`DROP DATABASE IF EXISTS "${young}"`);
+      await maintenance.end();
+    }
+  });
+});
+
+describe('sweepStaleGoTrueUsers', () => {
+  test("deletes an old user at the domain, and spares a young one and another domain's", async () => {
+    const maintenance = new Client({ connectionString: CONNECTION_STRING });
+    await maintenance.connect();
+
+    // A domain of this test's own, so a concurrent run's users are never in play.
+    const domain = `sweep-${crypto.randomUUID()}.example.test`;
+    const users = {
+      old: { id: crypto.randomUUID(), email: `old@${domain}`, hoursAgo: 3 },
+      young: { id: crypto.randomUUID(), email: `young@${domain}`, hoursAgo: 0 },
+      elsewhere: { id: crypto.randomUUID(), email: `old@elsewhere.${domain}`, hoursAgo: 3 },
+    };
+
+    try {
+      for (const { id, email, hoursAgo } of Object.values(users)) {
+        await maintenance.query(
+          `INSERT INTO auth.users (id, email, created_at)
+           VALUES ($1, $2, now() - make_interval(hours => $3))`,
+          [id, email, hoursAgo],
+        );
+      }
+
+      expect(await sweepStaleGoTrueUsers(CONNECTION_STRING, domain)).toBe(1);
+
+      const { rows } = await maintenance.query<{ email: string }>(
+        'SELECT email FROM auth.users WHERE id = ANY($1) ORDER BY email',
+        [Object.values(users).map((user) => user.id)],
+      );
+      expect(rows.map((row) => row.email)).toEqual([users.elsewhere.email, users.young.email]);
+    } finally {
+      await maintenance.query('DELETE FROM auth.users WHERE id = ANY($1)', [
+        Object.values(users).map((user) => user.id),
+      ]);
       await maintenance.end();
     }
   });

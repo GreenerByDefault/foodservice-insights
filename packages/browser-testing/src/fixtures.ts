@@ -1,4 +1,4 @@
-/** The extended Playwright `test` both browser suites build on: the run's signed-in identity, an
+/** The extended Playwright `test` both browser suites build on: a signed-in identity, an
  * organization it administers, and the database handle both are written through.
  *
  * Import `@gbd/db/env` only from a spec's own module graph, never from a `playwright.config.ts` —
@@ -12,7 +12,15 @@ import { DATABASE, shutdown } from '@gbd/db/env';
 import { insertOrganization } from '@gbd/db/testing';
 import { test as base } from '@playwright/test';
 import { type Kysely, sql } from 'kysely';
-import { readRunIdentity, type TestIdentity } from './identity.ts';
+import {
+  deleteGoTrueUser,
+  mintUser,
+  readPinnedIdentity,
+  readRunIdentity,
+  runAuthMode,
+  signInCookies,
+  type TestIdentity,
+} from './identity.ts';
 
 export type TestOrganization = {
   id: OrganizationId;
@@ -21,7 +29,23 @@ export type TestOrganization = {
   name: string;
 };
 
+/** Who a test is. See `SharedTestOptions.identity`. */
+export type IdentityOption = 'minted' | 'pinned' | 'anonymous';
+
 export type SharedTestOptions = {
+  /** Who this test's browser is signed in as. `placeholder` mode has one identity, the run's, so
+   * there anything but the default throws.
+   *
+   * - `minted` (the default): a GoTrue user of this test's own. Its address is unique, so a
+   *   screenshot must not render it.
+   * - `pinned`: the run's one shared identity, whose address (`PINNED_IDENTITY_EMAIL`) is fixed,
+   *   for a screenshot that renders it. Shared by every test that asks, the way a pinned
+   *   `orgName` is, so a spec using it must not mutate it.
+   * - `anonymous`: signed out. There is no `user`, so nothing that needs one — `org` included —
+   *   can be asked for.
+   */
+  identity: IdentityOption;
+
   /** The name `org` is created with, for a spec that needs it to read a particular way — a
    * screenshot spec, whose committed image is diffed pixel-for-pixel and whose switcher renders
    * this. Defaults to a unique `Test org <uuid>`.
@@ -35,7 +59,7 @@ export type SharedTestOptions = {
 };
 
 export type SharedTestFixtures = {
-  /** Who every request in this run is answered as. */
+  /** Who this test's browser is signed in as; see `identity`. */
   user: TestIdentity;
 
   /** A private organization `user` administers.
@@ -46,6 +70,11 @@ export type SharedTestFixtures = {
    * to track rows of its own. Named via `orgName`, it is shared instead; see that option.
    */
   org: TestOrganization;
+
+  /** `user`, and the GoTrue address its browser signs in with — null in `placeholder` mode, where
+   * no request carries a session. Null altogether for `anonymous`. Split out from `user` so that
+   * `context` can depend on it without throwing for an anonymous test. */
+  signedInAs: { user: TestIdentity; signInEmail: string | null } | null;
 };
 
 export type SharedWorkerFixtures = {
@@ -68,8 +97,56 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
     { scope: 'worker' },
   ],
 
-  user: async ({ db }, use) => {
-    await use(await readRunIdentity(db));
+  identity: ['minted', { option: true }],
+
+  signedInAs: async ({ db, identity }, use) => {
+    if (runAuthMode() === 'placeholder') {
+      if (identity !== 'minted') {
+        throw new Error(`identity: '${identity}' needs a run in supabase mode.`);
+      }
+      await use({ user: await readRunIdentity(db), signInEmail: null });
+      return;
+    }
+
+    switch (identity) {
+      case 'anonymous':
+        await use(null);
+        return;
+      case 'pinned': {
+        const { signInEmail, ...user } = await readPinnedIdentity(db);
+        await use({ user, signInEmail });
+        return;
+      }
+      case 'minted': {
+        const { signInEmail, ...user } = await mintUser(db);
+        await use({ user, signInEmail });
+        await deleteGoTrueUser(user.id);
+        return;
+      }
+    }
+  },
+
+  user: async ({ signedInAs }, use) => {
+    if (signedInAs === null) {
+      throw new Error("identity: 'anonymous' has no user, and nothing that needs one.");
+    }
+    await use(signedInAs.user);
+  },
+
+  context: async ({ context, signedInAs, baseURL }, use) => {
+    if (signedInAs?.signInEmail) {
+      if (baseURL === undefined) throw new Error('Signing a browser in needs a baseURL.');
+      // The project's own `baseURL`, which is `host.docker.internal` for the screenshots project,
+      // so the cookie is scoped to the host that browser actually requests.
+      const cookies = await signInCookies(signedInAs.signInEmail);
+      await context.addCookies(cookies.map((cookie) => ({ ...cookie, url: baseURL })));
+    }
+    await use(context);
+  },
+
+  // Playwright's own `request` shares no cookies with the browser, so it would be signed out.
+  request: async ({ context }, use) => {
+    await use(context.request);
   },
 
   org: async ({ db, user, orgName }, use) => {
@@ -103,9 +180,9 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
  * insert cannot go through `insertOrganization` for that reason, hence the duplicated slug shape.
  * The loser of the race reads the winner's row, so both see one id, one slug and one name.
  *
- * Every request in a run is answered as the same identity today, so an organization an earlier
- * test created already has this `adminUserId` as its admin. Once identities are per-test, this
- * needs a membership row per asking user.
+ * Every asking user is made an admin of it, so each test's own identity can open it. That
+ * membership is `ON CONFLICT DO NOTHING` too: the pinned identity, or `placeholder` mode's one
+ * user, asks again in every test.
  */
 async function findOrCreateOrganization(
   db: Kysely<Database>,
@@ -133,13 +210,18 @@ async function findOrCreateOrganization(
     return organization;
   });
 
-  const organization =
-    created ??
-    (await db
-      .selectFrom('organization')
-      .select(['id', 'slug'])
-      .where(sql`lower(name)`, '=', name.toLowerCase())
-      .executeTakeFirstOrThrow());
+  if (created !== undefined) return { id: created.id, slug: created.slug, name };
 
-  return { id: organization.id, slug: organization.slug, name };
+  const existing = await db
+    .selectFrom('organization')
+    .select(['id', 'slug'])
+    .where(sql`lower(name)`, '=', name.toLowerCase())
+    .executeTakeFirstOrThrow();
+  await db
+    .insertInto('organizationMember')
+    .values({ userId: adminUserId, organizationId: existing.id, role: 'admin' })
+    .onConflict((conflict) => conflict.doNothing())
+    .execute();
+
+  return { id: existing.id, slug: existing.slug, name };
 }

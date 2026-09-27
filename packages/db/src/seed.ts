@@ -1,12 +1,14 @@
-/** The one user and organization the app runs as until Supabase Auth lands.
+/** The one user and organization the app runs as in `PUBLIC_AUTH_MODE=placeholder`, where there
+ * is no sign-in and these rows stand in for whoever would have been authenticated.
  *
- * Phase 1 has no sign-in, so these rows stand in for whoever would have been authenticated. `pnpm
- * seed:identity` writes them for a dev database; the browser suites take only the user's id and
- * address, and build their own organizations (`packages/browser-testing/src/identity.ts`).
+ * `pnpm seed:identity` writes them for a dev or hosted database; the browser suites take only the
+ * user's id and address, and build their own organizations
+ * (`packages/browser-testing/src/identity.ts`).
  *
- * When auth arrives, delete this file along with `scripts/seed-identity.ts`, the `seed:identity`
- * task in `turbo.json`, and the stand-in body of `identifyUser` in
- * `apps/web/src/lib/server/auth/identify.ts`. Nothing else should refer to these constants.
+ * **Open:** whether `placeholder` mode outlives production's switch to `supabase`. If it doesn't,
+ * delete this file along with `scripts/seed-identity.ts`, the `seed:identity` task in
+ * `turbo.json`, and the `placeholder` branches of `identifyUser`
+ * (`apps/web/src/lib/server/auth/identify.ts`) and the browser-testing fixtures.
  */
 
 import type { DatabaseExecutor } from './schema.ts';

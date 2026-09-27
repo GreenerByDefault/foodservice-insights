@@ -269,6 +269,8 @@ export function webContainerCommand(options: {
       // The browser reaches the container through the published port, so the origin it sends is
       // still the host's — SvelteKit's CSRF check 403s the upload otherwise.
       ORIGIN: baseURL,
+      // Whatever `test-run.ts` chose, which matches how production is hosted and flips with it.
+      PUBLIC_AUTH_MODE: requireEnv('PUBLIC_AUTH_MODE'),
       ...sharedEnv(stack),
     }),
     image,

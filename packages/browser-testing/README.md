@@ -3,9 +3,9 @@
 Playwright helpers shared by `apps/web/e2e` and `tests/e2e` — driving a page's fake clock
 through its poll loop, and waiting for Svelte hydration before interacting with the page.
 
-`./fixtures` is the extended Playwright `test` both suites build on — the run's signed-in
-identity, and an organization it administers. `./identity.ts` behind it is the only place either
-suite refers to the phase-one placeholder user, so real sign-in has one file to replace.
+`./fixtures` is the extended Playwright `test` both suites build on — a signed-in identity, and
+an organization it administers. `./identity.ts` behind it is where both are made, for either
+`PUBLIC_AUTH_MODE`: the one placeholder user, or a GoTrue user signed in per test.
 
 `./test-run` is a third export, for the two `scripts/test-run.ts` wrappers rather than specs:
 `runAgainstFreshStack` gives a Playwright run its own database, blob-store bucket and identity,

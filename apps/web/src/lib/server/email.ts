@@ -11,7 +11,7 @@ import {
   sendEmail,
 } from '@gbd/email';
 import { env } from '$env/dynamic/private';
-import { requireVar } from './env.ts';
+import { requirePrivateVar } from './env.ts';
 
 let handle: Emailer | undefined;
 
@@ -23,16 +23,16 @@ export function emailer(): Emailer {
   handle ??= initializeEmailer({
     transport: resolveTransport(
       parseTransportSettings({
-        name: requireVar('EMAIL_TRANSPORT'),
-        // Not `requireVar`: a `provider` transport needs no endpoint, and `parseTransportSettings`
+        name: requirePrivateVar('EMAIL_TRANSPORT'),
+        // Not `requirePrivateVar`: a `provider` transport needs no endpoint, and `parseTransportSettings`
         // is what enforces that `mailpit` has one.
         endpoint: env.EMAIL_ENDPOINT,
       }),
     ),
-    from: { address: requireVar('EMAIL_FROM_ADDRESS'), name: APP_NAME },
-    siteUrl: requireVar('SITE_URL'),
-    gbdAddress: requireVar('EMAIL_GBD_ADDRESS'),
-    supportAddress: requireVar('EMAIL_SUPPORT_ADDRESS'),
+    from: { address: requirePrivateVar('EMAIL_FROM_ADDRESS'), name: APP_NAME },
+    siteUrl: requirePrivateVar('SITE_URL'),
+    gbdAddress: requirePrivateVar('EMAIL_GBD_ADDRESS'),
+    supportAddress: requirePrivateVar('EMAIL_SUPPORT_ADDRESS'),
   });
   return handle;
 }

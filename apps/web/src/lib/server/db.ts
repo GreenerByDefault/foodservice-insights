@@ -10,7 +10,7 @@ import {
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
 import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
-import { requireVar } from './env.ts';
+import { requirePrivateVar } from './env.ts';
 
 let handle: Kysely<Database> | undefined;
 
@@ -22,7 +22,7 @@ let handle: Kysely<Database> | undefined;
  * `DatabaseExecutor` parameter, so tests can hand them a rolled-back transaction.
  */
 export function database(): Kysely<Database> {
-  handle ??= initializeDatabase({ connectionString: requireVar('DB_CONNECTION_STRING') });
+  handle ??= initializeDatabase({ connectionString: requirePrivateVar('DB_CONNECTION_STRING') });
   return handle;
 }
 

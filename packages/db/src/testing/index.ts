@@ -40,6 +40,7 @@ export {
   createRunDatabase,
   dropRunDatabase,
   ensureTemplateDatabase,
+  sweepStaleGoTrueUsers,
   sweepStaleRunDatabases,
   sweepStaleTemplateBuilds,
   templateFingerprint,

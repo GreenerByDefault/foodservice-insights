@@ -1,17 +1,11 @@
 /** The switcher and `/orgs` both show *every* organization the signed-in user belongs to, with
  * no `/orgs/<slug>` of their own to scope a fixture to — unlike every other screenshot in this
- * suite, which renders inside one dedicated organization (see `reports-list.screenshot.ts`). And
- * every spec shares one identity (`identifyUser` always returns one seeded user), so what shows
- * up here is whatever else is committed for that user at the moment this test happens to run —
- * every concurrent spec's own `org` included.
+ * suite, which renders inside one dedicated organization (see `reports-list.screenshot.ts`).
  *
- * The fix is the same one `_loadSwitcherOrganizations`/`_loadAllOrganizations` already rely on
- * for their own unit tests: give these organizations a name that sorts ahead of anything an
- * ordinary fixture would use. Every other organization in this suite has a letter-led name (a
- * human-readable one, or `Test org <uuid>`), so no letter can promise "always first" — some other
- * name, present or future, is free to start earlier in the alphabet. A leading digit can promise
- * that, since it sorts before every letter, so these are named like a real digit-led foodservice
- * chain — `"24/7 …"` — rather than with a bare, test-only-looking prefix.
+ * Each test's user is its own now, so nothing another spec commits can show up here, and the
+ * `"24/7 …"` names and serial mode below are redundant. They date from when every spec shared one
+ * identity, and gave these organizations a name that sorts ahead of any other fixture's — a
+ * leading digit sorts before every letter. Removing them re-baselines both images.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -20,10 +14,6 @@ import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 import { stubOrganizationsAsEmpty } from '../lib/stub-page-data.ts';
 
-// Both tests below use a "24/7 "-prefixed name to dominate the sort order (see the file doc
-// comment above), which only keeps *other* specs out — nothing stops these two tests' own
-// "24/7 "-prefixed organizations from interleaving with each other if they ran at once. Serial
-// keeps this file's fixtures fully torn down before the next test's are created.
 test.describe.configure({ mode: 'serial' });
 
 test('the full switcher, past the cap', async ({ page, organizations }) => {
@@ -89,9 +79,11 @@ test('the /orgs list, past eight organizations', async ({ page, organizations })
 
 test('the /orgs list, empty', async ({ page, organizations }) => {
   // A letter-led name is fine here, unlike the two tests above: this list is stubbed empty before
-  // it's captured, so there is no sort order of real rows to defend against other specs'.
+  // it's captured, so there is no sort order of real rows to defend against other specs'. Two of
+  // them, because `/orgs` redirects a user with one organization straight into it.
   const name = 'Waypoint Foodservice';
   await organizations.create({ name, role: 'member' });
+  await organizations.create({ name: 'Wayside Foodservice', role: 'member' });
 
   await page.goto('/orgs');
   await ensureHydrated(page);

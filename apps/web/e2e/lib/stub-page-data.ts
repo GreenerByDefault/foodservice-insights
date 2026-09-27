@@ -1,14 +1,10 @@
 import type { Page } from '@playwright/test';
 
 /** Rewrite `/orgs`'s next client-side page-data fetch so its `organizations` array comes back
- * empty — the only way to see that screen. `identifyUser` (`$lib/server/auth/identify.ts`)
- * ignores the request and always resolves to one seeded user, who belongs to every organization
- * any concurrent spec creates, and a superadmin's branch reads the whole `organization` table,
- * which the run database is never empty of either. No fixture can produce this page; only a
- * stubbed response can.
- *
- * **Temporary**, like `identifyUser` itself: once real sign-in lands, drive this screen with a
- * user who genuinely belongs to no organizations, and delete this file.
+ * empty — the only way to see that screen. A user who belongs to no organization is redirected
+ * to `/orgs/new` (`_organizationsPageRedirect`), so only a superadmin can reach the empty list,
+ * and a superadmin's branch reads the whole `organization` table, which the run database is never
+ * empty of. No fixture can produce this page; only a stubbed response can.
  *
  * Only a client-side navigation asks for `__data.json` — a `page.goto` is server-rendered and
  * never requests it, so this has no effect until something like `page.goBack()` or an in-app

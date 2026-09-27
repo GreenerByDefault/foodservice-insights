@@ -5,12 +5,20 @@
  * environment.
  */
 
-import { env } from '$env/dynamic/private';
+import { env as privateEnv } from '$env/dynamic/private';
+import { env as publicEnv } from '$env/dynamic/public';
 
-/** Read an environment variable, or fail with a pointer at the setup instructions. */
-export function requireVar(name: string): string {
-  const value = env[name];
-  if (value) return value;
+/** Read a private environment variable, or fail with a pointer at the setup instructions. */
+export function requirePrivateVar(name: string): string {
+  return privateEnv[name] || missingVar(name);
+}
+
+/** `requirePrivateVar` for a `PUBLIC_` variable, which `$env/dynamic/private` does not carry. */
+export function requirePublicVar(name: `PUBLIC_${string}`): string {
+  return publicEnv[name] || missingVar(name);
+}
+
+function missingVar(name: string): never {
   throw new Error(
     `Must set the env var '${name}'. Copy .env.example to .env at the repo root and start the ` +
       'local stacks — see the README.',

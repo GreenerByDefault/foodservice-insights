@@ -2,7 +2,7 @@ import { divideByZero, withRollback } from '@gbd/db/testing';
 import { initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
 import { database } from '$lib/server/db';
-import { requireVar } from '$lib/server/env';
+import { requirePrivateVar } from '$lib/server/env';
 import { blobStore } from '$lib/server/storage';
 import { _checkHealth } from './+server.ts';
 
@@ -26,10 +26,10 @@ describe('_checkHealth', () => {
   test('degraded when the bucket does not exist', async () => {
     // Same endpoint and credentials as blobStore(), pointed at a bucket that was never created.
     const missingBucket = initializeBlobStore({
-      endpoint: requireVar('S3_ENDPOINT'),
-      region: requireVar('S3_REGION'),
-      accessKeyId: requireVar('S3_ACCESS_KEY_ID'),
-      secretAccessKey: requireVar('S3_SECRET_ACCESS_KEY'),
+      endpoint: requirePrivateVar('S3_ENDPOINT'),
+      region: requirePrivateVar('S3_REGION'),
+      accessKeyId: requirePrivateVar('S3_ACCESS_KEY_ID'),
+      secretAccessKey: requirePrivateVar('S3_SECRET_ACCESS_KEY'),
       bucket: `nonexistent-${crypto.randomUUID()}`,
     });
 
