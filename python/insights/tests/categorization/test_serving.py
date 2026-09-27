@@ -20,11 +20,6 @@ def _run_serving(
     and Gemini answering from `flash_labels` / `pro_labels`, keyed by the product name."""
     # `run_entree_detector` writes its review sheet to the working directory.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cache, "_historical_cache_path", lambda: tmp_path / "categories.csv")
-    monkeypatch.setattr(cache, "_web_app_unreviewed_cache_path", lambda: tmp_path / "web_app.csv")
-    monkeypatch.setattr(
-        cache, "get_previously_classified_entrees_location", lambda: tmp_path / "entrees.csv"
-    )
     pd.DataFrame(
         {
             "product": list(entree_history),
@@ -43,6 +38,16 @@ def _run_serving(
     with (
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
+        patch.object(entrees, "load_prompt", return_value="Prompt"),
+        patch.object(cache, "_historical_cache_path", return_value=tmp_path / "categories.csv"),
+        patch.object(
+            cache, "_web_app_unreviewed_cache_path", return_value=tmp_path / "web_app.csv"
+        ),
+        patch.object(
+            cache,
+            "get_previously_classified_entrees_location",
+            return_value=tmp_path / "entrees.csv",
+        ),
     ):
         return categorize_file(
             input_filepath=input_path,
