@@ -1,6 +1,7 @@
 <script lang="ts">
 import { APP_NAME } from '@gbd/core';
 import { page } from '$app/state';
+import { authMode } from '$lib/auth/mode';
 import type { LayoutProps } from './$types';
 import OrganizationSwitcher from './shell/organization-switcher.svelte';
 import UserMenu from './shell/user-menu.svelte';
@@ -31,7 +32,11 @@ const currentOrganization = $derived(page.data.organization);
       </div>
 
       <div class="ml-auto sm:ml-0">
-        <UserMenu email={data.user.email} displayName={data.user.displayName} />
+        <UserMenu
+          email={data.user.email}
+          displayName={data.user.displayName}
+          canSignOut={authMode() === 'supabase'}
+        />
       </div>
     </div>
   </header>

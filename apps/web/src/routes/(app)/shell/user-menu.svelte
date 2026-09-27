@@ -3,6 +3,8 @@ import LogOutIcon from '@lucide/svelte/icons/log-out';
 import MailIcon from '@lucide/svelte/icons/mail';
 import UserIcon from '@lucide/svelte/icons/user';
 import UserRoundIcon from '@lucide/svelte/icons/user-round';
+import { goto } from '$app/navigation';
+import { browserAuth } from '$lib/auth/browser';
 import { Button } from '$lib/components/ui/button';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import { cnChildProps } from '$lib/utils/shadcn.js';
@@ -11,11 +13,22 @@ import { initials } from './initials.ts';
 interface Props {
   email: string;
   displayName: string | null;
+  /** False in `placeholder` mode, which has no session to end. */
+  canSignOut: boolean;
 }
 
-let { email, displayName }: Props = $props();
+let { email, displayName, canSignOut }: Props = $props();
 
 const monogram = $derived(initials(displayName));
+
+async function signOut() {
+  // `local`: this device only, leaving the user's other browsers signed in. Its error is not
+  // checked: auth-js clears this device's session even when GoTrue refuses to revoke it, and in the
+  // rare case it keeps one — it could not read the session at all — `/` redirects a signed-in
+  // visitor back to `/orgs`, so nobody is left looking signed out who is not.
+  await browserAuth().signOut({ scope: 'local' });
+  await goto('/', { invalidateAll: true });
+}
 </script>
 
 <DropdownMenu.Root>
@@ -65,13 +78,13 @@ const monogram = $derived(initials(displayName));
       {/snippet}
     </DropdownMenu.Item>
 
-    <DropdownMenu.Separator class="my-2" />
+    {#if canSignOut}
+      <DropdownMenu.Separator class="my-2" />
 
-    <!-- **Stub:** signing out is a browser-side `supabase.auth.signOut()` followed by
-         `invalidateAll()`, arriving with the rest of auth. No route of ours is involved. -->
-    <DropdownMenu.Item disabled class="flex items-center gap-2 px-3 py-2">
-      <LogOutIcon class="size-4 shrink-0" />
-      Sign out
-    </DropdownMenu.Item>
+      <DropdownMenu.Item onSelect={signOut} class="flex items-center gap-2 px-3 py-2">
+        <LogOutIcon class="size-4 shrink-0" />
+        Sign out
+      </DropdownMenu.Item>
+    {/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

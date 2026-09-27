@@ -22,6 +22,29 @@ test('a signed-in request reaches its organization, which the shell names', asyn
   await expect(page.getByText(user.email)).toBeVisible();
 });
 
+test('signing out lands on the marketing page, and Back does not return to the shell', async ({
+  page,
+  org,
+}) => {
+  await page.goto(`/orgs/${org.slug}`);
+  await ensureHydrated(page);
+
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(`/orgs/${org.slug}`);
+  await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Account menu' })).toHaveCount(0);
+
+  // The cookie is gone too, not just the client's view of it: a fresh request is refused.
+  const response = await page.reload();
+  expect(response?.status()).toBe(401);
+});
+
 test.describe('signed out', () => {
   test.use({ identity: 'anonymous' });
 

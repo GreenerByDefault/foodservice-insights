@@ -1,10 +1,22 @@
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { goto } from '$app/navigation';
+import { authError, fakeBrowserAuth } from '$lib/auth/testing/fake';
+import { resetNavigationMocks } from '$lib/testing/navigation';
 import UserMenu from './user-menu.svelte';
 
+const auth = vi.hoisted(() => ({ current: null as ReturnType<typeof fakeBrowserAuth> | null }));
+vi.mock('$lib/auth/browser', () => ({ browserAuth: () => auth.current }));
+vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+
+beforeEach(() => {
+  auth.current = fakeBrowserAuth();
+  resetNavigationMocks();
+});
+
 /** Opens the menu and returns the screen — the content is portalled, so it only exists once open. */
-async function opened(props: { email: string; displayName: string | null }) {
-  const screen = await render(UserMenu, props);
+async function opened(props: { email: string; displayName: string | null; canSignOut?: boolean }) {
+  const screen = await render(UserMenu, { canSignOut: true, ...props });
   await screen.getByRole('button', { name: 'Account menu' }).click();
   return screen;
 }
@@ -14,6 +26,7 @@ describe('UserMenu', () => {
     const screen = await render(UserMenu, {
       email: 'ana@example.test',
       displayName: 'Ana Ruiz',
+      canSignOut: true,
     });
 
     await expect
@@ -22,7 +35,11 @@ describe('UserMenu', () => {
   });
 
   test('the trigger falls back to an icon when there is no display name', async () => {
-    const screen = await render(UserMenu, { email: 'ana@example.test', displayName: null });
+    const screen = await render(UserMenu, {
+      email: 'ana@example.test',
+      displayName: null,
+      canSignOut: true,
+    });
 
     const trigger = screen.getByRole('button', { name: 'Account menu' });
     await expect.poll(() => trigger.element().querySelector('svg')).not.toBeNull();
@@ -57,11 +74,40 @@ describe('UserMenu', () => {
       .toHaveAttribute('href', '/invites');
   });
 
-  test('sign out is present but disabled', async () => {
-    const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
+  test('the open menu hides sign out when there is no session to end', async () => {
+    const screen = await opened({
+      email: 'ana@example.test',
+      displayName: 'Ana Ruiz',
+      canSignOut: false,
+    });
 
+    await expect.element(screen.getByRole('menuitem', { name: 'Invitations' })).toBeVisible();
     await expect
       .element(screen.getByRole('menuitem', { name: 'Sign out' }))
-      .toHaveAttribute('data-disabled');
+      .not.toBeInTheDocument();
+  });
+
+  describe('signing out', () => {
+    async function clickSignOut() {
+      const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
+      await screen.getByRole('menuitem', { name: 'Sign out' }).click();
+    }
+
+    test("ends this device's session, then goes to / with fresh data", async () => {
+      await clickSignOut();
+
+      await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
+      expect(auth.current?.signOut.mock.calls).toEqual([[{ scope: 'local' }]]);
+      expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
+    });
+
+    test('goes to / even when GoTrue refuses to revoke the session', async () => {
+      auth.current?.signOut.mockResolvedValue({ error: authError('unexpected_failure') });
+
+      await clickSignOut();
+
+      await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
+      expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
+    });
   });
 });
