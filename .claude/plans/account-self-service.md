@@ -2,12 +2,12 @@
 
 ## Context
 
-`/account` is a stub. `auth.md` PR 2 gives it a working display-name rename and its first
+`/account` is a stub. `auth.md`'s onboarding PR gives it a working display-name rename and its first
 screenshot; this plan adds the other two rows of the roles table — change email, delete account —
 and the rule REQUIREMENTS § Data deletion attaches to the second: an admin is blocked from deleting
 their account until they promote someone or delete the organization.
 
-**Depends on** `auth.md` PRs 1 and 2 (a real session to end; the `/account` page and `BrowserAuth`
+**Depends on** `auth.md`'s sign-out and onboarding PRs (a real session to end; the `/account` page and `BrowserAuth`
 to extend). The widened `AuditEvent` (`target`, `detail`, `lib/server/audit.ts`) and
 `isCheckViolation` (`lib/server/db.ts`) this plan needs have already landed — except
 `AuditTarget`'s `'user'` branch requires a real `organizationId`, since nothing needed a null one
@@ -84,8 +84,8 @@ REQUIREMENTS.md with the invite work):
   `/account` or the menu shows it: GoTrue writes the change to the stack's main database and the app
   reads the run's clone (`auth.md` § Two facts, 2), so in e2e the page keeps the old address. In
   production both are one database; the menu updating is the component test's `invalidateAll()`
-  plus the `pnpm dev` check below, and an e2e of it needs the main-database project in `auth.md`
-  § Follow-ups.
+  plus the `pnpm dev` check below. An e2e of it would need a Playwright project pointed at the
+  stack's main database, which `auth.md` judged not worth building.
 - `account.png` regenerates. Remove the last `**Stub:**` markers on `/account`. Deletes this plan
   file.
 

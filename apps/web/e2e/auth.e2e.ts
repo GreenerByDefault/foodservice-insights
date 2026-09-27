@@ -1,6 +1,7 @@
 import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
 import { test } from './fixtures/test.ts';
+import { waitForSignInCode } from './lib/sign-in-code.ts';
 
 // The whole chain in one assertion: a real session cookie, `getUser()` in `identifyUser`, the
 // lookup in `hooks.server.ts`, the guard on `(app)`, and the data reaching a component. Goes
@@ -36,5 +37,28 @@ test.describe('signed out', () => {
 
     expect(response?.status()).toBe(401);
     await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  });
+
+  // The one spec that signs in the way a person does, with a code GoTrue emailed; every other
+  // test's session comes from the fixtures' password sign-in. It signs an existing user *in*, not
+  // up: GoTrue writes a new user to the stack's main database, never this run's clone, so the app
+  // would find no `app_user` for them (`@gbd/browser-testing`'s `identity.ts`).
+  test('signing in with an emailed code lands a user with no organization on creating one', async ({
+    page,
+    users,
+  }) => {
+    const person = await users.create();
+
+    await page.goto('/sign-in');
+    await ensureHydrated(page);
+
+    await page.getByLabel('Email address').fill(person.signInEmail);
+    await page.getByRole('button', { name: 'Send code' }).click();
+    await page.getByLabel('Sign-in code').fill(await waitForSignInCode(person.signInEmail));
+
+    // They belong to no organization, so `/orgs` sends them on to make one.
+    await expect(page).toHaveURL('/orgs/new');
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await expect(page.getByText(person.email)).toBeVisible();
   });
 });

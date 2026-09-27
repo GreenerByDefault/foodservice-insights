@@ -275,6 +275,7 @@ async function resendCode() {
       Send a new code
     {/if}
   </Button>
+  <span aria-hidden="true" class="text-muted-foreground">•</span>
   <Button variant="link" class="px-0" onclick={onChangeEmail} disabled={isLocked}>
     Change email
   </Button>

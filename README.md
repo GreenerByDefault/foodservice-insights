@@ -28,8 +28,8 @@ pnpm migrate
 pnpm seed:identity
 ```
 
-`pnpm seed:identity` creates the placeholder user that every request runs as until sign-in
-exists. The app will not serve a request without it.
+`pnpm seed:identity` creates the placeholder user that every request runs as in the default
+`PUBLIC_AUTH_MODE=placeholder`. The app will not serve a request without it.
 
 ### Start it
 
@@ -70,6 +70,14 @@ page checks for a result.
 | `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. | Real procurement data |
 | `stubbed` | A fake analysis that finishes in seconds. Its PDF and workbook are placeholders that will not open. The report name drives failure scenarios such as `!slow` and `!fail:<reason>`; see [`testing.py`](python/worker_child/worker_child/testing.py) for the full list. | Working on the report lifecycle and its error states |
 | `off` | No worker, so reports stay queued. | UI work that doesn't need a result |
+
+### Signing in for real
+
+By default, there is no sign-in: every request is the placeholder user. To use Supabase Auth
+instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
+address; the code arrives at <http://localhost:55324>, and an address that is new creates an
+account. To make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio
+(<http://localhost:55323>).
 
 ## Developing
 

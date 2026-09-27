@@ -108,6 +108,7 @@ async function handleSubmit(event: SubmitEvent) {
 
   <Button
     type="submit"
+    class="w-full"
     disabled={formState.status === 'sending'}
     aria-busy={formState.status === 'sending'}
   >
