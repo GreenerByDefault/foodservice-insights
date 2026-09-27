@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache, pipeline, steps
 from gbd_foodservice_insights.categorization.pipeline import categorize_file, categorize_products
+from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
@@ -21,14 +22,13 @@ def test_categorize_products_cache_write_mode_controls_destination():
     final_df = pd.DataFrame(
         {"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0], "category": ["Fruit"]}
     )
-    summary = {
-        "n_products_before": 1,
-        "n_products_after": 1,
-        "pct_remaining": 1.0,
-        "n_rows_before": 1,
-        "n_rows_after": 1,
-        "row_elimination_details": {},
-    }
+    counts = MergeCounts(
+        n_rows_before=1,
+        n_rows_after=1,
+        n_products_before=1,
+        n_products_after=1,
+        n_rows_uncategorized=0,
+    )
 
     with (
         patch.object(pipeline, "parse_and_validate_date_column", return_value=df),
@@ -59,7 +59,7 @@ def test_categorize_products_cache_write_mode_controls_destination():
         patch.object(
             pipeline,
             "merge_categorizations",
-            return_value=(final_df, summary),
+            return_value=(final_df, counts),
         ),
         patch.object(pipeline, "save_historical_categorizations") as save_reviewed,
         patch.object(

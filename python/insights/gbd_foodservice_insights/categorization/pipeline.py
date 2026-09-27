@@ -210,9 +210,11 @@ def categorize_products(
         save_historical_entree_classifications(unique_products_df)
 
     # --- Step 7: Merge categorizations back and filter ---
-    df_final, summary = merge_categorizations(df, unique_products_df)
+    df_final, counts = merge_categorizations(df, unique_products_df)
     if data_type == "serving":
-        df_final, summary = filter_to_entrees(df_final, summary, unique_products_df)
+        df_final, counts = filter_to_entrees(df_final, counts, unique_products_df)
+    summary = counts.to_summary()
+    if data_type == "serving":
         summary["_entree_human_review_df"] = entree_human_review_df
 
     # Provenance breakdown (raw-history / cleaned-name-history / llm) for the

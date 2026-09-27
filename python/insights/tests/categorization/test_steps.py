@@ -1,9 +1,11 @@
+import dataclasses
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import steps
 from gbd_foodservice_insights.categorization.steps import (
+    MergeCounts,
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
     categorize_with_llm,
@@ -42,7 +44,7 @@ def test_categorize_using_historical_classifications():
         assert result_previously_categorized == expected_previously_categorized
 
 
-def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
+def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
     products = [f"product {i}" for i in range(n_products)]
     return merge_categorizations(
         original_df=pd.DataFrame(
@@ -55,8 +57,54 @@ def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
 
 
 def test_merge_categorizations_accepts_exactly_20_percent_remaining():
-    df_final, _ = _merge_keeping_one_of(5)
+    df_final, counts = _merge_keeping_one_of(5)
     assert df_final["product"].tolist() == ["product 0"]
+    assert counts == MergeCounts(
+        n_rows_before=5,
+        n_rows_after=1,
+        n_products_before=5,
+        n_products_after=1,
+        n_rows_uncategorized=4,
+    )
+
+
+def test_merge_counts_to_summary_omits_non_entree_keys_until_the_entree_filter_runs():
+    counts = MergeCounts(
+        n_rows_before=8,
+        n_rows_after=5,
+        n_products_before=5,
+        n_products_after=4,
+        n_rows_uncategorized=3,
+    )
+    expected = {
+        "n_products_before": 5,
+        "n_products_after": 4,
+        "pct_remaining": 0.8,
+        "n_rows_before": 8,
+        "n_rows_after": 5,
+        "row_elimination_details": {
+            "total_rows_initial": 8,
+            "total_rows_final": 5,
+            "total_rows_eliminated": 3,
+            "total_eliminated_pct": 0.375,
+            "rows_eliminated_uncategorized": 3,
+            "rows_eliminated_uncategorized_pct": 0.375,
+        },
+    }
+    assert counts.to_summary() == expected
+
+    filtered = dataclasses.replace(counts, n_rows_after=4, n_rows_non_entree=1)
+    assert filtered.to_summary() == expected | {
+        "n_rows_after": 4,
+        "row_elimination_details": expected["row_elimination_details"]
+        | {
+            "total_rows_final": 4,
+            "total_rows_eliminated": 4,
+            "total_eliminated_pct": 0.5,
+            "rows_eliminated_non_entree": 1,
+            "rows_eliminated_non_entree_pct": 0.125,
+        },
+    }
 
 
 def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():
