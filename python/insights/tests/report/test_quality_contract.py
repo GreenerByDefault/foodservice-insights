@@ -188,6 +188,7 @@ def test_monthly_totals_preserve_all_missing_month_as_missing():
 
 def test_quality_status_rolls_up_the_worst_finding():
     assert quality_status_from_findings([{"status": "success"}]) == "pass"
+    assert quality_status_from_findings([{"status": "success"}, {"status": "info"}]) == "pass"
     assert quality_status_from_findings([{"status": "warning"}]) == "warning"
     assert quality_status_from_findings([{"status": "error"}]) == "invalid"
 
