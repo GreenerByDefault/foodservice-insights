@@ -2,142 +2,257 @@
 
 ## Context
 
-`categorize_unique_products` (`categorization/pipeline.py`), its steps and the merge-back
-`merge_categorizations` (`categorization/steps.py`) are the product's categorization path: exact
-cache match, LLM name cleaning, cleaned-name reuse, LLM category match, then the merge-back with
-the 80% cut. `analyze()` composes the two stages itself. An audit of the ported code in
-September 2026 found that the step meant to rescue near-miss model answers is dead, that the
-prompt coaches the model toward answers the pipeline then drops, that the product re-parses
-input the seam already parsed, and that every LLM call runs serially.
-`categorize_spreadsheet_to_csvs` now lives in the lab
-(`gbd_foodservice_insights_lab/categorization/spreadsheet.py`). `categorization-cache.md` PR 5
-replaces the cache this path reads, so the PRs here are sequenced around it.
+`categorize_unique_products` (`categorization/pipeline.py`) and its steps (`steps.py`) are the
+product's categorization path: exact cache match, LLM name cleaning, cleaned-name reuse, LLM
+category match, then `merge_categorizations` with the 80% cut. `analyze()` composes it; the lab's
+`categorize_spreadsheet_to_csvs` composes it the same way and adds entree detection. The cache is
+the gitignored `data_files/previously_categorized_items.csv`, read by
+`cache.get_previously_categorized_items()`; `categorization-cache.md` moves it into Postgres later
+and is sequenced after this plan. `product-surface-trim.md` PR 1 waits on PR 6 here.
 
-Verified facts (each reproduced with a scripted `LlmClient` on inline frames):
+This plan is the product side only: the cache the library reads and the pipeline that reads it.
+How new rows get back into the cache — from the web app or from GBD's reviewers — is
+`categorization-cache.md`'s problem and is not designed here.
 
-- `categorize_with_llm` ends by rewriting **every** value in the frame that is not byte-equal to
-  a YAML name to `"No Matches Found"`, cached rows included. So `fuzzy_match_GBD_categories`,
-  `LlmClient.fuzzy_match_category`, `fuzzy_match_gbd_category_prompt.md` and the fake's method
-  are unreachable: `Cheese.`, `pork`, `"Butter"`, `Cow's Milk` and `None` all became
-  uncategorized, and the step logged "All categories are standard".
-  `OpenAiLlmClient.match_product_to_category` returns `content.strip()` and nothing more, while
-  `match_items_to_gbd_categories_prompt.md` says *say "None"* when nothing fits and writes
-  `"oat milk"`, `"shelled eggs"`, `poultry`, `pork` and `"Cow's Milk"` in its own rules. It also
-  renders the category list as a Python `list` repr with mixed quote styles. How often
-  gpt-4.1-mini follows the rules literally is unmeasured.
-- A dropped product counts toward the 80% cut and appears in the review table as
-  "No Matches Found" rather than as a near-miss. A cache row whose category differs only by case
-  or whitespace is dropped **and** kept out of the review table, because it is
-  `previously_categorized`. `categorization-cache.md` PR 5 drops such rows before step 1; its
-  test should assert the product reaches the LLM, not only that a warning is logged.
-- `KeywordLlmClient` ignores its `categories` argument and only ever returns canonical names, so
-  no test and no `mock-llm` run can surface any of the above.
-- Re-running `parse_and_validate_date_column` and `clean_weight_column` on `read_input_csv`'s
-  output changes no value, but its `max_future_days=30` uses the container's local date while
-  `apps/web` uses UTC (`calendar.ts`), so a row dated exactly 30 days out can pass the web and
-  fail the run as `unknown`.
-- `merge_categorizations` merges on `product` without `validate=`; handed duplicate products it
-  fans out silently (3 rows in, 5 out). Nothing upstream produces duplicates today.
-- `_strip_pack_counts` (`categorization/llm.py`) deletes every `.` before the prompt:
-  `CHEESE 2.5 LB` becomes `CHEESE 25 LB` and `MILK 1.5% GAL` becomes `MILK 15% GAL`. Harmless to
-  the category, and `test_llm.py` pins it as intended.
-- `check_GBD_categories` (`categories.py`) logs every category absent from the upload on every
-  run and can never warn on the product path; `categorize_with_llm`'s `nan_categories` list and
-  the NaN check that follows `astype(str)` in `categorize_unique_products` are dead.
-- ARCHITECTURE.md § Concurrency and scaling names a `ThreadPoolExecutor` inside the library as
-  the lever for a faster individual attempt; the loops in `clean_product_names` and
-  `categorize_with_llm` are one call at a time.
+Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) and the code after
+#355–#380:
+
+- **Every cache write path is dead in the product.** `analyze()` passes `cache_write_mode="none"`;
+  the lab runscript passes `"none"` for baseline and pilot, and its `web_app` context (which wrote
+  `web_app_categorizations_unreviewed.csv`) belongs to the Flask app that no longer exists. The
+  reviewed-cache auto-write (`"reviewed"`) appends raw LLM output to the human-reviewed file, which
+  REQUIREMENTS.md § Product categorization cache forbids. What the file shows GBD actually did:
+  3,212 rows have no cleaned name (promoted from review files, which carry none) and 20,008 have
+  the raw SKU as their cleaned name (cache hits saved back with `cleaned_item_names = product`).
+- **The loader drops nothing and checks nothing.** `pd.read_csv(path)` with default NA handling: a
+  product named `NA` or `null` would become NaN, and the 106 rows with a blank category do. The
+  pipeline strips the upload's product before matching (`categorize_unique_products`) and so does
+  the web (`csv/rules/products.ts`), but the cache is matched verbatim, so its 747 rows with
+  surrounding whitespace can never hit; 736 rows collide once stripped, 11 pairs disagreeing on
+  the category. 20 rows carry a category that is not in the YAML (`Mlik`, `Plan-Based Mayo`,
+  `cheese`, `na`, `Stone Fruit`, ...). Such a row matches in step 1 (`previously_categorized=True`),
+  `categorize_with_llm`'s last line rewrites it to `"No Matches Found"`, and because it is
+  "previously categorized" it is kept out of the review table: silently dropped, every run, with no
+  LLM call. 2,844 rows collide case-insensitively, in 31 groups with conflicting categories.
+- **The fuzzy step is unreachable.** `categorize_with_llm` ends by rewriting every value that is not
+  byte-equal to a YAML name to `"No Matches Found"`, so `fuzzy_match_GBD_categories`,
+  `LlmClient.fuzzy_match_category`, `fuzzy_match_gbd_category_prompt.md`, the `nan_categories`
+  list and the `category_old` column do nothing, and the step logs "All categories are standard"
+  every run. `check_GBD_categories` can never warn for the same reason, and its per-run info line
+  listing every category absent from the upload is noise.
+- **The prompt coaches answers the pipeline drops.** `match_items_to_gbd_categories_prompt.md` says
+  *say "None"* when nothing fits and names categories as `"oat milk"`, `"shelled eggs"`, `poultry`,
+  `pork`, `"Cow's Milk"` in its own rules; the list is rendered as a Python `list` repr with mixed
+  quotes. `OpenAiLlmClient.match_product_to_category` returns `content.strip()` and nothing more,
+  so `Cheese.`, `"Butter"` and `oat milk` are all uncategorized. How often gpt-4.1-mini follows
+  the rules literally is unmeasured, and `KeywordLlmClient` only ever returns canonical names, so
+  no test and no `mock-llm` run can show it. `_strip_pack_counts` deletes every `.` before the
+  prompt (`CHEESE 2.5 LB` → `CHEESE 25 LB`), and `test_llm.py` pins that.
+- **Tests read whatever cache the developer has.** `test_analysis.py` redirects the loader's path
+  in an autouse fixture; `worker_child/tests/test_mock_llm.py` does not, and runs `analyze()`
+  against `data_files/`. Three of `KEYWORD_PRODUCTS` (`Pork Loin`, `Butter Unsalted`,
+  `Brown Rice`) are in GBD's cache, so how many LLM calls that test makes depends on the machine.
+  The same applies to the worker image: `apps/worker/Dockerfile` copies the package directory and
+  `.dockerignore` does not exclude the CSV, so a local `docker build` ships the developer's cache
+  and CI's ships none. Noted, not fixed here — deployment config is off limits.
+- **All the wall time is LLM calls.** Loading the cache, building the cleaned-name index (9,925
+  entries) and matching 208 products with no LLM calls takes ~100 ms on a loaded laptop. The two
+  loops in `clean_product_names` and `categorize_with_llm` are one call at a time, two calls per
+  new product; ARCHITECTURE.md § Concurrency and scaling names a `ThreadPoolExecutor` inside the
+  library as the lever. The parent kills a child after 20 minutes total
+  (`killAfterTotalRuntimeMs`), and there is no cap on unique products per upload.
+- **Two merges without `validate=`.** `categorize_using_historical_classifications` dedupes the
+  cache on `product` with `keep="last"` before merging, silently choosing; `merge_categorizations`
+  merges rows onto `unique_products_df` on `product` with no guard, so a duplicate product there
+  would fan out rows (the b531ca1 lesson). Nothing upstream produces one today.
+- **`categorize_unique_products` re-parses parsed input.** `read_input_csv` already yields
+  `datetime64` dates and float weights; re-running `parse_and_validate_date_column` and
+  `clean_weight_column` changes no value, but `max_future_days=30` uses the container's local date
+  while `apps/web` uses UTC (`calendar.ts`), so a row dated exactly 30 days out can pass the web
+  and fail the run as `unknown`. The NaN check after `astype(str)` on `product` is dead.
 
 ## Decisions
 
-- **Behavioural changes to ported code are each their own PR.**
-- **Normalize the model's answer before matching, and make the fuzzy step live.** Casefold and
-  strip quotes, periods and whitespace from both sides before comparing against the canonical
-  list; anything still unmatched goes through `fuzzy_match_category` once, and only then does the
-  catch-all apply. This is the shape the ported code intended. *Rejected: deleting the fuzzy step
-  outright* — until the near-miss rate under the corrected prompt is measured, one extra call per
-  near-miss is cheaper than a dropped product. **Open:** measure that rate on a real upload after
-  PR 2; if it stays near zero, delete the step, its protocol method, its prompt and the fake's
-  method in one PR.
+- **The product library never writes the cache.** The web-app-unreviewed cache, both promotion
+  flows and `cache_write_mode` are deleted. The two functions a data scientist still needs —
+  append reviewed rows to the file, and promote a reviewed `_for_human_review.csv` — move to the
+  lab, which is where GBD's tooling lives (`.claude/rules/python.md` § The lab boundary). *Rejected:
+  keeping `"reviewed"` auto-write as a lab option* — it writes unreviewed LLM output into the
+  reviewed file, and the data shows it was used.
+- **The pipeline is handed the cache; nothing below `analyze()` reads disk.** `categorize_unique_products`
+  and the two steps take a `CategorizationCache`; the `None`-means-read-the-file defaults go. That
+  is what makes tests hermetic and is the shape `categorization-cache.md` PR 5 needs (`analyze()`
+  builds the cache from seam rows instead of the file).
+- **One type owns the cache's shape.** `CategorizationCache.from_frame(df)` is the only constructor:
+  it strips `product`, drops rows whose category is not a YAML name or `"No Matches Found"`,
+  dedupes on `product` keeping the last, logs every count it dropped at WARNING, and builds the
+  cleaned-name index once. A bad row therefore costs LLM calls and a review-table entry, never a
+  silently dropped product. `load_categorization_cache()` reads the CSV as text
+  (`dtype=str, keep_default_na=False`, the `read_input_csv` precedent) and calls `from_frame`.
+  *Rejected: raising on a bad row* — a typo among 39k hand-maintained rows must not fail every
+  report. *Rejected: matching products case-insensitively* — 31 conflicting pairs in the file mean
+  GBD has to say which wins; **Open:** measure the extra hit rate on a real upload and ask.
+  **Open:** whether `from_frame` should raise when more than some share of rows are unusable (a
+  category renamed in the YAML would silently turn thousands of hits into LLM calls); warn-only
+  until the Postgres cache controls categories at write time.
+- **Delete the fuzzy step; normalize the model's answer instead.** Casefold and strip whitespace,
+  quotes and a trailing period from the answer, match against the canonical list plus
+  `"No Matches Found"`, and log anything still unrecognized at WARNING with the item. An
+  unrecognized answer is uncategorized and reaches the review table. *Rejected: making the fuzzy
+  step live, as the previous version of this plan proposed* — it is a second prompt to maintain
+  for a residual the corrected prompt and normalization already cover, and the WARNING count on
+  real data decides whether the prompt needs another rule, not whether to add a call.
 - **The prompt names categories exactly**: every rule uses the YAML name, the no-match answer is
-  `"No Matches Found"`, and the list is one category per line.
-- **`categorize_unique_products` parses nothing.** It requires a `datetime64` `date` column and
-  a float `weight` column and raises `ValueError` otherwise; `date_format` goes. The lab's
-  `categorize_spreadsheet_to_csvs` parses messy input before calling it. *Rejected: passing `max_future_days` through from `analyze()`* —
-  it keeps a second copy of a web rule in the library.
-- **`validate="many_to_one"` on the merge-back**, the b531ca1 lesson.
-- **Two test clients, both in `testing.py`.** `KeywordLlmClient` honours `categories` (returns
-  `NO_MATCH` when its keyword's category is not in the list), and a new `ScriptedLlmClient`
-  returns whatever answer it was given per item, verbatim, so a test can make the model say
-  `Cheese.`.
-- **LLM calls run through a bounded `ThreadPoolExecutor`.** `executor.map` keeps input order;
-  progress is reported per completed call (`_ReportingLlmClient` already reports per call, and
-  `worker_child`'s reporter is lock-protected); the first exception propagates and cancels what
-  has not started. `OpenAiLlmClient` is a frozen dataclass over a thread-safe SDK client, and its
-  backoff sleeps per thread. Concurrency is a module constant; API load is
-  workers × children × threads, so check the account's rate limit for the model before raising
-  it. *Rejected: `asyncio`* — ARCHITECTURE.md. *Rejected: several products per prompt* — it
-  changes the model's task, and every cache and review row is per product.
+  `No Matches Found`, and the list is one category per line. It is the one PR here that changes
+  categorizations on real data, so it ships alone, with a before/after diff GBD's data scientist
+  has seen.
+- **`categorize_unique_products` parses nothing.** It requires non-empty `str` products, a
+  `datetime64` `date` and a float `weight` and raises `ValueError` otherwise; `date_format` goes and
+  the lab parses messy input before calling it. *Rejected: passing `max_future_days` through from
+  `analyze()`* — a second copy of a web rule in the library.
+- **`validate="many_to_one"` on both merges.** A duplicate product in a cache someone built by hand
+  raises rather than silently picking one; `from_frame` guarantees the loader never produces one.
+- **LLM calls run through a bounded `ThreadPoolExecutor`**, via one helper shared by the two loops:
+  results in input order, progress per completion, the first exception propagates after
+  `shutdown(cancel_futures=True)` so nothing queued starts. `OpenAiLlmClient` is a frozen dataclass
+  over a thread-safe SDK client whose `with_options` copy is per call, and its backoff sleeps per
+  thread; `worker_child`'s progress reporter is lock-protected; the interpreter is a GIL build, so
+  `KeywordLlmClient.calls` is safe. Concurrency is a constant beside the retry constants in
+  `llm.py`: API load is workers × children × threads, and a 429 storm costs threads × 5 attempts.
+  *Rejected: `asyncio`* — ARCHITECTURE.md. *Rejected: several products per prompt* — it changes the
+  model's task, and every cache and review row is per product.
+- **One behaviour change per PR, deletions first, and a test-only prefactor before any of it.** The
+  characterization test PR 1 adds pins today's silent drops; each later PR's diff of that test is
+  its review.
 
-## PR 1 — test clients and a characterization (test only)
+PR order: 1 first; 2 and 3 are independent deletions; 4 after 2; 5 after 3; 6 any time after 1;
+7 after 5, since both edit `categorize_with_llm`.
 
-- `testing.py`: `ScriptedLlmClient`; `KeywordLlmClient.match_product_to_category` honours
-  `categories`. `test_testing.py` pins both.
-- A characterization test in `tests/categorization/test_pipeline.py`:
-  `categorize_unique_products` on an inline frame with scripted answers `Cheese.`, `pork`,
-  `"Butter"`, `Cow's Milk`, `None`, plus a cache row categorized `cheese`, asserting today's
-  `unique_products_df` and `ai_review_df` with `assert_frame_equal` (every one
-  `No Matches Found`; the cache row absent from the review table). Stop short of
-  `merge_categorizations`: with every product uncategorized, its 80% cut raises. PR 2's diff of this test is the review.
+## PR 1 — test clients and hermetic tests (test only)
 
-## PR 2 — accept what the model means
+- `testing.py`: `ScriptedLlmClient(match_answers: Mapping[str, str])` returns its scripted answer
+  verbatim from `match_product_to_category` and raises `KeyError` for an unscripted item, lowercases
+  in `clean_product_name`, records `calls` like `KeywordLlmClient`, and (until PR 3) returns
+  `NO_MATCH` from `fuzzy_match_category`. `test_testing.py` pins it.
+- `python/worker_child/tests/conftest.py`: an autouse fixture that points the loader at a path
+  under `tmp_path`, as `test_analysis.py`'s `cache_path` does, so `test_mock_llm.py` makes the same
+  LLM calls on every machine.
+- A characterization test in `tests/categorization/test_pipeline.py`: `categorize_unique_products`
+  on an inline, already-typed frame with scripted answers `Cheese.`, `"Butter"`, `pork`, `None`,
+  plus cache rows categorized `cheese`, one with a trailing space in `product`, and one with a
+  blank category. Asserts today's `unique_products_df`, `ai_review_df` and `match_type_counts`
+  with `assert_frame_equal`: every scripted answer `No Matches Found`; the `cheese` row
+  `No Matches Found` and absent from the review table; the trailing-space and blank rows sent to
+  the LLM. Stops short of `merge_categorizations`, whose 80% cut would raise.
 
-- `steps.py`: normalize-then-match in `categorize_with_llm`; its final catch-all moves to the end
-  of `fuzzy_match_GBD_categories`, after the fuzzy call, and `nan_categories` goes.
-  `_strip_pack_counts` keeps a `.` between digits. The prompt is rewritten as decided.
-- Until `categorization-cache.md` PR 5 lands, a cache row with a non-canonical category now costs
-  one fuzzy call per run instead of being dropped; say so in the PR body.
-- Tests: the characterization flips to the intended output; `test_llm.py` pins the new
-  `_strip_pack_counts` and that `match_product_to_category` returns the model's text untouched
-  (normalization belongs to the step, not the client); `test_steps.py` covers the fuzzy path with
-  `ScriptedLlmClient`; `test_llm_prompts.py` asserts the match prompt contains
-  `No Matches Found` and not `say "None"`.
-- Verification beyond the suite: run 200 products from a real upload through the old and new
-  prompt with `OpenAiLlmClient` and count answers that needed normalization or the fuzzy step.
-  That number decides the **Open** above.
+## PR 2 — the cache is read-only in the product
 
-## PR 3 — typed input, guarded merge
+- `cache.py` keeps the loader, `normalize_product_name`, `unanimous_index` and
+  `build_cleaned_name_reuse_index(reviewed_df)` (its `include_approved_web_app` branch and
+  read-the-file default go); the path helper becomes public for the lab. Deleted: the
+  web-app-unreviewed cache and its columns, both `promote_*`, `_validate_cache_write_mode` and
+  `scripts/promote_reviewed_web_app_categorizations.py` (the `scripts/` directory with it).
+- `gbd_foodservice_insights_lab/categorization/product_cache.py` receives
+  `save_historical_categorizations` and `promote_local_review_file_to_reviewed_cache` with their
+  category check, importing the loader and path from the product; their tests move to
+  `python/lab/tests/categorization/test_product_cache.py`.
+- `categorize_unique_products`, `categorize_spreadsheet_to_csvs` and `analyze()` lose
+  `cache_write_mode`; `1. Categorize Runscript.py` loses `--analysis-context` and its mapping;
+  the runscript's cache-mode tests and `test_pipeline.py`'s `cache_write_mode` test go.
+- `python/lab/README.md`: one sentence on how a reviewed `_for_human_review.csv` gets into the
+  cache. No product behaviour changes.
 
-- `categorize_unique_products` asserts dtypes and
-  drops the parsing parameters, `check_GBD_categories` call and the dead NaN check; the lab's
-  `categorize_spreadsheet_to_csvs` calls `parse_and_validate_date_column` and
-  `clean_weight_column` itself.
-- `merge_categorizations` gets `validate="many_to_one"`.
-- Tests: `test_pipeline.py` hands typed frames; a `str` date column is rejected; a duplicate
-  product in `categorized_products_df` raises; lab `test_runscript.py` unchanged.
+## PR 3 — delete the unreachable fuzzy step
 
-## PR 4 — concurrent LLM calls
+- `steps.py`: `fuzzy_match_GBD_categories`, `nan_categories`, `category_old` (and its drop in
+  `merge_categorizations`); `pipeline.py`: the call and the `check_GBD_categories` call;
+  `categories.py`: `check_GBD_categories`; `llm.py`: `LlmClient.fuzzy_match_category`,
+  `OpenAiLlmClient.fuzzy_match_category`; `prompts/fuzzy_match_gbd_category_prompt.md`;
+  `analysis.py`: `_ReportingLlmClient.fuzzy_match_category`; `testing.py`: the fake's method and
+  `"fuzzy"` in `LlmOperation`; `reviews.py`: `include_no_matches`, which every caller leaves at
+  its default. Tests that name any of these are deleted or repointed (`test_llm.py`'s
+  non-transient-failure test uses `match_product_to_category`).
+- The characterization test is unchanged, which is the proof the step was dead.
 
-- `steps.py`: the two loops become one `_map_llm_calls(fn, items)` helper over a
-  `ThreadPoolExecutor(LLM_CONCURRENCY)`; `print_progress` per completion.
-- Tests: a client that sleeps 50 ms per call categorizes 16 products in well under 800 ms;
-  results are in input order; an exception from one call propagates and no call starts after it
-  (a counter in the fake); `test_reports_progress_after_every_llm_call` asserts the count and
-  the set of calls rather than their order.
-- The PR body carries wall time before and after on a 2k-product upload, either
-  `WORKER_MODE=live` or the sleeping fake.
+## PR 4 — one loader, one type
+
+- `cache.py`: `CategorizationCache` (frozen; `products: pd.DataFrame` with `product`, `category`,
+  `cleaned_item_names` as `str`, unique stripped products, canonical categories; and
+  `cleaned_name_index: Mapping[str, str]`), `CategorizationCache.from_frame(df)` enacting the
+  decision above, and `load_categorization_cache() -> CategorizationCache` replacing
+  `get_previously_categorized_items` (missing file → empty cache and the existing warning;
+  missing column → `ValueError`). `build_cleaned_name_reuse_index` folds into `from_frame`.
+- `categorize_unique_products(df, llm, cache)`, `categorize_using_historical_classifications(
+  unique_products_df, cache)` and `categorize_using_cleaned_name_history(products_df, cache)`
+  take the cache, required; the step's `drop_duplicates(keep="last")` goes and its merge gets
+  `validate="many_to_one"`, as does `merge_categorizations`.
+- `analyze()` and the lab's `categorize_spreadsheet_to_csvs` load the cache and pass it;
+  `entree_cache.py`, `backfill_entree_cleaned_names`, `experiments/LLM_testing.py` and
+  `product_cache.py` use the new loader.
+- Tests: `test_cache.py` rewritten around `from_frame` — a product named `NA` survives, stripping,
+  blank and non-canonical categories dropped with the warning, duplicates keep the last, missing
+  column raises, missing file warns; `test_steps.py`: a duplicate product raises; the
+  characterization test flips — the trailing-space row is a cache hit, the `cheese` and blank rows
+  reach the LLM and the review table. `test_analysis.py`'s fixture keeps writing a CSV the loader
+  reads; `test_entree_cache.py` patches the new name.
+
+## PR 5 — accept what the model means
+
+- `steps.py`: `categorize_with_llm` maps each answer through a normalized-name table built from
+  the canonical list plus `"No Matches Found"`; an unrecognized answer becomes
+  `"No Matches Found"` with one WARNING naming the item and the answer.
+- `match_items_to_gbd_categories_prompt.md` rewritten as decided; `_categories_prompt` renders one
+  category per line. The domain rules keep their content — they are GBD's knowledge — and only
+  their category references change. `_strip_pack_counts` keeps a `.` between digits.
+- Tests: the characterization test flips (`Cheese.` → `Cheese`, `"Butter"` → `Butter`; `pork` and
+  `None` stay `No Matches Found`, now with a warning each); `test_llm.py` pins the new
+  `_strip_pack_counts` and that `match_product_to_category` still returns the model's text
+  untouched (normalization is the step's, not the client's); `test_llm_prompts.py` asserts the
+  match prompt contains `No Matches Found`, not `say "None"`, and lists categories one per line.
+- Verification beyond the suite, in the PR body: 200 products from a real upload through the old
+  and new prompt with `OpenAiLlmClient`, counting answers that needed normalization and answers
+  still unrecognized; and a diff of `1. Categorize Runscript.py`'s output on a real client file
+  before and after, reviewed by GBD's data scientist.
+
+## PR 6 — typed input, no re-parsing
+
+- `categorize_unique_products` asserts its dtypes, drops `date_format`, the two parsing calls and
+  the dead NaN check, and keeps the `product` strip (it is the match key rule, and cheap).
+- `categorize_spreadsheet_to_csvs` runs `parse_and_validate_date_column`, `clean_weight_column`
+  and the product cleaning itself, with the two "cleaning leaves missing values" tests moving from
+  `test_pipeline.py` to the lab's `test_spreadsheet.py`.
+- Tests: `test_pipeline.py` hands typed frames; a `str` date column and a NaN product are rejected.
+  `product-surface-trim.md` PR 1 then moves `parse_and_validate_date_column` whole to the lab.
+
+## PR 7 — concurrent LLM calls
+
+- `steps.py`: `_map_llm_calls(fn, items)` over `ThreadPoolExecutor(LLM_CONCURRENCY)` as decided,
+  used by `clean_product_names` and `categorize_with_llm`; `print_progress` per completion.
+  `llm.py`: `LLM_CONCURRENCY: Final = 8` with the load arithmetic in its comment. `analysis.py`'s
+  docstring says `report_progress` may be called from worker threads.
+- Tests, deterministic rather than timed: a fake whose calls wait on a
+  `threading.Barrier(LLM_CONCURRENCY, timeout=...)` proves that many calls run at once; a fake with
+  random sleeps proves results come back in input order; with concurrency 1, a fake whose first
+  call raises proves the error propagates and no later item is called.
+  `test_reports_progress_after_every_llm_call` stays as is: its two calls are in different steps.
+- The PR body carries wall time before and after on a 2k-product upload, `WORKER_MODE=live` or
+  the sleeping fake, with the machine's load noted.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; PR 3 also `just test-lab`.
-- PRs 2–4 change what `analyze()` runs: also `pnpm test:system`.
-- PR 2: the live 200-product sample, and a diff of `1. Categorize Runscript.py`'s output on a
-  real client file before and after the prompt change.
+- Every PR: `just lint && just check && just test`; PRs 2, 4 and 6 also `just test-lab`.
+- PRs 3–7 change what `analyze()` runs: also `pnpm test:system`.
+- PR 4: `python -m worker_child.mock_llm` on a run directory both with and without
+  `data_files/previously_categorized_items.csv` present.
+- PR 5: the live 200-product sample and the runscript diff above.
 
 ## Risks
 
-- The prompt rewrite changes categorizations on real data; the runscript diff is the check.
-- Rate limits: with N threads a 429 storm costs N × 5 attempts before `upstream_api`; start
-  with a small constant.
-- Conflicts: `categorization-cache.md` PR 5 edits the same functions; whichever lands second
-  rebases.
+- The prompt rewrite changes categorizations on real data; the runscript diff is the check, and
+  it needs `OPENAI_API_KEY` and a client file only GBD has.
+- PR 4 turns 126 silently dropped cache rows into LLM calls the first time each product appears;
+  the WARNING names them so GBD can fix the file.
+- Rate limits: with N threads a 429 storm costs N × 5 attempts before `upstream_api`; start at the
+  constant and check the account's tier for gpt-4.1-mini before raising it.
+- Conflicts: `categorization-cache.md` PR 5 and `product-surface-trim.md` PR 1 edit the same
+  functions; whichever lands second rebases.
