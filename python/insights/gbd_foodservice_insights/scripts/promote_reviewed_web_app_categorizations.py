@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Promote human-approved web-app categorizations into reviewed historical cache."""
 
-from __future__ import annotations
-
 import argparse
 import logging
 

@@ -5,8 +5,6 @@ turn a `FoodReport` into the deliverables; `pipeline.run_food_report` is the fil
 wrapper that also writes the data scientists' bundle.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager

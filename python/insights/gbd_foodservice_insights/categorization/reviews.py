@@ -5,8 +5,6 @@ Categorization Review Tables
 Human-review table construction for AI categorizations.
 """
 
-from __future__ import annotations
-
 import pandas as pd
 
 

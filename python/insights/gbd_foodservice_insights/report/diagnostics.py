@@ -1,7 +1,5 @@
 """Data quality checks, validation, and anomaly detection for food reports."""
 
-from __future__ import annotations
-
 import logging
 import re
 from collections.abc import Callable

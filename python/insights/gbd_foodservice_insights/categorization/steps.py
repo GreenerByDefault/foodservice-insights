@@ -6,8 +6,6 @@ Non-entree categorization steps: historical reuse, name cleaning,
 LLM categorization, fuzzy matching, and merge-back.
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from typing import Any
