@@ -2,9 +2,12 @@ import dataclasses
 import logging
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
+import pytest
 from gbd_foodservice_insights.categorization import entrees
 from gbd_foodservice_insights.categorization.entrees import (
+    assign_serving_sizes_from_entree_classification,
     classify_entrees_using_historical_classifications,
     filter_to_entrees,
     run_entree_detector,
@@ -85,6 +88,166 @@ def test_run_entree_detector_uses_historical_before_llm(tmp_path):
         "apple": 1.0,
         "banana": 0.5,
     }
+
+
+def test_run_entree_detector_raises_when_product_column_missing(tmp_path):
+    with pytest.raises(ValueError, match="must contain a 'product' column"):
+        run_entree_detector(
+            pd.DataFrame({"category": ["Fruit"]}),
+            gemini_client=object(),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+
+def test_run_entree_detector_raises_when_category_column_missing(tmp_path):
+    with pytest.raises(ValueError, match="must contain a 'category' column"):
+        run_entree_detector(
+            pd.DataFrame({"product": ["apple"]}),
+            gemini_client=object(),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+
+def test_run_entree_detector_raises_when_gemini_client_missing_for_new_products(tmp_path):
+    classified_products = pd.DataFrame({"product": ["banana"], "category": ["Fruit"]})
+
+    with (
+        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        pytest.raises(ValueError, match="gemini_client must be provided"),
+    ):
+        run_entree_detector(
+            classified_products,
+            gemini_client=None,
+            historical_entree_classifications=pd.DataFrame(
+                columns=["product", "entree_classification"]
+            ),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+
+def test_run_entree_detector_raises_when_a_product_maps_to_multiple_categories(tmp_path):
+    classified_products = pd.DataFrame(
+        {"product": ["mystery meal", "mystery meal"], "category": ["Fruit", "Dairy"]}
+    )
+
+    with (
+        patch.object(entrees, "get_GBD_categories", return_value=["Fruit", "Dairy"]),
+        pytest.raises(ValueError, match="mystery meal"),
+    ):
+        run_entree_detector(
+            classified_products,
+            gemini_client=object(),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+
+def test_run_entree_detector_skips_gemini_when_no_products_are_gbd_eligible(tmp_path):
+    """Products dropped upstream as uncategorized never reach the LLM."""
+    classified_products = pd.DataFrame(
+        {"product": ["paper towels"], "category": ["No Matches Found"]}
+    )
+
+    with (
+        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "call_gemini_api") as mock_call_gemini_api,
+        patch("pandas.DataFrame.to_csv"),
+    ):
+        result_df = run_entree_detector(
+            classified_products,
+            gemini_client=object(),
+            historical_entree_classifications=pd.DataFrame(
+                columns=["product", "entree_classification"]
+            ),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+    mock_call_gemini_api.assert_not_called()
+    assert result_df["entree_classification"].isna().all()
+    assert result_df["previously_entree_classified"].tolist() == [False]
+    assert result_df["entree_used_pro_model"].tolist() == [False]
+    assert result_df["entree_needs_review"].tolist() == [False]
+
+
+def test_run_entree_detector_retries_transient_gemini_failures_before_succeeding(tmp_path):
+    classified_products = pd.DataFrame({"product": ["banana"], "category": ["Fruit"]})
+    call_count = 0
+
+    def flaky_call_gemini_api(
+        prompt, gemini_client, temperature=0.0, model="gemini-3-flash-preview"
+    ):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise RuntimeError("transient failure")
+        return "entree"
+
+    with (
+        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "load_prompt", return_value="Prompt"),
+        patch.object(entrees, "call_gemini_api", side_effect=flaky_call_gemini_api),
+        patch.object(entrees, "print_progress", return_value=None),
+        patch("time.sleep", return_value=None) as mock_sleep,
+    ):
+        result_df = run_entree_detector(
+            classified_products,
+            gemini_client=object(),
+            historical_entree_classifications=pd.DataFrame(
+                columns=["product", "entree_classification"]
+            ),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+    assert call_count == 3
+    assert mock_sleep.call_count == 2
+    assert result_df.set_index("product")["entree_classification"].to_dict() == {"banana": "entree"}
+
+
+def test_run_entree_detector_raises_after_exhausting_gemini_retries(tmp_path):
+    classified_products = pd.DataFrame({"product": ["banana"], "category": ["Fruit"]})
+
+    with (
+        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "load_prompt", return_value="Prompt"),
+        patch.object(entrees, "call_gemini_api", side_effect=RuntimeError("persistent failure")),
+        patch.object(entrees, "print_progress", return_value=None),
+        patch("time.sleep", return_value=None) as mock_sleep,
+        pytest.raises(RuntimeError, match="persistent failure"),
+    ):
+        run_entree_detector(
+            classified_products,
+            gemini_client=object(),
+            historical_entree_classifications=pd.DataFrame(
+                columns=["product", "entree_classification"]
+            ),
+            review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+        )
+
+    assert mock_sleep.call_count == entrees.GEMINI_MAX_RETRIES - 1
+
+
+def test_assign_serving_sizes_from_entree_classification_maps_known_labels():
+    products = pd.DataFrame(
+        {
+            "product": ["steak", "fries", "water"],
+            "entree_classification": ["entree", "side/add-on", pd.NA],
+        }
+    )
+
+    result = assign_serving_sizes_from_entree_classification(products)
+
+    pd.testing.assert_frame_equal(result, products.assign(serving_size=[1.0, 0.5, np.nan]))
+
+
+def test_assign_serving_sizes_from_entree_classification_raises_when_column_missing():
+    with pytest.raises(ValueError, match="must contain an 'entree_classification' column"):
+        assign_serving_sizes_from_entree_classification(pd.DataFrame({"product": ["steak"]}))
+
+
+def test_assign_serving_sizes_from_entree_classification_raises_on_invalid_label():
+    products = pd.DataFrame({"product": ["steak"], "entree_classification": ["unsure"]})
+
+    with pytest.raises(ValueError, match="entree classifications are invalid"):
+        assign_serving_sizes_from_entree_classification(products)
 
 
 def test_run_entree_detector_escalates_unsure_items_to_pro_marks_review(caplog, tmp_path):

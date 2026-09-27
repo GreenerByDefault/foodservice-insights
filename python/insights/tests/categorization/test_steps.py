@@ -173,6 +173,42 @@ def test_categorize_with_llm_dedupes_identical_cleaned_names():
     )
 
 
+def test_categorize_with_llm_skips_the_llm_when_everything_is_already_categorized():
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A"],
+            "category": ["Cheese"],
+            "cleaned_item_names": ["cheese"],
+            "match_type": ["raw_product_history"],
+        }
+    )
+    llm = KeywordLlmClient()
+
+    result = categorize_with_llm(products_df, llm)
+
+    assert llm.calls == []
+    pd.testing.assert_frame_equal(result, products_df)
+
+
+def test_categorize_with_llm_tolerates_a_missing_match_type_column():
+    """`match_type` is absent when this step is exercised in isolation of the full pipeline."""
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A"],
+            "category": [pd.NA],
+            "cleaned_item_names": ["chicken breast"],
+        }
+    )
+    llm = KeywordLlmClient()
+
+    result = categorize_with_llm(products_df, llm)
+
+    assert "match_type" not in result.columns
+    pd.testing.assert_frame_equal(
+        result, products_df.assign(category=["Poultry (Chicken & Turkey)"])
+    )
+
+
 def test_categorize_with_llm_discards_an_answer_outside_the_gbd_categories():
     class AnswersOffList(KeywordLlmClient):
         def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:

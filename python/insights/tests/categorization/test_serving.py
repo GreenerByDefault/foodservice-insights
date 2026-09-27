@@ -15,6 +15,7 @@ def _run_serving(
     entree_history: dict[str, str],
     flash_labels: dict[str, str],
     pro_labels: dict[str, str],
+    update_historical_entree_classifications: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     """Run `categorize_file(data_type="serving")` with every cache redirected into `tmp_path`
     and Gemini answering from `flash_labels` / `pro_labels`, keyed by the product name."""
@@ -56,6 +57,7 @@ def _run_serving(
             gemini_client=object(),
             data_type="serving",
             cache_write_mode="reviewed",
+            update_historical_entree_classifications=update_historical_entree_classifications,
         )
 
 
@@ -186,3 +188,19 @@ def test_categorize_file_serving_side_add_ons_do_not_count_toward_unusable_data(
     assert df_final["product"].tolist() == ["Pork Loin"]
     assert summary["pct_remaining"] == 1.0
     assert summary["row_elimination_details"]["rows_eliminated_non_entree"] == 5
+
+
+def test_categorize_file_serving_skips_updating_entree_history_when_disabled(tmp_path, monkeypatch):
+    _run_serving(
+        tmp_path,
+        monkeypatch,
+        rows=[("Ground Beef 80/20", "2025-01-01", 5.0)],
+        entree_history={},
+        flash_labels={"Ground Beef 80/20": "entree"},
+        pro_labels={},
+        update_historical_entree_classifications=False,
+    )
+
+    # A newly-classified product would normally be appended to the historical cache; disabling
+    # the update should leave the (empty, pre-existing) cache file exactly as it started.
+    assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
