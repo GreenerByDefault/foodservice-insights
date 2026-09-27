@@ -9,6 +9,7 @@ LLM categorization, fuzzy matching, and merge-back.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -16,8 +17,6 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
-    ENTREE_LABEL_ENTREE,
-    ENTREE_LABEL_SIDE_ADDON,
     _normalize_product_name,
     build_cleaned_name_reuse_index,
     get_previously_categorized_items,
@@ -325,49 +324,77 @@ def fuzzy_match_GBD_categories(
 # ----------------------------------------------------------------------
 # Step 7 — Merge and filter
 # ----------------------------------------------------------------------
+@dataclass(frozen=True)
+class MergeCounts:
+    """How many rows and products survived the merge, and why the rest did not."""
+
+    n_rows_before: int
+    n_rows_after: int
+    n_products_before: int
+    n_products_after: int
+    n_rows_uncategorized: int
+    # None when no entree filter ran, so procurement summaries omit the key.
+    n_rows_non_entree: int | None = None
+
+    def to_summary(self) -> dict[str, Any]:
+        row_elimination_details: dict[str, Any] = {
+            "total_rows_initial": self.n_rows_before,
+            "total_rows_final": self.n_rows_after,
+            "total_rows_eliminated": self.n_rows_before - self.n_rows_after,
+            "total_eliminated_pct": self._pct_of_rows(self.n_rows_before - self.n_rows_after),
+            "rows_eliminated_uncategorized": self.n_rows_uncategorized,
+            "rows_eliminated_uncategorized_pct": self._pct_of_rows(self.n_rows_uncategorized),
+        }
+        if self.n_rows_non_entree is not None:
+            row_elimination_details |= {
+                "rows_eliminated_non_entree": self.n_rows_non_entree,
+                "rows_eliminated_non_entree_pct": self._pct_of_rows(self.n_rows_non_entree),
+            }
+        return {
+            "n_products_before": self.n_products_before,
+            "n_products_after": self.n_products_after,
+            "pct_remaining": self.n_products_after / self.n_products_before,
+            "n_rows_before": self.n_rows_before,
+            "n_rows_after": self.n_rows_after,
+            "row_elimination_details": row_elimination_details,
+        }
+
+    def _pct_of_rows(self, n_rows: int) -> float:
+        return n_rows / self.n_rows_before if self.n_rows_before > 0 else 0
+
+
 def merge_categorizations(
     original_df: pd.DataFrame,
     categorized_products_df: pd.DataFrame,
-    data_type: str,
-    n_products_before: int,
-    n_rows_before: int,
-) -> tuple[pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame, MergeCounts]:
     """
     Merge categorizations back to the original data and filter.
 
     Parameters
     ----------
     original_df : DataFrame
-        The original input data.
+        The cleaned input data.
     categorized_products_df : DataFrame
         Unique products with their assigned categories.
-    data_type : str
-        "procurement" or "serving".
-    n_products_before : int
-        Number of unique products before categorization.
-    n_rows_before : int
-        Number of rows before categorization.
 
     Returns
     -------
-    tuple[DataFrame, dict]
+    tuple[DataFrame, MergeCounts]
         - Filtered DataFrame ready for aggregation.
-        - Summary dict with elimination statistics.
+        - Row and product counts before and after the merge.
     """
-    # Determine which columns to merge
-    merge_cols = ["product", "category"]
-    if "entree_classification" in categorized_products_df.columns:
-        merge_cols.append("entree_classification")
+    n_rows_before = len(original_df)
+    n_products_before = original_df["product"].nunique()
 
     df_final = original_df.merge(
-        categorized_products_df[merge_cols],
+        categorized_products_df[["product", "category"]],
         on="product",
         how="left",
     )
     df_final["category"] = df_final["category"].fillna("No Matches Found")
 
     # Track elimination
-    n_rows_uncategorized = (df_final["category"] == "No Matches Found").sum()
+    n_rows_uncategorized = int((df_final["category"] == "No Matches Found").sum())
     df_final = df_final.loc[df_final["category"] != "No Matches Found"]
 
     n_products_after = df_final["product"].nunique()
@@ -383,12 +410,6 @@ def merge_categorizations(
             f"{n_products_after}/{n_products_before} ({pct_remaining:.1%}) remain."
         )
 
-    # Filter to entrees only for serving data.
-    n_rows_non_entree = 0
-    if data_type == "serving" and "entree_classification" in df_final.columns:
-        n_rows_non_entree = (df_final["entree_classification"] == ENTREE_LABEL_SIDE_ADDON).sum()
-        df_final = df_final.loc[df_final["entree_classification"] == ENTREE_LABEL_ENTREE]
-
     # Drop intermediate columns
     columns_to_drop = [
         "cleaned_item_names",
@@ -399,34 +420,6 @@ def merge_categorizations(
     columns_to_drop = [c for c in columns_to_drop if c in df_final.columns]
     df_final = df_final.drop(columns=columns_to_drop)
 
-    n_rows_after = len(df_final)
-
-    row_elimination_details = {
-        "total_rows_initial": n_rows_before,
-        "total_rows_final": n_rows_after,
-        "total_rows_eliminated": n_rows_before - n_rows_after,
-        "total_eliminated_pct": (
-            (n_rows_before - n_rows_after) / n_rows_before if n_rows_before > 0 else 0
-        ),
-        "rows_eliminated_uncategorized": int(n_rows_uncategorized),
-        "rows_eliminated_uncategorized_pct": (
-            n_rows_uncategorized / n_rows_before if n_rows_before > 0 else 0
-        ),
-        "rows_eliminated_non_entree": n_rows_non_entree,
-        "rows_eliminated_non_entree_pct": (
-            n_rows_non_entree / n_rows_before if n_rows_before > 0 else 0
-        ),
-    }
-
-    summary = {
-        "n_products_before": n_products_before,
-        "n_products_after": n_products_after,
-        "pct_remaining": pct_remaining,
-        "n_rows_before": n_rows_before,
-        "n_rows_after": n_rows_after,
-        "row_elimination_details": row_elimination_details,
-    }
-
     logger.info(
         "Categorization complete: %d/%d products retained (%.1f%%).",
         n_products_after,
@@ -434,4 +427,10 @@ def merge_categorizations(
         pct_remaining * 100,
     )
 
-    return df_final, summary
+    return df_final, MergeCounts(
+        n_rows_before=n_rows_before,
+        n_rows_after=len(df_final),
+        n_products_before=n_products_before,
+        n_products_after=n_products_after,
+        n_rows_uncategorized=n_rows_uncategorized,
+    )

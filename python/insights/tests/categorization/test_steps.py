@@ -1,9 +1,11 @@
+import dataclasses
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import steps
 from gbd_foodservice_insights.categorization.steps import (
+    MergeCounts,
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
     categorize_with_llm,
@@ -42,35 +44,7 @@ def test_categorize_using_historical_classifications():
         assert result_previously_categorized == expected_previously_categorized
 
 
-def test_merge_categorizations_serving_filters_side_add_on():
-    original_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "date": ["2025-01-01", "2025-01-01", "2025-01-01"],
-            "weight": [1.0, 1.0, 1.0],
-        }
-    )
-    categorized_products_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "category": ["Fruit", "Fruit", "Fruit"],
-            "entree_classification": ["entree", "side/add-on", "entree"],
-        }
-    )
-
-    df_final, summary = merge_categorizations(
-        original_df=original_df,
-        categorized_products_df=categorized_products_df,
-        data_type="serving",
-        n_products_before=3,
-        n_rows_before=3,
-    )
-
-    assert sorted(df_final["product"].tolist()) == ["apple", "carrot"]
-    assert summary["row_elimination_details"]["rows_eliminated_non_entree"] == 1
-
-
-def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
+def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
     products = [f"product {i}" for i in range(n_products)]
     return merge_categorizations(
         original_df=pd.DataFrame(
@@ -79,15 +53,71 @@ def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
         categorized_products_df=pd.DataFrame(
             {"product": products, "category": ["Cheese"] + ["No Matches Found"] * (n_products - 1)}
         ),
-        data_type="procurement",
-        n_products_before=n_products,
-        n_rows_before=n_products,
     )
 
 
 def test_merge_categorizations_accepts_exactly_20_percent_remaining():
-    df_final, _ = _merge_keeping_one_of(5)
+    df_final, counts = _merge_keeping_one_of(5)
     assert df_final["product"].tolist() == ["product 0"]
+    assert counts == MergeCounts(
+        n_rows_before=5,
+        n_rows_after=1,
+        n_products_before=5,
+        n_products_after=1,
+        n_rows_uncategorized=4,
+    )
+
+
+def test_merge_counts_to_summary_omits_non_entree_keys_until_the_entree_filter_runs():
+    counts = MergeCounts(
+        n_rows_before=8,
+        n_rows_after=5,
+        n_products_before=5,
+        n_products_after=4,
+        n_rows_uncategorized=3,
+    )
+    expected = {
+        "n_products_before": 5,
+        "n_products_after": 4,
+        "pct_remaining": 0.8,
+        "n_rows_before": 8,
+        "n_rows_after": 5,
+        "row_elimination_details": {
+            "total_rows_initial": 8,
+            "total_rows_final": 5,
+            "total_rows_eliminated": 3,
+            "total_eliminated_pct": 0.375,
+            "rows_eliminated_uncategorized": 3,
+            "rows_eliminated_uncategorized_pct": 0.375,
+        },
+    }
+    assert counts.to_summary() == expected
+
+    filtered = dataclasses.replace(counts, n_rows_after=4, n_rows_non_entree=1)
+    assert filtered.to_summary() == expected | {
+        "n_rows_after": 4,
+        "row_elimination_details": expected["row_elimination_details"]
+        | {
+            "total_rows_final": 4,
+            "total_rows_eliminated": 4,
+            "total_eliminated_pct": 0.5,
+            "rows_eliminated_non_entree": 1,
+            "rows_eliminated_non_entree_pct": 0.125,
+        },
+    }
+
+
+def test_merge_counts_to_summary_avoids_division_by_zero_with_no_rows_before():
+    counts = MergeCounts(
+        n_rows_before=0,
+        n_rows_after=0,
+        n_products_before=1,
+        n_products_after=1,
+        n_rows_uncategorized=0,
+    )
+    details = counts.to_summary()["row_elimination_details"]
+    assert details["total_eliminated_pct"] == 0
+    assert details["rows_eliminated_uncategorized_pct"] == 0
 
 
 def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():

@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 from unittest.mock import patch
 
@@ -5,8 +6,10 @@ import pandas as pd
 from gbd_foodservice_insights.categorization import entrees
 from gbd_foodservice_insights.categorization.entrees import (
     classify_entrees_using_historical_classifications,
+    filter_to_entrees,
     run_entree_detector,
 )
+from gbd_foodservice_insights.categorization.steps import MergeCounts
 
 
 def test_classify_entrees_using_historical_classifications():
@@ -168,3 +171,44 @@ def test_classify_entrees_using_historical_classifications_cleaned_name_reuse():
     assert result.set_index("product")["previously_entree_classified"].to_dict() == {
         "NEW_RAW": True
     }
+
+
+def _merged_rows(products: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "product": products,
+            "date": ["2025-01-01"] * len(products),
+            "weight": 1.0,
+            "category": "Fruit",
+        }
+    )
+
+
+def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
+    # Real entrees, a side, and one product `filter_to_entrees` doesn't recognise at all
+    # (e.g. dropped upstream as uncategorized) — its classification is NA, not a label.
+    counts = MergeCounts(
+        n_rows_before=5,
+        n_rows_after=4,
+        n_products_before=4,
+        n_products_after=3,
+        n_rows_uncategorized=1,
+    )
+    df_final, filtered_counts = filter_to_entrees(
+        _merged_rows(["steak", "bread roll", "pot roast", "steak"]),
+        counts,
+        classified_products=pd.DataFrame(
+            {
+                "product": ["steak", "bread roll", "pot roast", "unrecognized item"],
+                "entree_classification": ["entree", "side/add-on", "entree", pd.NA],
+            }
+        ),
+    )
+
+    pd.testing.assert_frame_equal(
+        df_final,
+        _merged_rows(["steak", "pot roast", "steak"])
+        .set_axis([0, 2, 3])
+        .assign(entree_classification="entree"),
+    )
+    assert filtered_counts == dataclasses.replace(counts, n_rows_after=3, n_rows_non_entree=1)
