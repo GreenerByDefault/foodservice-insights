@@ -45,6 +45,22 @@ test('signing out lands on the marketing page, and Back does not return to the s
   expect(response?.status()).toBe(401);
 });
 
+test('signing out in one tab signs the other out in place, untouched', async ({ page, org }) => {
+  const other = await page.context().newPage();
+  await other.goto(`/orgs/${org.slug}`);
+  await ensureHydrated(other);
+  await page.goto(`/orgs/${org.slug}`);
+  await ensureHydrated(page);
+
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL('/');
+
+  await expect(other.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  await expect(other).toHaveURL(`/orgs/${org.slug}`);
+  await expect(other.getByRole('button', { name: 'Account menu' })).toHaveCount(0);
+});
+
 test.describe('signed out', () => {
   test.use({ identity: 'anonymous' });
 

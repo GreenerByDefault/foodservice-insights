@@ -1,4 +1,4 @@
-import type { OrganizationId } from '@gbd/db';
+import type { OrganizationId, UserId } from '@gbd/db';
 import { createRawSnippet } from 'svelte';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -17,6 +17,7 @@ const noChildren = createRawSnippet(() => ({ render: () => '<div></div>' }));
 function props(role: LayoutProps['data']['role']): LayoutProps {
   return {
     data: {
+      sessionUserId: 'user-1' as UserId,
       user: { email: 'eric@example.com', displayName: 'Eric' },
       organizations: [],
       hasMoreOrganizations: false,

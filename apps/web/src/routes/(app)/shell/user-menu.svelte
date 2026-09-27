@@ -26,7 +26,14 @@ async function signOut() {
   // checked: auth-js clears this device's session even when GoTrue refuses to revoke it, and in the
   // rare case it keeps one — it could not read the session at all — `/` redirects a signed-in
   // visitor back to `/orgs`, so nobody is left looking signed out who is not.
-  await browserAuth().signOut({ scope: 'local' });
+  try {
+    await browserAuth().signOut({ scope: 'local' });
+  } catch (cause) {
+    // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
+    // Nothing was signed out, so there is nowhere to go; the next click loads it afresh.
+    console.error('Could not sign out', cause);
+    return;
+  }
   await goto('/', { invalidateAll: true });
 }
 </script>

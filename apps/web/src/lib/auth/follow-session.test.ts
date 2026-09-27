@@ -1,20 +1,30 @@
-import type { AuthChangeEvent } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { describe, expect, test, vi } from 'vitest';
-import { refreshWhenRestoredByBack, shouldInvalidate } from './follow-session.ts';
+import { refreshWhenRestoredByBack, sessionUserChanged } from './follow-session.ts';
 
-describe('shouldInvalidate', () => {
-  test('skips the initial session', () => {
-    expect(shouldInvalidate('INITIAL_SESSION')).toBe(false);
+function sessionFor(userId: string): Pick<Session, 'user'> {
+  return { user: { id: userId } as Session['user'] };
+}
+
+describe('sessionUserChanged', () => {
+  test('the user the page was rendered for is no change, however often auth-js confirms them', () => {
+    expect(sessionUserChanged('ana', sessionFor('ana'))).toBe(false);
   });
 
-  test.each<AuthChangeEvent>([
-    'SIGNED_IN',
-    'SIGNED_OUT',
-    'TOKEN_REFRESHED',
-    'USER_UPDATED',
-    'PASSWORD_RECOVERY',
-  ])('invalidates on %s', (event) => {
-    expect(shouldInvalidate(event)).toBe(true);
+  test('no session on a page rendered signed out is no change', () => {
+    expect(sessionUserChanged(null, null)).toBe(false);
+  });
+
+  test('signing out is a change', () => {
+    expect(sessionUserChanged('ana', null)).toBe(true);
+  });
+
+  test('signing in is a change', () => {
+    expect(sessionUserChanged(null, sessionFor('ana'))).toBe(true);
+  });
+
+  test('a different user is a change', () => {
+    expect(sessionUserChanged('ana', sessionFor('ben'))).toBe(true);
   });
 });
 
