@@ -126,12 +126,13 @@ state.
 
 ### Two facts that shape the design
 
-1. **GoTrue v2.195.0's built-in email templates carry no code.** Verified by grepping the running
-   `supabase_auth_fsi-test` binary: "Your sign-in link" and "Confirm your email address" have
-   `{{ .ConfirmationURL }}` only; `{{ .Token }}` appears solely in the reauthentication template.
-   `signInWithOtp` therefore sends a link unless we commit templates. (cfa-web-app's README note that
-   "the code is at the end of the email" was true of an older GoTrue.) Its "customizing the template
-   locally failed" remark is a risk to retire in PR 1's first commit.
+1. **GoTrue v2.195.0's built-in email templates carry no code**, only `{{ .ConfirmationURL }}`
+   (cfa-web-app's README note that "the code is at the end of the email" was true of an older
+   GoTrue). So both stacks' `config.toml` point `magic_link` at one committed template,
+   `supabase-dev/supabase/templates/sign-in-code.html`. Locally that is the only template sign-in
+   sends, since confirmations are off (§ Settled decisions); hosted, a new address gets
+   `confirmation` instead, which `verifyOtp({ type: 'email' })` accepts all the same. Setting both
+   in the hosted dashboard is `email-provider.md` § After the decision, step 4.
 2. **GoTrue writes to the stack's main `postgres` database; Playwright runs the app against a per-run
    clone** (`packages/db/src/testing/run-database.ts`). A user created through GoTrue exists in main
    `auth.users` only; `loadAuthorization` reads the clone. So e2e fixtures create the GoTrue user
@@ -196,7 +197,7 @@ instead.
 | --- | --- | --- |
 | Auth mode | `PUBLIC_AUTH_MODE`: `placeholder` \| `supabase`, required, checked in `init` | § The mode switch |
 | Sign-in vs sign-up | One flow, `shouldCreateUser: true` on the first send, `false` on a resend | Open org creation; a resend is for an address we have already sent to |
-| Email confirmations | `[auth.email] enable_confirmations = true` in both stacks, and "Confirm email" left on in the hosted dashboard | GoTrue's `/signup` is public and takes a password. With confirmations off it hands back a session for any address, never verified — and `lockInviteFor` treats the session's address as proof its owner controls it. With them on, OTP still works: a new address gets the confirmation template, whose code confirms it |
+| Email confirmations | "Confirm email" left on in the hosted dashboard; the local stacks keep the CLI default, off | GoTrue's `/signup` is public and takes a password. With confirmations off it hands back a session for any address, never verified — and `lockInviteFor` treats the session's address as proof its owner controls it. With them on, OTP still works: a new address gets the confirmation template, whose code confirms it. Locally the hole exposes nothing, and turning them on would change no test: every e2e user is made through the admin API, so is never new to GoTrue |
 | Session validation | `auth.getUser()` per request | Catches deleted/banned users; local CLI signs HS256 so `getClaims()` gains nothing locally |
 | Unreachable GoTrue | 503 (`AuthRetryableFetchError`) | An outage is not "signed out"; mirrors `withDbErrorHandling` |
 | Invalid/stale session | Signed out, cookie cleared via `signOut({ scope: 'local' })` on the server client, no log for `user_not_found` | A deleted user's token is normal; stop re-sending a dead cookie |
@@ -226,19 +227,6 @@ PRs 1 and 2 are independent; PR 3 needs only PR 1. Hosting needs none of them.
 ## PR 1 — Sign-in and sign-out
 
 After this, a developer can set `PUBLIC_AUTH_MODE=supabase` and sign in through Mailpit.
-
-**Supabase config, first commit.** It can land earlier on its own; nothing needs it before this PR.
-
-- `supabase-test/supabase/templates/magic-link.html` and `confirmation.html` (mirrored into
-  `supabase-dev/`): our copy plus `{{ .Token }}`, no link. Reference them from both `config.toml`
-  via `[auth.email.template.magic_link]` / `[auth.email.template.confirmation]` `content_path`.
-  Both, because with confirmations on a new address gets the confirmation template and a
-  known one the magic-link template. Pin the other defaults we depend on explicitly: `[auth.email]
-  enable_signup = true`, `otp_length = 6` (which `OTP_LENGTH` already assumes). Verify by
-  `TEST_DB=1 scripts/supabase stop && start`, then `signInWithOtp` from a scratch script for a new
-  address and a known one, reading each code in Mailpit and signing in with it.
-- Production needs the same two templates set in the hosted dashboard, and the Data API left
-  disabled. Deployment config is off limits here — flag both in the PR body.
 
 **Client:**
 

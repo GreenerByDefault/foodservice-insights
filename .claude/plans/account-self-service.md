@@ -45,7 +45,7 @@ REQUIREMENTS.md with the invite work):
 | GBD notice | `gbd-user-deleted` after commit — already defined, no caller | REQUIREMENTS § GBD email notifications |
 | Audit | `user.deleted`, `organizationId: null`, target user | The id survives in `audit_event`, which has no FKs for exactly this |
 | Change email | Browser: `updateUser({ email })` → code to the new address → `verifyOtp({ email, token, type: 'email_change' })` → `invalidateAll()` | The stub's design; no route of ours |
-| Confirmation mode | `[auth.email] double_confirm_changes = false`; `templates/email-change.html` with `{{ .Token }}` in both local stacks; hosted dashboard flagged in the PR body | Context, above |
+| Confirmation mode | `[auth.email] double_confirm_changes = false`; `supabase-dev/supabase/templates/email-change.html` with `{{ .Token }}`, referenced from both local stacks as `sign-in-code.html` is; hosted dashboard flagged in the PR body | Context, above |
 | Pending invites to the old address | Stay addressed to it | Accepted edge; the invite can be re-sent |
 
 ## PR 1 — Delete account
@@ -72,8 +72,8 @@ REQUIREMENTS.md with the invite work):
 ## PR 2 — Change email
 
 - Supabase config in both stacks: `double_confirm_changes = false`, `[auth.email.template.email_change]
-  content_path` → our template with `{{ .Token }}`. Verify by hand against Mailpit first (the
-  "template override failed" risk auth PR 1 retires applies here too).
+  content_path` → our template with `{{ .Token }}`, the way `[auth.email.template.magic_link]`
+  already is. Verify by hand against Mailpit first.
 - `BrowserAuth` gains `updateUser`; `$lib/auth/testing/fake.ts` follows.
 - `account/change-email-form.svelte`: two steps, `'email' | 'code'`, reusing
   `$lib/components/auth/code-step.svelte` (its second caller) and `describeAuthError`. Verified →
