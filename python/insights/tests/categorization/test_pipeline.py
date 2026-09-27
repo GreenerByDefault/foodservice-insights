@@ -1,3 +1,6 @@
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -7,6 +10,24 @@ from gbd_foodservice_insights.categorization.pipeline import (
     categorize_unique_products,
 )
 from gbd_foodservice_insights.testing import KeywordLlmClient
+from pandas.testing import assert_frame_equal
+
+
+@dataclass(frozen=True)
+class ScriptedLlmClient:
+    """Answers verbatim from `match_answers`, keyed by cleaned name, so a test can hand the
+    pipeline the near-miss answers a real model gives and `KeywordLlmClient` never does."""
+
+    match_answers: Mapping[str, str]
+
+    def clean_product_name(self, item: str) -> str:
+        return item.lower()
+
+    def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+        return self.match_answers[item]
+
+    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
+        raise AssertionError(f"the fuzzy step was reached for {item!r}")
 
 
 def test_categorize_unique_products_cache_write_mode_controls_destination():
@@ -180,3 +201,84 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     assert set(categorized.unique_products_df["category"]) == {"Dairy"}
     # Trusted reuse -> nothing queued for human review.
     assert categorized.ai_review_df.empty
+
+
+def test_categorize_unique_products_characterization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pins today's silent drops, so each later change to them shows up as a diff here: every
+    near-miss answer, and a cache row with a non-canonical category, become "No Matches Found",
+    and the cache row is kept out of the review table; a cache row with surrounding whitespace
+    or a blank category never hits."""
+    monkeypatch.setattr(cache, "_web_app_unreviewed_cache_path", lambda: tmp_path / "absent.csv")
+    products = [
+        "Cheddar Shred",
+        "Salted Butter",
+        "Pork Loin",
+        "Oat Milk Carton",
+        "Mozzarella Block",
+        "Whole Milk Gallon",
+    ]
+    df = pd.DataFrame(
+        {
+            "product": products,
+            "date": pd.to_datetime(["2025-01-15"] * len(products)),
+            "weight": [10.0] * len(products),
+        }
+    )
+    historical = pd.DataFrame(
+        {
+            "product": [
+                "Mozzarella Block",
+                "Oat Milk Carton ",
+                "Salted Butter",
+                "Whole Milk Gallon",
+            ],
+            "category": ["cheese", "Oat Milk", None, "Milk (Cow's milk)"],
+            "cleaned_item_names": ["mozzarella block", None, None, "whole milk gallon"],
+        }
+    )
+    llm = ScriptedLlmClient(
+        {
+            "cheddar shred": "Cheese.",
+            "salted butter": '"Butter"',
+            "pork loin": "pork",
+            "oat milk carton": "None",
+        }
+    )
+
+    categorized = categorize_unique_products(df, llm, historical_categorizations=historical)
+
+    no_match = "No Matches Found"
+    milk = "Milk (Cow's milk)"
+    assert_frame_equal(
+        categorized.unique_products_df,
+        pd.DataFrame(
+            {
+                "product": products,
+                "category": [no_match] * 5 + [milk],
+                "previously_categorized": [False] * 4 + [True] * 2,
+                "match_type": pd.Series(["llm"] * 4 + ["raw_product_history"] * 2, dtype="object"),
+                "cleaned_item_names": [
+                    "cheddar shred",
+                    "salted butter",
+                    "pork loin",
+                    "oat milk carton",
+                    "Mozzarella Block",
+                    "Whole Milk Gallon",
+                ],
+                "category_old": [no_match] * 5 + [milk],
+            }
+        ),
+    )
+    assert_frame_equal(
+        categorized.ai_review_df,
+        pd.DataFrame(
+            {
+                "category": [no_match] * 4,
+                "product": ["Cheddar Shred", "Oat Milk Carton", "Pork Loin", "Salted Butter"],
+                "occurrence_count": [1] * 4,
+            }
+        ),
+    )
+    assert categorized.match_type_counts == {"llm": 4, "raw_product_history": 2}
