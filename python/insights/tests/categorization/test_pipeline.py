@@ -1,6 +1,5 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -25,76 +24,6 @@ class ScriptedLlmClient:
 
     def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
         return self.match_answers[item]
-
-
-def test_categorize_unique_products_cache_write_mode_controls_destination():
-    df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
-    unique_products = pd.DataFrame(
-        {
-            "product": ["apple"],
-            "category": ["Fruit"],
-            "previously_categorized": [False],
-            "cleaned_item_names": ["apple"],
-            "match_type": ["llm"],
-        }
-    )
-
-    with (
-        patch.object(pipeline, "parse_and_validate_date_column", return_value=df),
-        patch.object(pipeline, "clean_weight_column", return_value=df),
-        patch.object(
-            pipeline,
-            "get_previously_categorized_items",
-            return_value=pd.DataFrame(columns=["product", "category"]),
-        ),
-        patch.object(
-            pipeline,
-            "categorize_using_historical_classifications",
-            return_value=unique_products,
-        ),
-        patch.object(pipeline, "clean_product_names", return_value=unique_products),
-        patch.object(pipeline, "categorize_with_llm", return_value=unique_products),
-        patch.object(
-            pipeline,
-            "build_ai_review_table",
-            return_value=pd.DataFrame(),
-        ),
-        patch.object(pipeline, "save_historical_categorizations") as save_reviewed,
-        patch.object(
-            pipeline,
-            "save_unreviewed_web_app_categorizations",
-        ) as save_unreviewed,
-    ):
-        categorize_unique_products(
-            df=df,
-            llm=KeywordLlmClient(),
-            cache_write_mode="none",
-        )
-        assert save_reviewed.call_count == 0
-        assert save_unreviewed.call_count == 0
-
-        categorize_unique_products(
-            df=df,
-            llm=KeywordLlmClient(),
-            cache_write_mode="reviewed",
-        )
-        assert save_reviewed.call_count == 1
-        assert save_unreviewed.call_count == 0
-
-        categorize_unique_products(
-            df=df,
-            llm=KeywordLlmClient(),
-            cache_write_mode="web_app_unreviewed",
-        )
-        assert save_reviewed.call_count == 1
-        assert save_unreviewed.call_count == 1
-
-        with pytest.raises(ValueError, match="Invalid cache_write_mode"):
-            categorize_unique_products(
-                df=df,
-                llm=KeywordLlmClient(),
-                cache_write_mode="invalid-mode",
-            )
 
 
 @pytest.mark.parametrize("missing_column", ["product", "date", "weight"])
@@ -164,25 +93,16 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
             return "whole milk"
 
     llm = EverythingIsWholeMilk()
-    empty_web_app = pd.DataFrame(
-        columns=["product", "category", "cleaned_item_names", "review_status"]
-    )
 
     with (
         patch.object(steps, "get_GBD_categories", return_value=["Dairy"]),
         patch.object(cache, "get_GBD_categories", return_value=["Dairy"]),
-        patch.object(
-            cache,
-            "get_web_app_unreviewed_categorizations",
-            return_value=empty_web_app,
-        ),
         patch.object(steps, "print_progress", return_value=None),
     ):
         categorized = categorize_unique_products(
             df=df,
             llm=llm,
             historical_categorizations=historical,
-            cache_write_mode="none",
         )
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
@@ -193,14 +113,11 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     assert categorized.ai_review_df.empty
 
 
-def test_categorize_unique_products_characterization(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_categorize_unique_products_characterization() -> None:
     """Pins today's silent drops, so each later change to them shows up as a diff here: every
     near-miss answer, and a cache row with a non-canonical category, become "No Matches Found",
     and the cache row is kept out of the review table; a cache row with surrounding whitespace
     or a blank category never hits."""
-    monkeypatch.setattr(cache, "_web_app_unreviewed_cache_path", lambda: tmp_path / "absent.csv")
     products = [
         "Cheddar Shred",
         "Salted Butter",

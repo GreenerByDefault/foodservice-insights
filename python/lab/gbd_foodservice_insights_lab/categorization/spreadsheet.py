@@ -34,7 +34,6 @@ def categorize_spreadsheet_to_csvs(
     data_type: Literal["procurement", "serving"] = "procurement",
     gemini_client: Any = None,
     date_format: str | None = None,
-    cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
     update_historical_entree_classifications: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     """Read a file, categorize products, and write results.
@@ -43,10 +42,9 @@ def categorize_spreadsheet_to_csvs(
     with a ``_categorized`` suffix, and ``date_format`` is auto-detected when ``None``. Serving
     data also runs entree detection, keeps only the entree rows, and requires ``gemini_client``.
 
-    ``cache_write_mode`` controls where new categorizations are persisted: ``"none"`` skips it,
-    ``"reviewed"`` appends to the reviewed historical cache, and ``"web_app_unreviewed"`` appends
-    to the unreviewed web-app cache. ``update_historical_entree_classifications`` appends new
-    entree classifications to the historical file.
+    ``update_historical_entree_classifications`` appends new entree classifications to the
+    historical file. New product categorizations are never cached here; see
+    ``product_cache.promote_local_review_file_to_reviewed_cache``.
 
     Returns the categorized frame and a summary dict: ``MergeCounts.to_summary()``, plus
     ``match_type_counts`` and the output file keys.
@@ -81,7 +79,6 @@ def categorize_spreadsheet_to_csvs(
         df=df,
         llm=llm,
         date_format=date_format,
-        cache_write_mode=cache_write_mode,
     )
     df_result, counts = merge_categorizations(
         categorized.cleaned_df, categorized.unique_products_df

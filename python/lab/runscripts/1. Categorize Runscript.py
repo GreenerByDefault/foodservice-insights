@@ -7,15 +7,13 @@ Thin CLI entrypoint around
 gbd_foodservice_insights_lab.categorization.spreadsheet.categorize_spreadsheet_to_csvs().
 
 Usage:
-    python "1. Categorize Runscript.py" --input data.csv --analysis-context baseline
+    python "1. Categorize Runscript.py" --input data.csv
     python "1. Categorize Runscript.py" --input data.csv --data-type serving
-    python "1. Categorize Runscript.py" --input data.csv --analysis-context web_app
     python "1. Categorize Runscript.py" --input data.csv --output results.csv --date-format "%b-%y"
 """
 
 import argparse
 import logging
-from typing import Literal
 
 from dotenv import find_dotenv, load_dotenv
 from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
@@ -26,16 +24,6 @@ from gbd_foodservice_insights_lab.notebook_runscript_setup import (
 )
 
 logger = logging.getLogger("gbd_foodservice_insights.runscript")
-
-# Local baseline/pilot runs do not write category cache updates automatically.
-# Web-app runs write to the separate unreviewed cache for later human promotion.
-ANALYSIS_CONTEXT_TO_CACHE_WRITE_MODE: dict[
-    str, Literal["none", "reviewed", "web_app_unreviewed"]
-] = {
-    "baseline": "none",
-    "pilot": "none",
-    "web_app": "web_app_unreviewed",
-}
 
 
 def main() -> None:
@@ -60,15 +48,6 @@ def main() -> None:
     parser.add_argument(
         "--date-format", default=None, help="Date format string (default: auto-detect)"
     )
-    parser.add_argument(
-        "--analysis-context",
-        default="baseline",
-        choices=["baseline", "pilot", "web_app"],
-        help=(
-            "Execution context used to set cache behavior. baseline/pilot: no category "
-            "cache writes; web_app: write to unreviewed web-app cache."
-        ),
-    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
@@ -85,10 +64,6 @@ def main() -> None:
     logger.info("Input:  %s", args.input)
     logger.info("Output: %s", args.output or "(auto)")
     logger.info("Type:   %s", args.data_type)
-    logger.info("Context: %s", args.analysis_context)
-
-    cache_write_mode = ANALYSIS_CONTEXT_TO_CACHE_WRITE_MODE[args.analysis_context]
-    logger.info("Category cache write mode: %s", cache_write_mode)
 
     # Basically, all the functionality in this script is nested inside the
     # `categorize_spreadsheet_to_csvs` function because it separates "CLI stuff"
@@ -100,7 +75,6 @@ def main() -> None:
         llm=OpenAiLlmClient.from_env(),
         gemini_client=clients.get("gemini_client"),
         date_format=args.date_format,
-        cache_write_mode=cache_write_mode,
     )
 
     # Save categorization statistics to client_metadata.json

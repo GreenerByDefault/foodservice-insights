@@ -8,7 +8,7 @@ category match, then `merge_categorizations` with the 80% cut. `analyze()` compo
 `categorize_spreadsheet_to_csvs` composes it the same way and adds entree detection. The cache is
 the gitignored `data_files/previously_categorized_items.csv`, read by
 `cache.get_previously_categorized_items()`; `categorization-cache.md` moves it into Postgres later
-and is sequenced after this plan. `diagnostics-split.md` PR 1 waits on PR 4 here.
+and is sequenced after this plan. `diagnostics-split.md` PR 1 waits on PR 3 here.
 
 This plan is the product side only: the cache the library reads and the pipeline that reads it.
 How new rows get back into the cache — from the web app or from GBD's reviewers — is
@@ -17,13 +17,12 @@ How new rows get back into the cache — from the web app or from GBD's reviewer
 Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) and the code after
 #355–#380:
 
-- **Every cache write path is dead in the product.** `analyze()` passes `cache_write_mode="none"`;
-  the lab runscript passes `"none"` for baseline and pilot, and its `web_app` context (which wrote
-  `web_app_categorizations_unreviewed.csv`) belongs to the Flask app that no longer exists. The
-  reviewed-cache auto-write (`"reviewed"`) appends raw LLM output to the human-reviewed file, which
-  REQUIREMENTS.md § Product categorization cache forbids. What the file shows GBD actually did:
-  3,212 rows have no cleaned name (promoted from review files, which carry none) and 20,008 have
-  the raw SKU as their cleaned name (cache hits saved back with `cleaned_item_names = product`).
+- **The product only reads the cache.** `categorization/cache.py` is the loader, the path
+  (`categorization_cache_path()`) and the cleaned-name index; the two writers a data scientist
+  runs by hand after review live in the lab's `categorization/product_cache.py`. What the file
+  shows of the old auto-writes: 3,212 rows have no cleaned name (promoted from review files,
+  which carry none) and 20,008 have the raw SKU as their cleaned name (cache hits saved back with
+  `cleaned_item_names = product`).
 - **The loader drops nothing and checks nothing.** `pd.read_csv(path)` with default NA handling: a
   product named `NA` or `null` would become NaN, and the 106 rows with a blank category do. The
   pipeline strips the upload's product before matching (`categorize_unique_products`) and so does
@@ -42,12 +41,12 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   the rules literally is unmeasured, and `KeywordLlmClient` only ever returns canonical names, so
   no test and no `mock-llm` run can show it. `_strip_pack_counts` deletes every `.` before the
   prompt (`CHEESE 2.5 LB` → `CHEESE 25 LB`), and `test_llm.py` pins that.
-- **Tests are hermetic by patching paths.** The pipeline reads two files below `analyze()`: the
-  reviewed cache (`cache._historical_cache_path`) and, inside `build_cleaned_name_reuse_index`,
-  the web-app cache (`cache._web_app_unreviewed_cache_path`). `test_analysis.py`,
-  `worker_child/tests/test_mock_llm.py` and `test_pipeline.py`'s characterization test each
-  monkeypatch those private helpers to paths under `tmp_path`; a test that runs the pipeline
-  without them reads the developer's `data_files/`. The worker image is not hermetic:
+- **Tests are hermetic by patching a path.** Below `analyze()` the pipeline reads one file, via
+  `cache.categorization_cache_path`, when it is not handed the cache. `test_analysis.py`,
+  `worker_child/tests/test_mock_llm.py`, and the lab's `test_serving.py`, `test_entree_cache.py`
+  and `test_product_cache.py` monkeypatch it to a path under `tmp_path`; a test that runs the
+  pipeline without it reads the developer's `data_files/`. `test_pipeline.py`'s tests pass
+  `historical_categorizations` instead. The worker image is not hermetic:
   `apps/worker/Dockerfile` copies the package directory and `.dockerignore` does not exclude the
   CSV, so a local `docker build` ships the developer's cache and CI's ships none. Noted, not fixed
   here — deployment config is off limits.
@@ -78,14 +77,13 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
 
 ## Decisions
 
-- **The product library never writes the cache.** The web-app-unreviewed cache, both promotion
-  flows and `cache_write_mode` are deleted. The two functions a data scientist still needs —
-  append reviewed rows to the file, and promote a reviewed `_for_human_review.csv` — move to the
-  lab, which is where GBD's tooling lives (`.claude/rules/python.md` § The lab boundary). *Rejected:
-  keeping `"reviewed"` auto-write as a lab option* — it writes unreviewed LLM output into the
-  reviewed file, and the data shows it was used.
+- **The product library never writes the cache.** New rows leave the library only as a return
+  value (`categorization-cache.md` PR 4–5); writing the reviewed file is the lab's, by hand after
+  review. *Rejected: keeping a `"reviewed"` auto-write as a lab option* — it writes unreviewed LLM
+  output into the reviewed file, and the data shows it was used.
 - **The pipeline is handed the cache; nothing below `analyze()` reads disk.** `categorize_unique_products`
-  and the two steps take a `CategorizationCache`; the `None`-means-read-the-file defaults go. That
+  and the two steps take a `CategorizationCache`; the `None`-means-read-the-file defaults go
+  (`categorize_using_cleaned_name_history` already requires its `reuse_index`). That
   is what makes tests hermetic and is the shape `categorization-cache.md` PR 5 needs (`analyze()`
   builds the cache from seam rows instead of the file).
 - **One type owns the cache's shape.** `CategorizationCache.from_frame(df)` is the only constructor:
@@ -127,31 +125,12 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   `llm.py`: API load is workers × children × threads, and a 429 storm costs threads × 5 attempts.
   *Rejected: `asyncio`* — ARCHITECTURE.md. *Rejected: several products per prompt* — it changes the
   model's task, and every cache and review row is per product.
-- **One behaviour change per PR, deletions first.** Each PR's diff of the characterization test
+- **One behaviour change per PR.** Each PR's diff of the characterization test
   is its review.
 
-PR order: 2 after 1; 3 and 4 any time; 5 after 3, since both edit `categorize_with_llm`.
+PR order: 1, 2 and 3 any time; 4 after 2, since both edit `categorize_with_llm`.
 
-## PR 1 — the cache is read-only in the product
-
-- `cache.py` keeps the loader, `normalize_product_name`, `unanimous_index` and
-  `build_cleaned_name_reuse_index(reviewed_df)` (its `include_approved_web_app` branch and
-  read-the-file default go); the path helper becomes public for the lab. Deleted: the
-  web-app-unreviewed cache and its columns, both `promote_*`, `_validate_cache_write_mode` and
-  `scripts/promote_reviewed_web_app_categorizations.py` (the `scripts/` directory with it).
-- `gbd_foodservice_insights_lab/categorization/product_cache.py` receives
-  `save_historical_categorizations` and `promote_local_review_file_to_reviewed_cache` with their
-  category check, importing the loader and path from the product; their tests move to
-  `python/lab/tests/categorization/test_product_cache.py`.
-- `categorize_unique_products`, `categorize_spreadsheet_to_csvs` and `analyze()` lose
-  `cache_write_mode`; `1. Categorize Runscript.py` loses `--analysis-context` and its mapping;
-  the runscript's cache-mode tests and `test_pipeline.py`'s `cache_write_mode` test go, as do
-  the `_web_app_unreviewed_cache_path` monkeypatches in `test_analysis.py`, `test_mock_llm.py` and
-  the characterization test; renaming the path helper renames the other patches.
-- `python/lab/README.md`: one sentence on how a reviewed `_for_human_review.csv` gets into the
-  cache. No product behaviour changes.
-
-## PR 2 — one loader, one type
+## PR 1 — one loader, one type
 
 - `cache.py`: `CategorizationCache` (frozen; `products: pd.DataFrame` with `product`, `category`,
   `cleaned_item_names` as `str`, unique stripped products, canonical categories; and
@@ -164,16 +143,18 @@ PR order: 2 after 1; 3 and 4 any time; 5 after 3, since both edit `categorize_wi
   take the cache, required; the step's `drop_duplicates(keep="last")` goes and its merge gets
   `validate="many_to_one"`, as does `merge_categorizations`.
 - `analyze()` and the lab's `categorize_spreadsheet_to_csvs` load the cache and pass it;
-  `entree_cache.py`, `backfill_entree_cleaned_names`, `experiments/LLM_testing.py` and
-  `product_cache.py` use the new loader.
+  `entree_cache.py`, `backfill_entree_cleaned_names`, `experiments/LLM_testing.py` and the lab's
+  `product_cache.save_historical_categorizations` use the new loader, the last appending to
+  `cache.products`.
 - Tests: `test_cache.py` rewritten around `from_frame` — a product named `NA` survives, stripping,
   blank and non-canonical categories dropped with the warning, duplicates keep the last, missing
   column raises, missing file warns; `test_steps.py`: a duplicate product raises; the
   characterization test flips — the trailing-space row is a cache hit, and the `cheese` row joins
-  the blank one at the LLM and in the review table, so it needs a scripted answer. `test_analysis.py`'s fixture keeps writing a CSV the loader
-  reads; `test_entree_cache.py` patches the new name.
+  the blank one at the LLM and in the review table, so it needs a scripted answer.
+  `test_analysis.py`'s fixture keeps writing a CSV the loader reads, and the patches of
+  `categorization_cache_path` stay.
 
-## PR 3 — accept what the model means
+## PR 2 — accept what the model means
 
 - `steps.py`: `categorize_with_llm` maps each answer through a normalized-name table built from
   the canonical list plus `"No Matches Found"`; an unrecognized answer becomes
@@ -191,7 +172,7 @@ PR order: 2 after 1; 3 and 4 any time; 5 after 3, since both edit `categorize_wi
   still unrecognized; and a diff of `1. Categorize Runscript.py`'s output on a real client file
   before and after, reviewed by GBD's data scientist.
 
-## PR 4 — typed input, no re-parsing
+## PR 3 — typed input, no re-parsing
 
 - `categorize_unique_products` asserts its dtypes, drops `date_format`, the two parsing calls and
   the dead NaN check, and keeps the `product` strip (it is the match key rule, and cheap).
@@ -201,7 +182,7 @@ PR order: 2 after 1; 3 and 4 any time; 5 after 3, since both edit `categorize_wi
 - Tests: `test_pipeline.py` hands typed frames; a `str` date column and a NaN product are rejected.
   `diagnostics-split.md` PR 1 then moves `parse_and_validate_date_column` whole to the lab.
 
-## PR 5 — concurrent LLM calls
+## PR 4 — concurrent LLM calls
 
 - `steps.py`: `_map_llm_calls(fn, items)` over `ThreadPoolExecutor(LLM_CONCURRENCY)` as decided,
   used by `clean_product_names` and `categorize_with_llm`; `print_progress` per completion.
@@ -217,17 +198,17 @@ PR order: 2 after 1; 3 and 4 any time; 5 after 3, since both edit `categorize_wi
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; PRs 1, 2 and 4 also `just test-lab`.
-- PRs 2–5 change what `analyze()` runs: also `pnpm test:system`.
-- PR 2: `python -m worker_child.mock_llm` on a run directory both with and without
+- Every PR: `just lint && just check && just test`; PRs 1 and 3 also `just test-lab`.
+- Every PR changes what `analyze()` runs: also `pnpm test:system`.
+- PR 1: `python -m worker_child.mock_llm` on a run directory both with and without
   `data_files/previously_categorized_items.csv` present.
-- PR 3: the live 200-product sample and the runscript diff above.
+- PR 2: the live 200-product sample and the runscript diff above.
 
 ## Risks
 
 - The prompt rewrite changes categorizations on real data; the runscript diff is the check, and
   it needs `OPENAI_API_KEY` and a client file only GBD has.
-- PR 2 turns 126 silently dropped cache rows into LLM calls the first time each product appears;
+- PR 1 turns 126 silently dropped cache rows into LLM calls the first time each product appears;
   the WARNING names them so GBD can fix the file.
 - Rate limits: with N threads a 429 storm costs N × 5 attempts before `upstream_api`; start at the
   constant and check the account's tier for gpt-4.1-mini before raising it.

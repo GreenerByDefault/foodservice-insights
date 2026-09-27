@@ -51,7 +51,7 @@ lab (`plotting_extras.py`, `pilot/plots.py`, `pilot/analysis.py`).
   **Open:** whether the export tables move with the QA workbook or stay because most checks
   compute them on the way to their findings. Measure per check before deciding.
 - **Typed inputs at the boundary.** `categorize_unique_products` takes `datetime64` dates and float
-  weights (`categorization-pipeline.md` PR 4) and the report takes `Literal` modes and regions
+  weights (`categorization-pipeline.md` PR 3) and the report takes `Literal` modes and regions
   (`build_food_report`). Parsing text is the lab's: free-text modes resolve only in the lab's
   `food_report/pipeline.py`, and `run_all_diagnostics` builds its `ReportMode` from its `serving`
   flag.
@@ -65,7 +65,7 @@ lab (`plotting_extras.py`, `pilot/plots.py`, `pilot/analysis.py`).
 Thresholds and checks stay in the product; the messy-input parsing and the meat check go to the
 lab, per the decision, and the meat check's two tests leave `test_diagnostics.py` with it.
 `parse_and_validate_date_column` keeps only its `datetime64` pass in the product if any product
-caller remains after `categorization-pipeline.md` PR 4; otherwise it moves whole.
+caller remains after `categorization-pipeline.md` PR 3; otherwise it moves whole.
 
 `thresholds.py` takes the loader without the `_ThresholdLoader` shim, and `_override_thresholds`
 patches the path where it now lives. `checks.py` takes `detect_unusual_sales` without its legacy

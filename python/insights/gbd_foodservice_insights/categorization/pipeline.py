@@ -12,21 +12,17 @@ All helper logic lives in sibling modules:
 
     steps.py    — historical reuse, name cleaning, LLM categorization, merge-back
     reviews.py  — human-review table construction
-    cache.py    — reviewed/unreviewed cache persistence, promotion
+    cache.py    — the reviewed cache, read-only
 """
 
 import logging
 from dataclasses import dataclass
-from typing import Literal
 
 import pandas as pd
 
 from gbd_foodservice_insights.categorization.cache import (
-    _validate_cache_write_mode,
     build_cleaned_name_reuse_index,
     get_previously_categorized_items,
-    save_historical_categorizations,
-    save_unreviewed_web_app_categorizations,
 )
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.reviews import build_ai_review_table
@@ -59,19 +55,14 @@ def categorize_unique_products(
     df: pd.DataFrame,
     llm: LlmClient,
     historical_categorizations: pd.DataFrame | None = None,
-    cache_write_mode: Literal["none", "reviewed", "web_app_unreviewed"] = "none",
     date_format: str | None = None,
 ) -> CategorizedProducts:
     """Clean the input and assign a GBD emissions category to each unique product.
 
     `df` needs product, date, and weight columns. Reads the packaged category cache when
-    `historical_categorizations` is None. `cache_write_mode` picks where new categorizations
-    are appended: "none" (nowhere), "reviewed" (the reviewed historical cache), or
-    "web_app_unreviewed" (the unreviewed web-app cache). `date_format=None` auto-detects the
-    date format.
+    `historical_categorizations` is None, and never writes it. `date_format=None` auto-detects
+    the date format.
     """
-    cache_write_mode = _validate_cache_write_mode(cache_write_mode)
-
     # --- Validate required columns ---
     for col in ("product", "date", "weight"):
         if col not in df.columns:
@@ -126,14 +117,6 @@ def categorize_unique_products(
         original_df=df,
         unique_products_df=unique_products_df,
     )
-
-    # --- Update historical cache ---
-    if cache_write_mode == "reviewed":
-        save_historical_categorizations(unique_products_df)
-    elif cache_write_mode == "web_app_unreviewed":
-        save_unreviewed_web_app_categorizations(unique_products_df)
-    else:
-        logger.info("Category cache writes disabled (cache_write_mode='none').")
 
     # Provenance breakdown (raw-history / cleaned-name-history / llm) for the
     # cleaned-name reuse hit-rate. Cast to plain str/int so the summary stays

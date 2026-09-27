@@ -102,7 +102,6 @@ def analyze(
         df,
         llm,
         historical_categorizations=get_previously_categorized_items(),
-        cache_write_mode="none",
     )
     df_final, _counts = merge_categorizations(
         categorized.cleaned_df, categorized.unique_products_df

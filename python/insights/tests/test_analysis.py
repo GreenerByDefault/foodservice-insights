@@ -66,8 +66,7 @@ def cache_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Where the categorization cache is read from — absent unless a test writes it, so a
     developer's local copy of the real cache never leaks into these tests."""
     path = tmp_path / "previously_categorized_items.csv"
-    monkeypatch.setattr(cache, "_historical_cache_path", lambda: path)
-    monkeypatch.setattr(cache, "_web_app_unreviewed_cache_path", lambda: tmp_path / "absent.csv")
+    monkeypatch.setattr(cache, "categorization_cache_path", lambda: path)
     return path
 
 

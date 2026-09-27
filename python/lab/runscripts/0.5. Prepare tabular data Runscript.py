@@ -42,7 +42,6 @@ SUB_CLIENT = (
 config = detect_client_structure(has_sub_client=SUB_CLIENT, step="prepare_tabular")
 client = config["client"]
 baseline_pilot = config["baseline_pilot"]
-analysis_context = config["analysis_context"]
 procurement_serving = config["procurement_serving"]
 sub_client_name = config["sub_client_name"]
 base_filepath = config["base_filepath"]
@@ -278,8 +277,6 @@ cmd = [
     str(script_path),
     "--input",
     str(output_file),
-    "--analysis-context",
-    analysis_context,
     "--data-type",
     data_type,
 ]
@@ -291,7 +288,7 @@ subprocess.run(args=cmd, check=True)  # nosec B603
 # %%
 # Optional: manually promote reviewed categorizations into the main reviewed cache.
 # Only set this to True after manually editing the *_for_human_review.csv file.
-from gbd_foodservice_insights.categorization.cache import (
+from gbd_foodservice_insights_lab.categorization.product_cache import (
     promote_local_review_file_to_reviewed_cache,
 )
 
