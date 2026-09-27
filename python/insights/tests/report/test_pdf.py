@@ -1,14 +1,26 @@
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report import pdf as pdf_module
+from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
 from gbd_foodservice_insights.report.pdf import (
+    _executive_narrative,
+    _format_animal_emissions_intensity_for_pdf,
+    _format_category_template_for_pdf,
+    _format_decision_kpis_for_pdf,
+    _format_substitution_scenarios_for_pdf,
     _wrap_text_lines,
     _wrap_to_width,
     build_pdf_report,
+    write_report_pdf,
 )
+from gbd_foodservice_insights.report.quality import summarize_findings
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
 from PyPDF2 import PdfReader
@@ -243,3 +255,328 @@ def test_build_pdf_report_handles_long_decision_kpi_text(tmp_path: Path) -> None
     reader = PdfReader(str(output_path))
     assert output_path.exists()
     assert len(reader.pages) >= 4
+
+
+# ----------------------------------------------------------------------
+# Tests for the PDF table formatters
+# ----------------------------------------------------------------------
+
+
+def test_format_animal_emissions_intensity_renames_orders_and_rounds() -> None:
+    table = pd.DataFrame(
+        {
+            "category": ["Beef and Buffalo Meat"],
+            "kilos_total": [22.4],
+            "total_kg_co2e": [909.7],
+            "kg_co2e_per_kg_food": [41.3549],
+        }
+    )
+
+    pd.testing.assert_frame_equal(
+        _format_animal_emissions_intensity_for_pdf(table),
+        pd.DataFrame(
+            {
+                "Category": ["Beef and Buffalo Meat"],
+                "Kilos of Food": pd.array([22], dtype="Int64"),
+                "CO2e Per Kg Food": [41.35],
+                "Kg CO2e Kg": pd.array([910], dtype="Int64"),
+            }
+        ),
+    )
+
+
+def test_format_category_template_titles_string_labels_only() -> None:
+    table = pd.DataFrame(
+        {"2024-01": [10.0], "grand_total": [10.0], 7: [1.0]},
+        index=pd.Index(["Beef and Buffalo Meat"], name="category"),
+    )
+
+    pd.testing.assert_frame_equal(
+        _format_category_template_for_pdf(table),
+        pd.DataFrame(
+            {"2024-01": [10.0], "Grand Total": [10.0], 7: [1.0]},
+            index=pd.Index(["Beef and Buffalo Meat"], name="Category"),
+        ),
+    )
+
+
+def test_format_category_template_leaves_an_unnamed_index_unnamed() -> None:
+    table = pd.DataFrame({"total": [10.0]}, index=["Legumes"])
+
+    pd.testing.assert_frame_equal(
+        _format_category_template_for_pdf(table),
+        pd.DataFrame({"Total": [10.0]}, index=["Legumes"]),
+    )
+
+
+def test_format_decision_kpis_drops_internal_columns_and_rounds() -> None:
+    table = pd.DataFrame(
+        {
+            "KPI": ["Top 1 animal products share of animal-product emissions"],
+            "Value": [38.84],
+            "Unit": ["%"],
+            "Denominator": ["Animal-product emissions only"],
+            "Top products": ["Ground Beef"],
+            "Top product emissions (kg CO2e)": ["n/a"],
+            "Total animal emissions (kg CO2e)": [909.7],
+        }
+    )
+
+    pd.testing.assert_frame_equal(
+        _format_decision_kpis_for_pdf(table),
+        pd.DataFrame(
+            {
+                "Focus": ["Top 1 animal products share of animal-product emissions"],
+                "Share of Animal Emissions (%)": [38.8],
+                "Top Animal Products": ["Ground Beef"],
+                # A value that is not a number renders blank rather than failing the report.
+                "Top Products Kg CO2e": pd.array([pd.NA], dtype="Int64"),
+                "Total Animal Kg CO2e": pd.array([910], dtype="Int64"),
+            }
+        ),
+    )
+
+
+def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> None:
+    table = pd.DataFrame(
+        {
+            "scenario": ["10% ruminant-to-legume swap"],
+            "substitution_pct": [10.0],
+            "replaced_weight_kg": [2.2],
+            "projected_emissions_kg_co2e": [822.25],
+            "avoidable_kg_co2e": [87.45],
+            "institution_emissions_avoided_pct": [9.0149],
+        }
+    )
+
+    pd.testing.assert_frame_equal(
+        _format_substitution_scenarios_for_pdf(table),
+        pd.DataFrame(
+            {
+                "Scenario": ["10% ruminant-to-legume swap"],
+                "Weight Replaced (kg)": pd.array([2], dtype="Int64"),
+                "Projected Kg CO2e": pd.array([822], dtype="Int64"),
+                "Avoidable Kg CO2e": pd.array([87], dtype="Int64"),
+                "Institution Emissions Averted (%)": [9.01],
+            }
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "format_table",
+    [
+        _format_animal_emissions_intensity_for_pdf,
+        _format_category_template_for_pdf,
+        _format_decision_kpis_for_pdf,
+        _format_substitution_scenarios_for_pdf,
+    ],
+)
+def test_pdf_table_formatters_pass_an_empty_table_through(
+    format_table: Callable[[pd.DataFrame], pd.DataFrame],
+) -> None:
+    table = pd.DataFrame(columns=["category", "kilos_total"])
+
+    formatted = format_table(table)
+
+    pd.testing.assert_frame_equal(formatted, table)
+    assert formatted is not table
+
+
+@pytest.mark.parametrize(
+    ("format_table", "column", "expected"),
+    [
+        (_format_animal_emissions_intensity_for_pdf, "category", "Category"),
+        (_format_decision_kpis_for_pdf, "KPI", "Focus"),
+        (_format_substitution_scenarios_for_pdf, "scenario", "Scenario"),
+    ],
+)
+def test_pdf_table_formatters_skip_absent_columns(
+    format_table: Callable[[pd.DataFrame], pd.DataFrame], column: str, expected: str
+) -> None:
+    formatted = format_table(pd.DataFrame({column: ["x"], "unlisted": [1]}))
+
+    pd.testing.assert_frame_equal(formatted, pd.DataFrame({expected: ["x"]}))
+
+
+# ----------------------------------------------------------------------
+# Tests for write_report_pdf
+# ----------------------------------------------------------------------
+
+
+def _report(**overrides: Any) -> FoodReport:
+    kwargs: dict[str, Any] = {
+        "diner_meal_mapping": {"2024-01": 100, "2024-02": 120},
+        "mode": "procurement",
+        "region": "us",
+        "diner_or_meal": "diner",
+        "top_n_drivers": 5,
+    }
+    metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
+    rows = pd.DataFrame(
+        {
+            "date": ["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"],
+            "product": ["Ground Beef", "Lentils", "Ground Beef", "Lentils"],
+            "category": ["Beef and Buffalo Meat", "Legumes", "Beef and Buffalo Meat", "Legumes"],
+            metric: [10.0, 20.0, 12.0, 18.0],
+        }
+    )
+    return build_food_report(rows, **(kwargs | overrides))
+
+
+def _capture_pdf_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+    report: FoodReport,
+    charts: ReportCharts | None = None,
+) -> dict[str, Any]:
+    captured: dict[str, Any] = {}
+
+    def fake_build_pdf_report(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(pdf_module, "build_pdf_report", fake_build_pdf_report)
+    write_report_pdf(
+        report,
+        charts or ReportCharts(figures=[], findings=()),
+        Path("report.pdf"),
+        client_name="Acme",
+        baseline_pilot="pilot",
+        show_quality_successes=False,
+    )
+    return captured
+
+
+def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = _report()
+    fig = plt.figure()
+    chart_finding = {"stage": "plots", "category": "plot_failed", "status": "error"}
+    charts = ReportCharts(figures=[("caption", fig)], findings=(chart_finding,))
+
+    kwargs = _capture_pdf_kwargs(monkeypatch, report, charts)
+    plt.close(fig)
+
+    findings = [*report.findings, chart_finding]
+    tables = kwargs.pop("tables")
+    narrative = kwargs.pop("narrative")
+    assert kwargs == {
+        "output_path": "report.pdf",
+        "title_info": {
+            "client": "Acme",
+            "baseline_pilot": "pilot",
+            "procurement_serving": "procurement",
+        },
+        "plots": [("caption", fig)],
+        # A chart finding counts toward the report's quality status.
+        "summary_stats": {**report.summary_stats, "Data Quality Status": "INVALID"},
+        "quality_status": "invalid",
+        "quality_summary": summarize_findings(findings),
+        "missing_data_findings": findings,
+        "show_quality_successes": False,
+        "diner_or_meal": "diner",
+    }
+    assert list(tables) == [
+        "Category Template",
+        "Animal Emissions Intensity",
+        "Decision KPIs",
+        "Substitution Scenarios",
+    ]
+    pd.testing.assert_frame_equal(
+        tables["Decision KPIs"],
+        _format_decision_kpis_for_pdf(report.aggregation["decision_kpis"]),
+    )
+    assert narrative == {
+        "client": "Acme",
+        "period": "Jan 2024 – Feb 2024",
+        "total_food_kg": 60.0,
+        "total_co2e_kg": pytest.approx(970.5),
+        "per_dm_kg": pytest.approx(970.5 / 220),
+        "dm_label": "diner",
+        "plant_pct": 63.3,
+        "animal_pct": 36.7,
+        "top_categories": [
+            ("Beef and Buffalo Meat", pytest.approx(100 * 909.7 / 970.5)),
+            ("Legumes", pytest.approx(100 * 60.8 / 970.5)),
+        ],
+        "quality_status": "invalid",
+    }
+
+
+def test_write_report_pdf_serving_has_only_the_template_table_and_no_narrative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kwargs = _capture_pdf_kwargs(monkeypatch, _report(mode="serving", diner_or_meal="meal"))
+
+    assert list(kwargs["tables"]) == ["Category Template"]
+    assert kwargs["narrative"] is None
+    assert kwargs["diner_or_meal"] == "meal"
+
+
+def test_write_report_pdf_writes_the_pdf_and_closes_the_chart_figures(tmp_path: Path) -> None:
+    fig = plt.figure()
+    path = tmp_path / "report.pdf"
+
+    write_report_pdf(
+        _report(),
+        ReportCharts(figures=[("caption", fig)], findings=()),
+        path,
+        client_name="Acme",
+        baseline_pilot="pilot",
+        show_quality_successes=True,
+    )
+
+    assert len(PdfReader(str(path)).pages) > 0
+    assert plt.get_fignums() == []
+
+
+# ----------------------------------------------------------------------
+# Tests for _executive_narrative
+# ----------------------------------------------------------------------
+
+
+def test_executive_narrative_lists_only_the_top_three_categories() -> None:
+    report = replace(
+        _report(),
+        emissions_summary=pd.DataFrame(
+            {"category": ["a", "b", "c", "d", "e"], "total_kg_co2e": [1.0, 4.0, np.nan, 3.0, 2.0]}
+        ),
+    )
+
+    narrative = _executive_narrative(report, "Acme", "pass")
+
+    assert narrative is not None
+    assert narrative["total_co2e_kg"] == 10.0
+    assert narrative["top_categories"] == [("b", 40.0), ("d", 30.0), ("e", 20.0)]
+
+
+def test_executive_narrative_leaves_per_unit_and_split_blank_when_unknown() -> None:
+    report = replace(_report(), diner_meal_mapping={}, plant_animal_split=None)
+
+    narrative = _executive_narrative(report, "Acme", "pass")
+
+    assert narrative is not None
+    assert (narrative["per_dm_kg"], narrative["plant_pct"], narrative["animal_pct"]) == (
+        None,
+        None,
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "emissions_summary",
+    [
+        None,
+        pd.DataFrame({"category": ["Legumes"]}),
+        pd.DataFrame({"category": ["Legumes"], "total_kg_co2e": [0.0]}),
+        pd.DataFrame({"category": ["Legumes"], "total_kg_co2e": [np.nan]}),
+    ],
+    ids=["no-summary", "no-total-column", "zero-total", "all-missing"],
+)
+def test_executive_narrative_is_omitted_without_positive_emissions(
+    emissions_summary: pd.DataFrame | None,
+) -> None:
+    report = replace(_report(), emissions_summary=emissions_summary)
+
+    assert _executive_narrative(report, "Acme", "pass") is None

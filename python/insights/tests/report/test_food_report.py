@@ -115,8 +115,23 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
 
     assert report.rows["month_year"].tolist() == [JAN, JAN, FEB, FEB]
     assert report.diner_meal_mapping == {JAN: 100.0, FEB: 120.0}
-    assert report.summary_stats["Data type"] == "Procurement"
-    assert "Data Quality Status" not in report.summary_stats
+    assert report.summary_stats == {
+        "Total rows": "4",
+        "Unique products": "2",
+        "Date range": "Jan 2024 – Feb 2024",
+        "Total diners": "220",
+        "Data type": "Procurement",
+        "Region used for climate emissions factors": "US/Canada",
+        "Total CO2e": "970 kg",
+        "CO2e per diner": "4.411 kg",
+        "Plant-based (% of classified food)": "63.3%",
+        "Animal-based (% of classified food)": "36.7%",
+        "Plant-based total": "38.0 kg",
+        "Animal-based total": "22.0 kg",
+        "Plant protein share (% of protein categories)": "63.3%",
+        "Plant protein total": "38.0 kg",
+        "Protein-category total": "60.0 kg",
+    }
     assert report.emissions_summary is not None
     assert report.procurement_table("animal_emissions_intensity") is not None
 
@@ -361,7 +376,10 @@ def test_serving_mode_computes_no_emissions():
     assert "Total CO2e" not in report.summary_stats
 
 
-def test_summary_stats_falls_back_to_the_raw_region_code_for_uk():
-    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal", region="uk")
+@pytest.mark.parametrize(
+    ("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK"), ("uk", "UK")]
+)
+def test_summary_stats_names_the_emissions_factor_region(region, label):
+    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal", region=region)
 
-    assert report.summary_stats["Region used for climate emissions factors"] == "UK"
+    assert report.summary_stats["Region used for climate emissions factors"] == label

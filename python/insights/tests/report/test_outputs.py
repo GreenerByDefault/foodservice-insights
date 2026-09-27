@@ -1,12 +1,17 @@
 import json
+from dataclasses import replace
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.excel import build_qa_excel_report, write_client_workbook
-from gbd_foodservice_insights.report.food_report import build_food_report
+from gbd_foodservice_insights.report.excel import (
+    build_qa_excel_report,
+    diner_meals_frame,
+    write_client_workbook,
+)
+from gbd_foodservice_insights.report.food_report import FoodReport, build_food_report
 from gbd_foodservice_insights.report.pipeline import run_food_report
 
 
@@ -126,28 +131,33 @@ def food_report_tmp_data(tmp_path: Path):
     return input_path, diner_path, metadata_path
 
 
-def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
+def _report(**overrides: Any) -> FoodReport:
+    kwargs: dict[str, Any] = {
+        "diner_meal_mapping": {"2024-01": 100, "2024-02": 120},
+        "mode": "procurement",
+        "region": "us",
+        "diner_or_meal": "diner",
+        "top_n_drivers": 5,
+    }
+    metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
     rows = pd.DataFrame(
         {
-            "date": ["2024-01-15", "2024-01-20"],
+            "date": ["2024-01-15", "2024-02-20"],
             "product": ["Ground Beef", "Lentils"],
             "category": ["Beef and Buffalo Meat", "Legumes"],
-            "kilos_total": [10.0, 20.0],
+            metric: [10.0, 20.0],
         }
     )
-    report = build_food_report(
-        rows,
-        diner_meal_mapping={"2024-01": 100},
-        mode="procurement",
-        region="us",
-        diner_or_meal="diner",
-        top_n_drivers=5,
-    )
+    return build_food_report(rows, **(kwargs | overrides))
+
+
+def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
     output_path = tmp_path / "client.xlsx"
 
-    write_client_workbook(report, output_path)
+    write_client_workbook(_report(), output_path)
 
-    assert pd.ExcelFile(output_path).sheet_names == [
+    sheets = pd.read_excel(output_path, sheet_name=None)
+    assert list(sheets) == [
         "Monthly by Product",
         "Monthly by Category",
         "Template",
@@ -157,6 +167,32 @@ def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
         "Decision_KPIs",
         "Substitution_Scenarios",
     ]
+    assert sheets["Template"].columns.tolist() == ["category", "2024-01", "2024-02", "total"]
+    pd.testing.assert_frame_equal(
+        sheets["Diners"], pd.DataFrame({"month_year": ["2024-01", "2024-02"], "diners": [100, 120]})
+    )
+
+
+def test_write_client_workbook_serving_omits_the_emissions_tabs(tmp_path: Path):
+    output_path = tmp_path / "client.xlsx"
+
+    write_client_workbook(_report(mode="serving", diner_or_meal="meal"), output_path)
+
+    assert pd.ExcelFile(output_path).sheet_names == [
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Meals",
+    ]
+
+
+def test_diner_meals_frame_keeps_its_columns_without_a_mapping():
+    report = replace(_report(diner_or_meal="meal"), diner_meal_mapping={})
+
+    pd.testing.assert_frame_equal(
+        diner_meals_frame(report),
+        pd.DataFrame(columns=["month_year", "meals"], dtype=object),
+    )
 
 
 def test_build_qa_excel_report_includes_debug_tabs(tmp_path: Path):
@@ -179,22 +215,22 @@ def test_build_qa_excel_report_includes_debug_tabs(tmp_path: Path):
         diagnostic_sheets=payload["diagnostic_sheets"],
     )
 
-    sheet_names = pd.ExcelFile(output_path).sheet_names
-
-    assert "Monthly by Product" in sheet_names
-    assert "Monthly by Category" in sheet_names
-    assert "Template" in sheet_names
-    assert "Category Stability" in sheet_names
-    assert "Diners" in sheet_names
-    assert "Emissions Summary" in sheet_names
-    assert "Animal Emissions Intensity" in sheet_names
-    assert "Decision_KPIs" in sheet_names
-    assert "Substitution_Scenarios" in sheet_names
-    assert "Raw Data" in sheet_names
-    assert "Data_Quality_Findings" in sheet_names
-    assert "Missingness_Summary" in sheet_names
-    assert "Data Profile" in sheet_names
-    assert "Denominator_QC" in sheet_names
+    assert pd.ExcelFile(output_path).sheet_names == [
+        "Raw Data",
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Category Stability",
+        "Diners",
+        "Emissions Summary",
+        "Animal Emissions Intensity",
+        "Decision_KPIs",
+        "Substitution_Scenarios",
+        "Data_Quality_Findings",
+        "Missingness_Summary",
+        "Data Profile",
+        "Denominator_QC",
+    ]
 
 
 def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
@@ -241,87 +277,39 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
     assert Path(result["graph_paths"][0]).exists()
     assert Path(result["graph_paths"][0]).parent == Path(result["graphs_dir"])
 
-    client_sheet_names = pd.ExcelFile(result["client_excel_path"]).sheet_names
-    qa_sheet_names = pd.ExcelFile(result["qa_excel_path"]).sheet_names
-
-    assert "Raw Data" not in client_sheet_names
-    assert "Data_Quality_Findings" not in client_sheet_names
-    assert "Animal Emissions Intensity" in client_sheet_names
-    assert "Decision_KPIs" in client_sheet_names
-    assert "Substitution_Scenarios" in client_sheet_names
-    assert "Category Stability" not in client_sheet_names
-    assert "Raw Data" in qa_sheet_names
-    assert "Data_Quality_Findings" in qa_sheet_names
-    assert "Animal Emissions Intensity" in qa_sheet_names
-    assert "Decision_KPIs" in qa_sheet_names
-    assert "Substitution_Scenarios" in qa_sheet_names
-    assert "Category Stability" in qa_sheet_names
-    assert "Denominator_QC" in qa_sheet_names
-    summary_stats_value = captured_pdf_kwargs["summary_stats"]
-    tables_value = captured_pdf_kwargs["tables"]
-    assert isinstance(summary_stats_value, dict)
-    assert isinstance(tables_value, dict)
-    summary_stats = cast(dict[str, str], summary_stats_value)
-    tables = cast(dict[str, pd.DataFrame], tables_value)
-
-    assert "Plant protein share (% of protein categories)" in summary_stats
-    assert "Plant-based total" in summary_stats
-    assert summary_stats["Plant-based total"].endswith(" kg")
-    assert "Animal-based total" in summary_stats
-    assert summary_stats["Animal-based total"].endswith(" kg")
-    assert "Plant protein total" in summary_stats
-    assert summary_stats["Plant protein total"].endswith(" kg")
-    assert "Protein-category total" in summary_stats
-    assert summary_stats["Protein-category total"].endswith(" kg")
-    assert summary_stats["Region used for climate emissions factors"] == "US/Canada"
-    assert "Animal Emissions Intensity" in tables
-    assert "Decision KPIs" in tables
-    assert "Substitution Scenarios" in tables
-    animal_pdf_table = tables["Animal Emissions Intensity"]
-    assert animal_pdf_table.columns.tolist() == [
-        "Category",
-        "Kilos of Food",
-        "CO2e Per Kg Food",
-        "Kg CO2e Kg",
+    assert pd.ExcelFile(result["client_excel_path"]).sheet_names == [
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Diners",
+        "Emissions Summary",
+        "Animal Emissions Intensity",
+        "Decision_KPIs",
+        "Substitution_Scenarios",
     ]
-    assert animal_pdf_table["Kilos of Food"].tolist() == [5]
-    assert animal_pdf_table["Kg CO2e Kg"].dtype.name == "Int64"
-    assert animal_pdf_table["Kg CO2e Kg"].iloc[0] == round(
-        float(animal_pdf_table["Kg CO2e Kg"].iloc[0])
-    )
-    assert animal_pdf_table["CO2e Per Kg Food"].iloc[0] == round(
-        float(animal_pdf_table["CO2e Per Kg Food"].iloc[0]), 2
-    )
-    decision_kpi_pdf_table = tables["Decision KPIs"]
-    assert decision_kpi_pdf_table.columns.tolist() == [
-        "Focus",
-        "Share of Animal Emissions (%)",
-        "Top Animal Products",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
+    assert pd.ExcelFile(result["qa_excel_path"]).sheet_names == [
+        "Raw Data",
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Category Stability",
+        "Diners",
+        "Emissions Summary",
+        "Animal Emissions Intensity",
+        "Decision_KPIs",
+        "Substitution_Scenarios",
+        "Data_Quality_Findings",
+        "Missingness_Summary",
+        "Data Profile",
+        "Denominator_QC",
+        "Aggregation_Reconciliation",
     ]
-    substitution_pdf_table = tables["Substitution Scenarios"]
-    assert substitution_pdf_table.columns.tolist() == [
-        "Scenario",
-        "Weight Replaced (kg)",
-        "Projected Kg CO2e",
-        "Avoidable Kg CO2e",
-        "Institution Emissions Averted (%)",
+    assert list(cast(dict[str, pd.DataFrame], captured_pdf_kwargs["tables"])) == [
+        "Category Template",
+        "Animal Emissions Intensity",
+        "Decision KPIs",
+        "Substitution Scenarios",
     ]
-    assert substitution_pdf_table["Weight Replaced (kg)"].dtype.name == "Int64"
-    assert substitution_pdf_table["Projected Kg CO2e"].dtype.name == "Int64"
-    assert substitution_pdf_table["Avoidable Kg CO2e"].dtype.name == "Int64"
-    assert all(
-        float(value).is_integer()
-        for value in substitution_pdf_table["Weight Replaced (kg)"].dropna()
-    )
-    assert all(
-        float(value).is_integer() for value in substitution_pdf_table["Projected Kg CO2e"].dropna()
-    )
-    assert all(
-        float(value).is_integer() for value in substitution_pdf_table["Avoidable Kg CO2e"].dropna()
-    )
-    assert "Category Stability (Highest / Lowest Months)" not in tables
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["run_status"] == "success"
@@ -344,17 +332,17 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
     plt.close(fig)
 
 
-def test_run_food_report_uses_europe_friendly_region_summary_label(
+def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
     monkeypatch, food_report_tmp_data, tmp_path: Path
 ):
-    input_path, diner_path, _metadata_path = food_report_tmp_data
-    captured_pdf_kwargs: dict[str, object] = {}
+    input_path, diner_path, _ = food_report_tmp_data
 
-    def fake_build_pdf_report(output_path: str, **kwargs: object) -> str:
-        captured_pdf_kwargs.update(kwargs)
-        path = Path(output_path)
-        path.write_text("placeholder pdf")
-        return str(path)
+    def fake_build_pdf_report(output_path: str, **_: object) -> str:
+        Path(output_path).write_text("placeholder pdf")
+        return output_path
+
+    def fail(_df: pd.DataFrame) -> pd.DataFrame:
+        raise ValueError("profile boom")
 
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.pdf.build_pdf_report",
@@ -364,20 +352,20 @@ def test_run_food_report_uses_europe_friendly_region_summary_label(
         "gbd_foodservice_insights.report.plots.generate_all_report_plots",
         lambda **kwargs: [],
     )
+    monkeypatch.setattr(
+        "gbd_foodservice_insights.report.diagnostics.summarise_numeric_columns", fail
+    )
 
-    run_food_report(
+    result = run_food_report(
         input_file=input_path,
         diner_meal_file=diner_path,
         output_dir=tmp_path,
         procurement_serving="procurement",
-        region="europe",
         missing_data_policy="warn_continue",
     )
 
-    summary_stats_value = captured_pdf_kwargs["summary_stats"]
-    assert isinstance(summary_stats_value, dict)
-    summary_stats = cast(dict[str, str], summary_stats_value)
-    assert summary_stats["Region used for climate emissions factors"] == "EU/UK"
+    assert result["run_status"] == "success"
+    assert "Data Profile" not in pd.ExcelFile(result["qa_excel_path"]).sheet_names
 
 
 def test_run_food_report_defaults_outputs_to_named_subdirectory(monkeypatch, food_report_tmp_data):
