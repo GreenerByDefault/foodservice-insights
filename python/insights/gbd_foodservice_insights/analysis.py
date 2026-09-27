@@ -24,8 +24,6 @@ already returns it as its `summary` dict (`n_rows_before`, `n_products_after`,
 `row_elimination_details`, `match_type_counts`, ...); `AnalysisOutcome` is where it would arrive.
 """
 
-import json
-import shutil
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,7 +43,9 @@ from gbd_foodservice_insights.errors import InvalidInputError as InvalidInputErr
 from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataError
 from gbd_foodservice_insights.errors import UpstreamApiError as UpstreamApiError
 from gbd_foodservice_insights.input_csv import read_input_csv
-from gbd_foodservice_insights.report.pipeline import run_food_report
+from gbd_foodservice_insights.report.excel import write_client_workbook
+from gbd_foodservice_insights.report.food_report import build_food_report, build_report_charts
+from gbd_foodservice_insights.report.pdf import write_report_pdf
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 type ReportProgress = Callable[[], None]
@@ -59,7 +59,7 @@ class AnalysisRequest:
     run_id: str  # opaque; log correlation only
     input_csv: Path  # product,date,weight — UTF-8, ISO dates, plain numbers
     output_directory: Path  # where to write the pdf and xlsx
-    work_directory: Path  # scratch; discarded after the run
+    work_directory: Path  # scratch; discarded after the run. Unused: the run layout is contract
     report_name: str | None
     site_name: str | None
     organization_name: str
@@ -105,48 +105,49 @@ def analyze(
         dayfirst_preference=False,
     )
 
-    # `run_food_report` reads its input from a file and reads `client_metadata.json` from beside
-    # it; it also writes graphs, a QA workbook, a manifest and a log. `work_directory` is
-    # discarded, so all of that happens there and only the two deliverables are moved out.
-    report_input = request.work_directory / "categorized_report.csv"
-    df_final.rename(columns={"weight": "kilos_total"})[
+    rows = df_final.rename(columns={"weight": "kilos_total"})[
         ["date", "product", "category", "kilos_total"]
-    ].to_csv(report_input, index=False)
-    (request.work_directory / "client_metadata.json").write_text(
-        json.dumps(
-            {
-                "client": _title(request),
-                "baseline_pilot": "baseline",
-                "procurement_serving": "procurement",
-            }
-        ),
-        encoding="utf-8",
-    )
-    result = run_food_report(
-        input_file=report_input,
+    ].reset_index(drop=True)
+    # Past `read_input_csv` and `apps/web`'s month-coverage check, an error finding can only be
+    # our bug, so `hard_fail` lets it land as `unknown` rather than ship a report with sheets
+    # silently missing. `warn_continue` once shipped a report with no per-diner figures and no
+    # error, after it rejected `monthly_counts`.
+    report = build_food_report(
+        rows,
         diner_meal_mapping=request.monthly_counts,
-        output_dir=request.work_directory / "report",
-        procurement_serving="procurement",
-        diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
+        mode="procurement",
         region="us",
+        diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
+        top_n_drivers=5,
         missing_data_policy="hard_fail",
-        show_quality_successes=False,
         report_progress=report_progress,
     )
-    return AnalysisOutcome(
-        pdf=_move(result["pdf_path"], request.output_directory / "report.pdf"),
-        xlsx=_move(result["client_excel_path"], request.output_directory / "report.xlsx"),
+
+    report_progress()
+    charts = build_report_charts(report)
+
+    report_progress()
+    pdf_path = request.output_directory / "report.pdf"
+    write_report_pdf(
+        report,
+        charts,
+        pdf_path,
+        client_name=_title(request),
+        baseline_pilot="baseline",
+        show_quality_successes=False,
     )
+
+    report_progress()
+    xlsx_path = request.output_directory / "report.xlsx"
+    write_client_workbook(report, xlsx_path)
+
+    return AnalysisOutcome(pdf=pdf_path, xlsx=xlsx_path)
 
 
 def _title(request: AnalysisRequest) -> str:
     if not request.site_name:
         return request.organization_name
     return f"{request.organization_name} — {request.site_name}"
-
-
-def _move(source: str | Path, destination: Path) -> Path:
-    return Path(shutil.move(source, destination))
 
 
 @dataclass(frozen=True)

@@ -73,35 +73,40 @@ def cache_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 class FakeReport:
-    """Stands in for `run_food_report`, which takes seconds, to check what `analyze()` hands
-    it."""
+    """Stands in for `build_food_report` and the writers after it, which take seconds, to check
+    what `analyze()` hands them."""
 
     def __init__(self) -> None:
+        self.rows = pd.DataFrame()
         self.kwargs: dict[str, Any] = {}
+        self.pdf_kwargs: dict[str, Any] = {}
 
-    def __call__(self, **kwargs: Any) -> dict[str, str]:
+    def build_food_report(self, rows: pd.DataFrame, **kwargs: Any) -> object:
+        self.rows = rows
         self.kwargs = kwargs
-        output_dir = Path(kwargs["output_dir"])
-        output_dir.mkdir()
-        pdf = output_dir / "food_report.pdf"
-        xlsx = output_dir / "food_report.xlsx"
-        pdf.write_bytes(b"%PDF-fake")
-        xlsx.write_bytes(b"PK-fake")
-        return {"pdf_path": str(pdf), "client_excel_path": str(xlsx)}
+        return object()
 
-    def input_df(self) -> pd.DataFrame:
-        return pd.read_csv(self.kwargs["input_file"])
+    def build_report_charts(self, report: object) -> object:
+        return object()
 
-    def client_metadata(self) -> dict[str, str]:
-        return json.loads(
-            (Path(self.kwargs["input_file"]).parent / "client_metadata.json").read_text()
-        )
+    def write_report_pdf(self, report: object, charts: object, path: Path, **kwargs: Any) -> None:
+        self.pdf_kwargs = kwargs
+        path.write_bytes(b"%PDF-fake")
+
+    def write_client_workbook(self, report: object, path: Path) -> None:
+        path.write_bytes(b"PK-fake")
 
 
 @pytest.fixture
 def fake_report(monkeypatch: pytest.MonkeyPatch) -> FakeReport:
     fake = FakeReport()
-    monkeypatch.setattr(analysis, "run_food_report", fake)
+    for name in (
+        "build_food_report",
+        "build_report_charts",
+        "write_report_pdf",
+        "write_client_workbook",
+    ):
+        monkeypatch.setattr(analysis, name, getattr(fake, name))
     return fake
 
 
@@ -139,9 +144,25 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     assert workbook["Diners"].to_dict("records") == [
         {"month_year": month, "diners": 1000} for month in SAMPLE_MONTHS
     ]
-    # One per LLM call, plus one per `run_food_report` stage.
+    # One per LLM call, plus one per `build_food_report` stage and one before each of the
+    # charts, the PDF and the workbook.
     assert llm.calls
-    assert progress_calls == len(llm.calls) + 15
+    assert progress_calls == len(llm.calls) + 11
+
+
+class NaIsCheeseLlmClient(KeywordLlmClient):
+    def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+        return "Cheese" if item == "na" else super().match_product_to_category(item, categories)
+
+
+def test_a_product_named_like_a_missing_value_survives(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    request.input_csv.write_text(sample_input_csv(("NA", *KEYWORD_PRODUCTS)))
+
+    outcome = analyze(request, llm=NaIsCheeseLlmClient())
+
+    products = pd.read_excel(outcome.xlsx, sheet_name="Monthly by Product", keep_default_na=False)
+    assert "NA" in products["product"].tolist()
 
 
 GOLDEN_PATH = Path(__file__).parent / "data" / "analysis_golden.json"
@@ -223,7 +244,7 @@ def test_analyze_golden_deliverables(
 
 
 # ----------------------------------------------------------------------
-# Tests for what analyze() hands run_food_report
+# Tests for what analyze() hands the report
 # ----------------------------------------------------------------------
 
 
@@ -235,14 +256,24 @@ def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
 
     analyze(request, llm=KeywordLlmClient())
 
-    assert fake_report.input_df().to_dict("records") == [
-        {"date": f"{month}-15", "product": product, "category": category, "kilos_total": 10.0}
-        for month in SAMPLE_MONTHS
-        for product, category in (
-            ("Cheddar Cheese", "Cheese"),
-            ("Chicken Thigh", "Poultry (Chicken & Turkey)"),
-        )
-    ]
+    pd.testing.assert_frame_equal(
+        fake_report.rows,
+        pd.DataFrame(
+            [
+                {
+                    "date": pd.Timestamp(f"{month}-15"),
+                    "product": product,
+                    "category": category,
+                    "kilos_total": 10.0,
+                }
+                for month in SAMPLE_MONTHS
+                for product, category in (
+                    ("Cheddar Cheese", "Cheese"),
+                    ("Chicken Thigh", "Poultry (Chicken & Turkey)"),
+                )
+            ]
+        ),
+    )
 
 
 def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -> None:
@@ -251,7 +282,7 @@ def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -
 
     analyze(request, llm=KeywordLlmClient())
 
-    assert fake_report.input_df()["kilos_total"].tolist() == [pytest.approx(10 * LB_TO_KG)]
+    assert fake_report.rows["kilos_total"].tolist() == [pytest.approx(10 * LB_TO_KG)]
 
 
 @pytest.mark.parametrize(
@@ -279,20 +310,18 @@ def test_hands_the_report_the_forms_answers(
     analyze(request, report_progress=report_progress, llm=KeywordLlmClient())
 
     assert fake_report.kwargs == {
-        "input_file": request.work_directory / "categorized_report.csv",
         "diner_meal_mapping": request.monthly_counts,
-        "output_dir": request.work_directory / "report",
-        "procurement_serving": "procurement",
-        "diner_or_meal": diner_or_meal,
+        "mode": "procurement",
         "region": "us",
+        "diner_or_meal": diner_or_meal,
+        "top_n_drivers": 5,
         "missing_data_policy": "hard_fail",
-        "show_quality_successes": False,
         "report_progress": report_progress,
     }
-    assert fake_report.client_metadata() == {
-        "client": client,
+    assert fake_report.pdf_kwargs == {
+        "client_name": client,
         "baseline_pilot": "baseline",
-        "procurement_serving": "procurement",
+        "show_quality_successes": False,
     }
 
 
@@ -309,8 +338,9 @@ def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: Fake
 
     analyze(request, report_progress=lambda: progress.append(len(llm.calls)), llm=llm)
 
-    # Each report comes after its call has been recorded.
-    assert progress == [1, 2]
+    # Each report comes after its call has been recorded. The last three are `analyze()`'s own,
+    # before the charts, the PDF and the workbook.
+    assert progress == [1, 2, 2, 2, 2]
     assert llm.calls == [("clean", "Cheddar Cheese"), ("match", "cheddar cheese")]
 
 
@@ -333,7 +363,7 @@ def test_a_cached_product_skips_the_llm(
     analyze(request, llm=llm)
 
     assert llm.calls == [("clean", "Pork Loin"), ("match", "pork loin")]
-    assert fake_report.input_df()["category"].tolist() == ["Cheese", "Pork (pig meat)"]
+    assert fake_report.rows["category"].tolist() == ["Cheese", "Pork (pig meat)"]
 
 
 # ----------------------------------------------------------------------

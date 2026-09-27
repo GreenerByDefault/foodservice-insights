@@ -6,14 +6,15 @@
 a time. It reads a CSV, finds `client_metadata.json` beside it, names its outputs after the
 file's stem, and writes a seven-part bundle: the PDF, the client workbook, a QA workbook, a
 300-dpi PNG of every chart, a manifest, a run log, and a write-back into the metadata.
-`analyze()` needs two of those files. To get them it writes its DataFrame to CSV, fakes the
-metadata, and throws the rest away in `work_directory`.
 
 The in-memory core now exists. `report/food_report.py` holds `build_food_report`, which runs
 every stage from ingestion through diagnostics with no files and no log handlers, and
 `build_report_charts`. `pdf.write_report_pdf` and `excel.write_client_workbook` write the two
-deliverables. `run_food_report` in `report/pipeline.py` composes those four, then writes the
-rest of the bundle itself. `analyze()` still calls `run_food_report`.
+deliverables. `analyze()` calls those four directly on its categorized DataFrame and writes
+`report.pdf` and `report.xlsx` straight into `output_directory`, so `work_directory` goes unused
+(it stays on the seam because the run-directory layout is contract). `run_food_report` composes
+the same four, then writes the rest of the bundle itself; nothing in the product calls it any
+more, only its own tests and the lab's step 2 runscript.
 
 `tests/test_analysis.py::test_analyze_golden_deliverables` goes through `analyze()`, the one path
 that survives every PR here. It records what `pdf.build_pdf_report` is handed (title info,
@@ -30,20 +31,11 @@ every file wrapper.
 Nothing outside tests reads the graphs, QA workbook, manifest, log or metadata write-back; the
 step 2 runscript only prints their paths. They are for people, and the people are in the lab.
 
-Measured on synthetic procurement data, one run per size on a loaded laptop, so read the
-proportions rather than the seconds:
-
-| | 5k rows, 400 products | 30k rows, 2k products |
-| --- | --- | --- |
-| Whole report | 6.1 s | 18.5 s |
-| QA workbook | 1.1 s | 10.6 s |
-| PNG export | 2.2 s | 2.2 s |
-| QA diagnostic sheets | 0.1 s | 1.1 s |
-
-The web app needs none of the last three. The QA workbook is the one that grows: it writes every
-raw row through openpyxl, and the upload cap allows a few hundred thousand. End to end, an
-uncached run is still dominated by LLM calls, which is `categorization-pipeline.md`'s concurrency
-PR, not this one.
+What moving `analyze()` off the bundle bought, on synthetic procurement data (30k rows, 2k
+products, offline LLM): the report stage went from about 10.3 s to 3.7 s, mostly the PNG export
+and the QA workbook, which writes every raw row through openpyxl and so grows with the upload.
+Those slow runs now happen only in `run_food_report`'s own tests, so moving them to the lab
+makes `just test` faster.
 
 ## Decisions
 
@@ -73,8 +65,9 @@ PR, not this one.
   manifest still gets a quality summary, since `build_food_report` returns nothing when it
   raises.
 - **Progress is split between the stages.** `build_food_report` reports its 8 stages. The
-  caller reports charts, the PDF and the workbook, since those calls are separate, and
-  `run_food_report` reports its bundle stages on top, for 15.
+  caller reports charts, the PDF and the workbook, since those calls are separate: `analyze()`
+  reports one before each, for 11, and `run_food_report` reports its bundle stages on top, for
+  15.
 - **Charts are their own step, not part of `FoodReport`**, so a notebook, a unit test or a future
   result-metadata field that only wants numbers never renders thirty-odd figures. The cost is
   that plot findings arrive late: the quality status and summary, the "Data Quality Status"
@@ -103,42 +96,7 @@ PR, not this one.
   (`get_customer_template_dir()`), and those copies live in gitignored `client_work/`, out of
   our reach.
 
-## PR 1: `analyze()` uses the core directly
-
-- `analyze()` calls `build_food_report` on `df_final` (with `weight` renamed to `kilos_total`),
-  then `build_report_charts`, `write_report_pdf` and `write_client_workbook`, writing
-  `report.pdf` and `report.xlsx` straight into `output_directory`: no CSV round trip,
-  no `client_metadata.json`, no `_move`. `work_directory` goes unused and stays on the seam,
-  since the run-directory layout is contract.
-- The behaviour changes, all intended:
-  - No graphs, QA workbook, manifest or log are written.
-  - Progress stages drop from 15 to 11: `build_food_report`'s 8, plus one that `analyze()`
-    reports before each of the charts, the PDF and the workbook.
-  - A product named `NA`, `null` or `None` no longer turns into NaN on the `read_csv` round
-    trip and hard-fails the run.
-  - `run_logging`'s bump of the package logger to INFO no longer sends INFO lines to the
-    child's stderr.
-- Check before relying on it: `parse_and_validate_date_column` now sees `datetime64` rather than
-  ISO strings. Its docstring says it handles native datetimes; the golden test proves it.
-- Put the `hard_fail` rationale on the `build_food_report` call in `analyze()`, since the port
-  plan that held it is gone: past `read_input_csv` and `apps/web`'s month-coverage check, an error
-  finding can only be our bug, so it lands as `unknown` rather than shipping a report with sheets
-  silently missing. *Rejected: `warn_continue`* — a rejected `monthly_counts` shipped a report
-  with no per-diner figures and no error. (`report-correctness.md` is what makes that sentence
-  true: today two data-driven checks can still raise under `hard_fail`.)
-
-**Testing:**
-
-- The golden test passes unchanged: the same deliverable, from a different path.
-- `FakeReport` becomes a fake `build_food_report` that records the DataFrame and kwargs, so
-  `test_analysis.py` asserts the frame with `assert_frame_equal` instead of reading a CSV. The
-  `client_metadata.json` assertions go, and the title moves to the `client_name` that
-  `write_report_pdf` is handed.
-- `test_analyze_writes_a_real_report_end_to_end`: `+ 15` becomes `+ 11`.
-- A regression test for a product named `NA`.
-- The PR body carries before and after timings on a 30k-row synthetic input.
-
-## PR 2: move the bundle to the lab
+## PR 1: move the bundle to the lab
 
 - Move `pipeline.py` and the rest of the bundle-only code listed in Decisions into
   `gbd_foodservice_insights_lab/food_report/`.
@@ -160,7 +118,7 @@ PR, not this one.
   --diner-meals Y` to `run_food_report(input_file=X, diner_meal_file=Y)`, since existing client
   folders depend on it.
 
-## PR 3: step 1.5 calls the report in-process (lab only)
+## PR 2: step 1.5 calls the report in-process (lab only)
 
 - The last cell of `1.5. Clean Units Runscript.py` calls
   `run_food_report(input_file=output_file, diner_meal_mapping=diners_map)` and prints the
@@ -171,20 +129,15 @@ PR, not this one.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`, plus `just test-lab` for PRs 2 and 3.
-- PR 1 changes what `analyze()` runs: also `pnpm test:system`, which runs a real report through
-  both images on `mock-llm`, and one real run through `pnpm dev`, with its PDF and workbook
-  compared side by side against a run of the same upload from `main`.
-- PRs 2 and 3: run steps 1.5 → 2 on `lab/test_data` in a scratch client folder, and diff the
+- Every PR: `just lint && just check && just test && just test-lab`.
+- Every PR: run steps 1.5 → 2 on `lab/test_data` in a scratch client folder, and diff the
   client workbook against a run from `main`.
 
 ## Risks
 
 - **The golden test pins today's numbers, bugs included.** A fix to a number regenerates it with
   `UPDATE_GOLDEN=1`, and the fixture diff is the review.
-- **Near-duplicate product names are O(n²) in unique products.** The check runs twice today
-  (once in diagnostics, once for the QA workbook) and once after PR 1, and for web runs it only
-  ever yields `info`. Measure it at large product counts before skipping it, which would be a
-  behaviour change.
-- **Conflicts.** `categorization-cache.md` PR 5 and `entree-detection-to-lab.md` PR 1 also edit
-  `analyze()`; whichever lands second rebases.
+- **Near-duplicate product names are O(n²) in unique products.** It runs once per web run (in
+  diagnostics) and twice per `run_food_report` run (again for the QA workbook), and for web runs
+  it only ever yields `info`. Measure it at large product counts before skipping it, which would
+  be a behaviour change.
