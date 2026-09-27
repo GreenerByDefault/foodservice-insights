@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -13,16 +14,16 @@ from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
     format_month_labels,
-    plot_time_series_with_periods,
-    rotate_x_labels,
     set_suptitle_font,
     set_title_font,
 )
+from gbd_foodservice_insights.report.plots import prepare_monthly_trend_data
 
 from gbd_foodservice_insights_lab.plotting_extras import (
     PERIOD_COLORS,
     clean_category_label,
     create_category_subplot_grid,
+    plot_time_series_with_periods,
     update_legend_to_title_case,
 )
 
@@ -553,9 +554,6 @@ def plot_kilos_over_time(
         )
     else:
         # Single period mode (baseline only)
-        # Use canonical plot_metric_over_time from report_plots module
-        from gbd_foodservice_insights.report.plots import plot_metric_over_time
-
         if per_diner_meal:
             if diner_meal_mapping is None:
                 raise ValueError(
@@ -776,7 +774,7 @@ def plot_unique_products_over_time(
         )
         ax.set_ylim(ymin * 0.8, ymax * 1.2)
 
-        rotate_x_labels(ax)
+        ax.tick_params(axis="x", rotation=45)
         add_grid(ax)
 
     plt.tight_layout()
@@ -1372,3 +1370,55 @@ def plot_kilos_per_diner_over_time(
         figsize=figsize,
         title=title,
     )
+
+
+def plot_metric_over_time(
+    monthly_category_data: pd.DataFrame,
+    metric: str = "kilos_total",
+    per_diner_meal: bool = False,
+    diner_meal_mapping: dict[Any, Any] | None = None,
+    custom_title: str | None = None,
+    figsize: tuple[int, int] = (10, 5),
+) -> plt.Figure:
+    """Line graph of total or per-diner metric over time."""
+    if metric not in {"kilos_total", "servings total"}:
+        raise ValueError("metric must be 'kilos_total' or 'servings total'")
+
+    plot_data, metric_label = prepare_monthly_trend_data(
+        monthly_category_data,
+        metric,
+        per_diner_meal=per_diner_meal,
+        diner_meal_mapping=diner_meal_mapping,
+    )
+
+    plot_title = custom_title or f"{metric_label.title()} Over Time"
+    fig = plot_time_series_with_periods(
+        data=plot_data,
+        y_col="value",
+        y_label=metric_label.title(),
+        title=plot_title,
+        figsize=figsize,
+        ylim_padding_factor=0.2,
+        use_period_hue=False,
+    )
+
+    # Add a note if month-to-month variation is large (coefficient of variation > 25%)
+    if "value" in plot_data.columns and len(plot_data) > 1:
+        vals = plot_data["value"].dropna()
+        mean_val = vals.mean()
+        if mean_val > 0 and (vals.std() / mean_val) > 0.25:
+            fig.text(
+                0.5,
+                0.01,
+                (
+                    "Note: month-to-month variation is normal and may reflect seasonal menus, "
+                    "catering events, or changes in diner numbers."
+                ),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                color="gray",
+                style="italic",
+            )
+
+    return fig

@@ -274,20 +274,7 @@ class TestPlotCategoryTotals:
         plt.close(fig)
 
 
-class TestPlotMetricOverTime:
-    """Tests for plot_metric_over_time function."""
-
-    def test_returns_figure(self):
-        data = {
-            "month_year": ["2023-01", "2023-02", "2023-03"],
-            "category": ["fruit", "fruit", "fruit"],
-            "kilos_total": [100, 150, 120],
-        }
-        df = pd.DataFrame(data)
-        fig = plots.plot_metric_over_time(df, metric="kilos_total")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
+class TestGenerateAllReportPlots:
     @patch("gbd_foodservice_insights.report.plots.get_food_categories")
     @patch("gbd_foodservice_insights.report.plots.get_drink_categories")
     def test_food_and_drink_comparison_page_uses_two_lines_on_each_chart(
@@ -644,20 +631,6 @@ class TestPlotMetricOverTime:
 
         for _, fig in plots_output:
             plt.close(fig)
-
-    def test_per_diner_meal(self):
-        data = {
-            "month_year": ["2023-01", "2023-02"],
-            "category": ["fruit", "fruit"],
-            "kilos_total": [100, 150],
-        }
-        df = pd.DataFrame(data)
-        diner_meal_mapping = {"2023-01": 100, "2023-02": 120}
-        fig = plots.plot_metric_over_time(
-            df, metric="kilos_total", per_diner_meal=True, diner_meal_mapping=diner_meal_mapping
-        )
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
 
 
 class TestCheckZeroCategoryMonthCombos:

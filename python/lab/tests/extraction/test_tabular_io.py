@@ -5,6 +5,7 @@ import openpyxl
 import pandas as pd
 import pytest
 from gbd_foodservice_insights_lab.extraction.tabular_io import (
+    clean_column_names,
     detect_excel_header_row,
     extract_dates_from_sheet_filenames,
     read_in_all_data_files,
@@ -90,3 +91,25 @@ def test_detect_excel_header_row_finds_metadata_offset(tmp_path):
     wb.close()
 
     assert header_row == 10
+
+
+def test_clean_column_names():
+    data = {"A B C": [1], "  leading_space": [2], "trailing_space  ": [3], "ALL CAPS": [4]}
+    df = pd.DataFrame(data)
+    cleaned_df = clean_column_names(df)
+    expected_columns = ["a_b_c", "leading_space", "trailing_space", "all_caps"]
+    assert list(cleaned_df.columns) == expected_columns
+
+
+def test_clean_column_names_empty_df():
+    df = pd.DataFrame()
+    cleaned_df = clean_column_names(df)
+    assert cleaned_df.empty
+    assert list(cleaned_df.columns) == []
+
+
+def test_clean_column_names_already_clean():
+    data = {"col1": [1], "col2": [2]}
+    df = pd.DataFrame(data)
+    cleaned_df = clean_column_names(df)
+    assert list(cleaned_df.columns) == ["col1", "col2"]

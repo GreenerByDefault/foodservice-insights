@@ -31,8 +31,9 @@ from gbd_foodservice_insights.report.quality import (
     summarize_findings,
 )
 from gbd_foodservice_insights.report.schema import (
+    VALID_REPORT_MODES,
     DinerOrMeal,
-    normalize_report_mode,
+    ReportMode,
     quality_status_from_findings,
     validate_region,
 )
@@ -246,7 +247,7 @@ def run_food_report(
     mode_for_manifest = str(requested_mode) if requested_mode is not None else "unknown"
 
     try:
-        mode = normalize_report_mode(requested_mode)
+        mode = _normalize_report_mode(requested_mode)
         mode_for_manifest = mode
 
         df = pd.read_csv(input_path)
@@ -416,3 +417,17 @@ def _write_qa_workbook(
         ),
         diner_or_meal=report.diner_or_meal,
     )
+
+
+def _normalize_report_mode(value: str | None) -> ReportMode:
+    """Normalize arbitrary procurement/serving text into a canonical mode."""
+    if value is None:
+        return "procurement"
+
+    normalized = str(value).strip().lower()
+    if normalized in VALID_REPORT_MODES:
+        return normalized
+
+    if "serv" in normalized:
+        return "serving"
+    return "procurement"

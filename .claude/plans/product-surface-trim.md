@@ -106,10 +106,15 @@ Dropped from this PR after review:
 
 ## PR 2 — lab-only code to the lab
 
-`get_dairy_categories`, `clean_GBD_category_name`, `plot_metric_over_time`,
-`plot_time_series_with_periods`, `rotate_x_labels`, `clean_column_names`,
-`get_default_output_file` and `normalize_report_mode`. Lab imports repointed; lab tests move,
-assertions unchanged. Stacks on PR 1, which deletes the product callers of
+`plot_metric_over_time` to `pilot/plots.py`, `plot_time_series_with_periods` to
+`plotting_extras.py`, `clean_column_names` to `extraction/tabular_io.py`, and
+`normalize_report_mode` private to `food_report/pipeline.py`; `rotate_x_labels` and
+`get_default_output_file` inline into their one caller. Lab imports repointed; lab tests move,
+assertions unchanged.
+
+`get_dairy_categories` and `clean_GBD_category_name` stay in `categories.py` despite being
+lab-only: that module is the one access layer over `GBD_categories.yaml`, and splitting its
+getters across packages would leave half the taxonomy in each. Stacks on PR 1, which deletes the product callers of
 `clean_GBD_category_name`, `plot_time_series_with_periods`, `rotate_x_labels` and
 `normalize_report_mode`.
 

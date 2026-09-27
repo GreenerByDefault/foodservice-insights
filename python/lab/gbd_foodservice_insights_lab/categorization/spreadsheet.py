@@ -15,7 +15,6 @@ import pandas as pd
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
-from gbd_foodservice_insights.utils import get_default_output_file
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     get_previously_classified_entrees,
@@ -79,9 +78,11 @@ def categorize_spreadsheet_to_csvs(
 
     input_filepath = Path(input_filepath)
 
-    if output_filepath is None:
-        output_filepath = get_default_output_file(str(input_filepath), "_categorized")
-    output_filepath = Path(output_filepath)
+    output_filepath = (
+        Path(output_filepath)
+        if output_filepath is not None
+        else input_filepath.with_stem(input_filepath.stem + "_categorized")
+    )
 
     # Read input file
     suffix = input_filepath.suffix.lower()

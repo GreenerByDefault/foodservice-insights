@@ -23,8 +23,6 @@ from gbd_foodservice_insights.plotting_utils import (
     create_horizontal_percentage_barplot,
     format_month_labels,
     format_percentage_column,
-    plot_time_series_with_periods,
-    rotate_x_labels,
     set_suptitle_font,
     set_title_font,
     set_ylim_with_padding,
@@ -152,19 +150,6 @@ class TestFormatMonthLabels:
 
         assert len(result) == 3
         assert all(isinstance(label, str) for label in result)
-
-
-class TestRotateXLabels:
-    """Tests for rotate_x_labels function."""
-
-    def test_rotates_labels(self):
-        fig, ax = plt.subplots()
-        ax.plot([1, 2, 3], [1, 2, 3])
-        ax.set_xticks([1, 2, 3])
-        ax.set_xticklabels(["A", "B", "C"])
-        rotate_x_labels(ax, rotation=45)
-        assert ax.get_xticklabels()[0].get_rotation() == 45
-        plt.close(fig)
 
 
 class TestAddGrid:
@@ -301,23 +286,6 @@ class TestCalculateFigureHeightForWrappedLabels:
         )
 
         assert long_height >= short_height
-
-
-class TestPlotTimeSeriesWithPeriods:
-    """Tests for plot_time_series_with_periods function."""
-
-    def test_returns_figure(self):
-        data = pd.DataFrame(
-            {
-                "month_year": ["2024-01", "2024-02", "2024-03"],
-                "value": [10, 20, 15],
-                "period": ["baseline", "baseline", "pilot"],
-            }
-        )
-        fig = plot_time_series_with_periods(data, "value", "Value", "Test Title")
-        assert isinstance(fig, plt.Figure)
-        assert len(fig.axes[0].lines) > 0
-        plt.close(fig)
 
 
 class TestCreateHorizontalPercentageBarplot:

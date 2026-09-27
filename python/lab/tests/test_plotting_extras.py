@@ -17,6 +17,7 @@ from gbd_foodservice_insights_lab.plotting_extras import (
     clean_category_label,
     create_line_plot_with_periods,
     hide_unused_subplots,
+    plot_time_series_with_periods,
     setup_seaborn_palette,
 )
 
@@ -142,3 +143,20 @@ def cleanup_plt():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestPlotTimeSeriesWithPeriods:
+    """Tests for plot_time_series_with_periods function."""
+
+    def test_returns_figure(self):
+        data = pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02", "2024-03"],
+                "value": [10, 20, 15],
+                "period": ["baseline", "baseline", "pilot"],
+            }
+        )
+        fig = plot_time_series_with_periods(data, "value", "Value", "Test Title")
+        assert isinstance(fig, plt.Figure)
+        assert len(fig.axes[0].lines) > 0
+        plt.close(fig)

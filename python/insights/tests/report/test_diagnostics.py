@@ -9,7 +9,6 @@ from gbd_foodservice_insights.report.diagnostics import (
     check_missing_weeks_within_month,
     check_per_product_weight_bounds,
     check_single_product_dominance,
-    clean_column_names,
     detect_category_discontinuity,
     detect_exact_duplicate_rows,
     detect_month_over_month_total_volatility,
@@ -20,14 +19,6 @@ from gbd_foodservice_insights.report.diagnostics import (
     parse_and_validate_date_column,
     run_all_diagnostics,
 )
-
-
-def test_clean_column_names():
-    data = {"A B C": [1], "  leading_space": [2], "trailing_space  ": [3], "ALL CAPS": [4]}
-    df = pd.DataFrame(data)
-    cleaned_df = clean_column_names(df)
-    expected_columns = ["a_b_c", "leading_space", "trailing_space", "all_caps"]
-    assert list(cleaned_df.columns) == expected_columns
 
 
 @pytest.fixture
@@ -778,20 +769,6 @@ def test_detect_near_duplicate_product_names_reads_threshold_from_yaml(tmp_path,
     assert findings[0]["count"] == 0
     assert findings[0]["metadata"]["warning_share_threshold"] == pytest.approx(0.40)
     report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
-def test_clean_column_names_empty_df():
-    df = pd.DataFrame()
-    cleaned_df = clean_column_names(df)
-    assert cleaned_df.empty
-    assert list(cleaned_df.columns) == []
-
-
-def test_clean_column_names_already_clean():
-    data = {"col1": [1], "col2": [2]}
-    df = pd.DataFrame(data)
-    cleaned_df = clean_column_names(df)
-    assert list(cleaned_df.columns) == ["col1", "col2"]
 
 
 def test_find_close_product_pairs_empty_df():

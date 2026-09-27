@@ -14,6 +14,7 @@ import pandas as pd
 from gbd_foodservice_insights_lab.extraction.llm import experimental_csv_extraction_to_markdown
 
 __all__ = [
+    "clean_column_names",
     "detect_excel_header_row",
     "detect_file_encoding",
     "detect_single_multi_sheet_excel",
@@ -581,3 +582,16 @@ def read_in_all_data_files(
     filepaths = files[file_type]
     dfs = [reader(fp, **read_kwargs) for fp in filepaths]
     return dfs, filepaths
+
+
+def clean_column_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean the column names of a pandas DataFrame.
+
+    Strips whitespace, lowercases, and replaces spaces with underscores.
+    """
+    if df.columns.empty:
+        return df
+    print(f"columns before:  {list(df.columns)}")
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+    print(f"columns after:   {list(df.columns)}\n\n")
+    return df

@@ -20,7 +20,6 @@ from gbd_foodservice_insights.plotting_utils import (
     convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
-    plot_time_series_with_periods,
     set_suptitle_font,
     set_title_font,
     set_ylim_with_padding,
@@ -62,7 +61,7 @@ def _remove_duplicate_xlabels(fig: Figure) -> Figure:
     return fig
 
 
-def _prepare_monthly_trend_data(
+def prepare_monthly_trend_data(
     monthly_category_data: pd.DataFrame,
     metric: str,
     *,
@@ -211,58 +210,6 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: str) -> Fi
     plt.xlabel(metric_label)
     plt.ylabel("")
     plt.tight_layout()
-    return fig
-
-
-def plot_metric_over_time(
-    monthly_category_data: pd.DataFrame,
-    metric: str = "kilos_total",
-    per_diner_meal: bool = False,
-    diner_meal_mapping: dict[Any, Any] | None = None,
-    custom_title: str | None = None,
-    figsize: tuple[int, int] = (10, 5),
-) -> Figure:
-    """Line graph of total or per-diner metric over time."""
-    if metric not in {"kilos_total", "servings total"}:
-        raise ValueError("metric must be 'kilos_total' or 'servings total'")
-
-    plot_data, metric_label = _prepare_monthly_trend_data(
-        monthly_category_data,
-        metric,
-        per_diner_meal=per_diner_meal,
-        diner_meal_mapping=diner_meal_mapping,
-    )
-
-    plot_title = custom_title or f"{metric_label.title()} Over Time"
-    fig = plot_time_series_with_periods(
-        data=plot_data,
-        y_col="value",
-        y_label=metric_label.title(),
-        title=plot_title,
-        figsize=figsize,
-        ylim_padding_factor=0.2,
-        use_period_hue=False,
-    )
-
-    # Add a note if month-to-month variation is large (coefficient of variation > 25%)
-    if "value" in plot_data.columns and len(plot_data) > 1:
-        vals = plot_data["value"].dropna()
-        mean_val = vals.mean()
-        if mean_val > 0 and (vals.std() / mean_val) > 0.25:
-            fig.text(
-                0.5,
-                0.01,
-                (
-                    "Note: month-to-month variation is normal and may reflect seasonal menus, "
-                    "catering events, or changes in diner numbers."
-                ),
-                ha="center",
-                va="bottom",
-                fontsize=8,
-                color="gray",
-                style="italic",
-            )
-
     return fig
 
 
@@ -417,7 +364,7 @@ def plot_food_and_drink_comparison_page(
     def _prepare_series(subset_df: pd.DataFrame, *, per_diner: bool) -> pd.DataFrame:
         if subset_df.empty:
             return pd.DataFrame(columns=["month_year", "value"])
-        plot_data, _ = _prepare_monthly_trend_data(
+        plot_data, _ = prepare_monthly_trend_data(
             subset_df,
             metric,
             per_diner_meal=per_diner,

@@ -108,3 +108,23 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
         )
 
     pd.testing.assert_frame_equal(mock_categorize_unique_products.call_args.kwargs["df"], input_df)
+
+
+def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_path):
+    input_path = tmp_path / "input.csv"
+    input_df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
+    input_df.to_csv(input_path, index=False)
+    categorized = CategorizedProducts(
+        cleaned_df=input_df,
+        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
+        ai_review_df=pd.DataFrame(),
+        match_type_counts={"llm": 1},
+    )
+
+    with patch.object(spreadsheet, "categorize_unique_products", return_value=categorized):
+        _, result_summary = categorize_spreadsheet_to_csvs(
+            input_filepath=input_path, llm=KeywordLlmClient()
+        )
+
+    assert result_summary["output_file"] == str(tmp_path / "input_categorized.csv")
+    assert (tmp_path / "input_categorized.csv").exists()
