@@ -10,8 +10,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-# Named explicitly rather than derived from `__name__`, which broke when this module moved
-# packages: it silently started capturing only the lab's own logs.
+# Named explicitly, not derived from this module's own `__name__`, so capture doesn't silently
+# narrow to one package if this module moves again.
 _CAPTURED_PACKAGE_NAMES = ("gbd_foodservice_insights", "gbd_foodservice_insights_lab")
 
 
