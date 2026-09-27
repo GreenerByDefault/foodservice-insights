@@ -15,7 +15,7 @@ let { organizationSlug, organizationName }: Props = $props();
 async function confirm() {
   await deleteOrganization(organizationSlug);
   // The switcher and org list both read from the layout load this refreshes; from `/orgs`,
-  // `_resolvePostSignInDestination` lands the user on a remaining organization, or `/orgs/new`
+  // `_organizationsPageRedirect` lands the user on a remaining organization, or `/orgs/new`
   // if that was their last.
   await goto('/orgs', { invalidateAll: true });
 }
