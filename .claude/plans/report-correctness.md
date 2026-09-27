@@ -53,10 +53,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   milks are `oat milk`, and no row of the current cache uses the category. Separately, the
   cache holds a handful of typo categories (`Plant-Based Butter`, `Mlik`, `Stone Fruit`) that
   reach emissions the same way today; `categorization-cache.md` PR 5 drops them before step 1.
-- "Carbon Emissions Over Time" (`plot_emissions_summary_over_time`) autoscales both y-axes from
-  the data minimum, unlike the kilos page one page earlier, and `_millions_formatter` prints
-  whole thousands: a 1,067 to 1,192 kg range prints `1k 1k 1k 1k 1k 1k 1k 1k` and a ±6% swing
-  fills the chart.
 - The executive summary rounds to whole tonnes (`_format_co2e`): 2,501 kg is "3 tonnes".
 - `calculate_emissions_per_diner_meal` rounds to four decimals, so minor categories at a large
   site show `0.0` in the workbook.
@@ -204,15 +200,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the one category that can make kilos vanish from the CO2e figures, and one line.
   Blocked only on telling GBD.
 
-## PR 5 — emissions-over-time axes
-
-- `plot_emissions_summary_over_time` passes `y_max` to both axes as the kilos page does, and
-  `_millions_formatter` becomes a thousands-separator formatter.
-- Tests: the bottom limit is 0 and the tick labels are distinct on a narrow range.
-- Worth it: the carbon trend chart, the report's main chart, currently exaggerates any swing
-  and labels every tick the same.
-
-## PR 6 — narrative sentences
+## PR 5 — narrative sentences
 
 - `_format_co2e` keeps one decimal below 10 t; the animal sentence is skipped at 0% animal;
   `_summary_stats` prints a single month once.
@@ -220,14 +208,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   reports, and the tonnes boundary.
 - Worth it: three sentences the customer reads first, each wrong on a plausible upload.
 
-## PR 7 — meal-mode prose
+## PR 6 — meal-mode prose
 
 - `_how_to_read_lines` and `_methodology_lines` take the basis for every mention of diners or
   people.
 - Tests: with `"meal"`, neither contains "diner" or "people"; the golden is unchanged.
 - Worth it: a report that says "diners served" to a customer who chose meals.
 
-## PR 8 — title page and static text
+## PR 7 — title page and static text
 
 - `create_title_page` drops `.title()` and wraps the client name with `_wrap_to_width`;
   "Kg CO2e Kg" becomes "Kg CO2e"; all four methodology headings are bold; the "How to Read"
@@ -236,7 +224,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   `test_pdf.py` formatter test flips; the bold set equals the heading lines.
 - Worth it: the client's own name misspelled on page one.
 
-## PR 9 — Category Template layout
+## PR 8 — Category Template layout
 
 - `create_table_page` measures the label column (as `_wrap_to_width` measures text) and shares
   the rest among month columns; past a month count the page cannot fit, the months split across
@@ -245,7 +233,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   category name.
 - Worth it: category names clip at six months, and twelve-month uploads are allowed.
 
-## PR 10 — fail loudly
+## PR 9 — fail loudly
 
 - The emissions, emissions-summary and diagnostics `except` blocks in `build_food_report` go,
   with `raise_on_error_findings` after each stage's checks so row drift still aborts there;
@@ -258,7 +246,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 11 — per-diner denominator
+## PR 10 — per-diner denominator
 
 - One `total_diner_meals` over the months present in `rows`, used by the summary, the narrative
   and the Emissions Summary sheet; `calculate_emissions_per_diner_meal` stops rounding.
@@ -266,7 +254,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: only when a whole month is uncategorized, so last among the number fixes; a dozen
   lines.
 
-## PR 12 — noise and cost
+## PR 11 — noise and cost
 
 - `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
   `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
@@ -277,7 +265,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `product-surface-trim.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 13 — fixed page sizes and category pages
+## PR 12 — fixed page sizes and category pages
 
 - Per the decision: Letter throughout, capped label wrapping, category pages grouped and ordered
   by emissions.
@@ -291,10 +279,10 @@ handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 2, 3, 4, 10 and 12, which change what the lab's QA workbook and manifest say; `pnpm test:system` for any PR
+- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 2, 3, 4, 9 and 11, which change what the lab's QA workbook and manifest say; `pnpm test:system` for any PR
   that changes what `analyze()` writes.
-- PRs 5, 8, 9 and 13: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; PR 13 also `2. Produce Food Report.py` on
+- PRs 7, 8 and 12: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; PR 12 also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
 ## Risks
@@ -304,6 +292,6 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 2 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `product-surface-trim.md` PR 1 moves `diagnostics.py`; PRs 2, 3 and 12 here touch it, and
-  whichever lands second rebases. PR 13 waits for its PR 4.
-- GBD's answers block PR 4 (a confirmation) and PR 13 only.
+- `product-surface-trim.md` PR 1 moves `diagnostics.py`; PRs 2, 3 and 11 here touch it, and
+  whichever lands second rebases. PR 12 waits for its PR 4.
+- GBD's answers block PR 4 (a confirmation) and PR 12 only.
