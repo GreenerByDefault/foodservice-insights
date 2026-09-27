@@ -2940,7 +2940,13 @@ def run_all_diagnostics(
 # ---------------------------------------------------------------------------
 
 _MISSING_DATE_TOKENS = {"", "na", "n/a", "nan", "none", "null", "nat", "missing"}
-_AMBIGUOUS_NUMERIC_DATE_PATTERN = re.compile(r"^\s*(\d{1,2})\D+(\d{1,2})\D+(\d{2}|\d{4})\s*$")
+
+# The optional time is so `01/03/2025 00:00`, a common spreadsheet export, cannot slip past to the
+# dateutil fallback, which reads it month-first without complaint.
+_AMBIGUOUS_NUMERIC_DATE_PATTERN = re.compile(
+    r"^\s*(\d{1,2})\D+(\d{1,2})\D+(\d{2}|\d{4})"
+    r"(?:[\sT]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[AaPp]\.?[Mm]\.?)?)?\s*$"
+)
 
 
 def _is_missing_date_value(value: Any) -> bool:
@@ -3058,9 +3064,7 @@ def _build_date_parse_error_message(
         examples = status_rows["original_value"].astype(str).head(5).tolist()
         lines.append(f"- {status} examples: {examples}")
 
-    lines.append(
-        "Set `dayfirst_preference=True` or `False` to resolve ambiguous day/month ordering."
-    )
+    lines.append("Pass `date_format` (for example '%d/%m/%Y') to read ambiguous day/month dates.")
     return "\n".join(lines)
 
 
@@ -3070,7 +3074,6 @@ def parse_and_validate_date_column(
     date_col: str = "date",
     *,
     date_format: str | None = None,
-    dayfirst_preference: bool | None = None,
     min_date: str | datetime | pd.Timestamp | None = None,
     max_date: str | datetime | pd.Timestamp | None = None,
     max_future_days: int = 30,
@@ -3085,7 +3088,6 @@ def parse_and_validate_date_column(
     date_col: str = "date",
     *,
     date_format: str | None = None,
-    dayfirst_preference: bool | None = None,
     min_date: str | datetime | pd.Timestamp | None = None,
     max_date: str | datetime | pd.Timestamp | None = None,
     max_future_days: int = 30,
@@ -3100,7 +3102,6 @@ def parse_and_validate_date_column(
     date_col: str = "date",
     *,
     date_format: str | None = None,
-    dayfirst_preference: bool | None = None,
     min_date: str | datetime | pd.Timestamp | None = None,
     max_date: str | datetime | pd.Timestamp | None = None,
     max_future_days: int = 30,
@@ -3114,7 +3115,6 @@ def parse_and_validate_date_column(
     date_col: str = "date",
     *,
     date_format: str | None = None,
-    dayfirst_preference: bool | None = None,
     min_date: str | datetime | pd.Timestamp | None = None,
     max_date: str | datetime | pd.Timestamp | None = None,
     max_future_days: int = 30,
@@ -3124,8 +3124,8 @@ def parse_and_validate_date_column(
     """
     Parse and validate a date column using a strict multi-pass strategy.
 
-    The function intentionally fails on ambiguous numeric dates by default
-    (for example, ``03/04/2025``) unless ``dayfirst_preference`` is supplied.
+    The function intentionally fails on ambiguous numeric dates (for example,
+    ``03/04/2025``) unless ``date_format`` is supplied.
 
     Parsing strategy:
     1. Exact custom format (if ``date_format`` is provided)
@@ -3213,10 +3213,7 @@ def parse_and_validate_date_column(
                 .str.replace(r"\s+", " ", regex=True)
             )
 
-            if dayfirst_preference is None:
-                ambiguous_mask = cleaned_strings.map(_is_ambiguous_numeric_date_string)
-            else:
-                ambiguous_mask = pd.Series(False, index=cleaned_strings.index)
+            ambiguous_mask = cleaned_strings.map(_is_ambiguous_numeric_date_string)
 
             if ambiguous_mask.any():
                 ambiguous_indices = ambiguous_mask.index[ambiguous_mask]
@@ -3224,32 +3221,19 @@ def parse_and_validate_date_column(
                 parser_used.loc[ambiguous_indices] = "ambiguous_numeric_date"
 
             non_ambiguous_strings = cleaned_strings.loc[~ambiguous_mask]
-            if dayfirst_preference is True:
-                slash_dash_dot_formats = [
-                    "%d/%m/%Y",
-                    "%m/%d/%Y",
-                    "%d-%m-%Y",
-                    "%m-%d-%Y",
-                    "%d.%m.%Y",
-                    "%m.%d.%Y",
-                    "%d/%m/%y",
-                    "%m/%d/%y",
-                    "%d-%m-%y",
-                    "%m-%d-%y",
-                ]
-            else:
-                slash_dash_dot_formats = [
-                    "%m/%d/%Y",
-                    "%d/%m/%Y",
-                    "%m-%d-%Y",
-                    "%d-%m-%Y",
-                    "%m.%d.%Y",
-                    "%d.%m.%Y",
-                    "%m/%d/%y",
-                    "%d/%m/%y",
-                    "%m-%d-%y",
-                    "%d-%m-%y",
-                ]
+            # Only unambiguous strings get here, so at most one order of each pair can match.
+            slash_dash_dot_formats = [
+                "%m/%d/%Y",
+                "%d/%m/%Y",
+                "%m-%d-%Y",
+                "%d-%m-%Y",
+                "%m.%d.%Y",
+                "%d.%m.%Y",
+                "%m/%d/%y",
+                "%d/%m/%y",
+                "%m-%d-%y",
+                "%d-%m-%y",
+            ]
 
             explicit_formats = [
                 "%Y-%m-%d",
@@ -3302,7 +3286,6 @@ def parse_and_validate_date_column(
                 fallback_parsed = pd.to_datetime(
                     non_ambiguous_strings.loc[fallback_mask],
                     errors="coerce",
-                    dayfirst=False if dayfirst_preference is None else dayfirst_preference,
                 )
                 fallback_success = fallback_parsed.notna()
                 if fallback_success.any():
