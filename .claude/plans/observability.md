@@ -50,19 +50,14 @@ What the database does *not* record, and should not, is the other two signals:
 | Signal | Today | Home |
 | --- | --- | --- |
 | What the product did — reports, attempts, queue, failures, notifications, invites, users | Postgres, permanently | Queried in place, § 3 |
-| How the code behaved — per-request timing and errors; what a worker was doing when an attempt hung; the Python child's warnings | `console.*` to stdout, unstructured; the child's stderr is dropped except an 8 KB tail on a crash | Structured logs, forwarded off the host, § 2 |
+| How the code behaved — per-request timing and errors; what a worker was doing when an attempt hung; the Python child's warnings | `console.*`, unstructured; the child's stderr is dropped except an 8 KB tail on a crash | Structured logs, forwarded off the host, § 2 |
 | What the machines were doing — CPU, memory, restarts, request rate, p95 latency | The host | The host's own metrics and alerts, § 4 |
 
 Each signal has one natural home, and the design puts each in it rather than pushing all three
 through one tool. What exists today:
 
-- **No logger.** Every log line in both TypeScript apps is a `console.*` call. The web app's
-  convention is `console.error('sentence', { ...context, error })` —
-  [`withDbErrorHandling`](../../apps/web/src/lib/server/db.ts) is the model — and the worker's is
-  ids inside the message string. Node prints the object across several lines, so nothing is
-  machine-parseable. No request id exists; `workerId` is written to the database but never to a
-  log line. Fifteen call sites in six test files assert on `console.error`. Neither process
-  installs an `uncaughtException` or `unhandledRejection` handler.
+- **No logger.** Every server-side log line is a `console.*` call, unstructured and tied to no
+  request or worker. [`structured-logging.md`](structured-logging.md) § Context has the survey.
 - **The child's output is nearly all discarded.** [`spawn.ts`](../../apps/worker/src/child/spawn.ts)
   ignores stdout and keeps the last 8 KB of stderr, which reaches `failure_detail` only when the
   child dies by signal or an unexpected exit code. The Python side logs at WARNING to stderr; the
@@ -80,73 +75,12 @@ through one tool. What exists today:
 
 ### 2.1 Inside the process
 
-**One JSON line per event to stdout, from [pino](https://getpino.io).** The host reads stdout;
-the process never knows where the lines go, which is what keeps the image free of any
-environment's configuration (`ARCHITECTURE.md` § Images). The rules, with the mechanics that
-make each one hold:
-
-- **`createLogger({ level, format })` at `@gbd/core/log`** — a subpath like `./env`, because
-  `@gbd/core`'s root is imported by browser code and pino must not be reachable from it. It
-  takes its settings as arguments: the web app reads config through `$env/dynamic/private`, so
-  core reading `process.env` itself would give `vite dev` and the worker different answers.
-  pino is a runtime `dependency` of core, which is what keeps it out of the SvelteKit bundle —
-  [`vite.config.ts`](../../apps/web/vite.config.ts) externalizes what `dependencies` lists, and
-  pino's transports break under Rollup. `LOG_FORMAT=pretty` selects `pino-pretty` as an
-  in-process stream (a dev dependency, so absent from the image; an unset or unknown format
-  falls back to JSON with a warning rather than failing to boot). Production runs no transport
-  at all: a synchronous stdout stream, so a process that exits flushes what it logged.
-  `LOG_LEVEL` and `LOG_FORMAT` go in `turbo.json`'s `globalPassThroughEnv` — Turbo strips
-  unlisted variables — and in `.env.example`.
-- **Web: `handle` becomes the access log.** One line per request — method, `route.id`, status,
-  duration, user id, and a request id: Cloudflare's `cf-ray` header when present, else
-  generated — written in a `try/finally` around `resolve`, because `resolveAuth` can throw an
-  `HttpError` before `resolve` runs. The child logger bound to that id goes on
-  `event.locals.log` as the first statement, so `handleError` always has it;
-  `withDbErrorHandling` and `withBlobStoreErrorHandling`, which have no `event`, reach it through
-  SvelteKit's `getRequestEvent()` with the root logger as the fallback outside a request. The id
-  is echoed as `x-request-id` and into the error body, so a user can quote the string that finds
-  the line. Poll routes and health probes log at `debug`; everything else at `info`.
-- **Worker: a root logger bound to `workerId`, a child per attempt bound to `attemptId`**, and a
-  line on successful start — there is none today, which
-  [`containers.ts`](../../tests/e2e/scripts/containers.ts) works around. Log a claim, never a
-  poll: the idle loop polls every 2 s. During an outage, retries that may still succeed log at
-  `warn` and the final failure at `error`, so an hour of Supabase being down is a handful of
-  lines per attempt rather than one every tick. The Python child's stderr tail is emitted as
-  **one record on a non-zero exit**, tagged with the attempt id and capped to the host's line
-  limit; the tail itself stays, because `failure_detail` is built from it. Progress advancing
-  in `progress.json`, which the direct tick already reads, is the natural `info` line during a
-  run. The child's stdout stays ignored — the library's stray `print()`s are lost today and stay
-  lost until they become `logger` calls.
-- **Errors go through pino's `err` serializer**, which keeps `cause` chains and stacks, with
-  `stack` truncated and `pg`'s `internalQuery` and `where` fields (SQL text) dropped, so a line
-  fits the host's 2000-byte cap (§ 2.2). Every existing call puts the error under `error:`,
-  which the standard serializer ignores — register it for that key or rename, or stacks are
-  silently absent. [`failures.ts`](../../apps/worker/src/failures.ts)'s `describe(error)`
-  stays the renderer for `failure_detail` strings; log lines pass the object.
-- **The seams below both apps log too.** `@gbd/db`'s pool handlers in
-  [`client.ts`](../../packages/db/src/client.ts) are the outage warnings we most want
-  structured; `initializeDatabase` takes an optional logger. Both entry points install
-  `uncaughtException` and `unhandledRejection` handlers that log one record and exit, instead of
-  Node's multi-line trace arriving as one entry per line.
-- **Tests inject, they do not spy.** pino writes to the file descriptor, so vitest's
-  `silent: 'passed-only'` cannot hide it and every error-path test would spray JSON. The seams
-  already exist: `WorkerDependencies`, `RetryOptions` and `DatabaseConfig` each gain a `log`; the
-  web app's module singleton is mocked the way `hooks.server.test.ts` already mocks modules. A
-  collecting sink that returns parsed records turns today's `toMatchObject` on console arguments
-  into `toEqual` on a record. `.env.test` sets `LOG_LEVEL` for the server Playwright spawns.
-- **Ids, never emails.** [`email.ts`](../../apps/web/src/lib/server/email.ts) logs an invite
-  recipient's address today and that line changes; pino's `redact` on `email` and `to` is the
-  backstop that makes the rule hold without review.
-- **Out of scope:** the browser-side `console.error`s in the auth components, and CLI scripts
-  (`migrate.ts`, `scripts/`, `browser-testing`), where plain text is right.
-
-*Rejected: OpenTelemetry.* Right in the abstract and three libraries plus a collector in
-practice; nothing here needs traces, and pino lines carry the same ids.
-*Rejected: forwarding the child's stderr line by line.* Chunks are not lines, so it needs a
-splitter, and a traceback becomes dozens of records to reassemble; one record at exit is the same
-diagnostic in one place.
-*Rejected: logging to the database.* The database is the event log for product facts;
-operational chatter would dwarf it and tie log volume to the connection pool.
+One JSON object per line on stdout, from pino. The design and its PRs are in
+[`structured-logging.md`](structured-logging.md), which lands ahead of this plan because none of it
+waits on a vendor. What this file relies on from it: the host reads stdout and the process never
+configures a destination (`ARCHITECTURE.md` § Images); every web request writes one access line
+carrying the `x-request-id` the response returns (§ 3.4); worker lines carry `workerId`,
+`attemptId` and `reportId`; and every record fits § 2.2's 2000-byte line cap.
 
 ### 2.2 Where they go
 
@@ -397,7 +331,8 @@ thing most likely to change, and the exit is Papertrail or Nano.
   is Railway's own logs and alerts, keeping Better Stack only for the uptime monitor. Axiom and
   Loki become the in-process options if 30 days is not enough.
 - Either way, **§ 3 does not move.** The views, the role, Grafana and the data alerts are
-  provider-independent; only the log destination and the host alerts follow the host.
+  provider-independent. Only the log destination, the host alerts and the record bound in
+  `@gbd/core/log` follow the host, and a looser line cap only raises the bound.
 
 ## Recommendation
 
@@ -429,27 +364,21 @@ Nano from day one.
 
 ## After the decision
 
-Roughly one PR each, in this order. The first three need no vendor account and no hosting
-decision, so they can land now; the fourth contends with `hosting-provider.md`'s step 2 for the
-same file and follows it.
+Structured logging needs no vendor account and no hosting decision, so it is a plan of its own,
+[`structured-logging.md`](structured-logging.md), landing ahead of the rest. What follows is
+roughly one PR each, in this order. The first two need no vendor account or hosting decision
+either, so they can land now. The third contends with `hosting-provider.md`'s step 2 for the same
+file and follows it.
 
-1. **The logging seam** — probably two PRs, `@gbd/core/log` with `@gbd/db` and the worker, then
-   the web app. Everything in § 2.1: the logger and its `err` serializer; the process-level
-   handlers; `WorkerDependencies`, `RetryOptions` and `DatabaseConfig` gain `log`; the worker's
-   start line, claim lines, per-attempt child loggers, the retry-level policy and the stderr
-   tail record; the access-log `handle` with `try/finally`, `event.locals.log`,
-   `getRequestEvent()` in the two wrappers, the request id echoed; `LOG_LEVEL` and `LOG_FORMAT`
-   in `turbo.json`, `.env.example` and `.env.test`; the six test files move to the sink;
-   `email.ts` stops logging the recipient.
-2. **The health split.** `/health` becomes liveness; the dependency check moves to its own path,
+1. **The health split.** `/health` becomes liveness; the dependency check moves to its own path,
    added to the auth skip in `hooks.server.ts`.
-3. **The `metrics` schema and role.** Migration `002_metrics`: the schema, the first views
+2. **The `metrics` schema and role.** Migration `002_metrics`: the schema, the first views
    (`attempt`, `report`, `rejected_upload`, `user_signup`, `queue_backlog`,
    `notification_backlog`), `metrics_reader` with its grants, timeout, read-only default and
    connection limit; a `dump-metrics-schema.ts` beside the public one, wired into `gen-types`
    and the `ts-db-types` CI check; a test per view; the README convention. `.env.example` gains
    nothing — the role's password is set in Supabase.
-4. **Host config.** In `.do/app.yaml`: `alerts:` per component (`CPU_UTILIZATION`,
+3. **Host config.** In `.do/app.yaml`: `alerts:` per component (`CPU_UTILIZATION`,
    `MEM_UTILIZATION`, `RESTART_COUNT`; `REQUEST_DURATION_P95_MS` on web) and at app level
    (`DEPLOYMENT_FAILED`); `health_check.http_path` at the liveness route; `log_destinations:`
    for Better Stack. The token is a plain string in the spec with no `SECRET` type, and the
@@ -457,14 +386,14 @@ same file and follows it.
    placeholder and substitute a GitHub secret in the deploy step before `doctl apps update`
    (**Open:** whether `app_action/deploy@v2` substitutes anything beyond `IMAGE_DIGEST_*`). Then
    the one out-of-band step: alert destinations via `doctl apps update-alert-destinations`.
-5. **Grafana Cloud.** The stack; the Postgres data source as `metrics_reader` through the pooler
+4. **Grafana Cloud.** The stack; the Postgres data source as `metrics_reader` through the pooler
    with a small max-connections (Grafana's published egress ranges go on the allowlist only if
    Supabase network restrictions are ever turned on); the Supabase metrics scrape job; Git Sync
    to `observability/grafana/dashboards/` and the first dashboard; the alert rules and the export
    script; the contact point.
-6. **Better Stack.** The source for DigitalOcean, the monitor on the dependency route, and the
+5. **Better Stack.** The source for DigitalOcean, the monitor on the dependency route, and the
    Slack or email integration. Verify the first forwarded line arrives parsed into fields.
-7. **Docs.** `ARCHITECTURE.md` gains § Observability, recording the three homes and the pipes;
+6. **Docs.** `ARCHITECTURE.md` gains § Observability, recording the three homes and the pipes;
    each § Failure modes row that says "alert" says where that alert lives, and "disk" is resolved
    one way or the other; this file is deleted.
 
@@ -477,9 +406,8 @@ row-count lines, a contract change because the child's env is an allowlist; and 
 
 ## Verification
 
-Steps 1–3 are verified by `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for the
-worker's start line and stderr record, since only that tier runs the real child. The vendor steps
-are verified end to end, once, against the hosted stack:
+Steps 1 and 2 are verified by `pnpm lint && pnpm check && pnpm test`. The vendor steps are
+verified end to end, once, against the hosted stack:
 
 - A request to the web app produces one JSON line in Better Stack with its fields parsed and the
   same `x-request-id` the response carried; a forced 500 produces a second line with a stack that
