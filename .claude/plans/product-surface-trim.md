@@ -87,8 +87,8 @@ What the map found:
 Everything with no callers: the four `categories.py` functions and `remove_file`,
 `schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`,
 `emissions.get_available_regions`, the `timescale="period"` branch, the unreachable `plot_*`
-functions (each superseded by a combined page the report renders, or a one-line pandas
-profile), the unreachable Decision KPIs branch and the never-selected `"error"` status sentence
+functions (the superseded ones for good; the data-profiling ones come back in the lab in PR 2),
+the unreachable Decision KPIs branch and the never-selected `"error"` status sentence
 in `pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the second token set, and both
 `temp_dir` fixtures. Tests go with them. No product behaviour changes: the golden test passes
 unchanged.
@@ -106,18 +106,23 @@ Dropped from this PR after review:
 
 ## PR 2 — lab-only code to the lab
 
+Stacks on PR 1, which deletes the last product callers of `plot_time_series_with_periods`,
+`rotate_x_labels` and `normalize_report_mode`.
+
 `plot_metric_over_time` to `pilot/plots.py`, `plot_time_series_with_periods` to
 `plotting_extras.py`, `clean_column_names` to `extraction/tabular_io.py`, and
 `normalize_report_mode` private to `food_report/pipeline.py`; `rotate_x_labels` and
 `get_default_output_file` inline into their one caller. Lab imports repointed; lab tests move,
 assertions unchanged.
 
-`get_dairy_categories` and `clean_GBD_category_name` stay in `categories.py` despite being
-lab-only: that module is the one access layer over `GBD_categories.yaml`, and splitting its
-getters across packages would leave half the taxonomy in each. Stacks on PR 1, which deletes the product callers of
-`clean_GBD_category_name`, `plot_time_series_with_periods`, `rotate_x_labels` and
-`normalize_report_mode`.
+The data-profiling plots PR 1 deletes (`plot_date_value_counts`, `plot_metric(s)_by_date`,
+`plot_metric(s)_by_month`, `plot_category_distribution`) return as `data_profile_plots.py`. The
+data scientists' validate and categorize notebooks called them until those notebooks became
+runscripts in February 2026, and nothing in the lab replaces them.
 
+- `get_dairy_categories` and `clean_GBD_category_name` stay in `categories.py` despite being
+  lab-only: that module is the one access layer over `GBD_categories.yaml`, and splitting its
+  getters across packages would leave half the taxonomy in each.
 - `normalize_report_mode` is still reached by `run_all_diagnostics` → `check_required_columns`,
   which only ever passes the two literals, so the product builds the `ReportMode` itself.
 - `plot_metric_over_time` calls `_prepare_monthly_trend_data`, which the report also uses.
