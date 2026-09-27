@@ -8,46 +8,13 @@ Date parsing tests are in report/test_diagnostics.py.
 
 import logging
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from gbd_foodservice_insights.utils import (
     get_default_output_file,
     print_progress,
     rel_path,
-    remove_file,
 )
-
-# ----------------------------------------------------------------------
-# Tests for remove_file
-# ----------------------------------------------------------------------
-
-
-class TestRemoveFile:
-    """Tests for remove_file function."""
-
-    def test_removes_existing_file(self, tmp_path, caplog):
-        test_file = tmp_path / "test_file.txt"
-        test_file.write_text("test content")
-        assert test_file.exists()
-
-        with caplog.at_level(logging.DEBUG, logger="gbd_foodservice_insights.utils"):
-            remove_file(str(test_file))
-
-        assert not test_file.exists()
-        assert "deleted successfully" in caplog.text
-
-    def test_handles_nonexistent_file(self, caplog):
-        with caplog.at_level(logging.DEBUG, logger="gbd_foodservice_insights.utils"):
-            remove_file("/nonexistent/path/file.txt")
-        assert "not found" in caplog.text.lower()
-
-    def test_handles_permission_error(self, tmp_path, caplog):
-        with patch("os.remove", side_effect=PermissionError("Permission denied")):
-            with caplog.at_level(logging.DEBUG, logger="gbd_foodservice_insights.utils"):
-                remove_file(str(tmp_path / "some_file.txt"))
-            assert "error" in caplog.text.lower() or "not found" in caplog.text.lower()
-
 
 # ----------------------------------------------------------------------
 # Tests for path helpers

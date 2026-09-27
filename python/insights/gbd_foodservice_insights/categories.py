@@ -9,7 +9,6 @@ from typing import Any
 
 import pandas as pd
 import yaml
-from pandas.api.types import CategoricalDtype
 
 from gbd_foodservice_insights import PACKAGE_DIR
 
@@ -298,10 +297,6 @@ def get_drink_categories(lowercase: bool = False) -> list[str]:
     return categories
 
 
-def GBD_categories_check(df: pd.DataFrame) -> None:
-    print("WARNING DEPRECATED: use check_GBD_categories() instead.")
-
-
 def check_GBD_categories(df: pd.DataFrame) -> None:
     """Check a DataFrame's 'category' column against the predefined GBD categories.
 
@@ -371,80 +366,3 @@ def clean_GBD_category_name(category: str) -> str:
         raise KeyError(f"Category '{category}' not found in food dictionary")
 
     return category_name_map[category_lower]
-
-
-def clean_GBD_category_names(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Applies the clean_GBD_category_name function to the 'category' column of a DataFrame.
-
-    Args:
-        df: The input DataFrame, which should have a 'category' column.
-
-    Returns:
-        The DataFrame with cleaned category names in the 'category' column.
-
-    Raises:
-        ValueError: If the 'category' column is not found in the DataFrame.
-    """
-    if "category" not in df.columns:
-        raise ValueError("'category' column not found in DataFrame. Cannot clean category names.")
-
-    df["category"] = df["category"].str.lower().apply(clean_GBD_category_name)
-    return df
-
-
-def order_GBD_categories(df: pd.DataFrame, sort_df: bool = True) -> pd.DataFrame:
-    """
-    Orders a DataFrame by a predefined GBD category order and optionally sorts it.
-
-    The function first standardizes the 'category' column to lowercase.
-    It then defines a desired order for GBD categories based on the YAML file.
-    Categories present in the DataFrame but not in the predefined list (`desired_order`)
-    are identified as 'extra categories' and appended to the end of the ordering.
-    A warning is printed if any categories from `desired_order` are missing from the DataFrame.
-
-    The 'category' column is converted to a pandas `CategoricalDtype` with the
-    newly defined order.
-
-    Args:
-        df: The input DataFrame. Must have a 'category' column.
-        sort_df: bool, default True
-            If True, the DataFrame is sorted by the 'category' column after the
-            categorical order is applied. If False, the DataFrame is not sorted,
-            but the 'category' column will still have the categorical order defined.
-            This is useful if custom sorting with other columns is needed.
-
-    Returns:
-        The DataFrame with the 'category' column ordered (and optionally sorted).
-        The 'category' column will be of `CategoricalDtype`.
-    """
-    # Get the desired order from YAML file (lowercase)
-    desired_order = [*get_GBD_categories(lowercase=True), "none"]
-
-    # Get all categories present in the DataFrame (in their first occurrence order)
-    all_categories = list(df["category"].str.lower().unique())
-
-    # Identify extra categories not listed in desired_order
-    extra_categories = [cat for cat in all_categories if cat not in desired_order]
-
-    if extra_categories:
-        print(
-            f"Info: The following extra categories will be appended at the end: {extra_categories}"
-        )
-
-    # New ordering: desired_order followed by any extra categories
-    new_order = desired_order + extra_categories
-
-    missing_categories = [category for category in desired_order if category not in all_categories]
-    if missing_categories:
-        print(
-            "WARNING: The following desired categories are missing from the DataFrame: "
-            f"{missing_categories}"
-        )
-
-    df["category"] = (
-        df["category"].str.lower().astype(CategoricalDtype(categories=new_order, ordered=True))
-    )
-    if sort_df:  # You may want to sort it yourself
-        df = df.sort_values("category").reset_index(drop=True)
-    return df

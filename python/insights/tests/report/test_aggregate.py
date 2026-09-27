@@ -36,22 +36,11 @@ def test_check_required_columns(sample_df):
     assert diagnostics.check_required_columns(sample_df.drop(columns=["kilos_total"])) is False
 
 
-def test_baseline_pre_flight_checks(sample_df):
-    diner_meal_mapping = {"2023-01": 100, "2023-02": 120}
-    df = diagnostics.baseline_pre_flight_checks(sample_df.copy(), diner_meal_mapping)
-    assert pd.api.types.is_datetime64_any_dtype(df["date"])
-
-    with pytest.raises(AssertionError):
-        df_with_neg = sample_df.copy()
-        df_with_neg.loc[0, "kilos_total"] = -5
-        diagnostics.baseline_pre_flight_checks(df_with_neg, diner_meal_mapping)
-
-
 def test_aggregate_data(sample_df):
     diner_meal_mapping = {"2023-01": 100, "2023-02": 120}
 
     # Test aggregation by product
-    agg_df = aggregate.aggregate_data(sample_df, group_by="product", timescale="month_year")
+    agg_df = aggregate.aggregate_data(sample_df, group_by="product")
     assert "kilos_total" in agg_df.columns
     assert len(agg_df) == 3
     jan_apple = agg_df.loc[
@@ -64,7 +53,6 @@ def test_aggregate_data(sample_df):
     agg_per_diner_meal_df = aggregate.aggregate_data(
         sample_df,
         group_by="product",
-        timescale="month_year",
         per_diner_meal=True,
         diner_meal_mapping=diner_meal_mapping,
     )
@@ -83,7 +71,7 @@ def test_create_template_data(mock_get_gbd_categories, sample_df):
     tables.
     """
     mock_get_gbd_categories.return_value = ["fruit", "vegetable"]
-    agg_df = aggregate.aggregate_data(sample_df, group_by="category", timescale="month_year")
+    agg_df = aggregate.aggregate_data(sample_df, group_by="category")
     template_df = aggregate.create_template_data(agg_df, metric="kilos_total")
     assert "total" in template_df.columns
     assert "fruit" in template_df.index
@@ -237,7 +225,7 @@ class TestPlotCategoryTotals:
     """Tests for plot_category_totals function."""
 
     def test_returns_figure(self, sample_df):
-        agg_df = aggregate.aggregate_data(sample_df, group_by="category", timescale="month_year")
+        agg_df = aggregate.aggregate_data(sample_df, group_by="category")
         fig = plots.plot_category_totals(agg_df, metric="kilos_total")
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
@@ -302,32 +290,6 @@ class TestPlotMetricOverTime:
 
     @patch("gbd_foodservice_insights.report.plots.get_food_categories")
     @patch("gbd_foodservice_insights.report.plots.get_drink_categories")
-    def test_food_vs_food_and_drink_split(
-        self, mock_get_drink_categories, mock_get_food_categories
-    ):
-        mock_get_food_categories.return_value = ["fruit"]
-        mock_get_drink_categories.return_value = ["juice"]
-
-        df = pd.DataFrame(
-            {
-                "month_year": ["2023-01", "2023-01", "2023-02", "2023-02"],
-                "category": ["fruit", "juice", "fruit", "juice"],
-                "kilos_total": [100, 25, 150, 40],
-            }
-        )
-
-        fig = plots.plot_food_vs_food_and_drink_over_time(df, metric="kilos_total")
-
-        assert isinstance(fig, plt.Figure)
-        assert len(fig.axes) == 2
-        assert fig.axes[0].get_title() == "Food Only"
-        assert fig.axes[1].get_title() == "Food + Drink"
-        assert np.asarray(fig.axes[0].lines[0].get_ydata()).tolist() == [100, 150]
-        assert np.asarray(fig.axes[1].lines[0].get_ydata()).tolist() == [125, 190]
-        plt.close(fig)
-
-    @patch("gbd_foodservice_insights.report.plots.get_food_categories")
-    @patch("gbd_foodservice_insights.report.plots.get_drink_categories")
     def test_food_and_drink_comparison_page_uses_two_lines_on_each_chart(
         self,
         mock_get_drink_categories,
@@ -362,28 +324,6 @@ class TestPlotMetricOverTime:
         assert np.asarray(fig.axes[1].lines[0].get_ydata()).tolist() == [1.0, 1.5]
         assert np.asarray(fig.axes[1].lines[1].get_ydata()).tolist() == [1.25, 1.9]
         plt.close(fig)
-
-    @patch("gbd_foodservice_insights.report.plots.get_food_categories")
-    @patch("gbd_foodservice_insights.report.plots.get_drink_categories")
-    def test_food_vs_food_and_drink_over_time_raises_for_untyped_categories(
-        self,
-        mock_get_drink_categories,
-        mock_get_food_categories,
-    ):
-        """Unexpected category labels should fail loudly instead of silently disappearing."""
-        mock_get_food_categories.return_value = ["fruit"]
-        mock_get_drink_categories.return_value = ["juice"]
-
-        df = pd.DataFrame(
-            {
-                "month_year": ["2023-01", "2023-01"],
-                "category": ["fruit", "No Matches Found"],
-                "kilos_total": [100, 25],
-            }
-        )
-
-        with pytest.raises(ValueError, match="Unknown categories"):
-            plots.plot_food_vs_food_and_drink_over_time(df, metric="kilos_total")
 
     @patch("gbd_foodservice_insights.report.plots.get_food_categories")
     @patch("gbd_foodservice_insights.report.plots.get_drink_categories")

@@ -53,16 +53,13 @@ def aggregate_data(
     diner_meal_mapping: dict[Any, Any] | None = None,
     per_diner_meal: bool = False,
     metrics: list[str] | str = "kilos_total",
-    timescale: str = "month_year",
 ) -> pd.DataFrame:
-    """Aggregate metrics by timescale and group.
+    """Aggregate metrics by month and group.
 
     Uses ``sum(min_count=1)`` to preserve all-missing groups as missing values.
     """
-    if timescale not in {"month_year", "period"}:
-        raise ValueError("timescale must be 'month_year' or 'period'.")
-    if timescale not in df.columns:
-        raise ValueError(f"'{timescale}' column not found in DataFrame.")
+    if "month_year" not in df.columns:
+        raise ValueError("'month_year' column not found in DataFrame.")
 
     if group_by not in {"product", "category"}:
         raise ValueError("group_by must be 'product' or 'category'.")
@@ -78,7 +75,9 @@ def aggregate_data(
             raise ValueError(f"Metric column '{metric_name}' not found in DataFrame.")
 
     agg = (
-        df.groupby([timescale, group_by], dropna=False)[metric_list].sum(min_count=1).reset_index()
+        df.groupby(["month_year", group_by], dropna=False)[metric_list]
+        .sum(min_count=1)
+        .reset_index()
     )
 
     if not per_diner_meal:
@@ -88,7 +87,7 @@ def aggregate_data(
         raise ValueError("diner_meal_mapping is required when per_diner_meal=True")
 
     dm_mapping = normalize_diner_meal_mapping(diner_meal_mapping)
-    alignment = compute_month_alignment(agg[timescale].dropna().unique(), dm_mapping.keys())
+    alignment = compute_month_alignment(agg["month_year"].dropna().unique(), dm_mapping.keys())
     missing_months = alignment["missing_in_mapping"]
     invalid_counts = [month for month, value in dm_mapping.items() if value <= 0]
 
@@ -100,7 +99,7 @@ def aggregate_data(
             details.append(f"non-positive diner-meal counts: {invalid_counts}")
         raise ValueError("Cannot compute per-diner metrics: " + "; ".join(details))
 
-    denom = agg[timescale].map(dm_mapping)
+    denom = agg["month_year"].map(dm_mapping)
 
     for metric_name in metric_list:
         per_dm_col = per_diner_metric_name(metric_name)

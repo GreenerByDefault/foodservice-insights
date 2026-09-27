@@ -414,27 +414,6 @@ def create_table_page(
 
     display_df = display_df.map(_format_pdf_table_value)
 
-    if title == "Decision KPIs" and "Top Animal Products" in display_df.columns:
-        display_df = display_df.copy()
-        if "Focus" in display_df.columns:
-            display_df["Focus"] = display_df["Focus"].map(
-                lambda value: (
-                    textwrap.fill(
-                        str(value), width=30, break_long_words=False, break_on_hyphens=False
-                    )
-                    if pd.notna(value)
-                    else value
-                )
-            )
-        display_df["Top Animal Products"] = display_df["Top Animal Products"].map(
-            lambda value: (
-                textwrap.fill(str(value), width=34, break_long_words=False, break_on_hyphens=False)
-                if pd.notna(value)
-                else value
-            )
-        )
-        col_widths = [0.20, 0.16, 0.30, 0.17, 0.17]
-
     if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
         display_df = display_df.copy()
         display_df["Scenario"] = display_df["Scenario"].map(
@@ -470,8 +449,6 @@ def create_table_page(
     )
     table.auto_set_font_size(False)
     font_size = 7.5 if len(display_df.columns) <= 6 else 6.5
-    if title == "Decision KPIs":
-        font_size = 7.0
     if title == "Substitution Scenarios":
         font_size = 10.0
     if title == "Category Template":
@@ -488,16 +465,6 @@ def create_table_page(
         cell.get_text().set_wrap(True)
         cell.set_edgecolor("#D9E1EA")
         cell.set_linewidth(0.6)
-
-    if title == "Decision KPIs":
-        line_counts = [
-            max(str(value).count("\n") + 1 for value in row) for row in display_df.values.tolist()
-        ]
-        for row_idx, line_count in enumerate(line_counts, start=1):
-            row_height = table[row_idx, 0].get_height() * max(1.0, 1 + 0.55 * (line_count - 1))
-            for col_idx in range(len(display_df.columns)):
-                table[row_idx, col_idx].set_height(row_height)
-                table[row_idx, col_idx].set_text_props(va="top")
 
     if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
         scenario_col_idx = display_df.columns.get_loc("Scenario")
@@ -648,7 +615,7 @@ _QUALITY_STATUS_SENTENCES = {
     "warning": (
         "Your data passed most checks, but a few things are worth noting. See the details below."
     ),
-    "error": (
+    "invalid": (
         "One or more data issues were found that may affect the accuracy of these results. "
         "Please review the notes below before sharing this report."
     ),
@@ -671,7 +638,7 @@ def _quality_to_lines(
     """Turn quality-check results into plain lines for the PDF report.
 
     Args:
-        quality_status: Overall status string (``"pass"``, ``"warning"``, ``"error"``).
+        quality_status: Overall status string (``"pass"``, ``"warning"``, ``"invalid"``).
         quality_summary: Optional summary mapping with a ``"by_status"`` count breakdown.
         missing_data_findings: Optional list of finding dicts with ``status``/``message`` keys.
         show_successes: If True, include success findings in the rendered detail list.
