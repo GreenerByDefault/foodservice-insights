@@ -5,6 +5,7 @@ their emissions factors, and which are animal- or plant-based.
 """
 
 import logging
+from functools import cache
 from typing import Any
 
 import pandas as pd
@@ -13,15 +14,11 @@ import yaml
 from gbd_foodservice_insights import PACKAGE_DIR
 
 logger = logging.getLogger(__name__)
-_GBD_CATEGORIES_DATA: dict[str, Any] | None = None
 
 
+@cache
 def _load_gbd_categories_data() -> dict[str, Any]:
     """Private helper to load GBD categories YAML data."""
-    global _GBD_CATEGORIES_DATA
-    if _GBD_CATEGORIES_DATA is not None:
-        return _GBD_CATEGORIES_DATA
-
     yaml_path = PACKAGE_DIR / "data_files" / "GBD_categories.yaml"
     with open(yaml_path) as f:
         loaded_data = yaml.safe_load(f)
@@ -29,8 +26,7 @@ def _load_gbd_categories_data() -> dict[str, Any]:
     if not isinstance(loaded_data, dict):
         raise ValueError(f"{yaml_path.name} must contain a top-level mapping of category data.")
 
-    _GBD_CATEGORIES_DATA = loaded_data
-    return _GBD_CATEGORIES_DATA
+    return loaded_data
 
 
 def get_gbd_categories_metadata() -> dict[str, Any]:
