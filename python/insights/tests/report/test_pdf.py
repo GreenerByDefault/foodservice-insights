@@ -15,6 +15,7 @@ from gbd_foodservice_insights.report.pdf import (
     _format_category_template_for_pdf,
     _format_decision_kpis_for_pdf,
     _format_substitution_scenarios_for_pdf,
+    _quality_to_lines,
     _wrap_text_lines,
     _wrap_to_width,
     build_pdf_report,
@@ -209,6 +210,28 @@ def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:
 
     assert "About This Report" in page_titles[-2]
     assert "Data Completeness & Quality" in page_titles[-1]
+
+
+def test_quality_lines_explain_an_invalid_status() -> None:
+    assert _quality_to_lines(
+        "invalid",
+        {"by_status": {"success": 1, "error": 1}},
+        [
+            {"status": "success", "message": "All required columns present."},
+            {"status": "error", "message": "Found 2 negative values in 'kilos_total'."},
+        ],
+    ) == [
+        "This section summarises the automated checks run on your data before this report "
+        "was produced.",
+        "",
+        "One or more data issues were found that may affect the accuracy of these results. "
+        "Please review the notes below before sharing this report.",
+        "  1 passed  ·  1 issue",
+        "",
+        "Check details:",
+        "  • Passed:  All required columns present.",
+        "  • Issue:  Found 2 negative values in 'kilos_total'.",
+    ]
 
 
 def test_build_pdf_report_renders_table_index_as_a_regular_column(tmp_path: Path) -> None:

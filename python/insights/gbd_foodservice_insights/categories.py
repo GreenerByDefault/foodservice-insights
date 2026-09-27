@@ -136,6 +136,20 @@ def get_dairy_categories(lowercase: bool = False) -> list[str]:
     return get_categories_by_product_category("Dairy", lowercase=lowercase)
 
 
+def get_plant_based_dairy_categories(lowercase: bool = False) -> list[str]:
+    """
+    Returns a list of plant-based dairy alternative categories (plant milks, plant cheese,
+    plant yogurt, plant egg).
+
+    Args:
+        lowercase: If True, returns the categories in lowercase. Defaults to False.
+
+    Returns:
+        A list of plant-based dairy alternative category strings.
+    """
+    return get_categories_by_product_category("Plant-Based Dairy & Egg", lowercase=lowercase)
+
+
 def get_egg_categories(lowercase: bool = False) -> list[str]:
     """
     Returns a list of egg categories (liquid eggs, shelled eggs).
