@@ -214,7 +214,10 @@ async function buildTemplateDatabase(
   // Migrations run as the app's own role, not the superuser used for everything above — `owner`
   // is what makes that role able to create anything in `public` at all.
   const appStagingConnectionString = withDatabaseName(connectionString, staging);
-  const stagingDatabase = initializeDatabase({ connectionString: appStagingConnectionString });
+  const stagingDatabase = initializeDatabase({
+    connectionString: appStagingConnectionString,
+    log: 'console',
+  });
   try {
     await migrateToLatest(stagingDatabase);
   } finally {

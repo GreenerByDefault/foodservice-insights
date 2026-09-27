@@ -43,6 +43,9 @@ export type RawLogSettings = {
 const LEVELS: readonly LogLevel[] = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
 const FORMATS: readonly LogFormat[] = ['json', 'pretty'];
 
+/** The keys an error rides under, each with the error serializer. */
+const ERROR_KEYS: readonly string[] = ['err', 'error', 'cause'];
+
 /** Parse `LOG_LEVEL` and `LOG_FORMAT`. Production sets neither; a typo throws at startup. */
 export function parseLogSettings(raw: RawLogSettings): LogSettings {
   return {
@@ -98,12 +101,12 @@ function loggerOptions(level: LogLevel): LoggerOptions {
     formatters: { level: (label) => ({ level: label }) },
     timestamp: pino.stdTimeFunctions.isoTime,
     // Call sites log ids, never emails. This is the backstop that makes the rule hold without a
-    // reviewer catching it.
-    redact: ['email', 'to', '*.email', '*.to'],
+    // reviewer catching it. Not `to`: it is as often a state or a date as a recipient.
+    redact: ['email', '*.email'],
     // An `Error` under a key with no serializer is written as `{}`, because `message` and `stack`
     // are not enumerable, and nothing fails. So every key an error rides under gets one. New code
     // uses `err`, which is where `log.error(error, '…')` puts it.
-    serializers: { err: serializeError, error: serializeError, cause: serializeError },
+    serializers: Object.fromEntries(ERROR_KEYS.map((key) => [key, serializeError])),
   };
 }
 
@@ -138,7 +141,7 @@ function loadPrettyStream(): DestinationStream {
  */
 export const MAX_RECORD_BYTES = 2_000;
 
-/** Room kept for the `truncated` field `fitRecord` adds. */
+/** Room kept for the `"truncated":[…]` field `fitRecord` adds. Names that do not fit are left off. */
 const TRUNCATION_RESERVE_BYTES = 300;
 
 /** Return `line`, or, when it is over `MAX_RECORD_BYTES`, the same record with its largest fields
@@ -151,38 +154,63 @@ function fitRecord(line: string): string {
   if (Buffer.byteLength(line) <= MAX_RECORD_BYTES) return line;
 
   const record: Record<string, unknown> = JSON.parse(line);
-  const budget = MAX_RECORD_BYTES - TRUNCATION_RESERVE_BYTES;
   const entries = Object.entries(record).map(([key, value]) => ({
     key,
     value,
-    bytes: Buffer.byteLength(JSON.stringify(value)) + key.length + 4,
+    // Each counted with a trailing comma, which covers the one before `truncated`.
+    bytes: Buffer.byteLength(`${JSON.stringify(key)}:${JSON.stringify(value)},`),
   }));
-  // Smallest first, so `level`, `time`, the ids and a short `msg` always survive.
-  const bySize = entries.toSorted((a, b) => a.bytes - b.bytes);
-  const keptKeys = new Set<string>();
-  let used = 0;
-  for (const entry of bySize) {
-    if (used + entry.bytes > budget) break;
-    keptKeys.add(entry.key);
-    used += entry.bytes;
-  }
+  // Errors first: a record that lost its error has lost its point, and the serializer keeps each
+  // under `ERROR_BYTES`. Then smallest first, so `level`, `time`, the ids and a short `msg` survive.
+  const byPriority = entries.toSorted(
+    (a, b) =>
+      Number(ERROR_KEYS.includes(b.key)) - Number(ERROR_KEYS.includes(a.key)) || a.bytes - b.bytes,
+  );
+  const kept = new Set(
+    fitWithin(
+      byPriority,
+      MAX_RECORD_BYTES - TRUNCATION_RESERVE_BYTES - '{}\n'.length,
+      (entry) => entry.bytes,
+    ),
+  );
 
-  const kept = entries.filter((entry) => keptKeys.has(entry.key));
-  const dropped = entries.filter((entry) => !keptKeys.has(entry.key)).map((entry) => entry.key);
-  const fitted = Object.fromEntries(kept.map(({ key, value }) => [key, value]));
-  return `${JSON.stringify({ ...fitted, truncated: dropped.slice(0, 20) })}\n`;
+  const fitted = Object.fromEntries(
+    entries.filter((entry) => kept.has(entry)).map(({ key, value }) => [key, value]),
+  );
+  const dropped = entries.filter((entry) => !kept.has(entry)).map((entry) => entry.key);
+  const truncated = fitWithin(dropped, TRUNCATION_RESERVE_BYTES - '"truncated":[]'.length, (key) =>
+    Buffer.byteLength(`${JSON.stringify(key)},`),
+  );
+  return `${JSON.stringify({ ...fitted, truncated })}\n`;
+}
+
+/** The items, in order, that fit in `budget`, skipping any that would overrun it. */
+function fitWithin<T>(items: readonly T[], budget: number, bytesOf: (item: T) => number): T[] {
+  let used = 0;
+  return items.filter((item) => {
+    const bytes = bytesOf(item);
+    if (used + bytes > budget) return false;
+    used += bytes;
+    return true;
+  });
 }
 
 // -----------------------------------------------------
 // Errors
 // -----------------------------------------------------
 
+/** The most one serialized error may take, leaving the rest of its record room for ids and `msg`. */
+const ERROR_BYTES = 1_400;
 /** Stack bytes for the logged error. Each level of cause gets half its parent's, split among
  * siblings, so a whole chain's stacks stay under twice this. */
 const STACK_BYTES = 700;
 /** Below this, a stack could not hold a frame, so it is left out. */
 const MIN_STACK_BYTES = 80;
-const MESSAGE_BYTES = 300;
+/** For the message, and for each other field an error carries. */
+const FIELD_BYTES = 300;
+/** The smallest fraction of the budgets above that `serializeScaled` tries. A message cut shorter
+ * than an eighth would no longer say what went wrong. */
+const MIN_SCALE = 1 / 8;
 /** How many levels of cause are followed. Also what ends a cycle. */
 const MAX_ERROR_DEPTH = 4;
 const MAX_AGGREGATE_ERRORS = 3;
@@ -196,18 +224,33 @@ const OWN_ERROR_FIELDS = new Set(['type', 'message', 'stack', 'cause', 'aggregat
 
 type ErrorLike = Error & { readonly errors?: unknown };
 
+type ErrorBudget = { readonly stackBytes: number; readonly fieldBytes: number };
+
 function isErrorLike(value: unknown): value is ErrorLike {
   return value instanceof Error;
 }
 
 /** pino's `errWithCause`, but trimmed to fit a record, and without `pg`'s data-bearing fields. */
 function serializeError(value: unknown): unknown {
-  return isErrorLike(value) ? serializeErrorWithin(value, STACK_BYTES, 0) : value;
+  return isErrorLike(value) ? serializeScaled(value, 1) : value;
+}
+
+/** A chain of long messages overruns `ERROR_BYTES` at full budgets, and `fitRecord` would then drop
+ * the error whole. Halving every budget until it fits keeps each message and the top of each stack.
+ */
+function serializeScaled(error: ErrorLike, scale: number): Record<string, unknown> {
+  const budget = {
+    stackBytes: Math.floor(STACK_BYTES * scale),
+    fieldBytes: Math.floor(FIELD_BYTES * scale),
+  };
+  const serialized = serializeErrorWithin(error, budget, 0);
+  if (jsonBytes(serialized) <= ERROR_BYTES || scale <= MIN_SCALE) return serialized;
+  return serializeScaled(error, scale / 2);
 }
 
 function serializeErrorWithin(
   error: ErrorLike,
-  stackBytes: number,
+  budget: ErrorBudget,
   depth: number,
 ): Record<string, unknown> {
   const fields = Object.entries(error).filter(
@@ -223,17 +266,21 @@ function serializeErrorWithin(
 
   const children = (cause ? 1 : 0) + aggregated.length + errorFields;
   const child = (inner: ErrorLike) =>
-    serializeErrorWithin(inner, stackBytes / 2 / children, depth + 1);
+    serializeErrorWithin(
+      inner,
+      { ...budget, stackBytes: budget.stackBytes / 2 / children },
+      depth + 1,
+    );
 
   return {
     type: error.constructor.name,
-    message: truncateBytes(error.message, MESSAGE_BYTES),
-    ...(error.stack && stackBytes >= MIN_STACK_BYTES
-      ? { stack: trimStack(error.stack, stackBytes) }
+    message: truncateBytes(error.message, budget.fieldBytes),
+    ...(error.stack && budget.stackBytes >= MIN_STACK_BYTES
+      ? { stack: trimStack(error.stack, budget.stackBytes) }
       : {}),
     ...Object.fromEntries(
       fields.flatMap(([key, field]) => {
-        if (!isErrorLike(field)) return [[key, field]];
+        if (!isErrorLike(field)) return [[key, boundField(field, budget.fieldBytes)]];
         return nested ? [[key, child(field)]] : [];
       }),
     ),
@@ -242,18 +289,44 @@ function serializeErrorWithin(
   };
 }
 
+/** A string is cut to `maxBytes`. Any other value that would overrun it, or that cannot be
+ * serialized, is replaced by a note saying so. */
+function boundField(value: unknown, maxBytes: number): unknown {
+  if (typeof value === 'string') return truncateBytes(value, maxBytes);
+  return jsonBytes(value) <= maxBytes ? value : `[${typeof value} omitted]`;
+}
+
+function jsonBytes(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? '');
+  } catch {
+    // A cycle or a BigInt.
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 /** Keep the stack's leading lines that fit in `maxBytes`, and say how many were cut. */
 function trimStack(stack: string, maxBytes: number): string {
   const [header = '', ...frames] = stack.split('\n');
   const kept = [truncateBytes(header, maxBytes)];
   let used = Buffer.byteLength(kept[0] ?? '');
-  for (const frame of frames) {
+  for (const frame of frames.map(shortenFramePath)) {
     used += Buffer.byteLength(frame) + 1;
     if (used > maxBytes) break;
     kept.push(frame);
   }
   const cut = frames.length - (kept.length - 1);
   return cut > 0 ? `${kept.join('\n')}\n    … ${cut} more` : kept.join('\n');
+}
+
+/** A frame's path, from the package for a dependency and from the working directory for our own
+ * code. The absolute prefix is the same on every frame, and it would cost half the stack budget. */
+function shortenFramePath(frame: string): string {
+  const cwd = process.cwd();
+  return frame
+    .replace(/(?:file:\/\/)?[^\s(]*\/node_modules\//g, '')
+    .replaceAll(`file://${cwd}/`, '')
+    .replaceAll(`${cwd}/`, '');
 }
 
 function truncateBytes(text: string, maxBytes: number): string {

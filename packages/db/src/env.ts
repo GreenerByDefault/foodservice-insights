@@ -18,6 +18,7 @@ loadLocalEnv();
 
 export const DATABASE: Kysely<Database> = initializeDatabase({
   connectionString: requireEnv('DB_CONNECTION_STRING'),
+  log: 'console',
 });
 
 /** Close `DATABASE`. Call this at the end of every script, or it will hang. */

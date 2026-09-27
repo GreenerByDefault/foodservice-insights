@@ -22,11 +22,12 @@ Facts from the tree (2026-09-27) that shape the design:
 - **`@gbd/core/testing` has `collectingLogger()`**, returning `{ log, records, clear() }`. It logs
   at every level, and each record is the parsed line without `time`, `pid` or `hostname`, so a test
   asserts `toEqual` on what production would write, bound and redaction included.
-- **`@gbd/db` already logs through it when handed one.** `DatabaseConfig.log` is optional; with it,
-  a dropped connection is a `warn` ("Database connection dropped") and anything else an `error`
-  ("Unexpected database connection error"), both with `err`. Without it the same lines go to the
-  console, for the scripts `@gbd/db/env` serves. Only the client listener logs: pg-pool re-emits an
-  idle client's error on the pool, so logging both wrote every drop twice. `shutdownDatabase` no
+- **`@gbd/db` already logs through it when handed one.** `DatabaseConfig.log` is required, a
+  `Logger` or `'console'`; with a logger, a dropped connection is a `warn` ("Database connection
+  dropped") and anything else an `error` ("Unexpected database connection error"), both with `err`.
+  `'console'` writes the same lines to the console. Every caller passes `'console'` today; the web
+  app's and the worker's carry a TODO that PRs 1 and 3 resolve. Only the client listener logs:
+  pg-pool re-emits an idle client's error on the pool, so logging both wrote every drop twice. `shutdownDatabase` no
   longer logs the error it rethrows, so its two callers (`apps/web/src/lib/server/db.ts`,
   `apps/worker/src/main.ts`) must keep logging it.
 - **`LOG_LEVEL` and `LOG_FORMAT` are wired.** Turbo passes both through; `.env.example` sets
@@ -67,18 +68,21 @@ tail.
   lack; asking for it there throws with a message saying so.
 - **New code puts errors under `err`**, pino's own key, which is where `log.error(error, '…')`
   puts it. `error` and `cause` are serialized too, so the existing call sites cannot write `{}`
-  while they move over. The serializer drops `pg`'s `detail`, `internalQuery` and `where`, trims
-  stacks and messages, follows at most four levels of cause and three aggregated errors.
+  while they move over. The serializer drops `pg`'s `detail`, `internalQuery` and `where`, bounds
+  stacks, messages and every other field, follows at most four levels of cause and three aggregated
+  errors, and halves those bounds until the error fits in 1,400 bytes. Stack frames lose their path
+  up to `node_modules/` or the working directory.
   `describe(error)` in `failures.ts` stays the renderer for `failure_detail`; log lines pass the
   error object.
 - **Every record fits in `MAX_RECORD_BYTES` (2,000).** That is DigitalOcean's per-line forwarding
   cap, the tightest among the hosts `hosting-provider.md` compared. The error serializer keeps
-  ordinary records under it. Past that, the write drops the record's largest fields and names them
-  under `truncated`, so a field that is too big disappears whole. The child's stderr tail is the
+  ordinary records under it. Past that, the write keeps any error, then the smallest fields, and
+  names the rest under `truncated`, so a field that is too big disappears whole. The child's stderr tail is the
   one field that will hit this, so the worker trims it itself, keeping the end, before logging it.
 - **Ids, never emails.** Call sites log `userId`, `organizationId`, `reportId`, `attemptId` and
-  `storageKey`. `redact` on `email` and `to` is the backstop that makes the rule hold without a
-  reviewer catching it. It also covers one level down (`user.email`).
+  `storageKey`. `redact` on `email` is the backstop that makes the rule hold without a reviewer
+  catching it. It also covers one level down (`user.email`). Not `to`, which is as often a state or
+  a date as a recipient.
 - **Tests read records, not spies.** A test asserts `toEqual` on `collectingLogger()`'s records,
   where today it runs `toMatchObject` on `console` arguments. Where a seam exists, the logger is a
   required parameter. Where it is a module singleton, it is replaced once in the test project's
@@ -122,6 +126,7 @@ Mechanical: every line the worker writes today, now as a structured record at th
 - `main.ts` installs `uncaughtException` and `unhandledRejection` handlers that log one record and
   exit 1, and its own `.catch` logs through the same logger. Today Node's multi-line trace
   arrives at the host as one entry per line.
+- `db.ts` passes that root to `initializeDatabase` as `log`, in place of `'console'`.
 - `testing/worker-harness.ts` passes a `collectingLogger()`. The setup file replaces `log.ts`'s root
   for every test, because `WORKER_DATABASE`'s pool logs through it. `retry.test.ts` moves to the
   sink.
@@ -163,7 +168,7 @@ Mechanical, like PR 1.
   singleton it returns sits in a module of its own, built lazily from `$env/dynamic/private` for
   the reason `database()` is lazy: the build imports server modules with no env set. Keeping the
   singleton separate lets the setup file mock the root while PR 4 tests the accessor.
-  `database()` passes the logger to `initializeDatabase` as `log`.
+  `database()` passes the logger to `initializeDatabase` as `log`, in place of `'console'`.
 - Every server `console.*` moves to it: `hooks.server.ts` (`handleError`, and `init`'s shutdown
   lines), `db.ts`, `storage.ts`, `email.ts`, `identify.ts`, `files.ts`, `health/+server.ts`, and
   the three route files. `sendInvite` takes the invite's id and logs it in place of the

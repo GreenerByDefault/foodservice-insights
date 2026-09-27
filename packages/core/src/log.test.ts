@@ -71,6 +71,41 @@ describe('createJsonLogger', () => {
       { level: 'info', userId: 'u1', msg: 'big', truncated: ['blob'] },
     ]);
   });
+
+  test('stays within the bound when the names of what it drops are long', () => {
+    const lines: string[] = [];
+    const log = createJsonLogger('info', (line) => lines.push(line));
+    const fields = Object.fromEntries(
+      Array.from({ length: 30 }, (_, i) => [`aFairlyLongFieldName${i}`, 'y'.repeat(100)]),
+    );
+
+    log.info(fields, 'many');
+
+    const [line = ''] = lines;
+    expect(Buffer.byteLength(line)).toBeLessThanOrEqual(MAX_RECORD_BYTES);
+    expect(JSON.parse(line)).toEqual(
+      expect.objectContaining({
+        msg: 'many',
+        truncated: expect.arrayContaining([expect.any(String)]),
+      }),
+    );
+  });
+
+  test('keeps the error over a smaller field when both do not fit', () => {
+    const sink = collectingLogger();
+    // Larger than `note`, but small enough that the serializer leaves it whole.
+    const error = Object.assign(new Error('boom'), {
+      a: 'a'.repeat(250),
+      b: 'b'.repeat(250),
+      c: 'c'.repeat(250),
+    });
+
+    sink.log.error({ err: error, note: 'n'.repeat(800) }, 'failed');
+
+    const [record] = sink.records;
+    expect(record?.truncated).toEqual(['note']);
+    expect(record?.err).toEqual(expect.objectContaining({ message: 'boom', c: 'c'.repeat(250) }));
+  });
 });
 
 describe('collectingLogger', () => {
@@ -84,17 +119,13 @@ describe('collectingLogger', () => {
     expect(sink.records).toEqual([]);
   });
 
-  test('redacts email and to, top-level and one deep', () => {
+  test('redacts email, top-level and one deep, but not to', () => {
     const sink = collectingLogger();
 
-    sink.log.info({
-      email: 'a@example.com',
-      to: 'b@example.com',
-      user: { email: 'c@example.com' },
-    });
+    sink.log.info({ email: 'a@example.com', user: { email: 'b@example.com' }, to: 'running' });
 
     expect(sink.records).toEqual([
-      { level: 'info', email: '[Redacted]', to: '[Redacted]', user: { email: '[Redacted]' } },
+      { level: 'info', email: '[Redacted]', user: { email: '[Redacted]' }, to: 'running' },
     ]);
   });
 });
@@ -156,6 +187,77 @@ describe('error serializer', () => {
     for (const trimmed of [err.stack, err.cause.stack, err.cause.cause.stack]) {
       expect(trimmed).toMatch(/\n {4}… \d+ more$/);
     }
+  });
+
+  test('a chain of long messages shrinks to fit rather than being dropped', () => {
+    const lines: string[] = [];
+    const log = createJsonLogger('error', (line) => lines.push(line));
+    const long = 'm'.repeat(400);
+    const error = new Error(long, {
+      cause: new Error(long, { cause: new Error(long, { cause: new Error(long) }) }),
+    });
+
+    log.error(error, 'failed');
+
+    const [line = ''] = lines;
+    expect(Buffer.byteLength(line)).toBeLessThanOrEqual(MAX_RECORD_BYTES);
+    const record = JSON.parse(line);
+    expect(record).not.toHaveProperty('truncated');
+    const messages = [
+      record.err.message,
+      record.err.cause.message,
+      record.err.cause.cause.message,
+      record.err.cause.cause.cause.message,
+    ];
+    for (const message of messages) expect(message).toMatch(/^m+…$/);
+  });
+
+  test("an error's other fields are bounded", () => {
+    const sink = collectingLogger();
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    const error = Object.assign(new Error('boom'), {
+      response: 'r'.repeat(1_000),
+      body: { html: 'h'.repeat(1_000) },
+      cycle,
+      status: 502,
+    });
+
+    sink.log.error(error);
+
+    expect(sink.records[0]?.err).toEqual({
+      type: 'Error',
+      message: 'boom',
+      stack: expect.any(String),
+      response: `${'r'.repeat(300)}…`,
+      body: '[object omitted]',
+      cycle: '[object omitted]',
+      status: 502,
+    });
+  });
+
+  test('frame paths are shortened to the package or the working directory', () => {
+    const sink = collectingLogger();
+    const error = new Error('boom');
+    error.stack = [
+      'Error: boom',
+      `    at run (${process.cwd()}/src/main.ts:1:1)`,
+      `    at file://${process.cwd()}/src/main.ts:2:2`,
+      '    at next (file:///app/node_modules/.pnpm/pg@8.17.2/node_modules/pg/lib/client.js:3:3)',
+    ].join('\n');
+
+    sink.log.error(error);
+
+    expect(sink.records[0]?.err).toEqual({
+      type: 'Error',
+      message: 'boom',
+      stack: [
+        'Error: boom',
+        '    at run (src/main.ts:1:1)',
+        '    at src/main.ts:2:2',
+        '    at next (pg/lib/client.js:3:3)',
+      ].join('\n'),
+    });
   });
 
   test('a cycle of causes ends after four levels', () => {

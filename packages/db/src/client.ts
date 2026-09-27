@@ -54,15 +54,16 @@ export const DEFAULT_LIMITS: DatabaseLimits = {
 export type DatabaseConfig = {
   connectionString: string;
   limits?: Partial<DatabaseLimits>;
-  /** Where the pool reports a dropped connection. Without one, as in the scripts `@gbd/db/env`
-   * serves, it writes to the console. */
-  log?: Logger;
+  /** Where the pool reports a dropped connection. `'console'` suits scripts and tests, whose
+   * readers want a line rather than a record. Required, so that no caller falls back to it by
+   * forgetting. */
+  log: Logger | 'console';
 };
 
 /** How long `shutdownDatabase` gives the pool to drain before giving up on a clean shutdown. */
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000;
 
-export function buildPoolConfig(config: DatabaseConfig): PoolConfig {
+export function buildPoolConfig(config: Omit<DatabaseConfig, 'log'>): PoolConfig {
   const limits = { ...DEFAULT_LIMITS, ...config.limits };
 
   return {
@@ -95,8 +96,8 @@ export function initializeDatabase(config: DatabaseConfig): Kysely<Database> {
   // timeouts above cause them on purpose.
   //
   // Only the client's listener logs. The pool re-emits an idle client's error as its own, so
-  // logging both would write every drop twice; and a client emits one only when it has no query
-  // in flight, which is exactly when nothing else will report it.
+  // logging both would write every drop twice. A checked-out client emits one too when its socket
+  // dies mid-query, so that drop is logged here and again by the caller whose query failed.
   pool.on('error', () => undefined);
   pool.on('connect', (client) => {
     client.on('error', (error) => logConnectionError(config.log, error));
@@ -108,15 +109,15 @@ export function initializeDatabase(config: DatabaseConfig): Kysely<Database> {
   });
 }
 
-export function logConnectionError(log: Logger | undefined, error: Error): void {
+export function logConnectionError(log: Logger | 'console', error: Error): void {
   const transient = isTransientDatabaseError(error);
-  if (log) {
-    if (transient) log.warn({ err: error }, 'Database connection dropped');
-    else log.error({ err: error }, 'Unexpected database connection error');
+  if (log === 'console') {
+    if (transient) console.warn('Database connection dropped:', error.message);
+    else console.error('Unexpected database connection error:', error);
     return;
   }
-  if (transient) console.warn('Database connection dropped:', error.message);
-  else console.error('Unexpected database connection error:', error);
+  if (transient) log.warn({ err: error }, 'Database connection dropped');
+  else log.error({ err: error }, 'Unexpected database connection error');
 }
 
 /** Close a database handle, releasing its pool.

@@ -7,5 +7,6 @@ import type { Database } from '../schema.ts';
 export function unreachableDatabase(): Kysely<Database> {
   return initializeDatabase({
     connectionString: `postgres://nobody:nothing@${LOCALHOST}:${UNREACHABLE_PORT}/nothing`,
+    log: 'console',
   });
 }

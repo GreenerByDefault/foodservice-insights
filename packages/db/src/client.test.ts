@@ -82,6 +82,7 @@ test('a custom statementTimeoutMs is enforced by the real database', async () =>
   const database = initializeDatabase({
     connectionString: requireEnv('DB_CONNECTION_STRING'),
     limits: { statementTimeoutMs: 100 },
+    log: 'console',
   });
 
   try {
@@ -138,5 +139,23 @@ describe('a dropped connection', () => {
         msg: 'Unexpected database connection error',
       },
     ]);
+  });
+
+  test("with 'console', a drop is a one-line warning and anything else an error", () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const dropped = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+    const unexpected = new Error('boom');
+
+    try {
+      logConnectionError('console', dropped);
+      logConnectionError('console', unexpected);
+
+      expect(warn.mock.calls).toEqual([['Database connection dropped:', 'read ECONNRESET']]);
+      expect(error.mock.calls).toEqual([['Unexpected database connection error:', unexpected]]);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 });
