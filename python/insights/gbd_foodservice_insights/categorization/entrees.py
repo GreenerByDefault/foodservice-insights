@@ -516,3 +516,48 @@ def run_entree_detector(
         classified_products["entree_needs_review"].fillna(False).astype(bool)
     )
     return classified_products
+
+
+def filter_to_entrees(
+    df_final: pd.DataFrame,
+    summary: dict,
+    classified_products: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict]:
+    """
+    Keep only the entree rows of `merge_categorizations`' output, and update its summary.
+
+    This runs after the merge, not before, so that side/add-ons do not count toward the
+    merge's "over 80% of products eliminated" check: a file that is mostly sides is still
+    usable serving data. `n_products_after` and `pct_remaining` keep their pre-filter values
+    for the same reason.
+    """
+    classifications = df_final["product"].map(
+        classified_products.set_index("product")["entree_classification"]
+    )
+    unlabeled = df_final.loc[~classifications.isin(VALID_ENTREE_CLASSIFICATIONS), "product"]
+    if not unlabeled.empty:
+        raise ValueError(
+            "Some categorized products have no entree classification: "
+            + ", ".join(sorted(unlabeled.unique()[:10]))
+        )
+
+    entrees = df_final.assign(entree_classification=classifications).loc[
+        classifications == ENTREE_LABEL_ENTREE
+    ]
+
+    n_rows_before = summary["n_rows_before"]
+    n_rows_after = len(entrees)
+    n_rows_non_entree = len(df_final) - n_rows_after
+    logger.info("Entree filter: kept %d/%d rows.", n_rows_after, len(df_final))
+
+    row_elimination_details = summary["row_elimination_details"] | {
+        "total_rows_final": n_rows_after,
+        "total_rows_eliminated": n_rows_before - n_rows_after,
+        "total_eliminated_pct": (n_rows_before - n_rows_after) / n_rows_before,
+        "rows_eliminated_non_entree": n_rows_non_entree,
+        "rows_eliminated_non_entree_pct": n_rows_non_entree / n_rows_before,
+    }
+    return entrees, summary | {
+        "n_rows_after": n_rows_after,
+        "row_elimination_details": row_elimination_details,
+    }

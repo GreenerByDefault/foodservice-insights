@@ -16,8 +16,6 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
-    ENTREE_LABEL_ENTREE,
-    ENTREE_LABEL_SIDE_ADDON,
     _normalize_product_name,
     build_cleaned_name_reuse_index,
     get_previously_categorized_items,
@@ -328,9 +326,6 @@ def fuzzy_match_GBD_categories(
 def merge_categorizations(
     original_df: pd.DataFrame,
     categorized_products_df: pd.DataFrame,
-    data_type: str,
-    n_products_before: int,
-    n_rows_before: int,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Merge categorizations back to the original data and filter.
@@ -338,15 +333,9 @@ def merge_categorizations(
     Parameters
     ----------
     original_df : DataFrame
-        The original input data.
+        The cleaned input data.
     categorized_products_df : DataFrame
         Unique products with their assigned categories.
-    data_type : str
-        "procurement" or "serving".
-    n_products_before : int
-        Number of unique products before categorization.
-    n_rows_before : int
-        Number of rows before categorization.
 
     Returns
     -------
@@ -354,13 +343,11 @@ def merge_categorizations(
         - Filtered DataFrame ready for aggregation.
         - Summary dict with elimination statistics.
     """
-    # Determine which columns to merge
-    merge_cols = ["product", "category"]
-    if "entree_classification" in categorized_products_df.columns:
-        merge_cols.append("entree_classification")
+    n_rows_before = len(original_df)
+    n_products_before = original_df["product"].nunique()
 
     df_final = original_df.merge(
-        categorized_products_df[merge_cols],
+        categorized_products_df[["product", "category"]],
         on="product",
         how="left",
     )
@@ -382,12 +369,6 @@ def merge_categorizations(
             "Over 80% of products were eliminated during categorization: "
             f"{n_products_after}/{n_products_before} ({pct_remaining:.1%}) remain."
         )
-
-    # Filter to entrees only for serving data.
-    n_rows_non_entree = 0
-    if data_type == "serving" and "entree_classification" in df_final.columns:
-        n_rows_non_entree = (df_final["entree_classification"] == ENTREE_LABEL_SIDE_ADDON).sum()
-        df_final = df_final.loc[df_final["entree_classification"] == ENTREE_LABEL_ENTREE]
 
     # Drop intermediate columns
     columns_to_drop = [
@@ -411,10 +392,6 @@ def merge_categorizations(
         "rows_eliminated_uncategorized": int(n_rows_uncategorized),
         "rows_eliminated_uncategorized_pct": (
             n_rows_uncategorized / n_rows_before if n_rows_before > 0 else 0
-        ),
-        "rows_eliminated_non_entree": n_rows_non_entree,
-        "rows_eliminated_non_entree_pct": (
-            n_rows_non_entree / n_rows_before if n_rows_before > 0 else 0
         ),
     }
 

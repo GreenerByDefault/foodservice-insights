@@ -2,9 +2,11 @@ import logging
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 from gbd_foodservice_insights.categorization import entrees
 from gbd_foodservice_insights.categorization.entrees import (
     classify_entrees_using_historical_classifications,
+    filter_to_entrees,
     run_entree_detector,
 )
 
@@ -168,3 +170,76 @@ def test_classify_entrees_using_historical_classifications_cleaned_name_reuse():
     assert result.set_index("product")["previously_entree_classified"].to_dict() == {
         "NEW_RAW": True
     }
+
+
+def _merged_rows(products: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "product": products,
+            "date": ["2025-01-01"] * len(products),
+            "weight": 1.0,
+            "category": "Fruit",
+        }
+    )
+
+
+def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
+    df_final, summary = filter_to_entrees(
+        _merged_rows(["apple", "banana", "carrot", "apple"]),
+        summary={
+            "n_products_before": 4,
+            "n_products_after": 3,
+            "pct_remaining": 0.75,
+            "n_rows_before": 5,
+            "n_rows_after": 4,
+            "row_elimination_details": {
+                "total_rows_initial": 5,
+                "total_rows_final": 4,
+                "total_rows_eliminated": 1,
+                "total_eliminated_pct": 0.2,
+                "rows_eliminated_uncategorized": 1,
+                "rows_eliminated_uncategorized_pct": 0.2,
+            },
+        },
+        classified_products=pd.DataFrame(
+            {
+                "product": ["apple", "banana", "carrot", "durian"],
+                "entree_classification": ["entree", "side/add-on", "entree", pd.NA],
+            }
+        ),
+    )
+
+    pd.testing.assert_frame_equal(
+        df_final,
+        _merged_rows(["apple", "carrot", "apple"])
+        .set_axis([0, 2, 3])
+        .assign(entree_classification="entree"),
+    )
+    assert summary == {
+        "n_products_before": 4,
+        "n_products_after": 3,
+        "pct_remaining": 0.75,
+        "n_rows_before": 5,
+        "n_rows_after": 3,
+        "row_elimination_details": {
+            "total_rows_initial": 5,
+            "total_rows_final": 3,
+            "total_rows_eliminated": 2,
+            "total_eliminated_pct": 0.4,
+            "rows_eliminated_uncategorized": 1,
+            "rows_eliminated_uncategorized_pct": 0.2,
+            "rows_eliminated_non_entree": 1,
+            "rows_eliminated_non_entree_pct": 0.2,
+        },
+    }
+
+
+def test_filter_to_entrees_rejects_a_row_with_no_classification():
+    with pytest.raises(ValueError, match="no entree classification: banana"):
+        filter_to_entrees(
+            _merged_rows(["apple", "banana"]),
+            summary={"n_rows_before": 2, "row_elimination_details": {}},
+            classified_products=pd.DataFrame(
+                {"product": ["apple", "banana"], "entree_classification": ["entree", pd.NA]}
+            ),
+        )

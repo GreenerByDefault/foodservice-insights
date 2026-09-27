@@ -35,7 +35,7 @@ from gbd_foodservice_insights.categorization.cache import (
     save_historical_entree_classifications,
     save_unreviewed_web_app_categorizations,
 )
-from gbd_foodservice_insights.categorization.entrees import run_entree_detector
+from gbd_foodservice_insights.categorization.entrees import filter_to_entrees, run_entree_detector
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.reviews import (
     build_ai_review_table,
@@ -142,9 +142,6 @@ def categorize_products(
     if df["date"].isna().any():
         raise ValueError("Column 'date' contains NaN values after cleaning.")
 
-    n_rows_before = len(df)
-    n_products_before = df["product"].nunique()
-
     # --- Step 1: Match against historical categorizations ---
     unique_products_df = df[["product"]].drop_duplicates().copy()
 
@@ -213,10 +210,9 @@ def categorize_products(
         save_historical_entree_classifications(unique_products_df)
 
     # --- Step 7: Merge categorizations back and filter ---
-    df_final, summary = merge_categorizations(
-        df, unique_products_df, data_type, n_products_before, n_rows_before
-    )
+    df_final, summary = merge_categorizations(df, unique_products_df)
     if data_type == "serving":
+        df_final, summary = filter_to_entrees(df_final, summary, unique_products_df)
         summary["_entree_human_review_df"] = entree_human_review_df
 
     # Provenance breakdown (raw-history / cleaned-name-history / llm) for the

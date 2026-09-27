@@ -42,34 +42,6 @@ def test_categorize_using_historical_classifications():
         assert result_previously_categorized == expected_previously_categorized
 
 
-def test_merge_categorizations_serving_filters_side_add_on():
-    original_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "date": ["2025-01-01", "2025-01-01", "2025-01-01"],
-            "weight": [1.0, 1.0, 1.0],
-        }
-    )
-    categorized_products_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "category": ["Fruit", "Fruit", "Fruit"],
-            "entree_classification": ["entree", "side/add-on", "entree"],
-        }
-    )
-
-    df_final, summary = merge_categorizations(
-        original_df=original_df,
-        categorized_products_df=categorized_products_df,
-        data_type="serving",
-        n_products_before=3,
-        n_rows_before=3,
-    )
-
-    assert sorted(df_final["product"].tolist()) == ["apple", "carrot"]
-    assert summary["row_elimination_details"]["rows_eliminated_non_entree"] == 1
-
-
 def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
     products = [f"product {i}" for i in range(n_products)]
     return merge_categorizations(
@@ -79,9 +51,6 @@ def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, dict]:
         categorized_products_df=pd.DataFrame(
             {"product": products, "category": ["Cheese"] + ["No Matches Found"] * (n_products - 1)}
         ),
-        data_type="procurement",
-        n_products_before=n_products,
-        n_rows_before=n_products,
     )
 
 
