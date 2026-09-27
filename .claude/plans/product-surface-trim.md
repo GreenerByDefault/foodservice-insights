@@ -71,7 +71,7 @@ What the map found:
   `dict[str, Any]`; a `Finding` type belongs beside `report.food_report.FoodReport`.
   **Open:** whether the export tables move with the QA workbook or stay because most checks
   compute them on the way to their findings. Measure per check before deciding.
-- **Typed inputs at the boundary.** `categorize_products` takes `datetime64` dates and float
+- **Typed inputs at the boundary.** `categorize_unique_products` takes `datetime64` dates and float
   weights (`categorization-pipeline.md` PR 3) and the report takes `Literal` modes and regions
   (`build_food_report`). Parsing text is the lab's.
 - **Tests move with the code, assertions unchanged.** A trivial assertion is deleted rather than

@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache, entrees
 from gbd_foodservice_insights.categorization.pipeline import categorize_file
+from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
@@ -203,4 +204,41 @@ def test_categorize_file_serving_skips_updating_entree_history_when_disabled(tmp
 
     # A newly-classified product would normally be appended to the historical cache; disabling
     # the update should leave the (empty, pre-existing) cache file exactly as it started.
+    assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
+
+
+def test_categorize_file_serving_unusable_data_fails_before_entree_detection(tmp_path, monkeypatch):
+    unknown = ["Paper Towels", "Dish Soap", "Napkins", "Trash Bags", "Foil Wrap"]
+
+    # `flash_labels` is empty, so any Gemini call would raise KeyError instead.
+    with pytest.raises(UnusableDataError):
+        _run_serving(
+            tmp_path,
+            monkeypatch,
+            rows=[(product, "2025-01-01", 1.0) for product in ["Pork Loin", *unknown]],
+            entree_history={},
+            flash_labels={},
+            pro_labels={},
+        )
+
+    assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
+    assert not (tmp_path / "classified_products_with_entree.csv").exists()
+
+
+def test_categorize_file_serving_keeps_category_cache_when_entree_detection_fails(
+    tmp_path, monkeypatch
+):
+    with pytest.raises(ValueError, match="Unexpected entree classification"):
+        _run_serving(
+            tmp_path,
+            monkeypatch,
+            rows=[("Pork Loin", "2025-01-01", 1.0)],
+            entree_history={},
+            flash_labels={"Pork Loin": "not a label"},
+            pro_labels={},
+        )
+
+    assert (tmp_path / "categories.csv").read_text() == (
+        "product,category,cleaned_item_names\nPork Loin,Pork (pig meat),pork loin\n"
+    )
     assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
