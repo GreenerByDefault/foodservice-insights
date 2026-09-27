@@ -74,7 +74,8 @@ This suite runs in `PUBLIC_AUTH_MODE=supabase`: every test's browser is signed i
 session as a GoTrue user of its own, so what one test's user belongs to never shows up in
 another's. A screenshot whose image renders the signed-in address uses
 `test.use({ identity: 'pinned' })`, the run's one identity with a fixed address, and a signed-out
-test uses `identity: 'anonymous'`. `identity.ts` beside the fixtures owns all of it, including why
+test uses `identity: 'anonymous'`. A spec that needs a second person asks the `users` fixture:
+`users.create()` mints one, and `users.contextFor(user)` is a browser context signed in as them. `identity.ts` beside the fixtures owns all of it, including why
 GoTrue's users have to be mirrored into the run's database.
 
 Screenshots and e2e share the catalogue of report states, not any rows, so a behavioural spec is
