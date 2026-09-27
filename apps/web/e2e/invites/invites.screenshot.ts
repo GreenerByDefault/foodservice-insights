@@ -1,5 +1,7 @@
 /** `invites.png` is one live offer and one expired, the two shapes a card takes; `invites-empty.png`
- * is the page with nothing waiting.
+ * is the page with nothing waiting. `invites-accept-failed.png` is a card's error line, routed
+ * rather than actually hit, as `members.screenshot.ts` does for Revoke — Decline and Dismiss render
+ * the same line, so this one image covers all three.
  *
  * The invitee is a second person, minted by `users`, rather than the test's own user: that user is
  * the one `organizations.create` puts in every organization it makes. No image renders the
@@ -39,6 +41,30 @@ test('one live invitation and one expired', async ({ organizations, users }) => 
   await expect(page.getByText(/Your invitation expired 2 days ago/)).toBeVisible();
 
   await expectScreenshots(page, 'invites.png');
+});
+
+test('accepting an invitation, failed', async ({ organizations, users }) => {
+  const invitee = await users.create();
+  const name = 'Invites Accept Failed Screenshot Foodservice';
+  await organizations.create({
+    name,
+    role: 'member',
+    admin: { displayName: 'Priya Shah', email: 'invites-accept-failed-admin@example.test' },
+    invites: [{ email: invitee.email, expiresAt: dbMsFromNow(3 * DAY_MS + 12 * HOUR_MS) }],
+  });
+  const context = await users.contextFor(invitee);
+  await context.route('**/api/invites/*/accept', (route) =>
+    route.fulfill({ status: 500, json: { message: 'Internal Error' } }),
+  );
+  const page = await context.newPage();
+
+  await page.goto('/invites');
+  await ensureHydrated(page);
+
+  await page.getByRole('button', { name: `Accept invitation to ${name}` }).click();
+  await expect(page.getByText("Couldn't accept this invitation — please try again.")).toBeVisible();
+
+  await expectScreenshots(page, 'invites-accept-failed.png');
 });
 
 test('no invitations waiting', async ({ page }) => {
