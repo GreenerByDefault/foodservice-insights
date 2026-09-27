@@ -81,7 +81,7 @@ def build_analyze(scenario: Scenario) -> Analyze:
         request: AnalysisRequest, *, report_progress: ReportProgress = lambda: None
     ) -> AnalysisOutcome:
         if scenario.spawn_grandchild:
-            _spawn_grandchild(request.work_directory)
+            _spawn_grandchild()
         _report_progress_under_load(report_progress, PROGRESS_CALLS)
 
         if scenario.hang:
@@ -114,7 +114,7 @@ def _report_progress_under_load(report_progress: ReportProgress, count: int) -> 
         thread.join()
 
 
-def _spawn_grandchild(work_directory: Path) -> None:
+def _spawn_grandchild() -> None:
     """Stands in for a subprocess the analysis library spawns, so a test can check that a kill
     aimed at this process reaches it too. Not `start_new_session`: staying in this process's
     group is what that kill relies on.
@@ -125,7 +125,8 @@ def _spawn_grandchild(work_directory: Path) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    write_atomically(work_directory / GRANDCHILD_PID_FILE, str(grandchild.pid).encode())
+    # Relative, so beneath `work/`: the parent always spawns the child there.
+    write_atomically(Path(GRANDCHILD_PID_FILE), str(grandchild.pid).encode())
 
 
 def main(argv: list[str]) -> int:

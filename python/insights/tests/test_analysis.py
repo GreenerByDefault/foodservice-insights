@@ -45,14 +45,11 @@ def _request(
     site_name: str | None = None,
 ) -> AnalysisRequest:
     output_directory = tmp_path / "output"
-    work_directory = tmp_path / "work"
     output_directory.mkdir(exist_ok=True)
-    work_directory.mkdir(exist_ok=True)
     return AnalysisRequest(
         run_id="test-run",
         input_csv=tmp_path / "input.csv",
         output_directory=output_directory,
-        work_directory=work_directory,
         report_name=None,
         site_name=site_name,
         organization_name="Acme Foodservice",
