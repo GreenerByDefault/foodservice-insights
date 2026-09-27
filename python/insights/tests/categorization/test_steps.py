@@ -107,6 +107,19 @@ def test_merge_counts_to_summary_omits_non_entree_keys_until_the_entree_filter_r
     }
 
 
+def test_merge_counts_to_summary_avoids_division_by_zero_with_no_rows_before():
+    counts = MergeCounts(
+        n_rows_before=0,
+        n_rows_after=0,
+        n_products_before=1,
+        n_products_after=1,
+        n_rows_uncategorized=0,
+    )
+    details = counts.to_summary()["row_elimination_details"]
+    assert details["total_eliminated_pct"] == 0
+    assert details["rows_eliminated_uncategorized_pct"] == 0
+
+
 def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():
     with pytest.raises(UnusableDataError, match=r"1/6 \(16\.7%\) remain"):
         _merge_keeping_one_of(6)
