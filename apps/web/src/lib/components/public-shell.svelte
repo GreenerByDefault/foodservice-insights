@@ -1,9 +1,9 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
 
-/** The chrome for a page outside the `(app)` gate — the marketing page, sign-in, and the root
- * error boundary. The root layout deliberately has none, since a stranger is never shown the
- * signed-in header. */
+/** The chrome for a page outside the `(app)` gate — sign-in and the root error boundary. The
+ * marketing page carries its own. The root layout deliberately has none, since a stranger is never
+ * shown the signed-in header. */
 interface Props {
   children: Snippet;
 }

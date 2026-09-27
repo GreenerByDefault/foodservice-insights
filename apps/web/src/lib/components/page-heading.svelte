@@ -1,8 +1,7 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
 
-/** The `<h1>` a page opens with. `app-title.svelte` is the larger wordmark heading, which names
- * the product rather than the page. */
+/** The `<h1>` a page opens with. */
 interface Props {
   children: Snippet;
 }

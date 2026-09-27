@@ -254,7 +254,7 @@ After this, a developer can set `PUBLIC_AUTH_MODE=supabase` and sign in through 
   `authMode() === 'supabase'`. Sign out → `browserAuth().signOut({ scope: 'local' })` then
   `goto('/', { invalidateAll: true })`; hidden when `canSignOut` is false. Replace the `'sign out is
   present but disabled'` test with one per value.
-- `+page.svelte` (marketing) keeps its `**Stub:**` for copy; it already links `/sign-in`.
+- `+page.svelte` (marketing) already links `/sign-in`; nothing changes there.
 
 **E2E:** `packages/browser-testing` gains `waitForSignInCode(address)` over `@gbd/email/testing`'s
 `waitForEmail`, anchored on our template's copy. `auth.e2e.ts` gets the real flow: `identity:
