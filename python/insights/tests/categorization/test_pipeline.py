@@ -26,9 +26,6 @@ class ScriptedLlmClient:
     def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
         return self.match_answers[item]
 
-    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
-        raise AssertionError(f"the fuzzy step was reached for {item!r}")
-
 
 def test_categorize_unique_products_cache_write_mode_controls_destination():
     df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
@@ -57,12 +54,6 @@ def test_categorize_unique_products_cache_write_mode_controls_destination():
         ),
         patch.object(pipeline, "clean_product_names", return_value=unique_products),
         patch.object(pipeline, "categorize_with_llm", return_value=unique_products),
-        patch.object(
-            pipeline,
-            "fuzzy_match_GBD_categories",
-            return_value=unique_products,
-        ),
-        patch.object(pipeline, "check_GBD_categories"),
         patch.object(
             pipeline,
             "build_ai_review_table",
@@ -185,7 +176,6 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
             "get_web_app_unreviewed_categorizations",
             return_value=empty_web_app,
         ),
-        patch.object(pipeline, "check_GBD_categories"),
         patch.object(steps, "print_progress", return_value=None),
     ):
         categorized = categorize_unique_products(
@@ -267,7 +257,6 @@ def test_categorize_unique_products_characterization(
                     "Mozzarella Block",
                     "Whole Milk Gallon",
                 ],
-                "category_old": [no_match] * 5 + [milk],
             }
         ),
     )

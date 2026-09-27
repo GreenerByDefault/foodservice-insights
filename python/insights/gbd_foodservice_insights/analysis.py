@@ -164,8 +164,3 @@ class _ReportingLlmClient:
         category = self.llm.match_product_to_category(item, categories)
         self.report_progress()
         return category
-
-    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
-        category = self.llm.fuzzy_match_category(item, categories)
-        self.report_progress()
-        return category

@@ -32,10 +32,6 @@ class LlmClient(Protocol):
         the pipeline treats as uncategorized."""
         ...
 
-    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
-        """The one of `categories` a near-miss label was meant to be."""
-        ...
-
 
 # This class is the one retry layer for LLM calls (`apps/worker/src/failures.ts`
 # § one-retry-layer), so `_complete` turns the SDK's own retries off on whatever client it is
@@ -97,12 +93,6 @@ class OpenAiLlmClient:
         return self._complete(
             _categories_prompt("match_items_to_gbd_categories_prompt.md", categories),
             f"classify {_strip_pack_counts(item)} according to your instructions",
-        )
-
-    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
-        return self._complete(
-            _categories_prompt("fuzzy_match_gbd_category_prompt.md", categories),
-            f"classify {item} according to your instructions",
         )
 
     def _complete(self, system_prompt: str, user_prompt: str) -> str:

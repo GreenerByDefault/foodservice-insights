@@ -87,7 +87,7 @@ def test_non_transient_failures_propagate_without_retrying(status_code: int) -> 
     client, fake, sleeps = _client(_status_error(status_code))
 
     with pytest.raises(openai.APIStatusError) as excinfo:
-        client.fuzzy_match_category("chese", ["Cheese"])
+        client.match_product_to_category("chese", ["Cheese"])
 
     assert not isinstance(excinfo.value, UpstreamApiError)
     assert excinfo.value.status_code == status_code
@@ -113,14 +113,12 @@ def test_clean_product_name_strips_pack_counts_and_lowercases() -> None:
     }
 
 
-def test_category_prompts_list_the_categories() -> None:
-    client, fake, _ = _client("Cheese", "Butter")
+def test_match_prompt_lists_the_categories() -> None:
+    client, fake, _ = _client("Cheese")
 
     client.match_product_to_category("cheddar", ["Cheese", "Butter"])
-    client.fuzzy_match_category("buter", ["Cheese", "Butter"])
 
-    for request in fake.requests:
-        assert "['Cheese', 'Butter']" in request["messages"][0]["content"]
+    assert "['Cheese', 'Butter']" in fake.requests[0]["messages"][0]["content"]
 
 
 def test_requests_go_out_with_sdk_retries_off() -> None:

@@ -1,5 +1,4 @@
 import csv
-import difflib
 import io
 import re
 from collections.abc import Iterable, Sequence
@@ -88,7 +87,7 @@ KEYWORD_CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
 )
 NO_MATCH: Final = "No Matches Found"
 
-type LlmOperation = Literal["clean", "match", "fuzzy"]
+type LlmOperation = Literal["clean", "match"]
 
 
 @dataclass
@@ -109,10 +108,6 @@ class KeywordLlmClient:
             (category for keyword, category in KEYWORD_CATEGORIES if keyword in lowered),
             NO_MATCH,
         )
-
-    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
-        self.calls.append(("fuzzy", item))
-        return next(iter(difflib.get_close_matches(item, categories, n=1)), NO_MATCH)
 
 
 # Products `KeywordLlmClient` places in a category, and products it places in none.

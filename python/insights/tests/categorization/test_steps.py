@@ -12,7 +12,6 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_using_historical_classifications,
     categorize_with_llm,
     clean_product_names,
-    fuzzy_match_GBD_categories,
     merge_categorizations,
 )
 from gbd_foodservice_insights.errors import UnusableDataError
@@ -20,7 +19,7 @@ from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
 # ----------------------------------------------------------------------
-# Step 1 — Historical reuse
+# Historical reuse
 # ----------------------------------------------------------------------
 def test_categorize_using_historical_classifications_loads_the_default_cache():
     historical_df = pd.DataFrame(
@@ -57,7 +56,7 @@ def test_categorize_using_historical_classifications_prefers_the_latest_history_
 
 
 # ----------------------------------------------------------------------
-# Step 2 — Name cleaning
+# Name cleaning
 # ----------------------------------------------------------------------
 def test_clean_product_names_sends_only_uncategorized_products_to_the_llm():
     products_df = pd.DataFrame(
@@ -97,7 +96,7 @@ def test_clean_product_names_skips_the_llm_when_everything_is_categorized():
 
 
 # ----------------------------------------------------------------------
-# Step 2.5 — Historical reuse on cleaned names
+# Historical reuse on cleaned names
 # ----------------------------------------------------------------------
 def test_categorize_using_cleaned_name_history_reuses_a_match_and_trusts_it():
     products_df = pd.DataFrame(
@@ -148,7 +147,7 @@ def test_categorize_using_cleaned_name_history_leaves_products_unchanged(categor
 
 
 # ----------------------------------------------------------------------
-# Step 3 — LLM categorization
+# LLM categorization
 # ----------------------------------------------------------------------
 def test_categorize_with_llm_dedupes_identical_cleaned_names():
     products_df = pd.DataFrame(
@@ -238,32 +237,7 @@ def test_categorize_with_llm_discards_an_answer_outside_the_gbd_categories():
 
 
 # ----------------------------------------------------------------------
-# Step 4 — Fuzzy matching
-# ----------------------------------------------------------------------
-def test_fuzzy_match_GBD_categories_standardizes_non_canonical_categories():
-    products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A", "RAW_B", "RAW_C", "RAW_D"],
-            "category": ["Cheese", np.nan, "none.", "Chese"],
-        }
-    )
-    llm = KeywordLlmClient()
-
-    result = fuzzy_match_GBD_categories(products_df, llm)
-
-    # Only the typo needs the LLM; the "uncategorized" spellings are mapped without it.
-    assert llm.calls == [("fuzzy", "Chese")]
-    pd.testing.assert_frame_equal(
-        result,
-        products_df.assign(
-            category=["Cheese", "No Matches Found", "No Matches Found", "Cheese"],
-            category_old=["Cheese", "No Matches Found", "No Matches Found", "Chese"],
-        ),
-    )
-
-
-# ----------------------------------------------------------------------
-# Step 7 — Merge and filter
+# Merge and filter
 # ----------------------------------------------------------------------
 def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
     products = [f"product {i}" for i in range(n_products)]
