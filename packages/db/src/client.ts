@@ -1,3 +1,4 @@
+import type { Logger } from '@gbd/core/log';
 import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool, type PoolConfig } from 'pg';
 import { isTransientDatabaseError } from './errors.ts';
@@ -53,6 +54,9 @@ export const DEFAULT_LIMITS: DatabaseLimits = {
 export type DatabaseConfig = {
   connectionString: string;
   limits?: Partial<DatabaseLimits>;
+  /** Where the pool reports a dropped connection. Without one, as in the scripts `@gbd/db/env`
+   * serves, it writes to the console. */
+  log?: Logger;
 };
 
 /** How long `shutdownDatabase` gives the pool to drain before giving up on a clean shutdown. */
@@ -86,31 +90,33 @@ export function buildPoolConfig(config: DatabaseConfig): PoolConfig {
 export function initializeDatabase(config: DatabaseConfig): Kysely<Database> {
   const pool = new Pool(buildPoolConfig(config));
 
-  // Without these two handlers, an unhandled pool error takes down the whole process. A dropped
-  // connection is expected rather than exceptional here, because the timeouts above cause them on
-  // purpose.
-  pool.on('error', (error) => {
-    if (isTransientDatabaseError(error)) {
-      console.warn('Database connection dropped:', error.message);
-      return;
-    }
-    console.error('Unexpected database error:', error);
-  });
-
+  // Without an `error` listener on the pool and on each client, a dropped connection takes down the
+  // whole process. A dropped connection is expected rather than exceptional here, because the
+  // timeouts above cause them on purpose.
+  //
+  // Only the client's listener logs. The pool re-emits an idle client's error as its own, so
+  // logging both would write every drop twice; and a client emits one only when it has no query
+  // in flight, which is exactly when nothing else will report it.
+  pool.on('error', () => undefined);
   pool.on('connect', (client) => {
-    client.on('error', (error) => {
-      if (isTransientDatabaseError(error)) {
-        console.warn('Database client disconnected:', error.message);
-        return;
-      }
-      console.error('Unexpected database client error:', error);
-    });
+    client.on('error', (error) => logConnectionError(config.log, error));
   });
 
   return new Kysely<Database>({
     dialect: new PostgresDialect({ pool }),
     plugins: [new CamelCasePlugin()],
   });
+}
+
+export function logConnectionError(log: Logger | undefined, error: Error): void {
+  const transient = isTransientDatabaseError(error);
+  if (log) {
+    if (transient) log.warn({ err: error }, 'Database connection dropped');
+    else log.error({ err: error }, 'Unexpected database connection error');
+    return;
+  }
+  if (transient) console.warn('Database connection dropped:', error.message);
+  else console.error('Unexpected database connection error:', error);
 }
 
 /** Close a database handle, releasing its pool.
@@ -130,10 +136,5 @@ export async function shutdownDatabase(
     ).unref(),
   );
 
-  try {
-    await Promise.race([database.destroy(), timeout]);
-  } catch (error) {
-    console.error('Error during database shutdown:', error);
-    throw error;
-  }
+  await Promise.race([database.destroy(), timeout]);
 }
