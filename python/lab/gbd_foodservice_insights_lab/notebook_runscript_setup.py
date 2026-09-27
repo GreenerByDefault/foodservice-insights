@@ -46,6 +46,8 @@ VALID_PROCUREMENT_SERVING: tuple[str, ...] = (
 
 def get_customer_template_dir() -> Path:
     """Return the runscripts folder next to the installed lab package."""
+    # Nothing in the repo calls this any more, but client copies of step 1.5 made before it ran
+    # step 2 in-process still use it to launch the CLI, and they live in gitignored client_work/.
     template_dir = PACKAGE_DIR.parent / "runscripts"
     if not template_dir.exists():
         raise FileNotFoundError(

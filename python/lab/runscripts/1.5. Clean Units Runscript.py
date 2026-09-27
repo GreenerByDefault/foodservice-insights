@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 # %%
-import json
-import subprocess  # nosec B404
-import sys
-from pathlib import Path
-
 import pandas as pd
 from dotenv import load_dotenv
 from gbd_foodservice_insights.utils import rel_path
 from gbd_foodservice_insights_lab.clean_product_weights import (
     convert_products_to_kilograms,
 )
+from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
-    get_customer_template_dir,
     load_client_metadata,
     setup_api_clients,
     setup_pandas_display,
@@ -32,7 +27,6 @@ gemini_client = clients["gemini_client"]
 client = config["client"]
 procurement_serving = config["procurement_serving"]
 sub_client_name = config["sub_client_name"]
-base_filepath = config["base_filepath"]
 input_file = config["input_file"]
 output_file = config["output_file"]
 
@@ -220,28 +214,12 @@ diners_map = {
 
 
 # %%
-# Auto-launch step 2 from the runscripts folder, not copied per-client.
-template_dir = get_customer_template_dir()
-next_script = template_dir / "2. Produce Food Report.py"
+# Run step 2 in this kernel.
+results = run_food_report(input_file=output_file, diner_meal_mapping=diners_map)
 
-# Write diners_map dict to a temp JSON so the CLI script can read it.
-diner_meals_cli_path = Path(base_filepath) / "_diner_meals_from_notebook.json"
-with open(diner_meals_cli_path, "w", encoding="utf-8") as f:
-    json.dump(diners_map, f, indent=2)
-print(f"✓ Wrote diner-meals JSON to: {rel_path(diner_meals_cli_path)}")
-
-cmd = [
-    sys.executable,
-    str(next_script),
-    "--input",
-    str(output_file),
-    "--diner-meals",
-    str(diner_meals_cli_path),
-]
-
-print(f"Launching: {next_script.name}")
-result = subprocess.run(cmd, cwd=str(next_script.parent))  # nosec B603
-if result.returncode != 0:
-    raise RuntimeError(f"Step 2 failed with return code {result.returncode}")
-
-print("✓ Step 2 completed successfully")
+print(f"  Client PDF:      {rel_path(results['pdf_path'])}")
+print(f"  Client Excel:    {rel_path(results['client_excel_path'])}")
+print(f"  QA Excel:        {rel_path(results['qa_excel_path'])}")
+print(f"  Manifest:        {rel_path(results['manifest_path'])}")
+print(f"  Log:             {rel_path(results['log_path'])}")
+print(f"  Quality status:  {results['quality_status']}")

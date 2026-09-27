@@ -5,10 +5,9 @@
 An audit of the ported report code in September 2026 ran `run_food_report` with `analyze()`'s
 exact arguments (`hard_fail`, procurement, `us`, both count bases) on inputs `apps/web` accepts,
 rendered every PDF page, and read back every workbook sheet. The deliverable crashes on ordinary
-data, carries wrong numbers, and says things the data does not support. `food-report-split.md`
-restructures this code; this plan fixes what it computes. Both edit `report/pipeline.py`,
-`aggregation.py`, `pdf.py` and `plots.py`, so land the split's PR 1 first for its golden test:
-every fix here regenerates the golden, and the fixture diff is the review.
+data, carries wrong numbers, and says things the data does not support. This plan fixes what it
+computes. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's output: every
+fix here regenerates the golden with `UPDATE_GOLDEN=1`, and the fixture diff is the review.
 
 Verified facts, each reproduced through `analyze()` or `run_food_report` with product arguments:
 
@@ -175,6 +174,4 @@ files exist.
 - The golden test pins numbers, so every PR here regenerates it; review the fixture diff rather
   than accept it.
 - Threshold and `info` changes alter the lab's QA output; tell the data scientists.
-- Conflicts with `food-report-split.md` PRs 1 and 2 in `pipeline.py` and `pdf.py`; whichever
-  lands second rebases.
 - The GBD questions block PR 4 and parts of PRs 7 and 8 only.

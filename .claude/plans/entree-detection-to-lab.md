@@ -43,8 +43,8 @@ If the web app ever supports serving data, entree detection would be rewritten a
   them. The lab already lists `google-genai` as a dependency.
 - **`categorize_file` moves to the lab.** Its only callers are the lab's categorize runscript
   and `test_pipeline.py`, and it is where the serving orchestration will sit (see PR 1). This
-  follows the precedent `food-report-split.md` sets for `run_food_report`: the lab owns the
-  file-reading wrapper.
+  follows the precedent `run_food_report` set when it moved: the lab owns the file-reading
+  wrapper.
 - **The cache helpers that both caches share become public in the product**:
   `_normalize_product_name`, `_first_non_empty_value` and `_unanimous_index`, all in `cache.py`.
   The lab's entree cache imports them. *Rejected: copying them into the lab, because two copies

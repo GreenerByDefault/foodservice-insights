@@ -3,10 +3,10 @@
 ## Context
 
 The product package still carries code that only the lab, only tests, or nobody calls.
-`entree-detection-to-lab.md` and `food-report-split.md` move the two large pieces (entree
-detection; the report bundle). This plan is what is left once both have landed, mapped in the
-September 2026 audit by grepping callers across `python/` with tests excluded and following the
-call graphs. Do not start it before those two plans finish, so nothing here fights their moves.
+The report bundle has already moved to the lab, and `entree-detection-to-lab.md` moves entree
+detection. This plan is what is left once both have landed, mapped in the September 2026 audit
+by grepping callers across `python/` with tests excluded and following the call graphs. Do not
+start it before `entree-detection-to-lab.md` finishes, so nothing here fights its moves.
 
 What the map found:
 
@@ -65,12 +65,12 @@ What the map found:
   code nobody imports is deleted with its tests, since git has it.
 - **`diagnostics.py` splits along the seams above**: `report/thresholds.py`, `report/checks.py`
   (the checks and `run_all_diagnostics`), and the lab gets the messy-input parsing. Findings stay
-  `dict[str, Any]`; a `Finding` type belongs with `food-report-split.md`'s `FoodReport`.
+  `dict[str, Any]`; a `Finding` type belongs beside `report.food_report.FoodReport`.
   **Open:** whether the export tables move with the QA workbook or stay because most checks
   compute them on the way to their findings. Measure per check before deciding.
 - **Typed inputs at the boundary.** `categorize_products` takes `datetime64` dates and float
   weights (`categorization-pipeline.md` PR 3) and the report takes `Literal` modes, regions and
-  policies (`food-report-split.md`). Parsing text is the lab's.
+  policies (`build_food_report`). Parsing text is the lab's.
 - **Tests move with the code, assertions unchanged.** A trivial assertion is deleted rather than
   moved unless it is the only test of a lab function. Templated tests collapse to one
   parametrized test.
