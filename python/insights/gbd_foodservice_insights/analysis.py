@@ -120,18 +120,17 @@ def analyze(
     )
 
     report_progress()
-    charts = build_report_charts(report)
-
-    report_progress()
     pdf_path = request.output_directory / "report.pdf"
-    write_report_pdf(
-        report,
-        charts,
-        pdf_path,
-        client_name=_title(request),
-        baseline_pilot="baseline",
-        show_quality_successes=False,
-    )
+    with build_report_charts(report) as charts:
+        report_progress()
+        write_report_pdf(
+            report,
+            charts,
+            pdf_path,
+            client_name=_title(request),
+            baseline_pilot="baseline",
+            show_quality_successes=False,
+        )
 
     report_progress()
     xlsx_path = request.output_directory / "report.xlsx"

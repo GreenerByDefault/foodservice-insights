@@ -19,6 +19,7 @@ from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
     calculate_figure_height_for_wrapped_labels,
+    close_new_figures_on_error,
     convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -1124,9 +1125,10 @@ def _safe_plot(
     output_caption = f"{caption} [DATA WARNING]" if has_input_warning else caption
 
     try:
-        fig = _remove_duplicate_xlabels(plot_fn())
-        if has_input_warning:
-            fig.suptitle(output_caption, fontsize=10, color="#b22222", y=0.99)
+        with close_new_figures_on_error():
+            fig = _remove_duplicate_xlabels(plot_fn())
+            if has_input_warning:
+                fig.suptitle(output_caption, fontsize=10, color="#b22222", y=0.99)
         return output_caption, fig
     except Exception as exc:
         quality_findings.append(
@@ -1455,14 +1457,18 @@ def generate_all_report_plots(
                 )
                 has_input_warning = True
 
-        cat_figs = plot_category_drivers(category_drivers, metric=metric_total)
-        for cat_name, fig in cat_figs.items():
-            fig = _remove_duplicate_xlabels(fig)
-            caption = f"Top Products — {standardize_title_case(cat_name)}"
-            if has_input_warning:
-                caption += " [DATA WARNING]"
-                fig.suptitle(caption, fontsize=10, color="#b22222", y=0.99)
-            plots.append(("", fig))
+        # All or nothing: on a failure, the placeholder below replaces every category's chart.
+        category_plots: list[tuple[str, Figure]] = []
+        with close_new_figures_on_error():
+            cat_figs = plot_category_drivers(category_drivers, metric=metric_total)
+            for cat_name, fig in cat_figs.items():
+                fig = _remove_duplicate_xlabels(fig)
+                caption = f"Top Products — {standardize_title_case(cat_name)}"
+                if has_input_warning:
+                    caption += " [DATA WARNING]"
+                    fig.suptitle(caption, fontsize=10, color="#b22222", y=0.99)
+                category_plots.append(("", fig))
+        plots.extend(category_plots)
     except Exception as exc:
         findings.append(
             make_finding(
