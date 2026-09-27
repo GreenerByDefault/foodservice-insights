@@ -10,10 +10,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-# The packages whose logs belong in a report run's log file: the product code that does the
-# actual work, and this lab package's own orchestration. Deriving this from `__name__` broke
-# when this module moved packages, since it silently started capturing only the lab's own
-# logs and dropped every product-side log line (categorization, food_report, etc).
+# Named explicitly rather than derived from `__name__`, which broke when this module moved
+# packages: it silently started capturing only the lab's own logs.
 _CAPTURED_PACKAGE_NAMES = ("gbd_foodservice_insights", "gbd_foodservice_insights_lab")
 
 
