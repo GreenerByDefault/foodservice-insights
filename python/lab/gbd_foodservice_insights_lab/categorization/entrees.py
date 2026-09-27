@@ -16,22 +16,21 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
 from gbd_foodservice_insights.categories import get_GBD_categories
-from gbd_foodservice_insights.categorization.cache import (
+from gbd_foodservice_insights.categorization.cache import normalize_product_name
+from gbd_foodservice_insights.categorization.steps import MergeCounts
+from gbd_foodservice_insights.utils import print_progress
+
+from gbd_foodservice_insights_lab.categorization.entree_cache import (
     ENTREE_LABEL_ENTREE,
     ENTREE_LABEL_SIDE_ADDON,
     ENTREE_LABEL_UNSURE,
-    _first_non_empty_value,
     _normalize_entree_classification,
-    _normalize_product_name,
     build_entree_cleaned_name_reuse_index,
     get_previously_classified_entrees,
 )
-from gbd_foodservice_insights.categorization.steps import MergeCounts
-from gbd_foodservice_insights.gemini import call_gemini_api, get_gemini_model
-from gbd_foodservice_insights.llm_prompts import load_prompt
-from gbd_foodservice_insights.utils import print_progress
+from gbd_foodservice_insights_lab.gemini import call_gemini_api, get_gemini_model
+from gbd_foodservice_insights_lab.llm_prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +54,17 @@ GEMINI_INITIAL_BACKOFF_SECONDS = 2.0
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+def _first_non_empty_value(values: pd.Series) -> Any:
+    """Return the first non-empty value from a Series, or pd.NA if none exist."""
+    for value in values:
+        if pd.isna(value):
+            continue
+        if isinstance(value, str) and value.strip() == "":
+            continue
+        return value
+    return pd.NA
+
+
 def _call_gemini_with_retry(prompt: str, gemini_client: Any, model: str) -> str:
     """Call Gemini with exponential backoff on transient errors."""
     last_exception = None
@@ -282,7 +292,7 @@ def classify_entrees_using_historical_classifications(
         mask_unmatched = classified_products["entree_classification"].isna()
         if reuse_index and mask_unmatched.any():
             normalized = classified_products.loc[mask_unmatched, "cleaned_item_names"].map(
-                _normalize_product_name
+                normalize_product_name
             )
             reused = normalized.map(reuse_index)
             hit_index = reused.dropna().index
@@ -544,3 +554,53 @@ def filter_to_entrees(
         n_rows_after=len(entrees),
         n_rows_non_entree=int((classifications == ENTREE_LABEL_SIDE_ADDON).sum()),
     )
+
+
+def build_entree_human_review_table(
+    original_df: pd.DataFrame,
+    unique_products_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Build a product-level human-review table for newly LLM-classified entree rows.
+    """
+    required_original_cols = {"product"}
+    required_unique_cols = {
+        "product",
+        "category",
+        "entree_classification",
+        "previously_entree_classified",
+    }
+
+    missing_original = required_original_cols - set(original_df.columns)
+    if missing_original:
+        raise ValueError(f"original_df missing required columns: {sorted(missing_original)}")
+
+    missing_unique = required_unique_cols - set(unique_products_df.columns)
+    if missing_unique:
+        raise ValueError(f"unique_products_df missing required columns: {sorted(missing_unique)}")
+
+    product_counts = (
+        original_df["product"]
+        .value_counts()
+        .rename("occurrence_count")
+        .to_frame()
+        .reset_index()
+        .rename(columns={"index": "product"})
+    )
+
+    llm_only = unique_products_df.loc[
+        (~unique_products_df["previously_entree_classified"].fillna(False))
+        & unique_products_df["entree_classification"].notna(),
+        ["entree_classification", "product", "category"],
+    ].copy()
+
+    review_df = llm_only.merge(product_counts, on="product", how="left")
+    review_df["occurrence_count"] = review_df["occurrence_count"].fillna(0).astype(int)
+
+    review_df = review_df[["entree_classification", "product", "category", "occurrence_count"]]
+    review_df = review_df.sort_values(
+        by=["entree_classification", "occurrence_count", "product"],
+        ascending=[True, False, True],
+    ).reset_index(drop=True)
+
+    return review_df

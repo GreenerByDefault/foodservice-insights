@@ -7,15 +7,12 @@ import pytest
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.cache import (
     _historical_cache_path,
-    _normalize_product_name,
-    backfill_entree_cleaned_names,
     build_cleaned_name_reuse_index,
-    get_previously_classified_entrees,
     get_web_app_unreviewed_categorizations,
+    normalize_product_name,
     promote_local_review_file_to_reviewed_cache,
     promote_reviewed_web_app_categorizations,
     save_historical_categorizations,
-    save_historical_entree_classifications,
     save_unreviewed_web_app_categorizations,
 )
 
@@ -61,24 +58,6 @@ def test_get_previously_categorized_items_returns_empty_when_missing(tmp_path, c
 
     assert result.empty
     assert list(result.columns) == ["product", "category", "cleaned_item_names"]
-    assert "not found" in caplog.text
-
-
-def test_get_previously_classified_entrees_returns_empty_when_missing(tmp_path, caplog):
-    """Missing entree cache file logs a warning and returns an empty, correctly-shaped frame."""
-    missing_path = tmp_path / "missing.csv"
-    with (
-        patch.object(
-            cache,
-            "get_previously_classified_entrees_location",
-            return_value=missing_path,
-        ),
-        caplog.at_level("WARNING"),
-    ):
-        result = get_previously_classified_entrees()
-
-    assert result.empty
-    assert list(result.columns) == ["product", "entree_classification", "cleaned_item_names"]
     assert "not found" in caplog.text
 
 
@@ -265,39 +244,12 @@ def test_promote_local_review_file_to_reviewed_cache(tmp_path):
     assert set(updated_historical["product"]) == {"existing", "apple"}
 
 
-def test_save_historical_entree_classifications_uses_main_labels(tmp_path):
-    historical_csv_path = tmp_path / "historical_entree.csv"
-    pd.DataFrame({"product": ["apple"], "entree_classification": ["entree"]}).to_csv(
-        historical_csv_path, index=False
-    )
-
-    new_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "entree_classification": ["not entree", pd.NA, "entree"],
-        }
-    )
-
-    with patch.object(
-        cache,
-        "get_previously_classified_entrees_location",
-        return_value=historical_csv_path,
-    ):
-        save_historical_entree_classifications(new_df)
-
-    saved = pd.read_csv(historical_csv_path).sort_values("product").reset_index(drop=True)
-    assert saved["product"].tolist() == ["apple", "carrot"]
-    assert saved["entree_classification"].tolist() == ["side/add-on", "entree"]
-    # Schema migration: the entree cache now carries a cleaned-name column.
-    assert "cleaned_item_names" in saved.columns
-
-
 def test_normalize_product_name_keeps_digits():
     """Normalization lower-cases and collapses punctuation but preserves digits."""
-    assert _normalize_product_name("7 Up") == "7 up"
-    assert _normalize_product_name("100% Beef!!") == "100 beef"
-    assert _normalize_product_name("Chicken  Breast S/less") == "chicken breast s less"
-    assert _normalize_product_name(pd.NA) == ""
+    assert normalize_product_name("7 Up") == "7 up"
+    assert normalize_product_name("100% Beef!!") == "100 beef"
+    assert normalize_product_name("Chicken  Breast S/less") == "chicken breast s less"
+    assert normalize_product_name(pd.NA) == ""
 
 
 def test_build_cleaned_name_reuse_index_unanimous():
@@ -359,64 +311,3 @@ def test_build_cleaned_name_reuse_index_includes_only_approved_web_app():
     ):
         index = build_cleaned_name_reuse_index(reviewed_df=reviewed, include_approved_web_app=True)
     assert index == {"duck": "Poultry"}
-
-
-def test_get_previously_classified_entrees_backfills_missing_cleaned_column(tmp_path):
-    """Loading a pre-migration 2-column entree cache adds an empty cleaned-name column."""
-    entree_path = tmp_path / "entree.csv"
-    pd.DataFrame({"product": ["apple"], "entree_classification": ["entree"]}).to_csv(
-        entree_path, index=False
-    )
-
-    with patch.object(
-        cache, "get_previously_classified_entrees_location", return_value=entree_path
-    ):
-        df = get_previously_classified_entrees()
-    assert "cleaned_item_names" in df.columns
-
-
-def test_save_historical_entree_classifications_persists_cleaned_names(tmp_path):
-    entree_path = tmp_path / "entree.csv"
-    pd.DataFrame(
-        {"product": ["apple"], "entree_classification": ["entree"], "cleaned_item_names": ["apple"]}
-    ).to_csv(entree_path, index=False)
-    new_df = pd.DataFrame(
-        {
-            "product": ["banana"],
-            "entree_classification": ["entree"],
-            "cleaned_item_names": ["banana sandwich"],
-        }
-    )
-
-    with patch.object(
-        cache, "get_previously_classified_entrees_location", return_value=entree_path
-    ):
-        save_historical_entree_classifications(new_df)
-
-    saved = pd.read_csv(entree_path).set_index("product")
-    assert saved.loc["banana", "cleaned_item_names"] == "banana sandwich"
-    assert saved.loc["apple", "cleaned_item_names"] == "apple"
-
-
-def test_backfill_entree_cleaned_names_borrows_from_category_cache(tmp_path):
-    """Backfill borrows cleaned names from the category cache and falls back to the product."""
-    entree_path = tmp_path / "entree.csv"
-    category_path = tmp_path / "category.csv"
-    pd.DataFrame(
-        {"product": ["apple", "mystery"], "entree_classification": ["entree", "side/add-on"]}
-    ).to_csv(entree_path, index=False)
-    pd.DataFrame(
-        {"product": ["apple"], "category": ["Fruit"], "cleaned_item_names": ["green apple"]}
-    ).to_csv(category_path, index=False)
-
-    with (
-        patch.object(cache, "get_previously_classified_entrees_location", return_value=entree_path),
-        patch.object(cache, "_historical_cache_path", return_value=category_path),
-    ):
-        summary = backfill_entree_cleaned_names()
-
-    saved = pd.read_csv(entree_path).set_index("product")["cleaned_item_names"].to_dict()
-    assert saved["apple"] == "green apple"  # borrowed from the category cache
-    assert saved["mystery"] == "mystery"  # absent from category cache -> fallback to product
-    assert summary["n_borrowed"] == 1
-    assert summary["n_fallback"] == 1

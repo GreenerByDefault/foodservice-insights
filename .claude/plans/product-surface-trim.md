@@ -3,10 +3,9 @@
 ## Context
 
 The product package still carries code that only the lab, only tests, or nobody calls.
-The report bundle has already moved to the lab, and `entree-detection-to-lab.md` moves entree
-detection. This plan is what is left once both have landed, mapped in the September 2026 audit
-by grepping callers across `python/` with tests excluded and following the call graphs. Do not
-start it before `entree-detection-to-lab.md` finishes, so nothing here fights its moves.
+The report bundle and entree detection have already moved to the lab. This plan is what is left,
+mapped in the September 2026 audit by grepping callers across `python/` with tests excluded and
+following the call graphs.
 
 What the map found:
 
@@ -25,7 +24,7 @@ What the map found:
   (three `print` calls between them, and they mutate their input) and
   `get_plant_based_dairy_categories` have no callers; `get_dairy_categories` and
   `clean_GBD_category_name` are lab-only. `utils.py`: `remove_file` has no callers;
-  `get_default_output_file` follows `categorize_spreadsheet_to_csvs` to the lab; `rel_path`
+  `get_default_output_file` is lab-only, called by the lab's `categorize_spreadsheet_to_csvs`; `rel_path`
   shortens two log lines.
 - `report/schema.py`: `validate_report_mode` has no callers; `REQUIRED_NON_NULL_COLUMNS_BY_MODE`
   equals `REQUIRED_COLUMNS_BY_MODE`; `normalize_report_mode`'s `"serv" in text`
@@ -130,4 +129,3 @@ is a behaviour change for GBD to want.
 ## Risks
 
 - Lab regressions are silent; the runscript check above is the only guard.
-- Ordering: this plan assumes the split and entree moves have landed.

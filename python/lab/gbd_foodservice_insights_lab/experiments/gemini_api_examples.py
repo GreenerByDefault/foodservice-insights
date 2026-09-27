@@ -24,10 +24,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from gbd_foodservice_insights.gemini import get_gemini_model
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+
+from gbd_foodservice_insights_lab.gemini import get_gemini_model
 
 EXAMPLE_FLASH_MODEL = get_gemini_model("gemini_api_examples.flash")
 EXAMPLE_PRO_MODEL = get_gemini_model("gemini_api_examples.pro")

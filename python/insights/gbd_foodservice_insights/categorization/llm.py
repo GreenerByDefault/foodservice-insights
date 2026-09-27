@@ -12,12 +12,11 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, Protocol
+from typing import Final, Protocol
 
 import openai
 
 from gbd_foodservice_insights.errors import UpstreamApiError
-from gbd_foodservice_insights.gemini import call_gemini_api
 from gbd_foodservice_insights.llm_prompts import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -136,12 +135,3 @@ class OpenAiLlmClient:
             if content is None:
                 raise ValueError(f"OpenAI returned no content: {response!r}")
             return content.strip()
-
-
-def classify_entree(product: str, gemini_client: Any) -> str:
-    """Classify a product as entree/non-entree using Gemini."""
-    if gemini_client is None:
-        raise ValueError("gemini_client is required for entree detection.")
-    entree_detector_prompt = load_prompt("entree_detector_prompt.md")
-    prompt = f"{entree_detector_prompt}\n\nProduct: {product}"
-    return call_gemini_api(prompt, gemini_client)

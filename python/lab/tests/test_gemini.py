@@ -1,5 +1,5 @@
 """
-Tests for gbd_foodservice_insights/gemini.py
+Tests for gbd_foodservice_insights_lab/gemini.py
 
 This module tests the Gemini model registry and the shared provider-call wrappers that
 maintained package code now routes through.
@@ -8,7 +8,7 @@ maintained package code now routes through.
 import json
 
 import pytest
-from gbd_foodservice_insights import gemini
+from gbd_foodservice_insights_lab import gemini
 
 
 @pytest.fixture(autouse=True)

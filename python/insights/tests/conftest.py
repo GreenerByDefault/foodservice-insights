@@ -7,7 +7,6 @@ This file contains fixtures that are available to all tests in the test suite.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -32,18 +31,3 @@ os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE_DIR))
 def temp_dir(tmp_path):
     """Temporary directory for file operations."""
     return tmp_path
-
-
-# ----------------------------------------------------------------------
-# Mock API Clients
-# ----------------------------------------------------------------------
-
-
-@pytest.fixture
-def mock_gemini_client():
-    """Mock Gemini client for testing without API calls."""
-    mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.text = "Test response"
-    mock_client.models.generate_content.return_value = mock_response
-    return mock_client

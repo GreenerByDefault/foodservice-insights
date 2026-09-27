@@ -1,4 +1,5 @@
-from gbd_foodservice_insights.categorization import cache, entrees, steps
+from gbd_foodservice_insights.categorization import cache, steps
+from gbd_foodservice_insights_lab.categorization import entrees
 from gbd_foodservice_insights_lab.food_report import run_logging
 
 
@@ -24,6 +25,6 @@ def test_categorize_cache_and_categorize_entrees_get_their_own_logger_name():
     }
     assert names == {
         "gbd_foodservice_insights.categorization.cache",
-        "gbd_foodservice_insights.categorization.entrees",
+        "gbd_foodservice_insights_lab.categorization.entrees",
         "gbd_foodservice_insights.categorization.steps",
     }

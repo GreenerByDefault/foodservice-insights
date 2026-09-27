@@ -37,6 +37,7 @@ allowed-confusables = ["×", "–", "ℹ"]
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "gbd_foodservice_insights_lab".msg = "Product code must not import the lab."
 "gbd_foodservice_insights.testing".msg = "Product code must not import the tests."
+"google.genai".msg = "Product code must not call Gemini; entree detection lives in the lab."
 
 [tool.ruff.lint.per-file-ignores]
 "python/lab/**" = ["TID251"]
