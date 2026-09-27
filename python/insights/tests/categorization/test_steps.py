@@ -1,6 +1,8 @@
 import dataclasses
+from collections.abc import Sequence
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import steps
@@ -9,41 +11,224 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
     categorize_with_llm,
+    clean_product_names,
+    fuzzy_match_GBD_categories,
     merge_categorizations,
 )
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
 
-def test_categorize_using_historical_classifications():
-    historical_data = {
-        "product": ["apple", "banana"],
-        "category": ["Fruit", "Fruit"],
-    }
-    historical_df = pd.DataFrame(historical_data)
-
-    unique_products_data = {"product": ["apple", "cherry", "banana"]}
-    unique_products_df = pd.DataFrame(unique_products_data)
+# ----------------------------------------------------------------------
+# Step 1 — Historical reuse
+# ----------------------------------------------------------------------
+def test_categorize_using_historical_classifications_loads_the_default_cache():
+    historical_df = pd.DataFrame(
+        {"product": ["CHEESE CHEDDAR 5LB", "Whole Milk Gallon"], "category": ["Cheese", "Milk"]}
+    )
+    unique_products_df = pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB", "Paper Towels"]})
 
     with patch.object(steps, "get_previously_categorized_items", return_value=historical_df):
-        result_df = categorize_using_historical_classifications(unique_products_df)
+        result = categorize_using_historical_classifications(unique_products_df)
 
-        expected_categories = {"apple": "Fruit", "banana": "Fruit", "cherry": None}
-        result_categories = result_df.set_index("product")["category"].to_dict()
-        result_categories = {k: v if pd.notna(v) else None for k, v in result_categories.items()}
-        assert result_categories == expected_categories
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame(
+            {
+                "product": ["CHEESE CHEDDAR 5LB", "Paper Towels"],
+                "category": ["Cheese", np.nan],
+                "previously_categorized": [True, False],
+                "match_type": pd.Series(["raw_product_history", pd.NA], dtype="object"),
+            }
+        ),
+    )
 
-        expected_previously_categorized = {
-            "apple": True,
-            "banana": True,
-            "cherry": False,
+
+def test_categorize_using_historical_classifications_prefers_the_latest_history_entry():
+    historical_df = pd.DataFrame(
+        {"product": ["CHEESE CHEDDAR 5LB"] * 2, "category": ["Butter", "Cheese"]}
+    )
+
+    result = categorize_using_historical_classifications(
+        pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB"]}), historical_df
+    )
+
+    assert result["category"].tolist() == ["Cheese"]
+
+
+# ----------------------------------------------------------------------
+# Step 2 — Name cleaning
+# ----------------------------------------------------------------------
+def test_clean_product_names_sends_only_uncategorized_products_to_the_llm():
+    products_df = pd.DataFrame(
+        {
+            "product": ["CHEESE CHEDDAR 5LB", "Chicken Breast!!"],
+            "category": ["Cheese", np.nan],
+            "previously_categorized": [True, False],
         }
-        result_previously_categorized = result_df.set_index("product")[
-            "previously_categorized"
-        ].to_dict()
-        assert result_previously_categorized == expected_previously_categorized
+    )
+    llm = KeywordLlmClient()
+
+    result = clean_product_names(products_df, llm)
+
+    assert llm.calls == [("clean", "Chicken Breast!!")]
+    pd.testing.assert_frame_equal(
+        result,
+        products_df.assign(cleaned_item_names=["CHEESE CHEDDAR 5LB", "chicken breast"]),
+    )
 
 
+def test_clean_product_names_skips_the_llm_when_everything_is_categorized():
+    products_df = pd.DataFrame(
+        {
+            "product": ["CHEESE CHEDDAR 5LB"],
+            "category": ["Cheese"],
+            "previously_categorized": [True],
+        }
+    )
+    llm = KeywordLlmClient()
+
+    result = clean_product_names(products_df, llm)
+
+    assert llm.calls == []
+    pd.testing.assert_frame_equal(
+        result, products_df.assign(cleaned_item_names=["CHEESE CHEDDAR 5LB"])
+    )
+
+
+# ----------------------------------------------------------------------
+# Step 2.5 — Historical reuse on cleaned names
+# ----------------------------------------------------------------------
+def test_categorize_using_cleaned_name_history_reuses_a_match_and_trusts_it():
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A", "RAW_B", "RAW_C"],
+            "category": ["Cheese", pd.NA, pd.NA],
+            "cleaned_item_names": ["cheese", "Chicken  Breast!", "mystery thing"],
+            "previously_categorized": [True, False, False],
+            "match_type": ["raw_product_history", pd.NA, pd.NA],
+        }
+    )
+
+    result = categorize_using_cleaned_name_history(
+        products_df, reuse_index={"chicken breast": "Poultry (Chicken & Turkey)"}
+    )
+
+    pd.testing.assert_frame_equal(
+        result,
+        products_df.assign(
+            category=["Cheese", "Poultry (Chicken & Turkey)", pd.NA],
+            previously_categorized=[True, True, False],
+            match_type=["raw_product_history", "cleaned_name_history", pd.NA],
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("category", "reuse_index"),
+    [
+        pytest.param(pd.NA, {}, id="empty index"),
+        pytest.param("Cheese", {"cheese": "Butter"}, id="nothing left to categorize"),
+    ],
+)
+def test_categorize_using_cleaned_name_history_leaves_products_unchanged(category, reuse_index):
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A"],
+            "category": [category],
+            "cleaned_item_names": ["cheese"],
+            "previously_categorized": [pd.notna(category)],
+            "match_type": [pd.NA],
+        }
+    )
+
+    result = categorize_using_cleaned_name_history(products_df, reuse_index=reuse_index)
+
+    pd.testing.assert_frame_equal(result, products_df)
+
+
+# ----------------------------------------------------------------------
+# Step 3 — LLM categorization
+# ----------------------------------------------------------------------
+def test_categorize_with_llm_dedupes_identical_cleaned_names():
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A", "RAW_B"],
+            "category": [pd.NA, pd.NA],
+            "cleaned_item_names": ["chicken breast", "chicken breast"],
+            "match_type": [pd.NA, pd.NA],
+        }
+    )
+    llm = KeywordLlmClient()
+
+    result = categorize_with_llm(products_df, llm)
+
+    assert llm.calls == [("match", "chicken breast")]
+    pd.testing.assert_frame_equal(
+        result,
+        products_df.assign(
+            category=["Poultry (Chicken & Turkey)"] * 2,
+            match_type=pd.Series(["llm"] * 2, dtype="object"),
+        ),
+    )
+
+
+def test_categorize_with_llm_discards_an_answer_outside_the_gbd_categories():
+    class AnswersOffList(KeywordLlmClient):
+        def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+            super().match_product_to_category(item, categories)
+            return "Chicken"
+
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A", "RAW_B"],
+            "category": [pd.NA, "Cheese"],
+            "cleaned_item_names": ["chicken breast", "cheese"],
+            "match_type": [pd.NA, "raw_product_history"],
+        }
+    )
+    llm = AnswersOffList()
+
+    result = categorize_with_llm(products_df, llm)
+
+    assert llm.calls == [("match", "chicken breast")]
+    pd.testing.assert_frame_equal(
+        result,
+        products_df.assign(
+            category=["No Matches Found", "Cheese"],
+            match_type=["llm", "raw_product_history"],
+        ),
+    )
+
+
+# ----------------------------------------------------------------------
+# Step 4 — Fuzzy matching
+# ----------------------------------------------------------------------
+def test_fuzzy_match_GBD_categories_standardizes_non_canonical_categories():
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A", "RAW_B", "RAW_C", "RAW_D"],
+            "category": ["Cheese", np.nan, "none.", "Chese"],
+        }
+    )
+    llm = KeywordLlmClient()
+
+    result = fuzzy_match_GBD_categories(products_df, llm)
+
+    # Only the typo needs the LLM; the "uncategorized" spellings are mapped without it.
+    assert llm.calls == [("fuzzy", "Chese")]
+    pd.testing.assert_frame_equal(
+        result,
+        products_df.assign(
+            category=["Cheese", "No Matches Found", "No Matches Found", "Cheese"],
+            category_old=["Cheese", "No Matches Found", "No Matches Found", "Chese"],
+        ),
+    )
+
+
+# ----------------------------------------------------------------------
+# Step 7 — Merge and filter
+# ----------------------------------------------------------------------
 def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
     products = [f"product {i}" for i in range(n_products)]
     return merge_categorizations(
@@ -58,7 +243,13 @@ def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
 
 def test_merge_categorizations_accepts_exactly_20_percent_remaining():
     df_final, counts = _merge_keeping_one_of(5)
-    assert df_final["product"].tolist() == ["product 0"]
+
+    pd.testing.assert_frame_equal(
+        df_final,
+        pd.DataFrame(
+            {"product": ["product 0"], "date": ["2025-01-01"], "weight": 1.0, "category": "Cheese"}
+        ),
+    )
     assert counts == MergeCounts(
         n_rows_before=5,
         n_rows_after=1,
@@ -66,6 +257,46 @@ def test_merge_categorizations_accepts_exactly_20_percent_remaining():
         n_products_after=1,
         n_rows_uncategorized=4,
     )
+
+
+def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():
+    with pytest.raises(UnusableDataError, match=r"1/6 \(16\.7%\) remain"):
+        _merge_keeping_one_of(6)
+
+
+def test_merge_categorizations_drops_a_product_missing_from_the_categorizations():
+    original_df = pd.DataFrame(
+        {
+            "product": ["CHEESE CHEDDAR 5LB", "CHEESE CHEDDAR 5LB", "Paper Towels", "Dish Soap"],
+            "date": ["2025-01-01"] * 4,
+            "weight": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    categorized_products_df = pd.DataFrame(
+        {
+            "product": ["CHEESE CHEDDAR 5LB", "Paper Towels"],
+            "category": ["Cheese", "No Matches Found"],
+        }
+    )
+
+    df_final, counts = merge_categorizations(original_df, categorized_products_df)
+
+    pd.testing.assert_frame_equal(df_final, original_df.head(2).assign(category="Cheese"))
+    assert counts == MergeCounts(
+        n_rows_before=4,
+        n_rows_after=2,
+        n_products_before=3,
+        n_products_after=1,
+        n_rows_uncategorized=2,
+    )
+
+
+def test_merge_categorizations_rejects_empty_input():
+    with pytest.raises(ValueError, match="n_products_before is zero"):
+        merge_categorizations(
+            pd.DataFrame(columns=["product", "date", "weight"]),
+            pd.DataFrame(columns=["product", "category"]),
+        )
 
 
 def test_merge_counts_to_summary_omits_non_entree_keys_until_the_entree_filter_runs():
@@ -115,76 +346,19 @@ def test_merge_counts_to_summary_avoids_division_by_zero_with_no_rows_before():
         n_products_after=1,
         n_rows_uncategorized=0,
     )
-    details = counts.to_summary()["row_elimination_details"]
-    assert details["total_eliminated_pct"] == 0
-    assert details["rows_eliminated_uncategorized_pct"] == 0
 
-
-def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():
-    with pytest.raises(UnusableDataError, match=r"1/6 \(16\.7%\) remain"):
-        _merge_keeping_one_of(6)
-
-
-def test_categorize_using_cleaned_name_history_reuses_unanimous_match():
-    """A still-uncategorized item whose cleaned name is in the reuse index is filled and trusted."""
-    products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A", "RAW_B", "RAW_C"],
-            "category": ["Fruit", pd.NA, pd.NA],
-            "cleaned_item_names": ["apple", "Chicken  Breast!", "mystery thing"],
-            "previously_categorized": [True, False, False],
-            "match_type": ["raw_product_history", pd.NA, pd.NA],
-        }
-    )
-    # Index keys are normalized; case/punctuation differences still match.
-    reuse_index = {"chicken breast": "Poultry (Chicken & Turkey)"}
-
-    result = categorize_using_cleaned_name_history(products_df, reuse_index=reuse_index)
-    by_product = result.set_index("product")
-
-    # RAW_B matched on its cleaned name (case/punctuation-insensitive).
-    assert by_product.loc["RAW_B", "category"] == "Poultry (Chicken & Turkey)"
-    assert bool(by_product.loc["RAW_B", "previously_categorized"]) is True
-    assert by_product.loc["RAW_B", "match_type"] == "cleaned_name_history"
-
-    # RAW_C had no index entry -> left for the LLM.
-    assert pd.isna(by_product.loc["RAW_C", "category"])
-    assert bool(by_product.loc["RAW_C", "previously_categorized"]) is False
-    assert pd.isna(by_product.loc["RAW_C", "match_type"])
-
-    # RAW_A (raw-history hit) is untouched.
-    assert by_product.loc["RAW_A", "category"] == "Fruit"
-    assert by_product.loc["RAW_A", "match_type"] == "raw_product_history"
-
-
-def test_categorize_using_cleaned_name_history_noop_without_index():
-    products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A"],
-            "category": [pd.NA],
-            "cleaned_item_names": ["apple"],
-            "previously_categorized": [False],
-            "match_type": [pd.NA],
-        }
-    )
-    result = categorize_using_cleaned_name_history(products_df, reuse_index={})
-    assert pd.isna(result.loc[0, "category"])
-
-
-def test_categorize_with_llm_dedupes_identical_cleaned_names():
-    products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A", "RAW_B"],
-            "category": [pd.NA, pd.NA],
-            "cleaned_item_names": ["chicken breast", "chicken breast"],
-            "match_type": [pd.NA, pd.NA],
-        }
-    )
-
-    llm = KeywordLlmClient()
-
-    result = categorize_with_llm(products_df, llm)
-
-    assert llm.calls == [("match", "chicken breast")]
-    assert result["category"].tolist() == ["Poultry (Chicken & Turkey)"] * 2
-    assert result["match_type"].tolist() == ["llm", "llm"]
+    assert counts.to_summary() == {
+        "n_products_before": 1,
+        "n_products_after": 1,
+        "pct_remaining": 1.0,
+        "n_rows_before": 0,
+        "n_rows_after": 0,
+        "row_elimination_details": {
+            "total_rows_initial": 0,
+            "total_rows_final": 0,
+            "total_rows_eliminated": 0,
+            "total_eliminated_pct": 0,
+            "rows_eliminated_uncategorized": 0,
+            "rows_eliminated_uncategorized_pct": 0,
+        },
+    }
