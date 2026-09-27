@@ -108,10 +108,6 @@ def analyze(
     rows = df_final.rename(columns={"weight": "kilos_total"})[
         ["date", "product", "category", "kilos_total"]
     ].reset_index(drop=True)
-    # Past `read_input_csv` and `apps/web`'s month-coverage check, an error finding can only be
-    # our bug, so `hard_fail` lets it land as `unknown` rather than ship a report with sheets
-    # silently missing. `warn_continue` once shipped a report with no per-diner figures and no
-    # error, after it rejected `monthly_counts`.
     report = build_food_report(
         rows,
         diner_meal_mapping=request.monthly_counts,
