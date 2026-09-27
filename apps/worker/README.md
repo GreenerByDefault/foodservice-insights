@@ -38,13 +38,15 @@ rather than here.
 
 [`src/modes.ts`](src/modes.ts) resolves `WORKER_MODE` into which child to spawn and, since a
 fast local loop needs different timings than production, which config profile to run it under.
+For what each mode gives you and when to pick it, see the root
+[`README.md`](../../README.md#analysis-modes).
 
-| `WORKER_MODE` | Runs |
-| --- | --- |
-| `stubbed` | `python -m worker_child.testing` — a fake analysis, steered by the report name. See [`worker_child/testing.py`](../../python/worker_child/worker_child/testing.py) for the scenario catalogue (`!slow`, `!hang`, `!fail:<reason>`, …). |
-| `mock-llm` | `python -m worker_child.mock_llm` — the real analysis, with an offline keyword fake in place of OpenAI, so it needs no API key. Production timings. |
-| `live` | The real `python -m worker_child`. Needs `OPENAI_API_KEY`. |
-| `off` | `pnpm dev` starts no worker. |
+| `WORKER_MODE` | Runs | Timings |
+| --- | --- | --- |
+| `mock-llm` | `python -m worker_child.mock_llm` | Production |
+| `live` | `python -m worker_child` | Production |
+| `stubbed` | `python -m worker_child.testing` | Fast, so `!hang` is killed while you watch |
+| `off` | Nothing | — |
 
 ## Layout
 
