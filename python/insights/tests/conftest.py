@@ -1,8 +1,4 @@
-"""
-Pytest configuration and shared fixtures.
-
-This file contains fixtures that are available to all tests in the test suite.
-"""
+"""Pytest configuration shared by every test in the suite."""
 
 import os
 import tempfile
@@ -18,8 +14,3 @@ _XDG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", str(_MPL_CONFIG_DIR))
 os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE_DIR))
-
-
-# ----------------------------------------------------------------------
-# Sample Data Fixtures
-# ----------------------------------------------------------------------

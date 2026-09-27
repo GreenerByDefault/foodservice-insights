@@ -84,14 +84,14 @@ What the map found:
 
 ## PR 1 — delete the dead
 
-Everything with no callers: the four `categories.py` functions and `remove_file`,
-`schema.validate_report_mode`, `REQUIRED_NON_NULL_COLUMNS_BY_MODE`,
-`emissions.get_available_regions`, the `timescale="period"` branch, the unreachable `plot_*`
-functions that a combined page the report renders supersedes, the unreachable Decision KPIs
-branch and the never-selected `"error"` status sentence
-in `pdf.py`, `validate_date_column`, `baseline_pre_flight_checks`, the second token set, and both
-`temp_dir` fixtures. Tests go with them. No product behaviour changes: the golden test passes
-unchanged.
+Everything with no callers: `GBD_categories_check`, `clean_GBD_category_names`,
+`order_GBD_categories` and `remove_file`, `schema.validate_report_mode`,
+`REQUIRED_NON_NULL_COLUMNS_BY_MODE`, `emissions.get_available_regions`, the `timescale="period"`
+branch, the unreachable `plot_*` functions that a combined page the report renders supersedes,
+the unreachable Decision KPIs branches in `pdf.py`, `validate_date_column`,
+`baseline_pre_flight_checks`, the second token set, and both `temp_dir` fixtures. Tests go with
+them. `pdf.py`'s `"error"` status sentence is re-keyed to `"invalid"`, the status it was written
+for. No product behaviour changes: the golden test passes unchanged.
 
 Dropped from this PR after review:
 
@@ -100,8 +100,12 @@ Dropped from this PR after review:
 - **`summary_stats` is rendered.** `_executive_narrative` returns `None` when total CO2e is
   missing or zero (missing emissions are only a warning), and the PDF falls back to the
   key-value page. The golden file pins every key.
-- **The quality page's per-finding `error` label and count stay**: `build_pdf_report` is public,
-  and only the status sentence is unreachable by construction.
+- **`get_plant_based_dairy_categories` stays.** It is the taxonomy getter paired with
+  `get_dairy_categories`, and its replacement needs the exact string `"Plant-Based Dairy & Egg"`:
+  `get_categories_by_product_category` returns `[]` for anything else.
+- **The quality page's `error` handling stays**: `build_pdf_report` is public, so a direct caller
+  can pass error findings. The per-finding label and count stay, and the status sentence, never
+  selected only because it was keyed `"error"` instead of `"invalid"`, is re-keyed.
 - **`highest_lowest` feeds the lab's QA workbook**, not the client workbook; the lab uses it.
 - **The data-profiling plots move to the lab in PR 2** (`plot_date_value_counts`,
   `plot_metric(s)_by_date`, `plot_metric(s)_by_month`, `plot_category_distribution`). The data

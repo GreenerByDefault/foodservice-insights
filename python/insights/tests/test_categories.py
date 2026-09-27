@@ -21,6 +21,7 @@ from gbd_foodservice_insights.categories import (
     get_GBD_categories,
     get_meat_categories,
     get_plant_based_categories,
+    get_plant_based_dairy_categories,
     get_plant_protein_categories,
     get_protein_categories,
 )
@@ -136,6 +137,27 @@ class TestGetDairyCategories:
 
     def test_lowercase_option(self):
         lower = get_dairy_categories(lowercase=True)
+        assert all(item.lower() == item for item in lower)
+
+
+class TestGetPlantBasedDairyCategories:
+    """Tests for get_plant_based_dairy_categories function."""
+
+    # An exact list, because a product-category name that drifts from the YAML's returns [].
+    def test_returns_the_plant_based_dairy_and_egg_categories(self):
+        assert get_plant_based_dairy_categories() == [
+            "Almond/Coconut Milk",
+            "Oat Milk",
+            "Rice Milk",
+            "Soy Milk",
+            "Plant-Based Cheese",
+            "Plant-Based Yogurt",
+            "Plant-Based Egg",
+            "Unspecified non dairy milk",
+        ]
+
+    def test_lowercase_option(self):
+        lower = get_plant_based_dairy_categories(lowercase=True)
         assert all(item.lower() == item for item in lower)
 
 
@@ -301,11 +323,6 @@ class TestCleanGBDCategoryName:
             result_lower = clean_GBD_category_name(test_cat.lower())
             result_upper = clean_GBD_category_name(test_cat.upper())
             assert result_normal == result_lower == result_upper
-
-
-# ----------------------------------------------------------------------
-# Tests for category ordering functions
-# ----------------------------------------------------------------------
 
 
 if __name__ == "__main__":
