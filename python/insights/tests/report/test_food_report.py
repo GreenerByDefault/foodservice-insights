@@ -5,13 +5,14 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.report import aggregation, plots
+from gbd_foodservice_insights.report import aggregation
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     _attach_monthly_category_emissions,
     build_food_report,
     build_report_charts,
 )
+from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import QualityCheckError
 
 JAN = pd.Period("2024-01", freq="M")
@@ -372,7 +373,7 @@ def test_report_charts_close_what_was_drawn_when_generation_raises(
         plt.figure()
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(plots, "generate_all_report_plots", generate_all_report_plots)
+    monkeypatch.setattr(report_plots, "generate_all_report_plots", generate_all_report_plots)
     before = set(plt.get_fignums())
 
     with pytest.raises(RuntimeError, match="boom"), build_report_charts(_build(_rows())):

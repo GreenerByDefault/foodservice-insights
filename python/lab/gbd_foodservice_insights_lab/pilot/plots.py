@@ -15,7 +15,7 @@ from gbd_foodservice_insights.plotting_utils import (
     set_suptitle_font,
     set_title_font,
 )
-from gbd_foodservice_insights.report.plots import prepare_monthly_trend_data
+from gbd_foodservice_insights.report.plots.panels import prepare_monthly_trend_data
 
 from gbd_foodservice_insights_lab.plotting_extras import (
     PERIOD_COLORS,
