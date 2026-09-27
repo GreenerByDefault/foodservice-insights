@@ -60,7 +60,6 @@ def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisReques
         run_id=manifest.analysis_attempt_id,
         input_csv=run_directory / layout.INPUT_CSV,
         output_directory=run_directory / layout.RESULT_FILES_DIRECTORY,
-        work_directory=run_directory / layout.WORK_DIRECTORY,
         report_name=manifest.report.name,
         site_name=manifest.report.site_name,
         organization_name=manifest.report.organization_name,

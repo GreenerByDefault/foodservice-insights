@@ -13,8 +13,8 @@
  * each expected path from the two fixed report names, which makes traversal impossible by
  * construction. A path segment is always an id or a fixed name, never anything a user typed.
  *
- * `work/` exists because the analysis library writes CSV intermediates; the child's working
- * directory is `work/`, so a stray relative write lands in scratch rather than among the results.
+ * `work/` is the child's working directory, so a stray relative write — from the library or
+ * anything it spawns — lands in scratch rather than among the results.
  */
 
 import { join } from 'node:path';

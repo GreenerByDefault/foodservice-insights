@@ -4,7 +4,7 @@ answers, and returns either a report, or one of three failure reasons.
 Two properties keep this seam agnostic and are worth preserving:
 
 1. **The library never sees the run directory, the contract's documents, or exit codes.** It is
-   handed a CSV, a scratch directory, an output directory, and the form's answers.
+   handed a CSV, an output directory, and the form's answers.
 2. **`report_progress` is a plain no-argument callable with a no-op default**, so notebooks and
    the lab are unaffected. It carries no payload; the child's only use of it is to bump
    `sequence`.
@@ -59,7 +59,6 @@ class AnalysisRequest:
     run_id: str  # opaque; log correlation only
     input_csv: Path  # product,date,weight — UTF-8, ISO dates, plain numbers
     output_directory: Path  # where to write the pdf and xlsx
-    work_directory: Path  # scratch; discarded after the run. Unused: the run layout is contract
     report_name: str | None
     site_name: str | None
     organization_name: str
