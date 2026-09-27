@@ -3,13 +3,18 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import (
+    aggregate_data,
     calculate_animal_emissions_concentration,
     calculate_milk_oat_swap_scenarios,
     calculate_plant_animal_split,
     calculate_plant_protein_share,
     calculate_ruminant_legume_swap_scenarios,
+    category_highest_vs_lowest_months,
     create_template_data,
+    identify_category_drivers,
+    identify_overall_drivers,
     run_aggregation_pipeline,
+    summarize_animal_emissions_intensity,
 )
 
 
@@ -387,3 +392,151 @@ def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emis
 
     assert not result.empty
     assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0, 0.0]
+
+
+@pytest.fixture
+def fruit_rows():
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-01", "2023-01-15", "2023-02-01"]),
+            "product": ["apple", "banana", "apple"],
+            "kilos_total": [10, 20, 15],
+            "category": ["fruit", "fruit", "fruit"],
+            "month_year": ["2023-01", "2023-01", "2023-02"],
+        }
+    )
+
+
+def test_aggregate_data(fruit_rows):
+    agg_df = aggregate_data(fruit_rows, group_by="product")
+    assert "kilos_total" in agg_df.columns
+    assert len(agg_df) == 3
+    jan_apple = agg_df.loc[
+        (agg_df["month_year"] == "2023-01") & (agg_df["product"] == "apple"),
+        "kilos_total",
+    ].iloc[0]
+    assert jan_apple == 10
+
+    agg_per_diner_meal_df = aggregate_data(
+        fruit_rows,
+        group_by="product",
+        per_diner_meal=True,
+        diner_meal_mapping={"2023-01": 100, "2023-02": 120},
+    )
+    assert "kilos per diner-meal" in agg_per_diner_meal_df.columns
+    feb_apple_per_dm = agg_per_diner_meal_df.loc[
+        (agg_per_diner_meal_df["month_year"] == "2023-02")
+        & (agg_per_diner_meal_df["product"] == "apple"),
+        "kilos per diner-meal",
+    ].iloc[0]
+    assert feb_apple_per_dm == pytest.approx(15 / 120)
+
+
+@patch("gbd_foodservice_insights.report.aggregation.get_GBD_categories")
+def test_create_template_data_zero_fills_absent_categories(mock_get_gbd_categories, fruit_rows):
+    """Report templates include every category so chart tables keep a stable shape."""
+    mock_get_gbd_categories.return_value = ["fruit", "vegetable"]
+    agg_df = aggregate_data(fruit_rows, group_by="category")
+    template_df = create_template_data(agg_df, metric="kilos_total")
+    assert "total" in template_df.columns
+    assert "fruit" in template_df.index
+    assert "vegetable" in template_df.index
+    assert template_df.loc["vegetable", "total"] == 0
+
+
+def test_identify_category_drivers(fruit_rows):
+    drivers_df = identify_category_drivers(fruit_rows, metric="kilos_total", top_n=1)
+    assert "percentage" in drivers_df.columns
+    assert len(drivers_df) == 1  # Only one category
+    assert drivers_df["product"].iloc[0] == "apple"
+    assert drivers_df["percentage"].iloc[0] == "55.6%"
+
+
+def test_identify_overall_drivers(fruit_rows):
+    drivers_df = identify_overall_drivers(fruit_rows, metric="kilos_total", top_n=1)
+    assert "percentage" in drivers_df.columns
+    assert len(drivers_df) == 1
+    assert drivers_df["product"].iloc[0] == "apple"
+    assert drivers_df["percentage"].iloc[0] == "55.6%"
+
+
+def test_category_highest_vs_lowest_months():
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-01", "2023-02-01", "2023-03-01"]),
+            "product": ["apple", "apple", "apple"],
+            "kilos": [10, 40, 5],
+            "category": ["fruit", "fruit", "fruit"],
+            "month_year": ["2023-01", "2023-02", "2023-03"],
+            "kilos per diner_meal": [0.1, 0.4, 0.05],
+        }
+    )
+    ratio_df = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
+    assert len(ratio_df) == 1
+    assert ratio_df["times_higher"].iloc[0] == 8.0
+
+
+def test_category_highest_vs_lowest_months_returns_empty_frame_when_no_category_hits_threshold():
+    """Keeps the aggregation pipeline usable when no category has a 2x month spread."""
+    df = pd.DataFrame(
+        {
+            "category": ["legumes", "legumes"],
+            "kilos per diner_meal": [0.1, 0.12],
+        }
+    )
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
+
+    assert result.empty
+    assert result.columns.tolist() == ["category", "times_higher"]
+
+
+def test_summarize_animal_emissions_intensity():
+    """Procurement summaries include weight, total emissions, and intensity for animal
+    categories only.
+    """
+    df = pd.DataFrame(
+        {
+            "category": [
+                "Beef and Buffalo Meat",
+                "Beef and Buffalo Meat",
+                "Poultry (Chicken & Turkey)",
+                "Legumes",
+            ],
+            "kilos_total": [2.0, 3.0, 4.0, 5.0],
+            "emissions_kg_co2e": [82.7, 124.05, 17.6, 8.0],
+        }
+    )
+
+    summary = summarize_animal_emissions_intensity(df)
+
+    assert summary["category"].tolist() == [
+        "Beef and Buffalo Meat",
+        "Poultry (Chicken & Turkey)",
+    ]
+    assert summary["kilos_total"].tolist() == [5.0, 4.0]
+    assert summary["total_kg_co2e"].tolist() == [206.75, 17.6]
+    assert summary["kg_co2e_per_kg_food"].tolist() == [41.35, 4.4]
+
+
+def test_summarize_animal_emissions_intensity_normalizes_case_variants():
+    df = pd.DataFrame(
+        {
+            "category": [
+                "beef and buffalo meat",
+                "Beef and Buffalo Meat",
+                "POULTRY (CHICKEN & TURKEY)",
+            ],
+            "kilos_total": [2.0, 3.0, 4.0],
+            "emissions_kg_co2e": [82.7, 124.05, 17.6],
+        }
+    )
+
+    summary = summarize_animal_emissions_intensity(df)
+
+    assert summary["category"].tolist() == [
+        "Beef and Buffalo Meat",
+        "Poultry (Chicken & Turkey)",
+    ]
+    assert summary["kilos_total"].tolist() == [5.0, 4.0]
+    assert summary["total_kg_co2e"].tolist() == [206.75, 17.6]

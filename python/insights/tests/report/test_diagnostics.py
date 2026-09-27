@@ -1,14 +1,21 @@
+from collections.abc import Callable
+from pathlib import Path
+
 import gbd_foodservice_insights.report.diagnostics as report_diagnostics
 import pandas as pd
 import pytest
+import yaml
 from gbd_foodservice_insights.report.diagnostics import (
     check_aggregation_reconciliation,
     check_category_concentration,
+    check_date_distribution,
     check_diner_meal_reasonableness,
     check_missing_internal_months,
     check_missing_weeks_within_month,
     check_per_product_weight_bounds,
+    check_required_columns,
     check_single_product_dominance,
+    check_zero_category_month_combos,
     detect_category_discontinuity,
     detect_exact_duplicate_rows,
     detect_month_over_month_total_volatility,
@@ -16,6 +23,7 @@ from gbd_foodservice_insights.report.diagnostics import (
     detect_numeric_coercion_loss,
     detect_unusual_sales,
     find_close_product_pairs,
+    identify_potentially_abnormal_weight_meat_items,
     parse_and_validate_date_column,
     run_all_diagnostics,
 )
@@ -45,7 +53,7 @@ def test_find_close_product_pairs_finds_pairs(close_pairs_df):
     assert pair["Product 2"].iloc[0] == "testing"
 
 
-def test_find_close_product_pairs_sorting(close_pairs_df):
+def test_find_close_product_pairs_sorting():
     df = pd.DataFrame(
         {"product": ["apple"] * 10 + ["apply"] * 2 + ["apricot"] * 8 + ["apriot"] * 1}
     )
@@ -125,7 +133,7 @@ def test_detect_unusual_sales(unusual_sales_df):
     assert outlier_rows["flag_reason"].str.len().gt(0).all()
 
 
-def test_detect_unusual_sales_no_abnormal(unusual_sales_df):
+def test_detect_unusual_sales_no_abnormal():
     """Returns no flagged products when category-level values stay within the normal range."""
     df = pd.DataFrame(
         {
@@ -224,17 +232,20 @@ def test_detect_exact_duplicate_rows_warns_and_returns_export_table():
     assert duplicate_rows["duplicate_group_size"].eq(3).all()
 
 
-def test_detect_exact_duplicate_rows_errors_above_threshold():
-    """Escalates when duplicate rows are common enough to suggest a serious data issue."""
-    df = pd.DataFrame(
+def _three_duplicates_in_100_rows(duplicate_date: object, other_date: object) -> pd.DataFrame:
+    return pd.DataFrame(
         {
-            "date": [pd.Timestamp("2025-01-01")] * 3 + [pd.Timestamp("2025-01-02")] * 97,
+            "date": [duplicate_date] * 3 + [other_date] * 97,
             "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
             "category": ["Legumes"] * 100,
             "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
         }
     )
-    df.loc[1:2, ["product", "kilos_total"]] = ["Beans", 2.0]
+
+
+def test_detect_exact_duplicate_rows_errors_above_threshold():
+    """Escalates when duplicate rows are common enough to suggest a serious data issue."""
+    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"))
 
     findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
 
@@ -247,15 +258,7 @@ def test_detect_exact_duplicate_rows_caps_month_bucketed_dates_at_warning():
     Month/year-only client data should not hard-fail because transaction-level duplicate detection
     is ambiguous.
     """
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")] * 3 + [pd.Timestamp("2025-02-01")] * 97,
-            "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
-            "category": ["Legumes"] * 100,
-            "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
-        }
-    )
-    df.loc[1:2, ["product", "kilos_total"]] = ["Beans", 2.0]
+    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))
 
     findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
 
@@ -269,15 +272,7 @@ def test_detect_exact_duplicate_rows_treats_month_only_string_dates_as_month_buc
     Month-only strings should be recognized as month-bucketed so duplicate severity is not
     overstated.
     """
-    df = pd.DataFrame(
-        {
-            "date": ["04/2025"] * 3 + ["05/2025"] * 97,
-            "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
-            "category": ["Legumes"] * 100,
-            "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
-        }
-    )
-    df.loc[1:2, ["product", "kilos_total"]] = ["Beans", 2.0]
+    df = _three_duplicates_in_100_rows("04/2025", "05/2025")
 
     findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
 
@@ -302,14 +297,18 @@ def test_detect_exact_duplicate_rows_success_when_none_found():
     assert duplicate_rows.empty
 
 
-def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
-    """PDF/OCR extracts should warn when likely name splits affect a meaningful share of volume."""
-    df = pd.DataFrame(
+def _curry_split_across_two_names() -> pd.DataFrame:
+    return pd.DataFrame(
         {
             "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
             "kilos_total": [20.0, 15.0, 65.0],
         }
     )
+
+
+def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
+    """PDF/OCR extracts should warn when likely name splits affect a meaningful share of volume."""
+    df = _curry_split_across_two_names()
 
     findings, export_df = detect_near_duplicate_product_names(
         df,
@@ -327,12 +326,7 @@ def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
 
 def test_detect_near_duplicate_product_names_keeps_tabular_pairs_as_info():
     """The same likely split is lower-severity in tabular data because OCR risk is lower."""
-    df = pd.DataFrame(
-        {
-            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
-            "kilos_total": [20.0, 15.0, 65.0],
-        }
-    )
+    df = _curry_split_across_two_names()
 
     findings, _ = detect_near_duplicate_product_names(
         df,
@@ -618,36 +612,6 @@ def test_detect_category_discontinuity_succeeds_when_categories_are_continuous()
     assert export_df.empty
 
 
-def test_detect_category_discontinuity_reads_min_gap_months_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "category_discontinuity:",
-                "  min_gap_months: 2",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "month_year": pd.PeriodIndex(
-                ["2025-01", "2025-03", "2025-01", "2025-02", "2025-03"], freq="M"
-            ),
-            "category": ["Legumes", "Legumes", "Poultry", "Poultry", "Poultry"],
-            "kilos_total": [10.0, 9.0, 5.0, 6.0, 7.0],
-        }
-    )
-
-    findings, _ = detect_category_discontinuity(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["metadata"]["min_gap_months"] == 2
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
 def test_check_diner_meal_reasonableness_respects_boundary_ratios():
     findings, export_df = check_diner_meal_reasonableness(
         {
@@ -676,99 +640,6 @@ def test_check_diner_meal_reasonableness_flags_outside_boundary_ratios_and_escal
     assert findings[0]["count"] == 2
     assert export_df["ratio_to_median"].tolist() == pytest.approx([0.49, 1.0, 2.01])
     assert export_df["is_flagged"].tolist() == [True, False, True]
-
-
-def test_check_diner_meal_reasonableness_reads_thresholds_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "diner_meal_count_reasonableness:",
-                "  low_ratio_threshold: 0.8",
-                "  high_ratio_threshold: 1.2",
-                "  error_if_flagged_months: 3",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    findings, export_df = check_diner_meal_reasonableness(
-        {
-            "2025-01": 79,
-            "2025-02": 100,
-            "2025-03": 121,
-        }
-    )
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 2
-    assert export_df["is_flagged"].tolist() == [True, False, True]
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
-def test_detect_exact_duplicate_rows_reads_thresholds_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "exact_duplicate_rows:",
-                "  warning_share_threshold: 0.05",
-                "  error_share_threshold: 0.10",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")] * 3 + [pd.Timestamp("2025-01-02")] * 97,
-            "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
-            "category": ["Legumes"] * 100,
-            "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
-        }
-    )
-    df.loc[1:2, ["product", "kilos_total"]] = ["Beans", 2.0]
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["metadata"]["warning_share_threshold"] == pytest.approx(0.05)
-    assert findings[0]["metadata"]["error_share_threshold"] == pytest.approx(0.10)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
-def test_detect_near_duplicate_product_names_reads_threshold_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "near_duplicate_product_names:",
-                "  warning_share_threshold: 0.40",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
-            "kilos_total": [20.0, 15.0, 65.0],
-        }
-    )
-
-    findings, _ = detect_near_duplicate_product_names(
-        df,
-        metric_total="kilos_total",
-        pdf_extracted=True,
-    )
-
-    assert findings[0]["status"] == "info"
-    assert findings[0]["count"] == 0
-    assert findings[0]["metadata"]["warning_share_threshold"] == pytest.approx(0.40)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
 
 
 def test_find_close_product_pairs_empty_df():
@@ -810,33 +681,6 @@ def test_detect_unusual_sales_returns_legacy_product_list():
     assert flagged_products == ["A", "B"]
 
 
-def test_detect_unusual_sales_reads_legacy_thresholds_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "outlier_line_items:",
-                "  legacy_median_floor: 10",
-                "  legacy_absolute_threshold_if_below_floor: 50",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "product_name": ["A"] * 5,
-            "quantity_sold": [9, 9, 9, 9, 45],
-        }
-    )
-
-    flagged_products = detect_unusual_sales(df, "quantity_sold", "product_name")
-
-    assert flagged_products == []
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
 def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
     """Hard bounds should catch near-certain unit errors and preserve row traceability."""
     df = pd.DataFrame(
@@ -876,37 +720,6 @@ def test_check_per_product_weight_bounds_treats_boundaries_as_in_range():
     assert flagged_rows.empty
 
 
-def test_check_per_product_weight_bounds_reads_thresholds_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "per_product_weight_bounds:",
-                "  low: 2",
-                "  high: 10",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "product": ["Beans", "Tofu", "Tempeh"],
-            "kilos_total": [1.5, 10.0, 11.0],
-        }
-    )
-
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 2
-    assert findings[0]["metadata"]["low"] == pytest.approx(2.0)
-    assert findings[0]["metadata"]["high"] == pytest.approx(10.0)
-    assert list(flagged_rows["product"]) == ["Beans", "Tempeh"]
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
 def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_metric():
     df = pd.DataFrame(
         {
@@ -924,80 +737,6 @@ def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_met
     assert findings[0]["metadata"]["unit_label"] == "servings"
     assert "0.5000 servings" in findings[0]["sample_values"][0]
     assert list(flagged_rows["row_index"]) == [20, 22]
-
-
-def test_find_close_product_pairs_reads_max_levenshtein_distance_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "near_duplicate_product_names:",
-                "  max_levenshtein_distance: 1",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame({"product": ["abcd", "abef"]})
-    result_df = find_close_product_pairs(df, "product")
-
-    assert result_df.empty
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
-def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
-    tmp_path, monkeypatch
-):
-    """The large-quantity cutoff for meat items should be configurable in YAML."""
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "meat_quantity_reasonableness:",
-                "  large_quantity_threshold: 50",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "category": ["Poultry (Chicken & Turkey)"] * 2,
-            "quantity": [40, 2],
-        }
-    )
-
-    result = report_diagnostics.identify_potentially_abnormal_weight_meat_items(df)
-
-    assert result is True
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
-def test_check_date_distribution_reads_threshold_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "date_distribution:",
-                "  partial_month_ratio_threshold: 0.2",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "month_year": ["2025-01"] * 4 + ["2025-02"] * 10 + ["2025-03"] * 10,
-        }
-    )
-
-    findings = report_diagnostics.check_date_distribution(df)
-
-    assert findings == []
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
 
 
 # ----------------------------------------------------------------------
@@ -1169,68 +908,259 @@ def test_detect_numeric_coercion_loss_errors_for_unreadable_required_metric_toke
     ]
 
 
-def test_detect_numeric_coercion_loss_reads_allowed_loss_threshold_from_yaml(tmp_path):
-    """Tolerance should soften coercion loss to a warning, not hide it as a clean pass."""
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "numeric_coercion_loss:",
-                "  allowed_loss_count: 2",
-            ]
+def _override_thresholds(
+    monkeypatch: pytest.MonkeyPatch,
+    config_path: Path,
+    overrides: dict[str, dict[str, float]],
+) -> None:
+    config_path.write_text(yaml.safe_dump(overrides))
+    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+
+
+def test_load_diagnostic_thresholds_refreshes_when_the_path_changes(tmp_path, monkeypatch):
+    for mad_threshold in (5, 99):
+        _override_thresholds(
+            monkeypatch,
+            tmp_path / f"thresholds_{mad_threshold}.yaml",
+            {"outlier_line_items": {"mad_threshold": mad_threshold}},
         )
+
+        assert (
+            report_diagnostics.get_diagnostic_threshold("outlier_line_items", "mad_threshold")
+            == mad_threshold
+        )
+
+
+def _category_discontinuity_with_a_one_month_gap() -> dict[str, object]:
+    df = pd.DataFrame(
+        {
+            "month_year": pd.PeriodIndex(
+                ["2025-01", "2025-03", "2025-01", "2025-02", "2025-03"], freq="M"
+            ),
+            "category": ["Legumes", "Legumes", "Poultry", "Poultry", "Poultry"],
+            "kilos_total": [10.0, 9.0, 5.0, 6.0, 7.0],
+        }
     )
+    findings, _ = detect_category_discontinuity(df, metric_total="kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "min_gap_months": findings[0]["metadata"]["min_gap_months"],
+    }
 
-    original_path = report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH
-    report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH = config_path
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
 
+def _diner_meal_counts_about_20_percent_off_the_median() -> dict[str, object]:
+    findings, export_df = check_diner_meal_reasonableness(
+        {"2025-01": 79, "2025-02": 100, "2025-03": 121}
+    )
+    return {
+        "status": findings[0]["status"],
+        "count": findings[0]["count"],
+        "is_flagged": export_df["is_flagged"].tolist(),
+    }
+
+
+def _three_duplicates_in_100_rows_on_distinct_days() -> dict[str, object]:
+    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"))
+    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
+    metadata = findings[0]["metadata"]
+    return {
+        "status": findings[0]["status"],
+        "warning_share_threshold": metadata["warning_share_threshold"],
+        "error_share_threshold": metadata["error_share_threshold"],
+    }
+
+
+def _curry_split_in_a_pdf_extract() -> dict[str, object]:
+    findings, _ = detect_near_duplicate_product_names(
+        _curry_split_across_two_names(), metric_total="kilos_total", pdf_extracted=True
+    )
+    return {
+        "status": findings[0]["status"],
+        "count": findings[0]["count"],
+        "warning_share_threshold": findings[0]["metadata"]["warning_share_threshold"],
+    }
+
+
+def _legacy_spike_below_the_median_floor() -> list[str]:
+    df = pd.DataFrame({"product_name": ["A"] * 5, "quantity_sold": [9, 9, 9, 9, 46]})
+    return detect_unusual_sales(df, "quantity_sold", "product_name")
+
+
+def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
+    df = pd.DataFrame({"product": ["Beans", "Tofu", "Tempeh"], "kilos_total": [1.5, 10.0, 11.0]})
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "count": findings[0]["count"],
+        "low": findings[0]["metadata"]["low"],
+        "high": findings[0]["metadata"]["high"],
+        "flagged": flagged_rows["product"].tolist(),
+    }
+
+
+def _names_two_edits_apart() -> int:
+    return len(find_close_product_pairs(pd.DataFrame({"product": ["abcd", "abef"]}), "product"))
+
+
+def _first_month_at_40_percent_of_the_median() -> list[dict[str, object]]:
+    df = pd.DataFrame({"month_year": ["2025-01"] * 4 + ["2025-02"] * 10 + ["2025-03"] * 10})
+    return check_date_distribution(df)
+
+
+def _two_unreadable_weights() -> dict[str, object]:
     df = pd.DataFrame({"kilos_total": ["bad token", "still bad", "4.5"]})
     findings, _ = detect_numeric_coercion_loss(df, ["kilos_total"])
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 2
-    assert findings[0]["metadata"]["allowed_loss_count"] == 2
-
-    report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH = original_path
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
+    return {
+        "status": findings[0]["status"],
+        "count": findings[0]["count"],
+        "allowed_loss_count": findings[0]["metadata"]["allowed_loss_count"],
+    }
 
 
-def test_load_diagnostic_thresholds_refreshes_when_path_changes_without_manual_cache_clear(
-    tmp_path,
+def _aggregates_0_15_percent_off_the_raw_total() -> dict[str, object]:
+    findings, _ = check_aggregation_reconciliation(
+        pd.DataFrame({"kilos_total": [1000.0]}),
+        pd.DataFrame({"kilos_total": [1001.5]}),
+        pd.DataFrame({"kilos_total": [1000.0]}),
+        "kilos_total",
+    )
+    return {
+        "status": findings[0]["status"],
+        "rel_error_threshold": findings[0]["metadata"]["rel_error_threshold"],
+    }
+
+
+def _top_product_at_35_percent() -> dict[str, object]:
+    df = pd.DataFrame({"product": ["Tofu", "Beans", "Tempeh"], "kilos_total": [35.0, 33.0, 32.0]})
+    findings = check_single_product_dominance(df, "kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "threshold_pct": findings[0]["metadata"]["threshold_pct"],
+    }
+
+
+def _top_category_at_35_percent() -> dict[str, object]:
+    df = pd.DataFrame(
+        {"category": ["Legumes", "Poultry", "Eggs"], "kilos_total": [35.0, 33.0, 32.0]}
+    )
+    findings = check_category_concentration(df, "kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "threshold_pct": findings[0]["metadata"]["threshold_pct"],
+    }
+
+
+# Each input lands on the other side of the checked-in threshold from the override, so a case
+# passes only if the check read the override rather than the default.
+@pytest.mark.parametrize(
+    ("overrides", "observe", "expected"),
+    [
+        pytest.param(
+            {"category_discontinuity": {"min_gap_months": 2}},
+            _category_discontinuity_with_a_one_month_gap,
+            {"status": "success", "min_gap_months": 2},
+            id="category_discontinuity",
+        ),
+        pytest.param(
+            {
+                "diner_meal_count_reasonableness": {
+                    "low_ratio_threshold": 0.8,
+                    "high_ratio_threshold": 1.2,
+                    "error_if_flagged_months": 3,
+                }
+            },
+            _diner_meal_counts_about_20_percent_off_the_median,
+            {"status": "warning", "count": 2, "is_flagged": [True, False, True]},
+            id="diner_meal_count_reasonableness",
+        ),
+        pytest.param(
+            {
+                "exact_duplicate_rows": {
+                    "warning_share_threshold": 0.05,
+                    "error_share_threshold": 0.10,
+                }
+            },
+            _three_duplicates_in_100_rows_on_distinct_days,
+            {"status": "success", "warning_share_threshold": 0.05, "error_share_threshold": 0.10},
+            id="exact_duplicate_rows",
+        ),
+        pytest.param(
+            {"near_duplicate_product_names": {"warning_share_threshold": 0.40}},
+            _curry_split_in_a_pdf_extract,
+            {"status": "info", "count": 0, "warning_share_threshold": 0.40},
+            id="near_duplicate_product_names",
+        ),
+        pytest.param(
+            {"near_duplicate_product_names": {"max_levenshtein_distance": 1}},
+            _names_two_edits_apart,
+            0,
+            id="max_levenshtein_distance",
+        ),
+        pytest.param(
+            {
+                "outlier_line_items": {
+                    "legacy_median_floor": 10,
+                    "legacy_absolute_threshold_if_below_floor": 50,
+                }
+            },
+            _legacy_spike_below_the_median_floor,
+            [],
+            id="outlier_line_items_legacy",
+        ),
+        pytest.param(
+            {"per_product_weight_bounds": {"low": 2, "high": 10}},
+            _weights_either_side_of_2_to_10_kg,
+            {
+                "status": "warning",
+                "count": 2,
+                "low": 2.0,
+                "high": 10.0,
+                "flagged": ["Beans", "Tempeh"],
+            },
+            id="per_product_weight_bounds",
+        ),
+        pytest.param(
+            {"date_distribution": {"partial_month_ratio_threshold": 0.2}},
+            _first_month_at_40_percent_of_the_median,
+            [],
+            id="date_distribution",
+        ),
+        pytest.param(
+            {"numeric_coercion_loss": {"allowed_loss_count": 2}},
+            _two_unreadable_weights,
+            {"status": "warning", "count": 2, "allowed_loss_count": 2},
+            id="numeric_coercion_loss",
+        ),
+        pytest.param(
+            {"aggregation_reconciliation": {"rel_error_threshold": 0.002}},
+            _aggregates_0_15_percent_off_the_raw_total,
+            {"status": "success", "rel_error_threshold": 0.002},
+            id="aggregation_reconciliation",
+        ),
+        pytest.param(
+            {"single_product_dominance": {"threshold_pct": 0.40}},
+            _top_product_at_35_percent,
+            {"status": "success", "threshold_pct": 0.40},
+            id="single_product_dominance",
+        ),
+        pytest.param(
+            {"category_concentration": {"threshold_pct": 0.40}},
+            _top_category_at_35_percent,
+            {"status": "success", "threshold_pct": 0.40},
+            id="category_concentration",
+        ),
+    ],
+)
+def test_checks_read_their_thresholds_from_yaml(
+    overrides: dict[str, dict[str, float]],
+    observe: Callable[[], object],
+    expected: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    """Changing the configured thresholds file should be enough to refresh cached values."""
-    first_config_path = tmp_path / "first_thresholds.yaml"
-    first_config_path.write_text(
-        "\n".join(
-            [
-                "outlier_line_items:",
-                "  mad_threshold: 5",
-            ]
-        )
-    )
-    second_config_path = tmp_path / "second_thresholds.yaml"
-    second_config_path.write_text(
-        "\n".join(
-            [
-                "outlier_line_items:",
-                "  mad_threshold: 99",
-            ]
-        )
-    )
+    _override_thresholds(monkeypatch, tmp_path / "diagnostic_thresholds.yaml", overrides)
 
-    original_path = report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH
-    report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH = first_config_path
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    assert report_diagnostics.get_diagnostic_threshold("outlier_line_items", "mad_threshold") == 5
-
-    report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH = second_config_path
-
-    assert report_diagnostics.get_diagnostic_threshold("outlier_line_items", "mad_threshold") == 99
-
-    report_diagnostics.DIAGNOSTIC_THRESHOLDS_PATH = original_path
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
+    assert observe() == expected
 
 
 def test_check_aggregation_reconciliation_passes_at_exact_point_one_percent_threshold():
@@ -1273,35 +1203,6 @@ def test_check_aggregation_reconciliation_errors_above_point_one_percent_thresho
     assert export_df["is_flagged"].tolist() == [True]
 
 
-def test_check_aggregation_reconciliation_reads_threshold_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "aggregation_reconciliation:",
-                "  rel_error_threshold: 0.002",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
-    monthly_product_df = pd.DataFrame({"kilos_total": [1001.5]})
-    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
-
-    findings, _ = check_aggregation_reconciliation(
-        raw_df,
-        monthly_product_df,
-        monthly_category_df,
-        "kilos_total",
-    )
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["metadata"]["rel_error_threshold"] == pytest.approx(0.002)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
 def test_check_single_product_dominance_does_not_flag_at_exact_thirty_percent():
     """Exactly-on-threshold product concentration should not create a false positive."""
     df = pd.DataFrame(
@@ -1332,33 +1233,6 @@ def test_check_single_product_dominance_flags_above_thirty_percent():
     assert findings[0]["count"] == 1
     assert findings[0]["metadata"]["top_product"] == "Tofu"
     assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.3001)
-
-
-def test_check_single_product_dominance_reads_threshold_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "single_product_dominance:",
-                "  threshold_pct: 0.40",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "product": ["Tofu", "Beans"],
-            "kilos_total": [39.0, 61.0],
-        }
-    )
-
-    findings = check_single_product_dominance(df, "kilos_total")
-
-    assert findings[0]["status"] == "info"
-    assert findings[0]["metadata"]["threshold_pct"] == pytest.approx(0.40)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
 
 
 def test_check_category_concentration_does_not_flag_at_exact_thirty_percent():
@@ -1392,229 +1266,6 @@ def test_check_category_concentration_flags_above_thirty_percent():
     assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.3001)
 
 
-def test_check_category_concentration_reads_threshold_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "category_concentration:",
-                "  threshold_pct: 0.40",
-            ]
-        )
-    )
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-    df = pd.DataFrame(
-        {
-            "category": ["Legumes", "Poultry"],
-            "kilos_total": [39.0, 61.0],
-        }
-    )
-
-    findings = check_category_concentration(df, "kilos_total")
-
-    assert findings[0]["status"] == "info"
-    assert findings[0]["metadata"]["threshold_pct"] == pytest.approx(0.40)
-    report_diagnostics.load_diagnostic_thresholds.cache_clear()
-
-
-def test_run_all_diagnostics_includes_exact_duplicate_row_finding():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-01")],
-            "product": ["Tofu", "Tofu"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": [1.5, 1.5],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    duplicate_finding = next(
-        finding for finding in findings if finding.get("category") == "exact_duplicate_rows"
-    )
-    assert duplicate_finding["status"] == "warning"
-    assert duplicate_finding["count"] == 2
-    assert duplicate_finding["metadata"]["month_bucketed_dates"] is True
-
-
-def test_run_all_diagnostics_includes_aggregation_reconciliation_finding():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")],
-            "month_year": [pd.Period("2025-01", freq="M"), pd.Period("2025-01", freq="M")],
-            "product": ["Tofu", "Beans"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": [60.0, 40.0],
-        }
-    )
-    monthly_product_data = pd.DataFrame(
-        {
-            "month_year": [pd.Period("2025-01", freq="M"), pd.Period("2025-01", freq="M")],
-            "product": ["Tofu", "Beans"],
-            "kilos_total": [60.0, 40.0],
-        }
-    )
-    monthly_category_data = pd.DataFrame(
-        {
-            "month_year": [pd.Period("2025-01", freq="M")],
-            "category": ["Legumes"],
-            "kilos_total": [100.0],
-        }
-    )
-
-    findings = run_all_diagnostics(
-        df=df,
-        diner_meal_mapping={},
-        serving=False,
-        monthly_product_data=monthly_product_data,
-        monthly_category_data=monthly_category_data,
-    )
-
-    reconciliation_finding = next(
-        finding for finding in findings if finding.get("category") == "aggregation_reconciliation"
-    )
-    assert reconciliation_finding["status"] == "success"
-    assert reconciliation_finding["metadata"]["raw_total"] == pytest.approx(100.0)
-
-
-def test_run_all_diagnostics_includes_single_product_dominance_finding():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")] * 3,
-            "product": ["Tofu", "Beans", "Tempeh"],
-            "category": ["Legumes", "Legumes", "Plant-based meats"],
-            "kilos_total": [15.0, 60.0, 25.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    dominance_finding = next(
-        finding for finding in findings if finding.get("category") == "single_product_dominance"
-    )
-    assert dominance_finding["status"] == "info"
-    assert dominance_finding["count"] == 1
-    assert dominance_finding["metadata"]["top_product"] == "Beans"
-
-
-def test_run_all_diagnostics_includes_category_concentration_finding():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")] * 3,
-            "product": ["Tofu", "Beans", "Chicken"],
-            "category": ["Legumes", "Legumes", "Poultry"],
-            "kilos_total": [35.0, 30.0, 35.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    concentration_finding = next(
-        finding for finding in findings if finding.get("category") == "category_concentration"
-    )
-    assert concentration_finding["status"] == "info"
-    assert concentration_finding["count"] == 1
-    assert concentration_finding["metadata"]["top_category"] == "Legumes"
-
-
-def test_run_all_diagnostics_includes_near_duplicate_name_finding():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")] * 3,
-            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
-            "category": ["Poultry", "Poultry", "Legumes"],
-            "kilos_total": [20.0, 15.0, 65.0],
-        }
-    )
-
-    findings = run_all_diagnostics(
-        df=df,
-        diner_meal_mapping={},
-        serving=False,
-        pdf_extracted=True,
-    )
-
-    near_duplicate_finding = next(
-        finding for finding in findings if finding.get("category") == "near_duplicate_product_names"
-    )
-    assert near_duplicate_finding["status"] == "warning"
-    assert near_duplicate_finding["count"] == 1
-
-
-def test_run_all_diagnostics_includes_numeric_coercion_loss_finding():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")],
-            "product": ["Tofu", "Tempeh"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": ["4.0", "not a number"],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    coercion_finding = next(
-        finding for finding in findings if finding.get("category") == "numeric_coercion_loss"
-    )
-    assert coercion_finding["status"] == "error"
-    assert coercion_finding["count"] == 1
-
-
-def test_run_all_diagnostics_includes_outlier_line_item_finding():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-01",
-                    "2025-01-02",
-                    "2025-01-03",
-                    "2025-01-04",
-                    "2025-01-05",
-                    "2025-01-06",
-                    "2025-01-07",
-                    "2025-01-08",
-                    "2025-01-09",
-                    "2025-01-10",
-                ]
-            ),
-            "product": ["Bean Chili"] * 5 + ["Tofu Curry"] * 5,
-            "category": ["Legumes"] * 5 + ["Plant-based meats"] * 5,
-            "kilos_total": [10.0, 11.0, 12.0, 10.0, 50.0, 8.0, 9.0, 10.0, 8.0, 9.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    outlier_finding = next(
-        finding for finding in findings if finding.get("category") == "outlier_line_items"
-    )
-    assert outlier_finding["status"] == "warning"
-    assert outlier_finding["count"] == 1
-
-
-def test_run_all_diagnostics_includes_per_product_weight_bounds_finding():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2025-01-01", "2025-01-02", "2025-01-03"]),
-            "product": ["Beans", "Tofu", "Tempeh"],
-            "category": ["Legumes", "Plant-based meats", "Plant-based meats"],
-            "kilos_total": [0.001, 0.0005, 600.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    bounds_finding = next(
-        finding for finding in findings if finding.get("category") == "per_product_weight_bounds"
-    )
-    assert bounds_finding["status"] == "warning"
-    assert bounds_finding["count"] == 2
-    assert bounds_finding["metadata"]["low"] == pytest.approx(0.001)
-    assert bounds_finding["metadata"]["high"] == pytest.approx(500.0)
-
-
 def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
     """Serving reports should not describe serving counts as kilograms."""
     df = pd.DataFrame(
@@ -1638,176 +1289,127 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
     assert "kg" not in bounds_finding["message"]
 
 
-def test_run_all_diagnostics_includes_missing_weeks_within_month_finding():
-    """Wires the missing-weeks check into the report diagnostics when dates are truly day-level."""
+def test_run_all_diagnostics_returns_every_checks_findings_in_order():
+    # Shaped like what `build_food_report` hands over: parsed dates, Period months, and a
+    # Period-keyed mapping. March is short and has no poultry, so the date distribution and
+    # category-month checks, which stay silent on clean data, report too.
+    jan, feb, mar = pd.period_range("2025-01", periods=3, freq="M")
     df = pd.DataFrame(
         {
             "date": pd.to_datetime(
                 [
-                    "2025-01-01",
-                    "2025-01-05",
+                    "2025-01-06",
+                    "2025-01-13",
                     "2025-01-20",
-                    "2025-01-25",
+                    "2025-01-27",
+                    "2025-02-03",
+                    "2025-02-10",
+                    "2025-02-17",
+                    "2025-02-24",
+                    "2025-03-03",
                 ]
             ),
-            "product": ["Beans"] * 4,
-            "category": ["Legumes"] * 4,
-            "kilos_total": [10.0, 12.0, 11.0, 9.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    gap_finding = next(
-        finding for finding in findings if finding.get("category") == "missing_weeks_within_month"
-    )
-    assert gap_finding["status"] == "info"
-    assert gap_finding["count"] == 1
-
-
-def test_run_all_diagnostics_skips_missing_weeks_within_month_for_monthly_dates():
-    """A monthly series cleaned to one date per month should not surface the missing-weeks check."""
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-01",
-                    "2025-02-01",
-                    "2025-03-01",
-                ]
-            ),
-            "product": ["Beans"] * 3,
-            "category": ["Legumes"] * 3,
-            "kilos_total": [10.0, 12.0, 11.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    assert not any(finding.get("category") == "missing_weeks_within_month" for finding in findings)
-
-
-def test_run_all_diagnostics_includes_month_over_month_total_volatility_finding():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-15",
-                    "2025-02-15",
-                    "2025-03-15",
-                ]
-            ),
-            "product": ["Beans", "Beans", "Beans"],
-            "category": ["Legumes", "Legumes", "Legumes"],
-            "kilos_total": [100.0, 140.0, 80.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    volatility_finding = next(
-        finding
-        for finding in findings
-        if finding.get("category") == "month_over_month_total_volatility"
-    )
-    assert volatility_finding["status"] == "warning"
-    assert volatility_finding["count"] == 2
-
-
-def test_run_all_diagnostics_includes_missing_internal_months_finding():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-15",
-                    "2025-03-15",
-                ]
-            ),
-            "product": ["Beans", "Beans"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": [100.0, 120.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    missing_months_finding = next(
-        finding for finding in findings if finding.get("category") == "missing_internal_months"
-    )
-    assert missing_months_finding["status"] == "warning"
-    assert missing_months_finding["count"] == 1
-    assert missing_months_finding["sample_values"] == ["Feb 2025"]
-
-
-def test_run_all_diagnostics_includes_category_discontinuity_finding():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-10",
-                    "2025-03-10",
-                    "2025-01-15",
-                    "2025-02-15",
-                    "2025-03-15",
-                ]
-            ),
-            "product": [
-                "Bean Chili",
-                "Bean Chili",
-                "Tofu Curry",
-                "Tofu Curry",
-                "Tofu Curry",
-            ],
-            "category": [
-                "Legumes",
-                "Legumes",
-                "Plant-based meats",
-                "Plant-based meats",
-                "Plant-based meats",
-            ],
-            "kilos_total": [10.0, 9.0, 4.0, 5.0, 6.0],
-        }
-    )
-
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
-
-    discontinuity_finding = next(
-        finding for finding in findings if finding.get("category") == "category_discontinuity"
-    )
-    assert discontinuity_finding["status"] == "warning"
-    assert discontinuity_finding["count"] == 1
-
-
-def test_run_all_diagnostics_includes_diner_meal_reasonableness_finding():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-15",
-                    "2025-02-15",
-                    "2025-03-15",
-                ]
-            ),
-            "product": ["Beans", "Beans", "Beans"],
-            "category": ["Legumes", "Legumes", "Legumes"],
-            "kilos_total": [100.0, 100.0, 100.0],
+            "month_year": [jan] * 4 + [feb] * 4 + [mar],
+            "product": ["Lentils", "Chicken Thighs"] * 4 + ["Lentils"],
+            "category": ["Legumes", "Poultry (Chicken & Turkey)"] * 4 + ["Legumes"],
+            "kilos_total": [10.0, 12.0, 11.0, 12.0, 10.0, 13.0, 11.0, 12.0, 10.0],
         }
     )
 
     findings = run_all_diagnostics(
         df=df,
-        diner_meal_mapping={
-            "2025-01": 49,
-            "2025-02": 100,
-            "2025-03": 201,
-        },
+        diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
         serving=False,
+        monthly_product_data=df.groupby(["month_year", "product"], as_index=False)[
+            "kilos_total"
+        ].sum(),
+        monthly_category_data=df.groupby(["month_year", "category"], as_index=False)[
+            "kilos_total"
+        ].sum(),
+        pdf_extracted=False,
     )
 
-    denominator_finding = next(
-        finding
-        for finding in findings
-        if finding.get("category") == "diner_meal_count_reasonableness"
+    assert [(finding["category"], finding["status"]) for finding in findings] == [
+        ("numeric_coercion_loss", "success"),
+        ("exact_duplicate_rows", "success"),
+        ("near_duplicate_product_names", "success"),
+        ("month_over_month_total_volatility", "warning"),
+        ("missing_internal_months", "success"),
+        ("category_discontinuity", "success"),
+        ("diner_meal_count_reasonableness", "success"),
+        ("single_product_dominance", "info"),
+        ("category_concentration", "info"),
+        ("outlier_line_items", "success"),
+        ("per_product_weight_bounds", "success"),
+        ("missing_weeks_within_month", "info"),
+        ("required_columns", "success"),
+        ("date_alignment", "success"),
+        ("date_distribution", "warning"),
+        ("negative_values", "success"),
+        ("aggregation_reconciliation", "success"),
+        ("gbd_categories", "success"),
+        ("gbd_categories_absent", "info"),
+        ("missing_category_month_combos", "warning"),
+    ]
+
+
+def test_check_required_columns():
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-01"]),
+            "product": ["apple"],
+            "category": ["fruit"],
+            "kilos_total": [10.0],
+        }
     )
-    assert denominator_finding["status"] == "error"
-    assert denominator_finding["count"] == 2
+
+    assert check_required_columns(df) is True
+    assert check_required_columns(df.drop(columns=["kilos_total"])) is False
+
+
+def test_check_zero_category_month_combos_names_missing_months_in_plain_english():
+    df = pd.DataFrame(
+        {
+            "month_year": ["2024-01", "2024-02", "2024-01"],
+            "category": ["Lamb/mutton & goat meat", "Legumes", "Legumes"],
+            "kilos_total": [10, 5, 7],
+        }
+    )
+
+    findings = check_zero_category_month_combos(df, "kilos_total")
+    missing_finding = next(f for f in findings if f["category"] == "missing_category_month_combos")
+
+    assert "Lamb/mutton and goat meat missing during Feb 2024" in missing_finding["sample_values"]
+
+
+def test_identify_potentially_abnormal_weight_meat_items():
+    df = pd.DataFrame(
+        {
+            "product": ["beef steak", "pork chop", "tofu", "beef stew"],
+            "quantity": [5, 50, 10, 2.5],  # 50 is > 30, 2.5 has decimal
+            "category": [
+                "beef and buffalo meat",
+                "pork (pig meat)",
+                "legumes",
+                "beef and buffalo meat",
+            ],
+        }
+    )
+
+    result = identify_potentially_abnormal_weight_meat_items(df)
+
+    assert isinstance(result, pd.DataFrame)
+    assert sorted(result["product"].tolist()) == ["beef stew", "pork chop"]
+
+
+def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
+    tmp_path, monkeypatch
+):
+    _override_thresholds(
+        monkeypatch,
+        tmp_path / "diagnostic_thresholds.yaml",
+        {"meat_quantity_reasonableness": {"large_quantity_threshold": 50}},
+    )
+    df = pd.DataFrame({"category": ["Poultry (Chicken & Turkey)"] * 2, "quantity": [40, 2]})
+
+    assert identify_potentially_abnormal_weight_meat_items(df) is True
