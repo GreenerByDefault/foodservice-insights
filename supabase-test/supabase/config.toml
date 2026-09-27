@@ -38,12 +38,7 @@ sign_in_sign_ups = 1000
 token_refresh = 1000
 token_verifications = 1000
 
-# On in both stacks and in the hosted dashboard ("Confirm email"). GoTrue's `/signup` is public and
-# takes a password; with this off it hands back a session for any address, never verified, and the
-# app treats a session's address as proof its owner controls it (`lockInviteFor`). Email OTP still
-# works with it on: a new address gets the confirmation email, whose code confirms it.
 [auth.email]
-enable_confirmations = true
 max_frequency = "1s"
 
 # Mailpit: catches outbound email so nothing escapes locally.

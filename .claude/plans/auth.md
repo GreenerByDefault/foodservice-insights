@@ -234,7 +234,7 @@ After this, a developer can set `PUBLIC_AUTH_MODE=supabase` and sign in through 
 - `supabase-test/supabase/templates/magic-link.html` and `confirmation.html` (mirrored into
   `supabase-dev/`): our copy plus `{{ .Token }}`, no link. Reference them from both `config.toml`
   via `[auth.email.template.magic_link]` / `[auth.email.template.confirmation]` `content_path`.
-  Both, because with confirmations on (already in both `config.toml`s) a new address gets the confirmation template and a
+  Both, because with confirmations on a new address gets the confirmation template and a
   known one the magic-link template. Pin the other defaults we depend on explicitly: `[auth.email]
   enable_signup = true`, `otp_length = 6` (which `OTP_LENGTH` already assumes). Verify by
   `TEST_DB=1 scripts/supabase stop && start`, then `signInWithOtp` from a scratch script for a new
