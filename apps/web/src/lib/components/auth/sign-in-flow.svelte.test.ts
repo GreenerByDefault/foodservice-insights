@@ -31,6 +31,24 @@ describe('SignInFlow', () => {
     await expect.element(screen.getByLabelText('Email address')).toHaveValue('ada@example.com');
   });
 
+  test('an initial address arrives filled in, and is the one a code is sent to', async () => {
+    const auth = fakeBrowserAuth();
+    const screen = await render(SignInFlow, {
+      auth,
+      initialEmail: 'ada@example.com',
+      onSignedIn: vi.fn(),
+    });
+
+    await expect.element(screen.getByLabelText('Email address')).toHaveValue('ada@example.com');
+    await screen.getByRole('button', { name: 'Send code' }).click();
+
+    await expect.element(screen.getByLabelText('Sign-in code')).toBeInTheDocument();
+    expect(auth.signInWithOtp).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      options: { shouldCreateUser: true },
+    });
+  });
+
   test('two flows on one document each label their own field', async () => {
     await render(SignInFlow, { auth: fakeBrowserAuth(), onSignedIn: vi.fn() });
     await render(SignInFlow, { auth: fakeBrowserAuth(), onSignedIn: vi.fn() });

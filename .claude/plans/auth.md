@@ -5,7 +5,7 @@
 The server already reads a real Supabase Auth session when `PUBLIC_AUTH_MODE=supabase`, and the
 `apps/web` browser suite already signs every test in as a GoTrue user of its own. What is left is
 the frontend: a one-question onboarding step (display name, required), a working rename on
-`/account`, the invite link's prefilled address, and sign-in on the 401 page.
+`/account`, and sign-in on the 401 page.
 
 **Supabase Auth arrives beside the placeholder, not in place of it.** `PUBLIC_AUTH_MODE` picks one
 per environment (§ The mode switch). That lets hosting go ahead before there is an email provider —
@@ -17,8 +17,9 @@ it.** The system suite runs in `placeholder` to hold that line end to end.
 What has landed: the mode switch and server sessions (§ The mode switch), per-test identities for
 both browser suites and a second person in a test (§ Where a test identity comes from), the
 sign-in form, mounted on `/sign-in` with a real-OTP e2e and screenshots of both steps (§ The
-sign-in form), and sign-out with a root layout that follows the session (§ Following the session).
-In `supabase` mode a developer can sign in through Mailpit and out again today.
+sign-in form), the invite email's link arriving there with the address filled in, and sign-out with
+a root layout that follows the session (§ Following the session). In `supabase` mode a developer
+can sign in through Mailpit and out again today, and an invitee can go from the email to `/invites`.
 
 Invites, memberships, CSP, and the site password itself are out of scope. Change-email and
 delete-account are `account-self-service.md`; CSP becomes an Open item in `ARCHITECTURE.md`.
@@ -57,7 +58,7 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 `$lib/components/auth/sign-in-flow.svelte` holds both steps of email OTP — `email-step.svelte` then
 `code-step.svelte` — behind two props: `auth: BrowserAuth` and `onSignedIn: () => Promise<void>`. It
 keeps the address in its own `$state` so "Change email" returns to a filled field, and it lives in
-`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 3).
+`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 2).
 
 `/sign-in` passes `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, and needs nothing more:
 the invalidation re-runs its `load`, whose `locals.auth` redirect to `/orgs` takes over, and `/orgs`
@@ -86,21 +87,23 @@ Three details of that seam constrain what is left:
 `describeAuthError({ code })`, which maps `otp_expired` / `over_email_send_rate_limit` / anything
 else to copy of ours — Supabase's own `message` is never rendered.
 
-It has no `initialEmail` yet, which the invite email's `/sign-in?email=…` needs (PR 1). The link
-comes from `signInUrl` (`packages/email/src/messages/links.ts`), which `encodeURIComponent`s the
-address; the invitee page it leads to has landed (`/invites`), so this prefill is the last
-invite-flow step left.
+`SignInFlow` also takes an optional `initialEmail`, which seeds its `$state` once and is never
+re-synced. Only `/sign-in` passes one: its load reads the invite email's `?email=` (built by
+`signInUrl`, `packages/email/src/messages/links.ts`) through `_initialEmail`, which normalizes it
+with `emailAddress` and drops an invalid one silently. The 401 page has no address to offer.
 
 `/sign-in`'s redirect fires on every request in `placeholder` mode, so only `supabase` ever shows
 the form; in the `apps/web` suite an `identity: 'anonymous'` test reaches it.
 
 Two test helpers the later PRs reuse:
 
-- **`waitForSignInCode(address)`**, `apps/web/e2e/lib/sign-in-code.ts`, reads the newest mail to an
-  address from Mailpit and pulls the code out by our template's wording. It reads the HTML, since
-  GoTrue sends no text part. It lives in the suite rather than `@gbd/browser-testing` because
+- **`waitForSignInCode(address)`**, `apps/web/e2e/lib/sign-in-code.ts`, polls Mailpit for the
+  newest *sign-in* email to an address — passing over other mail there, such as the invite that led
+  to `/sign-in` — and pulls the code out by our template's wording. It reads the HTML, since GoTrue
+  sends no text part. It lives in the suite rather than `@gbd/browser-testing` because
   every caller is in `apps/web`; the system suite never signs in. `auth.e2e.ts`'s real-OTP spec
-  signs a `users.create()` user in with it and lands on `/orgs/new`.
+  signs a `users.create()` user in with it and lands on `/orgs/new`; `invites/invites.e2e.ts`
+  signs an invitee in from the invite email's link and lands on `/invites`.
 - **`sign-in.screenshot.ts`** shows how to capture the flow at all: `page.clock.install()` before
   `page.goto`, which freezes the resend countdown at `60s` in every viewport, and
   `page.route('**/auth/v1/otp*', …)` fulfilled with a 200 and `{}`, since the containerized browser
@@ -136,7 +139,7 @@ supabase-js after hydration, anonymous ones included. Four details constrain wha
 - **The callback does not await `invalidateAll()`.** supabase-js awaits its subscribers, so an
   awaited reload would hold `signOut()` — or `verifyOtp()` — until every load had re-run.
 - **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={invalidateAll}` and the
-  listener's `SIGNED_IN`. Harmless, and the 401 page (PR 3) inherits it.
+  listener's `SIGNED_IN`. Harmless, and the 401 page (PR 2) inherits it.
 
 `auth.e2e.ts` covers both halves of sign-out. One signs out of an `(app)` page, lands on `/`, presses
 Back to the 401 page with no account menu, and reloads for a 401, so the cookie is proven gone and
@@ -179,7 +182,7 @@ Two consequences later PRs inherit:
   refuses to remove the last admin of a pinned organization. Anything that deletes a minted user
   through the app (`account-self-service.md`) has the same constraint to reckon with.
 - **Minted users have no display name yet**, like the placeholder, so every `(app)` screenshot still
-  shows the icon, not a monogram. PR 2 gives them one fixed name and re-baselines.
+  shows the icon, not a monogram. PR 1 gives them one fixed name and re-baselines.
 
 `apps/web/e2e` extends that shared `test` with `reports.create(state)` — into `org` — and
 `organizations.create(spec)` for an organization built to a spec (members, invites, a whole list of
@@ -276,42 +279,22 @@ instead.
 | Env vars | `PUBLIC_AUTH_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public` (the last two landed with the form); `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
 | Dependencies | `@supabase/ssr` ^0.12.7, `@supabase/supabase-js` ^2.116.0, both in the catalog, both `dependencies` of `apps/web` | Latest at the time; server code imports them, so not `devDependencies` |
 | Test sessions | `admin.createUser({ email, password, email_confirm: true })` once per user, then `signInWithPassword` per test, on the test stack only | Every password sign-in is an independent session, so any number of tests can be one user at once with nothing to coordinate. *Rejected: `generateLink` → `verifyOtp`, as CFA does.* GoTrue keeps one outstanding code per user (`one_time_tokens_user_id_token_type_key`), so two tests signing in as one user cancel each other's code. No real user has a password, and the Mailpit spec covers the real OTP path |
-| Screenshot text the identity owns | Minted users will share one fixed display name (PR 2), so a monogram is stable. A spec whose image shows the *address* runs as the run's pinned identity, `test.use({ identity: 'pinned' })`. Its GoTrue address is unique to the run; the fixed address it shows exists only in the run database, which is where `loadAuthorization` reads `auth.users.email` and where GoTrue never writes (§ Two facts, 2) | Every GoTrue address is unique, so nothing is shared across runs or worktrees and the two-hour sweep needs no exceptions. Within a run, specs share the pinned identity the way they share a pinned `orgName`, which keeps them `fullyParallel`; nothing pinned is mutated or deleted |
+| Screenshot text the identity owns | Minted users will share one fixed display name (PR 1), so a monogram is stable. A spec whose image shows the *address* runs as the run's pinned identity, `test.use({ identity: 'pinned' })`. Its GoTrue address is unique to the run; the fixed address it shows exists only in the run database, which is where `loadAuthorization` reads `auth.users.email` and where GoTrue never writes (§ Two facts, 2) | Every GoTrue address is unique, so nothing is shared across runs or worktrees and the two-hour sweep needs no exceptions. Within a run, specs share the pinned identity the way they share a pinned `orgName`, which keeps them `fullyParallel`; nothing pinned is mutated or deleted |
 | Local keys | Fixed CLI defaults committed in `.env.example`/`.env.test`: `sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`, `sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz` | Same on every machine and in CI |
 
 ## Sequencing
 
 ```
-PR 1  ?email= prefill, invite loop
-PR 2  onboarding, rename ──────── account-self-service.md (needs 2)
-PR 3  401 in place
-PR 4  e2e/README.md catches up with per-test identities
+PR 1  onboarding, rename ──────── account-self-service.md (needs 1)
+PR 2  401 in place
+PR 3  e2e/README.md catches up with per-test identities
 ```
 
-All four are independent of each other. PRs 1 and 3 build on the mounted `/sign-in` and
+All three are independent of each other. PR 2 builds on the mounted `/sign-in` flow and
 `waitForSignInCode`, both landed. Hosting needs none of them, and every one keeps `placeholder`
 untouched: it never reaches `/sign-in` and hides sign out.
 
-## PR 1 — `?email=` prefill, closing the invite loop
-
-- `/sign-in`'s `+page.server.ts` validates `?email=` with `emailAddress` (`$lib/forms/validation.ts`,
-  which also trims and lowercases) via `v.safeParse`, returning `initialEmail: string | null` —
-  `null` for a missing or bad one, dropped silently rather than shown as an error, since it arrived
-  from outside. Put the validation in an exported `_`-prefixed pure function and unit-test it:
-  missing, valid, mixed-case/padded, invalid, over `MAX_EMAIL_LENGTH`. Keep the `locals.auth`
-  redirect first. The page passes `initialEmail` to `SignInFlow`.
-- `SignInFlow` takes `initialEmail?: string | null` and seeds its own `let email = $state(…)` from
-  it; `email-step.svelte` needs no change, since it binds `email`. Seeding `$state` from a prop
-  trips `state_referenced_locally`, which `svelte-check --fail-on-warnings` fails on — the
-  precedent is `$lib/components/orgs/organization-name-form.svelte`'s `svelte-ignore` with its
-  reason. Component test: the field arrives filled, and Send code sends that address.
-
-**E2E:** an organization with `invites: [{ email: invitee.email }]` for a `users.create()` invitee,
-the invite email's link read from Mailpit (`waitForEmail`, as `e2e/organizations/invites.e2e.ts`
-does), opened while anonymous → the email field is prefilled → `waitForSignInCode` → code → lands on
-`/invites` with the offer listed.
-
-## PR 2 — Onboarding: the display name is required, and `/account` can change it
+## PR 1 — Onboarding: the display name is required, and `/account` can change it
 
 The `app_user_display_name_trimmed_length` CHECK already exists on `display_name` — folded into
 `001_initial_schema.ts` as a prefactor, since 001 hadn't shipped yet — with `MAX_DISPLAY_NAME_LENGTH
@@ -349,7 +332,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   `/account` rename changes the menu's name. Screenshots: `onboarding.png`, `account.png` (new —
   stubs get their first shot when implemented).
 
-## PR 3 — 401 in place
+## PR 2 — 401 in place
 
 - `error-page.svelte`: for `status === 401`, mount `SignInFlow` under the heading with
   `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, as `/sign-in` does — the page the user
@@ -364,7 +347,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   its URL → 401 page with the form → sign in as that user with the code from Mailpit → the org page
   renders at the same URL.
 
-## PR 4 — `e2e/README.md` catches up with per-test identities
+## PR 3 — `e2e/README.md` catches up with per-test identities
 
 A docs-only fix for two paragraphs of `apps/web/e2e/README.md` § Database state that predate
 minted identities:
@@ -400,9 +383,8 @@ e2e/auth.e2e.ts`). Re-baseline screenshots only when Playwright asks:
 with no sign-in, and `/sign-in` sends you to `/orgs`. Then set `PUBLIC_AUTH_MODE=supabase` and walk
 it with Mailpit (55324) open:
 
-- PR 1: `/sign-in?email=a@b.test` arrives prefilled; `/sign-in?email=nope` arrives empty.
-- PR 2: a fresh address is sent to `/onboarding` before anything else; an empty or 101-character
+- PR 1: a fresh address is sent to `/onboarding` before anything else; an empty or 101-character
   name is refused inline; the menu shows the monogram; `/account` renames. In `placeholder`, no
   onboarding.
-- PR 3: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
+- PR 2: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
   the same URL.

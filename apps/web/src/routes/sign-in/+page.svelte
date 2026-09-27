@@ -5,6 +5,9 @@ import { browserAuth } from '$lib/auth/browser';
 import SignInFlow from '$lib/components/auth/sign-in-flow.svelte';
 import PageHeading from '$lib/components/page-heading.svelte';
 import PublicShell from '$lib/components/public-shell.svelte';
+import type { PageProps } from './$types';
+
+let { data }: PageProps = $props();
 </script>
 
 <svelte:head>
@@ -20,6 +23,6 @@ import PublicShell from '$lib/components/public-shell.svelte';
   <div class="flex w-full max-w-sm flex-col gap-4 self-center">
     <PageHeading>Sign in</PageHeading>
 
-    <SignInFlow auth={browserAuth()} onSignedIn={invalidateAll} />
+    <SignInFlow auth={browserAuth()} initialEmail={data.initialEmail} onSignedIn={invalidateAll} />
   </div>
 </PublicShell>
