@@ -10,10 +10,11 @@
 import { type Database, type OrganizationId, type UserId, withTransaction } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { insertOrganization } from '@gbd/db/testing';
-import { test as base } from '@playwright/test';
+import { type BrowserContext, test as base } from '@playwright/test';
 import { type Kysely, sql } from 'kysely';
 import {
   deleteGoTrueUser,
+  type MintedUser,
   mintUser,
   readPinnedIdentity,
   readRunIdentity,
@@ -58,6 +59,18 @@ export type SharedTestOptions = {
   orgName: string | undefined;
 };
 
+/** More people than the one `user` a test is signed in as. `supabase` mode only: `placeholder`
+ * has one identity per run. */
+export interface UserFactory {
+  /** A GoTrue user of this test's own, like `identity: 'minted'`'s. Deleted from GoTrue when the
+   * test ends. It belongs to no organization until the spec gives it one. */
+  create(): Promise<MintedUser>;
+
+  /** A second browser context signed in as `user`, alongside the test's own `context`. Closed
+   * when the test ends. Its `request` carries the session too. */
+  contextFor(user: MintedUser): Promise<BrowserContext>;
+}
+
 export type SharedTestFixtures = {
   /** Who this test's browser is signed in as; see `identity`. */
   user: TestIdentity;
@@ -75,6 +88,8 @@ export type SharedTestFixtures = {
    * no request carries a session. Null altogether for `anonymous`. Split out from `user` so that
    * `context` can depend on it without throwing for an anonymous test. */
   signedInAs: { user: TestIdentity; signInEmail: string | null } | null;
+
+  users: UserFactory;
 };
 
 export type SharedWorkerFixtures = {
@@ -135,13 +150,34 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
 
   context: async ({ context, signedInAs, baseURL }, use) => {
     if (signedInAs?.signInEmail) {
-      if (baseURL === undefined) throw new Error('Signing a browser in needs a baseURL.');
-      // The project's own `baseURL`, which is `host.docker.internal` for the screenshots project,
-      // so the cookie is scoped to the host that browser actually requests.
-      const cookies = await signInCookies(signedInAs.signInEmail);
-      await context.addCookies(cookies.map((cookie) => ({ ...cookie, url: baseURL })));
+      await signIn(context, signedInAs.signInEmail, baseURL);
     }
     await use(context);
+  },
+
+  users: async ({ db, browser, baseURL }, use) => {
+    const created: MintedUser[] = [];
+    const contexts: BrowserContext[] = [];
+
+    await use({
+      create: async () => {
+        if (runAuthMode() === 'placeholder') {
+          throw new Error('users.create() needs a run in supabase mode.');
+        }
+        const user = await mintUser(db);
+        created.push(user);
+        return user;
+      },
+      contextFor: async (user) => {
+        const context = await browser.newContext({ baseURL });
+        contexts.push(context);
+        await signIn(context, user.signInEmail, baseURL);
+        return context;
+      },
+    });
+
+    await Promise.all(contexts.map((context) => context.close()));
+    await Promise.all(created.map((user) => deleteGoTrueUser(user.id)));
   },
 
   // Playwright's own `request` shares no cookies with the browser, so it would be signed out.
@@ -167,6 +203,18 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
     await db.deleteFrom('organization').where('id', '=', organization.id).execute();
   },
 });
+
+async function signIn(
+  context: BrowserContext,
+  signInEmail: string,
+  baseURL: string | undefined,
+): Promise<void> {
+  if (baseURL === undefined) throw new Error('Signing a browser in needs a baseURL.');
+  // The project's own `baseURL`, which is `host.docker.internal` for the screenshots project,
+  // so the cookie is scoped to the host that browser actually requests.
+  const cookies = await signInCookies(signInEmail);
+  await context.addCookies(cookies.map((cookie) => ({ ...cookie, url: baseURL })));
+}
 
 /** The one organization called `name` in this run, creating it if this is the first test to ask.
  *

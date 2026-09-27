@@ -2,12 +2,12 @@
 
 ## Context
 
-`/account` is a stub. `auth.md` PR 4 gives it a working display-name rename and its first
+`/account` is a stub. `auth.md` PR 2 gives it a working display-name rename and its first
 screenshot; this plan adds the other two rows of the roles table — change email, delete account —
 and the rule REQUIREMENTS § Data deletion attaches to the second: an admin is blocked from deleting
 their account until they promote someone or delete the organization.
 
-**Depends on** `auth.md` PRs 3 and 4 (a real session to end; the `/account` page and `BrowserAuth`
+**Depends on** `auth.md` PRs 1 and 2 (a real session to end; the `/account` page and `BrowserAuth`
 to extend). The widened `AuditEvent` (`target`, `detail`, `lib/server/audit.ts`) and
 `isCheckViolation` (`lib/server/db.ts`) this plan needs have already landed — except
 `AuditTarget`'s `'user'` branch requires a real `organizationId`, since nothing needed a null one
@@ -39,7 +39,7 @@ in `invitee-ui.md` § Sequencing):
 | How the user is deleted | `DELETE FROM auth.users WHERE id = …` in our transaction | Context, above. `organization_member_at_least_one_admin` fires on the cascade (`organization.test.ts:346`). Rejected: `admin.deleteUser` — not transactional, needs `SUPABASE_SECRET_KEY` in prod |
 | Sole-admin block | Loader lists organizations where the user is the only admin; the UI disables delete and links each org's Members page; the server maps the trigger to 409 `{ code: 'last-admin' }` via `SET CONSTRAINTS … IMMEDIATE` | Same shape as memberships: server side is `attemptMemberWrite` + `lastAdminResponse` (`lib/server/orgs/members.ts`, used by the members `+server.ts`); client side is `ConfirmAction` + the copy in `members/member-write.ts` |
 | Confirmation | `ConfirmAction` with `confirmPhrase` = the user's email | The delete-organization pattern, typing the name |
-| Ending the session | After 204: `browserAuth().signOut({ scope: 'local' })`, then `goto('/', { invalidateAll: true })` | supabase-js tolerates GoTrue's 401/403/404 on logout for a dead user and still clears the local session; server-side, auth PR 1 already treats a deleted user's token as signed-out-and-clear |
+| Ending the session | After 204: `browserAuth().signOut({ scope: 'local' })`, then `goto('/', { invalidateAll: true })` | supabase-js tolerates GoTrue's 401/403/404 on logout for a dead user and still clears the local session; server-side, the auth hook already treats a deleted user's token as signed-out-and-clear |
 | The user's reports | Stay, `created_by_user_id → NULL` (existing FK). `lib/server/reports/guards.ts` then grants no member ownership of them; admins still can | REQUIREMENTS; nothing in the UI shows a submitter today, so "displayed as a deleted user" has nowhere to render yet |
 | GBD notice | `gbd-user-deleted` after commit — already defined, no caller | REQUIREMENTS § GBD email notifications |
 | Audit | `user.deleted`, `organizationId: null`, target user | The id survives in `audit_event`, which has no FKs for exactly this |
@@ -72,7 +72,7 @@ in `invitee-ui.md` § Sequencing):
 
 - Supabase config in both stacks: `double_confirm_changes = false`, `[auth.email.template.email_change]
   content_path` → our template with `{{ .Token }}`. Verify by hand against Mailpit first (the
-  "template override failed" risk auth PR 3 retires applies here too).
+  "template override failed" risk auth PR 1 retires applies here too).
 - `BrowserAuth` gains `updateUser`; `$lib/auth/testing/fake.ts` follows.
 - `account/change-email-form.svelte`: two steps, `'email' | 'code'`, reusing
   `$lib/components/auth/code-step.svelte` (its second caller) and `describeAuthError`. Verified →

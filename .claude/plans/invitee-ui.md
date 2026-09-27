@@ -40,26 +40,26 @@ This section is the canonical home for how memberships, the invitee UI, account 
 the run's identity is a real user with a real email, a real `app_user` row, and real memberships
 (`packages/browser-testing/src/identity.ts`) — every server-side rule and every browser flow that
 varies what *that* user belongs to could be built against today. What's left waits on a run that
-can *be* a second person — per-test identities, which arrive with **auth PR 2**:
+can *be* a second person — per-test identities and `users.create()` / `users.contextFor()`, which
+have landed. The table records what each feature was blocked by:
 
 | Feature | Before auth | Blocked by |
 | --- | --- | --- |
-| Invitee `/invites` page | Nothing worth landing | **The UI cannot be screenshotted or driven.** A *live* invite for the run's one identity makes `_resolvePostSignInDestination` send every parallel spec's `/orgs` visit to `/invites` for as long as it exists — `delete-organization.e2e.ts` and `organizations.screenshot.ts` both land there. `users.create()` / `users.contextFor()` (auth PR 2) remove the hazard |
+| Invitee `/invites` page | Nothing worth landing | **The UI cannot be screenshotted or driven.** A *live* invite for the run's one identity makes `_resolvePostSignInDestination` send every parallel spec's `/orgs` visit to `/invites` for as long as it exists — `delete-organization.e2e.ts` and `organizations.screenshot.ts` both land there. `users.create()` / `users.contextFor()` remove the hazard |
 | Delete account | Nothing worth landing | Deleting the identity every request runs as breaks the run; and the flow's last step is ending a session that does not exist yet |
 | Change email | Nothing | Entirely a browser-side Supabase call |
 
 *Rejected: screenshotting `/invites` early through `e2e/lib/stub-page-data.ts`.* It only works on a
 client-side navigation, so it would need the account-menu link to exist first, and it would hang a
-second temporary hack on a file `auth.md` PR 1 already deletes — to get one image weeks earlier
+second temporary hack on a stand-in file — to get one image weeks earlier
 that the real fixture then has to reproduce anyway.
 
-**The order that keeps you unblocked:** auth PRs 1–2 → this plan's PR, while auth PRs 3–5 go on
-in parallel → account-self-service PRs 1–2 once auth PRs 3 and 4 are in (memberships and the
+**The order that keeps you unblocked:** this plan's PR now, while auth PRs 1–3 go on in parallel
+→ account-self-service PRs 1–2 once auth PRs 1 and 2 are in (memberships and the
 admin/invitee-endpoint side already landed). `auth.md` § Sequencing has the graph.
 
-Two notes on the auth numbering, which moved when `auth.md` gained its mode switch: a second
-person in a test arrives with **auth PR 2**, and the `?email=` prefill with **auth PR 3**, which
-mounts the sign-in form. After auth PR 4 an invitee with no display name meets `/onboarding` before
+Two notes on the auth numbering: the `?email=` prefill arrives with **auth PR 1**, which mounts
+the sign-in form, and after auth PR 2 an invitee with no display name meets `/onboarding` before
 `/invites` — correct, and no change here, since the fixtures mint onboarded users.
 
 **Requirements this plan changed, confirmed.** Each was a change to the written requirement, not a
@@ -92,10 +92,10 @@ here.
 | Accept when already a member | Mark `accepted`, 200 | Landed — the membership insert is a no-op (`onConflict().doNothing()`) if one exists; the outcome the invitee wants is the same |
 | Accept/decline guard | Invite looked up by id and `email = lower(user.email)`; anything else 404 | Landed in `lockInviteFor`. The verified address is the token, so a 404 leaks nothing about an id that belongs to someone else |
 | Audit | `invite.accepted`, `invite.declined`, `invite.expired`; target type `invite` | REQUIREMENTS § Audit trail: invites. Landed alongside the endpoints |
-| Who the email says invited you | `invited_by_user_id`'s display name, `null` → "An admin" | The column is `ON DELETE SET NULL` and display names are nullable until auth PR 4; `renderOrganizationInvite` already has this fallback, so `/invites` must match it |
-| `?email=` prefill on `/sign-in` | Not here — auth PR 3 validates `?email=` and passes it to the form as `initialEmail` | The invite email already carries it |
+| Who the email says invited you | `invited_by_user_id`'s display name, `null` → "An admin" | The column is `ON DELETE SET NULL` and display names are nullable until auth PR 2; `renderOrganizationInvite` already has this fallback, so `/invites` must match it |
+| `?email=` prefill on `/sign-in` | Not here — auth PR 1 validates `?email=` and passes it to the form as `initialEmail` | The invite email already carries it |
 
-## PR 1 — The `/invites` page, end to end (after auth PR 2)
+## PR 1 — The `/invites` page, end to end
 
 With `users.create()` and `users.contextFor(user)`:
 
@@ -120,7 +120,7 @@ With `users.create()` and `users.contextFor(user)`:
   with the inviter's name pinned through the org's `admin` spec) and `invites-empty.png` (the
   no-invitations state, the way `organizations/list-empty.png` owns its own). `account/menu.png`
   regenerates for the new "Invitations" item.
-- Confirm auth PR 3 reads `?email=` into the sign-in email step (add it there if not).
+- Confirm auth PR 1 reads `?email=` into the sign-in email step (add it there if not).
 - Deletes this plan file. By then the § Sequencing question is settled — auth has landed — and
   `account-self-service.md` states its own dependencies.
 
