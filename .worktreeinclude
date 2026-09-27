@@ -3,3 +3,7 @@
 .env
 .claude/settings.local.json
 
+# The three cache CSVs GBD hands out privately.
+python/insights/gbd_foodservice_insights/data_files/previously_categorized_items.csv
+python/lab/gbd_foodservice_insights_lab/data_files/previously_classified_entrees.csv
+python/lab/gbd_foodservice_insights_lab/data_files/previously_classified_weights.csv

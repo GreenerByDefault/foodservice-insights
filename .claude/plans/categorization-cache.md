@@ -9,11 +9,21 @@ worker materializes the **verified** rows into each run directory at claim time;
 returns the new rows through a contract document; the parent inserts them **unverified**; a human
 verifies or edits them in Supabase Studio, outside the app. The parent is long-lived and queries
 per claim, so the next spawn always sees the latest verified rows. Python never touches the
-database. The library's other two caches (entree classifications, weight patterns) stay
-gitignored files in the lab — only the product cache gets a table.
+database. Only the product cache gets a table here. **Open:** the lab's two caches (entree
+classifications, weight patterns) are gitignored files with no sync path left now that nothing
+commits them, and GBD may want entree serving mode in the web app, which would need the entree
+cache treated exactly like the product cache — a table with a verified flag, materialized per
+run, and the lab's default write of unreviewed Gemini labels into the reviewed file removed.
+*Rejected, provisionally: encrypting the files into git* — restores the old commit-the-CSV habit,
+but a multi-megabyte blob per review round is neither diffable nor mergeable, key rotation
+rewrites history, and it leaves two cache mechanisms once the product cache is in Postgres. The
+weights cache is lab-only and used by a manual step, so it can stay a file until something else
+needs it. Not designed here; the table pattern and import script below are what it would reuse.
 
-PR 5 here edits `categorization/cache.py` and the `analyze()` seam in `analysis.py`, which is
-implemented. PRs 1–4 touch only `packages/db`, `contract/`, and
+PR 5 here edits `categorization/cache.py` and the `analyze()` seam in `analysis.py`, and assumes
+`categorization-pipeline.md` has landed: the library's cache is read-only, the pipeline is handed
+a `CategorizationCache` built only by `CategorizationCache.from_frame`, and `analyze()` is the one
+product caller that loads the CSV. PRs 1–4 touch only `packages/db`, `contract/`, and
 `apps/worker`, and can start any time.
 
 Requirement: REQUIREMENTS.md § Product categorization cache. The seam docstring in `analysis.py`
@@ -193,27 +203,25 @@ Both halves + `contract/` together, per `contract/README.md`.
 
 ## PR 5 — library: consume the seam rows, drop the packaged CSV
 
-- `categorization/cache.py` keeps only `normalize_product_name`, `unanimous_index` (the lab's
-  `entree_cache.py` imports both),
-  `build_cleaned_name_reuse_index(historical) -> dict[str, str]`. Deleted: the loader and path
-  helper (and the `.gitignore` entry), `save_historical_categorizations`, the unreviewed-web-app
-  cache functions, both `promote_*`, `_validate_cache_write_mode`/`cache_write_mode`.
-  `categorize_unique_products(df, llm, historical_categorizations: pd.DataFrame, *, ...)` —
-  required (an empty frame with the three columns is allowed).
-- `analyze()`: `cache = frame_from_rows(request.categorization_cache)` (the one place the seam's
-  `cleaned_name` meets the library's `cleaned_item_names`); rows whose `category` is not in
-  `get_GBD_categories()` + `"No Matches Found"` are dropped with a warning and counted in
-  `metadata` — a reviewer's typo in Studio must not fail every run. `new_categorizations` moves
-  from `metadata` into `AnalysisOutcome.new_categorizations` via `rows_from_review_table(ai_review_df)`.
-- The lab still reads the packaged CSV: `categorize_spreadsheet_to_csvs`
-  (`categorization/spreadsheet.py`) through `categorize_unique_products`, and
-  `entree_cache.backfill_entree_cleaned_names` through `get_previously_categorized_items`, so the
-  loader moves to the lab rather than being deleted. GBD's "categorize → review → save to cache"
-  notebook flow becomes a lab tool that emits rows for the import script; noted, not designed here.
-- Tests: delete the write/promote/web-app tests in `tests/categorization/test_cache.py`; keep
-  `normalize_product_name` and the reuse-index tests; new `test_frame_from_rows`,
-  `test_unknown_category_is_dropped_and_counted`; `test_analysis` cache-hit test now passes rows
-  instead of patching a path.
+- `categorization/cache.py`: `CategorizationCache.from_rows(rows: Iterable[CachedCategorization])`
+  beside `from_frame` — the one place the seam's `cleaned_name` meets the library's
+  `cleaned_item_names`. `from_frame` already drops a row whose category is not in the YAML with a
+  warning (a reviewer's typo in Studio must not fail every run); this PR counts those drops so
+  they reach `metadata`. `load_categorization_cache()` and the path helper move to the lab's
+  `categorization/product_cache.py` (and the `.gitignore` entry stays, for the lab's copy).
+- `analyze()`: `cache = CategorizationCache.from_rows(request.categorization_cache)`; it no longer
+  loads the file. `AnalysisOutcome.new_categorizations` is built from `unique_products_df`'s
+  non-cached rows, not from `ai_review_df`, because the review table carries no cleaned name and
+  the harvested row must carry the LLM's cleaned name — the CSV shows what happens otherwise:
+  20,008 rows where the "cleaned name" is the raw SKU, from cache hits written back with
+  `cleaned_item_names = product`.
+- The lab still reads its CSV: `categorize_spreadsheet_to_csvs` and
+  `entree_cache.backfill_entree_cleaned_names` through the moved loader. GBD's "categorize →
+  review → promote" flow (`product_cache.promote_local_review_file_to_reviewed_cache`) becomes a
+  lab tool that emits rows for the import script; noted, not designed here.
+- Tests: `test_cache.py` gains `test_from_rows`; `test_analysis`'s `cache_path` fixture and its
+  cache-hit test pass rows on the request instead of writing a CSV; `worker_child`'s conftest
+  fixture that redirects the loader goes.
 - Docs: `analysis.py` cache Open → deleted; REQUIREMENTS.md § Persistence result-metadata Open →
   points at `AnalysisOutcome`.
 
@@ -238,8 +246,8 @@ Both halves + `contract/` together, per `contract/README.md`.
 3. Deploy PR 3 (parent + child ship in one image, so the contract change is atomic). If the import
    is late, the parent writes `{"rows": []}` — costs LLM calls, breaks nothing.
 4. Deploy PR 4, then PR 5. If PR 4 lands before the import, harvested unverified rows are later
-   promoted by the import's `DO UPDATE … WHERE NOT is_verified`. After PR 5, delete the gitignored
-   CSV from developer checkouts; the table is the source of truth.
+   promoted by the import's `DO UPDATE … WHERE NOT is_verified`. After PR 5 the table is the
+   product's source of truth; the gitignored CSV stays for the lab until GBD's review flow moves.
 
 ## Verification
 

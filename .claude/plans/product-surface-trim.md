@@ -60,7 +60,7 @@ What the map found:
   **Open:** whether the export tables move with the QA workbook or stay because most checks
   compute them on the way to their findings. Measure per check before deciding.
 - **Typed inputs at the boundary.** `categorize_unique_products` takes `datetime64` dates and float
-  weights (`categorization-pipeline.md` PR 3) and the report takes `Literal` modes and regions
+  weights (`categorization-pipeline.md` PR 6) and the report takes `Literal` modes and regions
   (`build_food_report`). Parsing text is the lab's: free-text modes resolve only in the lab's
   `food_report/pipeline.py`, and `run_all_diagnostics` builds its `ReportMode` from its `serving`
   flag.
@@ -74,7 +74,7 @@ What the map found:
 
 Thresholds and checks stay in the product; the messy-input parsing and the meat check go to the
 lab, per the decision, and the meat check's test leaves `test_aggregate.py` with it. `parse_and_validate_date_column` keeps only its `datetime64`
-pass in the product if any product caller remains after `categorization-pipeline.md` PR 3;
+pass in the product if any product caller remains after `categorization-pipeline.md` PR 6;
 otherwise it moves whole.
 
 ## PR 2 — test consolidation
