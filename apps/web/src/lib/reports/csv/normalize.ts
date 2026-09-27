@@ -122,6 +122,11 @@ function readRows(
   if (findings.failingRowCount > 0 || findings.dateOrder) {
     return { ok: false, rejection: describeFindings(findings) };
   }
+  // Every figure in the report is a share of the kilos bought, so a file that bought none would
+  // be a report of zeros.
+  if (resolved.rows.every((row) => row.weight === 0)) {
+    return unreadable({ kind: 'all-weights-zero' });
+  }
 
   return { ok: true, normalized: encodeNormalizedCsv(resolved.rows), months: resolved.months };
 }

@@ -16,6 +16,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights import emissions
+from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
 from gbd_foodservice_insights.report import aggregation, diagnostics
 from gbd_foodservice_insights.report.aggregation import (
@@ -128,7 +129,7 @@ def build_food_report(
     pdf_extracted: bool | None = None,
     report_progress: Callable[[], None] = _ignore,
 ) -> FoodReport:
-    """An error finding raises `QualityCheckError`."""
+    """An error finding raises `QualityCheckError`; rows that weigh nothing, `UnusableDataError`."""
     metric_total = metric_for_mode(mode)
     quality_findings: list[Finding] = []
     df = rows.copy()
@@ -146,6 +147,12 @@ def build_food_report(
         )
     )
     raise_on_error_findings(quality_findings)
+    # Every figure is a share of this total. `apps/web` refuses a file whose weights are all 0,
+    # but only categorized rows reach here, so its uncategorized products can have held them all.
+    if (df[metric_total] == 0).all():
+        raise UnusableDataError(
+            f"Every row has a {metric_total} of 0, so there is nothing to report."
+        )
 
     # Date normalization with explicit diagnostics
     _log_stage("date_normalization", report_progress)

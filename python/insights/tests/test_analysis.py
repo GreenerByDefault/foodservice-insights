@@ -165,6 +165,22 @@ def test_a_product_named_like_a_missing_value_survives(tmp_path: Path) -> None:
     assert "NA" in products["product"].tolist()
 
 
+def test_a_product_bought_at_zero_weight_still_reports(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    request.input_csv.write_text(
+        input_csv_text(
+            (product, f"{month}-15", 0.0 if product == "Pork Loin" else 10.0)
+            for month in SAMPLE_MONTHS
+            for product in KEYWORD_PRODUCTS
+        )
+    )
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    products = pd.read_excel(outcome.xlsx, sheet_name="Monthly by Product")
+    assert products.loc[products["product"] == "Pork Loin", "kilos_total"].tolist() == [0.0] * 3
+
+
 GOLDEN_PATH = Path(__file__).parent / "data" / "analysis_golden.json"
 
 
@@ -385,6 +401,20 @@ def test_data_with_almost_no_recognizable_products_is_unusable(tmp_path: Path) -
     request.input_csv.write_text(sample_input_csv(UNKNOWN_PRODUCTS))
 
     with pytest.raises(UnusableDataError, match="Over 80% of products were eliminated"):
+        analyze(request, llm=KeywordLlmClient())
+
+
+def test_data_whose_recognizable_products_weigh_nothing_is_unusable(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    request.input_csv.write_text(
+        input_csv_text(
+            (product, f"{month}-15", 10.0 if product in UNKNOWN_PRODUCTS else 0.0)
+            for month in SAMPLE_MONTHS
+            for product in KEYWORD_PRODUCTS + UNKNOWN_PRODUCTS
+        )
+    )
+
+    with pytest.raises(UnusableDataError, match="Every row has a kilos_total of 0"):
         analyze(request, llm=KeywordLlmClient())
 
 
