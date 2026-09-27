@@ -18,7 +18,7 @@ from matplotlib.transforms import Bbox
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import summarize_findings
-from gbd_foodservice_insights.report.schema import quality_status_from_findings
+from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
 from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
@@ -740,7 +740,7 @@ def _wrap_text_lines(content_lines: list[str], width: int = _TEXT_PAGE_WRAP_CHAR
     return wrapped_lines or [""]
 
 
-def _how_to_read_lines(diner_or_meal: str = "diner") -> list[str]:
+def _how_to_read_lines(diner_or_meal: DinerOrMeal) -> list[str]:
     """Introductory guide to reading the report, shown before the charts."""
     return [
         "The charts in this report show your catering operation's food purchasing patterns",
@@ -752,7 +752,7 @@ def _how_to_read_lines(diner_or_meal: str = "diner") -> list[str]:
         "  \u2022 How purchasing volumes vary month to month.",
         "",
         f"The 'per {diner_or_meal}' figures are the most useful for comparing across months,",
-        "because they account for differences in how many people were served each month.",
+        f"because they account for how many {diner_or_meal}s were served each month.",
         "",
         "The plant vs. animal breakdown shows the proportion of food purchased from",
         "plant-based vs. animal-based sources. Shifting this ratio is one of the most",
@@ -764,7 +764,7 @@ def _how_to_read_lines(diner_or_meal: str = "diner") -> list[str]:
     ]
 
 
-def _methodology_lines(diner_or_meal: str = "diner") -> list[str]:
+def _methodology_lines(diner_or_meal: DinerOrMeal) -> list[str]:
     """Methodology note for the final page of the PDF."""
     return [
         (
@@ -792,7 +792,7 @@ def _methodology_lines(diner_or_meal: str = "diner") -> list[str]:
         "  seasonal menus, catering events, term dates, and other operational factors.",
         (
             f"  Per-{diner_or_meal} figures account for this by normalising against the number "
-            "of diners served."
+            f"of {diner_or_meal}s served."
         ),
         "",
         "How should I use this report?",
@@ -956,7 +956,7 @@ def build_pdf_report(
     quality_summary: dict[str, Any] | None = None,
     missing_data_findings: list[dict[str, Any]] | None = None,
     show_quality_successes: bool = True,
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal = "diner",
     narrative: dict[str, Any] | None = None,
 ) -> str:
     """Assemble the full PDF report and return its absolute path.
