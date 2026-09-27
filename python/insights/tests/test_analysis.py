@@ -395,9 +395,6 @@ class UnreachableLlmClient:
     def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
         raise UpstreamApiError("OpenAI failed 5 times")
 
-    def fuzzy_match_category(self, item: str, categories: Sequence[str]) -> str:
-        raise UpstreamApiError("OpenAI failed 5 times")
-
 
 def test_an_upstream_failure_propagates(tmp_path: Path) -> None:
     request = _request(tmp_path)

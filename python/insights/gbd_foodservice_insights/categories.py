@@ -4,16 +4,12 @@
 their emissions factors, and which are animal- or plant-based.
 """
 
-import logging
 from functools import cache
 from typing import Any
 
-import pandas as pd
 import yaml
 
 from gbd_foodservice_insights import PACKAGE_DIR
-
-logger = logging.getLogger(__name__)
 
 
 @cache
@@ -195,46 +191,6 @@ def get_drink_categories(lowercase: bool = False) -> list[str]:
         return [category.lower() for category in categories]
 
     return categories
-
-
-def check_GBD_categories(df: pd.DataFrame) -> None:
-    """Check a DataFrame's 'category' column against the predefined GBD categories.
-
-    Logs a warning when the 'category' column is missing or holds non-GBD categories, and an
-    info message listing GBD categories (or "No Matches Found") absent from the data.
-
-    Only the non-GBD check is case-insensitive (lowercase is acceptable); the list of missing
-    categories is compared case-sensitively.
-    """
-    if "category" not in df.columns:
-        logger.warning("'category' column not found in DataFrame.")
-        return
-
-    gbd_categories = get_GBD_categories()
-    gbd_categories_plus_uncategorized = [*gbd_categories, "No Matches Found"]
-
-    df_categories = df["category"].unique()
-
-    # Normalize to lowercase for comparison
-    gbd_lower = {cat.lower() for cat in gbd_categories_plus_uncategorized}
-
-    missing_categories_in_df: set[str] = set(gbd_categories_plus_uncategorized) - set(df_categories)
-    # Only flag as non-GBD if the lowercase version doesn't match any GBD category
-    non_gbd_categories_in_df: set[str] = {
-        cat for cat in df_categories if pd.notna(cat) and str(cat).lower() not in gbd_lower
-    }
-
-    if missing_categories_in_df:
-        logger.info(
-            "The following GBD categories are missing from the data: %s",
-            sorted(missing_categories_in_df),
-        )
-
-    if non_gbd_categories_in_df:
-        logger.warning(
-            "The categories %s found in the data are not GBD categories!",
-            non_gbd_categories_in_df,
-        )
 
 
 def clean_GBD_category_name(category: str) -> str:

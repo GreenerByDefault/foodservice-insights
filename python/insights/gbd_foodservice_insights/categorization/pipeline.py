@@ -10,8 +10,7 @@ Callers merge the result back onto the rows with `steps.merge_categorizations`.
 
 All helper logic lives in sibling modules:
 
-    steps.py    — historical reuse, name cleaning, LLM categorization,
-                 fuzzy matching, merge-back
+    steps.py    — historical reuse, name cleaning, LLM categorization, merge-back
     reviews.py  — human-review table construction
     cache.py    — reviewed/unreviewed cache persistence, promotion
 """
@@ -22,7 +21,6 @@ from typing import Literal
 
 import pandas as pd
 
-from gbd_foodservice_insights.categories import check_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
     _validate_cache_write_mode,
     build_cleaned_name_reuse_index,
@@ -37,7 +35,6 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_using_historical_classifications,
     categorize_with_llm,
     clean_product_names,
-    fuzzy_match_GBD_categories,
 )
 from gbd_foodservice_insights.report.diagnostics import (
     clean_weight_column,
@@ -124,16 +121,10 @@ def categorize_unique_products(
     # --- Step 3: LLM categorization for still-uncategorized items ---
     unique_products_df = categorize_with_llm(unique_products_df, llm)
 
-    # --- Step 4: Normalize categories (fuzzy match non-standard ones) ---
-    unique_products_df = fuzzy_match_GBD_categories(unique_products_df, llm)
-
-    check_GBD_categories(unique_products_df)
-
     # Build human-review table for AI-only categorizations
     ai_review_df = build_ai_review_table(
         original_df=df,
         unique_products_df=unique_products_df,
-        include_no_matches=True,
     )
 
     # --- Update historical cache ---

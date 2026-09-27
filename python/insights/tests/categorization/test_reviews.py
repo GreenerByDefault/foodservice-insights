@@ -12,7 +12,7 @@ def test_build_ai_review_table_excludes_historical_and_includes_no_matches():
         }
     )
 
-    result = build_ai_review_table(original_df, unique_products_df, include_no_matches=True)
+    result = build_ai_review_table(original_df, unique_products_df)
 
     expected = pd.DataFrame(
         {
@@ -55,20 +55,3 @@ def test_build_ai_review_table_sorts_by_category_first():
 
     result = build_ai_review_table(original_df, unique_products_df)
     assert result["category"].tolist() == ["Fruit", "Vegetables"]
-
-
-def test_build_ai_review_table_can_exclude_no_matches():
-    """Ensures optional filtering can drop no-match rows when analysts only want resolvable
-    items."""
-    original_df = pd.DataFrame({"product": ["beef", "apple"]})
-    unique_products_df = pd.DataFrame(
-        {
-            "product": ["beef", "apple"],
-            "category": ["No Matches Found", "Fruit"],
-            "previously_categorized": [False, False],
-        }
-    )
-
-    result = build_ai_review_table(original_df, unique_products_df, include_no_matches=False)
-    assert result["category"].tolist() == ["Fruit"]
-    assert result["product"].tolist() == ["apple"]

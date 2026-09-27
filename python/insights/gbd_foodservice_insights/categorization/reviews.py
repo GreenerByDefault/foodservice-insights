@@ -11,7 +11,6 @@ import pandas as pd
 def build_ai_review_table(
     original_df: pd.DataFrame,
     unique_products_df: pd.DataFrame,
-    include_no_matches: bool = True,
 ) -> pd.DataFrame:
     """Build a product-level human-review table for AI-categorized items only.
 
@@ -45,9 +44,6 @@ def build_ai_review_table(
         ~unique_products_df["previously_categorized"].fillna(False),
         ["product", "category"],
     ].copy()
-
-    if not include_no_matches:
-        ai_only = ai_only.loc[ai_only["category"] != "No Matches Found"]
 
     ai_review_df = ai_only.merge(product_counts, on="product", how="left")
     ai_review_df["occurrence_count"] = ai_review_df["occurrence_count"].fillna(0).astype(int)

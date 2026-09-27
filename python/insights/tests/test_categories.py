@@ -5,12 +5,8 @@ This module tests all functions for working with GBD food categories,
 including category retrieval, validation, and data cleaning.
 """
 
-import logging
-
-import pandas as pd
 import pytest
 from gbd_foodservice_insights.categories import (
-    check_GBD_categories,
     clean_GBD_category_name,
     get_animal_product_categories,
     get_categories_by_product_category,
@@ -265,33 +261,6 @@ class TestGetDrinkCategories:
     def test_lowercase_option(self):
         lower = get_drink_categories(lowercase=True)
         assert all(item.lower() == item for item in lower)
-
-
-# ----------------------------------------------------------------------
-# Tests for category validation functions
-# ----------------------------------------------------------------------
-
-
-class TestCheckGBDCategories:
-    """Tests for check_GBD_categories function."""
-
-    def test_warns_on_missing_categories(self, caplog):
-        df = pd.DataFrame({"category": ["Beef"]})  # Only one category
-        with caplog.at_level(logging.DEBUG, logger="gbd_foodservice_insights.categories"):
-            check_GBD_categories(df)
-        assert "missing" in caplog.text.lower()
-
-    def test_warns_on_non_gbd_categories(self, caplog):
-        df = pd.DataFrame({"category": ["Not A Real Category"]})
-        with caplog.at_level(logging.DEBUG, logger="gbd_foodservice_insights.categories"):
-            check_GBD_categories(df)
-        assert "not" in caplog.text.lower() and "gbd" in caplog.text.lower()
-
-    def test_warns_on_missing_column(self, caplog):
-        df = pd.DataFrame({"other_col": [1, 2, 3]})
-        with caplog.at_level(logging.DEBUG, logger="gbd_foodservice_insights.categories"):
-            check_GBD_categories(df)
-        assert "category" in caplog.text.lower() and "not found" in caplog.text.lower()
 
 
 # ----------------------------------------------------------------------

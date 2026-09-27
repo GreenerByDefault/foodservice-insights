@@ -12,7 +12,6 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_using_historical_classifications,
     categorize_with_llm,
     clean_product_names,
-    fuzzy_match_GBD_categories,
     merge_categorizations,
 )
 from gbd_foodservice_insights.errors import UnusableDataError
@@ -233,31 +232,6 @@ def test_categorize_with_llm_discards_an_answer_outside_the_gbd_categories():
         products_df.assign(
             category=["No Matches Found", "Cheese"],
             match_type=["llm", "raw_product_history"],
-        ),
-    )
-
-
-# ----------------------------------------------------------------------
-# Step 4 — Fuzzy matching
-# ----------------------------------------------------------------------
-def test_fuzzy_match_GBD_categories_standardizes_non_canonical_categories():
-    products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A", "RAW_B", "RAW_C", "RAW_D"],
-            "category": ["Cheese", np.nan, "none.", "Chese"],
-        }
-    )
-    llm = KeywordLlmClient()
-
-    result = fuzzy_match_GBD_categories(products_df, llm)
-
-    # Only the typo needs the LLM; the "uncategorized" spellings are mapped without it.
-    assert llm.calls == [("fuzzy", "Chese")]
-    pd.testing.assert_frame_equal(
-        result,
-        products_df.assign(
-            category=["Cheese", "No Matches Found", "No Matches Found", "Cheese"],
-            category_old=["Cheese", "No Matches Found", "No Matches Found", "Chese"],
         ),
     )
 

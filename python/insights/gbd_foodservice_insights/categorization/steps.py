@@ -3,14 +3,13 @@ Categorization Steps
 =====================
 
 Non-entree categorization steps: historical reuse, name cleaning,
-LLM categorization, fuzzy matching, and merge-back.
+LLM categorization, and merge-back.
 """
 
 import logging
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
@@ -223,52 +222,6 @@ def categorize_with_llm(
 
 
 # ----------------------------------------------------------------------
-# Step 4 — Fuzzy matching
-# ----------------------------------------------------------------------
-def fuzzy_match_GBD_categories(
-    products_df: pd.DataFrame,
-    llm: LlmClient,
-) -> pd.DataFrame:
-    """Standardize category values by fuzzy-matching non-standard ones.
-
-    Replaces various forms of "uncategorized" with "No Matches Found", then
-    runs fuzzy matching on any remaining non-standard categories. The pre-match
-    value is kept in 'category_old'.
-    """
-    products_df = products_df.copy()
-
-    # Standardize known uncategorized variants
-    nan_categories = [
-        np.nan,
-        "nan",
-        "Uncategorized",
-        "None.",
-        "None",
-        "none",
-        "none.",
-        "other",
-    ]
-    products_df.loc[products_df["category"].isin(nan_categories), "category"] = "No Matches Found"
-
-    # Fuzzy match remaining non-standard categories
-    canonical: list[str] = [*get_GBD_categories(), "No Matches Found"]
-    products_df["category_old"] = products_df["category"]
-
-    non_canonical_mask = ~products_df["category"].isin(canonical)
-    n_fuzzy = non_canonical_mask.sum()
-
-    if n_fuzzy > 0:
-        logger.info("Fuzzy-matching %d non-standard categories.", n_fuzzy)
-        products_df.loc[non_canonical_mask, "category"] = products_df.loc[
-            non_canonical_mask, "category_old"
-        ].apply(lambda x: llm.fuzzy_match_category(str(x), canonical))
-    else:
-        logger.info("All categories are standard — no fuzzy matching needed.")
-
-    return products_df
-
-
-# ----------------------------------------------------------------------
 # Step 7 — Merge and filter
 # ----------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -349,7 +302,6 @@ def merge_categorizations(
     # Drop intermediate columns
     columns_to_drop = [
         "cleaned_item_names",
-        "category_old",
         "previously_categorized",
         "match_type",
     ]

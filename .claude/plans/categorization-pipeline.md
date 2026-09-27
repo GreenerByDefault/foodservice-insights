@@ -8,7 +8,7 @@ category match, then `merge_categorizations` with the 80% cut. `analyze()` compo
 `categorize_spreadsheet_to_csvs` composes it the same way and adds entree detection. The cache is
 the gitignored `data_files/previously_categorized_items.csv`, read by
 `cache.get_previously_categorized_items()`; `categorization-cache.md` moves it into Postgres later
-and is sequenced after this plan. `diagnostics-split.md` PR 1 waits on PR 5 here.
+and is sequenced after this plan. `diagnostics-split.md` PR 1 waits on PR 4 here.
 
 This plan is the product side only: the cache the library reads and the pipeline that reads it.
 How new rows get back into the cache — from the web app or from GBD's reviewers — is
@@ -34,12 +34,6 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   `categorize_with_llm`'s last line rewrites it to `"No Matches Found"`, and because it is
   "previously categorized" it is kept out of the review table: silently dropped, every run, with no
   LLM call. 2,844 rows collide case-insensitively, in 31 groups with conflicting categories.
-- **The fuzzy step is unreachable.** `categorize_with_llm` ends by rewriting every value that is not
-  byte-equal to a YAML name to `"No Matches Found"`, so `fuzzy_match_GBD_categories`,
-  `LlmClient.fuzzy_match_category`, `fuzzy_match_gbd_category_prompt.md`, the `nan_categories`
-  list and the `category_old` column do nothing, and the step logs "All categories are standard"
-  every run. `check_GBD_categories` can never warn for the same reason, and its per-run info line
-  listing every category absent from the upload is noise.
 - **The prompt coaches answers the pipeline drops.** `match_items_to_gbd_categories_prompt.md` says
   *say "None"* when nothing fits and names categories as `"oat milk"`, `"shelled eggs"`, `poultry`,
   `pork`, `"Cow's Milk"` in its own rules; the list is rendered as a Python `list` repr with mixed
@@ -60,8 +54,7 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
 - **`test_categorize_unique_products_characterization` pins today's silent drops.** It runs
   `categorize_unique_products` on an already-typed frame with `test_pipeline.py`'s
   `ScriptedLlmClient`, which answers verbatim by cleaned name (`Cheese.`, `"Butter"`, `pork`,
-  `None`), raises `KeyError` for an unscripted item, and raises on `fuzzy_match_category`, so
-  reaching the fuzzy step fails the test. Its cache holds a `cheese` row, a trailing-space row and
+  `None`) and raises `KeyError` for an unscripted item. Its cache holds a `cheese` row, a trailing-space row and
   a blank-category row — the last two with no cleaned name, so the cleaned-name step cannot rescue
   them — plus one good hit. Today every scripted answer and the `cheese` row come out
   `No Matches Found`, the `cheese` row is absent from the review table, and the trailing-space and
@@ -107,11 +100,12 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   **Open:** whether `from_frame` should raise when more than some share of rows are unusable (a
   category renamed in the YAML would silently turn thousands of hits into LLM calls); warn-only
   until the Postgres cache controls categories at write time.
-- **Delete the fuzzy step; normalize the model's answer instead.** Casefold and strip whitespace,
+- **Normalize the model's answer; no second prompt.** Casefold and strip whitespace,
   quotes and a trailing period from the answer, match against the canonical list plus
   `"No Matches Found"`, and log anything still unrecognized at WARNING with the item. An
-  unrecognized answer is uncategorized and reaches the review table. *Rejected: making the fuzzy
-  step live, as the previous version of this plan proposed* — it is a second prompt to maintain
+  unrecognized answer is uncategorized and reaches the review table. *Rejected: reviving the fuzzy
+  step* (an LLM call re-matching a non-canonical answer, deleted because `categorize_with_llm`'s
+  rewrite made it unreachable) — it is a second prompt to maintain
   for a residual the corrected prompt and normalization already cover, and the WARNING count on
   real data decides whether the prompt needs another rule, not whether to add a call.
 - **The prompt names categories exactly**: every rule uses the YAML name, the no-match answer is
@@ -136,8 +130,7 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
 - **One behaviour change per PR, deletions first.** Each PR's diff of the characterization test
   is its review.
 
-PR order: 1 and 2 are independent deletions; 3 after 1; 4 after 2; 5 any time; 6 after 4, since
-both edit `categorize_with_llm`.
+PR order: 2 after 1; 3 and 4 any time; 5 after 3, since both edit `categorize_with_llm`.
 
 ## PR 1 — the cache is read-only in the product
 
@@ -158,19 +151,7 @@ both edit `categorize_with_llm`.
 - `python/lab/README.md`: one sentence on how a reviewed `_for_human_review.csv` gets into the
   cache. No product behaviour changes.
 
-## PR 2 — delete the unreachable fuzzy step
-
-- `steps.py`: `fuzzy_match_GBD_categories`, `nan_categories`, `category_old` (and its drop in
-  `merge_categorizations`); `pipeline.py`: the call and the `check_GBD_categories` call;
-  `categories.py`: `check_GBD_categories`; `llm.py`: `LlmClient.fuzzy_match_category`,
-  `OpenAiLlmClient.fuzzy_match_category`; `prompts/fuzzy_match_gbd_category_prompt.md`;
-  `analysis.py`: `_ReportingLlmClient.fuzzy_match_category`; `testing.py`: the fake's method and
-  `"fuzzy"` in `LlmOperation`; `test_pipeline.py`: `ScriptedLlmClient.fuzzy_match_category`;
-  `reviews.py`: `include_no_matches`, which every caller leaves at its default. Tests that name any of these are deleted or repointed (`test_llm.py`'s
-  non-transient-failure test uses `match_product_to_category`).
-- The characterization test is unchanged, which is the proof the step was dead.
-
-## PR 3 — one loader, one type
+## PR 2 — one loader, one type
 
 - `cache.py`: `CategorizationCache` (frozen; `products: pd.DataFrame` with `product`, `category`,
   `cleaned_item_names` as `str`, unique stripped products, canonical categories; and
@@ -192,7 +173,7 @@ both edit `categorize_with_llm`.
   the blank one at the LLM and in the review table, so it needs a scripted answer. `test_analysis.py`'s fixture keeps writing a CSV the loader
   reads; `test_entree_cache.py` patches the new name.
 
-## PR 4 — accept what the model means
+## PR 3 — accept what the model means
 
 - `steps.py`: `categorize_with_llm` maps each answer through a normalized-name table built from
   the canonical list plus `"No Matches Found"`; an unrecognized answer becomes
@@ -210,7 +191,7 @@ both edit `categorize_with_llm`.
   still unrecognized; and a diff of `1. Categorize Runscript.py`'s output on a real client file
   before and after, reviewed by GBD's data scientist.
 
-## PR 5 — typed input, no re-parsing
+## PR 4 — typed input, no re-parsing
 
 - `categorize_unique_products` asserts its dtypes, drops `date_format`, the two parsing calls and
   the dead NaN check, and keeps the `product` strip (it is the match key rule, and cheap).
@@ -220,7 +201,7 @@ both edit `categorize_with_llm`.
 - Tests: `test_pipeline.py` hands typed frames; a `str` date column and a NaN product are rejected.
   `diagnostics-split.md` PR 1 then moves `parse_and_validate_date_column` whole to the lab.
 
-## PR 6 — concurrent LLM calls
+## PR 5 — concurrent LLM calls
 
 - `steps.py`: `_map_llm_calls(fn, items)` over `ThreadPoolExecutor(LLM_CONCURRENCY)` as decided,
   used by `clean_product_names` and `categorize_with_llm`; `print_progress` per completion.
@@ -236,17 +217,17 @@ both edit `categorize_with_llm`.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; PRs 1, 3 and 5 also `just test-lab`.
-- PRs 2–6 change what `analyze()` runs: also `pnpm test:system`.
-- PR 3: `python -m worker_child.mock_llm` on a run directory both with and without
+- Every PR: `just lint && just check && just test`; PRs 1, 2 and 4 also `just test-lab`.
+- PRs 2–5 change what `analyze()` runs: also `pnpm test:system`.
+- PR 2: `python -m worker_child.mock_llm` on a run directory both with and without
   `data_files/previously_categorized_items.csv` present.
-- PR 4: the live 200-product sample and the runscript diff above.
+- PR 3: the live 200-product sample and the runscript diff above.
 
 ## Risks
 
 - The prompt rewrite changes categorizations on real data; the runscript diff is the check, and
   it needs `OPENAI_API_KEY` and a client file only GBD has.
-- PR 3 turns 126 silently dropped cache rows into LLM calls the first time each product appears;
+- PR 2 turns 126 silently dropped cache rows into LLM calls the first time each product appears;
   the WARNING names them so GBD can fix the file.
 - Rate limits: with N threads a 429 storm costs N × 5 attempts before `upstream_api`; start at the
   constant and check the account's tier for gpt-4.1-mini before raising it.

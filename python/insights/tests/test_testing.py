@@ -98,15 +98,8 @@ def test_keyword_llm_client_cleans_names() -> None:
     assert KeywordLlmClient().clean_product_name(" CHKN Breast (12) 5LB ") == "chkn breast lb"
 
 
-def test_keyword_llm_client_fuzzy_matches_to_the_closest_category() -> None:
-    llm = KeywordLlmClient()
-    assert llm.fuzzy_match_category("Chese", ["Cheese", "Butter"]) == "Cheese"
-    assert llm.fuzzy_match_category("zzz", ["Cheese", "Butter"]) == "No Matches Found"
-
-
 def test_keyword_llm_client_records_every_call() -> None:
     llm = KeywordLlmClient()
     llm.clean_product_name("a")
     llm.match_product_to_category("b", [])
-    llm.fuzzy_match_category("c", [])
-    assert llm.calls == [("clean", "a"), ("match", "b"), ("fuzzy", "c")]
+    assert llm.calls == [("clean", "a"), ("match", "b")]
