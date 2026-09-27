@@ -336,8 +336,6 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - Real sign-up e2e: a small Playwright project pointed at the stack's main `postgres` (migrated,
   untruncated, unique emails) so the GoTrue insert fires the trigger. The same project would let
   `account-self-service.md`'s change-email e2e see the new address on the page.
-- `organizations.screenshot.ts`'s `"24/7 "` sort trick and serial mode are redundant now that each
-  test's user sees only its own organizations; removing them re-baselines both images.
 
 ## Verification
 
