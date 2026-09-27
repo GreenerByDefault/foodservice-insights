@@ -25,7 +25,10 @@ What the map found:
   `prepare_monthly_trend_data` is public because the lab's `pilot/plots.py` builds
   `plot_metric_over_time` on it, so the lab's trend numbers are the report's. `plotting_utils.py`
   is shared with five lab modules and sets the backend, the seaborn palette and the fonts at
-  import. `aggregation.py` formats percentages as strings that `plots.py` parses back.
+  import. `aggregation.py` formats percentages as strings that `plots.py` parses back. The
+  multi-panel pages are layout over public `draw_*` panel drawers that take an `Axes`; nothing
+  outside `plots.py` calls them, and that is not a reason to trim them, since they exist so a
+  notebook draws one panel exactly as the client sees it.
 - Tests follow the code. About a quarter of `test_diagnostics.py` targets lab-only paths: the
   `TestParseAndValidateDateColumn` string, numeric and ambiguous cases, and the meat check's two
   tests, in the outliers and thresholds sections. Threshold overrides go through one
@@ -94,29 +97,6 @@ caches; `isinstance(dtype, pd.PeriodDtype)` in the three lab modules. **Open:** 
 numeric in `aggregation.py` and format them at draw time; it changes the workbook's percentage cells
 from text to numbers, so it is a behaviour change for GBD to want.
 
-## PR 3 — report pages composed from public panel drawers
-
-The three combined report pages already draw through private per-axis helpers
-(`_draw_metric_over_time_on_axis`, `_draw_multi_series_metric_over_time_on_axis`,
-`_draw_share_bar_axis`, `_draw_monthly_share_axis`), but each page still does every panel's data
-prep, titles, axis formatting and empty state itself, and `plot_plant_breakdown_overview` has two
-copies of its "not available" block. Give each panel a public drawer, named for what it draws,
-that takes an `Axes` and owns all of that: `draw_food_and_drink_totals`,
-`draw_food_and_drink_per_diner`, `draw_total_emissions`, `draw_emissions_per_diner`,
-`draw_plant_animal_split`, `draw_plant_share_by_month`, `draw_plant_protein_share` and
-`draw_plant_protein_share_by_month`. Each page becomes layout only, and a notebook draws any one
-panel with `plt.subplots()` and one call, getting exactly the chart the client sees. The trend
-drawers keep preparing their data through `prepare_monthly_trend_data`, which the lab shares.
-
-*Rejected: restoring the figure-level functions #378 deleted (`plot_emissions_over_time`,
-`plot_plant_protein_share`, ...) and having the pages call them.* A page cannot embed a figure
-without threading a matplotlib `SubFigure` through every chart function, and those copies had
-drifted from what the report renders: a seaborn line path, different bar labels, no trend for a
-single month.
-
-Its tests go in `test_plots.py`; independent of PRs 1 and 2. No behaviour changes, but the golden
-pins chart titles, not pixels.
-
 ## Verification
 
 - Every PR: `just lint && just check && just test && just test-lab`; the golden test unchanged
@@ -126,8 +106,6 @@ pins chart titles, not pixels.
   proving nothing product-side imports a moved symbol.
 - PR 1: run `1. Categorize Runscript.py` and `2. Produce Food Report.py` on
   `python/lab/test_data` in a scratch client folder, since no CI job runs the lab against data.
-- PR 3: render every `generate_all_report_plots` figure on the golden input before and after, and
-  compare the PNGs pixel for pixel.
 
 ## Risks
 

@@ -251,13 +251,19 @@ def _filter_monthly_categories_by_type(
     return filtered.drop(columns="_category_lower")
 
 
+def _draw_unavailable(ax: plt.Axes, title: str, message: str) -> None:
+    """Stand in for a panel whose data is missing, keeping its title."""
+    ax.axis("off")
+    ax.text(0.5, 0.6, title, ha="center", va="center", fontsize=12, fontweight="bold")
+    ax.text(0.5, 0.42, message, ha="center", va="center", fontsize=10, color="gray")
+
+
 def _draw_metric_over_time_on_axis(
     ax: plt.Axes,
     plot_data: pd.DataFrame,
     *,
     title: str,
     y_label: str,
-    y_max: float | None = None,
 ) -> None:
     """Draw a simple monthly trend line on a provided axis."""
     data_sorted = plot_data.sort_values("month_year").copy()
@@ -276,11 +282,6 @@ def _draw_metric_over_time_on_axis(
     set_title_font(ax, title)
     add_grid(ax)
 
-    if y_max is not None and y_max > 0:
-        ax.set_ylim(0, y_max * 1.2)
-    elif y_max == 0:
-        ax.set_ylim(0, 1)
-
 
 def _draw_multi_series_metric_over_time_on_axis(
     ax: plt.Axes,
@@ -288,7 +289,6 @@ def _draw_multi_series_metric_over_time_on_axis(
     *,
     title: str,
     y_label: str,
-    y_max: float | None = None,
 ) -> None:
     """Draw multiple monthly trend lines on a provided axis."""
     non_empty_payloads = [
@@ -336,10 +336,88 @@ def _draw_multi_series_metric_over_time_on_axis(
     add_grid(ax)
     ax.legend(frameon=False)
 
-    if y_max is not None and y_max > 0:
+    y_max = max(
+        (
+            float(max_value)
+            for _, plot_data in non_empty_payloads
+            if pd.notna(max_value := pd.to_numeric(plot_data["value"], errors="coerce").max())
+        ),
+        default=0.0,
+    )
+    if y_max > 0:
         ax.set_ylim(0, y_max * 1.2)
     elif y_max == 0:
         ax.set_ylim(0, 1)
+
+
+def _food_and_drink_trends(
+    monthly_category_data: pd.DataFrame,
+    metric: str,
+    *,
+    per_diner_meal: bool,
+    diner_meal_mapping: dict[Any, Any] | None = None,
+) -> list[tuple[str, pd.DataFrame]]:
+    """Monthly trends of `metric` for food only and for food + drink, as labelled series."""
+    if metric not in {"kilos_total", "servings total"}:
+        raise ValueError("metric must be 'kilos_total' or 'servings total'")
+
+    def trend(*, include_drinks: bool) -> pd.DataFrame:
+        subset = _filter_monthly_categories_by_type(
+            monthly_category_data, include_drinks=include_drinks
+        )
+        if subset.empty:
+            return pd.DataFrame(columns=["month_year", "value"])
+        plot_data, _ = prepare_monthly_trend_data(
+            subset,
+            metric,
+            per_diner_meal=per_diner_meal,
+            diner_meal_mapping=diner_meal_mapping,
+        )
+        return plot_data
+
+    return [
+        ("Food Only", trend(include_drinks=False)),
+        ("Food + Drink", trend(include_drinks=True)),
+    ]
+
+
+def draw_food_and_drink_totals(
+    ax: plt.Axes,
+    monthly_category_data: pd.DataFrame,
+    *,
+    metric: str = "kilos_total",
+) -> None:
+    """Total `metric` by month, food only against food + drink."""
+    title = f"Total {metric_display_label(metric)}"
+    _draw_multi_series_metric_over_time_on_axis(
+        ax,
+        _food_and_drink_trends(monthly_category_data, metric, per_diner_meal=False),
+        title=title,
+        y_label=title,
+    )
+
+
+def draw_food_and_drink_per_diner(
+    ax: plt.Axes,
+    monthly_category_data: pd.DataFrame,
+    diner_meal_mapping: dict[Any, Any],
+    *,
+    metric: str = "kilos_total",
+    diner_or_meal: str = "diner",
+) -> None:
+    """`metric` per diner (or meal) by month, food only against food + drink."""
+    title = f"{metric_display_label(metric)} per {diner_or_meal.title()}"
+    _draw_multi_series_metric_over_time_on_axis(
+        ax,
+        _food_and_drink_trends(
+            monthly_category_data,
+            metric,
+            per_diner_meal=True,
+            diner_meal_mapping=diner_meal_mapping,
+        ),
+        title=title,
+        y_label=title,
+    )
 
 
 def plot_food_and_drink_comparison_page(
@@ -351,65 +429,19 @@ def plot_food_and_drink_comparison_page(
     figsize: tuple[int, int] = (14, 5),
 ) -> Figure:
     """Create one page with total and per-diner trends, each comparing food vs food + drink."""
-    if metric not in {"kilos_total", "servings total"}:
-        raise ValueError("metric must be 'kilos_total' or 'servings total'")
     if diner_meal_mapping is None:
         raise ValueError("diner_meal_mapping is required for the comparison page")
 
-    food_only = _filter_monthly_categories_by_type(monthly_category_data, include_drinks=False)
-    food_and_drink = _filter_monthly_categories_by_type(monthly_category_data, include_drinks=True)
-
-    def _prepare_series(subset_df: pd.DataFrame, *, per_diner: bool) -> pd.DataFrame:
-        if subset_df.empty:
-            return pd.DataFrame(columns=["month_year", "value"])
-        plot_data, _ = prepare_monthly_trend_data(
-            subset_df,
-            metric,
-            per_diner_meal=per_diner,
-            diner_meal_mapping=diner_meal_mapping,
-        )
-        return plot_data
-
-    total_payloads = [
-        ("Food Only", _prepare_series(food_only, per_diner=False)),
-        ("Food + Drink", _prepare_series(food_and_drink, per_diner=False)),
-    ]
-    per_diner_payloads = [
-        ("Food Only", _prepare_series(food_only, per_diner=True)),
-        ("Food + Drink", _prepare_series(food_and_drink, per_diner=True)),
-    ]
-
-    def _max_value(payloads: list[tuple[str, pd.DataFrame]]) -> float:
-        candidates = [
-            float(pd.to_numeric(plot_data["value"], errors="coerce").max())
-            for _, plot_data in payloads
-            if not plot_data.empty
-            and "value" in plot_data.columns
-            and pd.notna(pd.to_numeric(plot_data["value"], errors="coerce").max())
-        ]
-        return max(candidates, default=0.0)
-
-    total_title = f"Total {metric_display_label(metric)}"
-    per_diner_title = f"{metric_display_label(metric)} per {diner_or_meal.title()}"
-
     fig, axes = plt.subplots(1, 2, figsize=figsize)
     set_suptitle_font(fig, f"{metric_display_label(metric)} Over Time", fontsize=16)
-
-    _draw_multi_series_metric_over_time_on_axis(
-        axes[0],
-        total_payloads,
-        title=total_title,
-        y_label=total_title,
-        y_max=_max_value(total_payloads),
-    )
-    _draw_multi_series_metric_over_time_on_axis(
+    draw_food_and_drink_totals(axes[0], monthly_category_data, metric=metric)
+    draw_food_and_drink_per_diner(
         axes[1],
-        per_diner_payloads,
-        title=per_diner_title,
-        y_label=per_diner_title,
-        y_max=_max_value(per_diner_payloads),
+        monthly_category_data,
+        diner_meal_mapping,
+        metric=metric,
+        diner_or_meal=diner_or_meal,
     )
-
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     return fig
 
@@ -444,6 +476,50 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
     return fig
 
 
+def _format_with_magnitude_suffix(x: float, _pos: int | None) -> str:
+    if abs(x) >= 1e6:
+        return f"{x / 1e6:,.1f}M"
+    if abs(x) >= 1e3:
+        return f"{x / 1e3:,.0f}k"
+    return f"{x:,.0f}"
+
+
+def draw_total_emissions(
+    ax: plt.Axes,
+    monthly_category_data: pd.DataFrame,
+    *,
+    emissions_col: str = "emissions_kg_co2e",
+) -> None:
+    """Total kg CO2e by month."""
+    totals = monthly_totals(monthly_category_data, emissions_col)
+    _draw_metric_over_time_on_axis(
+        ax,
+        pd.DataFrame({"month_year": totals.index, "value": totals.values}),
+        title="Total Carbon Emissions Over Time",
+        y_label="Total kg CO₂e",
+    )
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_format_with_magnitude_suffix))
+
+
+def draw_emissions_per_diner(
+    ax: plt.Axes,
+    monthly_category_data: pd.DataFrame,
+    diner_meal_mapping: dict[Any, Any],
+    *,
+    emissions_col: str = "emissions_kg_co2e",
+    diner_or_meal: str = "diner",
+) -> None:
+    """kg CO2e per diner (or meal) by month."""
+    totals = monthly_totals(monthly_category_data, emissions_col)
+    per_dm, _, _ = divide_by_diner_meals(totals, diner_meal_mapping, strict=False)
+    _draw_metric_over_time_on_axis(
+        ax,
+        pd.DataFrame({"month_year": per_dm.index, "value": per_dm.values}),
+        title=f"Carbon Emissions per {diner_or_meal.title()} Over Time",
+        y_label=f"kg CO2e per {diner_or_meal.title()}",
+    )
+
+
 def plot_emissions_summary_over_time(
     monthly_category_data: pd.DataFrame,
     diner_meal_mapping: dict[Any, Any],
@@ -452,40 +528,22 @@ def plot_emissions_summary_over_time(
     figsize: tuple[float, float] = (12, 4.8),
 ) -> Figure:
     """Put total and per-diner emissions trends together on one report page."""
-    totals = monthly_totals(monthly_category_data, emissions_col)
-    per_dm, _, _ = divide_by_diner_meals(totals, diner_meal_mapping, strict=False)
-
-    total_plot_data = pd.DataFrame({"month_year": totals.index, "value": totals.values})
-    per_diner_plot_data = pd.DataFrame({"month_year": per_dm.index, "value": per_dm.values})
-
     fig, axes = plt.subplots(1, 2, figsize=figsize)
     set_suptitle_font(fig, "Carbon Emissions Over Time", fontsize=16)
-
-    _draw_metric_over_time_on_axis(
-        axes[0],
-        total_plot_data,
-        title="Total Carbon Emissions Over Time",
-        y_label="Total kg CO\u2082e",
-    )
-
-    def _millions_formatter(x, _):
-        if abs(x) >= 1e6:
-            return f"{x / 1e6:,.1f}M"
-        if abs(x) >= 1e3:
-            return f"{x / 1e3:,.0f}k"
-        return f"{x:,.0f}"
-
-    axes[0].yaxis.set_major_formatter(mticker.FuncFormatter(_millions_formatter))
-
-    _draw_metric_over_time_on_axis(
+    draw_total_emissions(axes[0], monthly_category_data, emissions_col=emissions_col)
+    draw_emissions_per_diner(
         axes[1],
-        per_diner_plot_data,
-        title=f"Carbon Emissions per {diner_or_meal.title()} Over Time",
-        y_label=f"kg CO2e per {diner_or_meal.title()}",
+        monthly_category_data,
+        diner_meal_mapping,
+        emissions_col=emissions_col,
+        diner_or_meal=diner_or_meal,
     )
-
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     return fig
+
+
+_PLANT_COLOR = GBD_colors[2]
+_NON_PLANT_COLOR = GBD_colors[0]
 
 
 def _draw_share_bar_axis(
@@ -495,22 +553,20 @@ def _draw_share_bar_axis(
     title: str,
     primary_label: str,
     secondary_label: str,
-    primary_color: str,
-    secondary_color: str,
     xlabel: str,
 ) -> None:
-    """Draw a simple 100% stacked bar for a two-way share."""
+    """Draw a 100% stacked bar splitting plant from everything else."""
     ax.barh(
         [title],
         [share_pct],
-        color=primary_color,
+        color=_PLANT_COLOR,
         label=f"{primary_label} ({share_pct:.1f}%)",
     )
     ax.barh(
         [title],
         [100 - share_pct],
         left=[share_pct],
-        color=secondary_color,
+        color=_NON_PLANT_COLOR,
         label=f"{secondary_label} ({100 - share_pct:.1f}%)",
     )
     ax.set_xlim(0, 100)
@@ -529,24 +585,21 @@ def _draw_monthly_share_axis(
     value_column: str,
     title: str,
     y_label: str,
-    line_color: str,
     empty_message: str,
-) -> bool:
-    """Draw a monthly share trend or show a friendly fallback message."""
+) -> None:
+    """Draw a monthly plant share trend, or the unavailable state without one."""
     if (
         monthly is None
         or monthly.empty
         or "month_year" not in monthly.columns
         or value_column not in monthly.columns
     ):
-        ax.axis("off")
-        ax.text(0.5, 0.6, title, ha="center", va="center", fontsize=12, fontweight="bold")
-        ax.text(0.5, 0.42, empty_message, ha="center", va="center", fontsize=10, color="gray")
-        return False
+        _draw_unavailable(ax, title, empty_message)
+        return
 
     monthly_sorted = monthly.sort_values("month_year").copy()
     x_pos = range(len(monthly_sorted))
-    ax.plot(x_pos, monthly_sorted[value_column].values, marker="o", color=line_color)
+    ax.plot(x_pos, monthly_sorted[value_column].values, marker="o", color=_PLANT_COLOR)
     ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
     ax.set_ylim(0, 100)
     ax.set_ylabel(y_label)
@@ -554,7 +607,74 @@ def _draw_monthly_share_axis(
     ax.set_xticklabels(format_month_labels(monthly_sorted["month_year"]), rotation=45)
     add_grid(ax)
     set_title_font(ax, title)
-    return True
+
+
+def draw_plant_animal_split(
+    ax: plt.Axes,
+    plant_animal_split: dict[str, Any] | None,
+    *,
+    metric_label: str = "Kilos",
+) -> None:
+    """Plant-based against animal-based share of the whole period, as one stacked bar."""
+    title = "Plant vs. Animal Split"
+    if plant_animal_split is None:
+        _draw_unavailable(ax, title, "Plant/animal data was not available.")
+        return
+    _draw_share_bar_axis(
+        ax,
+        float(plant_animal_split["plant_pct"]),
+        title=title,
+        primary_label="Plant-based",
+        secondary_label="Animal-based",
+        xlabel=f"% of total {metric_label.lower()} (plant + animal categories only)",
+    )
+
+
+def draw_plant_share_by_month(ax: plt.Axes, plant_animal_split: dict[str, Any] | None) -> None:
+    """Plant-based share of plant + animal by month."""
+    _draw_monthly_share_axis(
+        ax,
+        plant_animal_split.get("monthly") if plant_animal_split else None,
+        value_column="plant_pct",
+        title="Plant-Based % by Month",
+        y_label="% plant-based",
+        empty_message="Monthly plant/animal data was not available.",
+    )
+
+
+def draw_plant_protein_share(
+    ax: plt.Axes,
+    plant_protein_share: dict[str, Any] | None,
+    *,
+    metric_label: str = "Kilos",
+) -> None:
+    """Plant protein against other protein for the whole period, as one stacked bar."""
+    title = "Plant Protein Share"
+    if plant_protein_share is None:
+        _draw_unavailable(ax, title, "Plant protein data was not available.")
+        return
+    _draw_share_bar_axis(
+        ax,
+        float(plant_protein_share["plant_protein_pct"]),
+        title=title,
+        primary_label="Plant protein",
+        secondary_label="Other protein",
+        xlabel=f"% of total {metric_label.lower()} in protein categories",
+    )
+
+
+def draw_plant_protein_share_by_month(
+    ax: plt.Axes, plant_protein_share: dict[str, Any] | None
+) -> None:
+    """Plant protein's share of all protein by month."""
+    _draw_monthly_share_axis(
+        ax,
+        plant_protein_share.get("monthly") if plant_protein_share else None,
+        value_column="plant_protein_pct",
+        title="Plant Protein % by Month",
+        y_label="% plant protein",
+        empty_message="Monthly plant protein data was not available.",
+    )
 
 
 def plot_plant_breakdown_overview(
@@ -563,103 +683,12 @@ def plot_plant_breakdown_overview(
     metric_label: str = "Kilos",
 ) -> Figure:
     """Combine the plant and protein share visuals into a single four-panel page."""
-    plant_color = GBD_colors[2] if len(GBD_colors) > 2 else "#4CAF50"
-    animal_color = GBD_colors[0] if GBD_colors else "#F44336"
-    other_color = GBD_colors[0] if GBD_colors else "#F44336"
-
     fig, axes = plt.subplots(2, 2, figsize=(13, 7.6))
     set_suptitle_font(fig, "Plant and Protein Breakdown", fontsize=16)
-
-    ax_bar = axes[0, 0]
-    if plant_animal_split is not None:
-        _draw_share_bar_axis(
-            ax_bar,
-            float(plant_animal_split["plant_pct"]),
-            title="Plant vs. Animal Split",
-            primary_label="Plant-based",
-            secondary_label="Animal-based",
-            primary_color=plant_color,
-            secondary_color=animal_color,
-            xlabel=f"% of total {metric_label.lower()} (plant + animal categories only)",
-        )
-    else:
-        ax_bar.axis("off")
-        ax_bar.text(
-            0.5,
-            0.6,
-            "Plant vs. Animal Split",
-            ha="center",
-            va="center",
-            fontsize=12,
-            fontweight="bold",
-        )
-        ax_bar.text(
-            0.5,
-            0.42,
-            "Plant/animal data was not available.",
-            ha="center",
-            va="center",
-            fontsize=10,
-            color="gray",
-        )
-
-    ax_trend = axes[0, 1]
-    plant_animal_monthly = plant_animal_split.get("monthly") if plant_animal_split else None
-    _draw_monthly_share_axis(
-        ax_trend,
-        plant_animal_monthly,
-        value_column="plant_pct",
-        title="Plant-Based % by Month",
-        y_label="% plant-based",
-        line_color=plant_color,
-        empty_message="Monthly plant/animal data was not available.",
-    )
-
-    ax_protein_bar = axes[1, 0]
-    if plant_protein_share is not None:
-        _draw_share_bar_axis(
-            ax_protein_bar,
-            float(plant_protein_share["plant_protein_pct"]),
-            title="Plant Protein Share",
-            primary_label="Plant protein",
-            secondary_label="Other protein",
-            primary_color=plant_color,
-            secondary_color=other_color,
-            xlabel=f"% of total {metric_label.lower()} in protein categories",
-        )
-    else:
-        ax_protein_bar.axis("off")
-        ax_protein_bar.text(
-            0.5,
-            0.6,
-            "Plant Protein Share",
-            ha="center",
-            va="center",
-            fontsize=12,
-            fontweight="bold",
-        )
-        ax_protein_bar.text(
-            0.5,
-            0.42,
-            "Plant protein data was not available.",
-            ha="center",
-            va="center",
-            fontsize=10,
-            color="gray",
-        )
-
-    ax_protein_trend = axes[1, 1]
-    plant_protein_monthly = plant_protein_share.get("monthly") if plant_protein_share else None
-    _draw_monthly_share_axis(
-        ax_protein_trend,
-        plant_protein_monthly,
-        value_column="plant_protein_pct",
-        title="Plant Protein % by Month",
-        y_label="% plant protein",
-        line_color=plant_color,
-        empty_message="Monthly plant protein data was not available.",
-    )
-
+    draw_plant_animal_split(axes[0, 0], plant_animal_split, metric_label=metric_label)
+    draw_plant_share_by_month(axes[0, 1], plant_animal_split)
+    draw_plant_protein_share(axes[1, 0], plant_protein_share, metric_label=metric_label)
+    draw_plant_protein_share_by_month(axes[1, 1], plant_protein_share)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     return fig
 
