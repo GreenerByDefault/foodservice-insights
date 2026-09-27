@@ -1,5 +1,6 @@
 """Emission factor lookup and carbon metric calculations."""
 
+from functools import cache
 from typing import Any, Literal, overload
 
 import pandas as pd
@@ -8,25 +9,20 @@ from gbd_foodservice_insights.categories import get_gbd_categories_metadata
 from gbd_foodservice_insights.report.quality import make_finding
 from gbd_foodservice_insights.report.schema import validate_region
 
-_EMISSION_FACTORS: dict[str, dict[str, float | None]] | None = None
 
-
+@cache
 def load_emission_factors() -> dict[str, dict[str, float | None]]:
     """Load emission factors from category metadata and cache results."""
-    global _EMISSION_FACTORS
-    if _EMISSION_FACTORS is not None:
-        return _EMISSION_FACTORS
-
     data = get_gbd_categories_metadata()
-    _EMISSION_FACTORS = {}
+    factors: dict[str, dict[str, float | None]] = {}
     for item in data["categories"]:
         name = item["cool_food_pledge_name"]
-        _EMISSION_FACTORS[name] = {
+        factors[name] = {
             "us": item.get("emission_factor_us"),
             "europe": item.get("emission_factor_europe"),
         }
 
-    return _EMISSION_FACTORS
+    return factors
 
 
 def get_emission_factor(category: str, region: str = "us") -> float | None:
