@@ -6,9 +6,9 @@ Every log line in both TypeScript apps is a `console.*` call, and none of it is 
 Node prints a context object across several lines, the worker puts ids inside the message string,
 and nothing ties a line to the request or worker that wrote it. This plan replaces that with
 one JSON object per line on stdout, from [pino](https://getpino.io) through `@gbd/core/log`, which
-already exists. It is the half of [`observability.md`](observability.md) § 2 that needs no vendor
-and no host. Stdout is the interface whatever that plan decides: every candidate host reads it, and
-the process never learns where its lines go (`ARCHITECTURE.md` § Images).
+already exists. It is the half of [`observability-vendors.md`](observability-vendors.md) § 2 that
+needs no vendor and no host. Stdout is the interface whatever that plan decides: every candidate
+host reads it, and the process never learns where its lines go (`ARCHITECTURE.md` § Images).
 
 The worker's PRs (1 and 2) and the web app's (3 and 4) are independent chains; either can go first.
 
@@ -149,8 +149,8 @@ This PR adds the lines that do not exist yet and fixes the levels of the ones th
   reach nowhere.
 - **Settle.** One line when a verdict is recorded, with the outcome and, for a failure, its
   `failure_reason`. The level is `info` for a success and `warn` for a failure. Alerting on
-  failures belongs to the metrics layer (`observability.md` § 4), so the level is for a person
-  scanning the log, not for a threshold.
+  failures belongs to the data alerts over the metrics views (`observability-vendors.md` § 4), so
+  the level is for a person scanning the log, not for a threshold.
 - **Progress.** An advance logs at `debug`: a bare counter says only that the child is alive.
 - **Outages.** The failure-streak rule from Decisions, as one helper shared by `pollQueue` and
   `startTicker` and cited from `absorb-or-fail`. `retryOnTransientDbError` logs at `warn`, and not
@@ -207,8 +207,8 @@ Mechanical, like PR 1.
   throws a 503, and at `debug` for a poll route. They also cover the header, and that a
   `withDbErrorHandling` failure inside a request carries that request's id (with `$app/server`
   mocked).
-- This PR deletes this plan, and turns `observability.md`'s pointers to it into pointers to
-  `@gbd/core/log`.
+- This PR deletes this plan, and turns `observability-vendors.md`'s pointers to it into pointers
+  to `@gbd/core/log`.
 
 ## Verification
 
