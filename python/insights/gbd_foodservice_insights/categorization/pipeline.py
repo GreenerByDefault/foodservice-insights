@@ -71,8 +71,9 @@ def categorize_unique_products(
 
     `df` needs product, date, and weight columns. Reads the packaged category cache when
     `historical_categorizations` is None. `cache_write_mode` picks where new categorizations
-    are appended: nowhere, the reviewed historical cache, or the unreviewed web-app cache.
-    `date_format=None` auto-detects the date format.
+    are appended: "none" (nowhere), "reviewed" (the reviewed historical cache), or
+    "web_app_unreviewed" (the unreviewed web-app cache). `date_format=None` auto-detects the
+    date format.
     """
     cache_write_mode = _validate_cache_write_mode(cache_write_mode)
 

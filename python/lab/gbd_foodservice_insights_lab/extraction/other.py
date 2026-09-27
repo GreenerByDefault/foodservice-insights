@@ -244,8 +244,9 @@ def extract_dates_from_sheet_filenames(
 ) -> pd.DataFrame:
     """Add a ``date`` column derived from filenames in a DataFrame (legacy alias).
 
-    Returns a copy. ``default_year`` applies to filenames that contain only a month;
-    ``date_format`` is an explicit ``strptime`` format tried first.
+    Returns a copy of ``df`` with the added ``date`` column. ``default_year`` applies to
+    filenames that contain only a month; ``date_format`` is an explicit ``strptime`` format
+    tried first.
     """
     _warn_function_use(
         "extract_dates_from_sheet_filenames",
@@ -373,9 +374,8 @@ def raw_data_report(
 ) -> str | tuple[str, RawDataFileReport]:
     """Print a raw-data report and return a data type classification (legacy alias).
 
-    ``return_dict`` also returns the discovered files. ``baseline_pilot`` is an optional
-    ``"baseline"`` / ``"pilot"`` marker, and ``base_filepath`` locates the matching dataset
-    to compare against.
+    ``return_dict`` also returns the discovered files. Only ``baseline_pilot="pilot"`` with a
+    ``base_filepath`` also compares against the matching baseline dataset.
     """
     _warn_function_use(
         "raw_data_report", "gbd_foodservice_insights_lab.extraction.tabular_inspection"

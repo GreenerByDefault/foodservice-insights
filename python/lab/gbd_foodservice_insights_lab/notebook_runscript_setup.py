@@ -495,8 +495,10 @@ def load_client_metadata(
 def setup_api_clients(
     openai: bool = False, whisper: bool = False, gemini: bool = False
 ) -> dict[str, Any]:
-    """Initialize the requested API clients, keyed ``openai_client``, ``whisper_client``, and
-    ``gemini_client``.
+    """Initialize the requested API clients.
+
+    The result holds only the requested clients, keyed ``openai_client``, ``whisper_client``,
+    or ``gemini_client``.
 
     Raises ``ValueError`` if a requested service's API key is not set in the environment.
     """

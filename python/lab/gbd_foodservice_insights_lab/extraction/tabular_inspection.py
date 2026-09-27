@@ -105,8 +105,8 @@ def identify_low_cardinality_columns(
 ) -> list[Any]:
     """Identify columns with low cardinality, print analysis details, and return ones to drop.
 
-    `threshold` is the maximum unique-value count for a column to qualify.
-    `exclude_categorical` skips object-dtype columns.
+    ``threshold`` is the maximum unique-value count for a column to qualify.
+    ``exclude_categorical`` skips object-dtype columns.
     """
     low_cardinality_cols: dict[Any, LowCardinalityDetails] = {}
 
@@ -571,9 +571,9 @@ def raw_data_report(
 ) -> str | tuple[str, RawDataFileReport]:
     """Print a raw-data report and return a data type classification.
 
-    `return_dict` also returns a dict of the discovered file paths. `baseline_pilot` is an
-    optional "baseline" / "pilot" marker that triggers a baseline-vs-pilot comparison, using
-    `base_filepath` to locate the matching dataset.
+    ``return_dict`` also returns a dict of the discovered file paths. Only
+    ``baseline_pilot="pilot"`` with a ``base_filepath`` also compares ``path`` against the
+    baseline's ``raw_data``, found by replacing "pilot" with "baseline" in ``base_filepath``.
     """
     base = Path(path)
 
@@ -943,8 +943,8 @@ def suggest_tabular_import_settings(
 ) -> dict[str, Any]:
     """Suggest likely header rows and skiprows values for CSV/Excel files in a directory.
 
-    `scan_rows` is how many leading rows are scored as header candidates. The result has
-    per-component suggestions and a recommended shared `skiprows` when one exists.
+    ``scan_rows`` is how many leading rows are scored as header candidates. The result has
+    per-component suggestions and a recommended shared ``skiprows`` when one exists.
     """
     base = Path(data_location)
     files = get_filtered_data_files(base, file_types=["csv", "excel"], recursive=recursive)
@@ -1136,8 +1136,9 @@ def suggest_column_roles(
 ) -> dict[str, Any]:
     """Suggest likely product, weight, date, and other key tabular columns.
 
-    `component_names` is currently unused but accepted for API consistency. Each role maps to
-    its best candidate column, a confidence, and the top scoring candidates.
+    ``component_names`` is currently unused but accepted for API consistency. The result's
+    ``"roles"`` dict maps each role to its best candidate column, a confidence, and the top three
+    scoring candidates.
     """
     del component_names
 
@@ -1205,9 +1206,10 @@ def suggest_date_source_and_coverage(
 ) -> dict[str, Any]:
     """Suggest the most likely date source and summarize observed period coverage.
 
-    `component_names` is used when falling back to filename-based date inference; ValueError if
-    its length differs from `dfs`. The result describes the chosen date source, confidence,
-    observed and missing periods, duplicates, and unparsed components.
+    ``component_names`` is used when falling back to filename-based date inference. Raises
+    ``ValueError`` if ``component_names`` and ``dfs`` differ in length. The result describes the
+    chosen date source, confidence, observed and missing periods, duplicates, and unparsed
+    components.
     """
     component_names = _component_names_from_inputs(dfs, component_names)
     sample_df = _combined_sample_for_roles(dfs)
@@ -1341,9 +1343,9 @@ def detect_component_duplicate_risk(
 ) -> dict[str, Any]:
     """Flag exact duplicate risk across component datasets before Step 1.
 
-    A duplicate-row share at or above `duplicate_share_threshold` sets the status to "warning";
-    ValueError if `component_names` and `dfs` differ in length. The result has duplicate
-    counts, per-source contributions, and pairwise overlap metrics.
+    A duplicate-row share at or above ``duplicate_share_threshold`` sets the status to
+    ``"warning"``. Raises ``ValueError`` if ``component_names`` and ``dfs`` differ in length. The
+    result has duplicate counts, per-source contributions, and pairwise overlap metrics.
     """
     component_names = _component_names_from_inputs(dfs, component_names)
 

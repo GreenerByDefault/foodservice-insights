@@ -543,7 +543,7 @@ async def use_async_context_manager() -> str:
 def openai_style_call(client: genai.Client, messages: list[dict[str, str]]) -> str:
     """Make a call similar to OpenAI's ``chat.completions.create()``.
 
-    Use this as a starting point when migrating from OpenAI. `messages` are dicts like
+    Use this as a starting point when migrating from OpenAI. ``messages`` are dicts like
     ``[{"role": "user", "content": "..."}]``.
     """
     # Extract system message if present
@@ -579,7 +579,7 @@ class GeminiWrapper:
     """
 
     def __init__(self, api_key: str | None = None) -> None:
-        """Initialize the wrapper; with no `api_key`, the client uses ``GEMINI_API_KEY``."""
+        """Initialize the wrapper; with no ``api_key``, the client uses ``GEMINI_API_KEY``."""
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
     def chat_completion(

@@ -312,9 +312,9 @@ def extract_dates_from_sheet_filenames(
 ) -> pd.DataFrame:
     """Extract dates from sheet or file names and add a ``date`` column.
 
-    Returns a copy of ``df``, with ``NaT`` where extraction failed. ``default_year`` applies
-    to filenames that contain only a month; ``date_format`` is an explicit ``strptime``
-    format tried first.
+    Returns a copy of ``df`` whose added ``date`` column is ``NaT`` where extraction failed.
+    ``default_year`` applies to filenames that contain only a month; ``date_format`` is an
+    explicit ``strptime`` format tried first.
 
     Raises ``ValueError`` if ``filename_column`` is missing, or if month-only filenames
     were found and no ``default_year`` was supplied.

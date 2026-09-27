@@ -42,8 +42,8 @@ def categorize_using_historical_classifications(
     """Match products against historical categorizations.
 
     `unique_products_df` needs a 'product' column; `historical_df` needs 'product' and
-    'category', and defaults to the cached history. Adds 'category' (from history or NaN) and a
-    boolean 'previously_categorized'.
+    'category', and defaults to the cached history. Returns `unique_products_df` with 'category'
+    (from history or NaN), a boolean 'previously_categorized', and 'match_type' added.
     """
     if historical_df is None:
         historical_df = get_previously_categorized_items()
@@ -82,8 +82,8 @@ def clean_product_names(
     Items already matched historically get their original name as the cleaned
     name.  Uncategorized items are cleaned via an LLM call.
 
-    `products_df` needs 'product', 'category', and 'previously_categorized'; adds
-    'cleaned_item_names'.
+    `products_df` needs 'product', 'category', and 'previously_categorized'. Returns a copy with
+    'cleaned_item_names' added.
     """
     products_df = products_df.copy()
     mask_needs_cleaning = products_df["category"].isna()
@@ -182,7 +182,9 @@ def categorize_with_llm(
 ) -> pd.DataFrame:
     """Apply LLM-based categorization to products not matched historically.
 
-    `products_df` needs 'category' and 'cleaned_item_names'.
+    `products_df` needs 'category' and 'cleaned_item_names'. Returns a copy with 'category'
+    filled for uncategorized rows; any category that is not a GBD category becomes
+    "No Matches Found".
     """
     products_df = products_df.copy()
     gbd_categories = get_GBD_categories()
@@ -314,7 +316,11 @@ def merge_categorizations(
     original_df: pd.DataFrame,
     categorized_products_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, MergeCounts]:
-    """Merge categorizations back to the cleaned input data and filter it for aggregation."""
+    """Merge categorizations back to the cleaned input data and filter it for aggregation.
+
+    Drops "No Matches Found" rows and the intermediate categorization columns. Raises
+    UnusableDataError if fewer than 20% of products survive.
+    """
     n_rows_before = len(original_df)
     n_products_before = original_df["product"].nunique()
 

@@ -85,11 +85,11 @@ def extract_weight_units_pipeline(
     "1 lb 4 oz", or "500ml bottle". `weight_extraction_instructions` of None uses the default
     prompt from file.
 
-    The returned DataFrame is a mapping table, not `df` with merged columns, sorted for review:
-    `original_unit`, `llm_cleaned_unit` (e.g. "oz", "lb", "ml"), `llm_extracted_weight`,
-    `example_products` (up to 5), and `previously_classified`. The stats dict has `total_units`,
-    `nan_units`, `unknown_units` ("Unknown or unusable"), `nan_weights`, `previously_classified`,
-    and `success_rate` (a percentage).
+    Returns a mapping table (not `df` with merged columns) with columns `original_unit`,
+    `llm_cleaned_unit` (e.g. "oz", "lb", "ml"), `llm_extracted_weight`, `example_products` (up
+    to 5), and `previously_classified`. The table is sorted for review, with new units first.
+    The stats dict has `total_units`, `nan_units`, `unknown_units` ("Unknown or unusable unit"),
+    `nan_weights`, `previously_classified`, and `success_rate` (a percentage).
 
     Typical workflow:
         >>> weights, stats = extract_weight_units_pipeline(df, "pack_size", client)
@@ -180,7 +180,8 @@ def _build_unit_mapping(
     """Builds a mapping from original units to cleaned units and extracted weights using an LLM.
 
     `df` is the original DataFrame, sampled for product names. The result has columns
-    'original_unit', 'llm_cleaned_unit', 'llm_extracted_weight', and 'example_products'.
+    'original_unit', 'llm_cleaned_unit', 'llm_extracted_weight', 'example_products', and
+    'previously_classified'.
     """
     # Validate input columns
     if units_column not in df.columns:
@@ -351,7 +352,8 @@ def create_unclear_items_csv(
 
     Unclear items are those where 'llm_cleaned_unit' is missing or "Unknown or unusable unit",
     or 'llm_extracted_weight' is missing. `client_name` goes in the filename; `output_dir` of
-    None saves in the current directory.
+    None saves in the current directory. Returns a "Saved unclear items to <path>" message, not
+    the bare path.
     """
     # Validate input columns
     required_cols = ["llm_cleaned_unit", "llm_extracted_weight"]
@@ -477,7 +479,9 @@ def convert_products_to_kilograms(
 ) -> pd.DataFrame:
     """Converts weights to kilograms, using product-category densities for volume units.
 
-    Units look like 'kg', 'oz', or 'cup'. Returns `df` with an added 'kilos' column.
+    `unit_column_name` holds units like 'kg', 'oz', or 'cup'. Returns a copy of `df` with an
+    added 'kilos_total' column. Raises ValueError if any of the three columns has NaNs, and
+    AssertionError if any row can't be converted.
     """
     # Validate input columns
     for col in [unit_column_name, weight_column_name, category_column_name]:
@@ -547,9 +551,9 @@ def classify_units_using_historical_weights(
 ) -> tuple[pd.DataFrame, dict[str, int | float]]:
     """Classifies unit strings using a historical list of weight classifications.
 
-    Merges 'llm_cleaned_unit' and 'llm_extracted_weight' from the historical data into
-    `unit_mapping_df` by 'original_unit', and adds a 'previously_classified' column that is True
-    where the unit was found. The stats dict has 'total_units', 'matched_units',
+    Returns a copy of `unit_mapping_df` with 'llm_cleaned_unit' and 'llm_extracted_weight' filled
+    from the historical data by 'original_unit', plus a 'previously_classified' column that is
+    True where the unit was found. The stats dict has 'total_units', 'matched_units',
     'unmatched_units', 'match_percentage', and 'unmatch_percentage'.
     """
     # Validate input columns
@@ -704,7 +708,7 @@ def _extract_weight_unit_from_product_name(
 ) -> dict[str, str | None]:
     """Attempts to extract both weight and unit from a product name using LLM.
 
-    Values are None where extraction failed.
+    Returns a dict with 'cleaned_unit' and 'extracted_weight', each None where extraction failed.
     """
     result = {"cleaned_unit": None, "extracted_weight": None}
 

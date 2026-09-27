@@ -28,10 +28,12 @@ def _load_and_concat_data(
     """Load a sheet from the baseline and pilot Excel files and combine them.
 
     By default the frames are concatenated with a ``period`` column of ``"baseline"`` or
-    ``"pilot"``; ``merge_on_category`` instead inner-joins them on ``category``.
-    ``drop_total_column`` drops the ``total`` column, ``drop_total_row`` drops rows where a
-    column equals ``"total"``, and ``validate_months`` checks both periods have the same
-    number of months.
+    ``"pilot"``; ``merge_on_category`` instead inner-joins them on ``category`` and ignores
+    ``drop_total_row`` and ``validate_months``. ``drop_total_column`` drops the ``total``
+    column. ``drop_total_row`` assumes transposed data: it renames ``index`` and ``0`` to
+    ``month_year`` and ``diner-meals``, then drops the ``month_year == "total"`` row.
+    ``validate_months`` asserts both periods have the same number of unique ``month_year``
+    values.
     """
     baseline_data = pd.read_excel(baseline_input_file, sheet_name=sheet_name)
     pilot_data = pd.read_excel(pilot_input_file, sheet_name=sheet_name)
@@ -749,10 +751,11 @@ def calculate_monthly_plant_animal_split(monthly_category_data: pd.DataFrame) ->
     """Calculate the percentage of plant-based protein vs animal protein for each month.
 
     ``monthly_category_data`` needs ``category``, ``month_year``, and ``kilos_total``
-    columns. Returns ``month_year`` (formatted like ``Jan-2024``), ``period``,
-    ``plant_kilos``, ``animal_kilos``, ``total_kilos`` (rounded to integers),
-    ``plant_percentage``, and ``animal_percentage`` (one decimal place). Raises
-    ``ValueError`` if the data contains categories not defined in the GBD categories YAML.
+    columns. Returns a DataFrame with ``month_year`` (formatted like ``Jan-2024``), ``period``,
+    ``plant_kilos``, ``animal_kilos``, ``total_kilos``, ``plant_percentage``, and
+    ``animal_percentage`` columns; kilos are rounded to integers and percentages to one
+    decimal place. Raises ``ValueError`` if the data contains categories not defined in the
+    GBD categories YAML.
     """
     # Get valid protein and animal categories from YAML (lowercase for comparison)
     valid_gbd_categories = set(get_GBD_categories(lowercase=True))

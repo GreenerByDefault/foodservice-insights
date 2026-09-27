@@ -2603,19 +2603,23 @@ def markdown_to_df(
     desired_columns: list[str] | None = None,
     debug: bool = True,
 ) -> pd.DataFrame:
-    """Convert a Markdown table string into a cleaned DataFrame.
+    """Convert a Markdown table string into a cleaned DataFrame with lowercased column names.
 
     Cleaning steps, in order:
-    1. Read with ``|`` as the separator and strip column names.
-    2. If `product_name_column` exists: assert it is at most 10% null, cast it to str, and
-       drop rows containing ``---`` (Markdown separator lines).
-    3. Drop all-null columns.
-    4. If `desired_columns` is given: assert all are present, then subset to them.
-    5. Strip whitespace from string cells.
+    1. Read with ``|`` as the separator, strip and lowercase column names, and drop
+       ``unnamed:*`` columns.
+    2. Strip whitespace from string cells.
+    3. If `product_name_column` exists (case-insensitive): assert it is under 10% null, cast
+       it to str, and drop rows where it is only dashes (Markdown separator lines).
+    4. Drop all-null columns.
+    5. If `desired_columns` is given: assert all are present (case-insensitive), then subset
+       to them.
     6. Convert `numeric_columns` to numeric, removing commas first ("1,000" -> "1000");
        unconvertible values become NaN.
+    7. Drop all-null rows.
 
-    `debug` prints messages such as columns being dropped or converted.
+    Raises ``AssertionError`` if the table is empty before or after cleaning. `debug` prints
+    messages such as columns being dropped or converted.
     """
 
     pulled_data = pd.read_csv(
@@ -2743,8 +2747,9 @@ def find_most_deviating_file_page_combos(
     ranks each ``original_file`` x ``page`` by absolute distance from that PDF's median row
     count, largest first. `page_file_counts` needs ``original_file``, ``page``, and
     ``row_count``; ``median_row_count`` and ``deviation_from_pdf_median`` are computed if
-    missing. Last pages are excluded by default because they are often naturally shorter, and
-    zero-deviation rows are dropped by default so the output focuses on actual spikes or dips.
+    missing. `exclude_last_page` drops each PDF's last page, which is often naturally shorter.
+    Rows with zero deviation are dropped unless `include_zero_deviation` is set, so the output
+    focuses on actual spikes or dips.
     """
     required_columns = {"original_file", "page", "row_count"}
     missing_columns = required_columns.difference(page_file_counts.columns)
@@ -2919,8 +2924,8 @@ def every_pdf_page_extracted_check(pdf_full_path: str | Path, debug: bool = True
     """Assert that every page of a PDF has a corresponding extracted CSV; return ``True`` if so.
 
     Looks for `extracted_pages/{pdf_stem}_page_{page_number}_extracted.csv` beside the PDF. A
-    page without one still counts when its metadata sidecar records no table or a skip. Raises
-    ``FileNotFoundError`` if the PDF does not exist.
+    page without one still counts when its metadata sidecar's status is ``"no_table_detected"``
+    or ``"skipped_existing"``. Raises ``FileNotFoundError`` if the PDF does not exist.
     """
 
     pdf_path_obj = Path(pdf_full_path)
@@ -3046,10 +3051,11 @@ def check_high_duplicate_pages(df: pd.DataFrame, product_name_col: str) -> pd.Da
 def check_extraction_by_page(data: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     """Identify pages with potentially abnormal mean row counts across all extracted PDF data.
 
-    Averages row counts per page number across files to spot missed data (too few rows) or
-    duplicates (too many), plots mean row count by page number, and returns the `n` highest
-    and `n` lowest pages as 'page' and 'mean_count' (all pages, sorted, if there are fewer
-    than ``2 * n``). `data` needs a numeric 'page' column and an 'original_file' column.
+    Averages row counts per page number across files, to spot missed data (too few rows) or
+    duplicates (too many), and plots mean row count by page number. Returns a DataFrame with
+    'page' and 'mean_count' columns, sorted by 'mean_count' descending: the `n` highest and
+    `n` lowest pages, or every page if there are at most ``2 * n``. `data` needs a numeric
+    'page' column and an 'original_file' column.
     """
     # Count rows per page per file, then calculate mean across files
     page_file_counts = (

@@ -18,8 +18,10 @@ def build_ai_review_table(
     """Build a product-level human-review table for AI-categorized items only.
 
     `original_df` is the cleaned input rows, with a 'product' column; `unique_products_df` needs
-    'product', 'category', and 'previously_categorized'. Returns columns 'category', 'product',
-    'occurrence_count', sorted by category ASC, occurrence_count DESC, product ASC.
+    'product', 'category', and 'previously_categorized'.
+
+    The returned table has columns 'category', 'product', and 'occurrence_count', sorted by
+    category ASC, occurrence_count DESC, product ASC.
     """
     required_original_cols = {"product"}
     required_unique_cols = {"product", "category", "previously_categorized"}

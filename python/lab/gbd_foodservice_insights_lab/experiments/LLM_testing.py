@@ -36,9 +36,9 @@ def match_items_items_to_GBD_categories_challenger(item: str, client: Any = None
 def test_new_categorization_LLM(n_test_samples: int = 100) -> None:
     """Test a challenger LLM categorization pipeline against previously categorized items.
 
-    Samples data and applies the challenger's cleaning and categorization functions; the
-    comparison and saving discrepancies to CSV are currently commented out. Raises
-    ``ValueError`` if 'previously_categorized_items.csv' is empty.
+    Samples ``n_test_samples`` items that have a cleaned name, runs the challenger categorizer
+    on them, and prints the share of results that are GBD categories and that match the true
+    category. Raises ``ValueError`` if fewer than ``n_test_samples`` items have a cleaned name.
     """
 
     # Load the previously categorized items

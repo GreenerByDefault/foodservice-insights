@@ -119,7 +119,8 @@ def set_ylim_with_padding(ax: plt.Axes, data: pd.Series, padding: float = 0.2) -
     """Set y-axis limits with padding above and below the data range. We do this to give the graph
     better perspective.
 
-    `padding` is a fraction of the range.
+    The lower limit is scaled by `1 - padding` and the upper by `1 + padding`, so the padding is
+    relative to each limit's value, not the range; this assumes positive data.
     """
     ymin, ymax = data.min(), data.max()
     ax.set_ylim(ymin * (1 - padding), ymax * (1 + padding))
@@ -211,8 +212,8 @@ def calculate_figure_height_for_wrapped_labels(
     """Calculate appropriate figure height for plots with wrapped labels.
 
     This function estimates the needed figure height based on the number of items
-    and the maximum number of lines in wrapped labels. Heights are in inches; `base_height` is
-    the minimum.
+    and the maximum number of lines in wrapped labels. The returned height is in inches and is
+    never below `base_height`.
     """
     wrapped = wrap_labels(labels, max_width)
     max_lines = max((label.count("\n") + 1) for label in wrapped) if wrapped else 1

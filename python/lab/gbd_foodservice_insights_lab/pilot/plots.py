@@ -117,10 +117,13 @@ def plot_category_trends(
 ) -> plt.Figure:
     """Plot line graphs showing category trends over time, with separate plots for each category.
 
+    Each subplot shows the % deviation from that category's mean, not raw kilos.
+
     `monthly_category_data` needs 'month_year', 'category', and either 'kilos per diner-meal'
-    (when `per_diner_meal`) or 'kilos_total' (otherwise), plus 'period' when
-    `compare_baseline_pilot`; without it, a single period (baseline only) is plotted.
-    `diner_or_meal` is "diner", "meal", or "diner-meal" and customizes title and y-axis labels.
+    (when `per_diner_meal` is True) or 'kilos_total' (when it is False). It also needs 'period'
+    when `compare_baseline_pilot` is True. With `compare_baseline_pilot=False`, all rows are
+    plotted as a single baseline period. `diner_or_meal` ("diner", "meal", or "diner-meal") only
+    changes the overall title.
     """
     data = monthly_category_data.copy()
 
@@ -266,9 +269,9 @@ def _plot_baseline_pilot_split(
     """Plot stacked horizontal bars of plant vs animal percentages for baseline and pilot periods.
 
     Shared by plot_plant_animal_split() and plot_milk_split(). `plant_percentages` has period as
-    index and plant percentage as values. Labels are e.g. 'Plant-Based' / 'Animal' or
-    'Plant-Based Milk' / 'Dairy Milk'. Returns None when `plant_percentages` is None and
-    `allow_none` is True.
+    index and plant percentage as values. `plant_label` and `animal_label` are e.g. 'Plant-Based'
+    and 'Animal', or 'Plant-Based Milk' and 'Dairy Milk'. Returns None when `plant_percentages`
+    is None and `allow_none` is True.
     """
     if plant_percentages is None:
         if allow_none:
@@ -407,10 +410,12 @@ def plot_kilos_over_time(
     """Plot total kilos or kilos per diner-meal over time, baseline-only or baseline vs pilot.
 
     `monthly_category_data` needs 'month_year', 'kilos_total', and 'category', plus 'period' when
-    `compare_baseline_pilot`. `per_diner_meal` divides kilos by diner-meal count, which needs
-    `diner_meal_data` (columns 'month_year', 'diner-meals', 'period') when comparing periods, or
-    `diner_meal_mapping` (month_year to diner-meal count) otherwise; ValueError if the one needed
-    is missing. `title` of None picks a default for the mode.
+    `compare_baseline_pilot` is True.
+
+    With `per_diner_meal`, kilos are divided by the diner-meal count. That needs `diner_meal_data`
+    (columns 'month_year', 'diner-meals', 'period') when `compare_baseline_pilot` is True, or
+    `diner_meal_mapping` (month_year to diner-meal count) when it is False. A ValueError is
+    raised if the needed one is None. `title` of None picks a default for the mode.
     """
     if compare_baseline_pilot:
         # Baseline + Pilot comparison mode
@@ -1115,9 +1120,10 @@ def plot_category_per_diner_by_month(
 ) -> plt.Figure:
     """DEPRECATED: removed. Use ``plot_category_trends(monthly_category_data)``.
 
-    `plot_category_trends` takes no diner-meal data and no `category_type`: add a
-    'kilos per diner-meal' column to `monthly_category_data` first, and filter its categories
-    yourself.
+    `plot_category_trends` takes no diner-meal data and no `category_type`. Before calling it,
+    add a 'kilos per diner-meal' column to `monthly_category_data` (each row's 'kilos_total'
+    divided by that month and period's 'diner-meals'), and filter it to the food or drink
+    categories you want.
     """
     warnings.warn(
         (

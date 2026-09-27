@@ -207,7 +207,8 @@ def check_GBD_categories(df: pd.DataFrame) -> None:
     Logs a warning when the 'category' column is missing or holds non-GBD categories, and an
     info message listing GBD categories (or "No Matches Found") absent from the data.
 
-    Categories are compared case-insensitively (lowercase is acceptable).
+    Only the non-GBD check is case-insensitive (lowercase is acceptable); the list of missing
+    categories is compared case-sensitively.
     """
     if "category" not in df.columns:
         logger.warning("'category' column not found in DataFrame.")

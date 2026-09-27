@@ -132,8 +132,9 @@ def write_run_manifest(
     without parsing logs or opening the client artifacts. The manifest is an
     internal run summary, not a client-facing deliverable.
 
-    Timestamps are ISO-format; ``run_status`` is e.g. ``"success"`` or ``"failed"``; ``mode`` is
-    ``"procurement"`` or ``"serving"``. ``metadata_context`` is a client-metadata snapshot that
+    Timestamps are ISO-format; ``run_status`` is e.g. ``"success"`` or ``"failed"``. ``mode`` is
+    normally ``"procurement"`` or ``"serving"``, but a failed run may record the raw requested
+    mode or ``"unknown"``. ``metadata_context`` is a client-metadata snapshot that
     seeds ``client_metadata_context``. Returns the manifest's absolute path.
     """
     manifest_path = str(Path(manifest_path).resolve())

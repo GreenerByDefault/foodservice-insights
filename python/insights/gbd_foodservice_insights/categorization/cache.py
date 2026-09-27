@@ -111,7 +111,8 @@ def _empty_historical_cache() -> pd.DataFrame:
 def get_previously_categorized_items() -> pd.DataFrame:
     """Load the previously categorized items from the cache CSV.
 
-    Has at least 'product' and 'category' columns.
+    The returned DataFrame has at least 'product' and 'category' columns, and is empty when the
+    CSV is missing.
     """
     path = _historical_cache_path()
     if not path.exists():

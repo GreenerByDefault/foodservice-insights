@@ -55,7 +55,7 @@ def create_title_page(
 ) -> None:
     """Render a branded title page in the PDF.
 
-    `baseline_pilot` is the phase, e.g. ``"baseline"`` or ``"pilot"``.
+    ``baseline_pilot`` is the phase, e.g. ``"baseline"`` or ``"pilot"``.
     """
     fig, ax = _new_text_figure(fig_size)
     ax.text(
@@ -476,7 +476,10 @@ def create_decision_kpis_page(
     dataframe: pd.DataFrame,
     fig_size: tuple[float, float] = (8.5, 11),
 ) -> None:
-    """Render the decision KPI, a one-row DataFrame, as a narrative text page."""
+    """Render the decision KPI as a narrative text page.
+
+    ``dataframe`` is one row of decision-KPI fields.
+    """
     fig, ax = _new_text_figure(fig_size)
 
     ax.text(
