@@ -301,7 +301,7 @@ describe('CodeStep', () => {
     expect(auth.verifyOtp).not.toHaveBeenCalled();
   });
 
-  test('a rejected resend reports it and leaves the button ready to try again', async () => {
+  test('a rate-limited resend re-arms the cooldown instead of leaving the button live under it', async () => {
     vi.useFakeTimers();
     const auth = fakeBrowserAuth();
     auth.signInWithOtp.mockResolvedValue({
@@ -317,7 +317,10 @@ describe('CodeStep', () => {
     await expect
       .element(screen.getByRole('alert'))
       .toHaveTextContent('Too many codes requested. Wait a minute, then try again.');
-    await expect.element(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+    // Re-armed, not left clickable: the error just said to wait, so the button has to agree.
+    await expect
+      .element(screen.getByRole('button', { name: `Send a new code in ${RESEND_COOLDOWN_S}s` }))
+      .toBeDisabled();
   });
 
   describe('one request at a time', () => {

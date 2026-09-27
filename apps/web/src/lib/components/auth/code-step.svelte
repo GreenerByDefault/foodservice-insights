@@ -29,7 +29,9 @@ type VerificationState =
   | { status: 'stalled' };
 
 type ResendState =
-  | { status: 'waiting'; remainingSeconds: number }
+  /** `message` is set when this cooldown was re-armed by a rate-limit failure, so the reason for
+   * the wait stays on screen instead of disappearing the instant the button re-enables. */
+  | { status: 'waiting'; remainingSeconds: number; message?: string }
   | { status: 'ready' }
   | { status: 'sending' }
   | { status: 'failed'; message: string };
@@ -63,6 +65,10 @@ function isResending(state: ResendState): boolean {
   return state.status === 'sending';
 }
 
+function resendStateMessage(state: ResendState): string | undefined {
+  return state.status === 'failed' || state.status === 'waiting' ? state.message : undefined;
+}
+
 /** One lock across both requests. A resend that lands during a verify resets the step over the
  * outcome the verify is about to write, and one after a verify re-enables a field whose code is
  * spent. */
@@ -71,6 +77,7 @@ const isLocked = $derived(isVerifying(verificationState) || isResending(resendSt
  * both a way out, and without them a sign-in the server keeps refusing has none. */
 const isCodeLocked = $derived(isLocked || isStalled(verificationState));
 const hasFullCode = $derived(code.length === OTP_LENGTH);
+const resendErrorMessage = $derived(resendStateMessage(resendState));
 
 // Read through a `$derived` rather than from `resendState` directly: the effect would otherwise
 // depend on the whole of `resendState` and tear its own interval down and back up on every tick.
@@ -83,7 +90,11 @@ $effect(() => {
     resendState =
       resendState.remainingSeconds <= 1
         ? { status: 'ready' }
-        : { status: 'waiting', remainingSeconds: resendState.remainingSeconds - 1 };
+        : {
+            status: 'waiting',
+            remainingSeconds: resendState.remainingSeconds - 1,
+            message: resendState.message,
+          };
   }, 1000);
   return () => clearInterval(interval);
 });
@@ -159,12 +170,14 @@ async function resendCode() {
 
   resendState = { status: 'sending' };
   let errorMessage: string | null;
+  let errorCode: string | null | undefined;
   try {
     // Passes `shouldCreateUser: false`, unlike the first send: reaching this step already proved
     // the account exists (see email-step.svelte), so needing to create one here would be a bug,
     // not a normal resend.
     const { error } = await auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     errorMessage = error && describeAuthError(error);
+    errorCode = error?.code;
   } catch (cause) {
     console.error('Could not resend a sign-in code', cause);
     errorMessage = describeAuthError({});
@@ -172,7 +185,12 @@ async function resendCode() {
   if (!isMounted) return;
 
   if (errorMessage) {
-    resendState = { status: 'failed', message: errorMessage };
+    // A rate limit means the wait was too short, so it re-arms the same cooldown rather than
+    // leaving the button clickable right under an error telling the visitor to wait.
+    resendState =
+      errorCode === 'over_email_send_rate_limit'
+        ? { status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S, message: errorMessage }
+        : { status: 'failed', message: errorMessage };
     return;
   }
   code = '';
@@ -262,6 +280,6 @@ async function resendCode() {
   </Button>
 </div>
 
-{#if resendState.status === 'failed'}
-  <p role="alert" class="text-sm text-destructive">{resendState.message}</p>
+{#if resendErrorMessage}
+  <p role="alert" class="text-sm text-destructive">{resendErrorMessage}</p>
 {/if}
