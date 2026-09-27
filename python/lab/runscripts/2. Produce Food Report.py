@@ -3,7 +3,7 @@
 Food Report CLI Script
 ======================
 
-Thin CLI wrapper around gbd_foodservice_insights.report.pipeline.run_food_report().
+Thin CLI wrapper around gbd_foodservice_insights_lab.food_report.pipeline.run_food_report().
 
 Reads a categorized CSV and a diner-meals JSON file, calculates carbon
 emissions, runs diagnostics and aggregation, and produces a client-facing
@@ -22,7 +22,7 @@ Usage (from a client data directory):
         --top-n 10
 
 Programmatic usage:
-    from gbd_foodservice_insights.report.pipeline import run_food_report
+    from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
     results = run_food_report(
         input_file="categorized_data.csv",
@@ -34,10 +34,9 @@ Programmatic usage:
 
 import argparse
 import logging
-from pathlib import Path
 
-from gbd_foodservice_insights.report.pipeline import run_food_report
 from gbd_foodservice_insights.utils import rel_path
+from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
 logger = logging.getLogger("gbd_foodservice_insights.food_report_cli")
 
@@ -147,22 +146,9 @@ def main() -> None:
     )
     logger.info("Region:      %s", args.region)
 
-    # Resolve input path: use explicit arg or auto-detect from metadata
-    input_file = args.input
-    if input_file is None:
-        import json
-
-        meta_path = Path.cwd() / "client_metadata.json"
-        if not meta_path.exists():
-            raise FileNotFoundError("No --input provided and no client_metadata.json in cwd")
-        with open(meta_path) as f:
-            input_file = json.load(f).get("report_input_file")
-        if not input_file:
-            raise ValueError("No --input provided and 'report_input_file' not in metadata")
-        logger.info("Auto-detected input: %s", input_file)
-
+    # `run_food_report` auto-detects `--input` from `client_metadata.json` when it's omitted.
     results = run_food_report(
-        input_file=input_file,
+        input_file=args.input,
         diner_meal_file=args.diner_meals,
         output_dir=args.output_dir,
         procurement_serving=args.procurement_serving,

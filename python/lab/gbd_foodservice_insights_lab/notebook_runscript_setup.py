@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import pandas as pd
-from gbd_foodservice_insights.report import artifacts as report_artifacts
 from google import genai
 from openai import OpenAI
 from unstract.llmwhisperer import LLMWhispererClientV2
 
 from gbd_foodservice_insights_lab import PACKAGE_DIR
+from gbd_foodservice_insights_lab.food_report import artifacts as report_artifacts
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,10 @@
 """The data scientists' food report: reads a categorized CSV and writes the full bundle.
 
-The report itself is built by `food_report.build_food_report` and `build_report_charts`, and its
-two deliverables by `pdf.write_report_pdf` and `excel.write_client_workbook`. This wrapper adds
-the file handling around them and the rest of the bundle: chart PNGs, the QA workbook, the run
-manifest, the run log, and the write-back into `client_metadata.json`.
+The report itself is built by the product's `food_report.build_food_report` and
+`build_report_charts`, and its two deliverables by `pdf.write_report_pdf` and
+`excel.write_client_workbook`. This wrapper adds the file handling around them and the rest of
+the bundle, all lab-only: chart PNGs, the QA workbook, the run manifest, the run log, and the
+write-back into `client_metadata.json`.
 """
 
 from __future__ import annotations
@@ -16,15 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
-from gbd_foodservice_insights.report import (
-    artifacts,
-    diagnostics,
-    excel,
-    pdf,
-    plots,
-    run_logging,
-)
+from gbd_foodservice_insights.report import diagnostics, excel, pdf
 from gbd_foodservice_insights.report.food_report import (
     Finding,
     FoodReport,
@@ -45,7 +38,11 @@ from gbd_foodservice_insights.report.schema import (
     validate_missing_data_policy,
     validate_region,
 )
-from gbd_foodservice_insights.report.utils import load_diner_meal_mapping_from_json
+
+from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging
+from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
+from gbd_foodservice_insights_lab.food_report import excel as qa_excel
+from gbd_foodservice_insights_lab.food_report.utils import load_diner_meal_mapping_from_json
 
 logger = logging.getLogger(__name__)
 
@@ -395,11 +392,11 @@ def _write_qa_workbook(
     df = report.rows
     data_profile_df = None
     try:
-        data_profile_df = diagnostics.summarise_numeric_columns(df)
+        data_profile_df = qa_diagnostics.summarise_numeric_columns(df)
     except Exception as exc:
         logger.warning("Could not compute data profile: %s", exc)
 
-    return excel.build_qa_excel_report(
+    return qa_excel.build_qa_excel_report(
         output_path=path,
         raw_df=df,
         monthly_product_data=report.aggregation["monthly_product_data"],

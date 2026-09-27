@@ -2,31 +2,32 @@
 
 ## Context
 
-`run_food_report` (`report/pipeline.py`) was written for a data scientist running one client at
-a time. It reads a CSV, finds `client_metadata.json` beside it, names its outputs after the
-file's stem, and writes a seven-part bundle: the PDF, the client workbook, a QA workbook, a
-300-dpi PNG of every chart, a manifest, a run log, and a write-back into the metadata.
+`run_food_report` (now `gbd_foodservice_insights_lab.food_report.pipeline.run_food_report`) was
+written for a data scientist running one client at a time. It reads a CSV, finds
+`client_metadata.json` beside it, names its outputs after the file's stem, and writes a
+seven-part bundle: the PDF, the client workbook, a QA workbook, a 300-dpi PNG of every chart, a
+manifest, a run log, and a write-back into the metadata.
 
-The in-memory core now exists. `report/food_report.py` holds `build_food_report`, which runs
-every stage from ingestion through diagnostics with no files and no log handlers, and
+The in-memory core lives in the product. `report/food_report.py` holds `build_food_report`,
+which runs every stage from ingestion through diagnostics with no files and no log handlers, and
 `build_report_charts`. `pdf.write_report_pdf` and `excel.write_client_workbook` write the two
 deliverables. `analyze()` calls those four directly on its categorized DataFrame and writes
-`report.pdf` and `report.xlsx` straight into `output_directory`, so `work_directory` goes unused
-(it stays on the seam because the run-directory layout is contract). `run_food_report` composes
-the same four, then writes the rest of the bundle itself; nothing in the product calls it any
-more, only its own tests and the lab's step 2 runscript.
+`report.pdf` and `report.xlsx` straight into `output_directory`. The lab's
+`gbd_foodservice_insights_lab.food_report.pipeline.run_food_report` composes the same four, then
+writes the rest of the bundle itself; nothing in the product calls it any more, only its own
+tests and the lab's step 2 runscript.
 
 `tests/test_analysis.py::test_analyze_golden_deliverables` goes through `analyze()`, the one path
 that survives every PR here. It records what `pdf.build_pdf_report` is handed (title info,
 summary stats, narrative, tables, findings, chart titles) and every client-workbook sheet, and
 compares them with `tests/data/analysis_golden.json`; `UPDATE_GOLDEN=1` rewrites the fixture. It
-must pass unchanged through both remaining PRs.
+must pass unchanged through the remaining PR.
 
 The split: the product keeps an in-memory core that turns categorized rows into a report and
 writes the two deliverables, and the lab owns the file-reading wrapper and the rest of the
-bundle. It is the boundary `entree-detection-to-lab.md` draws for `categorize_file`, so once
-both land the product exposes `categorize_products` and `build_food_report`, and the lab owns
-every file wrapper.
+bundle. It is the boundary `entree-detection-to-lab.md` draws for `categorize_file`, so now that
+both have landed, the product exposes `categorize_products` and `build_food_report`, and the lab
+owns every file wrapper.
 
 Nothing outside tests reads the graphs, QA workbook, manifest, log or metadata write-back; the
 step 2 runscript only prints their paths. They are for people, and the people are in the lab.
@@ -34,8 +35,8 @@ step 2 runscript only prints their paths. They are for people, and the people ar
 What moving `analyze()` off the bundle bought, on synthetic procurement data (30k rows, 2k
 products, offline LLM): the report stage went from about 10.3 s to 3.7 s, mostly the PNG export
 and the QA workbook, which writes every raw row through openpyxl and so grows with the upload.
-Those slow runs now happen only in `run_food_report`'s own tests, so moving them to the lab
-makes `just test` faster.
+Those slow runs now happen only in `run_food_report`'s own tests, so moving them to the lab made
+`just test` faster.
 
 ## Decisions
 
@@ -64,7 +65,10 @@ makes `just test` faster.
   - `pdf.write_report_pdf(report, charts, path, *, client_name, baseline_pilot,
     show_quality_successes) -> None`. The PDF-table formatters and the executive narrative live
     in `pdf.py` beside it.
-  - `excel.write_client_workbook(report, path) -> None`.
+  - `excel.write_client_workbook(report, path) -> None`. `excel.py` also exposes
+    `write_excel_workbook(output_path, sheets)`, the shared sheet-name→DataFrame writer, because
+    the lab's QA workbook is built from a different package and needs the same write path the
+    client workbook uses.
 - **Under `hard_fail`, an error finding raises `quality.QualityPolicyError`**, a `ValueError`
   whose `findings` is everything collected before the abort. That is how the lab's failure
   manifest still gets a quality summary, since `build_food_report` returns nothing when it
@@ -79,21 +83,28 @@ makes `just test` faster.
   stat and the narrative's status are computed from `report.findings + charts.findings` where
   they are used. *Rejected: figures inside `FoodReport`, because every numbers-only caller would
   render them, and the report would outlive its figures.*
-- **The product keeps what `analyze()` reaches, and the rest of the bundle moves to the lab**:
-  all of `pipeline.py` (`run_food_report`, `_write_qa_workbook`,
-  `_collect_diagnostic_export_sheets`, and `_resolve_input_file`, the cwd `report_input_file`
-  fallback), `artifacts.py`, `run_logging.py`, `excel.build_qa_excel_report`, the helpers only
-  they reach (`quality.findings_to_frame`, `quality.missingness_summary_frame`,
-  `diagnostics.summarise_numeric_columns`), `plots.export_report_plots`, and
-  `utils.load_diner_meal_mapping_from_json`. If charts
+- **The product keeps what `analyze()` reaches; the rest of the bundle lives in the lab**, under
+  `gbd_foodservice_insights_lab.food_report`: `pipeline.py` (`run_food_report`), `artifacts.py`,
+  `run_logging.py`, `excel.build_qa_excel_report`, `plots.export_report_plots`,
+  `diagnostics.summarise_numeric_columns`, and `utils.load_diner_meal_mapping_from_json`. The
+  product still owns the diagnostic helpers the QA workbook also calls
+  (`quality.findings_to_frame`, `quality.missingness_summary_frame`, and the rest of
+  `diagnostics.py`), since those are reachable from more than just the lab's bundle. If charts
   return to the result page (REQUIREMENTS.md § Result page), exporting them is a new product
   function at web resolution, not this one.
+- **`run_logging.attach_report_run_file_handler` captures both top-level package loggers by
+  name (`gbd_foodservice_insights`, `gbd_foodservice_insights_lab`), not one derived from
+  `__name__`.** Deriving the captured logger from the module's own `__name__` broke silently
+  the moment the module moved packages: it would have started capturing only the lab's own
+  logs and dropped every product-side log line (categorization, food_report, etc.), since
+  Python logger propagation only walks up a dotted name's own ancestors, never across to a
+  sibling package. Anything that moves `run_logging.py` again should keep this in mind rather
+  than reintroducing the `__name__`-derived name.
 - **`missing_data_policy` stays, `warn_continue` included**, with its empty-aggregation and
   placeholder-chart paths: data scientists may run it to get a bundle out of broken data. The
   product always passes `hard_fail`.
-- **The lab keeps the name.** `gbd_foodservice_insights_lab.food_report.run_food_report` keeps
-  today's keyword arguments and result dict, and writes the same bundle. Only the import path
-  changes; a shim is impossible, since the product may not import the lab. It loads
+- **The lab keeps the name.** `gbd_foodservice_insights_lab.food_report.pipeline.run_food_report`
+  keeps today's keyword arguments and result dict, and writes the same bundle. It loads
   `diner_meal_file` before calling the core, so a missing or unreadable file raises under either
   policy rather than becoming a `warn_continue` finding.
 - **The step 2 runscript's `--input` and `--diner-meals` are an interface.** Every client
@@ -101,29 +112,7 @@ makes `just test` faster.
   (`get_customer_template_dir()`), and those copies live in gitignored `client_work/`, out of
   our reach.
 
-## PR 1: move the bundle to the lab
-
-- Move `pipeline.py` and the rest of the bundle-only code listed in Decisions into
-  `gbd_foodservice_insights_lab/food_report/`.
-- Point `2. Produce Food Report.py` and `notebook_runscript_setup.py` (it calls
-  `default_report_output_dir`) at it. Delete the runscript's own copy of the
-  `report_input_file` fallback; the wrapper already has one.
-- Docs: the `artifacts.py` and `run_logging.py` rows of `insights/README.md`, and the step 2 row
-  of the lab README.
-
-**Testing:**
-
-- These move to `python/lab/tests/` with their assertions unchanged: the `run_food_report` tests
-  in `test_outputs.py` and `test_quality_contract.py`, `test_integration_food_report.py`,
-  `test_run_logging.py`, the QA-workbook test and the `summarise_numeric_columns` tests.
-  `test_food_report.py` stays: it tests the core. An
-  unchanged assertion is how the move shows it changed no behaviour. `just test` loses its
-  slowest report runs.
-- New: a runscript test on `test_runscript.py`'s importlib pattern, pinning `--input X
-  --diner-meals Y` to `run_food_report(input_file=X, diner_meal_file=Y)`, since existing client
-  folders depend on it.
-
-## PR 2: step 1.5 calls the report in-process (lab only)
+## PR 1: step 1.5 calls the report in-process (lab only)
 
 - The last cell of `1.5. Clean Units Runscript.py` calls
   `run_food_report(input_file=output_file, diner_meal_mapping=diners_map)` and prints the
@@ -134,9 +123,9 @@ makes `just test` faster.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test && just test-lab`.
-- Every PR: run steps 1.5 → 2 on `lab/test_data` in a scratch client folder, and diff the
-  client workbook against a run from `main`.
+- `just lint && just check && just test && just test-lab`.
+- Run steps 1.5 → 2 on `lab/test_data` in a scratch client folder, and diff the client workbook
+  against a run from `main`.
 
 ## Risks
 

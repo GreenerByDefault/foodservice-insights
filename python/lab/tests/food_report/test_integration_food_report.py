@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.pipeline import run_food_report
+from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def staged_report_inputs(tmp_path):
     repository. Working from a copy under ``tmp_path`` keeps every write
     confined to pytest's temp dir.
     """
-    src = Path(__file__).parents[1] / "data" / "aggregated_baseline.csv"
+    src = Path(__file__).parent / "data" / "aggregated_baseline.csv"
     df = pd.read_csv(src)
 
     # Mirror the canonical end-of-categorization cleanup (see
