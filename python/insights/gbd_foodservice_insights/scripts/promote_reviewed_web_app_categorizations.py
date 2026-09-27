@@ -14,11 +14,7 @@ logger = logging.getLogger("gbd_foodservice_insights.promote_web_app_categorizat
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for the promotion script.
-
-    Returns:
-        Parsed argument namespace with ``reviewed_by_default`` and ``verbose`` attributes.
-    """
+    """Parse command-line arguments for the promotion script."""
     parser = argparse.ArgumentParser(
         description=(
             "Promote rows from web_app_categorizations_unreviewed.csv where "

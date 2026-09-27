@@ -81,12 +81,7 @@ class PairwiseOverlap(TypedDict):
 
 
 def check_same_columns(df1: pd.DataFrame, df2: pd.DataFrame) -> None:
-    """Compare column names of two DataFrames and print differences to the console.
-
-    Args:
-        df1: First DataFrame to compare.
-        df2: Second DataFrame to compare.
-    """
+    """Compare column names of two DataFrames and print differences to the console."""
     cols_df1 = set(df1.columns)
     cols_df2 = set(df2.columns)
 
@@ -108,16 +103,10 @@ def identify_low_cardinality_columns(
     show_details: bool = True,
     exclude_categorical: bool = False,
 ) -> list[Any]:
-    """Identify columns with low cardinality and print analysis details.
+    """Identify columns with low cardinality, print analysis details, and return ones to drop.
 
-    Args:
-        df: DataFrame to inspect.
-        threshold: Maximum unique-value count for a column to qualify.
-        show_details: Whether to print per-column diagnostics.
-        exclude_categorical: If ``True``, skip object-dtype columns.
-
-    Returns:
-        List of column names recommended for dropping.
+    ``threshold`` is the maximum unique-value count for a column to qualify.
+    ``exclude_categorical`` skips object-dtype columns.
     """
     low_cardinality_cols: dict[Any, LowCardinalityDetails] = {}
 
@@ -183,11 +172,7 @@ def identify_low_cardinality_columns(
 def validate_matching_columns(dfs: list[pd.DataFrame]) -> None:
     """Validate that all DataFrames in a list have exactly matching columns.
 
-    Args:
-        dfs: DataFrames to compare against the first one.
-
-    Raises:
-        ValueError: If any DataFrame has columns that do not match the first.
+    Each is compared against the first; raises ValueError on a mismatch.
     """
     if len(dfs) < 2:
         return
@@ -211,15 +196,10 @@ def compare_baseline_pilot_raw_data(
     baseline_raw_path: str | Path,
     pilot_raw_path: str | Path,
 ) -> dict[str, Any]:
-    """Compare raw baseline and pilot data to identify structural differences.
+    """Compare raw baseline and pilot data directories to identify structural differences.
 
-    Args:
-        baseline_raw_path: Directory containing baseline raw data.
-        pilot_raw_path: Directory containing pilot raw data.
-
-    Returns:
-        Dictionary describing file counts, column comparisons, row-count
-        warnings, and a human-readable summary.
+    The result describes file counts, column comparisons, row-count warnings, and a
+    human-readable summary.
     """
     baseline_path = Path(baseline_raw_path)
     pilot_path = Path(pilot_raw_path)
@@ -591,19 +571,9 @@ def raw_data_report(
 ) -> str | tuple[str, RawDataFileReport]:
     """Print a raw-data report and return a data type classification.
 
-    Args:
-        path: Directory of raw data files to inspect.
-        recursive: Whether to recurse into subdirectories.
-        return_dict: If ``True``, also return the discovered file paths.
-        max_preview_rows: Number of preview rows to show per file.
-        baseline_pilot: Optional ``"baseline"`` / ``"pilot"`` marker for
-            triggering a baseline-vs-pilot comparison.
-        base_filepath: Filepath used to locate the matching dataset for the
-            baseline-vs-pilot comparison.
-
-    Returns:
-        Either the data type string, or a tuple of (data type, dictionary of
-        discovered file paths) when ``return_dict`` is ``True``.
+    ``return_dict`` also returns a dict of the discovered file paths. Only
+    ``baseline_pilot="pilot"`` with a ``base_filepath`` also compares ``path`` against the
+    baseline's ``raw_data``, found by replacing "pilot" with "baseline" in ``base_filepath``.
     """
     base = Path(path)
 
@@ -891,11 +861,7 @@ def raw_data_report(
 
 
 def compare_component_datasets(dfs: list[pd.DataFrame]) -> None:
-    """Compare a list of DataFrames for consistency in row counts and column names.
-
-    Args:
-        dfs: Component DataFrames to compare.
-    """
+    """Compare a list of DataFrames for consistency in row counts and column names."""
     row_nums: list[int] = [df.shape[0] for df in dfs]
     print(f"comparing number of rows:  {row_nums}")
 
@@ -975,16 +941,10 @@ def suggest_tabular_import_settings(
     recursive: bool = False,
     scan_rows: int = 20,
 ) -> dict[str, Any]:
-    """Suggest likely header rows and skiprows values for tabular imports.
+    """Suggest likely header rows and skiprows values for CSV/Excel files in a directory.
 
-    Args:
-        data_location: Directory of CSV/Excel files to inspect.
-        recursive: Whether to recurse into subdirectories.
-        scan_rows: Number of leading rows to consider when scoring headers.
-
-    Returns:
-        Dictionary describing per-component suggestions and a recommended shared
-        ``skiprows`` value when one exists.
+    ``scan_rows`` is how many leading rows are scored as header candidates. The result has
+    per-component suggestions and a recommended shared ``skiprows`` when one exists.
     """
     base = Path(data_location)
     files = get_filtered_data_files(base, file_types=["csv", "excel"], recursive=recursive)
@@ -1176,14 +1136,9 @@ def suggest_column_roles(
 ) -> dict[str, Any]:
     """Suggest likely product, weight, date, and other key tabular columns.
 
-    Args:
-        dfs: Component DataFrames to score columns over.
-        component_names: Optional friendly names for each component (currently
-            unused but accepted for API consistency).
-
-    Returns:
-        Dictionary mapping each role to its best candidate column, confidence,
-        and top scoring candidates.
+    ``component_names`` is currently unused but accepted for API consistency. The result's
+    ``"roles"`` dict maps each role to its best candidate column, a confidence, and the top three
+    scoring candidates.
     """
     del component_names
 
@@ -1251,17 +1206,10 @@ def suggest_date_source_and_coverage(
 ) -> dict[str, Any]:
     """Suggest the most likely date source and summarize observed period coverage.
 
-    Args:
-        dfs: Component DataFrames to inspect.
-        component_names: Optional friendly names for each component, used when
-            falling back to filename-based date inference.
-
-    Returns:
-        Dictionary describing the chosen date source, confidence, observed
-        periods, missing periods, duplicates, and unparsed components.
-
-    Raises:
-        ValueError: If ``dfs`` and ``component_names`` have different lengths.
+    ``component_names`` is used when falling back to filename-based date inference. Raises
+    ``ValueError`` if ``component_names`` and ``dfs`` differ in length. The result describes the
+    chosen date source, confidence, observed and missing periods, duplicates, and unparsed
+    components.
     """
     component_names = _component_names_from_inputs(dfs, component_names)
     sample_df = _combined_sample_for_roles(dfs)
@@ -1395,18 +1343,9 @@ def detect_component_duplicate_risk(
 ) -> dict[str, Any]:
     """Flag exact duplicate risk across component datasets before Step 1.
 
-    Args:
-        dfs: Component DataFrames to compare.
-        component_names: Optional friendly names for each component.
-        duplicate_share_threshold: Share of duplicate rows that flips the status
-            to ``"warning"``.
-
-    Returns:
-        Dictionary describing duplicate counts, per-source contributions, and
-        pairwise overlap metrics.
-
-    Raises:
-        ValueError: If ``dfs`` and ``component_names`` have different lengths.
+    A duplicate-row share at or above ``duplicate_share_threshold`` sets the status to
+    ``"warning"``. Raises ``ValueError`` if ``component_names`` and ``dfs`` differ in length. The
+    result has duplicate counts, per-source contributions, and pairwise overlap metrics.
     """
     component_names = _component_names_from_inputs(dfs, component_names)
 

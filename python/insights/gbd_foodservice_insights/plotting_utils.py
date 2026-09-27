@@ -97,28 +97,12 @@ def setup_gbd_fonts() -> None:
 
 
 def set_title_font(ax: plt.Axes, title: str, fontsize: int = 14, **kwargs) -> None:
-    """
-    Set a title with Montserrat font.
-
-    Args:
-        ax (plt.Axes): The axes object to set title on.
-        title (str): The title text.
-        fontsize (int, optional): Font size. Defaults to 14.
-        **kwargs: Additional keyword arguments passed to set_title.
-    """
+    """Set a title with Montserrat font; `kwargs` go to `set_title`."""
     ax.set_title(title, fontname=TITLE_FONT, fontsize=fontsize, **kwargs)
 
 
 def set_suptitle_font(fig: plt.Figure, title: str, fontsize: int = 16, **kwargs) -> None:
-    """
-    Set a figure suptitle with Montserrat font.
-
-    Args:
-        fig (plt.Figure): The figure object to set suptitle on.
-        title (str): The title text.
-        fontsize (int, optional): Font size. Defaults to 16.
-        **kwargs: Additional keyword arguments passed to suptitle.
-    """
+    """Set a figure suptitle with Montserrat font; `kwargs` go to `suptitle`."""
     fig.suptitle(title, fontname=TITLE_FONT, fontsize=fontsize, **kwargs)
 
 
@@ -132,30 +116,21 @@ setup_gbd_fonts()
 
 
 def set_ylim_with_padding(ax: plt.Axes, data: pd.Series, padding: float = 0.2) -> None:
-    """
-    Set y-axis limits with padding above and below the data range. We do this to give the graph
+    """Set y-axis limits with padding above and below the data range. We do this to give the graph
     better perspective.
 
-    Args:
-        ax (plt.Axes): The axes object to modify.
-        data (pd.Series): The data series to calculate limits from.
-        padding (float, optional): Fraction of range to add as padding. Defaults to 0.2.
+    The lower limit is scaled by `1 - padding` and the upper by `1 + padding`, so the padding is
+    relative to each limit's value, not the range; this assumes positive data.
     """
     ymin, ymax = data.min(), data.max()
     ax.set_ylim(ymin * (1 - padding), ymax * (1 + padding))
 
 
 def format_month_labels(month_values: Any) -> list[str]:
-    """
-    Converts month values in 'Jan-2025' format
+    """Converts month values in 'Jan-2025' format
 
-    Handles pandas Period objects, datetime objects, or strings in various formats.
-
-    Args:
-        month_values: Array-like of month identifiers (Period, datetime, or string format)
-
-    Returns:
-        List[str]: Formatted month labels in 'Mon-YYYY' format (e.g., 'Jan-2025')
+    Handles an array-like of pandas Period objects, datetime objects, or strings in various
+    formats.
     """
     formatted_labels = []
     for month in month_values:
@@ -183,29 +158,12 @@ def add_grid(
     linestyle: str = "--",
     alpha: float = 0.7,
 ) -> None:
-    """
-    Add a grid to the plot with consistent GBD styling.
-
-    Args:
-        ax (plt.Axes): The axes object to modify.
-        axis (str, optional): Which axis to add grid to ('x', 'y', or 'both'). Defaults to 'both'.
-        linestyle (str, optional): Line style for grid. Defaults to '--'.
-        alpha (float, optional): Transparency of grid lines. Defaults to 0.7.
-    """
+    """Add a grid to the plot with consistent GBD styling."""
     ax.grid(True, axis=axis, linestyle=linestyle, alpha=alpha)
 
 
 def wrap_labels(labels: list[str], max_width: int = 30) -> list[str]:
-    """
-    Wrap long labels to multiple lines.
-
-    Args:
-        labels (List[str]): List of labels to wrap.
-        max_width (int, optional): Maximum characters per line. Defaults to 30.
-
-    Returns:
-        List[str]: List of wrapped labels.
-    """
+    """Wrap long labels to multiple lines of at most `max_width` characters."""
     return [textwrap.fill(str(label), width=max_width) for label in labels]
 
 
@@ -234,18 +192,11 @@ def standardize_title_case(text: str) -> str:
 def convert_percentage_to_float(
     df: pd.DataFrame, percentage_col: str = "percentage"
 ) -> pd.DataFrame:
-    """
-    Convert a percentage column to float, handling both string and numeric types.
+    """Convert a percentage column to float, handling both string and numeric types.
 
     If the column contains strings with '%' suffix (e.g., "25.5%"), removes the '%'
-    and converts to float. If already numeric, creates a copy as float.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing the percentage column.
-        percentage_col (str, optional): Name of the percentage column. Defaults to "percentage".
-
-    Returns:
-        pd.DataFrame: DataFrame with an additional "{percentage_col}_float" column.
+    and converts to float. If already numeric, creates a copy as float. The result goes in a
+    new "{percentage_col}_float" column.
     """
     df = df.copy()
     if pd.api.types.is_string_dtype(df[percentage_col]):
@@ -258,20 +209,11 @@ def convert_percentage_to_float(
 def calculate_figure_height_for_wrapped_labels(
     labels: list[str], max_width: int = 30, base_height: float = 4.0, height_per_item: float = 0.35
 ) -> float:
-    """
-    Calculate appropriate figure height for plots with wrapped labels.
+    """Calculate appropriate figure height for plots with wrapped labels.
 
     This function estimates the needed figure height based on the number of items
-    and the maximum number of lines in wrapped labels.
-
-    Args:
-        labels (List[str]): List of labels that will be wrapped.
-        max_width (int, optional): Maximum characters per line for wrapping. Defaults to 30.
-        base_height (float, optional): Minimum figure height. Defaults to 4.0.
-        height_per_item (float, optional): Height to add per item. Defaults to 0.35.
-
-    Returns:
-        float: Calculated figure height in inches.
+    and the maximum number of lines in wrapped labels. The returned height is in inches and is
+    never below `base_height`.
     """
     wrapped = wrap_labels(labels, max_width)
     max_lines = max((label.count("\n") + 1) for label in wrapped) if wrapped else 1
@@ -288,22 +230,13 @@ def create_horizontal_percentage_barplot(
     add_percentage_labels: bool = True,
     palette: list[str] | None = None,
 ) -> None:
-    """
-    Create a horizontal bar plot, with percentage values and optional text labels.
+    """Create a horizontal bar plot, with percentage values and optional text labels.
 
     This function creates a horizontal bar plot where the x-axis represents percentages
     (0-100) and optionally adds percentage text labels at the end of each bar.
 
-    Args:
-        ax (plt.Axes): The axes object to plot on.
-        data (pd.DataFrame): DataFrame containing the data. Must have been processed
-                            with convert_percentage_to_float() to have "{percentage_col}_float".
-        y_col (str): Column name for y-axis labels.
-        percentage_col (str, optional): Base name of percentage column. Defaults to "percentage".
-        max_label_width (int, optional): Maximum width for wrapping y-axis labels. Defaults to 30.
-        add_percentage_labels (bool, optional): Whether to add percentage text at bar ends.
-            Defaults to True.
-        palette (Optional[List[str]], optional): Color palette for bars. Defaults to GBD_colors.
+    `data` must have been processed with convert_percentage_to_float() to have
+    "{percentage_col}_float". `palette` defaults to GBD_colors.
     """
     if palette is None:
         palette = GBD_colors

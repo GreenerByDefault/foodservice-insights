@@ -28,11 +28,7 @@ def setup_seaborn_palette() -> None:
 
 
 def update_legend_to_title_case(ax: plt.Axes) -> None:
-    """Convert all legend label texts on the axes to title case in place.
-
-    Args:
-        ax (plt.Axes): The axes object containing the legend to update.
-    """
+    """Convert all legend label texts on the axes to title case in place."""
     legend = ax.legend() if hasattr(ax, "legend") else None
     if legend is not None:
         for text in legend.get_texts():
@@ -40,42 +36,19 @@ def update_legend_to_title_case(ax: plt.Axes) -> None:
 
 
 def calculate_subplot_grid(n_items: int, n_cols: int = 4) -> tuple[int, int]:
-    """
-    Calculate the number of rows and columns needed for a subplot grid.
-
-    Args:
-        n_items (int): Number of items to display in the grid.
-        n_cols (int, optional): Number of columns. Defaults to 4.
-
-    Returns:
-        Tuple[int, int]: (n_rows, n_cols) for the subplot grid.
-    """
+    """Calculate the (n_rows, n_cols) needed for a subplot grid."""
     n_rows = (n_items + n_cols - 1) // n_cols
     return n_rows, n_cols
 
 
 def hide_unused_subplots(axes: list[plt.Axes], n_used: int) -> None:
-    """
-    Hide unused subplots in a grid.
-
-    Args:
-        axes (List[plt.Axes]): List of axes objects from subplots.
-        n_used (int): Number of subplots actually being used.
-    """
+    """Hide unused subplots in a grid."""
     for idx in range(n_used, len(axes)):
         axes[idx].set_visible(False)
 
 
 def clean_category_label(label: str) -> str:
-    """
-    Clean a category label, attempting to use clean_GBD_category_name with fallback.
-
-    Args:
-        label (str): The category label to clean.
-
-    Returns:
-        str: Cleaned label, or original if cleaning fails.
-    """
+    """Clean a category label with clean_GBD_category_name, or return it as-is if that fails."""
     try:
         cleaned = clean_GBD_category_name(label)
         return cleaned if cleaned is not None else label
@@ -94,19 +67,9 @@ def create_line_plot_with_periods(
     linewidth: int = 2,
     markersize: int = 6,
 ) -> None:
-    """
-    Create a line plot with separate lines for each period (baseline/pilot).
+    """Create a line plot with separate lines for each period (baseline/pilot).
 
-    Args:
-        ax (plt.Axes): The axes object to plot on.
-        data (pd.DataFrame): Data to plot.
-        x_col (str): Column name for x-axis.
-        y_col (str): Column name for y-axis.
-        period_col (str, optional): Column name for period. Defaults to "period".
-        color_map (Optional[dict], optional): Color mapping for periods. Defaults to PERIOD_COLORS.
-        marker (str, optional): Marker style. Defaults to "o".
-        linewidth (int, optional): Line width. Defaults to 2.
-        markersize (int, optional): Marker size. Defaults to 6.
+    `color_map` defaults to PERIOD_COLORS.
     """
     if color_map is None:
         color_map = PERIOD_COLORS
@@ -134,19 +97,9 @@ def create_category_subplot_grid(
     figsize_per_plot: tuple[int, int] = (5, 3),
     **plot_kwargs: Any,
 ) -> plt.Figure:
-    """
-    Create a grid of subplots, one for each category, using a custom plot function.
+    """Create a grid of subplots, one for each category, using a custom plot function.
 
-    Args:
-        categories (List[str]): List of category names.
-        monthly_data (pd.DataFrame): Data containing all categories.
-        plot_func: Function that takes (ax, category_data, category_name, **kwargs).
-        n_cols (int, optional): Number of columns. Defaults to 4.
-        figsize_per_plot (Tuple[int, int], optional): Size per subplot. Defaults to (5, 3).
-        **plot_kwargs: Additional keyword arguments passed to plot_func.
-
-    Returns:
-        plt.Figure: The created figure.
+    `plot_func` is called as `plot_func(ax, category_data, category_name, **plot_kwargs)`.
     """
     n_categories = len(categories)
     n_rows, n_cols = calculate_subplot_grid(n_categories, n_cols)
@@ -190,56 +143,12 @@ def plot_time_series_with_periods(
     x_label: str = "",
     use_period_hue: bool = True,
 ) -> plt.Figure:
-    """
-    Create a standardized time series line plot, optionally comparing baseline vs pilot periods.
+    """Create a standardized time series line plot, optionally comparing baseline vs pilot.
 
-    This is a reusable helper for creating consistent time series plots across the codebase.
-    It handles all common formatting: period colors, legend styling, month label formatting,
-    gridlines, and axis configuration.
-
-    Supports two modes:
-    - Baseline + Pilot comparison (use_period_hue=True): Different colored lines for each period
-    - Single time series (use_period_hue=False): One line, no period grouping
-
-    Args:
-        data (pd.DataFrame): DataFrame with time series data. Must contain x_col and y_col.
-                            If use_period_hue=True, must also contain period_col.
-        y_col (str): Column name for y-axis values.
-        y_label (str): Label for y-axis.
-        title (str): Plot title.
-        figsize (Tuple[int, int], optional): Figure size. Defaults to (12, 4).
-        x_col (str, optional): Column name for x-axis (time). Defaults to "month_year".
-        period_col (Optional[str], optional): Column name for period grouping. Defaults to "period".
-                                             Ignored if use_period_hue=False.
-        ylim_padding_factor (Optional[float], optional): Y-axis padding as fraction of max value.
-                                                         If None, no ylim is set. Defaults to 0.1.
-        marker (str, optional): Marker style. Defaults to "o".
-        markersize (int, optional): Marker size. Defaults to 8.
-        linewidth (int, optional): Line width. Defaults to 2.
-        x_label (str, optional): Label for x-axis. Defaults to "" (empty string).
-        use_period_hue (bool, optional): Whether to use period column for different colored lines.
-                                        Defaults to True.
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
-
-    Examples:
-        >>> # Baseline + Pilot comparison
-        >>> fig = plot_time_series_with_periods(
-        ...     data=monthly_data,
-        ...     y_col="kilos_per_diner_meal",
-        ...     y_label="Kilos per Diner-Meal",
-        ...     title="Food Consumption Over Time"
-        ... )
-        >>>
-        >>> # Single time series (baseline only)
-        >>> fig = plot_time_series_with_periods(
-        ...     data=baseline_data,
-        ...     y_col="diner-meals",
-        ...     y_label="Number of Diner-Meals",
-        ...     title="Diner-Meal Numbers Over Time",
-        ...     use_period_hue=False
-        ... )
+    With `use_period_hue`, each period gets its own colored line; otherwise one line is drawn and
+    `period_col` is ignored. `data` must contain `x_col` and `y_col`, plus `period_col` when
+    `use_period_hue` is True. `ylim_padding_factor` pads the y-axis as a fraction of the max
+    value; None leaves ylim unset.
     """
     data_sorted = data.sort_values(x_col).copy()
 

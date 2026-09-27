@@ -17,11 +17,7 @@ _GBD_CATEGORIES_DATA: dict[str, Any] | None = None
 
 
 def _load_gbd_categories_data() -> dict[str, Any]:
-    """Private helper to load GBD categories YAML data.
-
-    Returns:
-        Dictionary containing the parsed YAML data.
-    """
+    """Private helper to load GBD categories YAML data."""
     global _GBD_CATEGORIES_DATA
     if _GBD_CATEGORIES_DATA is not None:
         return _GBD_CATEGORIES_DATA
@@ -43,16 +39,7 @@ def get_gbd_categories_metadata() -> dict[str, Any]:
 
 
 def get_GBD_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of GBD categories by reading from the GBD_categories.yaml file.
-
-    Args:
-        lowercase: If True, returns the categories in lowercase.
-                   Defaults to False.
-
-    Returns:
-        A list of GBD category strings.
-    """
+    """Returns a list of GBD categories by reading from the GBD_categories.yaml file."""
     data = _load_gbd_categories_data()
     categories = [item["cool_food_pledge_name"] for item in data["categories"]]
 
@@ -63,16 +50,10 @@ def get_GBD_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_categories_by_product_category(product_category: str, lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of GBD categories filtered by template_product_category field.
+    """Returns a list of GBD categories filtered by template_product_category field.
 
-    Args:
-        product_category: The product category to filter by (e.g., "Animal Based Proteins",
-                         "Plant-Based Proteins", "Dairy", "Plant-Based Dairy & Egg").
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of GBD category strings matching the product_category.
+    `product_category` is e.g. "Animal Based Proteins", "Plant-Based Proteins", "Dairy", or
+    "Plant-Based Dairy & Egg".
     """
     data = _load_gbd_categories_data()
     categories = [
@@ -88,15 +69,9 @@ def get_categories_by_product_category(product_category: str, lowercase: bool = 
 
 
 def get_meat_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of meat categories (beef, pork, poultry, lamb, fish, shellfish).
+    """Returns a list of meat categories (beef, pork, poultry, lamb, fish, shellfish).
+
     Excludes eggs and other animal proteins.
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of meat category strings.
     """
     data = _load_gbd_categories_data()
     categories = [
@@ -110,56 +85,24 @@ def get_meat_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_plant_protein_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of plant-based protein categories (whole grains, legumes, nuts & seeds,
-    plant-based meats).
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of plant-based protein category strings.
-    """
+    """Returns a list of plant-based protein categories (whole grains, legumes, nuts & seeds,
+    plant-based meats)."""
     return get_categories_by_product_category("Plant-Based Proteins", lowercase=lowercase)
 
 
 def get_dairy_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of dairy categories (milk, cheese, yogurt, butter, cream, ice cream, mayo).
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of dairy category strings.
-    """
+    """Returns a list of dairy categories (milk, cheese, yogurt, butter, cream, ice cream, mayo)."""
     return get_categories_by_product_category("Dairy", lowercase=lowercase)
 
 
 def get_plant_based_dairy_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of plant-based dairy alternative categories (plant milks, plant cheese,
-    plant yogurt, plant egg).
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of plant-based dairy alternative category strings.
-    """
+    """Returns a list of plant-based dairy alternative categories (plant milks, plant cheese,
+    plant yogurt, plant egg)."""
     return get_categories_by_product_category("Plant-Based Dairy & Egg", lowercase=lowercase)
 
 
 def get_egg_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of egg categories (liquid eggs, shelled eggs).
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of egg category strings.
-    """
+    """Returns a list of egg categories (liquid eggs, shelled eggs)."""
     data = _load_gbd_categories_data()
     categories = [
         item["cool_food_pledge_name"]
@@ -174,20 +117,13 @@ def get_egg_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_protein_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of all protein categories (meat, eggs, plant-based proteins).
+    """Returns a sorted list of all protein categories (meat, eggs, plant-based proteins).
 
     This includes:
     - All meat categories (beef, pork, poultry, lamb, fish, shellfish)
     - Egg categories (liquid eggs, shelled eggs)
     - Plant-based protein categories (legumes, whole grains, nuts & seeds, plant-based meats)
     - Plant-based egg alternatives
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of protein category strings.
     """
     # Filter to only include plant-based egg from plant-based dairy categories
     data = _load_gbd_categories_data()
@@ -210,15 +146,7 @@ def get_protein_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_animal_product_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of all animal product categories (meat, dairy, eggs).
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of animal product category strings.
-    """
+    """Returns a list of all animal product categories (meat, dairy, eggs)."""
     data = _load_gbd_categories_data()
     categories = [
         item["cool_food_pledge_name"]
@@ -233,15 +161,7 @@ def get_animal_product_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_plant_based_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of all plant-based categories.
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of plant-based category strings.
-    """
+    """Returns a list of all plant-based categories."""
     data = _load_gbd_categories_data()
     categories = [
         item["cool_food_pledge_name"]
@@ -256,15 +176,7 @@ def get_plant_based_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_food_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of all food categories (excludes drinks).
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of food category strings.
-    """
+    """Returns a list of all food categories (excludes drinks)."""
     data = _load_gbd_categories_data()
     categories = [
         item["cool_food_pledge_name"] for item in data["categories"] if item.get("type") == "food"
@@ -277,15 +189,7 @@ def get_food_categories(lowercase: bool = False) -> list[str]:
 
 
 def get_drink_categories(lowercase: bool = False) -> list[str]:
-    """
-    Returns a list of all drink categories.
-
-    Args:
-        lowercase: If True, returns the categories in lowercase. Defaults to False.
-
-    Returns:
-        A list of drink category strings.
-    """
+    """Returns a list of all drink categories."""
     data = _load_gbd_categories_data()
     categories = [
         item["cool_food_pledge_name"] for item in data["categories"] if item.get("type") == "drink"
@@ -300,15 +204,11 @@ def get_drink_categories(lowercase: bool = False) -> list[str]:
 def check_GBD_categories(df: pd.DataFrame) -> None:
     """Check a DataFrame's 'category' column against the predefined GBD categories.
 
-    Logs warnings if:
-    - GBD categories (or "No Matches Found") are missing from the DataFrame.
-    - Categories in the DataFrame are not valid GBD categories.
-    - The 'category' column is missing from the DataFrame.
+    Logs a warning when the 'category' column is missing or holds non-GBD categories, and an
+    info message listing GBD categories (or "No Matches Found") absent from the data.
 
-    Categories are compared case-insensitively (lowercase is acceptable).
-
-    Args:
-        df: The input DataFrame, expected to have a 'category' column.
+    Only the non-GBD check is case-insensitive (lowercase is acceptable); the list of missing
+    categories is compared case-sensitively.
     """
     if "category" not in df.columns:
         logger.warning("'category' column not found in DataFrame.")
@@ -342,17 +242,9 @@ def check_GBD_categories(df: pd.DataFrame) -> None:
 
 
 def clean_GBD_category_name(category: str) -> str:
-    """
-    Maps a GBD category string to a cleaner, standardized version.
+    """Maps a GBD category string (case-insensitive) to a cleaner, standardized version.
 
-    Args:
-        category: The GBD category string to clean.
-
-    Returns:
-        The cleaned category string.
-
-    Raises:
-        KeyError: If the input category is not found in the mapping.
+    Raises KeyError if the category is not in GBD_categories.yaml.
     """
     data = _load_gbd_categories_data()
 

@@ -14,11 +14,7 @@ logger = logging.getLogger("gbd_foodservice_insights_lab.backfill_entree_cleaned
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for the backfill script.
-
-    Returns:
-        Parsed argument namespace with a ``verbose`` attribute.
-    """
+    """Parse command-line arguments for the backfill script."""
     parser = argparse.ArgumentParser(
         description=(
             "Populate the cleaned_item_names column in previously_classified_entrees.csv by "

@@ -11,17 +11,9 @@ PROMPTS_DIR = PACKAGE_DIR / "prompts"
 
 
 def load_prompt(prompt_filename: str) -> str:
-    """
-    Load a prompt file from the package prompts directory.
+    """Load a prompt file (e.g. "clean_item_name_prompt.md") from the package prompts directory.
 
-    Args:
-        prompt_filename: The name of the prompt file (e.g., "clean_item_name_prompt.md").
-
-    Returns:
-        The contents of the prompt file as a string.
-
-    Raises:
-        FileNotFoundError: If the prompt file doesn't exist.
+    Raises FileNotFoundError, naming the full path, if the file doesn't exist.
     """
     prompt_file_path = PROMPTS_DIR / prompt_filename
 

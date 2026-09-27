@@ -33,13 +33,11 @@ What the map found:
   `test_aggregate.py` is a legacy grab-bag of aggregation and diagnostics tests (the meat check's
   among them) and about fifteen plot tests, several asserting only `isinstance(fig, plt.Figure)`;
   `test_plotting_utils.py` is mostly "runs without error".
-- Mechanical: `from __future__ import annotations` in 15 product modules on Python 3.14;
-  docstrings that restate the signature (`Parameters`/`Returns`, `Args`/`Returns`) on about 25
-  functions across `categorization/`, `categories.py` and `utils.py`; `Any` in about 145 places
-  where `dict[str, str]` or a `Literal` is easy; two hand-rolled module caches (`categories.py`,
-  `emissions.py`) that `functools.cache` expresses; `pd.api.types.is_period_dtype`, deprecated in
-  pandas 3 and gone in 4, which now lives only in the lab (`plotting_extras.py`, `pilot/plots.py`,
-  `pilot/analysis.py`).
+- Mechanical: `from __future__ import annotations` in 15 product modules on Python 3.14; `Any` in
+  about 145 places where `dict[str, str]` or a `Literal` is easy; two hand-rolled module caches
+  (`categories.py`, `emissions.py`) that `functools.cache` expresses;
+  `pd.api.types.is_period_dtype`, deprecated in pandas 3 and gone in 4, which now lives only in the
+  lab (`plotting_extras.py`, `pilot/plots.py`, `pilot/analysis.py`).
 
 ## Decisions
 
@@ -89,11 +87,10 @@ their modules' files; `test_plotting_utils.py` keeps font registration and the w
 
 ## PR 3 — mechanical
 
-`from __future__` gone; signature-restating docstrings pruned (the `prune-comments` skill);
-`Any` to real types where trivial; `functools.cache` for the two YAML caches;
-`isinstance(dtype, pd.PeriodDtype)` in the three lab modules. **Open:** keep percentages numeric
-in `aggregation.py` and format them at draw time; it changes the workbook's percentage cells from
-text to numbers, so it is a behaviour change for GBD to want.
+`from __future__` gone; `Any` to real types where trivial; `functools.cache` for the two YAML
+caches; `isinstance(dtype, pd.PeriodDtype)` in the three lab modules. **Open:** keep percentages
+numeric in `aggregation.py` and format them at draw time; it changes the workbook's percentage cells
+from text to numbers, so it is a behaviour change for GBD to want.
 
 ## PR 4 — report pages composed from public panel drawers
 

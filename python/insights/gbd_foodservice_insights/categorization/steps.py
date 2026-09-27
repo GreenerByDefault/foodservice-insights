@@ -39,22 +39,11 @@ def categorize_using_historical_classifications(
     unique_products_df: pd.DataFrame,
     historical_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """
-    Match products against historical categorizations.
+    """Match products against historical categorizations.
 
-    Parameters
-    ----------
-    unique_products_df : DataFrame
-        Must contain a 'product' column.
-    historical_df : DataFrame, optional
-        Historical data with 'product' and 'category' columns.
-        If None, loads from default cache.
-
-    Returns
-    -------
-    DataFrame
-        Input with 'category' (from history or NaN) and 'previously_categorized'
-        boolean columns added.
+    `unique_products_df` needs a 'product' column; `historical_df` needs 'product' and
+    'category', and defaults to the cached history. Returns `unique_products_df` with 'category'
+    (from history or NaN), a boolean 'previously_categorized', and 'match_type' added.
     """
     if historical_df is None:
         historical_df = get_previously_categorized_items()
@@ -88,22 +77,13 @@ def clean_product_names(
     products_df: pd.DataFrame,
     llm: LlmClient,
 ) -> pd.DataFrame:
-    """
-    Clean product names for items that still need categorization.
+    """Clean product names for items that still need categorization.
 
     Items already matched historically get their original name as the cleaned
     name.  Uncategorized items are cleaned via an LLM call.
 
-    Parameters
-    ----------
-    products_df : DataFrame
-        Must contain 'product', 'category', and 'previously_categorized' columns.
-    llm : LlmClient
-
-    Returns
-    -------
-    DataFrame
-        Input with 'cleaned_item_names' column added.
+    `products_df` needs 'product', 'category', and 'previously_categorized'. Returns a copy with
+    'cleaned_item_names' added.
     """
     products_df = products_df.copy()
     mask_needs_cleaning = products_df["category"].isna()
@@ -142,8 +122,7 @@ def categorize_using_cleaned_name_history(
     products_df: pd.DataFrame,
     reuse_index: dict[str, str] | None = None,
 ) -> pd.DataFrame:
-    """
-    Second historical lookup: reuse categories for *cleaned* names.
+    """Second historical lookup: reuse categories for *cleaned* names.
 
     After name cleaning, items still uncategorized are matched (case-,
     whitespace- and punctuation-insensitively) against previously-categorized
@@ -155,20 +134,9 @@ def categorize_using_cleaned_name_history(
     :func:`build_cleaned_name_reuse_index`); everything else falls through to
     the LLM unchanged.
 
-    Parameters
-    ----------
-    products_df : DataFrame
-        Must contain 'category', 'cleaned_item_names', 'previously_categorized'
-        and 'match_type' columns.
-    reuse_index : dict[str, str], optional
-        Pre-built ``{normalized cleaned name -> category}`` map. If None, it is
-        built from the default caches.
-
-    Returns
-    -------
-    DataFrame
-        Input with 'category', 'previously_categorized' and 'match_type'
-        updated for any cleaned-name matches.
+    `products_df` needs 'category', 'cleaned_item_names', 'previously_categorized' and
+    'match_type', which are updated for matches. `reuse_index` maps normalized cleaned name to
+    category, and is built from the default caches when None.
     """
     products_df = products_df.copy()
 
@@ -212,19 +180,11 @@ def categorize_with_llm(
     products_df: pd.DataFrame,
     llm: LlmClient,
 ) -> pd.DataFrame:
-    """
-    Apply LLM-based categorization to products not matched historically.
+    """Apply LLM-based categorization to products not matched historically.
 
-    Parameters
-    ----------
-    products_df : DataFrame
-        Must contain 'category' and 'cleaned_item_names' columns.
-    llm : LlmClient
-
-    Returns
-    -------
-    DataFrame
-        Input with 'category' column updated for previously-uncategorized items.
+    `products_df` needs 'category' and 'cleaned_item_names'. Returns a copy with 'category'
+    filled for uncategorized rows; any category that is not a GBD category becomes
+    "No Matches Found".
     """
     products_df = products_df.copy()
     gbd_categories = get_GBD_categories()
@@ -271,22 +231,11 @@ def fuzzy_match_GBD_categories(
     products_df: pd.DataFrame,
     llm: LlmClient,
 ) -> pd.DataFrame:
-    """
-    Standardize category values by fuzzy-matching non-standard ones.
+    """Standardize category values by fuzzy-matching non-standard ones.
 
     Replaces various forms of "uncategorized" with "No Matches Found", then
-    runs fuzzy matching on any remaining non-standard categories.
-
-    Parameters
-    ----------
-    products_df : DataFrame
-        Must contain a 'category' column.
-    llm : LlmClient
-
-    Returns
-    -------
-    DataFrame
-        Input with standardized 'category' column and 'category_old' backup.
+    runs fuzzy matching on any remaining non-standard categories. The pre-match
+    value is kept in 'category_old'.
     """
     products_df = products_df.copy()
 
@@ -367,21 +316,10 @@ def merge_categorizations(
     original_df: pd.DataFrame,
     categorized_products_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, MergeCounts]:
-    """
-    Merge categorizations back to the original data and filter.
+    """Merge categorizations back to the cleaned input data and filter it for aggregation.
 
-    Parameters
-    ----------
-    original_df : DataFrame
-        The cleaned input data.
-    categorized_products_df : DataFrame
-        Unique products with their assigned categories.
-
-    Returns
-    -------
-    tuple[DataFrame, MergeCounts]
-        - Filtered DataFrame ready for aggregation.
-        - Row and product counts before and after the merge.
+    Drops "No Matches Found" rows and the intermediate categorization columns. Raises
+    UnusableDataError if fewer than 20% of products survive.
     """
     n_rows_before = len(original_df)
     n_products_before = original_df["product"].nunique()

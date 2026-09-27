@@ -14,15 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def _is_extraction_failed(row: pd.Series) -> bool:
-    """
-    Check if unit/weight extraction failed for a given row.
-
-    Args:
-        row (pd.Series): A row from the unit_mapping DataFrame.
-
-    Returns:
-        bool: True if extraction failed, False otherwise.
-    """
+    """Check if unit/weight extraction failed for a row of the unit_mapping DataFrame."""
     unit_failed = pd.isna(row.get("llm_cleaned_unit")) or row.get("llm_cleaned_unit") in [
         "Unknown or unusable unit",
         "NA",
@@ -35,19 +27,7 @@ def _is_extraction_failed(row: pd.Series) -> bool:
 def _get_example_products(
     df: pd.DataFrame, filter_col: str, filter_val: Any, product_col: str, n: int = 5
 ) -> str | None:
-    """
-    Get semicolon-separated example products for a given filter value.
-
-    Args:
-        df (pd.DataFrame): The DataFrame to filter.
-        filter_col (str): Column name to filter on.
-        filter_val (Any): Value to filter for.
-        product_col (str): Column containing product names.
-        n (int): Maximum number of examples to return.
-
-    Returns:
-        Optional[str]: Semicolon-separated product names, or None if no examples found.
-    """
+    """Get up to `n` semicolon-separated example products for a filter value, or None if none."""
     filtered = df[df[filter_col] == filter_val]
     if filtered.empty or product_col not in df.columns:
         return None
@@ -58,27 +38,10 @@ def _get_example_products(
 def check_weight_unit_extraction(
     test_string: str, gemini_client: Any, weight_extraction_instructions: str | None = None
 ) -> dict[str, str | None]:
-    """
-    Test function to quickly check what the LLM extracts from a given string.
+    """Check what the LLM extracts from one unit string, for manual debugging.
 
-    This is useful for manual testing and debugging the weight and unit extraction
-    without running the full pipeline.
-
-    Args:
-        test_string (str): The string to test (e.g., "16 oz", "1 lb 4 oz", "500ml bottle")
-        gemini_client (Any): Authenticated client for the Gemini API
-        weight_extraction_instructions (Optional[str]): Custom instructions for weight extraction
-
-    Returns:
-        Dict[str, Optional[str]]: Dictionary with keys:
-            - 'input': The original test string
-            - 'cleaned_unit': The cleaned/standardized unit
-            - 'extracted_weight': The numerical weight extracted
-
-    Example:
-        >>> result = check_weight_unit_extraction("16 oz bottle", gemini_client)
-        >>> print(result)
-        {'input': '16 oz bottle', 'cleaned_unit': 'oz', 'extracted_weight': '16'}
+    For example, `check_weight_unit_extraction("16 oz bottle", client)` returns
+    `{'input': '16 oz bottle', 'cleaned_unit': 'oz', 'extracted_weight': '16'}`.
     """
     result = {"input": test_string, "cleaned_unit": None, "extracted_weight": None}
 
@@ -114,76 +77,25 @@ def extract_weight_units_pipeline(
     weight_extraction_instructions: str | None = None,
     product_name_column: str = "product",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """
-    Processes a DataFrame to clean unit strings and extract weights using a Large Language
-    Model (LLM).
+    """Clean unit strings and extract weights using an LLM, returning a mapping table and stats.
 
-    This pipeline function performs the following steps:
-    1. Identifies all unique unit strings to avoid duplicate LLM calls.
-    2. Uses LLM to clean each unique unit string and extract weight information.
-    3. For units where extraction fails, attempts to extract from associated product names.
-    4. Creates a mapping table with original units, cleaned units, extracted weights, and
-       example products.
-    5. Sorts the mapping table for easier review and debugging.
-    6. Saves the mapping table to 'cleaned_units_extracted_weights.csv'.
+    Each unique unit string is processed only once, and units already in the historical
+    classifications skip the LLM. Where extraction from the unit string fails, it falls back to
+    a product name from `product_name_column`. `units_column` holds strings like "16 oz",
+    "1 lb 4 oz", or "500ml bottle". `weight_extraction_instructions` of None uses the default
+    prompt from file.
 
-    Args:
-        df (pd.DataFrame): The input DataFrame containing product and unit information.
-        units_column (str): Name of the column containing unit strings to be processed.
-            Examples: "16 oz", "1 lb 4 oz", "500ml bottle"
-    gemini_client (Any): Authenticated client for the Gemini API used to call the LLM.
-        weight_extraction_instructions (Optional[str]): Custom instructions for the LLM
-            when extracting weights. If None, uses default prompt from file.
-        product_name_column (str): Name of the column containing product names.
-            Used as a fallback when unit extraction fails. Default is "product".
+    Returns a mapping table (not `df` with merged columns) with columns `original_unit`,
+    `llm_cleaned_unit` (e.g. "oz", "lb", "ml"), `llm_extracted_weight`, `example_products` (up
+    to 5), and `previously_classified`. The table is sorted for review, with new units first.
+    The stats dict has `total_units`, `nan_units`, `unknown_units` ("Unknown or unusable unit"),
+    `nan_weights`, `previously_classified`, and `success_rate` (a percentage).
 
-    Returns:
-        Tuple[pd.DataFrame, Dict]: A tuple containing:
-            - pd.DataFrame: A mapping table with columns:
-                - original_unit: The original unit string from the input data
-                - llm_cleaned_unit: Cleaned/standardized unit (e.g., "oz", "lb", "ml")
-                - llm_extracted_weight: Numerical weight extracted from unit string
-                - example_products: Up to 5 example products with this unit (for review)
-                - previously_classified: Boolean indicating if from historical database
-            - Dict: Summary statistics with keys:
-                - 'total_units': Total number of unique units processed
-                - 'nan_units': Units with NaN cleaned values
-                - 'unknown_units': Units marked as 'Unknown or unusable'
-                - 'nan_weights': Weights with NaN extracted values
-                - 'previously_classified': Units found in historical data
-                - 'success_rate': Percentage of successful extractions
-
-    Side Effects:
-        - Prints progress information about the number of unique units being processed.
-        - May print warnings or errors for individual units that couldn't be processed.
-
-    Note:
-        The function is designed to be efficient by processing each unique unit string only once,
-        regardless of how many times it appears in the dataset. Large datasets with many
-        duplicate units will benefit significantly from this approach.
-
-        The returned DataFrame is a mapping table, not the original DataFrame with merged columns.
-        To merge results back into your original DataFrame, use the mapping DataFrame with a join.
-
-    Example Workflow:
-        >>> # Step 1: Run pipeline
-        >>> weights, stats = extract_weight_units_pipeline(
-        ...     df=df_missing_weights,
-        ...     units_column="pack_size",
-        ...     gemini_client=client
-        ... )
-        >>>
-        >>> # Step 2: Optionally save for manual review
-        >>> weights.to_csv("cleaned_units_extracted_weights.csv", index=False)
-        >>>
-        >>> # Step 3: Fix any errors and reload if needed
-        >>> weights = pd.read_csv("hand_cleaned_units_extracted_weights.csv")
-        >>>
-        >>> # Step 4: Merge back to original dataframe
+    Typical workflow:
+        >>> weights, stats = extract_weight_units_pipeline(df, "pack_size", client)
+        >>> # Optionally save to CSV, hand-fix errors, and reload.
         >>> df = df.merge(weights, left_on="pack_size", right_on="original_unit")
-        >>>
-        >>> # Step 5: Update historical database for future use
-        >>> expand_historical_weight_classifications(weights)
+        >>> expand_historical_weight_classifications(weights)  # Reuse on future runs.
     """
     # Validate input parameters to catch common errors early
     if units_column not in df.columns:
@@ -249,16 +161,7 @@ def extract_weight_units_pipeline(
 
 
 def _get_unique_units(df: pd.DataFrame, units_column: str) -> np.ndarray:
-    """
-    Gets the unique units from the DataFrame.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame.
-        units_column (str): The name of the column containing the units.
-
-    Returns:
-        np.ndarray: A numpy array of unique units.
-    """
+    """Gets the unique units from the DataFrame."""
     # Validate input columns
     if units_column not in df.columns:
         raise ValueError(f"Column '{units_column}' not found in DataFrame")
@@ -274,20 +177,11 @@ def _build_unit_mapping(
     units_column: str,
     product_name_column: str,
 ) -> pd.DataFrame:
-    """
-    Builds a mapping from original units to cleaned units and extracted weights using an LLM.
+    """Builds a mapping from original units to cleaned units and extracted weights using an LLM.
 
-    Args:
-        unique_units (np.ndarray): An array of unique unit strings.
-        gemini_client (Any): The client for the Gemini API.
-        weight_extraction_instructions (Optional[str]): Custom instructions for weight extraction.
-        df (pd.DataFrame): The original DataFrame to sample product names from.
-        units_column (str): The name of the column containing unit strings.
-        product_name_column (str): The name of the column containing product names.
-
-    Returns:
-        pd.DataFrame: A DataFrame with columns 'original_unit', 'llm_cleaned_unit',
-                      'llm_extracted_weight', and 'example_products'.
+    `df` is the original DataFrame, sampled for product names. The result has columns
+    'original_unit', 'llm_cleaned_unit', 'llm_extracted_weight', 'example_products', and
+    'previously_classified'.
     """
     # Validate input columns
     if units_column not in df.columns:
@@ -454,25 +348,12 @@ def _build_unit_mapping(
 def create_unclear_items_csv(
     weights: pd.DataFrame, client_name: str, output_dir: str | None = None
 ) -> str:
-    """
-    Saves all items with unclear units or weights to a CSV file for manual review.
+    """Saves all items with unclear units or weights to a CSV file for manual review.
 
-    Unclear items are those where:
-      - 'llm_cleaned_unit' is missing or marked as "Unknown or unusable unit"
-      - 'llm_extracted_weight' is missing
-
-    Args:
-        weights (pd.DataFrame): DataFrame containing unit classification results.
-        client_name (str): Name of the client or dataset (used in filename).
-        output_dir (Optional[str]): Directory to save the CSV file. If None, saves in current
-            directory.
-
-    Returns:
-        str: The full path to the saved CSV file.
-
-    Example:
-        >>> create_unclear_items_csv(weights, "client")
-        >>> create_unclear_items_csv(weights, "client", output_dir="results/")
+    Unclear items are those where 'llm_cleaned_unit' is missing or "Unknown or unusable unit",
+    or 'llm_extracted_weight' is missing. `client_name` goes in the filename; `output_dir` of
+    None saves in the current directory. Returns a "Saved unclear items to <path>" message, not
+    the bare path.
     """
     # Validate input columns
     required_cols = ["llm_cleaned_unit", "llm_extracted_weight"]
@@ -508,18 +389,9 @@ def _compute_weight_in_kilograms(
     category_column_name: str,
     warnings_set: set[str],
 ) -> float:
-    """
-    Computes the weight in kilograms for a given row, based on the unit and product category.
+    """Computes the weight in kilograms for a given row, based on the unit and product category.
 
-    Args:
-        row (pd.Series): A row of a DataFrame containing unit, weight, and category.
-        unit_column_name (str): The name of the column containing unit identifiers.
-        weight_column_name (str): The name of the column containing weight values.
-        category_column_name (str): The name of the column containing product category labels.
-        warnings_set (set): A set to collect unique warnings.
-
-    Returns:
-        float: The weight in kilograms, or np.nan if conversion is not possible.
+    Returns np.nan if conversion is not possible; unique warnings are added to `warnings_set`.
     """
     unit = str(row[unit_column_name]).lower().strip()
     if not unit:
@@ -605,20 +477,11 @@ def _compute_weight_in_kilograms(
 def convert_products_to_kilograms(
     df: pd.DataFrame, unit_column_name: str, weight_column_name: str, category_column_name: str
 ) -> pd.DataFrame:
-    """
-    Converts weights from various units to kilograms, considering both unit conversion factors
-    and product-specific densities for volume-based units.
+    """Converts weights to kilograms, using product-category densities for volume units.
 
-    Parameters:
-        df (pd.DataFrame): The input DataFrame containing weight and unit information.
-        unit_column_name (str): The name of the column containing unit identifiers (e.g., 'kg',
-            'oz', 'cup').
-        weight_column_name (str): The name of the column containing weight values.
-        category_column_name (str): The name of the column containing product category labels.
-
-    Returns:
-        pd.DataFrame: The original DataFrame with an additional 'kilos' column representing
-            weights in kilograms.
+    `unit_column_name` holds units like 'kg', 'oz', or 'cup'. Returns a copy of `df` with an
+    added 'kilos_total' column. Raises ValueError if any of the three columns has NaNs, and
+    AssertionError if any row can't be converted.
     """
     # Validate input columns
     for col in [unit_column_name, weight_column_name, category_column_name]:
@@ -686,31 +549,12 @@ def convert_products_to_kilograms(
 def classify_units_using_historical_weights(
     unit_mapping_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict[str, int | float]]:
-    """
-    Classifies unit strings using a historical list of weight classifications.
+    """Classifies unit strings using a historical list of weight classifications.
 
-    This function loads previously classified weight units and merges the
-    'llm_cleaned_unit' and 'llm_extracted_weight' from this historical data
-    into the input `unit_mapping_df` based on matching 'original_unit' values.
-
-    A 'previously_classified' boolean column is added to `unit_mapping_df`.
-    This column is `True` if a unit was found in the historical data (and thus
-    its weight classification columns are populated from historical data), and
-    `False` otherwise.
-
-    Args:
-        unit_mapping_df (pd.DataFrame): DataFrame with an 'original_unit' column
-                                        containing unique unit strings to classify.
-
-    Returns:
-        tuple: A tuple containing:
-            - pd.DataFrame: The `unit_mapping_df` augmented with classification columns
-            - Dict[str, Union[int, float]]: Statistics dictionary with keys:
-                - 'total_units': Total number of units in input
-                - 'matched_units': Number of units found in historical data
-                - 'unmatched_units': Number of units not in historical data
-                - 'match_percentage': Percentage of units matched
-                - 'unmatch_percentage': Percentage of units not matched
+    Returns a copy of `unit_mapping_df` with 'llm_cleaned_unit' and 'llm_extracted_weight' filled
+    from the historical data by 'original_unit', plus a 'previously_classified' column that is
+    True where the unit was found. The stats dict has 'total_units', 'matched_units',
+    'unmatched_units', 'match_percentage', and 'unmatch_percentage'.
     """
     # Validate input columns
     if "original_unit" not in unit_mapping_df.columns:
@@ -791,26 +635,11 @@ def classify_units_using_historical_weights(
 
 
 def expand_historical_weight_classifications(df: pd.DataFrame) -> None:
-    """
-    Expands the historical weight classifications file with new data from a DataFrame.
+    """Expands the historical weight classifications file with new data from a DataFrame.
 
-    This function takes a DataFrame `df`, expected to contain weight
-    classifications (at least 'original_unit', 'llm_cleaned_unit', and
-    'llm_extracted_weight' columns). It loads the existing historical weight
-    classifications, appends the relevant columns from the new `df`, and then
-    de-duplicates based on the 'original_unit' column, keeping the last occurrence.
-    This means entries from `df` will overwrite existing historical entries for
-    the same original unit.
-
-    The expanded and de-duplicated list is then saved back to the historical
-    weight classifications CSV file, overwriting the original file.
-
-    Args:
-        df (pd.DataFrame): A DataFrame containing new or updated weight
-                           classifications. It must include columns that are
-                           present in the historical weight data file (e.g.,
-                           'original_unit', 'llm_cleaned_unit', 'llm_extracted_weight',
-                           'example_products').
+    `df` needs 'original_unit', 'llm_cleaned_unit', and 'llm_extracted_weight'; only its columns
+    that the historical file already has are kept. Rows are de-duplicated on 'original_unit',
+    so entries from `df` overwrite historical ones, and the CSV is overwritten in place.
     """
     # Validate input columns
     required_cols = ["original_unit", "llm_cleaned_unit", "llm_extracted_weight"]
@@ -839,18 +668,7 @@ def expand_historical_weight_classifications(df: pd.DataFrame) -> None:
 
 
 def get_previously_classified_weights_location() -> Path:
-    """
-    Returns the file path for the CSV containing previously classified weights.
-
-    This function centralizes the logic for determining the location of the
-    historical weight classifications file, which is located at
-    "data_files/previously_classified_weights.csv" relative to this script's
-    directory. Using a dedicated function ensures the path is consistent.
-
-    Returns:
-        Path: A pathlib.Path object representing the full path to the
-              previously_classified_weights.csv file.
-    """
+    """Returns the path of data_files/previously_classified_weights.csv in this package."""
     historical_weight_classifications_filepath = (
         PACKAGE_DIR / "data_files" / "previously_classified_weights.csv"
     )
@@ -866,16 +684,7 @@ def _empty_previously_classified_weights() -> pd.DataFrame:
 
 
 def get_previously_classified_weights() -> pd.DataFrame:
-    """
-    Loads and returns the previously classified weights from the CSV file.
-
-    This function reads the CSV file specified by
-    `get_previously_classified_weights_location()` into a pandas DataFrame.
-    It also prints a message indicating the number of weight units loaded from the file.
-
-    Returns:
-        pd.DataFrame: A DataFrame containing the historically classified weight units.
-    """
+    """Loads and returns the previously classified weights from the CSV file."""
     path = get_previously_classified_weights_location()
     if not path.exists():
         logger.warning(
@@ -897,17 +706,9 @@ def get_previously_classified_weights() -> pd.DataFrame:
 def _extract_weight_unit_from_product_name(
     product_name: str, gemini_client: Any, custom_weight_prompt: str | None = None
 ) -> dict[str, str | None]:
-    """
-    Attempts to extract both weight and unit from a product name using LLM.
+    """Attempts to extract both weight and unit from a product name using LLM.
 
-    Args:
-        product_name (str): The product name to extract from.
-        gemini_client (Any): The client for the Gemini API.
-        custom_weight_prompt (Optional[str]): Custom instructions for weight extraction.
-
-    Returns:
-        Dict[str, Optional[str]]: Dictionary with keys 'cleaned_unit' and 'extracted_weight'.
-                                  Values are None if extraction failed.
+    Returns a dict with 'cleaned_unit' and 'extracted_weight', each None where extraction failed.
     """
     result = {"cleaned_unit": None, "extracted_weight": None}
 

@@ -59,12 +59,7 @@ def write_excel_workbook(
     path and stay aligned on Excel-writing behavior. It is public because the lab
     builds its QA workbook from a different package.
 
-    Args:
-        output_path: Destination workbook path; resolved to an absolute path.
-        sheets: Mapping of sheet name to DataFrame; ``None`` values are skipped.
-
-    Returns:
-        Absolute path of the workbook that was written.
+    ``None`` sheets are skipped. Returns the absolute path of the written workbook.
     """
     output_path = str(Path(output_path).resolve())
 

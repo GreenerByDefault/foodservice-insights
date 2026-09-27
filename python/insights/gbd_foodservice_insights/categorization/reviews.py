@@ -15,23 +15,13 @@ def build_ai_review_table(
     unique_products_df: pd.DataFrame,
     include_no_matches: bool = True,
 ) -> pd.DataFrame:
-    """
-    Build a product-level human-review table for AI-categorized items only.
+    """Build a product-level human-review table for AI-categorized items only.
 
-    Parameters
-    ----------
-    original_df : DataFrame
-        Original cleaned input rows with a 'product' column.
-    unique_products_df : DataFrame
-        Unique products with 'product', 'category', and 'previously_categorized'.
-    include_no_matches : bool
-        Whether to include rows categorized as "No Matches Found".
+    `original_df` is the cleaned input rows, with a 'product' column; `unique_products_df` needs
+    'product', 'category', and 'previously_categorized'.
 
-    Returns
-    -------
-    DataFrame
-        Columns: 'category', 'product', 'occurrence_count', sorted by
-        category ASC, occurrence_count DESC, product ASC.
+    The returned table has columns 'category', 'product', and 'occurrence_count', sorted by
+    category ASC, occurrence_count DESC, product ASC.
     """
     required_original_cols = {"product"}
     required_unique_cols = {"product", "category", "previously_categorized"}

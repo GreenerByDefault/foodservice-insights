@@ -18,15 +18,7 @@ MANIFEST_VERSION = 1
 
 
 def default_report_output_dir(input_file: str | Path) -> Path:
-    """Return the default directory for one report run's artifacts.
-
-    Args:
-        input_file: Path to the categorized input file the report runs on.
-
-    Returns:
-        Directory path under ``<input parent>/outputs/<stem>`` where the stem
-        has any leading ``"categorized_"`` prefix removed.
-    """
+    """Return ``<input parent>/outputs/<stem>``, with ``categorized_`` stripped from the stem."""
     input_path = Path(input_file).resolve()
     stem = input_path.stem.replace("categorized_", "")
     return input_path.parent / "outputs" / stem
@@ -40,14 +32,7 @@ def build_report_artifact_paths(out_dir: str | Path, stem: str) -> dict[str, str
     contract keeps ``food_report_{stem}.xlsx`` as the client workbook for
     backward compatibility, with internal artifacts on sibling filenames.
 
-    Args:
-        out_dir: Directory in which artifacts will be written; created if missing.
-        stem: Stem used to compose ``food_report_{stem}`` filenames.
-
-    Returns:
-        Mapping of artifact key to absolute path. Keys: ``pdf_path``,
-        ``client_excel_path``, ``qa_excel_path``, ``log_path``, ``manifest_path``,
-        ``graphs_dir``.
+    Creates ``out_dir`` and its ``graphs`` subdirectory if missing.
     """
     resolved_out_dir = Path(out_dir).resolve()
     resolved_out_dir.mkdir(parents=True, exist_ok=True)
@@ -66,14 +51,7 @@ def build_report_artifact_paths(out_dir: str | Path, stem: str) -> dict[str, str
 
 
 def _load_metadata_dict(metadata_path: Path) -> dict[str, Any]:
-    """Load existing client metadata when present.
-
-    Args:
-        metadata_path: Path to a JSON metadata file.
-
-    Returns:
-        Parsed metadata dict, or an empty dict if the file is absent or not a JSON object.
-    """
+    """Load client metadata, or ``{}`` if the file is absent or not a JSON object."""
     if not metadata_path.exists():
         return {}
     with open(metadata_path) as f:
@@ -82,14 +60,7 @@ def _load_metadata_dict(metadata_path: Path) -> dict[str, Any]:
 
 
 def _quality_issue_counts(quality_summary: dict[str, Any] | None) -> dict[str, int]:
-    """Normalize quality status counts for metadata and manifest outputs.
-
-    Args:
-        quality_summary: Optional summary mapping with a ``"by_status"`` sub-dict.
-
-    Returns:
-        Dict with integer counts for keys ``success``, ``info``, ``warning``, ``error``.
-    """
+    """Normalize quality status counts for metadata and manifest outputs."""
     by_status = (quality_summary or {}).get("by_status", {})
     return {
         "success": int(by_status.get("success", 0)),
@@ -111,15 +82,8 @@ def update_metadata_with_report_outputs(
     """Persist report output paths and summary metrics to client metadata.
 
     This exists so later notebook/script steps can discover the latest report
-    outputs without guessing filenames.
-
-    Args:
-        metadata_path: JSON file to update in-place (created if missing).
-        artifact_paths: Mapping returned by ``build_report_artifact_paths``.
-        input_file: Path of the categorized input file used for the run.
-        quality_status: Overall quality status string.
-        quality_summary: Quality summary mapping with a ``"by_status"`` sub-dict.
-        graph_paths: Optional list of graph image paths produced for the run.
+    outputs without guessing filenames. ``metadata_path`` is updated in place, or created;
+    ``artifact_paths`` is the mapping from ``build_report_artifact_paths``.
     """
     metadata = _load_metadata_dict(metadata_path)
     issue_counts = _quality_issue_counts(quality_summary)
@@ -168,26 +132,10 @@ def write_run_manifest(
     without parsing logs or opening the client artifacts. The manifest is an
     internal run summary, not a client-facing deliverable.
 
-    Args:
-        manifest_path: Destination JSON path; resolved to an absolute path.
-        run_id: Identifier for this report run.
-        run_status: Run status string (e.g. ``"success"``, ``"failed"``).
-        started_at: ISO-format start timestamp.
-        completed_at: ISO-format completion timestamp.
-        input_file: Path of the input file used for the run.
-        mode: Report mode (e.g. ``"procurement"`` or ``"serving"``).
-        region: Region identifier for the run.
-        diner_or_meal: Per-unit label associated with the run.
-        artifact_paths: Mapping returned by ``build_report_artifact_paths``.
-        quality_status: Optional overall quality status string.
-        quality_summary: Optional quality summary mapping with ``"by_status"`` counts.
-        metadata_context: Optional client-metadata snapshot used to seed
-            ``client_metadata_context`` fields.
-        graph_paths: Optional list of graph image paths to record.
-        error_message: Optional error message; included only when not ``None``.
-
-    Returns:
-        Absolute path of the manifest file that was written.
+    Timestamps are ISO-format; ``run_status`` is e.g. ``"success"`` or ``"failed"``. ``mode`` is
+    normally ``"procurement"`` or ``"serving"``, but a failed run may record the raw requested
+    mode or ``"unknown"``. ``metadata_context`` is a client-metadata snapshot that
+    seeds ``client_metadata_context``. Returns the manifest's absolute path.
     """
     manifest_path = str(Path(manifest_path).resolve())
     manifest: dict[str, Any] = {
@@ -245,20 +193,6 @@ def build_run_result(
     while artifact naming and compatibility aliases live in one place. The
     ``excel_path`` alias is intentionally preserved and should continue to
     point at the client workbook unless a deliberate API change is made.
-
-    Args:
-        artifact_paths: Mapping returned by ``build_report_artifact_paths``.
-        run_id: Identifier for this report run.
-        run_status: Run status string (e.g. ``"success"``, ``"failed"``).
-        diagnostics: List of diagnostic-finding dicts produced during the run.
-        summary: Mapping of summary statistics for the run.
-        quality_status: Overall quality status string.
-        missing_data_findings: Findings related to missing data, as dicts.
-        quality_summary: Quality summary mapping with ``"by_status"`` counts.
-        graph_paths: Optional list of graph image paths produced for the run.
-
-    Returns:
-        Result-payload dict with stable keys for downstream consumers.
     """
     return {
         "pdf_path": artifact_paths["pdf_path"],

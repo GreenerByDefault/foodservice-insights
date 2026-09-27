@@ -16,51 +16,29 @@ from gbd_foodservice_insights.categorization.cache import get_previously_categor
 # will basically see if the new model can match the correct classifications from previously
 # classified products.
 def clean_item_name_challenger(item: str, client: Any = None) -> str | None:
-    """
-    Cleans an item name using a 'challenger' LLM.
-    This is a placeholder for the actual implementation.
+    """Clean an item name using a 'challenger' LLM.
 
-    Args:
-        item (str): The item name to clean.
-        client (Any, optional): The LLM client. Defaults to None.
-
-    Returns:
-        Optional[str]: The cleaned item name, or None if placeholder is not replaced.
+    Placeholder for the actual implementation; returns None until it is replaced.
     """
 
     return None  # Placeholder for the actual implementation
 
 
 def match_items_items_to_GBD_categories_challenger(item: str, client: Any = None) -> str | None:
-    """
-    Matches a cleaned item name to GBD categories using a 'challenger' LLM.
-    This is a placeholder for the actual implementation.
+    """Match a cleaned item name to GBD categories using a 'challenger' LLM.
 
-    Args:
-        item (str): The cleaned item name.
-        client (Any, optional): The LLM client. Defaults to None.
-
-    Returns:
-        Optional[str]: The GBD category, or None if placeholder is not replaced.
+    Placeholder for the actual implementation; returns None until it is replaced.
     """
 
     return None  # Placeholder for the actual implementation
 
 
 def test_new_categorization_LLM(n_test_samples: int = 100) -> None:
-    """
-    Tests a new LLM categorization pipeline (challenger model) against previously
-    categorized items.
+    """Test a challenger LLM categorization pipeline against previously categorized items.
 
-    It samples data, applies the challenger's cleaning and categorization functions,
-    and compares results (comparison logic is currently commented out).
-    Prints progress and potentially saves discrepancies to CSV if uncommented.
-
-    Raises:
-        ValueError: If 'previously_categorized_items.csv' is empty.
-
-    Returns:
-        None.
+    Samples ``n_test_samples`` items that have a cleaned name, runs the challenger categorizer
+    on them, and prints the share of results that are GBD categories and that match the true
+    category. Raises ``ValueError`` if fewer than ``n_test_samples`` items have a cleaned name.
     """
 
     # Load the previously categorized items

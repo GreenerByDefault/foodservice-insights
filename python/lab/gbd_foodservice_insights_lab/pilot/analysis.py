@@ -25,24 +25,15 @@ def _load_and_concat_data(
     merge_on_category: bool = False,
     validate_months: bool = False,
 ) -> pd.DataFrame:
-    """
-    Generic helper function to load and combine data from baseline and pilot Excel files.
+    """Load a sheet from the baseline and pilot Excel files and combine them.
 
-    Args:
-        baseline_input_file (str): Path to baseline Excel file.
-        pilot_input_file (str): Path to pilot Excel file.
-        sheet_name (str): Name of the sheet to load.
-        transpose (bool): Whether to transpose the data. Defaults to False.
-        drop_total_column (bool): Whether to drop 'total' column. Defaults to False.
-        drop_total_row (bool): Whether to drop rows where a column equals 'total'.
-            Defaults to False.
-        merge_on_category (bool): Whether to merge (inner join on 'category') instead of
-            concat. Defaults to False.
-        validate_months (bool): Whether to validate that baseline and pilot have same number
-            of months. Defaults to False.
-
-    Returns:
-        pd.DataFrame: Combined or merged data.
+    By default the frames are concatenated with a ``period`` column of ``"baseline"`` or
+    ``"pilot"``; ``merge_on_category`` instead inner-joins them on ``category`` and ignores
+    ``drop_total_row`` and ``validate_months``. ``drop_total_column`` drops the ``total``
+    column. ``drop_total_row`` assumes transposed data: it renames ``index`` and ``0`` to
+    ``month_year`` and ``diner-meals``, then drops the ``month_year == "total"`` row.
+    ``validate_months`` asserts both periods have the same number of unique ``month_year``
+    values.
     """
     baseline_data = pd.read_excel(baseline_input_file, sheet_name=sheet_name)
     pilot_data = pd.read_excel(pilot_input_file, sheet_name=sheet_name)
@@ -81,15 +72,9 @@ def _load_and_concat_data(
 
 
 def load_template_data(baseline_input_file: str, pilot_input_file: str) -> pd.DataFrame:
-    """
-    Load and merge template data from baseline and pilot Excel files.
+    """Load and merge template data from the baseline and pilot "Template Data" sheets.
 
-    Args:
-        baseline_input_file (str): Path to baseline Excel file with "Template Data" sheet.
-        pilot_input_file (str): Path to pilot Excel file with "Template Data" sheet.
-
-    Returns:
-        pd.DataFrame: Merged template data with columns from both baseline and pilot periods.
+    The result has columns from both periods.
     """
     return _load_and_concat_data(
         baseline_input_file,
@@ -101,16 +86,9 @@ def load_template_data(baseline_input_file: str, pilot_input_file: str) -> pd.Da
 
 
 def load_monthly_product_data(baseline_input_file: str, pilot_input_file: str) -> pd.DataFrame:
-    """
-    Load and combine monthly product data from baseline and pilot Excel files.
+    """Load and combine the baseline and pilot "Monthly Product Data" sheets.
 
-    Args:
-        baseline_input_file (str): Path to baseline Excel file with "Monthly Product Data" sheet.
-        pilot_input_file (str): Path to pilot Excel file with "Monthly Product Data" sheet.
-
-    Returns:
-        pd.DataFrame: Combined monthly product data with 'period' column indicating baseline
-            or pilot.
+    A ``period`` column marks each row as baseline or pilot.
     """
     return _load_and_concat_data(
         baseline_input_file, pilot_input_file, sheet_name="Monthly Product Data"
@@ -118,16 +96,9 @@ def load_monthly_product_data(baseline_input_file: str, pilot_input_file: str) -
 
 
 def load_monthly_category_data(baseline_input_file: str, pilot_input_file: str) -> pd.DataFrame:
-    """
-    Load and combine monthly category data from baseline and pilot Excel files.
+    """Load and combine the baseline and pilot "Monthly Category Data" sheets.
 
-    Args:
-        baseline_input_file (str): Path to baseline Excel file with "Monthly Category Data" sheet.
-        pilot_input_file (str): Path to pilot Excel file with "Monthly Category Data" sheet.
-
-    Returns:
-        pd.DataFrame: Combined monthly category data with 'period' column indicating baseline
-            or pilot.
+    A ``period`` column marks each row as baseline or pilot.
     """
     return _load_and_concat_data(
         baseline_input_file, pilot_input_file, sheet_name="Monthly Category Data"
@@ -137,19 +108,10 @@ def load_monthly_category_data(baseline_input_file: str, pilot_input_file: str) 
 def load_diner_meal_data(
     baseline_input_file: str, pilot_input_file: str, validate_months: bool = True
 ) -> pd.DataFrame:
-    """
-    Load and combine diner-meal numbers from baseline and pilot Excel files.
+    """Load and combine the baseline and pilot "Diner-Meal Numbers" sheets.
 
-    Args:
-        baseline_input_file (str): Path to baseline Excel file with "Diner-Meal Numbers" sheet.
-        pilot_input_file (str): Path to pilot Excel file with "Diner-Meal Numbers" sheet.
-        validate_months (bool, optional): Whether to validate that baseline and pilot have the same
-                                         number of months. Defaults to True.
-
-    Returns:
-        pd.DataFrame: Combined diner-meal data with columns 'month_year', 'diner-meals', and
-            'period'.
-                     The 'total' row is removed as it's not needed for analysis.
+    Returns ``month_year``, ``diner-meals``, and ``period`` columns, without the ``total``
+    row. ``validate_months`` checks both periods have the same number of months.
     """
     return _load_and_concat_data(
         baseline_input_file,
@@ -164,18 +126,9 @@ def load_diner_meal_data(
 def load_monthly_product_category_data(
     baseline_input_file: str, pilot_input_file: str
 ) -> pd.DataFrame:
-    """
-    Load and combine monthly product x category data from baseline and pilot Excel files.
+    """Load and combine the baseline and pilot "Monthly Product x category Data" sheets.
 
-    Args:
-        baseline_input_file (str): Path to baseline Excel file with "Monthly Product x
-            category Data" sheet.
-        pilot_input_file (str): Path to pilot Excel file with "Monthly Product x category
-            Data" sheet.
-
-    Returns:
-        pd.DataFrame: Combined monthly product x category data with 'period' column
-            indicating baseline or pilot.
+    A ``period`` column marks each row as baseline or pilot.
     """
     return _load_and_concat_data(
         baseline_input_file, pilot_input_file, sheet_name="Monthly Product x category Data"
@@ -188,33 +141,14 @@ def load_all_pilot_data(
     include_total_meat: bool = True,
     validate_months: bool = True,
 ) -> dict:
-    """
-    Load all pilot analysis datasets in one call.
+    """Load all pilot analysis datasets in one call.
 
-    This function loads all datasets needed for pilot analysis:
-    - template_data: Merged template data from baseline and pilot
-    - monthly_product_data: Combined monthly product data
-    - monthly_category_data: Combined monthly category data
-    - diner_meal_data: Combined diner-meal numbers
-    - monthly_product_category_data: Combined monthly product x category data
-    - period_category_data: Aggregated period-level category data with kilos per diner-meal
-
-    Args:
-        baseline_input_file (str): Path to baseline Excel file.
-        pilot_input_file (str): Path to pilot Excel file.
-        include_total_meat (bool, optional): Whether to include aggregate "total meat" category
-                                            in period_category_data. Defaults to True.
-        validate_months (bool, optional): Whether to validate that baseline and pilot have the same
-                                         number of months. Defaults to True.
-
-    Returns:
-        dict: Dictionary with keys:
-            - 'template_data': pd.DataFrame
-            - 'monthly_product_data': pd.DataFrame
-            - 'monthly_category_data': pd.DataFrame
-            - 'diner_meal_data': pd.DataFrame
-            - 'monthly_product_category_data': pd.DataFrame
-            - 'period_category_data': pd.DataFrame
+    Returns a dict of DataFrames keyed by ``template_data``, ``monthly_product_data``,
+    ``monthly_category_data``, ``diner_meal_data``, ``monthly_product_category_data``, and
+    ``period_category_data`` (period-level category totals with kilos per diner-meal).
+    ``include_total_meat`` adds an aggregate "total meat" category to
+    ``period_category_data``; ``validate_months`` checks both periods have the same number
+    of months.
     """
     template_data = load_template_data(baseline_input_file, pilot_input_file)
     monthly_product_data = load_monthly_product_data(baseline_input_file, pilot_input_file)
@@ -242,23 +176,15 @@ def load_all_pilot_data(
 
 
 def calculate_product_overlap(monthly_product_data: pd.DataFrame) -> dict:
-    """
-    Calculate the overlap of unique product names between baseline and pilot periods.
+    """Calculate the overlap of unique product names between baseline and pilot periods.
 
-    This function normalizes product names (lowercase, strip whitespace) to determine
-    how many products are consistent between baseline and pilot periods. This helps
+    Names are normalized (lowercase, strip whitespace) before comparing. The overlap helps
     assess whether changes in metrics are due to menu composition shifts vs actual
     intervention effects.
 
-    Args:
-        monthly_product_data (pd.DataFrame): DataFrame with 'product_name' and 'period' columns.
-
-    Returns:
-        dict: Dictionary with keys:
-            - 'baseline_unique': int - Number of unique products in baseline
-            - 'pilot_unique': int - Number of unique products in pilot
-            - 'overlap_count': int - Number of products appearing in both periods
-            - 'overlap_percentage': float - Percentage of baseline products appearing in pilot
+    ``monthly_product_data`` needs ``product_name`` and ``period`` columns. Returns
+    ``baseline_unique``, ``pilot_unique``, ``overlap_count``, and ``overlap_percentage``
+    (the percentage of baseline products appearing in pilot).
     """
     # Normalize product names: lowercase and strip whitespace
     monthly_product_data = monthly_product_data.copy()
@@ -291,18 +217,11 @@ def calculate_product_overlap(monthly_product_data: pd.DataFrame) -> dict:
 
 
 def plant_animal_split(monthly_category_data: pd.DataFrame) -> pd.Series:
-    """
-    Calculate the percentage of plant-based protein vs animal protein for each period.
+    """Calculate the percentage of plant-based protein vs animal protein for each period.
 
-    Args:
-        monthly_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            'kilos_total']. Categories should match GBD categories from YAML.
-
-    Returns:
-        pd.Series: Series with period as index and plant-based protein percentage as values.
-
-    Raises:
-        ValueError: If the data contains categories not defined in the GBD categories YAML.
+    ``monthly_category_data`` needs ``category``, ``period``, and ``kilos_total`` columns.
+    Returns the plant-based percentage indexed by period. Raises ``ValueError`` if the data
+    contains categories not defined in the GBD categories YAML.
     """
     # Get valid protein and animal categories from YAML (lowercase for comparison)
     valid_gbd_categories = set(get_GBD_categories(lowercase=True))
@@ -356,41 +275,20 @@ def plant_animal_split(monthly_category_data: pd.DataFrame) -> pd.Series:
 
 
 def compare_plant_based_product_counts(monthly_product_category_data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compare the number of unique plant-based products between baseline and pilot periods.
+    """Compare the number of unique plant-based products between baseline and pilot periods.
 
-    This function filters the data to only include plant-based categories (as defined in
-    GBD_categories.yaml), then counts the number of unique products in each category for
-    both baseline and pilot periods. It also provides a fuller breakdown showing which
-    products were added or removed within each plant-based category, so the notebook can
-    explain not just whether counts changed but how the mix changed.
+    Filters to the plant-based categories in GBD_categories.yaml and, per category, also
+    lists which products were added or removed, so the notebook can explain not just
+    whether counts changed but how the mix changed. Display it with
+    ``print_plant_based_product_changes``.
 
-    Args:
-        monthly_product_category_data (pd.DataFrame): DataFrame with columns
-            ['product', 'category', 'period']. The 'period' column should contain
-            'baseline' and 'pilot' values.
-
-    Returns:
-        pd.DataFrame: DataFrame with columns:
-            - meta_category (str): Always "Plant-Based"
-            - category (str): The plant-based category name
-            - baseline_count (int): Number of unique products in baseline period
-            - pilot_count (int): Number of unique products in pilot period
-            - change (int): Difference in unique product count (pilot - baseline)
-            - pct_change (float): Percentage change from baseline to pilot
-            - retained_count (int): Number of unique products appearing in both periods
-            - products_added_count (int): Number of products newly appearing in pilot
-            - products_removed_count (int): Number of products present in baseline but not pilot
-            - increased (bool): True if pilot_count > baseline_count
-            - baseline_products (list[str]): Unique baseline product names in this category
-            - pilot_products (list[str]): Unique pilot product names in this category
-            - products_added (list[str]): Products newly appearing in pilot
-            - products_removed (list[str]): Products no longer appearing in pilot
-        Sorted by absolute change (descending).
-
-    Example:
-        >>> result = compare_plant_based_product_counts(monthly_product_category_data)
-        >>> print_plant_based_product_changes(result)
+    ``monthly_product_category_data`` needs ``product``, ``category``, and ``period``
+    (``"baseline"`` / ``"pilot"``) columns. Returns one row per plant-based category
+    (``meta_category`` is always ``"Plant-Based"``) with ``baseline_count``,
+    ``pilot_count``, ``change`` (pilot - baseline), ``pct_change``, ``retained_count``,
+    ``products_added_count``, ``products_removed_count``, ``increased``, and the product-name
+    lists ``baseline_products``, ``pilot_products``, ``products_added``, and
+    ``products_removed``. Sorted by absolute change, descending.
     """
     required_columns = {"product", "category", "period"}
     missing = required_columns - set(monthly_product_category_data.columns)
@@ -523,26 +421,16 @@ def analyze_category_consumption(
     categories: list[str] | None = None,
     category_label: str = "Category",
 ) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-    """
-    Analyze consumption for any combination of categories, comparing baseline and pilot periods.
+    """Analyze consumption for any combination of categories, comparing baseline and pilot.
 
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            'kilos_total'].
-        diner_meal_data (pd.DataFrame): DataFrame with columns ['period', 'diner-meals'].
-        categories (list[str] | None): List of category names to include in the analysis.
-                                       If None, will auto-detect based on category_label.
-        category_label (str): Label to use in outputs (e.g., "Meat", "Dairy", "Animal
-            Products", "Eggs"). If categories is None, this will be used to auto-fetch the
-            appropriate categories. Defaults to "Category".
+    ``period_category_data`` needs ``category``, ``period``, and ``kilos_total`` columns;
+    ``diner_meal_data`` needs ``period`` and ``diner-meals`` columns. When ``categories`` is
+    None, they are looked up from ``category_label`` (e.g. "Meat", "Dairy", "Animal Products",
+    "Eggs"), which also labels the output.
 
-    Returns:
-        tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-            - per_diner_meal: Series with 'baseline' and 'pilot' consumption per diner-meal (kg)
-            - summary: DataFrame with detailed breakdown including total, diner-meals, and
-              per-diner-meal metrics
-            - averted_summary: DataFrame with expected consumption, actual consumption, and
-              averted metrics
+    Returns consumption per diner-meal (kg) for baseline and pilot, a summary with totals,
+    diner-meals, and per-diner-meal metrics, and an averted summary with expected
+    consumption, actual consumption, and averted metrics.
     """
     # Auto-resolve categories based on category_label if not provided
     if categories is None:
@@ -676,24 +564,10 @@ def analyze_category_consumption(
 def analyze_meat_consumption(
     period_category_data: pd.DataFrame, diner_meal_data: pd.DataFrame
 ) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-    """
-    Analyze meat consumption comparing baseline and pilot periods, including meat averted
-    calculation.
+    """Analyze meat consumption comparing baseline and pilot periods, including meat averted.
 
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            'kilos_total']. Must contain meat category data for both baseline and pilot
-            periods.
-        diner_meal_data (pd.DataFrame): DataFrame with columns ['period', 'diner-meals'].
-
-    Returns:
-        tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-            - meat_per_diner_meal: Series with 'baseline' and 'pilot' meat consumption per
-              diner-meal (kg)
-            - meat_summary: DataFrame with detailed breakdown including total meat,
-              diner-meals, and per-diner-meal metrics
-            - averted_summary: DataFrame with expected meat consumption, actual consumption,
-              and meat averted metrics
+    ``period_category_data`` must contain meat categories for both periods. See
+    ``analyze_category_consumption`` for the input columns and the three returned values.
     """
     return analyze_category_consumption(
         period_category_data=period_category_data,
@@ -705,21 +579,9 @@ def analyze_meat_consumption(
 def analyze_animal_product_consumption(
     period_category_data: pd.DataFrame, diner_meal_data: pd.DataFrame
 ) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-    """
-    Analyze animal product consumption (meat, dairy, eggs) comparing baseline and pilot periods.
+    """Analyze animal product (meat, dairy, eggs) consumption, comparing baseline and pilot.
 
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            'kilos_total'].
-        diner_meal_data (pd.DataFrame): DataFrame with columns ['period', 'diner-meals'].
-
-    Returns:
-        tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-            - animal_product_per_diner_meal: Series with 'baseline' and 'pilot' consumption
-              per diner-meal (kg)
-            - animal_product_summary: DataFrame with detailed breakdown
-            - averted_summary: DataFrame with expected consumption, actual consumption, and
-              averted metrics
+    See ``analyze_category_consumption`` for the input columns and the three returned values.
     """
     return analyze_category_consumption(
         period_category_data=period_category_data,
@@ -731,21 +593,9 @@ def analyze_animal_product_consumption(
 def analyze_milk_consumption(
     period_category_data: pd.DataFrame, diner_meal_data: pd.DataFrame
 ) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-    """
-    Analyze milk consumption comparing baseline and pilot periods.
+    """Analyze milk consumption comparing baseline and pilot periods.
 
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            'kilos_total'].
-        diner_meal_data (pd.DataFrame): DataFrame with columns ['period', 'diner-meals'].
-
-    Returns:
-        tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
-            - milk_per_diner_meal: Series with 'baseline' and 'pilot' milk consumption per
-              diner-meal (kg)
-            - milk_summary: DataFrame with detailed breakdown
-            - averted_summary: DataFrame with expected consumption, actual consumption, and
-              averted metrics
+    See ``analyze_category_consumption`` for the input columns and the three returned values.
     """
     # Use the generalized function with just the "Milk (cow's milk)" category
     # This is the standard category name in GBD_categories.yaml
@@ -793,22 +643,13 @@ def create_period_category_data(
     diner_meal_data: pd.DataFrame,
     include_total_meat: bool = True,
 ) -> pd.DataFrame:
-    """
-    Create period-level category data with kilos per diner_meal calculations.
+    """Create period-level category data with kilos per diner_meal calculations.
 
-    This function aggregates monthly category data by period, optionally adds a
-    "total meat" aggregate category, and calculates kilos per diner_meal metrics.
-
-    Args:
-        monthly_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            'kilos_total'].
-        diner_meal_data (pd.DataFrame): DataFrame with columns ['period', 'diner-meals'].
-        include_total_meat (bool, optional): Whether to add an aggregate "total meat" category
-                                            combining beef, pork, and poultry. Defaults to True.
-
-    Returns:
-        pd.DataFrame: DataFrame with columns ['category', 'period', 'kilos_total',
-            'diner-meals', 'kilos per diner-meal'].
+    ``monthly_category_data`` needs ``category``, ``period``, and ``kilos_total`` columns;
+    ``diner_meal_data`` needs ``period`` and ``diner-meals`` columns. ``include_total_meat``
+    adds an aggregate "total meat" category combining beef, pork, and poultry. Returns
+    ``category``, ``period``, ``kilos_total``, ``diner-meals``, and ``kilos per diner-meal``
+    columns.
     """
     # Aggregate by category and period
     period_category_data = (
@@ -845,26 +686,13 @@ def create_period_category_data(
 def get_category_baseline_pilot_comparison(
     period_category_data: pd.DataFrame, metric: str = "kilos per diner-meal"
 ) -> pd.DataFrame:
-    """
-    Create a summary table comparing baseline and pilot values for each category,
-    with absolute, percentage, and multiplicative change calculations.
+    """Compare baseline and pilot values of ``metric`` for each category.
 
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            metric]. Must contain both 'baseline' and 'pilot' values for each category.
-        metric (str, optional): The column name to pivot on. Defaults to "kilos per diner-meal".
-
-    Returns:
-        pd.DataFrame: Pivoted DataFrame with columns:
-            - 'category': GBD category name
-            - 'baseline': baseline period values
-            - 'pilot': pilot period values
-            - 'change': absolute change (pilot - baseline)
-            - 'pct_change': percentage change from baseline to pilot
-              ((pilot - baseline) / baseline * 100)
-            - 'multiplier': multiplicative change (pilot / baseline). E.g., 2.0 means pilot
-              is 2x baseline
-            Sorted by absolute value of percentage change (descending).
+    ``period_category_data`` needs ``category``, ``period``, and ``metric`` columns, with
+    both periods for every category. Returns ``category``, ``baseline``, ``pilot``,
+    ``change`` (pilot - baseline), ``pct_change`` ((pilot - baseline) / baseline * 100), and
+    ``multiplier`` (pilot / baseline, so 2.0 means pilot is 2x baseline), sorted by absolute
+    ``pct_change``, descending.
     """
     pivot = period_category_data.pivot(
         index="category", columns="period", values=metric
@@ -881,19 +709,11 @@ def get_category_baseline_pilot_comparison(
 def calculate_plant_milk_percentage(
     period_category_data: pd.DataFrame, metric: str = "kilos per diner-meal"
 ) -> pd.Series | None:
-    """
-    Calculate the percentage of milk that is plant-based for each period.
+    """Calculate the percentage of milk that is plant-based for each period.
 
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns ['category', 'period',
-            metric]. Must contain milk categories for both baseline and pilot periods.
-        metric (str, optional): The column name to use for calculations. Defaults to
-            "kilos per diner-meal".
-
-    Returns:
-        pd.Series: Series with 'baseline' and 'pilot' as index and plant-based milk
-            percentage as values. Returns None if no plant-based milk categories are found
-            in the data.
+    ``period_category_data`` needs ``category``, ``period``, and ``metric`` columns, with
+    milk categories for both periods. Returns percentages indexed by ``"baseline"`` and
+    ``"pilot"``, or None if the data has no plant-based milk categories.
     """
     # Check if we have plant-based milk data
     plant_milks = ["soy milk", "oat milk", "almond/coconut milk"]
@@ -928,27 +748,14 @@ def calculate_plant_milk_percentage(
 
 
 def calculate_monthly_plant_animal_split(monthly_category_data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate the percentage of plant-based protein vs animal protein for each month.
+    """Calculate the percentage of plant-based protein vs animal protein for each month.
 
-    This function provides month-by-month breakdown of plant vs animal protein distribution,
-    useful for tracking trends over time within baseline or pilot periods.
-
-    Args:
-        monthly_category_data (pd.DataFrame): DataFrame with columns ['category', 'month_year',
-            'kilos_total']. Categories should match GBD categories from YAML.
-
-    Returns:
-        pd.DataFrame: DataFrame with columns ['month_year', 'period', 'plant_kilos',
-            'animal_kilos', 'total_kilos', 'plant_percentage', 'animal_percentage'].
-            Kilos are rounded to nearest integer, percentages to 1 decimal place.
-            month_year is formatted as 'Jan-2024'.
-
-    Raises:
-        ValueError: If the data contains categories not defined in the GBD categories YAML.
-
-    Examples:
-        >>> monthly_split = calculate_monthly_plant_animal_split(monthly_category_data)
+    ``monthly_category_data`` needs ``category``, ``month_year``, and ``kilos_total``
+    columns. Returns a DataFrame with ``month_year`` (formatted like ``Jan-2024``), ``period``,
+    ``plant_kilos``, ``animal_kilos``, ``total_kilos``, ``plant_percentage``, and
+    ``animal_percentage`` columns; kilos are rounded to integers and percentages to one
+    decimal place. Raises ``ValueError`` if the data contains categories not defined in the
+    GBD categories YAML.
     """
     # Get valid protein and animal categories from YAML (lowercase for comparison)
     valid_gbd_categories = set(get_GBD_categories(lowercase=True))
@@ -1025,26 +832,12 @@ def calculate_monthly_plant_animal_split(monthly_category_data: pd.DataFrame) ->
 def calculate_monthly_milk_split(
     monthly_category_data: pd.DataFrame, print_table: bool = True
 ) -> pd.DataFrame | None:
-    """
-    Calculate the percentage of plant-based milk vs dairy milk for each month.
+    """Calculate the percentage of plant-based milk vs dairy milk for each month.
 
-    This function provides month-by-month breakdown of plant vs dairy milk distribution,
-    useful for tracking dairy displacement trends over time.
-
-    Args:
-        monthly_category_data (pd.DataFrame): DataFrame with columns ['category', 'month_year',
-            'kilos_total']. Categories should match GBD categories from YAML.
-        print_table (bool, optional): If True, prints a formatted table. Defaults to True.
-
-    Returns:
-        pd.DataFrame: DataFrame with columns ['month_year', 'period', 'plant_milk_kilos',
-            'dairy_milk_kilos', 'total_milk_kilos', 'plant_milk_percentage',
-            'dairy_milk_percentage']. Returns None if no milk categories are found in the data.
-
-    Examples:
-        >>> monthly_milk = calculate_monthly_milk_split(monthly_category_data)
-        >>> # Or without printing
-        >>> monthly_milk = calculate_monthly_milk_split(monthly_category_data, print_table=False)
+    ``monthly_category_data`` needs ``category``, ``month_year``, and ``kilos_total``
+    columns. Returns ``month_year``, ``period``, ``plant_milk_kilos``, ``dairy_milk_kilos``,
+    ``total_milk_kilos``, ``plant_milk_percentage``, and ``dairy_milk_percentage`` columns,
+    or None if the data has no milk categories.
     """
     dairy_categories = set(get_dairy_categories(lowercase=True))
 

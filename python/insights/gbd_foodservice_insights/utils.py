@@ -35,14 +35,9 @@ def rel_path(p: str | Path | None) -> str | Path | None:
 
 
 def print_progress(prefix: str, current: int, total: int, updates: int = 10) -> None:
-    """
-    Log a simple textual progress update.
+    """Log a simple textual progress update.
 
-    Args:
-        prefix: Message prefix describing the ongoing task.
-        current: The current iteration (1-indexed).
-        total: Total number of iterations/items to process.
-        updates: Approximate number of times to emit a progress message.
+    `current` is 1-indexed; `updates` is roughly how many messages to emit across `total`.
     """
     if total <= 0:
         return

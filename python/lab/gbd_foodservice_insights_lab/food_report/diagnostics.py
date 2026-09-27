@@ -12,16 +12,9 @@ def summarise_numeric_columns(
 ) -> pd.DataFrame:
     """Summarize specified numeric columns in a DataFrame.
 
-    For each numeric column, calculates mean, median, max, min, counts of
-    negative values, zeros, and NaN values.
-
-    Args:
-        df: The input DataFrame.
-        numeric_columns: Columns to summarize. If ``None``, all numeric columns
-            (excluding ``'page'``) are used.
-
-    Returns:
-        Summary DataFrame with one row per numeric column.
+    Returns one row per column with mean, median, max, min, and counts of negative values,
+    zeros, and NaN values. ``numeric_columns`` defaults to every numeric column; a ``page``
+    column is always excluded.
     """
     if numeric_columns is None:
         cols: list[str] = df.select_dtypes(include=[np.number]).columns.tolist()

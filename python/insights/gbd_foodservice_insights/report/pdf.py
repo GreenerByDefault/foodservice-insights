@@ -40,14 +40,7 @@ _SUMMARY_LINE_HEIGHT = 0.025
 
 
 def _new_text_figure(fig_size: tuple[float, float] = (8.5, 11)) -> tuple[Figure, plt.Axes]:
-    """Create a blank figure for rendering text or tables.
-
-    Args:
-        fig_size: Figure size in inches as ``(width, height)``.
-
-    Returns:
-        Tuple of the new ``Figure`` and its single ``Axes`` with axes turned off.
-    """
+    """Create a blank figure, with its single axes turned off, for rendering text or tables."""
     fig, ax = plt.subplots(figsize=fig_size)
     ax.axis("off")
     return fig, ax
@@ -62,12 +55,7 @@ def create_title_page(
 ) -> None:
     """Render a branded title page in the PDF.
 
-    Args:
-        pdf: Open ``PdfPages`` instance to which the page is appended.
-        client: Client identifier used as the title-page subheading.
-        baseline_pilot: Phase descriptor (e.g. ``"baseline"``, ``"pilot"``).
-        procurement_serving: Mode descriptor used in the subtitle.
-        fig_size: Figure size in inches as ``(width, height)``.
+    ``baseline_pilot`` is the phase, e.g. ``"baseline"`` or ``"pilot"``.
     """
     fig, ax = _new_text_figure(fig_size)
     ax.text(
@@ -154,14 +142,9 @@ def create_executive_summary_page(
     - ``narrative`` omitted (legacy callers): the original ``label: value``
       listing of ``summary_stats``, unchanged.
 
-    Args:
-        pdf: Open ``PdfPages`` instance to which the page is appended.
-        summary_stats: Mapping of label to value (legacy rendering).
-        fig_size: Figure size in inches as ``(width, height)``.
-        narrative: Optional plain-English payload with keys ``client``,
-            ``period``, ``total_food_kg``, ``total_co2e_kg``, ``per_dm_kg``,
-            ``dm_label``, ``plant_pct``, ``animal_pct``, ``top_categories``
-            (list of ``(name, pct_of_footprint)``) and ``quality_status``.
+    ``narrative`` has keys ``client``, ``period``, ``total_food_kg``, ``total_co2e_kg``,
+    ``per_dm_kg``, ``dm_label``, ``plant_pct``, ``animal_pct``, ``top_categories`` (list of
+    ``(name, pct_of_footprint)``) and ``quality_status``.
     """
     fig, ax = _new_text_figure(fig_size)
     # Span the whole page, so axes coordinates are page coordinates: the default subplot
@@ -312,12 +295,8 @@ def create_text_page(
 ) -> None:
     """Render a text page in the PDF, paginating long content as needed.
 
-    Args:
-        pdf: Open ``PdfPages`` instance to which the page(s) are appended.
-        title: Page title; subsequent pages get a ``" (cont.)"`` suffix.
-        content_lines: Lines of content; blank strings render as blank rows.
-        fig_size: Figure size in inches as ``(width, height)``.
-        bold_lines: Set of lines (after stripping) to render in bold.
+    Continuation pages get a ``" (cont.)"`` title suffix. Blank lines render as blank rows;
+    lines in ``bold_lines`` (compared after stripping) render in bold.
     """
     wrapped_lines = _wrap_text_lines(content_lines)
     bold_lines = {line.strip() for line in (bold_lines or set())}
@@ -370,11 +349,7 @@ def create_table_page(
 ) -> None:
     """Render a DataFrame as a styled table page in the PDF.
 
-    Args:
-        pdf: Open ``PdfPages`` instance to which the page is appended.
-        title: Heading shown above the table; certain titles trigger custom layouts.
-        dataframe: Source DataFrame; only the first 40 rows are rendered.
-        fig_size: Figure size in inches as ``(width, height)``.
+    Certain titles trigger custom layouts. Only the first 40 rows are rendered.
     """
     if title == "Decision KPIs":
         create_decision_kpis_page(pdf, dataframe)
@@ -503,10 +478,7 @@ def create_decision_kpis_page(
 ) -> None:
     """Render the decision KPI as a narrative text page.
 
-    Args:
-        pdf: Open ``PdfPages`` instance to which the page is appended.
-        dataframe: One-row DataFrame containing the decision-KPI fields.
-        fig_size: Figure size in inches as ``(width, height)``.
+    ``dataframe`` is one row of decision-KPI fields.
     """
     fig, ax = _new_text_figure(fig_size)
 
@@ -637,14 +609,8 @@ def _quality_to_lines(
 ) -> list[str]:
     """Turn quality-check results into plain lines for the PDF report.
 
-    Args:
-        quality_status: Overall status string (``"pass"``, ``"warning"``, ``"invalid"``).
-        quality_summary: Optional summary mapping with a ``"by_status"`` count breakdown.
-        missing_data_findings: Optional list of finding dicts with ``status``/``message`` keys.
-        show_successes: If True, include success findings in the rendered detail list.
-
-    Returns:
-        List of plain-text lines suitable for passing to ``create_text_page``.
+    ``quality_status`` is ``"pass"``, ``"warning"``, or ``"invalid"``; ``quality_summary`` has
+    a ``"by_status"`` count breakdown; each finding has ``status``/``message`` keys.
     """
     status_sentence = _QUALITY_STATUS_SENTENCES.get(
         quality_status.lower(),
@@ -718,12 +684,7 @@ def _wrap_to_width(text: str, max_width_in: float, fontsize: float, fontfamily: 
 def _wrap_text_lines(content_lines: list[str], width: int = _TEXT_PAGE_WRAP_CHARS) -> list[str]:
     """Wrap text-page lines before rendering so spacing matches visible rows.
 
-    Args:
-        content_lines: Raw input lines, optionally with leading spaces or bullets.
-        width: Maximum visible width per wrapped line.
-
-    Returns:
-        Flattened list of wrapped lines, preserving indentation and bullet prefixes.
+    Preserves leading indentation and bullet prefixes.
     """
     wrapped_lines: list[str] = []
 
@@ -759,14 +720,7 @@ def _wrap_text_lines(content_lines: list[str], width: int = _TEXT_PAGE_WRAP_CHAR
 
 
 def _how_to_read_lines(diner_or_meal: str = "diner") -> list[str]:
-    """Introductory guide to reading the report, shown before the charts.
-
-    Args:
-        diner_or_meal: Per-unit label used in the explanatory copy.
-
-    Returns:
-        Lines to feed into ``create_text_page`` for the "How to Read" page.
-    """
+    """Introductory guide to reading the report, shown before the charts."""
     return [
         "The charts in this report show your catering operation's food purchasing patterns",
         "and associated carbon footprint over the reporting period.",
@@ -789,14 +743,7 @@ def _how_to_read_lines(diner_or_meal: str = "diner") -> list[str]:
 
 
 def _methodology_lines(diner_or_meal: str = "diner") -> list[str]:
-    """Methodology note for the final page of the PDF.
-
-    Args:
-        diner_or_meal: Per-unit label used in the explanatory copy.
-
-    Returns:
-        Lines to feed into ``create_text_page`` for the "About This Report" page.
-    """
+    """Methodology note for the final page of the PDF."""
     return [
         (
             "This report was produced by Greener By Default using procurement data provided by "
@@ -990,20 +937,11 @@ def build_pdf_report(
     diner_or_meal: str = "diner",
     narrative: dict[str, Any] | None = None,
 ) -> str:
-    """Assemble the full PDF report.
+    """Assemble the full PDF report and return its absolute path.
 
-    Args:
-        output_path: Destination file path.
-        title_info: Keys ``client``, ``baseline_pilot``, ``procurement_serving``.
-        plots: ``[(caption, Figure), ...]``.
-        tables: Named DataFrames to include (e.g. ``template_data``).
-        summary_stats: Key-value pairs for executive summary.
-        show_quality_successes: If True (notebook/data scientist mode), passed
-            checks are shown in the quality section. If False (web app mode),
-            only notes, warnings, and issues are shown.
-
-    Returns:
-        Absolute path of the created PDF.
+    ``title_info`` has keys ``client``, ``baseline_pilot``, ``procurement_serving``. With
+    ``show_quality_successes`` (notebook/data scientist mode), passed checks are shown in the
+    quality section; without it (web app mode), only notes, warnings, and issues are shown.
     """
     output_path = str(Path(output_path).resolve())
 

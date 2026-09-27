@@ -29,12 +29,7 @@ from gbd_foodservice_insights_lab.plotting_extras import (
 
 
 def print_product_overlap_summary(overlap_dict: dict) -> None:
-    """
-    Print a formatted summary of product overlap between baseline and pilot periods.
-
-    Args:
-        overlap_dict (dict): Dictionary returned by calculate_product_overlap().
-    """
+    """Print a formatted summary of the dict returned by calculate_product_overlap()."""
     print("\n" + "=" * 60)
     print("Product Name Overlap Analysis: Baseline vs Pilot")
     print("=" * 60)
@@ -65,23 +60,12 @@ def plot_kilos_per_diner_meal_pilot_changes_by_category(
     title: str = "Changes in kilos of food per diner-meal from baseline to pilot, by Category",
     categories: list[str] | None = None,
 ) -> plt.Figure:
-    """
-    Plot a horizontal barplot of kilos per diner-meal by category, grouped by period.
+    """Plot a horizontal barplot of kilos per diner-meal by category, grouped by period.
 
-    Note: This function expects data in 'period_category_data' format. Category labels
-    will be cleaned using clean_GBD_category_name() if available, otherwise displayed as-is.
-
-    Args:
-        period_category_data (pd.DataFrame): DataFrame with columns 'category',
-            'kilos per diner-meal', and 'period'.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (9, 9).
-        title (str, optional): Title for the plot. Defaults to "Changes in kilos of food per
-            diner-meal from baseline to pilot, by Category".
-        categories (list, optional): List of categories to include in the plot, in the desired
-            display order (top to bottom). If None, all categories will be included and sorted
-            by kilos per diner-meal. Defaults to None.
-    Returns:
-        matplotlib.figure.Figure: The resulting matplotlib Figure object.
+    `period_category_data` needs 'category', 'kilos per diner-meal', and 'period' columns.
+    Category labels are cleaned with clean_GBD_category_name() if available, otherwise shown
+    as-is. `categories` sets which to include, in display order (top to bottom); None includes
+    all, sorted by kilos per diner-meal.
     """
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -131,31 +115,15 @@ def plot_category_trends(
     figsize_per_plot: tuple = (5, 3),
     diner_or_meal: str = "diner-meal",
 ) -> plt.Figure:
-    """
-    Plot line graphs showing category trends over time, with separate plots for each category.
+    """Plot line graphs showing category trends over time, with separate plots for each category.
 
-    Parameters:
-    -----------
-    monthly_category_data : pd.DataFrame
-        DataFrame with columns: month_year, category, and either 'kilos_total' or
-        'kilos per diner-meal'
-        If compare_baseline_pilot=True, must also have 'period' column
-        If per_diner_meal=True, must contain 'kilos per diner-meal' column
-    per_diner_meal : bool, default=True
-        If True, plots kilos per diner-meal (requires 'kilos per diner-meal' column).
-        If False, plots kilos total (requires 'kilos_total' column).
-    compare_baseline_pilot : bool, default=True
-        If True, compares baseline vs pilot periods with different colors.
-        If False, plots single period data (baseline only).
-    figsize_per_plot : tuple, default=(5, 3)
-        Size of each individual subplot
-    diner_or_meal : str, default="diner-meal"
-        Either "diner", "meal", or "diner-meal" to customize title and y-axis labels.
+    Each subplot shows the % deviation from that category's mean, not raw kilos.
 
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        Figure containing all the subplot line graphs
+    `monthly_category_data` needs 'month_year', 'category', and either 'kilos per diner-meal'
+    (when `per_diner_meal` is True) or 'kilos_total' (when it is False). It also needs 'period'
+    when `compare_baseline_pilot` is True. With `compare_baseline_pilot=False`, all rows are
+    plotted as a single baseline period. `diner_or_meal` ("diner", "meal", or "diner-meal") only
+    changes the overall title.
     """
     data = monthly_category_data.copy()
 
@@ -298,28 +266,12 @@ def _plot_baseline_pilot_split(
     legend_y: float = 1.25,
     allow_none: bool = False,
 ) -> plt.Figure | None:
-    """
-    Generic function to plot stacked horizontal bar charts showing plant vs animal percentages
-    for baseline and pilot periods.
+    """Plot stacked horizontal bars of plant vs animal percentages for baseline and pilot periods.
 
-    This is a private helper function used by plot_plant_animal_split() and plot_milk_split().
-
-    Args:
-        plant_percentages (pd.Series): Series with period as index and plant percentage as values.
-        plant_label (str): Label for the plant-based category (e.g., 'Plant-Based',
-            'Plant-Based Milk').
-        animal_label (str): Label for the animal category (e.g., 'Animal', 'Dairy Milk').
-        xlabel (str): X-axis label describing the metric.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (10, 3).
-        title (str, optional): Title for the plot. Defaults to "Plant-Based vs. Animal
-            Distribution".
-        legend_y (float, optional): Y-position for legend. Defaults to 1.25.
-        allow_none (bool, optional): If True, returns None when plant_percentages is None.
-            Defaults to False.
-
-    Returns:
-        plt.Figure: The matplotlib Figure object, or None if allow_none=True and
-            plant_percentages is None.
+    Shared by plot_plant_animal_split() and plot_milk_split(). `plant_percentages` has period as
+    index and plant percentage as values. `plant_label` and `animal_label` are e.g. 'Plant-Based'
+    and 'Animal', or 'Plant-Based Milk' and 'Dairy Milk'. Returns None when `plant_percentages`
+    is None and `allow_none` is True.
     """
     if plant_percentages is None:
         if allow_none:
@@ -426,19 +378,10 @@ def plot_plant_animal_split(
     figsize: tuple = (10, 3),
     title: str = "Plant-Based vs. Animal Protein Distribution",
 ) -> plt.Figure:
-    """
-    Plot stacked horizontal bar charts showing the percentage of plant-based vs. animal protein
-    for baseline and pilot periods.
+    """Plot stacked horizontal bars of plant-based vs. animal protein for baseline and pilot.
 
-    Args:
-        plant_percentages (pd.Series): Series with period as index and plant percentage as values.
-                                       Output from plant_animal_split() function.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (10, 3).
-        title (str, optional): Title for the plot. Defaults to "Plant-Based vs. Animal Protein
-            Distribution".
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
+    `plant_percentages` is the output of plant_animal_split(): period as index, plant percentage
+    as values.
     """
     figure = _plot_baseline_pilot_split(
         plant_percentages=plant_percentages,
@@ -464,49 +407,15 @@ def plot_kilos_over_time(
     figsize: tuple = (12, 4),
     title: str | None = None,
 ) -> plt.Figure:
-    """
-    Plot total kilos or kilos per diner-meal over time.
+    """Plot total kilos or kilos per diner-meal over time, baseline-only or baseline vs pilot.
 
-    This unified function supports both baseline-only and baseline+pilot analyses,
-    and can show either total kilos or kilos per diner-meal.
+    `monthly_category_data` needs 'month_year', 'kilos_total', and 'category', plus 'period' when
+    `compare_baseline_pilot` is True.
 
-    Args:
-        monthly_category_data (pd.DataFrame): DataFrame with columns ['month_year',
-            'kilos_total', 'category']. If compare_baseline_pilot=True, must also have
-            'period' column.
-        per_diner_meal (bool, optional): If True, divides kilos by diner-meal count.
-            Defaults to False.
-        diner_meal_data (pd.DataFrame, optional): DataFrame with columns ['month_year',
-            'diner-meals', 'period']. Required if per_diner_meal=True and
-            compare_baseline_pilot=True. Defaults to None.
-        diner_meal_mapping (dict, optional): Dictionary mapping month_year to diner-meal counts.
-            Required if per_diner_meal=True and compare_baseline_pilot=False. Defaults to None.
-        compare_baseline_pilot (bool, optional): If True, compares baseline vs pilot periods
-            with different colors. If False, plots single period data. Defaults to True.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (12, 4).
-        title (str, optional): Title for the plot. If None, uses appropriate default.
-            Defaults to None.
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
-
-    Raises:
-        ValueError: If per_diner_meal=True but neither diner_meal_data nor diner_meal_mapping
-            is provided (depending on mode).
-
-    Examples:
-        # Baseline + Pilot comparison of total kilos
-        >>> plot_kilos_over_time(monthly_data, per_diner_meal=False)
-
-        # Baseline + Pilot comparison of kilos per diner-meal
-        >>> plot_kilos_over_time(monthly_data, per_diner_meal=True, diner_meal_data=diner_df)
-
-        # Baseline only, total kilos
-        >>> plot_kilos_over_time(monthly_data, per_diner_meal=False, compare_baseline_pilot=False)
-
-        # Baseline only, kilos per diner-meal
-        >>> plot_kilos_over_time(monthly_data, per_diner_meal=True, diner_meal_mapping=diners_dict,
-        ...                     compare_baseline_pilot=False)
+    With `per_diner_meal`, kilos are divided by the diner-meal count. That needs `diner_meal_data`
+    (columns 'month_year', 'diner-meals', 'period') when `compare_baseline_pilot` is True, or
+    `diner_meal_mapping` (month_year to diner-meal count) when it is False. A ValueError is
+    raised if the needed one is None. `title` of None picks a default for the mode.
     """
     if compare_baseline_pilot:
         # Baseline + Pilot comparison mode
@@ -588,32 +497,13 @@ def plot_kilos_per_diner_meal_over_time(
     title: str | None = None,
     diner_or_meal: str = "diner-meal",
 ) -> plt.Figure:
-    """
-    Plot kilos of food per diner-meal over time, optionally comparing baseline and pilot periods.
+    """Plot kilos of food per diner-meal over time, optionally comparing baseline and pilot periods.
 
-    This is a convenience wrapper around plot_kilos_over_time with per_diner_meal=True.
-
-    Args:
-        monthly_category_data (pd.DataFrame): DataFrame with columns ['month_year',
-            'kilos_total', 'category']. If compare_baseline_pilot=True, must also have
-            'period' column.
-        diner_meal_data (pd.DataFrame, optional): DataFrame with columns ['month_year',
-            'diner-meals', 'period']. Required if compare_baseline_pilot=True.
-            Defaults to None.
-        diner_meal_mapping (dict, optional): Dictionary mapping month_year to diner-meal counts.
-            Required if compare_baseline_pilot=False. Defaults to None.
-        compare_baseline_pilot (bool, optional): If True, compares baseline vs pilot periods
-            with different colors. If False, plots single period data. Defaults to True.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (12, 4).
-        title (str, optional): Title for the plot. If None, uses appropriate default based on
-            compare_baseline_pilot. Defaults to None.
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
-
-    Raises:
-        ValueError: If compare_baseline_pilot=True but diner_meal_data is None, or if
-            compare_baseline_pilot=False but diner_meal_mapping is None.
+    A wrapper around plot_kilos_over_time with per_diner_meal=True: `diner_meal_data` (columns
+    'month_year', 'diner-meals', 'period') is required when `compare_baseline_pilot`, else
+    `diner_meal_mapping` (month_year to diner-meal count); ValueError if it is missing.
+    `monthly_category_data` needs 'month_year', 'kilos_total', and 'category', plus 'period'
+    when comparing periods.
     """
     if title is None:
         if compare_baseline_pilot:
@@ -639,21 +529,10 @@ def plot_diner_meal_numbers_over_time(
     diner_or_meal: str = "diner-meal",
     baseline_only: bool = True,
 ) -> plt.Figure:
-    """
-    Plot diner-meal numbers over time, comparing baseline and pilot periods.
+    """Plot diner-meal numbers over time, comparing baseline and pilot periods.
 
-    Args:
-        diner_meal_data (pd.DataFrame): DataFrame with columns ['month_year', 'diner-meals',
-            'period'].
-        figsize (tuple, optional): Figure size for the plot. Defaults to (12, 4).
-        title (str, optional): Title for the plot. If None, generates title based on
-            diner_or_meal and baseline_only.
-        diner_or_meal (str, optional): Either "diner" or "meal" to customize title.
-            Defaults to "diner-meal".
-        baseline_only (bool, optional): If True, excludes "by Period" from title. Defaults to True.
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
+    `diner_meal_data` needs 'month_year', 'diner-meals', and 'period' columns. `diner_or_meal` and
+    `baseline_only` (which drops "by Period") only affect the default title.
     """
     # Generate title if not provided
     if title is None:
@@ -681,21 +560,10 @@ def plot_unique_products_over_time(
     figsize: tuple = (12, 6),
     title: str | None = None,
 ) -> plt.Figure:
-    """
-    Plot the number of unique products over time, optionally comparing baseline and pilot periods.
+    """Plot the number of unique products over time, optionally comparing baseline and pilot.
 
-    Args:
-        monthly_product_data (pd.DataFrame): DataFrame with columns ['month_year', 'product'].
-            If compare_baseline_pilot=True, must also have 'period' column.
-            'month_year' should be in string format (e.g., '2024-01').
-        compare_baseline_pilot (bool, optional): If True, compares baseline vs pilot periods
-            with different colors. If False, plots single period data. Defaults to True.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (12, 6).
-        title (str, optional): Title for the plot. If None, uses appropriate default based on
-            compare_baseline_pilot. Defaults to None.
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
+    `monthly_product_data` needs 'month_year' (a string like '2024-01') and 'product', plus
+    'period' when `compare_baseline_pilot`. `title` of None picks a default for the mode.
     """
     data = monthly_product_data.copy()
 
@@ -786,19 +654,9 @@ def plot_unique_products_by_category(
     figsize: tuple = (14, 6),
     title: str = "Unique Products per Category by Period",
 ) -> plt.Figure:
-    """
-    Plot a grouped bar chart showing the number of unique products per category
-    for baseline and pilot periods.
+    """Plot a grouped bar chart of unique products per category for baseline and pilot periods.
 
-    Args:
-        monthly_product_data (pd.DataFrame): DataFrame with columns
-            ['category', 'product', 'period'].
-        figsize (tuple, optional): Figure size for the plot. Defaults to (14, 6).
-        title (str, optional): Title for the plot. Defaults to
-            "Unique Products per Category by Period".
-
-    Returns:
-        plt.Figure: The matplotlib Figure object.
+    `monthly_product_data` needs 'category', 'product', and 'period' columns.
     """
     required_columns = {"category", "product", "period"}
     missing = required_columns - set(monthly_product_data.columns)
@@ -847,28 +705,13 @@ def plot_unique_products_by_category(
 
 
 def print_plant_based_product_changes(product_comparison: pd.DataFrame) -> None:
-    """
-    Print a formatted table showing unique plant-based product count changes between baseline
-    and pilot.
+    """Print a table of unique plant-based product count changes between baseline and pilot.
 
-    This function takes the output from compare_plant_based_product_counts() and displays it
-    in a readable format, highlighting categories where unique product counts increased.
-    When the comparison table includes detailed product lists, it also prints which
-    products were added and removed within each category.
-
-    Args:
-        product_comparison (pd.DataFrame): Output from compare_plant_based_product_counts()
-            with columns including ['category', 'baseline_count', 'pilot_count',
-            'change', 'pct_change', 'increased']. If present, the detailed columns
-            ['products_added_count', 'products_removed_count', 'products_added',
-            'products_removed'] will also be printed.
-
-    Returns:
-        None: Prints formatted output to console.
-
-    Example:
-        >>> result = compare_plant_based_product_counts(monthly_product_data)
-        >>> print_plant_based_product_changes(result)
+    `product_comparison` is the output of compare_plant_based_product_counts(), with columns
+    including 'category', 'baseline_count', 'pilot_count', 'change', 'pct_change', and
+    'increased'. If it also has 'products_added_count', 'products_removed_count',
+    'products_added', and 'products_removed', the added and removed products per category are
+    printed too. Output looks like:
 
         Plant-Based Unique Product Changes: Baseline → Pilot
         =====================================================
@@ -876,7 +719,6 @@ def print_plant_based_product_changes(product_comparison: pd.DataFrame) -> None:
         Category                    Baseline  Pilot  Change  % Change  Status
         ------------------------------------------------------------------------
         beans & legumes                   5      8      +3    +60.0%   ✓ INCREASED
-        plant-based meat alternatives     3      6      +3   +100.0%   ✓ INCREASED
         tofu & tempeh                     2      2       0      0.0%   - No change
     """
     if product_comparison.empty:
@@ -973,20 +815,10 @@ def plot_milk_split(
     figsize: tuple = (10, 3),
     title: str = "Plant-Based vs. Dairy Milk Distribution",
 ) -> plt.Figure | None:
-    """
-    Plot stacked horizontal bar charts showing the percentage of plant-based vs. dairy milk
-    for baseline and pilot periods.
+    """Plot stacked horizontal bars of plant-based vs. dairy milk for baseline and pilot periods.
 
-    Args:
-        plant_milk_percentages (pd.Series): Series with period as index and plant-based milk
-            percentage as values. Output from calculate_plant_milk_percentage() function.
-            If None, returns None without plotting.
-        figsize (tuple, optional): Figure size for the plot. Defaults to (10, 3).
-        title (str, optional): Title for the plot. Defaults to "Plant-Based vs. Dairy Milk
-            Distribution".
-
-    Returns:
-        plt.Figure: The matplotlib Figure object, or None if plant_milk_percentages is None.
+    `plant_milk_percentages` is the output of calculate_plant_milk_percentage(): period as index,
+    plant-based milk percentage as values. If it is None, returns None without plotting.
     """
     return _plot_baseline_pilot_split(
         plant_percentages=plant_milk_percentages,
@@ -1006,30 +838,13 @@ def print_baseline_pilot_percent_changes(
     monthly_product_data: pd.DataFrame | None = None,
     weight_column: str = "kilos_total",
 ) -> dict:
-    """
-    Print topline percentage changes from baseline to pilot for diner-meals, food/drink
-    weights, and per-diner-meal metrics.
+    """Print topline percentage changes from baseline to pilot and return them.
 
-    Calculates and prints 9 metrics:
-    1. Diner-meal numbers
-    2. Diner-meal numbers per month
-    3. Number of unique products (if monthly_product_data provided)
-    4. Total weight of food
-    5. Total weight of drink
-    6. Total weight of food plus drink
-    7. Food per diner-meal
-    8. Drink per diner-meal
-    9. Food and drink per diner-meal
-
-    Args:
-        monthly_category_data: DataFrame with columns ['category', 'period', weight_column].
-        diner_meal_data: DataFrame with columns ['period', 'diner-meals'].
-        monthly_product_data: Optional DataFrame with columns ['product', 'period']. If
-            provided, unique products will be counted.
-        weight_column: Column name representing total kilos. Defaults to "kilos_total".
-
-    Returns:
-        dict: Dictionary containing baseline, pilot, and percent change values for each metric.
+    Covers diner-meals (total and per month), unique products (only if `monthly_product_data`
+    is given), food, drink, and combined weight, and each of those per diner-meal. Required
+    columns: `monthly_category_data` ['category', 'period', weight_column], `diner_meal_data`
+    ['period', 'diner-meals'], `monthly_product_data` ['product', 'period']. The returned dict
+    holds baseline, pilot, and percent change values for each metric.
     """
     required_category_cols = {"category", "period", weight_column}
     if not required_category_cols.issubset(monthly_category_data.columns):
@@ -1278,19 +1093,10 @@ def print_baseline_pilot_percent_changes(
 def plot_monthly_category_trends(
     monthly_category_data: pd.DataFrame, per_diner_meal: bool = True
 ) -> plt.Figure:
-    """
-    DEPRECATED: This function has been removed.
+    """DEPRECATED: removed. Use ``plot_category_trends(monthly_category_data, per_diner_meal=...)``.
 
-    Migration:
-    ----------
-    Replace:
-        plot_monthly_category_trends(monthly_category_data, per_diner_meal=True)
-
-    With:
-        plot_category_trends(monthly_category_data, per_diner_meal=True, category_type="both")
-
-    Or simply:
-        plot_category_trends(monthly_category_data)  # per_diner_meal=True is the default
+    ``per_diner_meal=True`` (the default) needs a 'kilos per diner-meal' column in
+    `monthly_category_data`.
     """
     warnings.warn(
         (
@@ -1312,31 +1118,17 @@ def plot_category_per_diner_by_month(
     category_type: str = "both",
     figsize_per_plot: tuple = (5, 3),
 ) -> plt.Figure:
-    """
-    DEPRECATED: This function has been removed.
+    """DEPRECATED: removed. Use ``plot_category_trends(monthly_category_data)``.
 
-    Migration:
-    ----------
-    Replace:
-        plot_category_per_diner_by_month(
-            monthly_category_data=monthly_category_data,
-            diner_meal_data=diner_meal_data,
-            category_type="food"
-        )
-
-    With:
-        plot_category_trends(
-            monthly_category_data=monthly_category_data,
-            diner_meal_data=diner_meal_data,
-            per_diner_meal=True,
-            category_type="food"
-        )
+    `plot_category_trends` takes no diner-meal data and no `category_type`. Before calling it,
+    add a 'kilos per diner-meal' column to `monthly_category_data` (each row's 'kilos_total'
+    divided by that month and period's 'diner-meals'), and filter it to the food or drink
+    categories you want.
     """
     warnings.warn(
         (
             "plot_category_per_diner_by_month() is deprecated and has been removed.\n"
-            "Use plot_category_trends(monthly_category_data, diner_meal_data=diner_meal_data, "
-            "per_diner_meal=True, category_type=...) instead."
+            "Use plot_category_trends(monthly_category_data) instead."
         ),
         DeprecationWarning,
         stacklevel=2,

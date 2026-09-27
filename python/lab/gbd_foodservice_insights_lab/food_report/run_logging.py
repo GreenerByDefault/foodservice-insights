@@ -21,15 +21,7 @@ class HumanReadableReportFormatter(logging.Formatter):
     default_time_format = "%Y-%m-%d %H:%M:%S"
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format a log record as a timestamped human-readable line.
-
-        Args:
-            record: Log record being formatted.
-
-        Returns:
-            Formatted message with a timestamp prefix and severity label, plus
-            optional exception/stack traceback when present on the record.
-        """
+        """Format a log record as a timestamped human-readable line."""
         message = record.getMessage()
 
         if record.levelno >= logging.ERROR:
@@ -63,14 +55,8 @@ def attach_report_run_file_handler(
     module's `logging.getLogger(__name__)` in either package propagates into
     it, including sibling subpackages such as ``categorization``.
 
-    Args:
-        log_path: Path to the per-run log file; the parent directory is created.
-        level: Effective level applied to the logger if it is currently more
-            permissive than ``level``.
-
-    Returns:
-        Handler-state dict with keys ``loggers``, ``handler``, ``previous_levels``,
-        and ``log_path`` for later passing to ``close_report_run_file_handler``.
+    ``level`` is applied to each logger only if its current level is less verbose. Pass the
+    returned state to ``close_report_run_file_handler``.
     """
     resolved_log_path = Path(log_path).resolve()
     resolved_log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -96,12 +82,7 @@ def attach_report_run_file_handler(
 
 
 def close_report_run_file_handler(handler_state: dict[str, Any] | None) -> None:
-    """Remove and close a per-run file handler safely.
-
-    Args:
-        handler_state: State dict returned by ``attach_report_run_file_handler``,
-            or ``None`` to no-op.
-    """
+    """Remove and close a per-run file handler, restoring logger levels; ``None`` is a no-op."""
     if not handler_state:
         return
 
