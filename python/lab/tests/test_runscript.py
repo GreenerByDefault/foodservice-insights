@@ -50,11 +50,11 @@ def test_runscript_sets_none_cache_mode_for_baseline(monkeypatch, tmp_path):
 
     called = {}
 
-    def _fake_categorize_file(**kwargs):
+    def _fake_categorize(**kwargs):
         called.update(kwargs)
         return pd.DataFrame(), _summary(str(input_path))
 
-    monkeypatch.setattr(module, "categorize_file", _fake_categorize_file)
+    monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
     monkeypatch.setattr(
         module,
         "setup_api_clients",
@@ -91,11 +91,11 @@ def test_runscript_sets_unreviewed_cache_mode_for_web_app(monkeypatch, tmp_path)
 
     called = {}
 
-    def _fake_categorize_file(**kwargs):
+    def _fake_categorize(**kwargs):
         called.update(kwargs)
         return pd.DataFrame(), _summary(str(input_path))
 
-    monkeypatch.setattr(module, "categorize_file", _fake_categorize_file)
+    monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
     monkeypatch.setattr(
         module,
         "setup_api_clients",

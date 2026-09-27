@@ -204,9 +204,9 @@ Both halves + `contract/` together, per `contract/README.md`.
   `get_GBD_categories()` + `"No Matches Found"` are dropped with a warning and counted in
   `metadata` — a reviewer's typo in Studio must not fail every run. `new_categorizations` moves
   from `metadata` into `AnalysisOutcome.new_categorizations` via `rows_from_review_table(ai_review_df)`.
-- `categorize_file` (notebook I/O wrapper) → lab `categorize_file.py`. GBD's "categorize →
-  review → save to cache" notebook flow becomes a lab tool that emits rows for the import script;
-  noted, not designed here.
+- `categorize_spreadsheet_to_csvs` (notebook I/O wrapper) → lab
+  `categorize_spreadsheet_to_csvs.py`. GBD's "categorize → review → save to cache" notebook flow
+  becomes a lab tool that emits rows for the import script; noted, not designed here.
 - Tests: delete the write/promote/web-app tests in `tests/categorization/test_cache.py`; keep
   `normalize_product_name` and the reuse-index tests; new `test_frame_from_rows`,
   `test_unknown_category_is_dropped_and_counted`; `test_analysis` cache-hit test now passes rows

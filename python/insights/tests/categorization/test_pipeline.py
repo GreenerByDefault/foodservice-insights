@@ -3,7 +3,11 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache, pipeline, steps
-from gbd_foodservice_insights.categorization.pipeline import categorize_file, categorize_rows
+from gbd_foodservice_insights.categorization.pipeline import (
+    CategorizedProducts,
+    categorize_rows,
+    categorize_spreadsheet_to_csvs,
+)
 from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
 
@@ -70,7 +74,6 @@ def test_categorize_rows_cache_write_mode_controls_destination():
         categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
-            data_type="procurement",
             cache_write_mode="none",
         )
         assert save_reviewed.call_count == 0
@@ -79,7 +82,6 @@ def test_categorize_rows_cache_write_mode_controls_destination():
         categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
-            data_type="procurement",
             cache_write_mode="reviewed",
         )
         assert save_reviewed.call_count == 1
@@ -88,7 +90,6 @@ def test_categorize_rows_cache_write_mode_controls_destination():
         categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
-            data_type="procurement",
             cache_write_mode="web_app_unreviewed",
         )
         assert save_reviewed.call_count == 1
@@ -98,7 +99,6 @@ def test_categorize_rows_cache_write_mode_controls_destination():
             categorize_rows(
                 df=df,
                 llm=KeywordLlmClient(),
-                data_type="procurement",
                 cache_write_mode="invalid-mode",
             )
 
@@ -109,21 +109,7 @@ def test_categorize_rows_raises_when_a_required_column_is_missing(missing_column
     df = pd.DataFrame({col: ["x"] for col in columns})
 
     with pytest.raises(ValueError, match=f"Column '{missing_column}' not found"):
-        categorize_rows(df=df, llm=KeywordLlmClient(), data_type="procurement")
-
-
-def test_categorize_rows_raises_for_serving_data_without_a_gemini_client():
-    df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
-
-    with pytest.raises(ValueError, match="gemini_client is required for serving data"):
-        categorize_rows(df=df, llm=KeywordLlmClient(), data_type="serving")
-
-
-def test_categorize_rows_raises_for_an_invalid_data_type():
-    df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
-
-    with pytest.raises(ValueError, match=r"Invalid data_type: 'bogus'"):
-        categorize_rows(df=df, llm=KeywordLlmClient(), data_type="bogus")
+        categorize_rows(df=df, llm=KeywordLlmClient())
 
 
 def test_categorize_rows_raises_when_date_cleaning_leaves_missing_values():
@@ -139,7 +125,6 @@ def test_categorize_rows_raises_when_date_cleaning_leaves_missing_values():
         categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
-            data_type="procurement",
         )
 
 
@@ -158,11 +143,10 @@ def test_categorize_rows_raises_when_weight_cleaning_leaves_missing_values():
         categorize_rows(
             df=df,
             llm=KeywordLlmClient(),
-            data_type="procurement",
         )
 
 
-def test_categorize_file_writes_human_review_csv(tmp_path):
+def test_categorize_spreadsheet_to_csvs_writes_human_review_csv(tmp_path):
     input_path = tmp_path / "input.csv"
     output_path = tmp_path / "output_categorized.csv"
     input_df = pd.DataFrame(
@@ -174,27 +158,18 @@ def test_categorize_file_writes_human_review_csv(tmp_path):
     )
     input_df.to_csv(input_path, index=False)
 
-    categorized_df = pd.DataFrame(
-        {"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0], "category": ["Fruit"]}
-    )
-    summary = {
-        "n_products_before": 1,
-        "n_products_after": 1,
-        "pct_remaining": 1.0,
-        "n_rows_before": 1,
-        "n_rows_after": 1,
-        "row_elimination_details": {},
-    }
     human_review_df = pd.DataFrame(
         {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
     )
+    categorized = CategorizedProducts(
+        cleaned_df=input_df,
+        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
+        ai_review_df=human_review_df,
+        match_type_counts={"llm": 1},
+    )
 
-    with patch.object(
-        pipeline,
-        "categorize_rows",
-        return_value=(categorized_df, summary, human_review_df),
-    ):
-        _, result_summary = categorize_file(
+    with patch.object(pipeline, "categorize_unique_products", return_value=categorized):
+        _, result_summary = categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
             output_filepath=output_path,
             llm=KeywordLlmClient(),
@@ -211,100 +186,66 @@ def test_categorize_file_writes_human_review_csv(tmp_path):
     pd.testing.assert_frame_equal(written_review_df, human_review_df)
 
 
-def test_categorize_file_raises_for_an_unsupported_file_type(tmp_path):
+def test_categorize_spreadsheet_to_csvs_raises_for_an_unsupported_file_type(tmp_path):
     input_path = tmp_path / "input.txt"
     input_path.write_text("not real data")
 
     with pytest.raises(ValueError, match=r"Unsupported file type: \.txt"):
-        categorize_file(input_filepath=input_path, llm=KeywordLlmClient())
+        categorize_spreadsheet_to_csvs(input_filepath=input_path, llm=KeywordLlmClient())
 
 
-def test_categorize_file_reads_xlsx_input(tmp_path):
+def test_categorize_spreadsheet_to_csvs_raises_for_serving_data_without_a_gemini_client(tmp_path):
+    input_path = tmp_path / "input.csv"
+    pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]}).to_csv(
+        input_path, index=False
+    )
+
+    with pytest.raises(ValueError, match="gemini_client is required for serving data"):
+        categorize_spreadsheet_to_csvs(
+            input_filepath=input_path, llm=KeywordLlmClient(), data_type="serving"
+        )
+
+
+def test_categorize_spreadsheet_to_csvs_raises_for_an_invalid_data_type(tmp_path):
+    input_path = tmp_path / "input.csv"
+    pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]}).to_csv(
+        input_path, index=False
+    )
+
+    with pytest.raises(ValueError, match=r"Invalid data_type: 'bogus'"):
+        categorize_spreadsheet_to_csvs(
+            input_filepath=input_path,
+            llm=KeywordLlmClient(),
+            data_type="bogus",  # ty: ignore[invalid-argument-type]  # Deliberately invalid data_type verifies the runtime check fires.
+        )
+
+
+def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
     input_path = tmp_path / "input.xlsx"
     output_path = tmp_path / "output_categorized.csv"
     input_df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.5]})
     input_df.to_excel(input_path, index=False)
 
-    categorized_df = pd.DataFrame(
-        {"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0], "category": ["Fruit"]}
-    )
-    summary = {
-        "n_products_before": 1,
-        "n_products_after": 1,
-        "pct_remaining": 1.0,
-        "n_rows_before": 1,
-        "n_rows_after": 1,
-        "row_elimination_details": {},
-    }
     human_review_df = pd.DataFrame(
         {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
     )
+    categorized = CategorizedProducts(
+        cleaned_df=input_df,
+        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
+        ai_review_df=human_review_df,
+        match_type_counts={"llm": 1},
+    )
 
     with patch.object(
-        pipeline,
-        "categorize_rows",
-        return_value=(categorized_df, summary, human_review_df),
-    ) as mock_categorize_rows:
-        categorize_file(
+        pipeline, "categorize_unique_products", return_value=categorized
+    ) as mock_categorize_unique_products:
+        categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
             output_filepath=output_path,
             llm=KeywordLlmClient(),
         )
 
-    pd.testing.assert_frame_equal(mock_categorize_rows.call_args.kwargs["df"], input_df)
-
-
-def test_categorize_file_writes_entree_human_review_csv(tmp_path):
-    input_path = tmp_path / "input.csv"
-    output_path = tmp_path / "output_categorized.csv"
-    pd.DataFrame(
-        {
-            "product": ["apple"],
-            "date": ["2025-01-01"],
-            "weight": [1.0],
-        }
-    ).to_csv(input_path, index=False)
-
-    categorized_df = pd.DataFrame(
-        {"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0], "category": ["Fruit"]}
-    )
-    summary = {
-        "n_products_before": 1,
-        "n_products_after": 1,
-        "pct_remaining": 1.0,
-        "n_rows_before": 1,
-        "n_rows_after": 1,
-        "row_elimination_details": {},
-        "_entree_human_review_df": pd.DataFrame(
-            {
-                "entree_classification": ["side/add-on"],
-                "product": ["apple"],
-                "category": ["Fruit"],
-                "occurrence_count": [1],
-            }
-        ),
-    }
-    human_review_df = pd.DataFrame(
-        {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
-    )
-
-    with patch.object(
-        pipeline,
-        "categorize_rows",
-        return_value=(categorized_df, summary, human_review_df),
-    ):
-        _, result_summary = categorize_file(
-            input_filepath=input_path,
-            output_filepath=output_path,
-            llm=KeywordLlmClient(),
-            gemini_client=object(),
-            data_type="serving",
-        )
-
-    expected_review_path = tmp_path / "output_categorized_entree_for_human_review.csv"
-    assert expected_review_path.exists()
-    assert result_summary["entree_human_review_file"] == str(expected_review_path)
-    assert result_summary["entree_human_review_n_unique_products"] == 1
+    pd.testing.assert_frame_equal(mock_categorize_unique_products.call_args.kwargs["df"], input_df)
 
 
 def test_categorize_rows_reuses_cleaned_names_and_skips_llm():
@@ -349,7 +290,6 @@ def test_categorize_rows_reuses_cleaned_names_and_skips_llm():
         df_final, summary, ai_review_df = categorize_rows(
             df=df,
             llm=llm,
-            data_type="procurement",
             historical_categorizations=historical,
             cache_write_mode="none",
         )
