@@ -30,7 +30,7 @@ describe('CreateOrganizationForm', () => {
     const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe('/api/orgs');
     expect(JSON.parse(options.body as string)).toEqual({ name: 'Acme Foodservice' });
-    expect(goto).toHaveBeenCalledWith('/orgs/org-1');
+    expect(goto).toHaveBeenCalledWith('/orgs/org-1', { invalidateAll: true });
   });
 
   test.for([

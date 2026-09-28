@@ -12,7 +12,9 @@ async function handleSubmit(
   if (outcome.kind !== 'created') return outcome.kind;
 
   // Stay `submitting` — the button must remain disabled while this navigation is pending.
-  await goto(outcome.location);
+  // `invalidateAll` so the `(app)` layout re-lists the switcher's organizations: its load reads
+  // nothing from the URL, so a plain navigation reuses the list from before this one existed.
+  await goto(outcome.location, { invalidateAll: true });
   return 'done';
 }
 </script>
