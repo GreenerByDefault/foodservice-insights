@@ -131,11 +131,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - **A split, share, chart or stage failure fails the run, with its own traceback.** `_safe_plot`
   goes, placeholder page and input checks alike, and so do the emissions, emissions-summary and
   diagnostics `except` blocks. `ReportCharts` then carries no findings.
-- **Fixed page sizes.** Every page is US Letter, portrait for text and tables and landscape for
-  charts; wrapped labels shrink the font or truncate rather than grow the page. Category pages
-  are ordered by emissions and grouped several to a page, composed from the panel drawers in
-  `report/plots/`.
-  **Open:** GBD says how many category pages it wants at all.
+- **Fixed page sizes.** Every page is US Letter, portrait for text and landscape for charts and
+  tables (the Category Template needs the width); wrapped labels truncate with an ellipsis
+  rather than grow the page, since the workbook keeps every full product name.
+- **Every category keeps its drivers, four to a page.** Category panels are ordered by
+  emissions, highest first, in a 2 × 2 grid on a landscape page, each drawn by a
+  `draw_category_drivers` panel drawer like those in `report/plots/panels.py`: 26 categories
+  take 7 pages, not 26. *Rejected: only the top categories* — a customer looking for one
+  category's drivers would find nothing.
 
 ## PR 1 — the two escalations become warnings
 
@@ -189,14 +192,25 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 6 — fixed page sizes and category pages
+## PR 6 — fixed page sizes
 
-- Per the decision: Letter throughout, capped label wrapping, category pages grouped and ordered
-  by emissions.
+- Every figure in `report/plots/figures.py` and the placeholder drop their own sizes for the
+  two Letter orientations; `calculate_figure_height_for_wrapped_labels` goes, and the drivers
+  charts truncate labels past a line cap instead.
 - Tests: every page of a `mock_llm` run is one of two sizes; a 200-character product name does
-  not change the page count.
-- Lands after GBD's answer on category pages.
-- Worth it: the PDF a customer downloads is what GBD is selling.
+  not change any page's size.
+- Worth it: a report of ten paper sizes prints and scales unevenly, and a long product name
+  stretches its page.
+
+## PR 7 — category pages grouped by emissions
+
+- `plot_category_drivers`' body becomes `draw_category_drivers(ax, ...)`, the way #388 split
+  the combined pages; a new page function lays out four categories per page, ordered by
+  emissions.
+- Tests: 5 categories make 2 pages and 8 make 2; the first panel is the highest-emitting
+  category.
+- Worth it: one near-empty page per category, alphabetical, is most of the PDF's length on a
+  real upload.
 
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
 handed and what the sheets contain, not that files exist.
@@ -205,8 +219,8 @@ handed and what the sheets contain, not that files exist.
 
 - Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 3 and 5, which change what the lab's QA
   workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
-- PRs 2 and 6: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; PR 6 also `2. Produce Food Report.py` on
+- PRs 2, 6 and 7: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; PRs 6 and 7 also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
 ## Risks
@@ -218,4 +232,5 @@ handed and what the sheets contain, not that files exist.
   positive. Land it first.
 - `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 5 here touch it, and whichever
   lands second rebases.
-- GBD's answers block PR 6 only.
+- No PR here waits on GBD; the null-emission-factor restoration and the category-page count are
+  both decided in this plan.
