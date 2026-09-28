@@ -41,13 +41,10 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   diverge only when a month's every product was uncategorized and `merge_categorizations`
   dropped its rows. Reproduced: headline 0.75 kg against 1.13 kg on every chart, and only an
   `info` finding.
-- `Unspecified non dairy milk` has `emission_factor_us: null` and `emission_factor_europe: null`
-  in `GBD_categories.yaml`, is in the list `categorize_with_llm` hands the model, and yields
-  `NaN` emissions filed as eight `warning` findings: its kilos count toward weights and the
-  plant share and vanish from every CO2e figure. The match prompt already says unnamed non-dairy
-  milks are `oat milk`, and no row of the current cache uses the category. Separately, the
-  cache holds a handful of typo categories (`Plant-Based Butter`, `Mlik`, `Stone Fruit`) that
-  reach emissions the same way today; `categorization-cache.md` PR 5 drops them before step 1.
+- The cache holds a handful of typo categories (`Plant-Based Butter`, `Mlik`, `Stone Fruit`)
+  that have no factor, so their rows yield `NaN` emissions filed as `warning` findings: the
+  kilos count toward weights and the plant share and vanish from every CO2e figure.
+  `categorization-cache.md` PR 5 drops them before they reach the report.
 - `calculate_emissions_per_diner_meal` rounds to four decimals, so minor categories at a large
   site show `0.0` in the workbook.
 
@@ -112,13 +109,17 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   findings* — the lab reads them. **Open:** which warnings a customer should see at all (month
   volatility, partial first or last month, outlier line items, duplicates) is GBD's call; this
   plan only stops `info` leaking.
-- **Every category in `GBD_categories.yaml` has a factor in every region**, pinned by a test.
-  `Unspecified non dairy milk` leaves the YAML: it can produce no number anywhere, the prompt
-  already routes those items to Oat Milk, and no cache row uses it. Confirm with GBD before
-  merging; a factor can be added back any time. Once `categorization-cache.md` PR 5 also filters
-  the cache, a row without a factor can only mean our bug, and `unmatched_emission_factors`
-  becomes an `error`. *Rejected: excluding factorless categories from the model's list while
-  keeping the category* — a second notion of "valid category" for one dead entry.
+- **Every category in `GBD_categories.yaml` has a factor in every region**, pinned by
+  `test_emissions.py::test_every_category_has_an_emission_factor`. `Unspecified non dairy milk`
+  carries the mean of the four named plant milks, the method GBD used from its first commit
+  until the November 2025 move to per-region factors dropped it to `null`. Once
+  `categorization-cache.md` PR 5 also filters the cache, a row without a factor can only mean
+  our bug, and `unmatched_emission_factors` becomes an `error`. *Rejected: deleting the
+  category* — it removes something GBD built on purpose, where restoring the factor undoes an
+  accidental regression and needs no one's sign-off. *Rejected: excluding factorless categories
+  from the model's list* — a second notion of "valid category". The match prompt's rule sending
+  unnamed non-dairy milk to Oat Milk has contradicted the category since April 2025, and no
+  cache row uses it; which one GBD wants is their call, and either way the number is sane.
 - **Per-diner denominators sum only months with rows**, computed once, so the headline equals
   what the monthly charts show. A count for a month with no rows stays an `info` finding, the
   `date_alignment` one `run_all_diagnostics` files.
@@ -147,15 +148,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the only aborts a real upload is likely to hit, and the lab has no override since
   `warn_continue` went.
 
-## PR 2 — null emission factor
-
-- `GBD_categories.yaml` loses `Unspecified non dairy milk`; `test_emissions.py` asserts every
-  category has a factor in every region; `test_categories.py`'s exact plant-based-dairy list
-  shrinks by one. The golden's Template sheet and `gbd_categories_absent` message change.
-- Worth it: the one category that can make kilos vanish from the CO2e figures, and one line.
-  Blocked only on telling GBD.
-
-## PR 3 — Category Template layout
+## PR 2 — Category Template layout
 
 - `create_table_page` measures the label column (as `_wrap_to_width` measures text) and shares
   the rest among month columns; past a month count the page cannot fit, the months split across
@@ -164,7 +157,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   category name.
 - Worth it: category names clip at six months, and twelve-month uploads are allowed.
 
-## PR 4 — fail loudly
+## PR 3 — fail loudly
 
 - The emissions, emissions-summary and diagnostics `except` blocks in `build_food_report` go,
   with `raise_on_error_findings` after each stage's checks so row drift still aborts there;
@@ -177,7 +170,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 5 — per-diner denominator
+## PR 4 — per-diner denominator
 
 - One `total_diner_meals` over the months present in `rows`, used by the summary, the narrative
   and the Emissions Summary sheet; `calculate_emissions_per_diner_meal` stops rounding.
@@ -185,7 +178,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: only when a whole month is uncategorized, so last among the number fixes; a dozen
   lines.
 
-## PR 6 — noise and cost
+## PR 5 — noise and cost
 
 - `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
   `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
@@ -196,7 +189,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 7 — fixed page sizes and category pages
+## PR 6 — fixed page sizes and category pages
 
 - Per the decision: Letter throughout, capped label wrapping, category pages grouped and ordered
   by emissions.
@@ -210,10 +203,10 @@ handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2, 4 and 6, which change what the lab's QA
+- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 3 and 5, which change what the lab's QA
   workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
-- PRs 3 and 7: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; PR 7 also `2. Produce Food Report.py` on
+- PRs 2 and 6: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; PR 6 also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
 ## Risks
@@ -223,6 +216,6 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 6 here touch it, and whichever
+- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 5 here touch it, and whichever
   lands second rebases.
-- GBD's answers block PR 2 (a confirmation) and PR 7 only.
+- GBD's answers block PR 6 only.
