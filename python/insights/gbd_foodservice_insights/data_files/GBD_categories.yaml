@@ -261,8 +261,9 @@ categories:
 
 - name: Dairy Alternative (Unspecified)
   cool_food_pledge_name: Unspecified non dairy milk
-  emission_factor_us: null
-  emission_factor_europe: null
+  # The mean of the four named plant milks' factors in each region.
+  emission_factor_us: 0.8075
+  emission_factor_europe: 0.6925
   is_animal_product: false
   template_product_category: Plant-Based Dairy & Egg
   type: drink

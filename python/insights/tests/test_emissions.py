@@ -20,8 +20,9 @@ def test_get_emission_factor_is_case_insensitive():
 
 
 @pytest.mark.parametrize("region", VALID_REGIONS)
-def test_every_region_has_emission_factors(region):
-    assert emissions.get_emission_factor("Beef and Buffalo Meat", region=region) is not None
+def test_every_category_has_an_emission_factor(region):
+    factors = emissions.load_emission_factors()
+    assert [category for category, values in factors.items() if values[region] is None] == []
 
 
 def test_get_emission_factor_invalid_region_raises():
