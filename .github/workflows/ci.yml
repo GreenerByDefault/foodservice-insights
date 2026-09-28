@@ -166,6 +166,15 @@ jobs:
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-supabase
       - run: pnpm exec turbo run test:screenshots "$TURBO_SCOPE"
+      # Before the regenerate step below, whose rerun wipes test-results/ — and for a flaky diff,
+      # this run's actual/expected/diff images are the only record of which pixels differed.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: screenshot-diffs
+          path: apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
       # `screenshots:update` requires oxipng. To upgrade to a new version, go to
       # https://github.com/oxipng/oxipng/releases to get the latest version and the corresponding
