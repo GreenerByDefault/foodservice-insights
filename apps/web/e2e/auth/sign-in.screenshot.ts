@@ -8,8 +8,8 @@
 
 import { ensureHydrated } from '@gbd/browser-testing';
 import { expect, type Page } from '@playwright/test';
-import { test } from './fixtures/test.ts';
-import { expectScreenshots } from './lib/screenshots.ts';
+import { test } from '../fixtures/test.ts';
+import { expectScreenshots } from '../lib/screenshots.ts';
 
 test.use({ identity: 'anonymous' });
 

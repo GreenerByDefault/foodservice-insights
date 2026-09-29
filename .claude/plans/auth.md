@@ -4,7 +4,7 @@
 
 The server already reads a real Supabase Auth session when `PUBLIC_AUTH_MODE=supabase`, and the
 `apps/web` browser suite already signs every test in as a GoTrue user of its own. What is left is
-the frontend: a one-question onboarding step (display name, required) and sign-in on the 401 page.
+one screen: a one-question onboarding step (display name, required).
 
 **Supabase Auth arrives beside the placeholder, not in place of it.** `PUBLIC_AUTH_MODE` picks one
 per environment (§ The mode switch). That lets hosting go ahead before there is an email provider —
@@ -17,12 +17,13 @@ What has landed: the mode switch and server sessions (§ The mode switch), per-t
 both browser suites and a second person in a test (§ Where a test identity comes from), the
 sign-in form, mounted on `/sign-in` with a real-OTP e2e and screenshots of both steps (§ The
 sign-in form), the invite email's link arriving there with the address filled in, and sign-out with
-a root layout that follows the session (§ Following the session). Every identity the app can run as
+a root layout that follows the session (§ Following the session), and the 401 page signing a
+visitor in where they were refused (§ The sign-in form). Every identity the app can run as
 already has a display name — the placeholder and every test user — so nothing existing meets
 onboarding when its gate arrives (§ Where a test identity comes from). `/account` renames the
 signed-in user through the form onboarding will mount (§ The display-name form). In `supabase`
-mode a developer can sign in through Mailpit and out again today, and an invitee can go from the
-email to `/invites`.
+mode a developer can sign in through Mailpit and out again today, from `/sign-in` or from any
+page that refused them, and an invitee can go from the email to `/invites`.
 
 Invites, memberships, CSP, and the site password itself are out of scope. Change-email and
 delete-account are `account-self-service.md`; CSP becomes an Open item in `ARCHITECTURE.md`.
@@ -61,7 +62,8 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 `$lib/components/auth/sign-in-flow.svelte` holds both steps of email OTP — `email-step.svelte` then
 `code-step.svelte` — behind two props: `auth: BrowserAuth` and `onSignedIn: () => Promise<void>`. It
 keeps the address in its own `$state` so "Change email" returns to a filled field, and it lives in
-`$lib/components/` because two routes mount it: `/sign-in`, today, and the 401 page (PR 2).
+`$lib/components/` because two places mount it: `/sign-in` and the 401 branch of
+`$lib/components/error-page.svelte`.
 
 `/sign-in` passes `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, and needs nothing more:
 the invalidation re-runs its `load`, whose `locals.auth` redirect to `/orgs` takes over, and `/orgs`
@@ -69,6 +71,14 @@ forwards someone with a live invite to `/invites`. No `onAuthStateChange` listen
 flow sits in a `max-w-sm` column centred in `PublicShell`, which now carries `PublicHeader` (the
 app name linking `/`, shared with the marketing page) above a `max-w-4xl` `<main>`; anything else
 rendered in `PublicShell` — `/onboarding`, the 401 page — gets that header too.
+
+The 401 page mounts the flow the same way, in the same `max-w-sm` column under the error's heading
+and copy, so the page that was asked for renders at its own URL once the loads re-run: no redirect,
+no `?next=`. It has no mode check, since in `placeholder` nothing is ever signed out. Because
+`error-page.svelte` calls `browserAuth()` itself, its component test `vi.mock`s
+`$lib/auth/browser` (below). Onboarding meets it here: a first-time user who signs in on a 401 is
+still inside an `(app)` URL, so the invalidation runs the `(app)` gate, whose redirect has to take
+them to `/onboarding` rather than render the page they asked for.
 
 Three details of that seam constrain what is left:
 
@@ -104,14 +114,16 @@ Two test helpers the later PRs reuse:
   newest *sign-in* email to an address — passing over other mail there, such as the invite that led
   to `/sign-in` — and pulls the code out by our template's wording. It reads the HTML, since GoTrue
   sends no text part. It lives in the suite rather than `@gbd/browser-testing` because
-  every caller is in `apps/web`; the system suite never signs in. `auth.e2e.ts`'s real-OTP spec
-  signs a `users.create()` user in with it and lands on `/orgs/new`; `invites/invites.e2e.ts`
+  every caller is in `apps/web`; the system suite never signs in. `auth/auth.e2e.ts`'s real-OTP spec
+  signs a `users.create()` user in with it and lands on `/orgs/new`, and another signs one in on the
+401 page of an organization they administer; `invites/invites.e2e.ts`
   signs an invitee in from the invite email's link and lands on `/invites`.
-- **`sign-in.screenshot.ts`** shows how to capture the flow at all: `page.clock.install()` before
+- **`auth/sign-in.screenshot.ts`** shows how to capture the flow at all: `page.clock.install()` before
   `page.goto`, which freezes the resend countdown at `60s` in every viewport, and
   `page.route('**/auth/v1/otp*', …)` fulfilled with a 200 and `{}`, since the containerized browser
   cannot reach GoTrue on the host's `127.0.0.1`. Its shots are `sign-in-email.png` and
-  `sign-in-code.png`, flat under `e2e/__screenshots__`.
+  `sign-in-code.png`, under `e2e/__screenshots__/auth/`. The 401 page's email step is
+  `errors/unauthorized.png`, beside `not-found.png`, and needs neither trick.
 
 ### Following the session
 
@@ -142,9 +154,9 @@ supabase-js after hydration, anonymous ones included. Four details constrain wha
 - **The callback does not await `invalidateAll()`.** supabase-js awaits its subscribers, so an
   awaited reload would hold `signOut()` — or `verifyOtp()` — until every load had re-run.
 - **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={invalidateAll}` and the
-  listener's `SIGNED_IN`. Harmless, and the 401 page (PR 2) inherits it.
+  listener's `SIGNED_IN`. Harmless, and the 401 page inherits it.
 
-`auth.e2e.ts` covers both halves of sign-out. One signs out of an `(app)` page, lands on `/`, presses
+`auth/auth.e2e.ts` covers both halves of sign-out. One signs out of an `(app)` page, lands on `/`, presses
 Back to the 401 page with no account menu, and reloads for a 401, so the cookie is proven gone and
 not just hidden. That one passes without the listener, since Back there is a client-side
 navigation; the other proves the listener: a second tab on the same page turns into the 401
@@ -317,12 +329,10 @@ instead.
 
 ```
 PR 1  onboarding gate
-PR 2  401 in place
 ```
 
-Both are independent. PR 1 mounts the landed display-name form; PR 2 builds on the mounted
-`/sign-in` flow and `waitForSignInCode`, both landed. Hosting needs neither, and
-each keeps `placeholder` untouched: it never reaches `/sign-in` and hides sign out.
+PR 1 mounts the landed display-name form. Hosting does not need it, and it keeps `placeholder`
+untouched: every identity there already has a name.
 
 The `app_user_display_name_trimmed_length` CHECK already exists on `display_name` — folded into
 `001_initial_schema.ts` as a prefactor, since 001 hadn't shipped yet — with `MAX_DISPLAY_NAME_LENGTH
@@ -344,21 +354,6 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - **E2E:** `'new'` visiting `/orgs` lands on `/onboarding`, submits a name, arrives at `/orgs/new`.
   Screenshot: `onboarding.png`.
 
-## PR 2 — 401 in place
-
-- `error-page.svelte`: for `status === 401`, mount `SignInFlow` under the heading with
-  `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, as `/sign-in` does — the page the user
-  asked for renders with no redirect and no `?next=`. Give it `/sign-in`'s `max-w-sm` width rather
-  than the error body's. Component test for the 401 branch, using `fakeBrowserAuth()`; update the
-  "No calls to action yet" comment here and the "which will offer this same flow" one in
-  `/sign-in`'s `+page.svelte`. No mode check: in `placeholder` nothing is ever signed out, so the
-  branch is unreachable.
-- Screenshot: `unauthorized.png` beside `not-found.png`, the email step only, so it needs neither
-  of `sign-in.screenshot.ts`'s tricks.
-- E2E: `identity: 'anonymous'`, and an organization administered by a `users.create()` user →
-  its URL → 401 page with the form → sign in as that user with the code from Mailpit → the org page
-  renders at the same URL.
-
 ## Follow-ups (not in this plan)
 
 - **Open:** whether `placeholder` mode survives once production flips — kept for local dev, where it
@@ -367,7 +362,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - Pending-OTP persistence: `cfa-app` keeps `{ email, createdAt }` in `sessionStorage` for an hour
   and restores the code step on remount (`auth-flow.svelte:66-129`), so a reload does not cost a
   second code and a second cooldown. Needs a `restoring` state held through hydration, and changes
-  what `sign-in.screenshot.ts` captures.
+  what `auth/sign-in.screenshot.ts` captures.
 - CSP and `getClaims()`: both **Open** in `ARCHITECTURE.md` § Auth.
 - **`createBrowserClient`'s cookie has no `Secure` flag** (`lib/auth/browser.ts`'s
   `cookieOptions: { name }` — `@supabase/ssr`'s default omits it). Non-Secure until the server
@@ -377,14 +372,12 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 
 Per PR, the gate in the background: `pnpm lint && pnpm check && pnpm test`. While iterating, scope
 to the file (`pnpm --filter @gbd/web test:unit -- path`, `pnpm --filter @gbd/web test:e2e --
-e2e/auth.e2e.ts`). Re-baseline screenshots only when Playwright asks:
+e2e/auth/auth.e2e.ts`). Re-baseline screenshots only when Playwright asks:
 `pnpm turbo run screenshots:update --filter=@gbd/web`.
 
 **Every PR: `pnpm dev` in `placeholder` first**, and see that nothing changed — the org page loads
 with no sign-in, and `/sign-in` sends you to `/orgs`. Then set `PUBLIC_AUTH_MODE=supabase` and walk
 it with Mailpit (55324) open:
 
-- PR 1: a fresh address is sent to `/onboarding` before anything else; the same name rules hold
-  there. In `placeholder`, no onboarding.
-- PR 2: signed out, open an org URL directly, sign in on the 401 page, and see that page render at
-  the same URL.
+- PR 1: a fresh address is sent to `/onboarding` before anything else — signing in on `/sign-in`
+  or on a 401 page alike; the same name rules hold there. In `placeholder`, no onboarding.

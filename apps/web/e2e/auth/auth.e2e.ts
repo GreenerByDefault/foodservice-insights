@@ -1,7 +1,9 @@
 import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
-import { test } from './fixtures/test.ts';
-import { waitForSignInCode } from './lib/sign-in-code.ts';
+import { organizationHref } from '../../src/lib/hrefs.ts';
+import { clearOrganizationFixture, insertOrganizationFixture } from '../fixtures/organizations.ts';
+import { test } from '../fixtures/test.ts';
+import { waitForSignInCode } from '../lib/sign-in-code.ts';
 
 // The whole chain in one assertion: a real session cookie, `getUser()` in `identifyUser`, the
 // lookup in `hooks.server.ts`, the guard on `(app)`, and the data reaching a component. Goes
@@ -76,6 +78,32 @@ test.describe('signed out', () => {
 
     expect(response?.status()).toBe(401);
     await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  });
+
+  test('signing in on the 401 page renders the organization at the URL that was refused', async ({
+    page,
+    db,
+    users,
+  }) => {
+    const admin = await users.create();
+    const name = `Signs In In Place ${crypto.randomUUID()}`;
+    const { organizationId, organizationSlug } = await insertOrganizationFixture(db, admin.id, {
+      name,
+    });
+    try {
+      const response = await page.goto(organizationHref(organizationSlug));
+      expect(response?.status()).toBe(401);
+      await ensureHydrated(page);
+
+      await page.getByLabel('Email address').fill(admin.signInEmail);
+      await page.getByRole('button', { name: 'Send code' }).click();
+      await page.getByLabel('Sign-in code').fill(await waitForSignInCode(admin.signInEmail));
+
+      await expect(page.getByRole('banner')).toContainText(name);
+      await expect(page).toHaveURL(organizationHref(organizationSlug));
+    } finally {
+      await clearOrganizationFixture(db, organizationId);
+    }
   });
 
   // The one spec that signs in the way a person does, with a code GoTrue emailed; every other
