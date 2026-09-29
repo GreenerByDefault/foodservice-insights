@@ -12,6 +12,7 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
+from matplotlib.table import Cell
 from matplotlib.textpath import text_to_path
 from matplotlib.transforms import Bbox
 
@@ -32,6 +33,8 @@ _SUMMARY_MARGIN_IN = 1.0
 _SUMMARY_LINE_HEIGHT = 0.025
 
 _TITLE_CLIENT_LINE_HEIGHT = 0.04
+
+_TABLE_BBOX = Bbox.from_bounds(0.03, 0.06, 0.94, 0.84)
 
 
 # ---------------------------------------------------------------------------
@@ -367,27 +370,13 @@ def create_table_page(
     dataframe: pd.DataFrame,
     fig_size: tuple[float, float] = (11, 8.5),
 ) -> None:
-    """Render a DataFrame as a styled table page in the PDF.
+    """Render a DataFrame as styled table pages in the PDF.
 
     Certain titles trigger custom layouts. Only the first 40 rows are rendered.
     """
     if title == "Decision KPIs":
         create_decision_kpis_page(pdf, dataframe)
         return
-
-    fig, ax = _new_text_figure(fig_size)
-
-    ax.text(
-        0.5,
-        0.97,
-        title,
-        transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=14,
-        fontweight="bold",
-        fontfamily="Montserrat",
-    )
 
     # Truncate large tables for display
     display_df = dataframe.head(40).copy()
@@ -420,6 +409,99 @@ def create_table_page(
         )
         col_widths = [0.30, 0.17, 0.16, 0.16, 0.21]
 
+    font_size = 7.5 if len(display_df.columns) <= 6 else 6.5
+    row_scale = 1.18 if len(display_df.columns) <= 6 else 1.08
+    if title == "Substitution Scenarios":
+        font_size = 10.0
+        row_scale += 0.12
+
+    if title != "Category Template" or display_df.empty:
+        _draw_table_page(pdf, title, title, display_df, col_widths, font_size, row_scale, fig_size)
+        return
+
+    # One font size on every page, since the columns are measured at it. Each page repeats the
+    # category column at its measured width, and its month columns share the rest of the page.
+    font_size = 9.5
+    widths = _table_column_widths_in(display_df, font_size)
+    month_width = _table_width_in(fig_size) - widths[0]
+    pages = _pack_columns(widths[1:], month_width)
+    for page_number, page_columns in enumerate(pages, start=1):
+        heading = title if len(pages) == 1 else f"{title} ({page_number} of {len(pages)})"
+        columns = [index + 1 for index in page_columns]
+        slack = (month_width - sum(widths[index] for index in columns)) / max(len(columns), 1)
+        _draw_table_page(
+            pdf,
+            title,
+            heading,
+            display_df.iloc[:, [0, *columns]],
+            [widths[0], *(widths[index] + slack for index in columns)],
+            font_size,
+            row_scale,
+            fig_size,
+        )
+
+
+def _table_width_in(fig_size: tuple[float, float]) -> float:
+    """The width of `_TABLE_BBOX` on a `_new_text_figure` page, whose axes `plt.subplots`
+    places by the figure.subplot rcParams."""
+    axes_width = plt.rcParams["figure.subplot.right"] - plt.rcParams["figure.subplot.left"]
+    return fig_size[0] * axes_width * _TABLE_BBOX.width
+
+
+def _table_column_widths_in(display_df: pd.DataFrame, font_size: float) -> list[float]:
+    """The width each column needs for its bold header and widest cell to render unclipped."""
+    header = FontProperties(size=font_size, weight="bold")
+    body = FontProperties(size=font_size)
+    # A left-aligned cell starts its text `Cell.PAD` of its width in; pad the right to match.
+    return [
+        max(
+            _text_width_in(str(column), header),
+            *(_text_width_in(str(value), body) for value in display_df.iloc[:, index]),
+        )
+        / (1 - 2 * Cell.PAD)
+        for index, column in enumerate(display_df.columns)
+    ]
+
+
+def _pack_columns(widths: list[float], available_width: float) -> list[list[int]]:
+    """Greedily group column indexes, in order, into pages whose widths fit
+    ``available_width``. A column too wide for any page gets a page of its own."""
+    pages: list[list[int]] = [[]]
+    used = 0.0
+    for index, width in enumerate(widths):
+        if pages[-1] and used + width > available_width:
+            pages.append([])
+            used = 0.0
+        pages[-1].append(index)
+        used += width
+    return pages
+
+
+def _draw_table_page(
+    pdf: PdfPages,
+    title: str,
+    heading: str,
+    display_df: pd.DataFrame,
+    col_widths: list[float] | None,
+    font_size: float,
+    row_scale: float,
+    fig_size: tuple[float, float],
+) -> None:
+    """Draw ``display_df`` on one page under ``heading``, styled for the table ``title``."""
+    fig, ax = _new_text_figure(fig_size)
+
+    ax.text(
+        0.5,
+        0.97,
+        heading,
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=14,
+        fontweight="bold",
+        fontfamily="Montserrat",
+    )
+
     if display_df.empty:
         ax.text(
             0.5,
@@ -438,22 +520,12 @@ def create_table_page(
     table = ax.table(
         cellText=display_df.values.tolist(),
         colLabels=[str(column) for column in display_df.columns],
-        bbox=Bbox.from_bounds(0.03, 0.06, 0.94, 0.84),
+        bbox=_TABLE_BBOX,
         cellLoc="left",
         colWidths=col_widths,
     )
     table.auto_set_font_size(False)
-    font_size = 7.5 if len(display_df.columns) <= 6 else 6.5
-    if title == "Substitution Scenarios":
-        font_size = 10.0
-    if title == "Category Template":
-        font_size += 2.0
     table.set_fontsize(font_size)
-    row_scale = 1.18 if len(display_df.columns) <= 6 else 1.08
-    if title == "Category Template":
-        row_scale += 0.12
-    if title == "Substitution Scenarios":
-        row_scale += 0.12
     table.scale(1.0, row_scale)
 
     for (_, _), cell in table.get_celld().items():
@@ -682,19 +754,19 @@ def _quality_to_lines(
     return lines
 
 
+def _text_width_in(text: str, prop: FontProperties) -> float:
+    width_pt, _, _ = text_to_path.get_text_width_height_descent(text, prop, ismath=False)
+    return width_pt / 72
+
+
 def _wrap_to_width(text: str, max_width_in: float, fontsize: float, fontfamily: str) -> list[str]:
     """Greedily wrap ``text`` so each line's rendered width fits within ``max_width_in``."""
     prop = FontProperties(family=fontfamily, size=fontsize)
-
-    def width_in(line: str) -> float:
-        width_pt, _, _ = text_to_path.get_text_width_height_descent(line, prop, ismath=False)
-        return width_pt / 72
-
     lines: list[str] = []
     current = ""
     for word in text.split():
         candidate = f"{current} {word}" if current else word
-        if current and width_in(candidate) > max_width_in:
+        if current and _text_width_in(candidate, prop) > max_width_in:
             lines.append(current)
             current = word
         else:

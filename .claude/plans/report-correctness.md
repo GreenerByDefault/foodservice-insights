@@ -50,8 +50,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 **Layout.**
 
-- `create_table_page` gives every column the same width, so the Category Template clips
-  category names at six months ("Beef and Buffalo N") and harder at twelve.
 - Each figure's size becomes its page's size: a 28-page run has ten paper sizes. Label
   wrapping grows the page: five 200-character product names (the web's cap) make the overall
   drivers page 10 × 13.25 in.
@@ -133,7 +131,12 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   diagnostics `except` blocks. `ReportCharts` then carries no findings.
 - **Fixed page sizes.** Every page is US Letter, portrait for text and landscape for charts and
   tables (the Category Template needs the width); wrapped labels truncate with an ellipsis
-  rather than grow the page, since the workbook keeps every full product name.
+  rather than grow the page, since the workbook keeps every full product name. The Category
+  Template already fits by measurement: `create_table_page` sizes each column to its widest
+  rendered text and splits months across pages ("Category Template (1 of 2)") against
+  `_table_width_in(fig_size)`, which derives the table's width from the page size and the
+  `figure.subplot` rcParams. A change to the page size carries through; a change to where table
+  axes sit on the page must go through `_table_width_in` too, or the template clips again.
 - **Every category keeps its drivers, four to a page.** Category panels are ordered by
   emissions, highest first, in a 2 × 2 grid on a landscape page, each drawn by a
   `draw_category_drivers` panel drawer like those in `report/plots/panels.py`: 26 categories
@@ -151,16 +154,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: the only aborts a real upload is likely to hit, and the lab has no override since
   `warn_continue` went.
 
-## PR 2 — Category Template layout
-
-- `create_table_page` measures the label column (as `_wrap_to_width` measures text) and shares
-  the rest among month columns; past a month count the page cannot fit, the months split across
-  pages.
-- Tests: at three, six and twelve months the label cell is at least as wide as the longest
-  category name.
-- Worth it: category names clip at six months, and twelve-month uploads are allowed.
-
-## PR 3 — fail loudly
+## PR 2 — fail loudly
 
 - The emissions, emissions-summary and diagnostics `except` blocks in `build_food_report` go,
   with `raise_on_error_findings` after each stage's checks so row drift still aborts there;
@@ -173,7 +167,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 4 — per-diner denominator
+## PR 3 — per-diner denominator
 
 - One `total_diner_meals` over the months present in `rows`, used by the summary, the narrative
   and the Emissions Summary sheet; `calculate_emissions_per_diner_meal` stops rounding.
@@ -181,7 +175,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: only when a whole month is uncategorized, so last among the number fixes; a dozen
   lines.
 
-## PR 5 — noise and cost
+## PR 4 — noise and cost
 
 - `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
   `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
@@ -192,7 +186,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 6 — fixed page sizes
+## PR 5 — fixed page sizes
 
 - Every figure in `report/plots/figures.py` and the placeholder drop their own sizes for the
   two Letter orientations; `calculate_figure_height_for_wrapped_labels` goes, and the drivers
@@ -202,7 +196,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: a report of ten paper sizes prints and scales unevenly, and a long product name
   stretches its page.
 
-## PR 7 — category pages grouped by emissions
+## PR 6 — category pages grouped by emissions
 
 - `plot_category_drivers`' body becomes `draw_category_drivers(ax, ...)`, the way #388 split
   the combined pages; a new page function lays out four categories per page, ordered by
@@ -217,10 +211,10 @@ handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 3 and 5, which change what the lab's QA
+- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2 and 4, which change what the lab's QA
   workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
-- PRs 2, 6 and 7: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; PRs 6 and 7 also `2. Produce Food Report.py` on
+- PRs 5 and 6: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; both also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
 ## Risks
@@ -230,7 +224,7 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 5 here touch it, and whichever
+- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 4 here touch it, and whichever
   lands second rebases.
 - No PR here waits on GBD; the null-emission-factor restoration and the category-page count are
   both decided in this plan.

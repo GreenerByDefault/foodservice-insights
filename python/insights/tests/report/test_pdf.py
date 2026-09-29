@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report import pdf as pdf_module
+from gbd_foodservice_insights.report.aggregation import get_GBD_categories
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
 from gbd_foodservice_insights.report.pdf import (
     _executive_narrative,
@@ -18,10 +19,12 @@ from gbd_foodservice_insights.report.pdf import (
     _format_decision_kpis_for_pdf,
     _format_substitution_scenarios_for_pdf,
     _narrative_paragraphs,
+    _pack_columns,
     _quality_to_lines,
     _wrap_text_lines,
     _wrap_to_width,
     build_pdf_report,
+    create_table_page,
     create_title_page,
     write_report_pdf,
 )
@@ -399,6 +402,64 @@ def test_build_pdf_report_renders_table_index_as_a_regular_column(tmp_path: Path
     assert "CategoryTemplate" in collapsed_text
     assert "category" in collapsed_text.lower()
     assert "BeefandBuffaloMeat" in collapsed_text
+
+
+class _RecordingTablePdf:
+    """Stands in for ``PdfPages``, keeping each table page's heading, column labels, and the
+    cells whose text runs past the cell's right edge."""
+
+    def __init__(self) -> None:
+        self.headings: list[str] = []
+        self.columns: list[list[str]] = []
+        self.overflowing: list[str] = []
+
+    def savefig(self, fig: Figure) -> None:
+        fig.canvas.draw()  # lays the table out
+        renderer = fig.canvas.get_renderer()  # ty: ignore[unresolved-attribute]
+        (ax,) = fig.axes
+        (table,) = ax.tables
+        cells = table.get_celld()
+        self.headings.append(ax.texts[0].get_text())
+        self.columns.append(
+            [cells[0, col].get_text().get_text() for col in range(max(c for _, c in cells) + 1)]
+        )
+        self.overflowing += [
+            cell.get_text().get_text()
+            for cell in cells.values()
+            if cell.get_text().get_window_extent(renderer).x1 > cell.get_window_extent(renderer).x1
+        ]
+
+
+@pytest.mark.parametrize("months", [3, 6, 12, 24])
+def test_category_template_fits_every_cell_and_splits_months_across_pages(months: int) -> None:
+    month_labels = [str(month) for month in pd.period_range("2024-01", periods=months, freq="M")]
+    categories = [*get_GBD_categories(), "total"]
+    table = _format_category_template_for_pdf(
+        pd.DataFrame(
+            123_456.78,
+            index=pd.Index(categories, name="category"),
+            columns=[*month_labels, "total"],
+        )
+    )
+
+    pdf = _RecordingTablePdf()
+    create_table_page(pdf, "Category Template", table)  # ty: ignore[invalid-argument-type]
+
+    assert pdf.overflowing == []
+    assert all(columns[0] == "Category" for columns in pdf.columns)
+    assert [label for columns in pdf.columns for label in columns[1:]] == [*month_labels, "Total"]
+    pages = len(pdf.headings)
+    assert (pages > 1) == (months >= 12)
+    assert pdf.headings == (
+        ["Category Template"]
+        if pages == 1
+        else [f"Category Template ({page} of {pages})" for page in range(1, pages + 1)]
+    )
+
+
+def test_pack_columns_gives_an_overwide_column_its_own_page() -> None:
+    assert _pack_columns([1.0, 1.0, 3.0, 1.0], 2.5) == [[0, 1], [2], [3]]
+    assert _pack_columns([], 2.5) == [[]]
 
 
 def test_build_pdf_report_handles_long_decision_kpi_text(tmp_path: Path) -> None:
