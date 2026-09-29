@@ -1,6 +1,7 @@
+import { collectingLogger } from '@gbd/core/testing';
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { aBlobStoreError } from '@gbd/storage/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { retryOnTransientDbError, TRANSIENT_RETRY_WAITS_MS } from './retry.ts';
 
 function recordingSleep() {
@@ -23,41 +24,69 @@ function failingThenSucceeding(failures: unknown[]) {
   return { fn, calls: () => calls };
 }
 
+/** The record each failed attempt writes. The serialized error's stack is noise here. */
+function failureRecord(attempt: number) {
+  return {
+    level: 'error',
+    msg: `Could not reach the database to test (attempt ${attempt} of 3)`,
+    reportId: 'a-report',
+    err: expect.objectContaining({ type: 'Error', code: 'ECONNREFUSED' }),
+  };
+}
+
 describe('retryOnTransientDbError', () => {
-  it('returns the result without sleeping when the first attempt succeeds', async () => {
+  it('returns the result without sleeping or logging when the first attempt succeeds', async () => {
     const { waits, sleep } = recordingSleep();
+    const { log, records } = collectingLogger();
     const { fn, calls } = failingThenSucceeding([]);
 
-    await expect(retryOnTransientDbError(fn, { action: 'test', sleep })).resolves.toBe('done');
+    await expect(retryOnTransientDbError(fn, { action: 'test', log, sleep })).resolves.toBe('done');
     expect(calls()).toBe(1);
     expect(waits).toEqual([]);
+    expect(records).toEqual([]);
   });
 
-  it('retries transient failures with the configured waits', async () => {
+  it('retries transient failures with the configured waits, logging each', async () => {
     const { waits, sleep } = recordingSleep();
+    const { log, records } = collectingLogger();
     const { fn, calls } = failingThenSucceeding([
       anUnreachableDatabaseError(),
       anUnreachableDatabaseError(),
     ]);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(retryOnTransientDbError(fn, { action: 'test', sleep })).resolves.toBe('done');
+    await expect(
+      retryOnTransientDbError(fn, {
+        action: 'test',
+        log,
+        context: { reportId: 'a-report' },
+        sleep,
+      }),
+    ).resolves.toBe('done');
     expect(calls()).toBe(3);
     expect(waits).toEqual([...TRANSIENT_RETRY_WAITS_MS]);
+    expect(records).toEqual([failureRecord(1), failureRecord(2)]);
   });
 
   it('rethrows the last transient error once the attempts are exhausted', async () => {
     const { sleep } = recordingSleep();
+    const { log, records } = collectingLogger();
     const last = anUnreachableDatabaseError('the last failure');
     const { fn, calls } = failingThenSucceeding([
       anUnreachableDatabaseError(),
       anUnreachableDatabaseError(),
       last,
     ]);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(retryOnTransientDbError(fn, { action: 'test', sleep })).rejects.toBe(last);
+    await expect(
+      retryOnTransientDbError(fn, {
+        action: 'test',
+        log,
+        context: { reportId: 'a-report' },
+        sleep,
+      }),
+    ).rejects.toBe(last);
     expect(calls()).toBe(3);
+    expect(records).toEqual([failureRecord(1), failureRecord(2), failureRecord(3)]);
   });
 
   it.each([
@@ -66,10 +95,12 @@ describe('retryOnTransientDbError', () => {
     ['an unrelated bug', new TypeError('undefined is not a function')],
   ])('rethrows %s immediately without retrying', async (_name, error) => {
     const { waits, sleep } = recordingSleep();
+    const { log, records } = collectingLogger();
     const { fn, calls } = failingThenSucceeding([error]);
 
-    await expect(retryOnTransientDbError(fn, { action: 'test', sleep })).rejects.toBe(error);
+    await expect(retryOnTransientDbError(fn, { action: 'test', log, sleep })).rejects.toBe(error);
     expect(calls()).toBe(1);
     expect(waits).toEqual([]);
+    expect(records).toEqual([]);
   });
 });

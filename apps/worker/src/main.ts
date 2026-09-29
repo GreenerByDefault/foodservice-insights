@@ -10,11 +10,23 @@ import { BLOB_STORE, shutdown as shutdownBlobStore } from '@gbd/storage/env';
 import { SYSTEM_CLOCK } from './clock.ts';
 import { createWorkerConfig } from './config.ts';
 import { shutdown as shutdownDatabase, WORKER_DATABASE } from './db.ts';
+import { WORKER_LOG } from './log.ts';
 import { resolveWorkerMode } from './modes.ts';
 import { resolvePythonBin } from './python-bin.ts';
 import { createWorker } from './worker.ts';
 
 loadLocalEnv();
+
+// Without these, Node writes its own multi-line trace to stderr, which a host ingests as one entry
+// per line. The destination is synchronous, so the record is written before the exit.
+process.on('uncaughtException', (error) => {
+  WORKER_LOG.fatal({ err: error }, 'Uncaught exception');
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  WORKER_LOG.fatal({ err: reason }, 'Unhandled rejection');
+  process.exit(1);
+});
 
 async function main(): Promise<void> {
   try {
@@ -23,7 +35,7 @@ async function main(): Promise<void> {
       pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
     });
     if (resolved.mode === 'off') {
-      console.error('WORKER_MODE=off; not starting a worker.');
+      WORKER_LOG.error('WORKER_MODE=off; not starting a worker.');
       return;
     }
 
@@ -50,25 +62,27 @@ async function main(): Promise<void> {
       );
     }
 
+    const log = WORKER_LOG.child({ workerId: config.workerId });
     const worker = createWorker({
       db: WORKER_DATABASE,
       store: BLOB_STORE,
       emailer: EMAILER,
       clock: SYSTEM_CLOCK,
       config,
+      log,
     });
 
     let draining = false;
     const onSignal = (signal: NodeJS.Signals) => {
       if (draining) {
-        console.error(`Received ${signal} again while draining; exiting immediately`);
+        log.error({ signal }, 'Received a signal again while draining; exiting immediately');
         process.exit(1);
       }
       draining = true;
-      console.error(`Received ${signal}; draining`);
+      log.error({ signal }, 'Received a signal; draining');
       // `run()`'s own `finally` awaits the same memoized drain; this `catch` is only so that an
       // unexpected rejection cannot reach the event loop and kill the process mid-drain.
-      void worker.drain().catch((error) => console.error('The drain failed', error));
+      void worker.drain().catch((error) => log.error({ err: error }, 'The drain failed'));
     };
     process.on('SIGTERM', onSignal);
     process.on('SIGINT', onSignal);
@@ -82,6 +96,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error('Worker exited with an unhandled error', error);
+  WORKER_LOG.error({ err: error }, 'Worker exited with an unhandled error');
   process.exitCode = 1;
 });

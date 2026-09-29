@@ -5,6 +5,7 @@
  * against one database, so a sweep without it would email about another test file's attempts.
  */
 
+import { collectingLogger } from '@gbd/core/testing';
 import {
   type AnalysisAttemptId,
   type AnalysisFailureReason,
@@ -42,6 +43,8 @@ import {
   type NotifyOptions,
   sendPendingNotifications,
 } from './notifications.ts';
+
+const { log } = collectingLogger();
 
 const RETRY_BASE_MS = 5 * 60_000;
 const MAX_ATTEMPTS = 5;
@@ -131,7 +134,7 @@ describe('sendPendingNotifications', () => {
         );
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
         return { sent, email, row: await readAnalysisAttemptRow(transaction, attemptId) };
@@ -151,7 +154,7 @@ describe('sendPendingNotifications', () => {
         const { attemptId, reportId, email } = await insertNotifiableAttempt(transaction, 'failed');
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
         return { sent, email, row: await readAnalysisAttemptRow(transaction, attemptId) };
@@ -202,7 +205,7 @@ describe('sendPendingNotifications', () => {
           .execute();
 
         return await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({
             candidateReports: [
               canceledReport.id,
@@ -227,7 +230,7 @@ describe('sendPendingNotifications', () => {
           .execute();
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
         return { sent, row: await readAnalysisAttemptRow(transaction, attemptId) };
@@ -244,7 +247,7 @@ describe('sendPendingNotifications', () => {
         });
 
         return await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
       });
@@ -270,7 +273,7 @@ describe('sendPendingNotifications', () => {
         await markClaimed(transaction, expired.attemptId, 1, RETRY_BASE_MS + 60_000);
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [fresh.reportId, expired.reportId] }),
         );
         return { sent, freshId: fresh.attemptId, expiredId: expired.attemptId };
@@ -292,7 +295,7 @@ describe('sendPendingNotifications', () => {
         await markClaimed(transaction, overdue.attemptId, 3, RETRY_BASE_MS * 5);
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [notYet.reportId, overdue.reportId] }),
         );
         return { sent, notYetId: notYet.attemptId, overdueId: overdue.attemptId };
@@ -308,7 +311,7 @@ describe('sendPendingNotifications', () => {
         await markClaimed(transaction, attemptId, MAX_ATTEMPTS, RETRY_BASE_MS * 1_000);
 
         return await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
       });
@@ -328,7 +331,7 @@ describe('sendPendingNotifications', () => {
         const { attemptId, reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: unreachableEmailer(), workerId },
+          { db: transaction, emailer: unreachableEmailer(), workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
         return { sent, row: await readAnalysisAttemptRow(transaction, attemptId) };
@@ -356,7 +359,7 @@ describe('sendPendingNotifications', () => {
       const outcome = withRollback(WORKER_DATABASE, async (transaction) => {
         const { reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
         return sendPendingNotifications(
-          { db: transaction, emailer, workerId },
+          { db: transaction, emailer, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
       });
@@ -389,7 +392,7 @@ describe('sendPendingNotifications', () => {
         };
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer, workerId },
+          { db: transaction, emailer, workerId, log },
           notifyOptions({ candidateReports: [ok.reportId, broken.reportId] }),
         );
         return {
@@ -418,7 +421,7 @@ describe('sendPendingNotifications', () => {
         // No xlsx.
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [report.id] }),
         );
         return { sent, row: await readAnalysisAttemptRow(transaction, attempt.id) };
@@ -445,7 +448,7 @@ describe('sendPendingNotifications', () => {
         });
 
         const sent = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({
             maxNotificationsPerSweep: 1,
             candidateReports: [oldest.reportId, newer.reportId],
@@ -465,7 +468,7 @@ describe('sendPendingNotifications', () => {
         const { attemptId, reportId } = await insertNotifiableAttempt(transaction, 'succeeded');
 
         const first = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
 
@@ -481,7 +484,7 @@ describe('sendPendingNotifications', () => {
           .where('id', '=', attemptId)
           .execute();
         const second = await sendPendingNotifications(
-          { db: transaction, emailer: emailer.service, workerId },
+          { db: transaction, emailer: emailer.service, workerId, log },
           notifyOptions({ candidateReports: [reportId] }),
         );
         const rowAfterSecond = await readAnalysisAttemptRow(transaction, attemptId);
@@ -523,13 +526,13 @@ describe('sendPendingNotifications', () => {
         },
         async (transaction, fixture) => {
           await sendPendingNotifications(
-            { db: transaction, emailer: firstEmailer.service, workerId: firstWorkerId },
+            { db: transaction, emailer: firstEmailer.service, workerId: firstWorkerId, log },
             notifyOptions({ candidateReports: [fixture.reportId] }),
           );
         },
         (transaction, fixture) =>
           sendPendingNotifications(
-            { db: transaction, emailer: secondEmailer.service, workerId: secondWorkerId },
+            { db: transaction, emailer: secondEmailer.service, workerId: secondWorkerId, log },
             notifyOptions({ candidateReports: [fixture.reportId] }),
           ),
         (database, fixture) => readAnalysisAttemptRow(database, fixture.attemptId),

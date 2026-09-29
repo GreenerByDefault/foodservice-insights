@@ -10,9 +10,11 @@ already exists. It is the half of [`observability-vendors.md`](observability-ven
 needs no vendor and no host. Stdout is the interface whatever that plan decides: every candidate
 host reads it, and the process never learns where its lines go (`ARCHITECTURE.md` § Images).
 
-The worker's PRs (1 and 2) and the web app's (3 and 4) are independent chains; either can go first.
+The worker already logs through it, every line still at `error`. PR 1 gives the worker the lines
+it lacks and the right levels; PRs 2 and 3 move the web app. The two are independent; either can
+go first.
 
-Facts from the tree (2026-09-27) that shape the design:
+Facts from the tree (2026-09-28) that shape the design:
 
 - **`@gbd/core/log` is the whole logging surface.** `parseLogSettings({ level, format })` reads
   `LOG_LEVEL` and `LOG_FORMAT` (unset or empty means `info` and `json`; an unknown value throws,
@@ -25,25 +27,37 @@ Facts from the tree (2026-09-27) that shape the design:
 - **`@gbd/db` already logs through it when handed one.** `DatabaseConfig.log` is required, a
   `Logger` or `'console'`; with a logger, a dropped connection is a `warn` ("Database connection
   dropped") and anything else an `error` ("Unexpected database connection error"), both with `err`.
-  `'console'` writes the same lines to the console. Every caller passes `'console'` today; the web
-  app's and the worker's carry a TODO that PRs 1 and 3 resolve. Only the client listener logs:
-  pg-pool re-emits an idle client's error on the pool, so logging both wrote every drop twice. `shutdownDatabase` no
-  longer logs the error it rethrows, so its two callers (`apps/web/src/lib/server/db.ts`,
+  `'console'` writes the same lines to the console. The worker passes its root; the web app still
+  passes `'console'`, with a TODO that PR 2 resolves. Scripts and test helpers keep `'console'`.
+  Only the client listener logs: pg-pool re-emits an idle client's error on the pool, so logging
+  both wrote every drop twice. `shutdownDatabase` no longer logs the error it rethrows, so its two callers (`apps/web/src/lib/server/db.ts`,
   `apps/worker/src/main.ts`) must keep logging it.
 - **`LOG_LEVEL` and `LOG_FORMAT` are wired.** Turbo passes both through; `.env.example` sets
-  `LOG_FORMAT=pretty` and `.env.test` sets `LOG_LEVEL=warn`. Nothing reads them yet.
+  `LOG_FORMAT=pretty` and `.env.test` sets `LOG_LEVEL=warn`. Only the worker reads them so far.
+- **The worker's loggers are parameters, bar one.** `WORKER_LOG` in `apps/worker/src/log.ts` is
+  the root, a singleton because `WORKER_DATABASE`'s pool logs through it at import. `main.ts` binds
+  it to `workerId` and passes that as `WorkerDependencies.log`, which `AttemptDependencies.log`,
+  `NotifyDependencies.log`, `RetryOptions.log`, `SpawnChildOptions.log` and `startTicker`'s last
+  parameter carry onward. `startAttempt` binds `attemptId` and `reportId` into
+  `PreparedAttempt.log`, which every line about an in-flight attempt goes through;
+  `recordVerdict` takes an `AttemptLog` (`{ attemptId, log }`) for the same reason. `main.ts` also
+  logs `uncaughtException` and `unhandledRejection` as one `fatal` record and exits 1. `biome.json`
+  turns on `suspicious/noConsole` for `apps/worker/src/**`.
+- **Worker tests already read records.** The setup file `vi.mock`s `log.ts` onto a
+  `collectingLogger()`, and the harness gives each worker its own, exposed as `harness.logs`.
+  `retry.test.ts` asserts `toEqual` on the retry records, including one for the last try, which
+  PR 1 removes.
 - **pino writes to the file descriptor, not through `console`**, so vitest's
   `silent: 'passed-only'` cannot hide its output. Today that setting hides the error-path noise in
   every package. The seams for injecting a sink instead already exist: `WorkerDependencies`,
   `RetryOptions`, `DatabaseConfig`, and the web app's module singletons, which tests already
   `vi.mock`.
-- **Fifteen `vi.spyOn(console, 'error')` calls in six test files** assert on log lines:
-  `hooks.server.test.ts`, `db.test.ts`, `storage.test.ts`, `email.test.ts`, `identify.test.ts`,
-  `retry.test.ts`.
-- **Errors ride under three keys**: `error:` at most web call sites, `cause:` in
-  `reports/+server.ts`, and as a bare second argument in the worker. An `Error` that reaches pino
-  under a key with no serializer is written as `{}`, because `message` and `stack` are not
-  enumerable. Nothing fails when that happens.
+- **Thirteen `vi.spyOn(console, 'error')` calls in five web test files** assert on log lines:
+  `hooks.server.test.ts`, `db.test.ts`, `storage.test.ts`, `email.test.ts`, `identify.test.ts`.
+- **The web app's errors ride under two keys**: `error:` at most call sites and `cause:` in
+  `reports/+server.ts`; the worker's all use `err`. An `Error` that reaches pino under a key with no
+  serializer is written as `{}`, because `message` and `stack` are not enumerable. Nothing fails
+  when that happens.
 - **Postgres errors carry row values.** `pg`'s `DatabaseError.detail` is where Postgres writes
   "Key (email)=(…) already exists" and "Failing row contains (…)".
 - **The claim poll logs every failure, every 2 s** (`pollQueue` in `worker.ts`), so an hour-long
@@ -107,38 +121,17 @@ tail.
 
 Each decision's reasoning lands as a comment on the file that enacts it, since this plan is deleted
 with its last PR. `packages/core/src/log.ts` already carries the pino, transport, OpenTelemetry,
-serializer and bound reasoning. `spawn.ts` is to carry the one-record stderr, and `failures.ts` the
-streak rule.
+serializer and bound reasoning, and `apps/worker/src/log.ts` the singleton. `spawn.ts` is to carry
+the one-record stderr, and `failures.ts` the streak rule.
 
-## PR 1 — the worker logs through it
-
-Mechanical: every line the worker writes today, now as a structured record at the same point.
-
-- `apps/worker/src/log.ts` builds the root logger from `process.env`. It is a module singleton for
-  the same reason `WORKER_DATABASE` is one: the pool is built at import, before `main` runs, and
-  logs through the unbound root.
-- `WorkerDependencies` gains a required `log`, which `main.ts` binds to `workerId`.
-  `AttemptDependencies` carries it into `attempt/` and `sweeps/`. Each in-flight attempt holds a
-  child logger bound to `attemptId` at the claim and to `reportId` once `startAttempt` has loaded
-  it, since a support question starts from a report. `startTicker`, `RetryOptions` and
-  `spawnChild`'s options each take a logger.
-- Ids move out of the message strings into fields, and errors go under `err`.
-- `main.ts` installs `uncaughtException` and `unhandledRejection` handlers that log one record and
-  exit 1, and its own `.catch` logs through the same logger. Today Node's multi-line trace
-  arrives at the host as one entry per line.
-- `db.ts` passes that root to `initializeDatabase` as `log`, in place of `'console'`.
-- `testing/worker-harness.ts` passes a `collectingLogger()`. The setup file replaces `log.ts`'s root
-  for every test, because `WORKER_DATABASE`'s pool logs through it. `retry.test.ts` moves to the
-  sink.
-- `biome.json` gains an override turning on `suspicious/noConsole` for `apps/worker/src/**`.
-
-## PR 2 — what the worker says
+## PR 1 — what the worker says
 
 This PR adds the lines that do not exist yet and fixes the levels of the ones that do.
 
 - **Start.** One `info` line once the bucket check passes, giving the mode and
   `maxConcurrentAttempts`. `WORKER_MODE=off` logs at `info`; the signal and drain lines at `info`,
-  or `warn` for a second signal. A comment in `tests/e2e/scripts/containers.ts` says the worker
+  or `warn` for a second signal. Every other line the worker writes today stays at `error` unless
+  this section says otherwise. A comment in `tests/e2e/scripts/containers.ts` says the worker
   "logs nothing on a successful start"; rewrite it. Waiting on the new line for readiness is a
   separate change.
 - **Claim.** One `info` line per claim, with `attemptNumber`.
@@ -154,20 +147,21 @@ This PR adds the lines that do not exist yet and fixes the levels of the ones th
 - **Progress.** An advance logs at `debug`: a bare counter says only that the child is alive.
 - **Outages.** The failure-streak rule from Decisions, as one helper shared by `pollQueue` and
   `startTicker` and cited from `absorb-or-fail`. `retryOnTransientDbError` logs at `warn`, and not
-  on its last try.
-- Tests assert each line as a record, through the harness's logger: a claim, a success, a crash
+  on its last try, so `retry.test.ts`'s exhaustion case expects two records.
+- Tests assert each line as a record, through `harness.logs`: a claim, a success, a crash
   with its tail, and an over-long tail trimmed to the bound. Three failed polls followed by a
   success produce two records. Also run `pnpm test:system`, which covers the start line and the
   stderr record, since only that tier runs the real child in the real image.
 
-## PR 3 — the web app logs through it
+## PR 2 — the web app logs through it
 
-Mechanical, like PR 1.
+Mechanical: every server line, now as a structured record at the same point, as the worker's
+move was.
 
 - `$lib/server/log.ts` exposes a `logger()` accessor that every server module calls. The root
   singleton it returns sits in a module of its own, built lazily from `$env/dynamic/private` for
   the reason `database()` is lazy: the build imports server modules with no env set. Keeping the
-  singleton separate lets the setup file mock the root while PR 4 tests the accessor.
+  singleton separate lets the setup file mock the root while PR 3 tests the accessor.
   `database()` passes the logger to `initializeDatabase` as `log`, in place of `'console'`.
 - Every server `console.*` moves to it: `hooks.server.ts` (`handleError`, and `init`'s shutdown
   lines), `db.ts`, `storage.ts`, `email.ts`, `identify.ts`, `files.ts`, `health/+server.ts`, and
@@ -176,14 +170,14 @@ Mechanical, like PR 1.
 - `init` installs the process-level handlers, behind its existing listener guard, so `vite dev`
   installs them only once.
 - The server test project's setup file routes the root to a `collectingLogger()` for every test,
-  and calls `clear()` between tests. The five web test files assert on its records.
+  as the worker's does, and calls `clear()` between tests. The five web test files assert on its records.
 - `biome.json`'s `noConsole` override also covers the web app's server code: `src/lib/server/**`,
   `src/hooks.server.ts`, and the `+server.ts`, `+page.server.ts` and `+layout.server.ts` files
   under `src/routes/`.
 - `.claude/rules/typescript.md` gains a bullet: server code logs through `@gbd/core/log`, and a
   test asserts on the collecting logger from `@gbd/core/testing`.
 
-## PR 4 — the access log and request ids
+## PR 3 — the access log and request ids
 
 - `handle` starts by generating the request id and putting a child logger bound to it on
   `event.locals.log`; `App.Locals` gains `log`. Inside a request, `logger()` returns that child
@@ -212,8 +206,8 @@ Mechanical, like PR 1.
 
 ## Verification
 
-Each PR is verified by `pnpm lint && pnpm check && pnpm test`; PR 2 also by `pnpm test:system`.
-Then by hand, once PR 4 has landed:
+Each PR is verified by `pnpm lint && pnpm check && pnpm test`; PR 1 also by `pnpm test:system`.
+Then by hand, once PR 3 has landed:
 
 - `pnpm dev` prints readable lines, one per request, and none for polls at the default level.
 - With `LOG_FORMAT=json`, every line the web server and worker print parses as JSON.

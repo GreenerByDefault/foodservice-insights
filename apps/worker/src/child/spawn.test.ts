@@ -9,6 +9,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { collectingLogger } from '@gbd/core/testing';
 import type { AnalysisAttemptId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { runPath } from '../contract/layout.ts';
@@ -57,6 +58,7 @@ async function runScenario<T>(
     const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
     const child = spawnChild(fakeChildCommand(steps), runDirectory, {
       killGraceMs: GENEROUS_KILL_GRACE_MS,
+      log: collectingLogger().log,
       ...options,
     });
     try {
@@ -143,9 +145,18 @@ describe('how a child ends', () => {
       const runDirectory = await createRunDirectory(runRoot, ATTEMPT_ID);
       const command = { executable: join(runRoot, 'not-a-program'), leadingArguments: [] };
 
-      const child = spawnChild(command, runDirectory, { killGraceMs: GENEROUS_KILL_GRACE_MS });
+      const { log, records } = collectingLogger();
+      const child = spawnChild(command, runDirectory, { killGraceMs: GENEROUS_KILL_GRACE_MS, log });
 
       expect(await child.exited).toMatchObject({ kind: 'spawn-failed' });
+      expect(records).toEqual([
+        {
+          level: 'error',
+          msg: 'Failed to spawn the child process',
+          executable: command.executable,
+          err: expect.objectContaining({ type: 'Error', code: 'ENOENT' }),
+        },
+      ]);
     });
   });
 

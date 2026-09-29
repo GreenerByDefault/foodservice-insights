@@ -4,6 +4,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import type { Logger } from '@gbd/core/log';
 import { runPath } from '../contract/layout.ts';
 import { INVOCATION } from '../contract/names.ts';
 
@@ -27,6 +28,8 @@ export type RunningChild = {
 };
 
 export type SpawnChildOptions = {
+  log: Logger;
+
   /** How long the child has to exit on SIGTERM before `kill()` escalates to SIGKILL. */
   killGraceMs: number;
 
@@ -82,10 +85,10 @@ export function spawnChild(
     // Reached when the program does not exist or cannot be executed; a child that started and then
     // failed reports that through its exit status instead.
     child.once('error', (error) => {
-      console.error('worker: failed to spawn child process', {
-        executable: command.executable,
-        error,
-      });
+      options.log.error(
+        { executable: command.executable, err: error },
+        'Failed to spawn the child process',
+      );
       resolve({ kind: 'spawn-failed', error });
     });
 
