@@ -17,8 +17,8 @@ let { data }: PageProps = $props();
 <!-- Supabase is called from the browser — `signInWithOtp`, then `verifyOtp` — so no route of ours
      handles a credential and there is no callback route to receive a link.
      Reached from the marketing page and from an invite email. A visitor turned away from a
-     protected page arrives at `$lib/components/error-page.svelte` instead, which will offer this
-     same flow without sending them here. -->
+     protected page never comes here: `$lib/components/error-page.svelte` offers them this same
+     flow in place. -->
 <PublicShell>
   <div class="flex w-full max-w-sm flex-col gap-4 self-center">
     <PageHeading>Sign in</PageHeading>
