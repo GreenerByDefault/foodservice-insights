@@ -75,8 +75,9 @@ session as a GoTrue user of its own, so what one test's user belongs to never sh
 another's. A screenshot whose image renders the signed-in address uses
 `test.use({ identity: 'pinned' })`, the run's one identity with a fixed address, and a signed-out
 test uses `identity: 'anonymous'`. A spec that needs a second person asks the `users` fixture:
-`users.create()` mints one, and `users.contextFor(user)` is a browser context signed in as them. `identity.ts` beside the fixtures owns all of it, including why
-GoTrue's users have to be mirrored into the run's database.
+`users.create()` mints one, and `users.contextFor(user)` is a browser context signed in as them.
+[`packages/browser-testing/src/identity.ts`](../../../packages/browser-testing/src/identity.ts)
+owns all of it, including why GoTrue's users have to be mirrored into the run's database.
 
 Screenshots and e2e share the catalogue of report states, not any rows, so a behavioural spec is
 free to mutate what it created without affecting another test.
@@ -93,7 +94,8 @@ collide — so the spec's tests stay parallel instead of serializing behind it. 
 spec that reads the organization; one that renames it, deletes it, or asserts on the whole of its
 reports list wants `organizations.create` instead.
 
-One screen still has no fixture that can reach it: an empty `/orgs`. Every spec shares one
-identity, so that user belongs to every organization any concurrent test creates.
-`lib/stub-page-data.ts` rewrites the page-data response instead — a temporary stand-in for real
-sign-in, same as `identifyUser`.
+One screen still has no fixture that can reach it: an empty `/orgs`. A minted user with no
+organization is redirected to `/orgs/new`, so only a superadmin reaches the list at all — and a
+superadmin's branch reads the whole `organization` table, which the run database is never empty
+of. `lib/stub-page-data.ts` rewrites the page-data response instead; see its header for why no
+fixture can produce this page.
