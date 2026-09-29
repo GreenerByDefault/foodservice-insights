@@ -318,12 +318,11 @@ instead.
 ```
 PR 1  onboarding gate
 PR 2  401 in place
-PR 3  e2e/README.md catches up with per-test identities
 ```
 
-All three are independent. PR 1 mounts the landed display-name form; PR 2 builds on the mounted
-`/sign-in` flow and `waitForSignInCode`, both landed. Hosting needs none of them, and
-every one keeps `placeholder` untouched: it never reaches `/sign-in` and hides sign out.
+Both are independent. PR 1 mounts the landed display-name form; PR 2 builds on the mounted
+`/sign-in` flow and `waitForSignInCode`, both landed. Hosting needs neither, and
+each keeps `placeholder` untouched: it never reaches `/sign-in` and hides sign out.
 
 The `app_user_display_name_trimmed_length` CHECK already exists on `display_name` — folded into
 `001_initial_schema.ts` as a prefactor, since 001 hadn't shipped yet — with `MAX_DISPLAY_NAME_LENGTH
@@ -359,20 +358,6 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - E2E: `identity: 'anonymous'`, and an organization administered by a `users.create()` user →
   its URL → 401 page with the form → sign in as that user with the code from Mailpit → the org page
   renders at the same URL.
-
-## PR 3 — `e2e/README.md` catches up with per-test identities
-
-A docs-only fix for two paragraphs of `apps/web/e2e/README.md` § Database state that predate
-minted identities:
-
-- It says `identity.ts` sits "beside the fixtures". It is
-  `packages/browser-testing/src/identity.ts`; link it.
-- Its closing paragraph says an empty `/orgs` is unreachable because "every spec shares one
-  identity", and calls `lib/stub-page-data.ts` "a temporary stand-in for real sign-in, same as
-  `identifyUser`". Neither is true now: a minted user with no organization is redirected to
-  `/orgs/new`, and only a superadmin reaches the list at all — which reads the whole table, never
-  empty in a run database. The stub stays for good. State that reason in one sentence and point at
-  the file's header, which already explains it.
 
 ## Follow-ups (not in this plan)
 
