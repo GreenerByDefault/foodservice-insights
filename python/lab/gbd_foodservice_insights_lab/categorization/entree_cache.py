@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 from gbd_foodservice_insights.categorization.cache import (
-    get_previously_categorized_items,
+    load_categorization_cache,
     unanimous_index,
 )
 
@@ -181,15 +181,8 @@ def backfill_entree_cleaned_names() -> dict[str, int]:
     entree = get_previously_classified_entrees()
     n_total = len(entree)
 
-    category = get_previously_categorized_items()
-    if "cleaned_item_names" in category.columns:
-        name_map = (
-            category[["product", "cleaned_item_names"]]
-            .dropna(subset=["cleaned_item_names"])
-            .drop_duplicates(subset=["product"], keep="last")
-        )
-    else:
-        name_map = pd.DataFrame(columns=["product", "cleaned_item_names"])
+    category = load_categorization_cache().products
+    name_map = category.loc[category["cleaned_item_names"] != "", ["product", "cleaned_item_names"]]
 
     existing_clean = entree["cleaned_item_names"]
     has_clean = existing_clean.notna() & (existing_clean.astype(str).str.strip() != "")

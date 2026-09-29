@@ -14,7 +14,7 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
-    get_previously_categorized_items,
+    CategorizationCache,
     normalize_product_name,
 )
 from gbd_foodservice_insights.categorization.llm import LlmClient
@@ -33,21 +33,19 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 def categorize_using_historical_classifications(
     unique_products_df: pd.DataFrame,
-    historical_df: pd.DataFrame | None = None,
+    cache: CategorizationCache,
 ) -> pd.DataFrame:
     """Match products against historical categorizations.
 
-    `unique_products_df` needs a 'product' column; `historical_df` needs 'product' and
-    'category', and defaults to the cached history. Returns `unique_products_df` with 'category'
-    (from history or NaN), a boolean 'previously_categorized', and 'match_type' added.
+    `unique_products_df` needs a 'product' column. Returns it with 'category' (from history or
+    NaN), a boolean 'previously_categorized', and 'match_type' added.
     """
-    if historical_df is None:
-        historical_df = get_previously_categorized_items()
-
-    historical_subset = historical_df[["product", "category"]].drop_duplicates(
-        subset=["product"], keep="last"
+    unique_products_df = unique_products_df.merge(
+        cache.products[["product", "category"]],
+        on="product",
+        how="left",
+        validate="many_to_one",
     )
-    unique_products_df = unique_products_df.merge(historical_subset, on="product", how="left")
     unique_products_df["previously_categorized"] = unique_products_df["category"].notna()
 
     # Provenance for diagnostics / the cleaned-name hit-rate count. Object dtype
@@ -116,7 +114,7 @@ def clean_product_names(
 # ----------------------------------------------------------------------
 def categorize_using_cleaned_name_history(
     products_df: pd.DataFrame,
-    reuse_index: dict[str, str],
+    cache: CategorizationCache,
 ) -> pd.DataFrame:
     """Second historical lookup: reuse categories for *cleaned* names.
 
@@ -127,14 +125,14 @@ def categorize_using_cleaned_name_history(
     categorization step and the human-review file.
 
     Only unanimous, canonical-category matches are reused (see
-    :func:`build_cleaned_name_reuse_index`); everything else falls through to
+    `CategorizationCache.cleaned_name_index`); everything else falls through to
     the LLM unchanged.
 
     `products_df` needs 'category', 'cleaned_item_names', 'previously_categorized' and
-    'match_type', which are updated for matches. `reuse_index` maps normalized cleaned name to
-    category.
+    'match_type', which are updated for matches.
     """
     products_df = products_df.copy()
+    reuse_index = cache.cleaned_name_index
 
     mask_uncategorized = products_df["category"].isna()
     n_candidates = int(mask_uncategorized.sum())
@@ -275,6 +273,7 @@ def merge_categorizations(
         categorized_products_df[["product", "category"]],
         on="product",
         how="left",
+        validate="many_to_one",
     )
     df_final["category"] = df_final["category"].fillna("No Matches Found")
 
