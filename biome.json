@@ -73,6 +73,14 @@
       }
     },
     {
+      "includes": ["apps/worker/src/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noConsole": "error" }
+        }
+      }
+    },
+    {
       "includes": ["packages/db/migrations/**"],
       "linter": {
         "rules": {

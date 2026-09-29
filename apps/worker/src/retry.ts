@@ -2,6 +2,7 @@
  * [`failures.ts`](./failures.ts) covers which two writes need it and why nothing else does.
  */
 
+import type { Logger } from '@gbd/core/log';
 import { isTransientDatabaseError } from '@gbd/db';
 
 export type Sleep = (ms: number) => Promise<void>;
@@ -12,6 +13,7 @@ const SLEEP: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export const TRANSIENT_RETRY_WAITS_MS: readonly number[] = [250, 2_000];
 
 export interface RetryOptions {
+  log: Logger;
   /** What we were trying to do, for the log line: "Could not reach the database to <action>". */
   action: string;
   /** Structured context — entity IDs, etc. — logged next to the error. */
@@ -50,9 +52,9 @@ export async function retryOnTransientDbError<T>(
       return await fn();
     } catch (cause) {
       if (!isTransientDatabaseError(cause)) throw cause;
-      console.error(
+      options.log.error(
+        { ...options.context, err: cause },
         `Could not reach the database to ${options.action} (attempt ${attempt} of ${attempts})`,
-        { ...options.context, error: cause },
       );
       if (attempt === attempts) throw cause;
       await sleep(waits[attempt - 1] as number);

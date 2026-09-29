@@ -4,6 +4,7 @@
 
 import { join } from 'node:path';
 import { MINUTE_MS, SECOND_MS } from '@gbd/core';
+import { type CollectingLogger, collectingLogger } from '@gbd/core/testing';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
 import { type Breakable, readAnalysisAttemptRow } from '@gbd/db/testing';
 import { type RecordingEmailer, recordingEmailer } from '@gbd/email/testing';
@@ -89,6 +90,7 @@ export type Harness = {
   workerId: string;
   config: WorkerConfig;
   emails: RecordingEmailer;
+  logs: CollectingLogger;
   /** Every report this worker will claim from, `reports[0]` being the fixture's own. */
   reports: readonly SeededReport[];
   advance(milliseconds: number): void;
@@ -116,6 +118,7 @@ export async function withWorker<T>(
       const workerId = aWorkerId();
       const manual = workerOptions.systemClock === true ? undefined : manualClock();
       const emails = recordingEmailer();
+      const logs = collectingLogger();
       const config = createWorkerConfig(
         {
           workerId,
@@ -130,6 +133,7 @@ export async function withWorker<T>(
         emailer: emails.service,
         clock: manual ?? SYSTEM_CLOCK,
         config,
+        log: logs.log,
         candidateReports: reports.map((report) => report.reportId),
       });
 
@@ -147,6 +151,7 @@ export async function withWorker<T>(
         workerId,
         config,
         emails,
+        logs,
         reports,
         advance(milliseconds) {
           if (manual === undefined) {

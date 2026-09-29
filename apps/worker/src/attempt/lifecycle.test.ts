@@ -7,6 +7,7 @@
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { collectingLogger } from '@gbd/core/testing';
 import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
 import { deletePrefix, getObject, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
@@ -53,6 +54,7 @@ function dependencies(
     childCommand: fakeChildCommand(steps),
     killGraceMs: 2_000,
     transientRetryWaitsMs: TEST_TRANSIENT_RETRY_WAITS_MS,
+    log: collectingLogger().log,
   };
 }
 
@@ -426,6 +428,7 @@ describe('failure rows', () => {
           childCommand: { executable: `${fixture.runRoot}/not-a-program`, leadingArguments: [] },
           killGraceMs: 2_000,
           transientRetryWaitsMs: TEST_TRANSIENT_RETRY_WAITS_MS,
+          log: collectingLogger().log,
         };
 
         const prepared = await startAttempt(badDependencies, fixture.attemptId);
@@ -627,7 +630,8 @@ describe('recordVerdict', () => {
     await withAttemptFixture(workerId, async (fixture) => {
       const attemptDependencies = dependencies(fixture, workerId, []);
 
-      const won = await recordVerdict(attemptDependencies, fixture.attemptId, {
+      const attempt = { attemptId: fixture.attemptId, log: attemptDependencies.log };
+      const won = await recordVerdict(attemptDependencies, attempt, {
         kind: 'failed',
         reason: 'unknown',
         detail: 'something unexpected',

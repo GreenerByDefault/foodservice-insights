@@ -9,6 +9,7 @@
  * by the claim, both caps the spend and makes the claim expiry exponential.
  */
 
+import type { Logger } from '@gbd/core/log';
 import type {
   AnalysisAttemptId,
   AnalysisFailureReason,
@@ -39,6 +40,7 @@ export type NotifyDependencies = {
   db: DatabaseExecutor;
   emailer: Emailer;
   workerId: string;
+  log: Logger;
 };
 
 /** The tables `loadNotifiableAttempts` joins, so its scalar subqueries share one builder type. */
@@ -74,23 +76,23 @@ export async function sendPendingNotifications(
   dependencies: NotifyDependencies,
   options: NotifyOptions,
 ): Promise<AnalysisAttemptId[]> {
-  const { db, emailer, workerId } = dependencies;
+  const { db, emailer, workerId, log } = dependencies;
 
   const claimedIds = await claimDueNotifications(db, workerId, options);
   if (claimedIds.length === 0) return [];
 
-  const attempts = await loadNotifiableAttempts(db, claimedIds);
+  const attempts = await loadNotifiableAttempts(db, log, claimedIds);
 
   // Awaited concurrently: `sendOne` swallows every *delivery* failure, so one provider refusal
   // cannot abort the rest. A non-`EmailError` is a bug rather than a delivery failure and does
   // reject here, costing this sweep's other sends their stamp and so a duplicate each once their
   // claims expire — the deliberate price of not silently retrying a bug forever.
   const sentIds = (
-    await Promise.all(attempts.map((attempt) => sendOne(emailer, attempt, options)))
+    await Promise.all(attempts.map((attempt) => sendOne(emailer, log, attempt, options)))
   ).filter((id): id is AnalysisAttemptId => id !== undefined);
   if (sentIds.length === 0) return [];
 
-  return await stampSent(db, sentIds);
+  return await stampSent(db, log, sentIds);
 }
 
 /** Claim the attempts this sweep will email about, in one `UPDATE`.
@@ -183,6 +185,7 @@ function dueCandidates(db: DatabaseExecutor, options: NotifyOptions) {
  */
 async function loadNotifiableAttempts(
   db: DatabaseExecutor,
+  log: Logger,
   ids: readonly AnalysisAttemptId[],
 ): Promise<NotifiableAttempt[]> {
   const rows = await db
@@ -233,7 +236,7 @@ async function loadNotifiableAttempts(
     // Guaranteed by `isEmailDue`: only a `succeeded` or `failed` row is ever claimed, so
     // anything that isn't `failed` here is `succeeded`.
     if (row.pdfFileId === null || row.xlsxFileId === null) {
-      console.error(`analysis attempt ${row.id}: succeeded but missing a result file`);
+      log.error({ attemptId: row.id }, 'The attempt succeeded but is missing a result file');
       return [];
     }
 
@@ -265,6 +268,7 @@ function resultFileId(eb: NotifiableAttemptsExpressionBuilder, kind: ResultFileK
  * for the sweep to retry later, rather than rejecting the `Promise.all` it runs inside. */
 async function sendOne(
   emailer: Emailer,
+  log: Logger,
   attempt: NotifiableAttempt,
   options: Pick<NotifyOptions, 'maxNotificationAttempts'>,
 ): Promise<AnalysisAttemptId | undefined> {
@@ -274,10 +278,10 @@ async function sendOne(
     await sendEmail(emailer, email);
   } catch (error) {
     if (!isEmailError(error)) throw error;
-    console.error(
-      `Could not send the notification email for analysis attempt ${attempt.id} ` +
+    log.error(
+      { attemptId: attempt.id, err: error },
+      'Could not send the notification email ' +
         `(attempt ${attempt.notificationAttempts} of ${options.maxNotificationAttempts})`,
-      error,
     );
     return undefined;
   }
@@ -300,6 +304,7 @@ async function sendOne(
  */
 async function stampSent(
   db: DatabaseExecutor,
+  log: Logger,
   ids: readonly AnalysisAttemptId[],
 ): Promise<AnalysisAttemptId[]> {
   return await retryOnTransientDbError(
@@ -313,7 +318,7 @@ async function stampSent(
         .execute();
       return stamped.map((row) => row.id);
     },
-    { action: 'stamp sent notification emails', context: { attemptIds: ids } },
+    { action: 'stamp sent notification emails', log, context: { attemptIds: ids } },
   );
 }
 

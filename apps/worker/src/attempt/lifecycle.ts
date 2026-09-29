@@ -5,6 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { Logger } from '@gbd/core/log';
 import type { DatabaseExecutor } from '@gbd/db';
 import {
   type AnalysisAttemptId,
@@ -44,10 +45,17 @@ export type AttemptDependencies = Pick<
 > & {
   db: DatabaseExecutor;
   store: BlobStore;
+  /** The worker's own. Each attempt's lines go through a child of it: `PreparedAttempt.log`. */
+  log: Logger;
 };
 
-export type PreparedAttempt = {
+/** An attempt, and the logger bound to it. */
+export type AttemptLog = {
   attemptId: AnalysisAttemptId;
+  log: Logger;
+};
+
+export type PreparedAttempt = AttemptLog & {
   organizationId: OrganizationId;
   reportId: ReportId;
   runDirectory: string;
@@ -93,10 +101,12 @@ export async function startAttempt(
       () => loadAttemptInputs(dependencies.db, attemptId),
       {
         action: "load a claimed attempt's inputs",
-        context: { attemptId },
+        log: dependencies.log.child({ attemptId }),
         waitsMs: dependencies.transientRetryWaitsMs,
       },
     );
+    // Bound to the report as well, since a support question starts from one.
+    const log = dependencies.log.child({ attemptId, reportId: inputs.reportId });
 
     runDirectory = await createRunDirectory(dependencies.runRoot, attemptId);
 
@@ -113,10 +123,12 @@ export async function startAttempt(
 
     const child = spawnChild(dependencies.childCommand, runDirectory, {
       killGraceMs: dependencies.killGraceMs,
+      log,
     });
 
     return {
       attemptId,
+      log,
       organizationId: inputs.organizationId,
       reportId: inputs.reportId,
       runDirectory,
@@ -230,12 +242,13 @@ export type RecordableVerdict =
  */
 export async function recordVerdict(
   dependencies: AttemptDependencies,
-  attemptId: AnalysisAttemptId,
+  { attemptId, log }: AttemptLog,
   verdict: RecordableVerdict,
 ): Promise<boolean> {
   return await retryOnTransientDbError(() => writeVerdictOnce(dependencies, attemptId, verdict), {
     action: 'record an attempt verdict',
-    context: { attemptId, verdict: verdict.kind },
+    log,
+    context: { verdict: verdict.kind },
     waitsMs: dependencies.transientRetryWaitsMs,
   });
 }
@@ -339,13 +352,12 @@ export async function deliverVerdict(
   if (stored.stage === 'upload') return { kind: 'parked', pending: stored };
 
   try {
-    const won = await recordVerdict(dependencies, prepared.attemptId, stored.verdict);
+    const won = await recordVerdict(dependencies, prepared, stored.verdict);
     return won ? { kind: 'recorded' } : { kind: 'lost' };
   } catch (error) {
-    console.error(
-      `Could not record the verdict for attempt ${prepared.attemptId}; parking it for the ` +
-        'next direct tick to retry',
-      { verdict: stored.verdict.kind, error },
+    prepared.log.error(
+      { verdict: stored.verdict.kind, err: error },
+      'Could not record the verdict; parking it for the next direct tick to retry',
     );
     return { kind: 'parked', pending: stored };
   }
@@ -395,10 +407,9 @@ async function storeResultFiles(
   // bytes above — and parking it would retry a deterministic failure on every later tick.
   const error: unknown = rejected.reason;
   if (!isBlobStoreError(error)) throw error;
-  console.error(
-    `Could not store the result files for attempt ${prepared.attemptId}; parking the verdict ` +
-      'for the next direct tick to retry',
-    { error },
+  prepared.log.error(
+    { err: error },
+    'Could not store the result files; parking the verdict for the next direct tick to retry',
   );
   return { ...pending, lastError: error };
 }
@@ -443,9 +454,14 @@ export async function failClaimedAttempt(
       ? { reason: 'infrastructure' as const, detail: error.message }
       : classifyAttemptFailure(error);
 
-  await recordVerdict(dependencies, attemptId, {
-    kind: 'failed',
-    reason: failure.reason,
-    detail: failure.detail,
-  });
+  const log = dependencies.log.child({ attemptId });
+  await recordVerdict(
+    dependencies,
+    { attemptId, log },
+    {
+      kind: 'failed',
+      reason: failure.reason,
+      detail: failure.detail,
+    },
+  );
 }

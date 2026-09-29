@@ -9,6 +9,7 @@
  * order*, not about what.
  */
 
+import type { Logger } from '@gbd/core/log';
 import {
   type AnalysisAttemptId,
   type DatabaseExecutor,
@@ -51,6 +52,7 @@ export type WorkerDependencies = {
   emailer: Emailer;
   clock: Clock;
   config: WorkerConfig;
+  log: Logger;
   /** Test isolation only; production passes nothing. Same reasoning as `ClaimOptions`. */
   candidateReports?: readonly ReportId[];
 };
@@ -98,9 +100,9 @@ type InFlightAttempt = {
 };
 
 export function createWorker(dependencies: WorkerDependencies): Worker {
-  const { db, store, emailer, clock, config, candidateReports } = dependencies;
+  const { db, store, emailer, clock, config, log, candidateReports } = dependencies;
 
-  const attemptDependencies: AttemptDependencies = { ...config, db, store };
+  const attemptDependencies: AttemptDependencies = { ...config, db, store, log };
 
   const inFlight = new Map<AnalysisAttemptId, InFlightAttempt>();
   let shuttingDown = false;
@@ -150,23 +152,23 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       return await claimAndStart();
     } catch (error) {
       if (isPermanentDatabaseError(error)) throw error;
-      console.error('Could not claim from the queue; the next poll is the retry', error);
+      log.error({ err: error }, 'Could not claim from the queue; the next poll is the retry');
       return 'claim-failed';
     }
   }
 
   /** Log that a claimed attempt never got off the ground, and record that as its verdict. */
   async function recordStartFailure(attemptId: AnalysisAttemptId, error: unknown): Promise<void> {
-    console.error(`Could not start claimed attempt ${attemptId}`, error);
+    log.error({ attemptId, err: error }, 'Could not start a claimed attempt');
     try {
       await failClaimedAttempt(attemptDependencies, attemptId, error);
     } catch (failure) {
       // `reaper-is-the-backstop` in `failures.ts`: nothing is left to try, and the reaper
       // converges the row.
-      console.error(
-        `Could not record a verdict for attempt ${attemptId} after it failed to start; ` +
-          'abandoning it to the reaper',
-        failure,
+      log.error(
+        { attemptId, err: failure },
+        'Could not record a verdict for an attempt that failed to start; abandoning it to the ' +
+          'reaper',
       );
     }
   }
@@ -211,10 +213,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     try {
       await settling;
     } catch (error) {
-      console.error(
-        `Could not deliver the verdict for attempt ${record.prepared.attemptId}; abandoning it ` +
-          'to the reaper',
-        error,
+      record.prepared.log.error(
+        { err: error },
+        'Could not deliver the verdict; abandoning it to the reaper',
       );
       inFlight.delete(record.prepared.attemptId);
     } finally {
@@ -305,10 +306,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       progressSequence = (await readProgress(record.prepared.runDirectory))?.sequence;
     } catch (error) {
       // `no-check-no-renewal` in `failures.ts`: this tick has no check to stand behind.
-      console.error(
-        `Could not read progress for attempt ${record.prepared.attemptId}; skipping this ` +
-          "tick's lease renewal",
-        error,
+      record.prepared.log.error(
+        { err: error },
+        "Could not read progress; skipping this tick's lease renewal",
       );
       return { progress: { kind: 'failed', error }, lease: { kind: 'skipped' } };
     }
@@ -326,7 +326,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
       return { lease, renewalIssuedAt };
     } catch (error) {
       // `absorb-or-fail` in `failures.ts`: absorbed, and the next tick is the retry.
-      console.error(`Could not renew the lease on attempt ${record.prepared.attemptId}`, error);
+      record.prepared.log.error({ err: error }, 'Could not renew the lease');
       return { lease: { kind: 'failed', error }, renewalIssuedAt };
     }
   }
@@ -337,7 +337,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     // `canceled` and `shutting-down` are the user and the platform behaving normally; every other
     // reason is this worker giving up on the child on its own, which is worth knowing about.
     if (reason.reason !== 'canceled' && reason.reason !== 'shutting-down') {
-      console.error(`Killing attempt ${record.prepared.attemptId}'s child`, reason);
+      record.prepared.log.error({ kill: reason }, "Killing the attempt's child");
     }
     record.prepared.child.kill();
   }
@@ -377,7 +377,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   async function notify(): Promise<AnalysisAttemptId[]> {
     return await sendPendingNotifications(
-      { db, emailer, workerId: config.workerId },
+      { db, emailer, workerId: config.workerId, log },
       { ...config, candidateReports },
     );
   }
@@ -424,10 +424,10 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     }
     await awaitAllSettling();
 
-    for (const attemptId of inFlight.keys()) {
-      console.error(
-        `Attempt ${attemptId} still had an undelivered verdict when the drain ended; abandoning ` +
-          'it to the reaper',
+    for (const record of inFlight.values()) {
+      record.prepared.log.error(
+        'The attempt still had an undelivered verdict when the drain ended; abandoning it to the ' +
+          'reaper',
       );
     }
     inFlight.clear();
@@ -461,9 +461,9 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
   async function run(): Promise<void> {
     const tickers = [
-      startTicker('direct', direct, config.directIntervalMs),
-      startTicker('reap', reap, config.reapIntervalMs),
-      startTicker('notify', notify, config.notifyIntervalMs),
+      startTicker('direct', direct, config.directIntervalMs, log),
+      startTicker('reap', reap, config.reapIntervalMs, log),
+      startTicker('notify', notify, config.notifyIntervalMs, log),
     ];
 
     try {

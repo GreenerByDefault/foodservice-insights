@@ -6,6 +6,7 @@
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
+import type { Logger } from '@gbd/core/log';
 
 /** Resolves rather than rejecting when aborted, so an abort is never an unhandled rejection. */
 export async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -25,6 +26,7 @@ export function startTicker(
   name: string,
   tick: () => Promise<unknown>,
   intervalMs: number,
+  log: Logger,
 ): StopTicker {
   const controller = new AbortController();
 
@@ -36,7 +38,7 @@ export function startTicker(
         await tick();
       } catch (error) {
         // `absorb-or-fail` in `failures.ts`: the next tick is the retry.
-        console.error(`The worker's ${name} tick failed; the next tick is the retry`, error);
+        log.error({ ticker: name, err: error }, 'A worker tick failed; the next tick is the retry');
       }
     }
   })();
