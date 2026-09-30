@@ -73,6 +73,11 @@ costing wall clock on top of it.
 - **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
   misnamed test is either skipped or picked up by the wrong runner. See the table in
   [`README.md`](../../README.md).
+- **Server code logs through `@gbd/core/log`, never `console`**: the worker through its `log`
+  parameters, the web app through `logger()` from `$lib/server/log`. Errors go under `err`, and
+  ids, never emails. A test asserts `toEqual` on the records of a `collectingLogger()` from
+  `@gbd/core/testing` — the web app's server tests read `SERVER_LOGS`, which the setup file wires
+  in.
 
 ## Database
 

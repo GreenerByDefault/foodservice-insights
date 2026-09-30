@@ -25,6 +25,7 @@ import { error, type RequestEvent } from '@sveltejs/kit';
 import { authMode } from '$lib/auth/mode';
 import { SERVICE_UNAVAILABLE_ERROR } from '$lib/errors/messages';
 import { requirePublicVar } from '$lib/server/env';
+import { logger } from '$lib/server/log';
 
 export async function identifyUser(event: RequestEvent): Promise<UserId | null> {
   if (authMode() === 'placeholder') return PLACEHOLDER_USER_ID;
@@ -97,14 +98,14 @@ async function identifyFromSession(event: RequestEvent): Promise<UserId | null> 
     case 'signed-in':
       return result.userId;
     case 'unavailable':
-      console.error('Could not reach Supabase Auth to validate a session', {
-        path: event.url.pathname,
-        error: cause,
-      });
+      logger().error(
+        { path: event.url.pathname, err: cause },
+        'Could not reach Supabase Auth to validate a session',
+      );
       error(503, SERVICE_UNAVAILABLE_ERROR);
       break;
     case 'signed-out':
-      if (result.action.log) console.warn(result.action.log, { path: event.url.pathname });
+      if (result.action.log) logger().warn({ path: event.url.pathname }, result.action.log);
       // `local` touches this cookie only, not the user's sessions on other devices.
       if (result.action.clearCookie) await supabase.auth.signOut({ scope: 'local' });
       return null;

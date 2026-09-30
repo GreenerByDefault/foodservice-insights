@@ -19,6 +19,7 @@ import { screenStatus } from '$lib/reports/attempt-status';
 import type { Creator } from '$lib/reports/subheading';
 import { database, withDbErrorHandling } from '$lib/server/db';
 import { requirePrivateVar } from '$lib/server/env';
+import { logger } from '$lib/server/log';
 import type { PageServerLoad } from './$types';
 import { type FailureCopy, toFailureCopy } from './failure/failure-copy.ts';
 
@@ -215,7 +216,7 @@ async function failNotFoundOrBug(
 
   if (!reportExists) error(404, { message: 'Not found', code: 'not_found' });
 
-  console.error('A report has no analysis_attempt', { reportId: params.reportId });
+  logger().error({ reportId: params.reportId }, 'A report has no analysis_attempt');
   error(500, { message: UNEXPECTED_ERROR_MESSAGE });
 }
 

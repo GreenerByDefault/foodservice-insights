@@ -3,6 +3,7 @@ import { type BlobStore, bucketExists } from '@gbd/storage';
 import { json } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { database } from '$lib/server/db';
+import { logger } from '$lib/server/log';
 import { blobStore } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
@@ -24,7 +25,7 @@ export async function _checkHealth(db: DatabaseExecutor, store: BlobStore): Prom
   ]);
 
   for (const result of [dbResult, storageResult]) {
-    if (result.status === 'rejected') console.error('Health check failed:', result.reason);
+    if (result.status === 'rejected') logger().error({ err: result.reason }, 'Health check failed');
   }
 
   const healthy = dbResult.status === 'fulfilled' && storageResult.status === 'fulfilled';

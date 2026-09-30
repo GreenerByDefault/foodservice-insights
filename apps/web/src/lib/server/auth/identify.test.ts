@@ -12,6 +12,7 @@ import {
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as mode from '$lib/auth/mode';
+import { SERVER_LOGS } from '../testing/logs.ts';
 import { classifyAuthResult, identifyUser } from './identify.ts';
 
 const { createServerClient } = vi.hoisted(() => ({ createServerClient: vi.fn() }));
@@ -150,6 +151,24 @@ describe('identifyUser', () => {
 
     expect(await identifyUser(anEvent())).toBeNull();
     expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(SERVER_LOGS.records).toEqual([]);
+  });
+
+  test('clears and logs a session Supabase refused unexpectedly', async () => {
+    answer(
+      null,
+      new AuthApiError('Invalid Refresh Token: Already Used', 400, 'refresh_token_already_used'),
+    );
+
+    expect(await identifyUser(anEvent())).toBeNull();
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'warn',
+        msg: 'Supabase Auth refused the session: AuthApiError 400 refresh_token_already_used Invalid Refresh Token: Already Used',
+        path: '/orgs',
+      },
+    ]);
   });
 
   test('leaves a visitor with no session alone', async () => {
@@ -161,7 +180,6 @@ describe('identifyUser', () => {
 
   test('503s when Supabase Auth is unreachable', async () => {
     answer(null, new AuthRetryableFetchError('fetch failed', 0));
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
       await identifyUser(anEvent());
@@ -171,7 +189,14 @@ describe('identifyUser', () => {
       expect(thrown.status).toBe(503);
       expect(thrown.body.code).toBe('service_unavailable');
     }
-    logged.mockRestore();
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Could not reach Supabase Auth to validate a session',
+        path: '/orgs',
+        err: expect.objectContaining({ type: 'AuthRetryableFetchError', message: 'fetch failed' }),
+      },
+    ]);
   });
 
   describe('writing a refreshed session', () => {

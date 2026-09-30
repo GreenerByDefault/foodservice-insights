@@ -6,6 +6,7 @@ import * as mode from '$lib/auth/mode';
 import * as authorization from '$lib/server/auth/authorization';
 import * as identify from '$lib/server/auth/identify';
 import { anAuthContext } from '$lib/server/testing/fixtures';
+import { SERVER_LOGS } from '$lib/server/testing/logs';
 import { handle, handleError } from './hooks.server.ts';
 
 // This file tests only the hook's wiring, so identification and authorization are stubbed.
@@ -84,7 +85,6 @@ describe('handle', () => {
 
   test('503s an unreachable database', async () => {
     vi.mocked(authorization.loadAuthorization).mockRejectedValue(anUnreachableDatabaseError());
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
       await handle({ event: anEvent(), resolve: respond });
@@ -94,7 +94,14 @@ describe('handle', () => {
       expect(thrown.status).toBe(503);
       expect(thrown.body.code).toBe('service_unavailable');
     }
-    logged.mockRestore();
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Could not reach the database to load authorization',
+        userId: A_USER_ID,
+        err: expect.objectContaining({ code: 'ECONNREFUSED' }),
+      },
+    ]);
   });
 
   // Authorization is a plain read, so Postgres refusing it is our bug rather than something the
@@ -103,7 +110,6 @@ describe('handle', () => {
     vi.mocked(authorization.loadAuthorization).mockRejectedValue(
       aDatabaseError('column "emial" does not exist', '42703'),
     );
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
       await handle({ event: anEvent(), resolve: respond });
@@ -112,7 +118,6 @@ describe('handle', () => {
       if (!isHttpError(thrown)) throw thrown;
       expect(thrown.status).toBe(500);
     }
-    logged.mockRestore();
   });
 
   // `loadAuthorization` can also fail for reasons that have nothing to do with reachability,
@@ -145,7 +150,6 @@ describe('handle', () => {
 
 describe('handleError', () => {
   test('logs an unexpected failure with enough to find it again, and tells the client none of it', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     const cause = new Error('password authentication failed for user "app"');
 
     const body = await bodyFrom({
@@ -155,17 +159,21 @@ describe('handleError', () => {
       message: 'Internal Error',
     });
 
-    expect(logged).toHaveBeenCalledWith(
-      'Unhandled server error',
-      expect.objectContaining({ status: 500, path: '/reports', error: cause }),
-    );
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Unhandled server error',
+        status: 500,
+        method: 'GET',
+        path: '/reports',
+        routeId: null,
+        err: expect.objectContaining({ type: 'Error', message: cause.message }),
+      },
+    ]);
     expect(JSON.stringify(body)).not.toContain('password authentication');
-    logged.mockRestore();
   });
 
   test('stays quiet about a 404, which is not a failure of ours', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     const body = await bodyFrom({
       error: new Error('Not found'),
       event: anEvent('/no-such-page'),
@@ -174,7 +182,6 @@ describe('handleError', () => {
     });
 
     expect(body).toEqual({ message: 'Not Found', code: 'not_found' });
-    expect(logged).not.toHaveBeenCalled();
-    logged.mockRestore();
+    expect(SERVER_LOGS.records).toEqual([]);
   });
 });

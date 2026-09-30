@@ -12,6 +12,7 @@ import {
 } from '@gbd/email';
 import { env } from '$env/dynamic/private';
 import { requirePrivateVar } from './env.ts';
+import { logger } from './log.ts';
 
 let handle: Emailer | undefined;
 
@@ -49,19 +50,20 @@ export async function notifyGbd(message: GbdNotice): Promise<void> {
   try {
     await sendEmail(emailer(), message);
   } catch (cause) {
-    console.error('Could not notify GBD', { kind: message.kind, error: cause });
+    logger().error({ kind: message.kind, err: cause }, 'Could not notify GBD');
   }
 }
 
 /** Send an invite email, logging rather than throwing if it fails. Unlike `notifyGbd`, the caller
  * needs to know which happened: the invite row is already committed by the time this runs, so a
- * failed send still has to answer its request rather than 500ing on it. */
-export async function sendInvite(message: OrganizationInvite): Promise<boolean> {
+ * failed send still has to answer its request rather than 500ing on it. `inviteId` is what a
+ * failure logs, in place of the recipient's address. */
+export async function sendInvite(inviteId: string, message: OrganizationInvite): Promise<boolean> {
   try {
     await sendEmail(emailer(), message);
     return true;
   } catch (cause) {
-    console.error('Could not send invite', { to: message.to, error: cause });
+    logger().error({ inviteId, err: cause }, 'Could not send invite');
     return false;
   }
 }

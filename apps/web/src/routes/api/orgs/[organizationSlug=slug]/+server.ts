@@ -6,6 +6,7 @@ import { requireOrganizationRouteContext } from '$lib/server/auth/route-context'
 import type { Actor } from '$lib/server/auth/types';
 import { database, isUniqueViolation, withDbErrorHandling } from '$lib/server/db';
 import { notifyGbd } from '$lib/server/email';
+import { logger } from '$lib/server/log';
 import { nameTakenResponse, parseOrganizationNameBody } from '$lib/server/orgs/name';
 import { blobStore } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
@@ -121,10 +122,10 @@ export async function _deleteOrganization(
     await deletePrefix(blobStore(), organizationPrefix(organizationId));
   } catch (cause) {
     if (!isBlobStoreError(cause)) throw cause;
-    console.error("Could not delete an organization's blob prefix", {
-      organizationId,
-      error: cause,
-    });
+    logger().error(
+      { organizationId, err: cause },
+      "Could not delete an organization's blob prefix",
+    );
   }
 
   await notifyGbd({ kind: 'gbd-organization-deleted', organizationName: name, actorEmail });

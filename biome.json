@@ -73,7 +73,14 @@
       }
     },
     {
-      "includes": ["apps/worker/src/**"],
+      "includes": [
+        "apps/worker/src/**",
+        "apps/web/src/lib/server/**",
+        "apps/web/src/hooks.server.ts",
+        "apps/web/src/routes/**/+server.ts",
+        "apps/web/src/routes/**/+page.server.ts",
+        "apps/web/src/routes/**/+layout.server.ts"
+      ],
       "linter": {
         "rules": {
           "suspicious": { "noConsole": "error" }

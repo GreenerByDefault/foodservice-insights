@@ -7,6 +7,7 @@ import {
 import { error } from '@sveltejs/kit';
 import { SERVICE_UNAVAILABLE_ERROR } from '$lib/errors/messages';
 import { requirePrivateVar } from './env.ts';
+import { logger } from './log.ts';
 
 let handle: BlobStore | undefined;
 
@@ -64,10 +65,10 @@ export async function withBlobStoreErrorHandling<T>(
     return await fn();
   } catch (cause) {
     if (!isBlobStoreError(cause)) throw cause;
-    console.error(`Could not reach the blob store to ${options.action}`, {
-      ...options.context,
-      error: cause,
-    });
+    logger().error(
+      { ...options.context, err: cause },
+      `Could not reach the blob store to ${options.action}`,
+    );
     error(503, SERVICE_UNAVAILABLE_ERROR);
   }
 }

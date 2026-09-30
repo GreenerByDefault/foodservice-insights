@@ -11,6 +11,7 @@ import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
 import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
 import { requirePrivateVar } from './env.ts';
+import { logger } from './log.ts';
 
 let handle: Kysely<Database> | undefined;
 
@@ -24,8 +25,7 @@ let handle: Kysely<Database> | undefined;
 export function database(): Kysely<Database> {
   handle ??= initializeDatabase({
     connectionString: requirePrivateVar('DB_CONNECTION_STRING'),
-    // TODO: The web app's logger, once it has one.
-    log: 'console',
+    log: logger(),
   });
   return handle;
 }
@@ -62,14 +62,14 @@ export async function withDbErrorHandling<T>(
     return await fn();
   } catch (cause) {
     if (isTransientDatabaseError(cause)) {
-      console.error(`Could not reach the database to ${options.action}`, {
-        ...options.context,
-        error: cause,
-      });
+      logger().error(
+        { ...options.context, err: cause },
+        `Could not reach the database to ${options.action}`,
+      );
       error(503, SERVICE_UNAVAILABLE_ERROR);
     }
     if (!isPermanentDatabaseError(cause)) throw cause;
-    console.error(`Unexpected failure to ${options.action}`, { ...options.context, error: cause });
+    logger().error({ ...options.context, err: cause }, `Unexpected failure to ${options.action}`);
     error(500, { message: UNEXPECTED_ERROR_MESSAGE });
   }
 }

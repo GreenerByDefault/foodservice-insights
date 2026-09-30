@@ -8,6 +8,7 @@
 
 import { type BlobStore, objectExists, signedObjectUrl } from '@gbd/storage';
 import { error } from '@sveltejs/kit';
+import { logger } from './log.ts';
 import { withBlobStoreErrorHandling } from './storage.ts';
 
 /** Long enough to survive a slow redirect and a retry, short enough that a leaked signed URL is
@@ -33,7 +34,7 @@ export async function redirectToSignedUrl(
   });
 
   if (!exists) {
-    console.error('A file row points at an object that is not there', { storageKey });
+    logger().error({ storageKey }, 'A file row points at an object that is not there');
     error(404, { message: 'That file is not available.' });
   }
 
