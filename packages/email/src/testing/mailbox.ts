@@ -52,9 +52,16 @@ type MessageDetail = {
   HTML: string;
 };
 
-/** Every message sent to one address, newest first. */
-export async function readMailbox(address: string): Promise<MailboxMessage[]> {
-  const search = new URLSearchParams({ query: `to:${address}` });
+/** Every message sent to one address, newest first.
+ *
+ * `subject` narrows it to messages whose subject contains that text — for an address every run
+ * shares, such as GBD's, where the recipient alone is no isolation at all. */
+export async function readMailbox(
+  address: string,
+  filter: { subject?: string } = {},
+): Promise<MailboxMessage[]> {
+  const subject = filter.subject === undefined ? '' : ` subject:"${filter.subject}"`;
+  const search = new URLSearchParams({ query: `to:${address}${subject}` });
   const found = (await (await callMailpit(`/api/v1/search?${search}`)).json()) as SearchResult;
 
   // The search result carries only a snippet, so each body is a second request. Fine at the one or
@@ -77,6 +84,8 @@ export async function readMailbox(address: string): Promise<MailboxMessage[]> {
 }
 
 export type WaitOptions = {
+  /** See `readMailbox`. */
+  subject?: string;
   timeoutMs?: number;
   pollIntervalMs?: number;
 };
@@ -92,11 +101,11 @@ export async function waitForEmails(
   count: number,
   options: WaitOptions = {},
 ): Promise<MailboxMessage[]> {
-  const { timeoutMs = 5_000, pollIntervalMs = 50 } = options;
+  const { subject, timeoutMs = 5_000, pollIntervalMs = 50 } = options;
   const deadline = Date.now() + timeoutMs;
 
   for (;;) {
-    const messages = await readMailbox(address);
+    const messages = await readMailbox(address, { subject });
     if (messages.length >= count) return messages;
     if (Date.now() >= deadline) {
       throw new Error(
