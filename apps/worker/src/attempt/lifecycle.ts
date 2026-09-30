@@ -107,6 +107,7 @@ export async function startAttempt(
     );
     // Bound to the report as well, since a support question starts from one.
     const log = dependencies.log.child({ attemptId, reportId: inputs.reportId });
+    log.info({ attemptNumber: inputs.attemptNumber }, 'Claimed an attempt');
 
     runDirectory = await createRunDirectory(dependencies.runRoot, attemptId);
 
@@ -245,12 +246,27 @@ export async function recordVerdict(
   { attemptId, log }: AttemptLog,
   verdict: RecordableVerdict,
 ): Promise<boolean> {
-  return await retryOnTransientDbError(() => writeVerdictOnce(dependencies, attemptId, verdict), {
-    action: 'record an attempt verdict',
-    log,
-    context: { verdict: verdict.kind },
-    waitsMs: dependencies.transientRetryWaitsMs,
-  });
+  const won = await retryOnTransientDbError(
+    () => writeVerdictOnce(dependencies, attemptId, verdict),
+    {
+      action: 'record an attempt verdict',
+      log,
+      context: { verdict: verdict.kind },
+      waitsMs: dependencies.transientRetryWaitsMs,
+    },
+  );
+  if (won) logRecordedVerdict(log, verdict);
+  return won;
+}
+
+/** A failure is at `warn` for a person scanning the log. Alerting on failures belongs to the data
+ * alerts over the metrics views, not to a threshold on this level. */
+function logRecordedVerdict(log: Logger, verdict: RecordableVerdict): void {
+  if (verdict.kind === 'failed') {
+    log.warn({ verdict: verdict.kind, failureReason: verdict.reason }, 'Recorded the verdict');
+  } else {
+    log.info({ verdict: verdict.kind }, 'Recorded the verdict');
+  }
 }
 
 function writeVerdictOnce(

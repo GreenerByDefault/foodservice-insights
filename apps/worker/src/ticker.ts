@@ -6,7 +6,7 @@
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Logger } from '@gbd/core/log';
+import type { FailureStreak } from './failures.ts';
 
 /** Resolves rather than rejecting when aborted, so an abort is never an unhandled rejection. */
 export async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -23,10 +23,9 @@ export type StopTicker = () => Promise<void>;
 
 /** Run `tick` every `intervalMs`, re-arming only once the previous one has *resolved*. */
 export function startTicker(
-  name: string,
   tick: () => Promise<unknown>,
   intervalMs: number,
-  log: Logger,
+  streak: FailureStreak,
 ): StopTicker {
   const controller = new AbortController();
 
@@ -36,9 +35,10 @@ export function startTicker(
       if (controller.signal.aborted) return;
       try {
         await tick();
+        streak.succeeded();
       } catch (error) {
         // `absorb-or-fail` in `failures.ts`: the next tick is the retry.
-        log.error({ ticker: name, err: error }, 'A worker tick failed; the next tick is the retry');
+        streak.failed(error);
       }
     }
   })();

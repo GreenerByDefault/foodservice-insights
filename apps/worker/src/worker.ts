@@ -41,7 +41,7 @@ import type { Kill } from './attempt/verdict.ts';
 import { readProgress } from './child/run-directory.ts';
 import type { Clock } from './clock.ts';
 import type { WorkerConfig } from './config.ts';
-import { classifyAttemptFailure } from './failures.ts';
+import { classifyAttemptFailure, failureStreak } from './failures.ts';
 import { cancelRequestedPendingAttempts, reapExpiredAttempts } from './sweeps/converge.ts';
 import { sendPendingNotifications } from './sweeps/notifications.ts';
 import { sleep, startTicker } from './ticker.ts';
@@ -108,6 +108,10 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   let shuttingDown = false;
   let drainingPromise: Promise<void> | undefined;
   let tickingPromise: Promise<void> | undefined;
+  const claimStreak = failureStreak(log, clock, {
+    failed: 'Could not claim from the queue; the next poll is the retry',
+    recovered: 'Claiming from the queue recovered',
+  });
 
   // -----------------------------------------------------------
   // Claiming and starting
@@ -149,10 +153,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
    */
   async function pollQueue(): Promise<PollOutcome> {
     try {
-      return await claimAndStart();
+      const outcome = await claimAndStart();
+      claimStreak.succeeded();
+      return outcome;
     } catch (error) {
       if (isPermanentDatabaseError(error)) throw error;
-      log.error({ err: error }, 'Could not claim from the queue; the next poll is the retry');
+      claimStreak.failed(error);
       return 'claim-failed';
     }
   }
@@ -263,6 +269,12 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
     const resuming: InFlightAttempt[] = [];
     for (const { record, reading } of ticked) {
       const { state, directive } = decideDirective(record.state, reading, config, now);
+      if (state.lastProgressSequence !== record.state.lastProgressSequence) {
+        record.prepared.log.debug(
+          { progressSequence: state.lastProgressSequence },
+          'The child reported progress',
+        );
+      }
       record.state = state;
 
       switch (directive.kind) {
@@ -460,10 +472,19 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // -----------------------------------------------------------
 
   async function run(): Promise<void> {
+    const ticker = (name: string, tick: () => Promise<unknown>, intervalMs: number) =>
+      startTicker(
+        tick,
+        intervalMs,
+        failureStreak(log.child({ ticker: name }), clock, {
+          failed: 'A worker tick failed; the next tick is the retry',
+          recovered: 'The worker tick recovered',
+        }),
+      );
     const tickers = [
-      startTicker('direct', direct, config.directIntervalMs, log),
-      startTicker('reap', reap, config.reapIntervalMs, log),
-      startTicker('notify', notify, config.notifyIntervalMs, log),
+      ticker('direct', direct, config.directIntervalMs),
+      ticker('reap', reap, config.reapIntervalMs),
+      ticker('notify', notify, config.notifyIntervalMs),
     ];
 
     try {

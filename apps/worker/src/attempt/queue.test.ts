@@ -327,6 +327,7 @@ describe('loadAttemptInputs', () => {
     });
 
     expect(loaded.inputs).toEqual({
+      attemptNumber: 1,
       organizationId: loaded.report.organizationId,
       reportId: loaded.report.id,
       inputFile: {

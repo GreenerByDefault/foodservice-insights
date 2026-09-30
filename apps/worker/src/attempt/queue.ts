@@ -127,6 +127,7 @@ function nextPendingAttempt(
 // -----------------------------------------------------
 
 export type AttemptInputs = {
+  attemptNumber: number;
   organizationId: OrganizationId;
   reportId: ReportId;
   inputFile: {
@@ -149,6 +150,7 @@ export async function loadAttemptInputs(
     .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
     .innerJoin('organization', 'organization.id', 'report.organizationId')
     .select([
+      'analysisAttempt.attemptNumber',
       'report.id as reportId',
       'inputFile.id as inputFileId',
       'report.organizationId',
@@ -166,6 +168,7 @@ export async function loadAttemptInputs(
     .executeTakeFirstOrThrow();
 
   return {
+    attemptNumber: row.attemptNumber,
     organizationId: row.organizationId,
     reportId: row.reportId,
     inputFile: {

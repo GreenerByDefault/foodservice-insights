@@ -9,6 +9,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_RECORD_BYTES } from '@gbd/core/log';
 import { collectingLogger } from '@gbd/core/testing';
 import type { AnalysisAttemptId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
@@ -173,6 +174,32 @@ describe('how a child ends', () => {
         exitCode: 1,
         stderrTail: text.slice(-100),
       });
+    });
+  });
+
+  test('the exit record keeps the end of an over-long tail, within the record bound', async () => {
+    const text = `${'traceback line\n'.repeat(500)}ZeroDivisionError: division by zero\n`;
+    const steps: FakeChildStep[] = [
+      { step: 'writeStderr', text },
+      { step: 'exit', code: 1 },
+    ];
+    const { log, records } = collectingLogger();
+
+    await runScenario(steps, { log }, async (child) => {
+      await child.exited;
+      expect(records).toEqual([
+        {
+          level: 'warn',
+          msg: 'The child exited',
+          exitCode: 1,
+          durationMs: expect.any(Number),
+          stderrTail: expect.any(String),
+        },
+      ]);
+      const [record] = records;
+      expect(text.endsWith(record?.stderrTail as string)).toBe(true);
+      expect(Buffer.byteLength(JSON.stringify(record))).toBeLessThan(MAX_RECORD_BYTES);
+      expect(Buffer.byteLength(JSON.stringify(record))).toBeGreaterThan(MAX_RECORD_BYTES - 600);
     });
   });
 

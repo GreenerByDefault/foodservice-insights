@@ -23,7 +23,9 @@
  *   failure while processing a *claimed* attempt becomes `failed('infrastructure')`, because a
  *   claimed attempt can never return to the queue and so has no next tick to wait for. The one
  *   exception is a claim statement Postgres *refuses*, which ticking will meet again unchanged:
- *   the worker drains and exits nonzero.
+ *   the worker drains and exits nonzero. An absorbed failure is logged once per streak, through
+ *   `failureStreak` below: the claim poll runs every two seconds, so logging each one would turn
+ *   an hour-long outage into ~1,800 identical lines, where a streak is two.
  * - **reaper-is-the-backstop** for a verdict we cannot record. When even `markAttemptFailed` will
  *   not go through, kill the child, log loudly, and abandon the attempt — and abandoning it means
  *   stopping the lease renewals too, or the row sits `processing` forever with nothing left alive
@@ -51,12 +53,14 @@
  *   fully-paid-for result discarded by a zero-row update.
  */
 
+import type { Logger } from '@gbd/core/log';
 import {
   type AnalysisFailureReason,
   isPermanentDatabaseError,
   isTransientDatabaseError,
 } from '@gbd/db';
 import { isBlobStoreError } from '@gbd/storage';
+import type { Clock } from './clock.ts';
 
 /** What to record when an attempt fails through the parent's own machinery rather than through
  * anything the child did. */
@@ -88,4 +92,36 @@ export function classifyAttemptFailure(error: unknown): AttemptFailure {
 /** Renders an error for a log line or a failure detail. */
 export function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** A loop's run of consecutive failed ticks, as `absorb-or-fail` above logs it. */
+export type FailureStreak = {
+  failed(error: unknown): void;
+  succeeded(): void;
+};
+
+/** Log the first failure of a streak at `error`, and its recovery at `info` with how long it
+ * lasted and how many ticks failed. Every tick in between is silent. */
+export function failureStreak(
+  log: Logger,
+  clock: Clock,
+  messages: { failed: string; recovered: string },
+): FailureStreak {
+  let streak: { startedAt: number; failedTicks: number } | undefined;
+  return {
+    failed(error) {
+      if (streak !== undefined) {
+        streak.failedTicks++;
+        return;
+      }
+      streak = { startedAt: clock.now(), failedTicks: 1 };
+      log.error({ err: error }, messages.failed);
+    },
+    succeeded() {
+      if (streak === undefined) return;
+      const durationMs = Math.round(clock.now() - streak.startedAt);
+      log.info({ durationMs, failedTicks: streak.failedTicks }, messages.recovered);
+      streak = undefined;
+    },
+  };
 }

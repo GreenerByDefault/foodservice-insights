@@ -24,10 +24,10 @@ function failingThenSucceeding(failures: unknown[]) {
   return { fn, calls: () => calls };
 }
 
-/** The record each failed attempt writes. The serialized error's stack is noise here. */
+/** The record each retried attempt writes. The serialized error's stack is noise here. */
 function failureRecord(attempt: number) {
   return {
-    level: 'error',
+    level: 'warn',
     msg: `Could not reach the database to test (attempt ${attempt} of 3)`,
     reportId: 'a-report',
     err: expect.objectContaining({ type: 'Error', code: 'ECONNREFUSED' }),
@@ -67,7 +67,7 @@ describe('retryOnTransientDbError', () => {
     expect(records).toEqual([failureRecord(1), failureRecord(2)]);
   });
 
-  it('rethrows the last transient error once the attempts are exhausted', async () => {
+  it('rethrows the last transient error unlogged once the attempts are exhausted', async () => {
     const { sleep } = recordingSleep();
     const { log, records } = collectingLogger();
     const last = anUnreachableDatabaseError('the last failure');
@@ -86,7 +86,7 @@ describe('retryOnTransientDbError', () => {
       }),
     ).rejects.toBe(last);
     expect(calls()).toBe(3);
-    expect(records).toEqual([failureRecord(1), failureRecord(2), failureRecord(3)]);
+    expect(records).toEqual([failureRecord(1), failureRecord(2)]);
   });
 
   it.each([
