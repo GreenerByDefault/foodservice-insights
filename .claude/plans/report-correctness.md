@@ -34,19 +34,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 **Wrong numbers.**
 
-- The headline per-diner figure, the narrative's per-diner sentence and the Emissions Summary
-  sheet divide by the sum of every month in `monthly_counts` (`total_dm` in
-  `build_food_report`); the monthly charts divide month by month (`divide_by_diner_meals`). The
-  web only accepts counts for months the file has orders in (`monthly-coverage.ts`), so the two
-  diverge only when a month's every product was uncategorized and `merge_categorizations`
-  dropped its rows. Reproduced: headline 0.75 kg against 1.13 kg on every chart, and only an
-  `info` finding.
 - The cache holds a handful of typo categories (`Plant-Based Butter`, `Mlik`, `Stone Fruit`)
   that have no factor, so their rows yield `NaN` emissions filed as `warning` findings: the
   kilos count toward weights and the plant share and vanish from every CO2e figure.
   `categorization-cache.md` PR 5 drops them before they reach the report.
-- `calculate_emissions_per_diner_meal` rounds to four decimals, so minor categories at a large
-  site show `0.0` in the workbook.
+- `calculate_emissions_per_diner_meal` rounds to four decimals, so a category under 0.05 g
+  per diner (a year of spices at a large site) shows `0.0` in the workbook. Dropping the
+  rounding is worse: the writer sets no number formats, so every row shows ten digits the
+  emission factors cannot support.
 
 **Layout.**
 
@@ -118,9 +113,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   from the model's list* — a second notion of "valid category". The match prompt's rule sending
   unnamed non-dairy milk to Oat Milk has contradicted the category since April 2025, and no
   cache row uses it; which one GBD wants is their call, and either way the number is sane.
-- **Per-diner denominators sum only months with rows**, computed once, so the headline equals
-  what the monthly charts show. A count for a month with no rows stays an `info` finding, the
-  `date_alignment` one `run_all_diagnostics` files.
 - **Drivers stay ranked by kilos; the prose says so.** The Decision KPIs page is where carbon
   ranking lives. **Open:** GBD may want procurement drivers ranked by CO2e instead. Also for
   GBD: the Animal Emissions Intensity table lists animal categories with poultry and fish at the
@@ -167,15 +159,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 3 — per-diner denominator
-
-- One `total_diner_meals` over the months present in `rows`, used by the summary, the narrative
-  and the Emissions Summary sheet; `calculate_emissions_per_diner_meal` stops rounding.
-- Tests: a month whose products were all uncategorized leaves the headline equal to the charts.
-- Worth it: only when a whole month is uncategorized, so last among the number fixes; a dozen
-  lines.
-
-## PR 4 — noise and cost
+## PR 3 — noise and cost
 
 - `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
   `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
@@ -186,7 +170,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 5 — fixed page sizes
+## PR 4 — fixed page sizes
 
 - Every figure in `report/plots/figures.py` and the placeholder drop their own sizes for the
   two Letter orientations; `calculate_figure_height_for_wrapped_labels` goes, and the drivers
@@ -196,7 +180,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: a report of ten paper sizes prints and scales unevenly, and a long product name
   stretches its page.
 
-## PR 6 — category pages grouped by emissions
+## PR 5 — category pages grouped by emissions
 
 - `plot_category_drivers`' body becomes `draw_category_drivers(ax, ...)`, the way #388 split
   the combined pages; a new page function lays out four categories per page, ordered by
@@ -206,14 +190,23 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Worth it: one near-empty page per category, alphabetical, is most of the PDF's length on a
   real upload.
 
+## PR 6 — per-diner precision
+
+- `calculate_emissions_per_diner_meal` rounds to three significant figures instead of four
+  decimals, so a small category reads `0.0000312` rather than `0.0`.
+- Tests: a category under 0.00005 kg per diner is non-zero; the golden fixture diff is the
+  review.
+- Worth it: minor. A `0.0` beside a category the site did buy reads as a bug; nothing else here
+  depends on it.
+
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
 handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2 and 4, which change what the lab's QA
+- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2 and 3, which change what the lab's QA
   workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
-- PRs 5 and 6: `python -m worker_child.mock_llm` on the golden input before and after,
+- PRs 4 and 5: `python -m worker_child.mock_llm` on the golden input before and after,
   and compare the pages side by side; both also `2. Produce Food Report.py` on
   `python/lab/test_data`.
 
@@ -224,7 +217,7 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 4 here touch it, and whichever
+- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 3 here touch it, and whichever
   lands second rebases.
 - No PR here waits on GBD; the null-emission-factor restoration and the category-page count are
   both decided in this plan.

@@ -75,6 +75,7 @@ class FoodReport:
     region: Region
     diner_or_meal: DinerOrMeal
     diner_meal_mapping: dict[pd.Period, float]
+    diner_meals_in_data: float
     aggregation: dict[str, pd.DataFrame]
     emissions_summary: pd.DataFrame | None
     plant_animal_split: dict[str, Any] | None
@@ -89,10 +90,6 @@ class FoodReport:
     @property
     def metric_total(self) -> str:
         return metric_for_mode(self.mode)
-
-    @property
-    def total_diner_meals(self) -> float:
-        return float(sum(self.diner_meal_mapping.values()))
 
     def procurement_table(self, name: ProcurementTable) -> pd.DataFrame | None:
         if self.mode != "procurement":
@@ -251,7 +248,10 @@ def build_food_report(
             )
         )
         raise QualityCheckError(quality_findings) from exc
-    total_dm = float(sum(dm_mapping.values()))
+    months_with_rows = set(df["month_year"].dropna())
+    diner_meals_in_data = float(
+        sum(count for month, count in dm_mapping.items() if month in months_with_rows)
+    )
 
     _log_stage("emissions", report_progress)
     emissions_summary = None
@@ -349,7 +349,7 @@ def build_food_report(
             emissions_summary = emissions.calculate_emissions_summary(df)
             emissions_summary = emissions.calculate_emissions_per_diner_meal(
                 emissions_summary,
-                total_dm,
+                diner_meals_in_data,
             )
 
             if not monthly_cat.empty:
@@ -421,6 +421,7 @@ def build_food_report(
         region=region,
         diner_or_meal=diner_or_meal,
         diner_meal_mapping=dm_mapping,
+        diner_meals_in_data=diner_meals_in_data,
         aggregation=agg_results,
         emissions_summary=emissions_summary,
         plant_animal_split=plant_animal_split,
@@ -432,7 +433,7 @@ def build_food_report(
             mode=mode,
             region=region,
             diner_or_meal=diner_or_meal,
-            total_dm=total_dm,
+            diner_meals_in_data=diner_meals_in_data,
             emissions_summary=emissions_summary,
             plant_animal_split=plant_animal_split,
             plant_protein_share=plant_protein_share,
@@ -468,7 +469,7 @@ def _summary_stats(
     mode: ReportMode,
     region: Region,
     diner_or_meal: DinerOrMeal,
-    total_dm: float,
+    diner_meals_in_data: float,
     emissions_summary: pd.DataFrame | None,
     plant_animal_split: dict[str, Any] | None,
     plant_protein_share: dict[str, Any] | None,
@@ -484,7 +485,7 @@ def _summary_stats(
         "Total rows": f"{len(df):,}",
         "Unique products": f"{df['product'].nunique():,}" if "product" in df.columns else "N/A",
         "Date range": _date_range(df),
-        f"Total {diner_or_meal}s": f"{total_dm:,.0f}",
+        f"Total {diner_or_meal}s": f"{diner_meals_in_data:,.0f}",
         "Data type": mode.title(),
         "Region used for climate emissions factors": region_summary_label,
     }
@@ -493,9 +494,9 @@ def _summary_stats(
         total_co2e = emissions_summary["total_kg_co2e"].sum(min_count=1)
         if pd.notna(total_co2e):
             summary_stats["Total CO2e"] = f"{float(total_co2e):,.0f} kg"
-            if total_dm > 0:
+            if diner_meals_in_data > 0:
                 summary_stats[f"CO2e per {diner_or_meal}"] = (
-                    f"{float(total_co2e) / total_dm:.3f} kg"
+                    f"{float(total_co2e) / diner_meals_in_data:.3f} kg"
                 )
 
     if plant_animal_split is not None:
