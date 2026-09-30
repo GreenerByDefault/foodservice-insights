@@ -22,6 +22,7 @@ import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/
 import { readSubmission, validateSubmission } from '$lib/reports/submission';
 import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
 import { database, withDbErrorHandling } from '$lib/server/db';
+import { logger } from '$lib/server/log';
 import {
   describeRateLimitExceeded,
   lockAndCheckReportRateLimit,
@@ -257,10 +258,9 @@ async function recordRejection(
     // The blob store and the database are both only for our own records here, and the answer is
     // already the 400 telling the user why their file was rejected. So neither failing is raised —
     // which is why there is no `withDbErrorHandling` or `withBlobStoreErrorHandling` above.
-    console.error('Could not record a rejected upload', {
-      organizationId,
-      reason: rejection.reason,
-      cause,
-    });
+    logger().error(
+      { organizationId, reason: rejection.reason, err: cause },
+      'Could not record a rejected upload',
+    );
   }
 }

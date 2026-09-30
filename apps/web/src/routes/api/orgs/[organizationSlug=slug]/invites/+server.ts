@@ -146,7 +146,7 @@ export async function _createInvite(
     );
   }
 
-  const emailSent = await sendInvite({
+  const emailSent = await sendInvite(outcome.inviteId, {
     kind: 'organization-invite',
     to: email,
     organizationName,

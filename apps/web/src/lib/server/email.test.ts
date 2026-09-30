@@ -1,5 +1,8 @@
 import { expect, test, vi } from 'vitest';
 import { emailer, notifyGbd, sendInvite } from './email.ts';
+import { SERVER_LOGS } from './testing/logs.ts';
+
+const AN_INVITE_ID = crypto.randomUUID();
 
 const AN_INVITE = {
   kind: 'organization-invite',
@@ -32,7 +35,6 @@ test('notifyGbd sends through the app handle on success', async () => {
 
 test('notifyGbd logs, rather than throws, when the send fails', async () => {
   const sent = vi.spyOn(emailer().transport, 'send').mockRejectedValue(new Error('boom'));
-  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   try {
     await expect(
@@ -43,13 +45,16 @@ test('notifyGbd logs, rather than throws, when the send fails', async () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(logged).toHaveBeenCalledTimes(1);
-    const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
-    expect(message).toBe('Could not notify GBD');
-    expect(meta).toMatchObject({ kind: 'gbd-organization-created' });
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Could not notify GBD',
+        kind: 'gbd-organization-created',
+        err: expect.objectContaining({ type: 'Error', message: 'boom' }),
+      },
+    ]);
   } finally {
     sent.mockRestore();
-    logged.mockRestore();
   }
 });
 
@@ -57,7 +62,7 @@ test('sendInvite reports success as true', async () => {
   const sent = vi.spyOn(emailer().transport, 'send').mockResolvedValue(undefined);
 
   try {
-    await expect(sendInvite(AN_INVITE)).resolves.toBe(true);
+    await expect(sendInvite(AN_INVITE_ID, AN_INVITE)).resolves.toBe(true);
   } finally {
     sent.mockRestore();
   }
@@ -65,17 +70,19 @@ test('sendInvite reports success as true', async () => {
 
 test('sendInvite logs and reports false, rather than throwing, when the send fails', async () => {
   const sent = vi.spyOn(emailer().transport, 'send').mockRejectedValue(new Error('boom'));
-  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   try {
-    await expect(sendInvite(AN_INVITE)).resolves.toBe(false);
+    await expect(sendInvite(AN_INVITE_ID, AN_INVITE)).resolves.toBe(false);
 
-    expect(logged).toHaveBeenCalledTimes(1);
-    const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
-    expect(message).toBe('Could not send invite');
-    expect(meta).toMatchObject({ to: AN_INVITE.to });
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Could not send invite',
+        inviteId: AN_INVITE_ID,
+        err: expect.objectContaining({ type: 'Error', message: 'boom' }),
+      },
+    ]);
   } finally {
     sent.mockRestore();
-    logged.mockRestore();
   }
 });

@@ -60,7 +60,7 @@ describe('_createInvite', () => {
         }),
       ]);
 
-      expect(sendInvite).toHaveBeenCalledExactlyOnceWith({
+      expect(sendInvite).toHaveBeenCalledExactlyOnceWith(inviteId, {
         kind: 'organization-invite',
         to: 'invitee@example.test',
         organizationName: 'Acme Test',

@@ -5,6 +5,7 @@ import { loadAuthorization } from '$lib/server/auth/authorization';
 import { identifyUser } from '$lib/server/auth/identify';
 import type { AuthContext } from '$lib/server/auth/types';
 import { closeDatabase, database, withDbErrorHandling } from '$lib/server/db';
+import { logger } from '$lib/server/log';
 import { closeBlobStore } from '$lib/server/storage';
 
 /** The liveness probe reports on the database, so it must be able to answer without one. */
@@ -54,21 +55,25 @@ export const handleError: HandleServerError = ({ error: cause, event, status, me
   if (status === 404) return { message, code: 'not_found' };
 
   // Enough of a fingerprint to find this line again from a user saying "it broke around 2pm".
-  console.error('Unhandled server error', {
-    status,
-    method: event.request.method,
-    path: event.url.pathname,
-    routeId: event.route.id,
-    userId: event.locals.auth?.user.id,
-    error: cause,
-  });
+  logger().error(
+    {
+      status,
+      method: event.request.method,
+      path: event.url.pathname,
+      routeId: event.route.id,
+      userId: event.locals.auth?.user.id,
+      err: cause,
+    },
+    'Unhandled server error',
+  );
   // SvelteKit skips this hook for an expected `error()`, so `cause` is always a bug or an outage,
   // whose message and stack may say more about the system than a stranger should learn. None of it
   // crosses back to the client; it stays in the log line above.
   return { message: UNEXPECTED_ERROR_MESSAGE };
 };
 
-/** Release the connection pool and blob store sockets on shutdown, so a redeploy leaks neither.
+/** Log a crash as one record, and release the connection pool and blob store sockets on
+ * shutdown, so a redeploy leaks neither.
  *
  * https://svelte.dev/docs/kit/adapter-node#Graceful-shutdown
  */
@@ -80,17 +85,28 @@ export const init: ServerInit = () => {
 
   // Stops the server on an unset or unknown value, rather than on its first request.
   if (authMode() === 'placeholder') {
-    console.warn(
+    logger().warn(
       'PUBLIC_AUTH_MODE=placeholder: every request is the one seeded user, with no sign-in.',
     );
   }
 
+  // Without these, Node writes its own multi-line trace to stderr, which a host ingests as one
+  // entry per line. The destination is synchronous, so the record is written before the exit.
+  process.on('uncaughtException', (cause) => {
+    logger().fatal({ err: cause }, 'Uncaught exception');
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    logger().fatal({ err: reason }, 'Unhandled rejection');
+    process.exit(1);
+  });
+
   process.on('sveltekit:shutdown', async (reason) => {
-    console.log('Shutting down:', reason);
+    logger().info({ reason }, 'Shutting down');
     // allSettled, so one failing cleanup cannot strand the others.
     const outcomes = await Promise.allSettled([closeDatabase(), closeBlobStore()]);
     for (const outcome of outcomes) {
-      if (outcome.status === 'rejected') console.error('Cleanup failed:', outcome.reason);
+      if (outcome.status === 'rejected') logger().error({ err: outcome.reason }, 'Cleanup failed');
     }
   });
 };

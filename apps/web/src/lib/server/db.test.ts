@@ -1,9 +1,4 @@
-import {
-  isPermanentDatabaseError,
-  isTransientDatabaseError,
-  POSTGRES_CODE_CHECK_VIOLATION,
-  POSTGRES_CODE_UNIQUE_VIOLATION,
-} from '@gbd/db';
+import { POSTGRES_CODE_CHECK_VIOLATION, POSTGRES_CODE_UNIQUE_VIOLATION } from '@gbd/db';
 import {
   aDatabaseError,
   anUnreachableDatabaseError,
@@ -12,8 +7,9 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { error, isHttpError } from '@sveltejs/kit';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { database, isCheckViolation, isUniqueViolation, withDbErrorHandling } from './db.ts';
+import { SERVER_LOGS } from './testing/logs.ts';
 
 test('queries the database through the app handle, rolling back after', async () => {
   const id = await withRollback(database(), async (transaction) => {
@@ -39,25 +35,21 @@ describe('withDbErrorHandling', () => {
   });
 
   test('logs context and 500s a statement Postgres refused', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const thrown = await withDbErrorHandling(() => divideByZero(database()), {
+      action: 'load a widget',
+      context: { widgetId: 'abc' },
+    }).catch((error: unknown) => error);
 
-    try {
-      const thrown = await withDbErrorHandling(() => divideByZero(database()), {
-        action: 'load a widget',
-        context: { widgetId: 'abc' },
-      }).catch((error: unknown) => error);
-
-      if (!isHttpError(thrown)) throw thrown;
-      expect(thrown.status).toBe(500);
-
-      expect(logged).toHaveBeenCalledTimes(1);
-      const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
-      expect(message).toBe('Unexpected failure to load a widget');
-      expect(meta).toMatchObject({ widgetId: 'abc' });
-      expect(isPermanentDatabaseError(meta.error)).toBe(true);
-    } finally {
-      logged.mockRestore();
-    }
+    if (!isHttpError(thrown)) throw thrown;
+    expect(thrown.status).toBe(500);
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Unexpected failure to load a widget',
+        widgetId: 'abc',
+        err: expect.objectContaining({ type: 'DatabaseError', code: '22012' }),
+      },
+    ]);
   });
 
   /** That a real outage arrives in this shape is `@gbd/db`'s own test, against a closed port. This
@@ -66,47 +58,37 @@ describe('withDbErrorHandling', () => {
   const databaseIsDown = () => Promise.reject(anUnreachableDatabaseError());
 
   test('logs context and 503s an unreachable database', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const thrown = await withDbErrorHandling(databaseIsDown, {
+      action: 'load a widget',
+      context: { widgetId: 'abc' },
+    }).catch((error: unknown) => error);
 
-    try {
-      const thrown = await withDbErrorHandling(databaseIsDown, {
-        action: 'load a widget',
-        context: { widgetId: 'abc' },
-      }).catch((error: unknown) => error);
-
-      if (!isHttpError(thrown)) throw thrown;
-      expect(thrown.status).toBe(503);
-      expect(thrown.body.code).toBe('service_unavailable');
-
-      expect(logged).toHaveBeenCalledTimes(1);
-      const [message, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
-      expect(message).toBe('Could not reach the database to load a widget');
-      expect(meta).toMatchObject({ widgetId: 'abc' });
-      expect(isTransientDatabaseError(meta.error)).toBe(true);
-    } finally {
-      logged.mockRestore();
-    }
+    if (!isHttpError(thrown)) throw thrown;
+    expect(thrown.status).toBe(503);
+    expect(thrown.body.code).toBe('service_unavailable');
+    expect(SERVER_LOGS.records).toEqual([
+      {
+        level: 'error',
+        msg: 'Could not reach the database to load a widget',
+        widgetId: 'abc',
+        err: expect.objectContaining({ code: 'ECONNREFUSED' }),
+      },
+    ]);
   });
 
   test('503s a statement the database gave up on', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     const canceled = () =>
       Promise.reject(aDatabaseError('canceling statement due to timeout', '57014'));
 
-    try {
-      const thrown = await withDbErrorHandling(canceled, { action: 'load a widget' }).catch(
-        (error: unknown) => error,
-      );
+    const thrown = await withDbErrorHandling(canceled, { action: 'load a widget' }).catch(
+      (error: unknown) => error,
+    );
 
-      if (!isHttpError(thrown)) throw thrown;
-      expect(thrown.status).toBe(503);
-
-      expect(logged).toHaveBeenCalledTimes(1);
-      const [, meta] = logged.mock.calls[0] as [string, Record<string, unknown>];
-      expect(isTransientDatabaseError(meta.error)).toBe(true);
-    } finally {
-      logged.mockRestore();
-    }
+    if (!isHttpError(thrown)) throw thrown;
+    expect(thrown.status).toBe(503);
+    expect(SERVER_LOGS.records.map((record) => record.msg)).toEqual([
+      'Could not reach the database to load a widget',
+    ]);
   });
 
   test('passes through the answer a caller gave itself', async () => {
@@ -127,17 +109,12 @@ describe('withDbErrorHandling', () => {
   });
 
   test('rethrows a failure that is not from the database', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     const cause = new Error('a bug unrelated to Postgres');
 
-    try {
-      await expect(
-        withDbErrorHandling(() => Promise.reject(cause), { action: 'do a thing' }),
-      ).rejects.toBe(cause);
-      expect(logged).not.toHaveBeenCalled();
-    } finally {
-      logged.mockRestore();
-    }
+    await expect(
+      withDbErrorHandling(() => Promise.reject(cause), { action: 'do a thing' }),
+    ).rejects.toBe(cause);
+    expect(SERVER_LOGS.records).toEqual([]);
   });
 });
 
