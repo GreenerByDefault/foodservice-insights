@@ -35,7 +35,7 @@ async function main(): Promise<void> {
       pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
     });
     if (resolved.mode === 'off') {
-      WORKER_LOG.error('WORKER_MODE=off; not starting a worker.');
+      WORKER_LOG.info('WORKER_MODE=off; not starting a worker.');
       return;
     }
 
@@ -63,6 +63,10 @@ async function main(): Promise<void> {
     }
 
     const log = WORKER_LOG.child({ workerId: config.workerId });
+    log.info(
+      { mode: resolved.mode, maxConcurrentAttempts: config.maxConcurrentAttempts },
+      'Worker started',
+    );
     const worker = createWorker({
       db: WORKER_DATABASE,
       store: BLOB_STORE,
@@ -75,11 +79,11 @@ async function main(): Promise<void> {
     let draining = false;
     const onSignal = (signal: NodeJS.Signals) => {
       if (draining) {
-        log.error({ signal }, 'Received a signal again while draining; exiting immediately');
+        log.warn({ signal }, 'Received a signal again while draining; exiting immediately');
         process.exit(1);
       }
       draining = true;
-      log.error({ signal }, 'Received a signal; draining');
+      log.info({ signal }, 'Received a signal; draining');
       // `run()`'s own `finally` awaits the same memoized drain; this `catch` is only so that an
       // unexpected rejection cannot reach the event loop and kill the process mid-drain.
       void worker.drain().catch((error) => log.error({ err: error }, 'The drain failed'));

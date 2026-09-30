@@ -317,10 +317,10 @@ export function startWorkerContainer(options: {
     { stdio: 'inherit' },
   );
 
-  // The worker logs nothing on a successful start, so there is no readiness line to wait for — and
-  // a worker that dies at startup (an absent bucket, a broken venv in the image) would otherwise
-  // show up only as an opaque assertion timeout a minute into the first spec. `stopping` is what
-  // tells that apart from the shutdown below, where it drains and exits under its own power.
+  // Nothing waits on the worker's start line for readiness yet, so a worker that dies at startup
+  // (an absent bucket, a broken venv in the image) would otherwise show up only as an opaque
+  // assertion timeout a minute into the first spec. `stopping` is what tells that apart from the
+  // shutdown below, where it drains and exits under its own power.
   let stopping = false;
   container.on('exit', (code) => {
     if (stopping) return;

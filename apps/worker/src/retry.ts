@@ -14,7 +14,7 @@ export const TRANSIENT_RETRY_WAITS_MS: readonly number[] = [250, 2_000];
 
 export interface RetryOptions {
   log: Logger;
-  /** What we were trying to do, for the log line: "Could not reach the database to <action>". */
+  /** What we were trying to do, for each retry's line: "Could not reach the database to <action>". */
   action: string;
   /** Structured context — entity IDs, etc. — logged next to the error. */
   context?: Record<string, unknown>;
@@ -52,11 +52,13 @@ export async function retryOnTransientDbError<T>(
       return await fn();
     } catch (cause) {
       if (!isTransientDatabaseError(cause)) throw cause;
-      options.log.error(
+      // Unlogged, because every caller logs it along with what happens next: parking the verdict,
+      // or failing the attempt.
+      if (attempt === attempts) throw cause;
+      options.log.warn(
         { ...options.context, err: cause },
         `Could not reach the database to ${options.action} (attempt ${attempt} of ${attempts})`,
       );
-      if (attempt === attempts) throw cause;
       await sleep(waits[attempt - 1] as number);
     }
   }

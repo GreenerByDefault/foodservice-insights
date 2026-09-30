@@ -674,6 +674,59 @@ describe('draining', () => {
   });
 });
 
+describe('what it logs', () => {
+  test('a claim, the exit and the verdict of a child that succeeds', async () => {
+    await withWorker({}, async (harness, fixture) => {
+      const attemptId = await startOne(harness);
+      const attempt = { attemptId, reportId: fixture.reportId };
+
+      await waitUntil(() => harness.logs.records.length === 3, 'the verdict is recorded');
+      expect(harness.logs.records).toEqual([
+        { level: 'info', msg: 'Claimed an attempt', ...attempt, attemptNumber: 1 },
+        {
+          level: 'info',
+          msg: 'The child exited',
+          ...attempt,
+          exitCode: 0,
+          durationMs: expect.any(Number),
+        },
+        { level: 'info', msg: 'Recorded the verdict', ...attempt, verdict: 'succeeded' },
+      ]);
+    });
+  });
+
+  test('a crash, with its stderr tail', async () => {
+    const traceback = 'Traceback (most recent call last):\n  ZeroDivisionError\n';
+    const steps: FakeChildStep[] = [
+      { step: 'writeStderr', text: traceback },
+      { step: 'exit', code: 3 },
+    ];
+    await withWorker({ steps }, async (harness, fixture) => {
+      const attemptId = await startOne(harness);
+      const attempt = { attemptId, reportId: fixture.reportId };
+
+      await waitUntil(() => harness.logs.records.length === 3, 'the verdict is recorded');
+      expect(harness.logs.records.slice(1)).toEqual([
+        {
+          level: 'error',
+          msg: 'The child crashed',
+          ...attempt,
+          exitCode: 3,
+          durationMs: expect.any(Number),
+          stderrTail: traceback,
+        },
+        {
+          level: 'warn',
+          msg: 'Recorded the verdict',
+          ...attempt,
+          verdict: 'failed',
+          failureReason: 'child_crashed',
+        },
+      ]);
+    });
+  });
+});
+
 describe('the sweeps, wired up', () => {
   test("reap converges another worker's expired attempt under our own id", async () => {
     await withWorker({}, async (harness, fixture) => {
@@ -758,6 +811,23 @@ describe('run', () => {
             () => statusIs(attemptId, 'succeeded'),
             'the attempt is claimed and succeeds once the database is back',
           );
+          // One outage, two lines, however many polls it cost.
+          const claimLines = harness.logs.records.filter((record) =>
+            record.msg?.includes('from the queue'),
+          );
+          expect(claimLines).toEqual([
+            {
+              level: 'error',
+              msg: 'Could not claim from the queue; the next poll is the retry',
+              err: expect.objectContaining({ type: 'Error' }),
+            },
+            {
+              level: 'info',
+              msg: 'Claiming from the queue recovered',
+              durationMs: expect.any(Number),
+              failedTicks: expect.any(Number),
+            },
+          ]);
           await harness.worker.drain();
           await expect(running).resolves.toBeUndefined();
         },
