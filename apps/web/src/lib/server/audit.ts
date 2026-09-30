@@ -22,6 +22,9 @@ export type ReportAuditAction =
  * added. */
 export type MemberAuditAction = 'member.role_changed' | 'member.removed' | 'member.left';
 
+/** The `user.*` audit actions a route may record. */
+export type UserAuditAction = 'user.deleted';
+
 /** The `invite.*` audit actions a route may record. Supersession is not its own event — the
  * superseded row's status is the record. */
 export type InviteAuditAction =
@@ -35,12 +38,15 @@ export type AuditAction =
   | OrganizationAuditAction
   | ReportAuditAction
   | MemberAuditAction
+  | UserAuditAction
   | InviteAuditAction;
 
-/** What the event happened to, and the organization it happened in. */
+/** What the event happened to, and the organization it happened in. A user's own account belongs
+ * to no organization, hence the null. */
 export type AuditTarget =
   | { type: 'organization'; id: OrganizationId }
-  | { type: 'report' | 'user' | 'invite'; id: string; organizationId: OrganizationId };
+  | { type: 'report' | 'invite'; id: string; organizationId: OrganizationId }
+  | { type: 'user'; id: string; organizationId: OrganizationId | null };
 
 type AuditEvent = {
   action: AuditAction;

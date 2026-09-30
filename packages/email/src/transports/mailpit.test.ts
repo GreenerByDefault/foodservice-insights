@@ -6,8 +6,8 @@ import { initializeEmailer } from '../client.ts';
 import { isEmailError } from '../errors.ts';
 import { sendEmail } from '../send.ts';
 import { breakableEmailer } from '../testing/breakable.ts';
-import { allMessages, anAnalysisSucceeded } from '../testing/fixtures.ts';
-import { aTestEmailAddress, waitForEmail, waitForEmails } from '../testing/mailbox.ts';
+import { aGbdUserDeleted, allMessages, anAnalysisSucceeded } from '../testing/fixtures.ts';
+import { aTestEmailAddress, readMailbox, waitForEmail, waitForEmails } from '../testing/mailbox.ts';
 import { mailpitTransport } from './mailpit.ts';
 
 loadLocalEnv();
@@ -85,6 +85,20 @@ describe('mailpitTransport', () => {
     } finally {
       await breakable.close();
     }
+  });
+
+  test('a subject filter finds one message among others to the same address', async () => {
+    const to = aTestEmailAddress();
+    const emailer = emailerWithSharedMailbox(to);
+    const wanted = aTestEmailAddress('deleted');
+
+    await sendEmail(emailer, aGbdUserDeleted({ userEmail: aTestEmailAddress('other') }));
+    await sendEmail(emailer, aGbdUserDeleted({ userEmail: wanted }));
+    await waitForEmails(to, 2);
+
+    expect(await readMailbox(to, { subject: wanted })).toEqual([
+      expect.objectContaining({ subject: `User deleted: ${wanted}` }),
+    ]);
   });
 
   test('waitForEmails throws when too few arrive before the timeout', async () => {
