@@ -341,6 +341,16 @@ def test_a_mapping_month_absent_from_the_data_is_one_info_finding():
     assert _findings(report, "diner_meal_alignment") == []
 
 
+def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
+    aligned = _build(_rows())
+    report = _build(_rows(), diner_meal_mapping={"2024-01": 100, "2024-02": 120, "2024-03": 90})
+
+    assert report.diner_meals_in_data == 220.0
+    assert report.summary_stats == aligned.summary_stats
+    assert report.emissions_summary is not None and aligned.emissions_summary is not None
+    pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
+
+
 def test_a_category_bought_in_some_months_only_is_an_info_finding():
     lamb = pd.DataFrame(
         {

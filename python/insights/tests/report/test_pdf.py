@@ -820,7 +820,7 @@ def test_executive_narrative_lists_only_the_top_three_categories() -> None:
 
 
 def test_executive_narrative_leaves_per_unit_and_split_blank_when_unknown() -> None:
-    report = replace(_report(), diner_meal_mapping={}, plant_animal_split=None)
+    report = replace(_report(), diner_meals_in_data=0.0, plant_animal_split=None)
 
     narrative = _executive_narrative(report, "Acme", "pass")
 

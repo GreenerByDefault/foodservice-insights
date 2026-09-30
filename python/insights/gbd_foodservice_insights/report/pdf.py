@@ -1145,7 +1145,6 @@ def _executive_narrative(
     if not total_co2e > 0:  # NaN too
         return None
 
-    total_dm = report.total_diner_meals
     split = report.plant_animal_split
     top = co2e_by_cat.nlargest(3, "total_kg_co2e")
     return {
@@ -1153,7 +1152,9 @@ def _executive_narrative(
         "period": report.summary_stats.get("Date range", ""),
         "total_food_kg": float(report.rows[report.metric_total].sum()),
         "total_co2e_kg": total_co2e,
-        "per_dm_kg": (total_co2e / total_dm) if total_dm else None,
+        "per_dm_kg": (
+            total_co2e / report.diner_meals_in_data if report.diner_meals_in_data else None
+        ),
         "dm_label": report.diner_or_meal,
         "plant_pct": split["plant_pct"] if split is not None else None,
         "animal_pct": split["animal_pct"] if split is not None else None,
