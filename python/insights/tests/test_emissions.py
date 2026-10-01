@@ -68,3 +68,12 @@ def test_calculate_emissions_per_diner_meal_handles_zero_or_missing_denominator(
 
     assert pd.isna(out_zero.loc[0, "kg_co2e_per_diner_meal"])
     assert pd.isna(out_none.loc[0, "kg_co2e_per_diner_meal"])
+
+
+def test_calculate_emissions_per_diner_meal_rounds_to_three_significant_figures():
+    """A tiny category reads its magnitude instead of rounding down to 0.0."""
+    summary = pd.DataFrame({"category": ["Spices"], "total_kg_co2e": [0.0000312]})
+
+    out = emissions.calculate_emissions_per_diner_meal(summary, total_diner_meals=1)
+
+    assert out.loc[0, "kg_co2e_per_diner_meal"] == pytest.approx(0.0000312)
