@@ -3,6 +3,7 @@
 from functools import cache
 from typing import Any, Literal, overload
 
+import numpy as np
 import pandas as pd
 
 from gbd_foodservice_insights.categories import get_gbd_categories_metadata
@@ -157,6 +158,19 @@ def calculate_emissions_summary(
     return summary.sort_values("total_kg_co2e", ascending=False).reset_index(drop=True)
 
 
+def _round_to_significant_figures(values: pd.Series, significant_figures: int) -> pd.Series:
+    """Round each value to a fixed number of significant figures.
+
+    Zero and NaN pass through unchanged; a plain decimal round would instead floor a small
+    category's per-diner emissions to ``0.0``, which reads as a bug beside a category the
+    site did buy.
+    """
+    magnitude = pd.Series(np.floor(np.log10(values.abs().where(values != 0))), index=values.index)
+    decimals = (significant_figures - 1 - magnitude).fillna(0).astype(int)
+    scale = 10.0**decimals
+    return (values * scale).round() / scale
+
+
 def calculate_emissions_per_diner_meal(
     emissions_summary: pd.DataFrame,
     total_diner_meals: float | None,
@@ -164,7 +178,8 @@ def calculate_emissions_per_diner_meal(
     """Add ``kg_co2e_per_diner_meal`` column to an emissions summary."""
     out = emissions_summary.copy()
     if total_diner_meals and total_diner_meals > 0:
-        out["kg_co2e_per_diner_meal"] = (out["total_kg_co2e"] / float(total_diner_meals)).round(4)
+        per_diner_meal = out["total_kg_co2e"] / float(total_diner_meals)
+        out["kg_co2e_per_diner_meal"] = _round_to_significant_figures(per_diner_meal, 3)
     else:
         out["kg_co2e_per_diner_meal"] = float("nan")
     return out

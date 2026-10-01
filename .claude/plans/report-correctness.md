@@ -38,10 +38,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   that have no factor, so their rows yield `NaN` emissions filed as `warning` findings: the
   kilos count toward weights and the plant share and vanish from every CO2e figure.
   `categorization-cache.md` PR 5 drops them before they reach the report.
-- `calculate_emissions_per_diner_meal` rounds to four decimals, so a category under 0.05 g
-  per diner (a year of spices at a large site) shows `0.0` in the workbook. Dropping the
-  rounding is worse: the writer sets no number formats, so every row shows ten digits the
-  emission factors cannot support.
 
 **Layout.**
 
@@ -189,15 +185,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   category.
 - Worth it: one near-empty page per category, alphabetical, is most of the PDF's length on a
   real upload.
-
-## PR 6 — per-diner precision
-
-- `calculate_emissions_per_diner_meal` rounds to three significant figures instead of four
-  decimals, so a small category reads `0.0000312` rather than `0.0`.
-- Tests: a category under 0.00005 kg per diner is non-zero; the golden fixture diff is the
-  review.
-- Worth it: minor. A `0.0` beside a category the site did buy reads as a bug; nothing else here
-  depends on it.
 
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
 handed and what the sheets contain, not that files exist.
