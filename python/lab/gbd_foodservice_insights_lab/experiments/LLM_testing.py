@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.categories import get_GBD_categories
-from gbd_foodservice_insights.categorization.cache import get_previously_categorized_items
+from gbd_foodservice_insights.categorization.cache import read_categorization_cache_csv
 
 # Functions to allow easy testing of the LLM models in our existing pipelines
 
@@ -42,7 +42,7 @@ def test_new_categorization_LLM(n_test_samples: int = 100) -> None:
     """
 
     # Load the previously categorized items
-    previously_categorized_items: pd.DataFrame = get_previously_categorized_items()
+    previously_categorized_items: pd.DataFrame = read_categorization_cache_csv()
 
     previously_categorized_items = previously_categorized_items.loc[
         ~previously_categorized_items["cleaned_item_names"].isna(), :

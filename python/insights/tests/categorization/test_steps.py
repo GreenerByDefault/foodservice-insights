@@ -1,11 +1,10 @@
 import dataclasses
 from collections.abc import Sequence
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization import steps
+from gbd_foodservice_insights.categorization.cache import CategorizationCache
 from gbd_foodservice_insights.categorization.steps import (
     MergeCounts,
     categorize_using_cleaned_name_history,
@@ -21,14 +20,19 @@ from gbd_foodservice_insights.testing import KeywordLlmClient
 # ----------------------------------------------------------------------
 # Historical reuse
 # ----------------------------------------------------------------------
-def test_categorize_using_historical_classifications_loads_the_default_cache():
-    historical_df = pd.DataFrame(
-        {"product": ["CHEESE CHEDDAR 5LB", "Whole Milk Gallon"], "category": ["Cheese", "Milk"]}
+def _cache(products: list[str], categories: list[str], cleaned: list[str]) -> CategorizationCache:
+    return CategorizationCache.from_frame(
+        pd.DataFrame({"product": products, "category": categories, "cleaned_item_names": cleaned})
+    )
+
+
+def test_categorize_using_historical_classifications_matches_the_cache():
+    cache = _cache(
+        ["CHEESE CHEDDAR 5LB", "Whole Milk Gallon"], ["Cheese", "Milk (Cow's milk)"], ["", ""]
     )
     unique_products_df = pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB", "Paper Towels"]})
 
-    with patch.object(steps, "get_previously_categorized_items", return_value=historical_df):
-        result = categorize_using_historical_classifications(unique_products_df)
+    result = categorize_using_historical_classifications(unique_products_df, cache)
 
     pd.testing.assert_frame_equal(
         result,
@@ -44,12 +48,10 @@ def test_categorize_using_historical_classifications_loads_the_default_cache():
 
 
 def test_categorize_using_historical_classifications_prefers_the_latest_history_entry():
-    historical_df = pd.DataFrame(
-        {"product": ["CHEESE CHEDDAR 5LB"] * 2, "category": ["Butter", "Cheese"]}
-    )
+    cache = _cache(["CHEESE CHEDDAR 5LB"] * 2, ["Butter", "Cheese"], ["", ""])
 
     result = categorize_using_historical_classifications(
-        pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB"]}), historical_df
+        pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB"]}), cache
     )
 
     assert result["category"].tolist() == ["Cheese"]
@@ -109,9 +111,9 @@ def test_categorize_using_cleaned_name_history_reuses_a_match_and_trusts_it():
         }
     )
 
-    result = categorize_using_cleaned_name_history(
-        products_df, reuse_index={"chicken breast": "Poultry (Chicken & Turkey)"}
-    )
+    cache = _cache(["RAW_Z"], ["Poultry (Chicken & Turkey)"], ["chicken breast"])
+
+    result = categorize_using_cleaned_name_history(products_df, cache)
 
     pd.testing.assert_frame_equal(
         result,
@@ -124,13 +126,15 @@ def test_categorize_using_cleaned_name_history_reuses_a_match_and_trusts_it():
 
 
 @pytest.mark.parametrize(
-    ("category", "reuse_index"),
+    ("category", "cache_cleaned_name"),
     [
-        pytest.param(pd.NA, {}, id="empty index"),
-        pytest.param("Cheese", {"cheese": "Butter"}, id="nothing left to categorize"),
+        pytest.param(pd.NA, "", id="empty index"),
+        pytest.param("Cheese", "cheese", id="nothing left to categorize"),
     ],
 )
-def test_categorize_using_cleaned_name_history_leaves_products_unchanged(category, reuse_index):
+def test_categorize_using_cleaned_name_history_leaves_products_unchanged(
+    category, cache_cleaned_name
+):
     products_df = pd.DataFrame(
         {
             "product": ["RAW_A"],
@@ -141,7 +145,9 @@ def test_categorize_using_cleaned_name_history_leaves_products_unchanged(categor
         }
     )
 
-    result = categorize_using_cleaned_name_history(products_df, reuse_index=reuse_index)
+    cache = _cache(["RAW_Z"], ["Butter"], [cache_cleaned_name])
+
+    result = categorize_using_cleaned_name_history(products_df, cache)
 
     pd.testing.assert_frame_equal(result, products_df)
 

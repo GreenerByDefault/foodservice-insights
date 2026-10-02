@@ -36,7 +36,7 @@ import matplotlib
 # backend would try to open a window.
 matplotlib.use("Agg")
 
-from gbd_foodservice_insights.categorization.cache import get_previously_categorized_items
+from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import LlmClient, OpenAiLlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
@@ -98,11 +98,7 @@ def analyze(
     if request.unit_system == "lb":
         df = df.assign(weight=df["weight"] * LB_TO_KG)
 
-    categorized = categorize_unique_products(
-        df,
-        llm,
-        historical_categorizations=get_previously_categorized_items(),
-    )
+    categorized = categorize_unique_products(df, llm, load_categorization_cache())
     df_final, _counts = merge_categorizations(
         categorized.cleaned_df, categorized.unique_products_df
     )
