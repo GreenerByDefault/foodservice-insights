@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 def save_historical_categorizations(new_df: pd.DataFrame) -> None:
     """Append reviewed categorizations to the cache; a new row replaces one for the same
     product."""
+    # The raw file, not `load_categorization_cache`: a save must not delete the rows the loader
+    # drops, which a person may still fix.
     existing = cache.read_categorization_cache_csv()
 
     cols_to_keep = existing.columns.intersection(new_df.columns)

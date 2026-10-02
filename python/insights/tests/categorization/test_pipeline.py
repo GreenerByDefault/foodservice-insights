@@ -109,9 +109,9 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
 
 def test_categorize_unique_products_characterization() -> None:
     """Pins today's silent drops, so each later change to them shows up as a diff here: every
-    near-miss answer, and a cache row with a non-canonical category, become "No Matches Found",
-    and the cache row is kept out of the review table; a cache row with surrounding whitespace
-    or a blank category never hits."""
+    near-miss answer becomes "No Matches Found". A cache row with surrounding whitespace hits;
+    one with a blank or non-canonical category is dropped, so its product goes to the LLM and
+    the review table."""
     products = [
         "Cheddar Shred",
         "Salted Butter",
@@ -146,28 +146,30 @@ def test_categorize_unique_products_characterization() -> None:
             "cheddar shred": "Cheese.",
             "salted butter": '"Butter"',
             "pork loin": "pork",
-            "oat milk carton": "None",
+            "mozzarella block": "cheese",
         }
     )
 
     categorized = categorize_unique_products(df, llm, cache)
 
     no_match = "No Matches Found"
-    milk = "Milk (Cow's milk)"
     assert_frame_equal(
         categorized.unique_products_df,
         pd.DataFrame(
             {
                 "product": products,
-                "category": [no_match] * 5 + [milk],
-                "previously_categorized": [False] * 4 + [True] * 2,
-                "match_type": pd.Series(["llm"] * 4 + ["raw_product_history"] * 2, dtype="object"),
+                "category": [no_match] * 3 + ["Oat Milk", no_match, "Milk (Cow's milk)"],
+                "previously_categorized": [False] * 3 + [True, False, True],
+                "match_type": pd.Series(
+                    ["llm"] * 3 + ["raw_product_history", "llm", "raw_product_history"],
+                    dtype="object",
+                ),
                 "cleaned_item_names": [
                     "cheddar shred",
                     "salted butter",
                     "pork loin",
-                    "oat milk carton",
-                    "Mozzarella Block",
+                    "Oat Milk Carton",
+                    "mozzarella block",
                     "Whole Milk Gallon",
                 ],
             }
@@ -178,7 +180,7 @@ def test_categorize_unique_products_characterization() -> None:
         pd.DataFrame(
             {
                 "category": [no_match] * 4,
-                "product": ["Cheddar Shred", "Oat Milk Carton", "Pork Loin", "Salted Butter"],
+                "product": ["Cheddar Shred", "Mozzarella Block", "Pork Loin", "Salted Butter"],
                 "occurrence_count": [1] * 4,
             }
         ),

@@ -71,15 +71,17 @@ def unanimous_index(
 # Reviewed historical cache
 # ----------------------------------------------------------------------
 CACHE_COLUMNS: Final = ("product", "category", "cleaned_item_names")
+NO_MATCHES_FOUND: Final = "No Matches Found"
 
 
 @dataclass(frozen=True)
 class CategorizationCache:
-    """The reviewed cache, as the pipeline matches against it: build it with `from_frame`.
+    """The reviewed cache, in the one shape the pipeline matches against: build it with
+    `from_frame`, which enforces that shape.
 
-    `products` holds one row per product, the last when the file repeats one.
-    `cleaned_name_index` maps a normalized cleaned name to the canonical category every row with
-    that name agrees on.
+    `products` holds `CACHE_COLUMNS` as `str`, one row per stripped, non-empty product, each with
+    a GBD category or "No Matches Found"; a missing cleaned name is "". `cleaned_name_index` maps
+    a normalized cleaned name to the category every row with that name agrees on.
     """
 
     products: pd.DataFrame
@@ -87,18 +89,51 @@ class CategorizationCache:
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> CategorizationCache:
-        products = df.drop_duplicates(subset=["product"], keep="last")
-        # Built from every row, repeats included, so a repeated product whose rows disagree still
-        # keeps its cleaned name out of the index.
-        return cls(products=products, cleaned_name_index=_build_cleaned_name_index(df))
+        """Drops, with a WARNING per reason, each row the pipeline could not use as is."""
+        missing = [column for column in CACHE_COLUMNS if column not in df.columns]
+        if missing:
+            raise ValueError(f"Categorization cache is missing columns: {missing}")
+
+        products = df.loc[:, list(CACHE_COLUMNS)].fillna("").astype(str)
+        n_loaded = len(products)
+        # The upload's products are stripped before matching; the cache's must be too, or a row
+        # with surrounding whitespace can never hit.
+        products = products.assign(product=products["product"].str.strip())
+
+        blank_product = products["product"] == ""
+        _warn_dropped(blank_product, "a blank product")
+        products = products.loc[~blank_product]
+
+        # Dropped rather than rejected: a typo among tens of thousands of hand-maintained rows
+        # must not fail every report, and dropping it costs only LLM calls and a review-table
+        # entry. Kept, the row would hit, `categorize_with_llm` would rewrite its category to
+        # "No Matches Found", and as a cache hit it would never reach the review table.
+        allowed_categories = {*get_GBD_categories(), NO_MATCHES_FOUND}
+        unknown_category = ~products["category"].isin(allowed_categories)
+        _warn_dropped(
+            unknown_category,
+            "a blank or unknown category "
+            f"{sorted(products.loc[unknown_category, 'category'].unique())}",
+        )
+        products = products.loc[~unknown_category]
+
+        duplicated = products["product"].duplicated(keep="last")
+        _warn_dropped(duplicated, "a product repeated by a later row")
+        products = products.loc[~duplicated].reset_index(drop=True)
+
+        logger.info("Categorization cache: kept %d of %d rows.", len(products), n_loaded)
+        return cls(products=products, cleaned_name_index=_build_cleaned_name_index(products))
 
 
-def _build_cleaned_name_index(df: pd.DataFrame) -> dict[str, str]:
-    if "cleaned_item_names" not in df.columns:
-        return {}
-    # Only canonical categories are eligible, so "No Matches Found" never blocks a real category
-    # and is never reused.
-    eligible = df.loc[df["category"].isin(set(get_GBD_categories()))]
+def _warn_dropped(mask: pd.Series, reason: str) -> None:
+    if mask.any():
+        logger.warning("Categorization cache: dropped %d rows with %s.", mask.sum(), reason)
+
+
+def _build_cleaned_name_index(products: pd.DataFrame) -> dict[str, str]:
+    # "No Matches Found" is excluded before the unanimity check, so it never blocks a real
+    # category and is never reused.
+    eligible = products.loc[products["category"] != NO_MATCHES_FOUND]
     index = unanimous_index(eligible, key_col="cleaned_item_names", value_col="category")
     logger.info("Built cleaned-name reuse index with %d entries.", len(index))
     return index
@@ -109,10 +144,11 @@ def categorization_cache_path() -> Path:
 
 
 def read_categorization_cache_csv() -> pd.DataFrame:
-    """The cache file exactly as written; empty, with `CACHE_COLUMNS`, when the file is missing.
+    """The cache file exactly as written, every cell a `str` (so a product named `NA` stays
+    one); empty, with `CACHE_COLUMNS`, when the file is missing.
 
-    The pipeline wants `load_categorization_cache`. This is for the lab, which reads and appends
-    to the file itself.
+    The pipeline wants `load_categorization_cache`. This is for the lab's writers, which must
+    append to the file without discarding the rows `from_frame` drops.
     """
     path = categorization_cache_path()
     if not path.exists():
@@ -121,10 +157,10 @@ def read_categorization_cache_csv() -> pd.DataFrame:
             "to the LLM.",
             path,
         )
-        return pd.DataFrame(columns=list(CACHE_COLUMNS))
+        return pd.DataFrame(columns=list(CACHE_COLUMNS), dtype=str)
 
-    df = pd.read_csv(path)
-    logger.info("Loaded %d items from historical cache.", len(df))
+    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    logger.info("Read %d rows from historical cache.", len(df))
     return df
 
 

@@ -100,7 +100,7 @@ def test_backfill_entree_cleaned_names_borrows_from_category_cache(tmp_path):
         {"product": ["apple", "mystery"], "entree_classification": ["entree", "side/add-on"]}
     ).to_csv(entree_path, index=False)
     pd.DataFrame(
-        {"product": ["apple"], "category": ["Fruit"], "cleaned_item_names": ["green apple"]}
+        {"product": ["apple"], "category": ["Cheese"], "cleaned_item_names": ["green apple"]}
     ).to_csv(category_path, index=False)
 
     with (

@@ -51,7 +51,13 @@ def test_categorize_using_historical_classifications_matches_the_cache():
 
 def test_categorize_using_historical_classifications_prefers_the_latest_history_entry():
     cache = CategorizationCache.from_frame(
-        pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB"] * 2, "category": ["Butter", "Cheese"]})
+        pd.DataFrame(
+            {
+                "product": ["CHEESE CHEDDAR 5LB"] * 2,
+                "category": ["Butter", "Cheese"],
+                "cleaned_item_names": ["", ""],
+            }
+        )
     )
 
     result = categorize_using_historical_classifications(
@@ -59,6 +65,25 @@ def test_categorize_using_historical_classifications_prefers_the_latest_history_
     )
 
     assert result["category"].tolist() == ["Cheese"]
+
+
+def test_categorize_using_historical_classifications_rejects_a_duplicate_cache_product():
+    # Only a hand-built cache can hold one; `from_frame` dedupes.
+    cache = CategorizationCache(
+        products=pd.DataFrame(
+            {
+                "product": ["CHEESE CHEDDAR 5LB"] * 2,
+                "category": ["Butter", "Cheese"],
+                "cleaned_item_names": ["", ""],
+            }
+        ),
+        cleaned_name_index={},
+    )
+
+    with pytest.raises(pd.errors.MergeError, match="many-to-one"):
+        categorize_using_historical_classifications(
+            pd.DataFrame({"product": ["CHEESE CHEDDAR 5LB"]}), cache
+        )
 
 
 # ----------------------------------------------------------------------
@@ -307,6 +332,14 @@ def test_merge_categorizations_drops_a_product_missing_from_the_categorizations(
         n_products_after=1,
         n_rows_uncategorized=2,
     )
+
+
+def test_merge_categorizations_rejects_a_duplicate_categorized_product():
+    with pytest.raises(pd.errors.MergeError, match="many-to-one"):
+        merge_categorizations(
+            pd.DataFrame({"product": ["Cheddar"], "date": ["2025-01-01"], "weight": [1.0]}),
+            pd.DataFrame({"product": ["Cheddar"] * 2, "category": ["Cheese", "Butter"]}),
+        )
 
 
 def test_merge_categorizations_rejects_empty_input():
