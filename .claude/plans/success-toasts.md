@@ -24,8 +24,11 @@ case needs. So the fix is toasts, the way `cfa-web-app` does it.
 ## Pattern
 
 `svelte-sonner` wrapped as shadcn's `ui/sonner`, as in
-`~/code/cfa/cfa-web-app/src/lib/components/ui/sonner/`. There is one `<Toaster>` in the root
-`+layout.svelte`, so a toast survives navigation.
+`~/code/cfa/cfa-web-app/src/lib/components/ui/sonner/`. The wrapper is already vendored at
+[ui/sonner/sonner.svelte](apps/web/src/lib/components/ui/sonner/sonner.svelte), with
+`svelte-sonner` in the pnpm catalog, the `mode-watcher` import removed and `theme="light"`
+pinned. It is not mounted anywhere yet. There is one `<Toaster>` in the root `+layout.svelte`,
+so a toast survives navigation.
 
 Why a dependency, given AGENTS.md's supply-chain caution: stacking, timing, pause-on-hover,
 swipe, keyboard focus (alt+T) and a polite live region are not "simple to write". Sonner is the
@@ -46,14 +49,14 @@ adding a toast will look:
    `invalidateAll()` or `goto()`, so the toast never claims success before the page reflects it.
 4. Copy names the thing: "Deleted Acme Foodservice", not "Success".
 
-Settings: `position="bottom-right"`, `theme="light"` (the app never sets `.dark`), and the
-cfa-web-app CSS variables mapped to this app's popover tokens.
+Settings: `position="bottom-right"`, set where the toaster is mounted. The wrapper already
+pins `theme="light"` (the app never sets `.dark`) and maps the popover tokens to sonner's CSS
+variables.
 
 ## PRs (stacked, each small)
 
-### PR 1: Add the toaster; confirm renames (the reported bug)
-- `pnpm --filter @gbd/web dlx shadcn-svelte@latest add sonner` (or copy cfa's wrapper). Then
-  remove the `mode-watcher` import and pin `theme="light"`.
+### PR 1: Mount the toaster; confirm renames (the reported bug)
+- Add the rules above as a header comment on `ui/sonner/sonner.svelte`.
 - Mount `<Toaster>` in [+layout.svelte](apps/web/src/routes/+layout.svelte).
 - [display-name-form.svelte](apps/web/src/lib/components/account/display-name-form.svelte):
   after `await onSaved()`, call `toast.success('Your name was updated')`.
