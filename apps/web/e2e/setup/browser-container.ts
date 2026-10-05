@@ -27,7 +27,7 @@ const run = promisify(execFile);
  * versions, so this must match the `playwright` catalog pin in `pnpm-workspace.yaml`. Bump both
  * in the same commit.
  */
-const IMAGE_PLAYWRIGHT_VERSION = '1.62.1';
+const IMAGE_PLAYWRIGHT_VERSION = '1.63.0';
 export const BROWSER_IMAGE = `mcr.microsoft.com/playwright:v${IMAGE_PLAYWRIGHT_VERSION}-noble`;
 
 /** Pinned in the invocation, not inherited from the host, so an x86 Linux developer or a fork

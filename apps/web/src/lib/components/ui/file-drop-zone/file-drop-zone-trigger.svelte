@@ -37,17 +37,20 @@ const triggerState = useFileDropZoneTrigger();
         <span class="font-medium text-muted-foreground">
           {label}
         </span>
-        {#if triggerState.rootState.opts.maxFiles.current || triggerState.rootState.opts.maxFileSize.current}
+        {#if triggerState.rootState.opts.maxFiles.current ||
+          triggerState.rootState.opts.maxFileSize.current}
           <span class="text-sm text-muted-foreground/75">
             {#if triggerState.rootState.opts.maxFiles.current}
               <span> You can upload {triggerState.rootState.opts.maxFiles.current} files </span>
             {/if}
-            {#if triggerState.rootState.opts.maxFiles.current && triggerState.rootState.opts.maxFileSize.current}
+            {#if triggerState.rootState.opts.maxFiles.current &&
+              triggerState.rootState.opts.maxFileSize.current}
               <span>
                 (up to {displaySize(triggerState.rootState.opts.maxFileSize.current)} each)
               </span>
             {/if}
-            {#if triggerState.rootState.opts.maxFileSize.current && !triggerState.rootState.opts.maxFiles.current}
+            {#if triggerState.rootState.opts.maxFileSize.current &&
+              !triggerState.rootState.opts.maxFiles.current}
               <span>
                 Maximum size {displaySize(triggerState.rootState.opts.maxFileSize.current)}
               </span>

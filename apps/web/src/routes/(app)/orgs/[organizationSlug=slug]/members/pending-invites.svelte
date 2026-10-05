@@ -14,7 +14,9 @@ let { invites, organizationSlug }: Props = $props();
 </script>
 
 <ItemList items={invites} key={(invite) => invite.inviteId} empty="No pending invitations.">
-  {#snippet children(invite)}
+  {#snippet children(
+    invite,
+  )}
     <PendingInviteRow
       {organizationSlug}
       {invite}

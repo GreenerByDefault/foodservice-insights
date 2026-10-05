@@ -30,7 +30,9 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <Button {...props} variant="outline" class="min-w-0 max-w-full justify-between gap-1.5">
         <span class="truncate">{current?.name ?? 'Choose an organization'}</span>
         <span class="sr-only">Switch organization</span>
@@ -42,7 +44,9 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
   <DropdownMenu.Content class="max-h-(--bits-floating-available-height) w-72 overflow-y-auto p-2">
     {#each menuOrganizations as organization (organization.id)}
       <DropdownMenu.Item class="px-3 py-2">
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <a
             {...props}
             href={organizationHref(organization.slug)}
@@ -60,7 +64,9 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
     <DropdownMenu.Separator class="my-2" />
 
     <DropdownMenu.Item class="px-3 py-2">
-      {#snippet child({ props })}
+      {#snippet child({
+        props,
+      })}
         <a {...props} href="/orgs/new" class={cnChildProps(props, 'flex items-center gap-2')}>
           <PlusIcon class="size-4 shrink-0" />
           New organization
@@ -70,7 +76,9 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
 
     {#if hasMore}
       <DropdownMenu.Item class="px-3 py-2">
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <a {...props} href="/orgs" class={cnChildProps(props, 'flex items-center gap-2')}>
             <span class="size-4 shrink-0"></span>
             <span class="flex-1">View all organizations</span>

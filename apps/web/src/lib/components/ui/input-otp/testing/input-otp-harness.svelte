@@ -7,7 +7,9 @@ let { maxlength = 6 }: { maxlength?: number } = $props();
 </script>
 
 <InputOTP.Root inputId="harness-code" {maxlength} aria-label="Sign-in code">
-  {#snippet children({ cells })}
+  {#snippet children({
+    cells,
+  })}
     <InputOTP.Group>
       {#each cells as cell, index (index)}
         <InputOTP.Slot {cell} />

@@ -27,7 +27,9 @@ let hasScrollableDetail = $derived(
 );
 </script>
 
-{#snippet backButton(variant?: 'outline')}
+{#snippet backButton(
+  variant?: 'outline',
+)}
   <Button {variant} onclick={onBack}>Back to the form</Button>
 {/snippet}
 
