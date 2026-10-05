@@ -160,13 +160,9 @@ Applies to `packages/storage` and every app or package that imports it.
   unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
   ever means we could not reach the store, so retrying helps.
 
-## Svelte MCP server (`apps/web` only)
+## Svelte AI tools (`apps/web` only)
 
-You have access to the Svelte MCP server, which carries the full Svelte 5 and SvelteKit
-documentation. Use it rather than recalling API details.
-
-- **`list-sections`** — call this first to discover what documentation exists. Read the
-  `use_cases` field to decide what is relevant.
-- **`get-documentation`** — fetch every section the task touches, not just one.
-- **`svelte-autofixer`** — run this on any Svelte code you write before showing it.
-  Keep calling it until it returns no issues.
+- **Hand self-contained `.svelte` and `.svelte.ts` work to the `svelte-file-editor` subagent.**
+  It fetches docs and loops the autofixer in its own context.
+- **Otherwise, load the `svelte-core-bestpractices` skill and run `svelte-autofixer`** on every
+  Svelte file you write, until it reports no issues or suggestions.
