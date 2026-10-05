@@ -28,6 +28,7 @@ import type {
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
 import {
   dbMsAgo,
+  findOrInsertAppUser,
   insertAnalysisAttempt,
   insertAppUser,
   insertInputFile,
@@ -165,8 +166,9 @@ async function buildFailed(
   organizationId: OrganizationId,
 ): Promise<ReportId> {
   // A creator with no display name, so the heading's email-fallback branch gets exercised. A
-  // fixed email, not the default random one — this fixture renders into a committed screenshot.
-  const creator = await insertAppUser(tx, { email: 'jordan@example.test' });
+  // fixed email, not the default random one — this fixture renders into a committed screenshot —
+  // and so found rather than inserted when a repeat of the test already made them.
+  const creator = await findOrInsertAppUser(tx, { email: 'jordan@example.test' });
   const reportId = await insertReportWithInputFile(tx, organizationId, 'January Dairy', {
     createdByUserId: creator.id,
   });

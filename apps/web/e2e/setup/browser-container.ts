@@ -44,6 +44,27 @@ const CONTAINER_NAME = 'gbd-web-screenshot-browser';
 const HOST_PORT = 43117;
 const SERVER_PORT = 3000;
 
+/** Chromium flags the browser is launched with, on top of Playwright's own defaults. The
+ * `screenshots` project passes them as `launchOptions.args`, which `run-server` applies to the
+ * browser it launches for that connection.
+ *
+ * `--disable-partial-raster`: after a repaint, Chromium by default re-rasterizes only the
+ * invalidated part of each tile. At the anti-aliased corners and shadows of whatever the spec's
+ * last interaction touched — the input it just blurred, the button it just clicked — a partially
+ * re-rastered tile comes out a shade (±1) different from a fully rastered one, and which of the
+ * two a capture gets varies run to run: 7 of 40 captures of one screen differed without this
+ * flag, 0 of 40 with it. `toHaveScreenshot` here compares exactly, so that shade is a red build.
+ */
+export const BROWSER_ARGS = ['--disable-partial-raster'];
+
+/** `--unsafe` is what lets the server honour a client's `args` at all; without it they are
+ * silently dropped, and `describeBrowser` is what would catch that. It also admits
+ * `executablePath` and the like, which is fine for a loopback-only socket on a stateless
+ * container. */
+const SERVER_COMMAND =
+  `npx -y playwright-core@${IMAGE_PLAYWRIGHT_VERSION} run-server ` +
+  `--port ${SERVER_PORT} --host 0.0.0.0 --unsafe`;
+
 export const BROWSER_WS_ENDPOINT = `ws://127.0.0.1:${HOST_PORT}/`;
 
 /** Generous, because the first run on a machine pulls a multi-gigabyte image. */
@@ -54,13 +75,13 @@ export async function startBrowserServer(): Promise<void> {
   // Cold start (check, maybe stop, run, wait) is serialized so a concurrent run can't tear down
   // the container this one just created — the loser just finds it already serving and returns.
   await withStartupLock(async () => {
-    // The container is stateless, so reuse one already serving the pinned image rather than
-    // racing a concurrent `screenshots` run to kill and restart it.
-    if ((await isRunningCurrentImage()) && (await isServing())) return;
+    // The container is stateless, so reuse one already running the pinned image with the current
+    // command rather than racing a concurrent `screenshots` run to kill and restart it.
+    if ((await isRunningCurrentServer()) && (await isServing())) return;
 
-    // Otherwise — absent, unhealthy, or serving a stale image tag — reclaim the name and the port
-    // rather than failing on them. This is also the path a run killed mid-flight takes, since that
-    // leaves the container behind despite `--rm`.
+    // Otherwise — absent, unhealthy, or running a stale image or command — reclaim the name and
+    // the port rather than failing on them. This is also the path a run killed mid-flight takes,
+    // since that leaves the container behind despite `--rm`.
     await stopBrowserServer();
 
     await run('docker', [
@@ -83,8 +104,7 @@ export async function startBrowserServer(): Promise<void> {
       '--entrypoint=/bin/sh',
       BROWSER_IMAGE,
       '-c',
-      `npx -y playwright-core@${IMAGE_PLAYWRIGHT_VERSION} run-server ` +
-        `--port ${SERVER_PORT} --host 0.0.0.0`,
+      SERVER_COMMAND,
     ]);
 
     await waitUntilServing();
@@ -140,36 +160,56 @@ export async function stopBrowserServer(): Promise<void> {
   await run('docker', ['rm', '--force', CONTAINER_NAME]).catch(() => undefined);
 }
 
-/** Drive the browser once, so a broken connection fails here rather than inside a screenshot
- * assertion where it reads as a visual difference.
+/** Drive the browser once, so a broken connection — or a server that ignores `BROWSER_ARGS` —
+ * fails here rather than inside a screenshot assertion where it reads as a visual difference.
  */
 export async function describeBrowser(): Promise<string> {
   // Imported here rather than at module scope: this module is loaded by playwright.config.ts.
   const { chromium } = await import('playwright');
 
-  const browser = await chromium.connect(BROWSER_WS_ENDPOINT).catch((cause: unknown) => {
-    throw new Error(
-      `Could not drive the browser server at ${BROWSER_WS_ENDPOINT} (${BROWSER_IMAGE}). ` +
-        'The likeliest cause is a Playwright version mismatch: connect() requires the client and ' +
-        'the browser server to be the same version, so the image tag above and the `playwright` ' +
-        'catalog pin in pnpm-workspace.yaml have to move together.',
-      { cause },
-    );
-  });
+  const browser = await chromium
+    .connect(BROWSER_WS_ENDPOINT, {
+      // The same header the test runner sends for the `screenshots` project's `launchOptions`,
+      // so the browser this launches is the one the specs will get.
+      headers: { 'x-playwright-launch-options': JSON.stringify({ args: BROWSER_ARGS }) },
+    })
+    .catch((cause: unknown) => {
+      throw new Error(
+        `Could not drive the browser server at ${BROWSER_WS_ENDPOINT} (${BROWSER_IMAGE}). ` +
+          'The likeliest cause is a Playwright version mismatch: connect() requires the client and ' +
+          'the browser server to be the same version, so the image tag above and the `playwright` ' +
+          'catalog pin in pnpm-workspace.yaml have to move together.',
+        { cause },
+      );
+    });
   try {
+    const { commandLine } = await (await browser.newBrowserCDPSession()).send('SystemInfo.getInfo');
+    const missing = BROWSER_ARGS.filter((arg) => !commandLine.includes(arg));
+    if (missing.length > 0) {
+      throw new Error(
+        `The browser server launched Chromium without ${missing.join(' ')}. Every committed ` +
+          'screenshot assumes BROWSER_ARGS; is the server still started with --unsafe?',
+      );
+    }
     return `${browser.browserType().name()} ${browser.version()}`;
   } finally {
     await browser.close();
   }
 }
 
-async function isRunningCurrentImage(): Promise<boolean> {
+/** Whether the container is up, on the pinned image, and running `SERVER_COMMAND` — so a change
+ * to the command or `BROWSER_ARGS` replaces a container an earlier run left behind. */
+async function isRunningCurrentServer(): Promise<boolean> {
   const { stdout } = await run('docker', [
     'inspect',
-    '--format={{.State.Running}} {{.Config.Image}}',
+    '--format={{.State.Running}}\t{{.Config.Image}}\t{{json .Args}}',
     CONTAINER_NAME,
   ]).catch(() => ({ stdout: '' }));
-  return stdout.trim() === `true ${BROWSER_IMAGE}`;
+  const [running, image, argsJson] = stdout.trim().split('\t');
+  if (running !== 'true' || image !== BROWSER_IMAGE || argsJson === undefined) return false;
+  // Parsed, not compared as text: Go's JSON escapes `>` and `&`, which the command contains.
+  const args: unknown = JSON.parse(argsJson);
+  return JSON.stringify(args) === JSON.stringify(['-c', SERVER_COMMAND]);
 }
 
 async function waitUntilServing(): Promise<void> {
