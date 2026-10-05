@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization import cache, pipeline, steps
+from gbd_foodservice_insights.categorization import pipeline, steps
+from gbd_foodservice_insights.categorization.cache import CategorizationCache
 from gbd_foodservice_insights.categorization.pipeline import (
     categorize_unique_products,
 )
@@ -26,13 +27,18 @@ class ScriptedLlmClient:
         return self.match_answers[item]
 
 
+EMPTY_CACHE = CategorizationCache.from_frame(
+    pd.DataFrame(columns=["product", "category", "cleaned_item_names"])
+)
+
+
 @pytest.mark.parametrize("missing_column", ["product", "date", "weight"])
 def test_categorize_unique_products_raises_when_a_required_column_is_missing(missing_column):
     columns = [c for c in ("product", "date", "weight") if c != missing_column]
     df = pd.DataFrame({col: ["x"] for col in columns})
 
     with pytest.raises(ValueError, match=f"Column '{missing_column}' not found"):
-        categorize_unique_products(df=df, llm=KeywordLlmClient())
+        categorize_unique_products(df=df, llm=KeywordLlmClient(), cache=EMPTY_CACHE)
 
 
 def test_categorize_unique_products_raises_when_date_cleaning_leaves_missing_values():
@@ -45,10 +51,7 @@ def test_categorize_unique_products_raises_when_date_cleaning_leaves_missing_val
         patch.object(pipeline, "clean_weight_column", return_value=parsed_df),
         pytest.raises(ValueError, match=r"Column 'date' contains NaN values after cleaning."),
     ):
-        categorize_unique_products(
-            df=df,
-            llm=KeywordLlmClient(),
-        )
+        categorize_unique_products(df=df, llm=KeywordLlmClient(), cache=EMPTY_CACHE)
 
 
 def test_categorize_unique_products_raises_when_weight_cleaning_leaves_missing_values():
@@ -63,10 +66,7 @@ def test_categorize_unique_products_raises_when_weight_cleaning_leaves_missing_v
         patch.object(pipeline, "clean_weight_column", return_value=cleaned_df),
         pytest.raises(ValueError, match=r"Column 'weight' contains NaN values after cleaning."),
     ):
-        categorize_unique_products(
-            df=df,
-            llm=KeywordLlmClient(),
-        )
+        categorize_unique_products(df=df, llm=KeywordLlmClient(), cache=EMPTY_CACHE)
 
 
 def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
@@ -79,12 +79,14 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     )
     # Cache holds a *different* raw product whose cleaned name is "whole milk",
     # so the raw lookup misses but the cleaned-name lookup should hit.
-    historical = pd.DataFrame(
-        {
-            "product": ["SOME OTHER MILK SKU"],
-            "category": ["Dairy"],
-            "cleaned_item_names": ["whole milk"],
-        }
+    cache = CategorizationCache.from_frame(
+        pd.DataFrame(
+            {
+                "product": ["SOME OTHER MILK SKU"],
+                "category": ["Milk (Cow's milk)"],
+                "cleaned_item_names": ["whole milk"],
+            }
+        )
     )
 
     class EverythingIsWholeMilk(KeywordLlmClient):
@@ -94,21 +96,13 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
 
     llm = EverythingIsWholeMilk()
 
-    with (
-        patch.object(steps, "get_GBD_categories", return_value=["Dairy"]),
-        patch.object(cache, "get_GBD_categories", return_value=["Dairy"]),
-        patch.object(steps, "print_progress", return_value=None),
-    ):
-        categorized = categorize_unique_products(
-            df=df,
-            llm=llm,
-            historical_categorizations=historical,
-        )
+    with patch.object(steps, "print_progress", return_value=None):
+        categorized = categorize_unique_products(df=df, llm=llm, cache=cache)
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
     assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
     assert categorized.match_type_counts.get("cleaned_name_history") == 2
-    assert set(categorized.unique_products_df["category"]) == {"Dairy"}
+    assert set(categorized.unique_products_df["category"]) == {"Milk (Cow's milk)"}
     # Trusted reuse -> nothing queued for human review.
     assert categorized.ai_review_df.empty
 
@@ -133,17 +127,19 @@ def test_categorize_unique_products_characterization() -> None:
             "weight": [10.0] * len(products),
         }
     )
-    historical = pd.DataFrame(
-        {
-            "product": [
-                "Mozzarella Block",
-                "Oat Milk Carton ",
-                "Salted Butter",
-                "Whole Milk Gallon",
-            ],
-            "category": ["cheese", "Oat Milk", None, "Milk (Cow's milk)"],
-            "cleaned_item_names": ["mozzarella block", None, None, "whole milk gallon"],
-        }
+    cache = CategorizationCache.from_frame(
+        pd.DataFrame(
+            {
+                "product": [
+                    "Mozzarella Block",
+                    "Oat Milk Carton ",
+                    "Salted Butter",
+                    "Whole Milk Gallon",
+                ],
+                "category": ["cheese", "Oat Milk", None, "Milk (Cow's milk)"],
+                "cleaned_item_names": ["mozzarella block", None, None, "whole milk gallon"],
+            }
+        )
     )
     llm = ScriptedLlmClient(
         {
@@ -154,7 +150,7 @@ def test_categorize_unique_products_characterization() -> None:
         }
     )
 
-    categorized = categorize_unique_products(df, llm, historical_categorizations=historical)
+    categorized = categorize_unique_products(df, llm, cache)
 
     no_match = "No Matches Found"
     milk = "Milk (Cow's milk)"

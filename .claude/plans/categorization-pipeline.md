@@ -6,9 +6,8 @@
 product's categorization path: exact cache match, LLM name cleaning, cleaned-name reuse, LLM
 category match, then `merge_categorizations` with the 80% cut. `analyze()` composes it; the lab's
 `categorize_spreadsheet_to_csvs` composes it the same way and adds entree detection. The cache is
-the gitignored `data_files/previously_categorized_items.csv`, read by
-`cache.get_previously_categorized_items()`; `categorization-cache.md` moves it into Postgres later
-and is sequenced after this plan. `diagnostics-split.md` PR 1 waits on PR 3 here.
+the gitignored `data_files/previously_categorized_items.csv`; `categorization-cache.md` moves it
+into Postgres later and is sequenced after this plan. `diagnostics-split.md` PR 1 waits on PR 3 here.
 
 This plan is the product side only: the cache the library reads and the pipeline that reads it.
 How new rows get back into the cache — from the web app or from GBD's reviewers — is
@@ -23,8 +22,15 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   shows of the old auto-writes: 3,212 rows have no cleaned name (promoted from review files,
   which carry none) and 20,008 have the raw SKU as their cleaned name (cache hits saved back with
   `cleaned_item_names = product`).
-- **The loader drops nothing and checks nothing.** `pd.read_csv(path)` with default NA handling: a
-  product named `NA` or `null` would become NaN, and the 106 rows with a blank category do. The
+- **The pipeline is handed a `CategorizationCache`; nothing below `analyze()` reads disk.**
+  `categorize_unique_products(df, llm, cache)` and both lookup steps take it, required.
+  `load_categorization_cache()` wraps `read_categorization_cache_csv()` in
+  `CategorizationCache.from_frame`; `analyze()` and `categorize_spreadsheet_to_csvs` are its
+  callers in the pipeline, and the lab's other readers use the raw reader.
+- **The loader checks nothing, and `from_frame` only dedupes.** `read_categorization_cache_csv()` is
+  `pd.read_csv(path)` with default NA handling: a product named `NA` or `null` would become NaN,
+  and the 106 rows with a blank category do. `from_frame` builds the cleaned-name index from every
+  row, then dedupes on `product` keeping the last. The
   pipeline strips the upload's product before matching (`categorize_unique_products`) and so does
   the web (`csv/rules/products.ts`), but the cache is matched verbatim, so its 747 rows with
   surrounding whitespace can never hit; 736 rows collide once stripped, 11 pairs disagreeing on
@@ -41,12 +47,12 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   the rules literally is unmeasured, and `KeywordLlmClient` only ever returns canonical names, so
   no test and no `mock-llm` run can show it. `_strip_pack_counts` deletes every `.` before the
   prompt (`CHEESE 2.5 LB` → `CHEESE 25 LB`), and `test_llm.py` pins that.
-- **Tests are hermetic by patching a path.** Below `analyze()` the pipeline reads one file, via
-  `cache.categorization_cache_path`, when it is not handed the cache. `test_analysis.py`,
-  `worker_child/tests/test_mock_llm.py`, and the lab's `test_serving.py`, `test_entree_cache.py`
-  and `test_product_cache.py` monkeypatch it to a path under `tmp_path`; a test that runs the
-  pipeline without it reads the developer's `data_files/`. `test_pipeline.py`'s tests pass
-  `historical_categorizations` instead. The worker image is not hermetic:
+- **Tests stay hermetic by patching a path or building the cache.** `test_pipeline.py` and
+  `test_steps.py` build a `CategorizationCache.from_frame`; tests that go through `analyze()` or
+  `categorize_spreadsheet_to_csvs` — `test_analysis.py`, `worker_child/tests/test_mock_llm.py`, and
+  the lab's `test_serving.py`, `test_spreadsheet.py`, `test_entree_cache.py`,
+  `test_product_cache.py` — monkeypatch `cache.categorization_cache_path` to a path under
+  `tmp_path`. The worker image is not hermetic:
   `apps/worker/Dockerfile` copies the package directory and `.dockerignore` does not exclude the
   CSV, so a local `docker build` ships the developer's cache and CI's ships none. Noted, not fixed
   here — deployment config is off limits.
@@ -65,8 +71,8 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   new product; ARCHITECTURE.md § Concurrency and scaling names a `ThreadPoolExecutor` inside the
   library as the lever. The parent kills a child after 20 minutes total
   (`killAfterTotalRuntimeMs`), and there is no cap on unique products per upload.
-- **Two merges without `validate=`.** `categorize_using_historical_classifications` dedupes the
-  cache on `product` with `keep="last"` before merging, silently choosing; `merge_categorizations`
+- **Two merges without `validate=`.** `categorize_using_historical_classifications` merges
+  `cache.products`, which `from_frame` deduped on `product` with `keep="last"`, silently choosing; `merge_categorizations`
   merges rows onto `unique_products_df` on `product` with no guard, so a duplicate product there
   would fan out rows (the b531ca1 lesson). Nothing upstream produces one today.
 - **`categorize_unique_products` re-parses parsed input.** `read_input_csv` already yields
@@ -81,11 +87,6 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows) an
   value (`categorization-cache.md` PR 4–5); writing the reviewed file is the lab's, by hand after
   review. *Rejected: keeping a `"reviewed"` auto-write as a lab option* — it writes unreviewed LLM
   output into the reviewed file, and the data shows it was used.
-- **The pipeline is handed the cache; nothing below `analyze()` reads disk.** `categorize_unique_products`
-  and the two steps take a `CategorizationCache`; the `None`-means-read-the-file defaults go
-  (`categorize_using_cleaned_name_history` already requires its `reuse_index`). That
-  is what makes tests hermetic and is the shape `categorization-cache.md` PR 5 needs (`analyze()`
-  builds the cache from seam rows instead of the file).
 - **One type owns the cache's shape.** `CategorizationCache.from_frame(df)` is the only constructor:
   it strips `product`, drops rows whose category is not a YAML name or `"No Matches Found"`,
   dedupes on `product` keeping the last, logs every count it dropped at WARNING, and builds the
@@ -132,27 +133,18 @@ PR order: 1, 2 and 3 any time; 4 after 2, since both edit `categorize_with_llm`.
 
 ## PR 1 — one loader, one type
 
-- `cache.py`: `CategorizationCache` (frozen; `products: pd.DataFrame` with `product`, `category`,
-  `cleaned_item_names` as `str`, unique stripped products, canonical categories; and
-  `cleaned_name_index: Mapping[str, str]`), `CategorizationCache.from_frame(df)` enacting the
-  decision above, and `load_categorization_cache() -> CategorizationCache` replacing
-  `get_previously_categorized_items` (missing file → empty cache and the existing warning;
-  missing column → `ValueError`). `build_cleaned_name_reuse_index` folds into `from_frame`.
-- `categorize_unique_products(df, llm, cache)`, `categorize_using_historical_classifications(
-  unique_products_df, cache)` and `categorize_using_cleaned_name_history(products_df, cache)`
-  take the cache, required; the step's `drop_duplicates(keep="last")` goes and its merge gets
-  `validate="many_to_one"`, as does `merge_categorizations`.
-- `analyze()` and the lab's `categorize_spreadsheet_to_csvs` load the cache and pass it;
-  `entree_cache.py`, `backfill_entree_cleaned_names`, `experiments/LLM_testing.py` and the lab's
-  `product_cache.save_historical_categorizations` use the new loader, the last appending to
-  `cache.products`.
-- Tests: `test_cache.py` rewritten around `from_frame` — a product named `NA` survives, stripping,
-  blank and non-canonical categories dropped with the warning, duplicates keep the last, missing
-  column raises, missing file warns; `test_steps.py`: a duplicate product raises; the
-  characterization test flips — the trailing-space row is a cache hit, and the `cheese` row joins
-  the blank one at the LLM and in the review table, so it needs a scripted answer.
-  `test_analysis.py`'s fixture keeps writing a CSV the loader reads, and the patches of
-  `categorization_cache_path` stay.
+- `cache.py`: `from_frame` enacts the decision above: `products` becomes `CACHE_COLUMNS` as `str`
+  with unique stripped products and canonical categories, the index is built from those rows, and
+  a missing column raises `ValueError`. `read_categorization_cache_csv()` reads as text.
+- `steps.py`: both merges get `validate="many_to_one"`.
+- `entree_cache.backfill_entree_cleaned_names` and `experiments/LLM_testing.py` move to
+  `load_categorization_cache().products`; `product_cache.save_historical_categorizations` keeps
+  the raw reader, so a save never deletes a row the loader drops and a person could still fix.
+- Tests: `test_cache.py` — a product named `NA` survives, stripping, blank and non-canonical
+  categories dropped with the warning, missing column raises; `test_steps.py`: a duplicate
+  product raises in both merges; the characterization test flips — the trailing-space row is a
+  cache hit, and the `cheese` row joins the blank one at the LLM and in the review table, so it
+  needs a scripted answer.
 
 ## PR 2 — accept what the model means
 

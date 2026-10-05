@@ -114,11 +114,14 @@ assert (df["total_amount"] > 0).all()  # FAILS - 1 negative value
 # Step 3 would categorize these products
 df = pd.read_csv("step_2_output/validated_data.csv").rename(columns={"weight_lbs": "weight"})
 
+from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
 
-categorized = categorize_unique_products(df=df, llm=OpenAiLlmClient.from_env())
+categorized = categorize_unique_products(
+    df=df, llm=OpenAiLlmClient.from_env(), cache=load_categorization_cache()
+)
 df_categorized, counts = merge_categorizations(
     categorized.cleaned_df, categorized.unique_products_df
 )
@@ -266,6 +269,7 @@ assert len(df_clean) == len(df_expected)
 ### Test Step 3 (Categorize)
 
 ```python
+from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
@@ -276,7 +280,9 @@ df = pd.read_csv("test_data/step_2_output/validated_data.csv").rename(
 )
 
 # Run categorization
-categorized = categorize_unique_products(df=df, llm=OpenAiLlmClient.from_env())
+categorized = categorize_unique_products(
+    df=df, llm=OpenAiLlmClient.from_env(), cache=load_categorization_cache()
+)
 df_cat, counts = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
 
 # Compare with expected

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
+from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
@@ -78,6 +79,7 @@ def categorize_spreadsheet_to_csvs(
     categorized = categorize_unique_products(
         df=df,
         llm=llm,
+        cache=load_categorization_cache(),
         date_format=date_format,
     )
     df_result, counts = merge_categorizations(

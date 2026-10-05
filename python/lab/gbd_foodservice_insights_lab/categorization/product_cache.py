@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def save_historical_categorizations(new_df: pd.DataFrame) -> None:
     """Append reviewed categorizations to the cache; a new row replaces one for the same
     product."""
-    existing = cache.get_previously_categorized_items()
+    existing = cache.read_categorization_cache_csv()
 
     cols_to_keep = existing.columns.intersection(new_df.columns)
     combined = pd.concat([existing, new_df[cols_to_keep]], ignore_index=True)

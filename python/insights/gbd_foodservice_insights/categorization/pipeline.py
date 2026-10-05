@@ -12,7 +12,7 @@ All helper logic lives in sibling modules:
 
     steps.py    — historical reuse, name cleaning, LLM categorization, merge-back
     reviews.py  — human-review table construction
-    cache.py    — the reviewed cache, read-only
+    cache.py    — the reviewed cache, which callers load and pass in
 """
 
 import logging
@@ -20,10 +20,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from gbd_foodservice_insights.categorization.cache import (
-    build_cleaned_name_reuse_index,
-    get_previously_categorized_items,
-)
+from gbd_foodservice_insights.categorization.cache import CategorizationCache
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.reviews import build_ai_review_table
 from gbd_foodservice_insights.categorization.steps import (
@@ -54,14 +51,13 @@ class CategorizedProducts:
 def categorize_unique_products(
     df: pd.DataFrame,
     llm: LlmClient,
-    historical_categorizations: pd.DataFrame | None = None,
+    cache: CategorizationCache,
     date_format: str | None = None,
 ) -> CategorizedProducts:
     """Clean the input and assign a GBD emissions category to each unique product.
 
-    `df` needs product, date, and weight columns. Reads the packaged category cache when
-    `historical_categorizations` is None, and never writes it. `date_format=None` auto-detects
-    the date format.
+    `df` needs product, date, and weight columns. `date_format=None` auto-detects the date
+    format.
     """
     # --- Validate required columns ---
     for col in ("product", "date", "weight"):
@@ -91,23 +87,13 @@ def categorize_unique_products(
     # --- Match against historical categorizations ---
     unique_products_df = df[["product"]].drop_duplicates().copy()
 
-    if historical_categorizations is None:
-        historical_categorizations = get_previously_categorized_items()
-
-    unique_products_df = categorize_using_historical_classifications(
-        unique_products_df, historical_categorizations
-    )
+    unique_products_df = categorize_using_historical_classifications(unique_products_df, cache)
 
     # --- Clean product names for uncategorized items ---
     unique_products_df = clean_product_names(unique_products_df, llm)
 
     # --- Reuse categories for recognised cleaned names ---
-    cleaned_name_reuse_index = build_cleaned_name_reuse_index(
-        reviewed_df=historical_categorizations
-    )
-    unique_products_df = categorize_using_cleaned_name_history(
-        unique_products_df, reuse_index=cleaned_name_reuse_index
-    )
+    unique_products_df = categorize_using_cleaned_name_history(unique_products_df, cache)
 
     # --- LLM categorization for still-uncategorized items ---
     unique_products_df = categorize_with_llm(unique_products_df, llm)

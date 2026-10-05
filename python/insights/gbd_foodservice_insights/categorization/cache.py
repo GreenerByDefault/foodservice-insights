@@ -8,8 +8,10 @@ it only through GBD's review, via the lab's `categorization.product_cache`.
 
 import logging
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pandas as pd
 
@@ -68,20 +70,49 @@ def unanimous_index(
 # ----------------------------------------------------------------------
 # Reviewed historical cache
 # ----------------------------------------------------------------------
+CACHE_COLUMNS: Final = ("product", "category", "cleaned_item_names")
+
+
+@dataclass(frozen=True)
+class CategorizationCache:
+    """The reviewed cache, as the pipeline matches against it: build it with `from_frame`.
+
+    `products` holds one row per product, the last when the file repeats one.
+    `cleaned_name_index` maps a normalized cleaned name to the canonical category every row with
+    that name agrees on.
+    """
+
+    products: pd.DataFrame
+    cleaned_name_index: Mapping[str, str]
+
+    @classmethod
+    def from_frame(cls, df: pd.DataFrame) -> CategorizationCache:
+        products = df.drop_duplicates(subset=["product"], keep="last")
+        # Built from every row, repeats included, so a repeated product whose rows disagree still
+        # keeps its cleaned name out of the index.
+        return cls(products=products, cleaned_name_index=_build_cleaned_name_index(df))
+
+
+def _build_cleaned_name_index(df: pd.DataFrame) -> dict[str, str]:
+    if "cleaned_item_names" not in df.columns:
+        return {}
+    # Only canonical categories are eligible, so "No Matches Found" never blocks a real category
+    # and is never reused.
+    eligible = df.loc[df["category"].isin(set(get_GBD_categories()))]
+    index = unanimous_index(eligible, key_col="cleaned_item_names", value_col="category")
+    logger.info("Built cleaned-name reuse index with %d entries.", len(index))
+    return index
+
+
 def categorization_cache_path() -> Path:
     return PACKAGE_DIR / "data_files" / "previously_categorized_items.csv"
 
 
-def _empty_historical_cache() -> pd.DataFrame:
-    """Return an empty DataFrame with the historical cache schema."""
-    return pd.DataFrame(columns=["product", "category", "cleaned_item_names"])
+def read_categorization_cache_csv() -> pd.DataFrame:
+    """The cache file exactly as written; empty, with `CACHE_COLUMNS`, when the file is missing.
 
-
-def get_previously_categorized_items() -> pd.DataFrame:
-    """Load the previously categorized items from the cache CSV.
-
-    The returned DataFrame has at least 'product' and 'category' columns, and is empty when the
-    CSV is missing.
+    The pipeline wants `load_categorization_cache`. This is for the lab, which reads and appends
+    to the file itself.
     """
     path = categorization_cache_path()
     if not path.exists():
@@ -90,29 +121,12 @@ def get_previously_categorized_items() -> pd.DataFrame:
             "to the LLM.",
             path,
         )
-        return _empty_historical_cache()
+        return pd.DataFrame(columns=list(CACHE_COLUMNS))
 
     df = pd.read_csv(path)
     logger.info("Loaded %d items from historical cache.", len(df))
     return df
 
 
-# ----------------------------------------------------------------------
-# Cleaned-name reuse index
-# ----------------------------------------------------------------------
-def build_cleaned_name_reuse_index(reviewed_df: pd.DataFrame) -> dict[str, str]:
-    """
-    Build a ``{normalized cleaned name -> GBD category}`` reuse index from the reviewed cache.
-
-    Only canonical GBD categories are eligible ("No Matches Found" and any
-    non-canonical label are excluded), and a cleaned name is only included when
-    every contributing row agrees on a single category.
-    """
-    if not {"cleaned_item_names", "category"}.issubset(reviewed_df.columns):
-        return {}
-    valid_categories = set(get_GBD_categories())
-    eligible = reviewed_df.loc[reviewed_df["category"].isin(valid_categories)]
-
-    index = unanimous_index(eligible, key_col="cleaned_item_names", value_col="category")
-    logger.info("Built cleaned-name reuse index with %d entries.", len(index))
-    return index
+def load_categorization_cache() -> CategorizationCache:
+    return CategorizationCache.from_frame(read_categorization_cache_csv())
