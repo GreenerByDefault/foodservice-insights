@@ -49,6 +49,7 @@
     "shadcn-svelte": "catalog:",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
+    "svelte-sonner": "catalog:",
     "svelte-toolbelt": "catalog:",
     "tailwind-merge": "catalog:",
     "tailwind-variants": "catalog:",
