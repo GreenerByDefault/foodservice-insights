@@ -4,10 +4,12 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.cache import (
+    CACHE_COLUMNS,
     CategorizationCache,
     categorization_cache_path,
     load_categorization_cache,
     normalize_product_name,
+    read_categorization_cache_csv,
 )
 
 POULTRY = "Poultry (Chicken & Turkey)"
@@ -103,6 +105,21 @@ def test_load_categorization_cache_is_empty_when_the_file_is_missing(cache_path,
     pd.testing.assert_frame_equal(result.products, _frame([]), check_index_type=False)
     assert result.cleaned_name_index == {}
     assert "not found" in caplog.text
+
+
+def test_read_categorization_cache_csv_returns_the_file_undeduplicated(cache_path):
+    expected = _frame([("a", BEEF, "a"), ("a", POULTRY, "a")])
+    expected.to_csv(cache_path, index=False)
+
+    # The lab appends to this frame, so it must not be the pipeline's one-row-per-product view.
+    pd.testing.assert_frame_equal(read_categorization_cache_csv(), expected)
+
+
+def test_read_categorization_cache_csv_has_the_cache_columns_when_the_file_is_missing(cache_path):
+    result = read_categorization_cache_csv()
+
+    assert result.empty
+    assert list(result.columns) == list(CACHE_COLUMNS)
 
 
 def test_normalize_product_name_keeps_digits():
