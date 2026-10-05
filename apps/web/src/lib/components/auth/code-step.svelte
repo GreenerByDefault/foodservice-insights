@@ -220,7 +220,9 @@ async function resendCode() {
       bind:inputRef={codeInput}
       bind:value={code}
     >
-      {#snippet children({ cells })}
+      {#snippet children({
+        cells,
+      })}
         <InputOTP.Group>
           {#each cells as cell, index (index)}
             <InputOTP.Slot

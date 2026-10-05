@@ -16,7 +16,9 @@ let { organizations }: Props = $props();
   key={(organization) => organization.id}
   empty="No organizations yet."
 >
-  {#snippet children(organization)}
+  {#snippet children(
+    organization,
+  )}
     <ItemListLink href={organizationHref(organization.slug)}>
       <span class="min-w-0 truncate font-medium" title={organization.name}
         >{organization.name}</span

@@ -14,7 +14,10 @@ let {
   bind:this={ref}
   data-slot="input-otp-group"
   aria-hidden="true"
-  class={cn("has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40 has-aria-invalid:border-destructive rounded-md has-aria-invalid:ring-3 flex items-center", className)}
+  class={cn(
+    'has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40 has-aria-invalid:border-destructive rounded-md has-aria-invalid:ring-3 flex items-center',
+    className,
+  )}
   {...restProps}
 >
   {@render children?.()}

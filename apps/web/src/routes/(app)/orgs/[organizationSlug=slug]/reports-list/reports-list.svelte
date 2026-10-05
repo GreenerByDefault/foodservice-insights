@@ -11,7 +11,9 @@ let { reports }: Props = $props();
 </script>
 
 <ItemList items={reports} key={(report) => report.id} empty="No reports yet.">
-  {#snippet children(report)}
+  {#snippet children(
+    report,
+  )}
     <ReportRow {report} />
   {/snippet}
 </ItemList>

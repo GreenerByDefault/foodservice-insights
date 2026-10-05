@@ -49,7 +49,9 @@ async function remove() {
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <Button {...props} variant="ghost" size="icon">
         <MoreHorizontalIcon class="size-4" />
         <span class="sr-only">Manage {member.displayName ?? member.email}</span>
