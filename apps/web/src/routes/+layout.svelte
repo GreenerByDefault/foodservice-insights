@@ -5,6 +5,7 @@ import favicon from '$lib/assets/favicon.svg';
 import { browserAuth } from '$lib/auth/browser';
 import { refreshWhenRestoredByBack, sessionUserChanged } from '$lib/auth/follow-session';
 import { authMode } from '$lib/auth/mode';
+import { Toaster } from '$lib/components/ui/sonner';
 import type { LayoutProps } from './$types';
 import './layout.css';
 
@@ -61,3 +62,5 @@ $effect(() => {
 <svelte:head><link rel="icon" href={favicon}></svelte:head>
 
 {@render children()}
+
+<Toaster position="bottom-right" />

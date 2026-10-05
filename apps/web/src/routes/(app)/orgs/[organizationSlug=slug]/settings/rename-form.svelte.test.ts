@@ -3,17 +3,20 @@ import { render } from 'vitest-browser-svelte';
 import { invalidateAll } from '$app/navigation';
 import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { resetNavigationMocks } from '$lib/testing/navigation';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import RenameForm from './rename-form.svelte';
 
 vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
   resetNavigationMocks();
+  resetToastMocks();
 });
 
 describe('RenameForm', () => {
-  test('PATCHes the organization and refreshes on success', async () => {
+  test('PATCHes the organization and refreshes, then toasts on success', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
     const screen = await render(RenameForm, {
       organizationSlug: 'org-1',
@@ -29,9 +32,10 @@ describe('RenameForm', () => {
     expect(url).toBe('/api/orgs/org-1');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body as string)).toEqual({ name: 'Riverside Foods' });
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith('Renamed to Riverside Foods');
   });
 
-  test('an unreachable server shows the unknown-outcome message and does not refresh', async () => {
+  test('an unreachable server shows the unknown-outcome message and neither refreshes nor toasts', async () => {
     stubUnreachableFetch();
     const screen = await render(RenameForm, {
       organizationSlug: 'org-1',
@@ -45,5 +49,6 @@ describe('RenameForm', () => {
       .element(screen.getByText(/not sure whether that rename went through/))
       .toBeInTheDocument();
     expect(invalidateAll).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

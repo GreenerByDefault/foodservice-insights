@@ -1,4 +1,5 @@
 <script lang="ts">
+import { toast } from 'svelte-sonner';
 import { FIELD, MAX_DISPLAY_NAME_LENGTH } from '$lib/account/display-name';
 import { renameSelf } from '$lib/account/api/rename-self';
 import { Button } from '$lib/components/ui/button';
@@ -32,6 +33,7 @@ async function handleSubmit(event: SubmitEvent) {
   }
 
   await onSaved();
+  toast.success('Your name was updated');
   formState = 'idle';
 }
 </script>

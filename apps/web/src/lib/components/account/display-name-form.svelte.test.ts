@@ -6,10 +6,14 @@ import {
   stubPendingFetch,
   stubUnreachableFetch,
 } from '$lib/testing/fetch';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import DisplayNameForm from './display-name-form.svelte';
+
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetToastMocks();
 });
 
 function props(onSaved = vi.fn().mockResolvedValue(undefined)) {
@@ -33,7 +37,7 @@ describe('DisplayNameForm', () => {
     await expect.element(input).toHaveValue('Unsaved Draft');
   });
 
-  test('saves the trimmed name, then calls onSaved', async () => {
+  test('saves the trimmed name, then calls onSaved and toasts', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
     const onSaved = vi.fn().mockResolvedValue(undefined);
     const screen = await render(DisplayNameForm, props(onSaved));
@@ -48,9 +52,10 @@ describe('DisplayNameForm', () => {
       body: { displayName: 'Alex Baker' },
     });
     await expect.element(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith('Your name was updated');
   });
 
-  test('an unknown outcome shows an alert and does not call onSaved', async () => {
+  test('an unknown outcome shows an alert, and neither calls onSaved nor toasts', async () => {
     stubUnreachableFetch();
     const onSaved = vi.fn();
     const screen = await render(DisplayNameForm, props(onSaved));
@@ -61,6 +66,7 @@ describe('DisplayNameForm', () => {
       .element(screen.getByRole('alert'))
       .toHaveTextContent(/not sure whether your name was saved/);
     expect(onSaved).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   test('the button disables and swaps its label while the request is in flight', async () => {

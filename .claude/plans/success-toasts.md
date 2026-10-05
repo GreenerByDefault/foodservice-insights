@@ -24,11 +24,13 @@ case needs. So the fix is toasts, the way `cfa-web-app` does it.
 ## Pattern
 
 `svelte-sonner` wrapped as shadcn's `ui/sonner`, as in
-`~/code/cfa/cfa-web-app/src/lib/components/ui/sonner/`. The wrapper is already vendored at
+`~/code/cfa/cfa-web-app/src/lib/components/ui/sonner/`. The wrapper is
 [ui/sonner/sonner.svelte](apps/web/src/lib/components/ui/sonner/sonner.svelte), with
 `svelte-sonner` in the pnpm catalog, the `mode-watcher` import removed and `theme="light"`
-pinned. It is not mounted anywhere yet. There is one `<Toaster>` in the root `+layout.svelte`,
-so a toast survives navigation.
+pinned. One `<Toaster position="bottom-right">` is mounted in the root `+layout.svelte`, so a
+toast survives navigation. Tests mock the package with
+`vi.mock('svelte-sonner', () => import('$lib/testing/toast'))` and assert on `toast.success`
+or `toast.error`, resetting with `resetToastMocks()`.
 
 Why a dependency, given AGENTS.md's supply-chain caution: stacking, timing, pause-on-hover,
 swipe, keyboard focus (alt+T) and a polite live region are not "simple to write". Sonner is the
@@ -36,8 +38,8 @@ shadcn-svelte standard, and `cfa-web-app` already vets it. It has one runtime de
 (`runed`) and a peer dependency on Svelte 5. The current release is 1.2.1, old enough for pnpm's
 `minimumReleaseAge`.
 
-Rules. They go in a short header comment on `ui/sonner/sonner.svelte`, which is where someone
-adding a toast will look:
+Rules. They are the header comment on `ui/sonner/sonner.svelte`, which is where someone adding
+a toast will look:
 
 1. **Toast success only when the outcome isn't obvious where the user is looking**, including
    when a navigation takes away the context. Don't toast when the new page is itself the
@@ -49,38 +51,12 @@ adding a toast will look:
    `invalidateAll()` or `goto()`, so the toast never claims success before the page reflects it.
 4. Copy names the thing: "Deleted Acme Foodservice", not "Success".
 
-Settings: `position="bottom-right"`, set where the toaster is mounted. The wrapper already
-pins `theme="light"` (the app never sets `.dark`) and maps the popover tokens to sonner's CSS
-variables.
+The wrapper pins `theme="light"` (the app never sets `.dark`) and maps the popover tokens to
+sonner's CSS variables.
 
 ## PRs (stacked, each small)
 
-### PR 1: Mount the toaster; confirm renames (the reported bug)
-- Add the rules above as a header comment on `ui/sonner/sonner.svelte`.
-- Mount `<Toaster>` in [+layout.svelte](apps/web/src/routes/+layout.svelte).
-- [display-name-form.svelte](apps/web/src/lib/components/account/display-name-form.svelte):
-  after `await onSaved()`, call `toast.success('Your name was updated')`.
-- [rename-form.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/settings/rename-form.svelte):
-  after `invalidateAll()`, call `toast.success(\`Renamed to ${name}\`)`. It lives here, not in
-  the shared `organization-name-form.svelte`, because create-org navigates and doesn't toast.
-- Add `$lib/testing/toast.ts`, a `vi.mock('svelte-sonner')` factory with `toast.success/error`
-  spies, following `$lib/testing/navigation.ts`. Extend the success tests to assert the toast
-  call, and the unknown-outcome tests to assert no toast.
-- **Add one screenshot, and only one:** the name-saved toast, added to
-  `e2e/account/account.screenshot.ts`. It runs across that file's 3 viewports.
-  - Why one is worth having: the toast's appearance comes from one wrapper plus the popover
-    tokens, and only a screenshot can check it. That means the colours, the border, where it
-    sits on mobile (sonner goes full-width there), and whether it covers the page chrome.
-  - Why only one: every other toast uses the same component with different words, and the unit
-    tests already check the words. More screenshots would add maintenance and possible flakes
-    but no new coverage.
-  - Flake guards: stop the clock (`page.clock.install()` before the save) so the 4s auto-dismiss
-    can't fire mid-capture, and wait for `[data-sonner-toast][data-mounted="true"]` so the
-    entry animation has finished.
-  - If this screenshot turns out to be flaky or noisy, delete it rather than chase it. Nothing
-    else depends on it.
-
-### PR 2: Confirm actions that navigate away
+### PR 1: Confirm actions that navigate away
 - [settings/delete-button.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/settings/delete-button.svelte):
   "Deleted {org}".
 - [members/your-membership.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/your-membership.svelte):
@@ -93,7 +69,7 @@ variables.
 - Add or extend one e2e test (delete org) that asserts the toast shows on the destination page,
   to prove the toast survives the `goto`.
 
-### PR 3: Members page and auth
+### PR 2: Members page and auth
 - [invite-form.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/invite-form.svelte):
   "Invited {email}" only when `emailSent`. Otherwise keep the inline "couldn't email them"
   notice and give it `role="status"`.
@@ -106,7 +82,7 @@ variables.
 - [user-menu.svelte](apps/web/src/routes/(app)/shell/user-menu.svelte): sign-out failure shows
   `toast.error("Couldn't sign out. Try again.")`.
 
-### PR 4: Accessibility gaps the audit found (not toasts, but the same theme)
+### PR 3: Accessibility gaps the audit found (not toasts, but the same theme)
 - [confirm-action.svelte](apps/web/src/lib/components/confirm-action.svelte): give the error
   line `role="alert"`, and add `aria-busy` plus a busy label on the confirm button.
 - [failure-view.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/failure/failure-view.svelte):
@@ -116,7 +92,7 @@ variables.
 - Restore focus when the focused row disappears (revoke, remove member, decline invite). Move it
   to the list's heading, or to the next row.
 
-PR 4 is independent of 1–3 and can land in any order.
+PR 3 is independent of 1–2 and can land in any order.
 
 ## Verification (per PR)
 
@@ -125,7 +101,6 @@ PR 4 is independent of 1–3 and can land in any order.
 - Drive the app (the `run` skill or Playwright MCP): do each action and check that the toast
   appears once, on the right page, with the right copy, and that failures still show inline
   with no toast.
-- Screenshot baselines: PR 1 adds the one toast baseline (regenerate through turbo, not from
-  `apps/web`). Existing baselines should not change, because a toast appears only after an
-  action. PRs 2–4 add no screenshots. They are covered by the unit-level toast assertions plus
-  the one e2e test in PR 2 that checks a toast survives navigation.
+- No screenshots. The toast's baseline is already committed, and existing baselines should not
+  change, because a toast appears only after an action. These PRs are covered by the unit-level
+  toast assertions plus the one e2e test in PR 1 that checks a toast survives navigation.

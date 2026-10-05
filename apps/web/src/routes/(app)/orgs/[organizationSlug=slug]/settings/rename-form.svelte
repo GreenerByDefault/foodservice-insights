@@ -1,4 +1,5 @@
 <script lang="ts">
+import { toast } from 'svelte-sonner';
 import { invalidateAll } from '$app/navigation';
 import OrganizationNameForm from '$lib/components/orgs/organization-name-form.svelte';
 import { renameOrganization } from '$lib/orgs/api/rename-organization';
@@ -16,6 +17,7 @@ async function handleSubmit(name: string): Promise<'done' | 'name-taken' | 'unkn
 
   // The switcher and the org shell both read from the layout load this refreshes.
   await invalidateAll();
+  toast.success(`Renamed to ${name}`);
   return 'done';
 }
 </script>
