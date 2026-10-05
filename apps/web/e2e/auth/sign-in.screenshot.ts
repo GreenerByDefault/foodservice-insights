@@ -33,6 +33,15 @@ async function sendCode(page: Page): Promise<void> {
   await page.getByLabel('Email address').fill('sam.cook@example.test');
   await page.getByLabel('Email address').press('Enter');
   await expect(page.getByLabel('Sign-in code')).toBeFocused();
+  // On focus, bits-ui's PinInput arms a zero-delay timer that decides whether a password-manager
+  // badge sits over its cells — and its `elementFromPoint` probe always lands on its own hidden
+  // `<input>`, so the answer is always yes, and the input is widened by 40px to make room. Under
+  // the paused clock that timer fires in some runs and not others. Firing it here makes every run
+  // the widened one. Its one visible effect is in the phone-width images, which are 391px wide
+  // rather than 375: the widened input overflows the page there. On a real phone it wouldn't —
+  // bits-ui re-checks the room every second and keeps the input narrow when there is none — but
+  // that check runs on the paused clock too, so it never re-runs after the resize to phone width.
+  await page.clock.runFor(1);
 }
 
 function gotrueError(status: number, errorCode: string) {
@@ -81,11 +90,6 @@ test('a new code GoTrue refuses to send', async ({ page }) => {
   );
 
   await page.clock.runFor(60_000);
-  // The button is disabled while it sends, so it is re-enabled just before the capture, mid-fade
-  // back from `disabled:opacity-50`. A fading element gets a compositor layer, and whether Chrome
-  // has dropped it by capture time varies run to run; while it hasn't, the last glyph's edge
-  // renders a pixel differently. Waiting out the fade still flaked; with no fade, there's no layer.
-  await page.addStyleTag({ content: '* { transition: none !important; }' });
   await page.getByRole('button', { name: 'Send a new code' }).click();
   await expect(page.getByText('Too many codes requested.', { exact: false })).toBeVisible();
   // The click left the pointer on the button, which would capture it hovered.

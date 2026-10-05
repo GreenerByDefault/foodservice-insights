@@ -6,7 +6,7 @@ import {
 } from '@gbd/browser-testing/playwright-config';
 import { defineConfig } from '@playwright/test';
 import { SCREENSHOT_VIEWPORTS } from './e2e/lib/viewports';
-import { BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
+import { BROWSER_ARGS, BROWSER_WS_ENDPOINT } from './e2e/setup/browser-container';
 
 assertTestRunId(
   '`pnpm test:e2e`, `pnpm test:screenshots`, `pnpm test:playwright`, or `pnpm screenshots:update`',
@@ -51,6 +51,8 @@ export default defineConfig({
         use: {
           baseURL: baseURLFromContainer,
           connectOptions: { wsEndpoint: BROWSER_WS_ENDPOINT },
+          // Forwarded to the server, which launches this connection's browser with them.
+          launchOptions: { args: BROWSER_ARGS },
           // The width a spec starts at; `expectScreenshots` resizes from here to capture the rest
           // of `SCREENSHOT_VIEWPORTS` on the same navigation.
           viewport: SCREENSHOT_VIEWPORTS.desktop,

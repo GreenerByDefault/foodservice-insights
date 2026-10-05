@@ -50,6 +50,8 @@ Run the checks for the stack you changed, from the repo root, before saying a ch
 A change that typechecks but has not been run is not verified. Report what you actually ran;
 if something is failing or you skipped a step, say so.
 
+Run Playwright's `--repeat-each` with `--workers=1` to avoid copies of one test colliding in the database.
+
 ## General development principles
 
 - All these principles are not rigid and depend on the context. For example, sometimes DRY

@@ -20,6 +20,7 @@ import type {
 } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
 import {
+  findOrInsertAppUser,
   insertAppUser,
   insertOrganization,
   insertOrganizationInvite,
@@ -32,7 +33,9 @@ import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.t
 export type OrganizationMemberSpec = {
   displayName?: string;
   /** Defaults to a random address — set this for a screenshot spec, whose committed image needs
-   * the same text on every run, unlike a behavioural spec that only asserts the row exists. */
+   * the same text on every run, unlike a behavioural spec that only asserts the row exists. A set
+   * address is run-lived rather than per-test (`findOrInsertAppUser`), so `--repeat-each` finds
+   * the user the first run made instead of colliding on it. */
   email?: string;
   role?: OrganizationRole;
 };
@@ -108,11 +111,8 @@ export async function insertOrganizationFixture(
     }
 
     for (const member of spec.members ?? []) {
-      const user = await insertAppUser(tx, {
-        displayName: member.displayName,
-        email: member.email,
-      });
-      await insertOrganizationMember(tx, { organizationId, userId: user.id, role: member.role });
+      const userId = await insertPerson(tx, member);
+      await insertOrganizationMember(tx, { organizationId, userId, role: member.role });
     }
 
     for (const invite of spec.invites ?? []) {
@@ -140,7 +140,17 @@ async function resolveAdminUserId(
 ): Promise<UserId | undefined> {
   if (params.role === 'admin') return params.userId;
   if (params.admin === undefined) return undefined;
-  return (await insertAppUser(tx, params.admin)).id;
+  return await insertPerson(tx, params.admin);
+}
+
+/** A person the spec names. One with a pinned address is found if an earlier run of the test
+ * already made them — see `OrganizationMemberSpec.email`. */
+async function insertPerson(tx: DatabaseExecutor, person: OrganizationAdminSpec): Promise<UserId> {
+  const user =
+    person.email === undefined
+      ? await insertAppUser(tx, { displayName: person.displayName })
+      : await findOrInsertAppUser(tx, { email: person.email, displayName: person.displayName });
+  return user.id;
 }
 
 /** Deletes the organization and everything hanging off it: `organization_member` and `report`
