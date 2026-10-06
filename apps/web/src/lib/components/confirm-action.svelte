@@ -111,13 +111,18 @@ async function confirm() {
       </Field.Field>
     {/if}
     {#if actionState.status === 'error'}
-      <p class="text-sm text-destructive">{actionState.message}</p>
+      <p role="alert" class="text-sm text-destructive">{actionState.message}</p>
     {/if}
     <AlertDialogFooter>
       <AlertDialogCancel disabled={actionState.status === 'loading'}>
         {cancelLabel}
       </AlertDialogCancel>
-      <AlertDialogAction variant="destructive" disabled={confirmDisabled} onclick={confirm}>
+      <AlertDialogAction
+        variant="destructive"
+        disabled={confirmDisabled}
+        aria-busy={actionState.status === 'loading'}
+        onclick={confirm}
+      >
         {confirmLabel}
       </AlertDialogAction>
     </AlertDialogFooter>

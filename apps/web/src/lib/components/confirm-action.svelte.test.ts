@@ -24,7 +24,7 @@ describe('ConfirmAction', () => {
 
     await screen.getByRole('button', { name: 'Yes, do it' }).click();
 
-    await expect.element(screen.getByText('More specific reason.')).toBeVisible();
+    await expect.element(screen.getByRole('alert')).toHaveTextContent('More specific reason.');
     await expect
       .element(screen.getByText('Could not do the thing. Please try again.'))
       .not.toBeInTheDocument();

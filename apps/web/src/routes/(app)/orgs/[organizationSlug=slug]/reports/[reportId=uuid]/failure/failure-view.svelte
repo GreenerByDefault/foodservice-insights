@@ -50,7 +50,7 @@ async function retry() {
   </StatusLine>
 
   {#if actionState.status === 'error'}
-    <p class="text-sm text-destructive">{actionState.message}</p>
+    <p role="alert" class="text-sm text-destructive">{actionState.message}</p>
   {/if}
 
   <div class="flex flex-wrap items-center gap-3">

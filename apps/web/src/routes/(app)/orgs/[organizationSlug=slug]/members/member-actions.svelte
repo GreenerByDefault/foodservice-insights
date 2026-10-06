@@ -7,6 +7,7 @@ import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import type { ActionState } from '$lib/forms/action-state';
 import { changeMemberRole } from '$lib/orgs/api/change-member-role';
 import { removeMember } from '$lib/orgs/api/remove-member';
+import { focusPageHeading } from '$lib/utils/focus-page-heading';
 import type { MemberRow } from './+page.server.ts';
 import { confirmMemberWrite, LAST_ADMIN_MESSAGE } from './member-write.ts';
 
@@ -48,6 +49,7 @@ async function setRole(role: 'admin' | 'member') {
 async function remove() {
   confirmMemberWrite(await removeMember(organizationSlug, member.userId));
   await onDone();
+  await focusPageHeading();
   toast.success(`Removed ${memberLabel}`);
 }
 </script>
@@ -57,7 +59,13 @@ async function remove() {
     {#snippet child({
       props,
     })}
-      <Button {...props} variant="ghost" size="icon">
+      <Button
+        {...props}
+        variant="ghost"
+        size="icon"
+        disabled={actionState.status === 'loading'}
+        aria-busy={actionState.status === 'loading'}
+      >
         <MoreHorizontalIcon class="size-4" />
         <span class="sr-only">Manage {memberLabel}</span>
       </Button>
