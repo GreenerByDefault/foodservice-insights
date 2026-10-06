@@ -5,9 +5,9 @@ import pytest
 from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
     TITLE_FONT,
-    calculate_figure_height_for_wrapped_labels,
     close_new_figures_on_error,
     convert_percentage_to_float,
+    create_horizontal_percentage_barplot,
     format_month_labels,
     format_percentage_column,
     set_suptitle_font,
@@ -17,6 +17,7 @@ from gbd_foodservice_insights.plotting_utils import (
     standardize_title_case,
     wrap_labels,
 )
+from matplotlib.patches import Rectangle
 
 
 @pytest.fixture(autouse=True)
@@ -74,17 +75,25 @@ def test_wrap_labels_wraps_only_labels_longer_than_max_width():
     ]
 
 
-@pytest.mark.parametrize(
-    ("labels", "expected"),
-    [
-        (["Label"], 4.0),
-        ([f"Label {i}" for i in range(15)], 15 * 0.35 + 1),
-        (["A label that wraps onto two lines"] * 12, 12 * 0.35 * 2 + 1),
-    ],
-    ids=["never_below_base_height", "grows_with_items", "grows_with_wrapped_lines"],
-)
-def test_calculate_figure_height_for_wrapped_labels(labels, expected):
-    assert calculate_figure_height_for_wrapped_labels(labels) == pytest.approx(expected)
+def test_wrap_labels_ends_in_an_ellipsis_past_max_lines():
+    assert wrap_labels(["one two three four five six"], max_width=9, max_lines=2) == [
+        "one two\nthree …"
+    ]
+
+
+def test_horizontal_percentage_barplot_keeps_labels_that_truncate_alike_as_separate_bars():
+    prefix = "Chicken Breast Boneless Skinless Raw Individually Quick Frozen 4 Ounce Portion"
+    data = convert_percentage_to_float(
+        pd.DataFrame({"product": [f"{prefix} Case A", f"{prefix} Case B"], "percentage": [70, 30]})
+    )
+    _, ax = plt.subplots()
+
+    create_horizontal_percentage_barplot(ax, data, "product", add_percentage_labels=False)
+
+    assert [bar.get_width() for bar in ax.patches if isinstance(bar, Rectangle)] == [70, 30]
+    assert [label.get_text() for label in ax.get_yticklabels()] == [
+        "Chicken Breast Boneless\nSkinless Raw Individually\nQuick Frozen 4 Ounce Portion …"
+    ] * 2
 
 
 def test_format_percentage_column_rounds_to_one_decimal_without_mutating_input():

@@ -8,9 +8,9 @@ import seaborn as sns
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights.plotting_utils import (
+    LETTER_LANDSCAPE,
     GBD_colors,
     add_grid,
-    calculate_figure_height_for_wrapped_labels,
     convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -42,7 +42,7 @@ def plot_diner_meal_numbers(
     else:
         diner_meal_series = pd.Series(diner_meal_mapping).sort_index()
 
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     x_positions = range(len(diner_meal_series))
     ax.plot(x_positions, diner_meal_series.values, marker="o")
     set_title_font(ax, f"Number of {diner_or_meal.title()}s by Month")
@@ -73,14 +73,7 @@ def plot_category_drivers(
         data = top_drivers[top_drivers["category"] == category].copy()
         data = convert_percentage_to_float(data, "percentage")
 
-        fig_height = calculate_figure_height_for_wrapped_labels(
-            data["product"].tolist(),
-            max_width=max_label_width,
-            base_height=3.0,
-            height_per_item=0.3,
-        )
-
-        fig, ax = plt.subplots(figsize=(8, fig_height))
+        fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
         create_horizontal_percentage_barplot(
             ax=ax,
             data=data,
@@ -106,14 +99,7 @@ def plot_overall_drivers(overall_drivers: pd.DataFrame, metric: str = "kilos_tot
     overall_drivers = convert_percentage_to_float(overall_drivers, "percentage")
 
     max_label_width = 30
-    fig_height = calculate_figure_height_for_wrapped_labels(
-        overall_drivers["product"].tolist(),
-        max_width=max_label_width,
-        base_height=4.0,
-        height_per_item=0.35,
-    )
-
-    fig, ax = plt.subplots(figsize=(10, fig_height))
+    fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     create_horizontal_percentage_barplot(
         ax=ax,
         data=overall_drivers,
@@ -137,7 +123,7 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: str) -> Fi
     ].sum(min_count=1)
     metric_label = metric_display_label(metric)
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     sns.barplot(
         data=category_totals,
         y="category",
@@ -163,13 +149,12 @@ def plot_food_and_drink_comparison_page(
     metric: str = "kilos_total",
     diner_meal_mapping: dict[Any, Any] | None = None,
     diner_or_meal: str = "diner",
-    figsize: tuple[int, int] = (14, 5),
 ) -> Figure:
     """Create one page with total and per-diner trends, each comparing food vs food + drink."""
     if diner_meal_mapping is None:
         raise ValueError("diner_meal_mapping is required for the comparison page")
 
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    fig, axes = plt.subplots(2, 1, figsize=LETTER_LANDSCAPE)
     set_suptitle_font(fig, f"{metric_display_label(metric)} Over Time", fontsize=16)
     draw_food_and_drink_totals(axes[0], monthly_category_data, metric=metric)
     draw_food_and_drink_per_diner(
@@ -187,7 +172,7 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
     """Horizontal bar chart of total CO2e by category, with % of total labels."""
     data = emissions_summary.sort_values("total_kg_co2e", ascending=True).copy()
 
-    fig, ax = plt.subplots(figsize=(10, max(4, len(data) * 0.4)))
+    fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_colors[0])
     ax.set_xlabel("Total kg CO2e")
     set_title_font(ax, "Carbon Emissions by Category")
@@ -218,10 +203,9 @@ def plot_emissions_summary_over_time(
     diner_meal_mapping: dict[Any, Any],
     emissions_col: str = "emissions_kg_co2e",
     diner_or_meal: str = "diner",
-    figsize: tuple[float, float] = (12, 4.8),
 ) -> Figure:
     """Put total and per-diner emissions trends together on one report page."""
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    fig, axes = plt.subplots(2, 1, figsize=LETTER_LANDSCAPE)
     set_suptitle_font(fig, "Carbon Emissions Over Time", fontsize=16)
     draw_total_emissions(axes[0], monthly_category_data, emissions_col=emissions_col)
     draw_emissions_per_diner(
@@ -241,7 +225,7 @@ def plot_plant_breakdown_overview(
     metric_label: str = "Kilos",
 ) -> Figure:
     """Combine the plant and protein share visuals into a single four-panel page."""
-    fig, axes = plt.subplots(2, 2, figsize=(13, 7.6))
+    fig, axes = plt.subplots(2, 2, figsize=LETTER_LANDSCAPE)
     set_suptitle_font(fig, "Plant and Protein Breakdown", fontsize=16)
     draw_plant_animal_split(axes[0, 0], plant_animal_split, metric_label=metric_label)
     draw_plant_share_by_month(axes[0, 1], plant_animal_split)

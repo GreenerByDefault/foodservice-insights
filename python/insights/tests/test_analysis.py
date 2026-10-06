@@ -2,6 +2,7 @@ import dataclasses
 import json
 import math
 import os
+import re
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -178,6 +179,23 @@ def test_a_product_bought_at_zero_weight_still_reports(tmp_path: Path) -> None:
 
     products = pd.read_excel(outcome.xlsx, sheet_name="Monthly by Product")
     assert products.loc[products["product"] == "Pork Loin", "kilos_total"].tolist() == [0.0] * 3
+
+
+def test_every_pdf_page_is_letter_even_with_a_product_name_at_the_webs_cap(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    long_name = "Cheddar Cheese Sharp Yellow Shredded Fancy " * 5
+    request.input_csv.write_text(sample_input_csv((long_name[:200], *KEYWORD_PRODUCTS)))
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    # matplotlib writes each page's dictionary uncompressed, in points.
+    pdf_bytes = outcome.pdf.read_bytes()
+    page_count = int(re.findall(rb"/Count (\d+)", pdf_bytes)[-1])
+    page_sizes = re.findall(rb"/Type /Page .*?/MediaBox \[ 0 0 (\S+) (\S+) \]", pdf_bytes)
+    assert len(page_sizes) == page_count
+    assert set(page_sizes) == {(b"612", b"792"), (b"792", b"612")}
 
 
 GOLDEN_PATH = Path(__file__).parent / "data" / "analysis_golden.json"

@@ -37,6 +37,11 @@ GBD_colors = [
     "#016939",
 ]
 
+# Every report page is US Letter, so the PDF prints and scales as one document: text pages
+# portrait, charts and tables landscape.
+LETTER_PORTRAIT = (8.5, 11.0)
+LETTER_LANDSCAPE = (11.0, 8.5)
+
 # ----------------------------------------------------------------------
 # Font Configuration
 # ----------------------------------------------------------------------
@@ -162,9 +167,13 @@ def add_grid(
     ax.grid(True, axis=axis, linestyle=linestyle, alpha=alpha)
 
 
-def wrap_labels(labels: list[str], max_width: int = 30) -> list[str]:
-    """Wrap long labels to multiple lines of at most `max_width` characters."""
-    return [textwrap.fill(str(label), width=max_width) for label in labels]
+def wrap_labels(labels: list[str], max_width: int = 30, max_lines: int = 3) -> list[str]:
+    """Wrap long labels to lines of at most `max_width` characters, ending in an ellipsis past
+    `max_lines`."""
+    return [
+        textwrap.fill(str(label), width=max_width, max_lines=max_lines, placeholder=" …")
+        for label in labels
+    ]
 
 
 def format_percentage_column(df: pd.DataFrame, column: str = "percentage") -> pd.DataFrame:
@@ -206,21 +215,6 @@ def convert_percentage_to_float(
     return df
 
 
-def calculate_figure_height_for_wrapped_labels(
-    labels: list[str], max_width: int = 30, base_height: float = 4.0, height_per_item: float = 0.35
-) -> float:
-    """Calculate appropriate figure height for plots with wrapped labels.
-
-    This function estimates the needed figure height based on the number of items
-    and the maximum number of lines in wrapped labels. The returned height is in inches and is
-    never below `base_height`.
-    """
-    wrapped = wrap_labels(labels, max_width)
-    max_lines = max((label.count("\n") + 1) for label in wrapped) if wrapped else 1
-    n_items = len(labels)
-    return max(base_height, n_items * height_per_item * max_lines + 1)
-
-
 def create_horizontal_percentage_barplot(
     ax: plt.Axes,
     data: pd.DataFrame,
@@ -241,18 +235,18 @@ def create_horizontal_percentage_barplot(
     if palette is None:
         palette = GBD_colors
 
-    wrapped_col = f"wrapped_{y_col}"
-    data[wrapped_col] = wrap_labels(data[y_col].tolist(), max_label_width)
-
     sns.barplot(
         data=data,
-        y=wrapped_col,
+        y=y_col,
         x=f"{percentage_col}_float",
-        hue=wrapped_col,
+        hue=y_col,
         palette=palette,
         legend=False,
         ax=ax,
     )
+    # Bars are keyed on the full label and only the tick text is shortened: two labels that
+    # truncate alike would otherwise be averaged into one bar.
+    ax.set_yticks(ax.get_yticks(), labels=wrap_labels(data[y_col].tolist(), max_label_width))
 
     ax.set_xlim(0, 100)
 

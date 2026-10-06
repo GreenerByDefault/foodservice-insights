@@ -16,7 +16,11 @@ from matplotlib.table import Cell
 from matplotlib.textpath import text_to_path
 from matplotlib.transforms import Bbox
 
-from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
+from gbd_foodservice_insights.plotting_utils import (
+    LETTER_LANDSCAPE,
+    LETTER_PORTRAIT,
+    close_new_figures_on_error,
+)
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import summarize_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
@@ -42,7 +46,7 @@ _TABLE_BBOX = Bbox.from_bounds(0.03, 0.06, 0.94, 0.84)
 # ---------------------------------------------------------------------------
 
 
-def _new_text_figure(fig_size: tuple[float, float] = (8.5, 11)) -> tuple[Figure, plt.Axes]:
+def _new_text_figure(fig_size: tuple[float, float] = LETTER_PORTRAIT) -> tuple[Figure, plt.Axes]:
     """Create a blank figure, with its single axes turned off, for rendering text or tables."""
     fig, ax = plt.subplots(figsize=fig_size)
     ax.axis("off")
@@ -54,7 +58,7 @@ def create_title_page(
     client: str,
     baseline_pilot: str,
     procurement_serving: str,
-    fig_size: tuple[float, float] = (8.5, 11),
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
     """Render a branded title page in the PDF.
 
@@ -147,7 +151,7 @@ def _format_co2e(kg: float) -> str:
 def create_executive_summary_page(
     pdf: PdfPages,
     summary_stats: dict[str, Any],
-    fig_size: tuple[float, float] = (8.5, 11),
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
     narrative: dict[str, Any] | None = None,
 ) -> None:
     """Render the executive summary page.
@@ -313,7 +317,7 @@ def create_text_page(
     pdf: PdfPages,
     title: str,
     content_lines: list[str],
-    fig_size: tuple[float, float] = (8.5, 11),
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
     bold_lines: set[str] | None = None,
 ) -> None:
     """Render a text page in the PDF, paginating long content as needed.
@@ -368,7 +372,7 @@ def create_table_page(
     pdf: PdfPages,
     title: str,
     dataframe: pd.DataFrame,
-    fig_size: tuple[float, float] = (11, 8.5),
+    fig_size: tuple[float, float] = LETTER_LANDSCAPE,
 ) -> None:
     """Render a DataFrame as styled table pages in the PDF.
 
@@ -566,7 +570,7 @@ def _draw_table_page(
 def create_decision_kpis_page(
     pdf: PdfPages,
     dataframe: pd.DataFrame,
-    fig_size: tuple[float, float] = (8.5, 11),
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
     """Render the decision KPI as a narrative text page.
 
