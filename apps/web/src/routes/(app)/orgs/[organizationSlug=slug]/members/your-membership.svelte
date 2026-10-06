@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
+import { toast } from 'svelte-sonner';
 import { goto, invalidateAll } from '$app/navigation';
 import ConfirmAction from '$lib/components/confirm-action.svelte';
 import * as Field from '$lib/components/ui/field';
@@ -14,13 +15,15 @@ interface Props {
   organizationSlug: string;
   viewerUserId: string;
   viewerRole: OrganizationRole;
+  organizationName: string;
 }
 
-let { organizationSlug, viewerUserId, viewerRole }: Props = $props();
+let { organizationSlug, viewerUserId, viewerRole, organizationName }: Props = $props();
 
 async function stepDown() {
   confirmMemberWrite(await changeMemberRole(organizationSlug, viewerUserId, 'member'));
   await invalidateAll();
+  toast.success(`You're no longer an admin of ${organizationName}`);
 }
 
 async function leave() {
@@ -28,6 +31,7 @@ async function leave() {
   // Same landing as delete-organization: `/orgs` forwards to a remaining organization, or
   // `/orgs/new` if this was the viewer's last.
   await goto('/orgs', { invalidateAll: true });
+  toast.success(`You left ${organizationName}`);
 }
 </script>
 

@@ -14,10 +14,12 @@ interface Props {
   failure: FailureCopy;
   organizationSlug: string;
   reportId: string;
+  reportName: string;
   onReportChanged: () => Promise<void>;
 }
 
-let { attemptNumber, failure, organizationSlug, reportId, onReportChanged }: Props = $props();
+let { attemptNumber, failure, organizationSlug, reportId, reportName, onReportChanged }: Props =
+  $props();
 
 let actionState = $state<ActionState>({ status: 'idle' });
 
@@ -62,6 +64,6 @@ async function retry() {
       <MailIcon aria-hidden="true" />
       Contact us
     </Button>
-    <DeleteButton {organizationSlug} {reportId} />
+    <DeleteButton {organizationSlug} {reportId} {reportName} />
   </div>
 </div>

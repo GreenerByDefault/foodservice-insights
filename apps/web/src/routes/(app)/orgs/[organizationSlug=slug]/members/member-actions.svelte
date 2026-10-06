@@ -1,5 +1,6 @@
 <script lang="ts">
 import MoreHorizontalIcon from '@lucide/svelte/icons/more-horizontal';
+import { toast } from 'svelte-sonner';
 import ConfirmAction from '$lib/components/confirm-action.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -19,6 +20,8 @@ interface Props {
 
 let { organizationSlug, member, onDone }: Props = $props();
 
+const memberLabel = $derived(member.displayName ?? member.email);
+
 let actionState = $state<ActionState>({ status: 'idle' });
 let removeDialogOpen = $state(false);
 
@@ -28,6 +31,7 @@ async function setRole(role: 'admin' | 'member') {
   if (outcome.kind === 'done') {
     actionState = { status: 'idle' };
     await onDone();
+    toast.success(`${memberLabel} is now ${role === 'admin' ? 'an admin' : 'a member'}`);
     return;
   }
   actionState = {
@@ -44,6 +48,7 @@ async function setRole(role: 'admin' | 'member') {
 async function remove() {
   confirmMemberWrite(await removeMember(organizationSlug, member.userId));
   await onDone();
+  toast.success(`Removed ${memberLabel}`);
 }
 </script>
 
@@ -54,7 +59,7 @@ async function remove() {
     })}
       <Button {...props} variant="ghost" size="icon">
         <MoreHorizontalIcon class="size-4" />
-        <span class="sr-only">Manage {member.displayName ?? member.email}</span>
+        <span class="sr-only">Manage {memberLabel}</span>
       </Button>
     {/snippet}
   </DropdownMenu.Trigger>
@@ -82,7 +87,7 @@ async function remove() {
 
 <ConfirmAction
   bind:open={removeDialogOpen}
-  title="Remove {member.displayName ?? member.email}?"
+  title="Remove {memberLabel}?"
   description="They'll lose access to this organization's reports and files."
   confirmLabel="Yes, remove"
   cancelLabel="Cancel"

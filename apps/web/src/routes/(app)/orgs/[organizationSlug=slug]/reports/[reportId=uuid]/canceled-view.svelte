@@ -10,9 +10,10 @@ interface Props {
   newReportHref: string;
   organizationSlug: string;
   reportId: string;
+  reportName: string;
 }
 
-let { stoppedAt, now, newReportHref, organizationSlug, reportId }: Props = $props();
+let { stoppedAt, now, newReportHref, organizationSlug, reportId, reportName }: Props = $props();
 </script>
 
 <div class="space-y-4">
@@ -24,5 +25,5 @@ let { stoppedAt, now, newReportHref, organizationSlug, reportId }: Props = $prop
     </p>
   </StatusLine>
 
-  <DeleteButton {organizationSlug} {reportId} />
+  <DeleteButton {organizationSlug} {reportId} {reportName} />
 </div>

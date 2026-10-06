@@ -15,9 +15,10 @@ interface Props {
   inputFile: { href: string; originalFilename: string; byteSize: number };
   organizationSlug: string;
   reportId: string;
+  reportName: string;
 }
 
-let { finishedAt, now, files, inputFile, organizationSlug, reportId }: Props = $props();
+let { finishedAt, now, files, inputFile, organizationSlug, reportId, reportName }: Props = $props();
 </script>
 
 <div class="space-y-6">
@@ -36,7 +37,7 @@ let { finishedAt, now, files, inputFile, organizationSlug, reportId }: Props = $
       <FileSpreadsheetIcon aria-hidden="true" />
       Download Excel
     </Button>
-    <DeleteButton {organizationSlug} {reportId} />
+    <DeleteButton {organizationSlug} {reportId} {reportName} />
   </div>
 
   <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

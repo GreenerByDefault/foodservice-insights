@@ -57,6 +57,7 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
           organizationSlug={data.organization.slug}
           {viewerUserId}
           viewerRole={data.role}
+          organizationName={data.organization.name}
         />
       </Card.Content>
     </Card.Root>

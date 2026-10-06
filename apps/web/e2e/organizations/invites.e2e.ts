@@ -21,7 +21,7 @@ test('an admin invites someone, sees the row appear, then revokes it — no relo
   await page.getByLabel('Email address').fill(invitee);
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
-  const row = page.getByRole('listitem').filter({ hasText: invitee });
+  const row = page.getByRole('main').getByRole('listitem').filter({ hasText: invitee });
   await expect(row).toBeVisible();
   await expect(row.getByText('Member')).toBeVisible();
   // The field clears on success, ready for the next address.
@@ -47,12 +47,16 @@ test('re-inviting an outstanding address still shows one row', async ({ page, or
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  await expect(page.getByRole('listitem').filter({ hasText: invitee })).toHaveCount(1);
+  await expect(
+    page.getByRole('main').getByRole('listitem').filter({ hasText: invitee }),
+  ).toHaveCount(1);
 
   await page.getByLabel('Email address').fill(invitee);
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
-  await expect(page.getByRole('listitem').filter({ hasText: invitee })).toHaveCount(1);
+  await expect(
+    page.getByRole('main').getByRole('listitem').filter({ hasText: invitee }),
+  ).toHaveCount(1);
 });
 
 test('inviting an existing member is refused inline', async ({ page, organizations }) => {
@@ -69,7 +73,9 @@ test('inviting an existing member is refused inline', async ({ page, organizatio
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
   await expect(page.getByText('That person is already a member.')).toBeVisible();
-  await expect(page.getByRole('listitem').filter({ hasText: existingMemberEmail })).toHaveCount(1);
+  await expect(
+    page.getByRole('main').getByRole('listitem').filter({ hasText: existingMemberEmail }),
+  ).toHaveCount(1);
 });
 
 test('a member sees no invite form or pending list', async ({ page, organizations }) => {

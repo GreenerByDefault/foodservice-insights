@@ -1,16 +1,24 @@
 <script lang="ts">
 import Trash2Icon from '@lucide/svelte/icons/trash-2';
+import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
 import ConfirmAction from '$lib/components/confirm-action.svelte';
 import { organizationHref } from '$lib/hrefs';
 import { deleteReport } from '$lib/reports/api/delete-report';
 
-let { organizationSlug, reportId }: { organizationSlug: string; reportId: string } = $props();
+interface Props {
+  organizationSlug: string;
+  reportId: string;
+  reportName: string;
+}
+
+let { organizationSlug, reportId, reportName }: Props = $props();
 
 async function confirm() {
   await deleteReport(organizationSlug, reportId);
   // This page 404s the moment the report is gone, so land on the organization instead.
   await goto(organizationHref(organizationSlug));
+  toast.success(`Deleted ${reportName}`);
 }
 </script>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { REGEXP_ONLY_DIGITS } from 'bits-ui';
 import { onDestroy, tick } from 'svelte';
+import { toast } from 'svelte-sonner';
 import type { BrowserAuth } from '$lib/auth/browser';
 import { describeAuthError, FIELD, OTP_LENGTH, RESEND_COOLDOWN_S } from '$lib/auth/sign-in';
 import { Button } from '$lib/components/ui/button';
@@ -199,6 +200,7 @@ async function resendCode() {
   // Disabled while the resend was in flight, like every other control.
   await tick();
   codeInput?.focus();
+  toast.success(`Sent a new code to ${email}`);
 }
 </script>
 

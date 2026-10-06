@@ -9,6 +9,7 @@ const onReportChanged = vi.fn(() => Promise.resolve());
 
 const ORGANIZATION_SLUG = 'org-1';
 const REPORT_ID = 'report-1';
+const REPORT_NAME = 'Q1 procurement';
 
 const RETRYABLE = retryableFailure();
 const NOT_RETRYABLE = notRetryableFailure();
@@ -26,6 +27,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
 
@@ -42,6 +44,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
     await expect
@@ -53,6 +56,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
     await expect.element(thirdAttempt.getByText('This was attempt 3.')).toBeVisible();
@@ -64,6 +68,7 @@ describe('FailureView', () => {
       failure: AT_RETRY_CAP,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
 
@@ -79,6 +84,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
     await expect.element(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
@@ -90,6 +96,7 @@ describe('FailureView', () => {
       failure: NOT_RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
     await expect.element(screen.getByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
@@ -102,6 +109,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
 
@@ -121,6 +129,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
 
@@ -139,6 +148,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
 
@@ -156,6 +166,7 @@ describe('FailureView', () => {
       failure: RETRYABLE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
       onReportChanged,
     });
 

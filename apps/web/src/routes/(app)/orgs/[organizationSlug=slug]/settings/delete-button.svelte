@@ -1,5 +1,6 @@
 <script lang="ts">
 import Trash2Icon from '@lucide/svelte/icons/trash-2';
+import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
 import ConfirmAction from '$lib/components/confirm-action.svelte';
 import * as Field from '$lib/components/ui/field';
@@ -18,6 +19,7 @@ async function confirm() {
   // `_organizationsPageRedirect` lands the user on a remaining organization, or `/orgs/new`
   // if that was their last.
   await goto('/orgs', { invalidateAll: true });
+  toast.success(`Deleted ${organizationName}`);
 }
 </script>
 

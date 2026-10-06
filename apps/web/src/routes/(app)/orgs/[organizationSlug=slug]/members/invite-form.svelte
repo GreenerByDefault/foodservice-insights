@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
+import { toast } from 'svelte-sonner';
 import { invalidate } from '$app/navigation';
 import { Button } from '$lib/components/ui/button';
 import * as Field from '$lib/components/ui/field';
@@ -52,10 +53,12 @@ async function handleSubmit(event: SubmitEvent) {
     return;
   }
 
+  const invitedEmail = email;
   formState = outcome.emailSent ? { status: 'idle' } : { status: 'email-failed' };
   email = '';
   role = 'member';
   await invalidate(MEMBERS_DEPENDENCY);
+  if (outcome.emailSent) toast.success(`Invited ${invitedEmail}`);
 }
 </script>
 
@@ -102,7 +105,7 @@ async function handleSubmit(event: SubmitEvent) {
       You've sent too many invites. Try again in an hour.
     </p>
   {:else if formState.status === 'email-failed'}
-    <p class="text-sm text-muted-foreground">
+    <p role="status" class="text-sm text-muted-foreground">
       They're invited, but we couldn't email them. Send the invite again to retry.
     </p>
   {:else if formState.status === 'outcome-unknown'}

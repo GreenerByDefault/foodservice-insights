@@ -3,13 +3,16 @@ import { render } from 'vitest-browser-svelte';
 import { goto } from '$app/navigation';
 import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
 import { resetNavigationMocks } from '$lib/testing/navigation';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import DeleteButton from './delete-button.svelte';
 
 vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
   resetNavigationMocks();
+  resetToastMocks();
 });
 
 describe('DeleteButton', () => {
@@ -65,7 +68,7 @@ describe('DeleteButton', () => {
       .toBeDisabled();
   });
 
-  test('confirming DELETEs the organization and navigates to /orgs', async () => {
+  test('confirming DELETEs the organization, navigates to /orgs and toasts', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
     const screen = await render(DeleteButton, {
       organizationSlug: 'org-1',
@@ -82,9 +85,10 @@ describe('DeleteButton', () => {
     expect(url).toBe('/api/orgs/org-1');
     expect(options.method).toBe('DELETE');
     expect(goto).toHaveBeenCalledWith('/orgs', { invalidateAll: true });
+    await expect.poll(() => toast.success.mock.calls).toEqual([['Deleted Acme Foodservice']]);
   });
 
-  test('an unreachable server shows the inline error and does not navigate', async () => {
+  test('an unreachable server shows the inline error, and neither navigates nor toasts', async () => {
     stubUnreachableFetch();
     const screen = await render(DeleteButton, {
       organizationSlug: 'org-1',
@@ -99,5 +103,6 @@ describe('DeleteButton', () => {
       .element(screen.getByText('Could not delete this organization. Please try again.'))
       .toBeInTheDocument();
     expect(goto).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

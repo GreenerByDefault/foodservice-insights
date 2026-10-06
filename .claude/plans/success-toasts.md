@@ -7,8 +7,8 @@ After you save a display name on `/account`, nothing says it worked. The button 
 inside the closed user menu. The avatar monogram changes only if the initials do. Org rename has
 the same gap, softened only by the switcher label changing.
 
-A full audit of every mutating action (20 in all) turned up a wider pattern. The app has **no
-success feedback system**: every success is confirmed only by a change on the page. That works
+A full audit of every mutating action (20 in all) turned up a wider pattern: the app had **no
+success feedback system**, and every success was confirmed only by a change on the page. That works
 when the page changes a lot (sign-in, upload, cancel). It fails in three cases:
 
 - **Nothing visible changes where you're looking:** rename self, rename org, resend code.
@@ -19,7 +19,8 @@ when the page changes a lot (sign-in, upload, cancel). It fails in three cases:
   where the item is just gone. `/orgs` may even redirect you onward.
 
 An inline "Saved" notice fixes only the first case. It can't survive a `goto`, which the third
-case needs. So the fix is toasts, the way `cfa-web-app` does it.
+case needs. So the fix is toasts, the way `cfa-web-app` does it. They have shipped for every
+action the audit flagged; what remains is the accessibility gaps the same audit found.
 
 ## Pattern
 
@@ -51,38 +52,16 @@ a toast will look:
    `invalidateAll()` or `goto()`, so the toast never claims success before the page reflects it.
 4. Copy names the thing: "Deleted Acme Foodservice", not "Success".
 
+Sonner renders each toast as an `li` inside a `region`, so a Playwright `getByRole('listitem')`
+that matches on an email or name also matches the toast. Scope row locators to
+`page.getByRole('main')`.
+
 The wrapper pins `theme="light"` (the app never sets `.dark`) and maps the popover tokens to
 sonner's CSS variables.
 
-## PRs (stacked, each small)
+## PRs
 
-### PR 1: Confirm actions that navigate away
-- [settings/delete-button.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/settings/delete-button.svelte):
-  "Deleted {org}".
-- [members/your-membership.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/your-membership.svelte):
-  leaving shows "You left {org}". Stepping down shows "You're no longer an admin of {org}",
-  because the page changes a lot there without saying why.
-- [reports/[reportId]/delete-button.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/delete-button.svelte):
-  "Deleted {report name}". This needs the name passed as a prop if it isn't already.
-- [invites/invite-offer.svelte](apps/web/src/routes/(app)/invites/invite-offer.svelte): accepting
-  shows "You joined {org}", and declining shows "Declined the invitation to {org}".
-- Add or extend one e2e test (delete org) that asserts the toast shows on the destination page,
-  to prove the toast survives the `goto`.
-
-### PR 2: Members page and auth
-- [invite-form.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/invite-form.svelte):
-  "Invited {email}" only when `emailSent`. Otherwise keep the inline "couldn't email them"
-  notice and give it `role="status"`.
-- [member-actions.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/member-actions.svelte):
-  role change shows "{name} is now an admin/member", and remove shows "Removed {name}".
-- [pending-invite-row.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/pending-invite-row.svelte):
-  "Revoked the invitation for {email}".
-- [code-step.svelte](apps/web/src/lib/components/auth/code-step.svelte): resend shows "Sent a
-  new code to {email}".
-- [user-menu.svelte](apps/web/src/routes/(app)/shell/user-menu.svelte): sign-out failure shows
-  `toast.error("Couldn't sign out. Try again.")`.
-
-### PR 3: Accessibility gaps the audit found (not toasts, but the same theme)
+### PR 1: Accessibility gaps the audit found (not toasts, but the same theme)
 - [confirm-action.svelte](apps/web/src/lib/components/confirm-action.svelte): give the error
   line `role="alert"`, and add `aria-busy` plus a busy label on the confirm button.
 - [failure-view.svelte](apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/failure/failure-view.svelte):
@@ -92,15 +71,10 @@ sonner's CSS variables.
 - Restore focus when the focused row disappears (revoke, remove member, decline invite). Move it
   to the list's heading, or to the next row.
 
-PR 3 is independent of 1–2 and can land in any order.
-
-## Verification (per PR)
+## Verification
 
 - `pnpm lint && pnpm check && pnpm test` from the repo root. Run the svelte-autofixer on each
   touched component.
-- Drive the app (the `run` skill or Playwright MCP): do each action and check that the toast
-  appears once, on the right page, with the right copy, and that failures still show inline
-  with no toast.
-- No screenshots. The toast's baseline is already committed, and existing baselines should not
-  change, because a toast appears only after an action. These PRs are covered by the unit-level
-  toast assertions plus the one e2e test in PR 1 that checks a toast survives navigation.
+- Drive the app (the `run` skill or Playwright MCP) and check that each changed control announces
+  its busy and error states, and that focus lands somewhere sensible after a row disappears.
+- No screenshots: nothing here changes how a page looks at rest.

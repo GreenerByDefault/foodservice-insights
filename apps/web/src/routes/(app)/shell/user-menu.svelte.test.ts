@@ -3,15 +3,18 @@ import { render } from 'vitest-browser-svelte';
 import { goto } from '$app/navigation';
 import { authError, fakeBrowserAuth } from '$lib/auth/testing/fake';
 import { resetNavigationMocks } from '$lib/testing/navigation';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import UserMenu from './user-menu.svelte';
 
 const auth = vi.hoisted(() => ({ current: null as ReturnType<typeof fakeBrowserAuth> | null }));
 vi.mock('$lib/auth/browser', () => ({ browserAuth: () => auth.current }));
 vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
 
 beforeEach(() => {
   auth.current = fakeBrowserAuth();
   resetNavigationMocks();
+  resetToastMocks();
 });
 
 /** Opens the menu and returns the screen — the content is portalled, so it only exists once open. */
@@ -100,6 +103,7 @@ describe('UserMenu', () => {
       expect(auth.current?.signOut.mock.calls).toEqual([[{ scope: 'local' }]]);
       expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
       expect(auth.current?.signOut).toHaveBeenCalledBefore(vi.mocked(goto));
+      expect(toast.error).not.toHaveBeenCalled();
     });
 
     test('goes to / even when GoTrue refuses to revoke the session', async () => {
@@ -111,7 +115,7 @@ describe('UserMenu', () => {
       expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
     });
 
-    test('stays put when the client itself could not load', async () => {
+    test('stays put, and says so, when the client itself could not load', async () => {
       const cause = new Error('chunk failed to load');
       auth.current?.signOut.mockRejectedValue(cause);
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -120,6 +124,7 @@ describe('UserMenu', () => {
 
       await expect.poll(() => consoleError.mock.calls).toEqual([['Could not sign out', cause]]);
       expect(goto).not.toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledExactlyOnceWith("Couldn't sign out. Try again.");
       consoleError.mockRestore();
     });
   });
