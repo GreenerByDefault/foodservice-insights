@@ -13,7 +13,6 @@ import {
   putRejectedUpload,
   type StoredInputFile,
 } from '@gbd/storage';
-import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
 import { reportHref } from '#lib/hrefs.js';
 import type { ReportMetadata } from '#lib/reports/metadata.js';
@@ -56,7 +55,7 @@ export async function _createReport(
 
   if (!outcome.ok) {
     await recordRejection(db, store, uploader, raw, outcome, outcome.rejection);
-    return json(userFacingRejection(outcome.rejection), { status: 400 });
+    return Response.json(userFacingRejection(outcome.rejection), { status: 400 });
   }
 
   const { organizationId, organizationSlug, userId } = uploader;
@@ -78,7 +77,7 @@ export async function _createReport(
       outcome.file,
       initialRateLimitViolation,
     );
-    return json(userFacingRejection(rejection), { status: 429 });
+    return Response.json(userFacingRejection(rejection), { status: 429 });
   }
 
   const reportId = newReportId();
@@ -127,9 +126,9 @@ export async function _createReport(
   );
 
   // Always a rate-limit rejection: it's the only reason `write.ok` can be false here.
-  if (!write.ok) return json(userFacingRejection(write.rejection), { status: 429 });
+  if (!write.ok) return Response.json(userFacingRejection(write.rejection), { status: 429 });
 
-  return json(
+  return Response.json(
     { reportId },
     { status: 201, headers: { location: reportHref(organizationSlug, reportId) } },
   );

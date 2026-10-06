@@ -6,7 +6,6 @@ import {
   RESERVED_ORGANIZATION_SLUGS,
   withTransaction,
 } from '@gbd/db';
-import { json } from '@sveltejs/kit';
 import { organizationHref } from '#lib/hrefs.js';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
@@ -112,7 +111,7 @@ export async function _createOrganization(
     actorEmail,
   });
 
-  return json(
+  return Response.json(
     { organizationId: outcome.organizationId },
     { status: 201, headers: { location: organizationHref(slug) } },
   );

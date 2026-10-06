@@ -1,6 +1,5 @@
 import type { DatabaseExecutor, OrganizationInviteId, UserId } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
-import { json } from '@sveltejs/kit';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
@@ -59,7 +58,7 @@ export async function _declineInvite(
   );
 
   if (outcome.kind === 'no-longer-valid') {
-    return json(
+    return Response.json(
       { message: 'This invitation is no longer valid.', code: 'no-longer-valid' },
       { status: 409 },
     );

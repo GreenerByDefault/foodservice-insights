@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import { requireReportRouteContext } from '#lib/server/auth/route-context.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { _loadReport, _reportEnvironment } from '../+page.server.ts';
@@ -28,5 +27,5 @@ export const GET: RequestHandler = async (event) => {
     { action: 'poll a report', context: { organizationId, reportId } },
   );
 
-  return json(data);
+  return Response.json(data);
 };

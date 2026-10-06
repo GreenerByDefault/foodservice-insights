@@ -1,6 +1,5 @@
 import type { DatabaseExecutor, OrganizationInviteId, UserId } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
-import { json } from '@sveltejs/kit';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
@@ -98,13 +97,16 @@ export async function _acceptInvite(
   );
 
   if (outcome.kind === 'no-longer-valid') {
-    return json(
+    return Response.json(
       { message: 'This invitation is no longer valid.', code: 'no-longer-valid' },
       { status: 409 },
     );
   }
   if (outcome.kind === 'expired') {
-    return json({ message: 'This invitation has expired.', code: 'expired' }, { status: 410 });
+    return Response.json(
+      { message: 'This invitation has expired.', code: 'expired' },
+      { status: 410 },
+    );
   }
-  return json({ organizationSlug: outcome.organizationSlug }, { status: 200 });
+  return Response.json({ organizationSlug: outcome.organizationSlug }, { status: 200 });
 }

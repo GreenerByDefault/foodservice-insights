@@ -6,7 +6,6 @@ import {
   type OrganizationId,
   withTransaction,
 } from '@gbd/db';
-import { json } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import * as v from 'valibot';
 import { emailAddress } from '#lib/forms/validation.js';
@@ -134,13 +133,13 @@ export async function _createInvite(
   );
 
   if (outcome.kind === 'rate-limited') {
-    return json(
+    return Response.json(
       { message: "You've sent too many invites. Try again in an hour.", code: 'rate-limited' },
       { status: 429 },
     );
   }
   if (outcome.kind === 'already-member') {
-    return json(
+    return Response.json(
       { message: 'That person is already a member.', code: 'already-member' },
       { status: 409 },
     );
@@ -155,5 +154,5 @@ export async function _createInvite(
     expiresAt: outcome.expiresAt,
   });
 
-  return json({ inviteId: outcome.inviteId, emailSent }, { status: 201 });
+  return Response.json({ inviteId: outcome.inviteId, emailSent }, { status: 201 });
 }

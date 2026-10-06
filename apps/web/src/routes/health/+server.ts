@@ -1,6 +1,5 @@
 import type { DatabaseExecutor } from '@gbd/db';
 import { type BlobStore, bucketExists } from '@gbd/storage';
-import { json } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import { database } from '#lib/server/db.js';
 import { logger } from '#lib/server/log.js';
@@ -34,5 +33,5 @@ export async function _checkHealth(db: DatabaseExecutor, store: BlobStore): Prom
 
 export const GET: RequestHandler = async () => {
   const report = await _checkHealth(database(), blobStore());
-  return json(report, { status: report.status === 'ok' ? 200 : 503 });
+  return Response.json(report, { status: report.status === 'ok' ? 200 : 503 });
 };
