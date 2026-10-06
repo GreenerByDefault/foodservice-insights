@@ -12,7 +12,7 @@ parameter, so that callers stay testable. Build one with `initializeBlobStore`, 
 your caller already has:
 
 - **The web app** calls `blobStore()` from `#lib/server/storage.js`, which reads
-  `$env/dynamic/private` on first use.
+  `$app/env/private` on first use.
 - **Everything outside Vite** imports `BLOB_STORE` from `@gbd/storage/env`, which reads the
   process environment. `TEST_DB=1` selects the test stack.
 - **Helper functions** should take a `BlobStore` parameter rather than reaching for either, so a

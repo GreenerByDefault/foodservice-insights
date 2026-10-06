@@ -62,7 +62,7 @@ outcome.
 ## UI components
 
 **Anything under `src/lib` outside `server/` is imported by the browser.** The build rejects
-`#lib/server` and `$env/*/private` there, and nothing Node-only may go in either.
+`#lib/server` and `$app/env/private` there, and nothing Node-only may go in either.
 
 Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
 is purely vendored shadcn** — nothing hand-written goes there — so we own the components outright

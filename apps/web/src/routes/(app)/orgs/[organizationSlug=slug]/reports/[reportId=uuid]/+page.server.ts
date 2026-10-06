@@ -19,7 +19,7 @@ import type { Creator } from '#lib/reports/subheading.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { requirePrivateVar } from '#lib/server/env.js';
 import { logger } from '#lib/server/log.js';
-import { env } from '$env/dynamic/private';
+import { WORKER_MODE } from '$app/env/private';
 import type { PageServerLoad } from './$types';
 import { type FailureCopy, toFailureCopy } from './failure/failure-copy.ts';
 
@@ -45,7 +45,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 export function _reportEnvironment(): { supportEmail: string; pollIntervalMs: number } {
   return {
     supportEmail: requirePrivateVar('EMAIL_SUPPORT_ADDRESS'),
-    pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
+    pollIntervalMs: pollIntervalMsForWorkerMode(WORKER_MODE),
   };
 }
 

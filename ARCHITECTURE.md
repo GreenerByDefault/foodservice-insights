@@ -312,8 +312,8 @@ commit, whether or not that commit ever deploys. **A deploy is a promotion of an
 never a rebuild:** it resolves the commit SHA it's deploying to that image's digest and hands the
 digest to the hosting provider. That's also what makes a rollback simple.
 
-**An image carries no environment's configuration.** A build-time `PUBLIC_*` or an
-`$env/static/*` import would bake one in, and promoting that image — forward or back — would
+**An image carries no environment's configuration.** A build-time `PUBLIC_*` or a
+`static: true` variable would bake one in, and promoting that image — forward or back — would
 start shipping the wrong config with it. Read configuration at runtime instead.
 
 ### Web deploys on every push
@@ -447,10 +447,10 @@ belongs to a fixed set of values.
 Secrets load as environment variables. Locally they all live in one gitignored file, `.env`,
 templated by `.env.example`. `.env.test` is committed because every value in it is safe in version control and needed for tests.
 
-**Server config is read at runtime, not inlined at build time** — `$env/dynamic/private` rather
-than `$env/static/private`. One build artifact therefore runs against any environment, and
-rotating a credential does not require a rebuild. The cost is that no server module may read
-config at the module-level while being imported.
+**Server config is read at runtime, not inlined at build time** — every variable in
+`apps/web/src/env.ts` is dynamic, never `static: true`. One build artifact therefore runs against
+any environment, and rotating a credential does not require a rebuild. The cost is that no server
+module may read config at the module-level while being imported.
 
 **Open:** no rotation process exists yet for suspected leaks.
 

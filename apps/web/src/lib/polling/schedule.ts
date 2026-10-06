@@ -38,7 +38,7 @@ export function pollIntervalMsForWorkerMode(workerMode: string | undefined): num
  * - `consecutiveFailures`: each one doubles `baseIntervalMs` — so a real outage doesn't keep
  *   hammering the server at the same steady cadence — capped at `BACKOFF_CAP_MS`.
  * - `baseIntervalMs`: the un-backed-off interval, from `pollIntervalMsForWorkerMode`. Browser
- *   code can't read `WORKER_MODE` itself (`$env/dynamic/private` is server-only), so the caller
+ *   code can't read `WORKER_MODE` itself (`$app/env/private` is server-only), so the caller
  *   threads it down from `+page.server.ts` instead of this module importing a constant.
  */
 export function nextPollDelayMs(state: {

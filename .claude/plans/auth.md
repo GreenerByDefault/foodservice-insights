@@ -92,7 +92,7 @@ Three details of that seam constrain what is left:
 - **`#lib/auth/testing/fake.ts`** gives component tests `fakeBrowserAuth()` (a `FakeBrowserAuth`,
   every method a typed `vi.fn()`) and `authError(code)`. Anything mounting the flow in a component
   test uses those rather than a client. A component that calls `browserAuth()` itself rather than
-  taking `auth` as a prop cannot even be imported in a component test — `$env/dynamic/public` has
+  taking `auth` as a prop cannot even be imported in a component test — `$app/env/public` has
   no environment there — so its test `vi.mock`s `#lib/auth/browser.js` to hand back a fake, as
   `(app)/shell/user-menu.svelte.test.ts` does.
 
@@ -262,7 +262,7 @@ the variable serves every visitor as one admin. Defaulting to `supabase` means a
 predates the variable gets 401s with no hint why. In `placeholder`, `init` also logs one warning, so
 a hosted log says which mode it is in.
 
-It is `PUBLIC_` and read through `$env/dynamic/public` by one parser, `#lib/auth/mode.ts`, because
+It is `PUBLIC_` and read through `$app/env/public` by one parser, `#lib/auth/mode.ts`, because
 both halves branch on it and the browser must not load supabase-js in `placeholder`. Components
 take what they need as a prop — `user-menu.svelte` gets `canSignOut` — rather than reading the
 environment themselves.
@@ -319,7 +319,7 @@ instead.
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
 | Email normalization in the form | Reused `#lib/forms/validation.js`'s `emailAddress` and `MAX_EMAIL_LENGTH`, not a schema of sign-in's own | It already trims, lowercases and caps at 254, matching `organization_invite_email_is_lowercase` — and GoTrue lowercases anyway, so the address the form sends is the address the fixtures read back |
 | OTP input | bits-ui `PinInput`, vendored as shadcn-svelte's `input-otp` in `#lib/components/ui/input-otp/index.js/` | `bits-ui` was already a dependency. The step completes itself on the last digit, so it is the self-completing exception in `apps/web/README.md` § Forms |
-| Env vars | `PUBLIC_AUTH_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public` (the last two landed with the form); `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
+| Env vars | `PUBLIC_AUTH_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$app/env/public` (the last two landed with the form); `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. Declaring them dynamic in `src/env.ts` is what makes `PUBLIC_*` safe here; `static: true` is the banned half |
 | Dependencies | `@supabase/ssr` ^0.12.7, `@supabase/supabase-js` ^2.116.0, both in the catalog, both `dependencies` of `apps/web` | Latest at the time; server code imports them, so not `devDependencies` |
 | Test sessions | `admin.createUser({ email, password, email_confirm: true })` once per user, then `signInWithPassword` per test, on the test stack only | Every password sign-in is an independent session, so any number of tests can be one user at once with nothing to coordinate. *Rejected: `generateLink` → `verifyOtp`, as CFA does.* GoTrue keeps one outstanding code per user (`one_time_tokens_user_id_token_type_key`), so two tests signing in as one user cancel each other's code. No real user has a password, and the Mailpit spec covers the real OTP path |
 | Screenshot text the identity owns | Minted users share one fixed display name, `MINTED_USER_DISPLAY_NAME`, so a monogram is stable. A spec whose image shows the *address* runs as the run's pinned identity, `test.use({ identity: 'pinned' })`. Its GoTrue address is unique to the run; the fixed address it shows exists only in the run database, which is where `loadAuthorization` reads `auth.users.email` and where GoTrue never writes (§ Two facts, 2) | Every GoTrue address is unique, so nothing is shared across runs or worktrees and the two-hour sweep needs no exceptions. Within a run, specs share the pinned identity the way they share a pinned `orgName`, which keeps them `fullyParallel`; nothing pinned is mutated or deleted |

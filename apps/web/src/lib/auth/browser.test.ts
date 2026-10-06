@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const { mockEnv, createBrowserClient } = vi.hoisted(() => ({
-  mockEnv: {} as Record<string, string>,
+  mockEnv: {
+    PUBLIC_SUPABASE_URL: undefined as string | undefined,
+    PUBLIC_SUPABASE_PUBLISHABLE_KEY: undefined as string | undefined,
+  },
   createBrowserClient: vi.fn(),
 }));
-vi.mock('$app/environment', () => ({ browser: true }));
-vi.mock('$env/dynamic/public', () => ({ env: mockEnv }));
+vi.mock('$app/env', () => ({ browser: true }));
+vi.mock('$app/env/public', () => mockEnv);
 vi.mock('@supabase/ssr', () => ({ createBrowserClient }));
 
 const signOut = vi.fn().mockResolvedValue({ error: null });
@@ -24,7 +27,8 @@ async function freshBrowserAuth() {
 }
 
 beforeEach(() => {
-  for (const name of Object.keys(mockEnv)) delete mockEnv[name];
+  mockEnv.PUBLIC_SUPABASE_URL = undefined;
+  mockEnv.PUBLIC_SUPABASE_PUBLISHABLE_KEY = undefined;
   createBrowserClient.mockReset().mockReturnValue({ auth: { signOut } });
   signOut.mockClear();
 });

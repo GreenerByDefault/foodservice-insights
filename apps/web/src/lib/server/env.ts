@@ -5,16 +5,18 @@
  * environment.
  */
 
-import { env as privateEnv } from '$env/dynamic/private';
-import { env as publicEnv } from '$env/dynamic/public';
+import * as privateEnv from '$app/env/private';
+import * as publicEnv from '$app/env/public';
 
 /** Read a private environment variable, or fail with a pointer at the setup instructions. */
-export function requirePrivateVar(name: string): string {
+export function requirePrivateVar(name: keyof typeof privateEnv): string {
+  // biome-ignore lint/performance/noDynamicNamespaceImportAccess: server-only, and every dynamic variable is read at runtime anyway, so there is nothing to tree-shake.
   return privateEnv[name] || missingVar(name);
 }
 
-/** `requirePrivateVar` for a `PUBLIC_` variable, which `$env/dynamic/private` does not carry. */
-export function requirePublicVar(name: `PUBLIC_${string}`): string {
+/** `requirePrivateVar` for a `PUBLIC_` variable, which `$app/env/private` does not carry. */
+export function requirePublicVar(name: keyof typeof publicEnv): string {
+  // biome-ignore lint/performance/noDynamicNamespaceImportAccess: server-only, and every dynamic variable is read at runtime anyway, so there is nothing to tree-shake.
   return publicEnv[name] || missingVar(name);
 }
 
