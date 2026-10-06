@@ -1,6 +1,6 @@
 import type { OrganizationRole } from '@gbd/db';
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
-import { organizationInvitesApiHref } from '$lib/hrefs';
+import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { organizationInvitesApiHref } from '#lib/hrefs.js';
 
 export type CreateInviteOutcome =
   | { kind: 'created'; inviteId: string; emailSent: boolean }

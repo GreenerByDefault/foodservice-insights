@@ -15,20 +15,20 @@ import {
 } from '@gbd/storage';
 import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
-import { reportHref } from '$lib/hrefs';
-import type { ReportMetadata } from '$lib/reports/metadata';
-import { type RejectedUploadRecord, userFacingRejection } from '$lib/reports/rejection';
-import type { FileDescription, RawSubmission, UploadedFile } from '$lib/reports/submission';
-import { readSubmission, validateSubmission } from '$lib/reports/submission';
-import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { logger } from '$lib/server/log';
+import { reportHref } from '#lib/hrefs.js';
+import type { ReportMetadata } from '#lib/reports/metadata.js';
+import { type RejectedUploadRecord, userFacingRejection } from '#lib/reports/rejection.js';
+import type { FileDescription, RawSubmission, UploadedFile } from '#lib/reports/submission.js';
+import { readSubmission, validateSubmission } from '#lib/reports/submission.js';
+import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { logger } from '#lib/server/log.js';
 import {
   describeRateLimitExceeded,
   lockAndCheckReportRateLimit,
   type RateLimitExceeded,
-} from '$lib/server/reports/rate-limit';
-import { blobStore, withBlobStoreErrorHandling } from '$lib/server/storage';
+} from '#lib/server/reports/rate-limit.js';
+import { blobStore, withBlobStoreErrorHandling } from '#lib/server/storage.js';
 import type { RequestHandler } from './$types';
 
 export type Uploader = { organizationId: OrganizationId; organizationSlug: string; userId: UserId };

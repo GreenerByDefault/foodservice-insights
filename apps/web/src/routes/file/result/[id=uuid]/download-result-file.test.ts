@@ -3,7 +3,7 @@ import { newResultFileId } from '@gbd/db';
 import { insertAnalysisAttempt, insertReport, insertResultFile } from '@gbd/db/testing';
 import { putResultFile } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
-import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
+import { withOrganizationFixtures } from '#lib/server/testing/fixtures.js';
 import { _downloadResultFile } from './+server.ts';
 
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7 fake');

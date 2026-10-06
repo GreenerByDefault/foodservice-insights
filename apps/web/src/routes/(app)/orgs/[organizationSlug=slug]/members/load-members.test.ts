@@ -1,8 +1,8 @@
 import type { UserId } from '@gbd/db';
 import { withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { anOrganizationWithMembers } from '$lib/server/testing/fixtures';
+import { database } from '#lib/server/db.js';
+import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { _loadMembers } from './+page.server.ts';
 
 describe('_loadMembers', () => {

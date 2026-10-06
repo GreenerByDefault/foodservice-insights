@@ -3,7 +3,7 @@ import { newInputFileId } from '@gbd/db';
 import { insertInputFile, insertReport } from '@gbd/db/testing';
 import { putInputFile } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
-import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
+import { withOrganizationFixtures } from '#lib/server/testing/fixtures.js';
 import { _downloadInputFile } from './+server.ts';
 
 const CSV = new TextEncoder().encode('product name,date ordered,weight\n');

@@ -7,9 +7,9 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
-import { statusOf } from '$lib/server/testing/http-error';
+import { database } from '#lib/server/db.js';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
+import { statusOf } from '#lib/server/testing/http-error.js';
 import { cancelActiveAttempt, requestCancellation } from './cancel';
 
 describe('cancelActiveAttempt', () => {

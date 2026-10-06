@@ -1,6 +1,6 @@
 /** The form field name and the schema for an organization's name, shared by create and rename. */
 
-import { requiredText } from '$lib/forms/validation';
+import { requiredText } from '#lib/forms/validation.js';
 
 export const FIELD = {
   // We use `organization-name` rather than `name` so that iOS does not offer to autofill a

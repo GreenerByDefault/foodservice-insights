@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_EMAIL_LENGTH } from '$lib/forms/validation';
+import { MAX_EMAIL_LENGTH } from '#lib/forms/validation.js';
 import { _initialEmail } from './+page.server.ts';
 
 describe('_initialEmail', () => {

@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { jsonResponse, stubFetch } from '$lib/testing/fetch';
-import { resetToastMocks, toast } from '$lib/testing/toast';
+import { jsonResponse, stubFetch } from '#lib/testing/fetch.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import PendingInviteRow from './pending-invite-row.svelte';
 import { aPendingInvite } from './testing/fixtures.ts';
 
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();

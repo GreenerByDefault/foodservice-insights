@@ -1,7 +1,7 @@
 <script lang="ts">
 import { APP_NAME } from '@gbd/core';
 import { page } from '$app/state';
-import { authMode } from '$lib/auth/mode';
+import { authMode } from '#lib/auth/mode.js';
 import type { LayoutProps } from './$types';
 import OrganizationSwitcher from './shell/organization-switcher.svelte';
 import UserMenu from './shell/user-menu.svelte';

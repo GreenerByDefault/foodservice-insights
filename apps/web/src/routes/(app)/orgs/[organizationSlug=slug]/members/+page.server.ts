@@ -6,8 +6,8 @@ import type {
   UserId,
 } from '@gbd/db';
 import { sql } from 'kysely';
-import { requireAuth } from '$lib/server/auth/guards';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
 import type { PageServerLoad } from './$types';
 import { MEMBERS_DEPENDENCY } from './dependencies.ts';
 

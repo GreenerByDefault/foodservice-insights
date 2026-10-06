@@ -21,7 +21,7 @@ export type FieldOrientation = VariantProps<typeof fieldVariants>['orientation']
 </script>
 
 <script lang="ts">
-import { cn, type WithElementRef } from '$lib/utils/shadcn.js';
+import { cn, type WithElementRef } from '#lib/utils/shadcn.js';
 import type { HTMLAttributes } from 'svelte/elements';
 
 let {

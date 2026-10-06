@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '$lib/auth/testing/fake';
+import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
 import EmailStep from './email-step.svelte';
 
 describe('EmailStep', () => {

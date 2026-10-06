@@ -1,17 +1,17 @@
 import type { AnalysisAttemptStatus, DatabaseExecutor, OrganizationId, ReportId } from '@gbd/db';
 import { sql } from 'kysely';
-import { env } from '$env/dynamic/private';
 import {
   newerReportsHref,
   newReportHref,
   olderReportsHref,
   reportHref,
   reportsPollHref,
-} from '$lib/hrefs';
-import { pollIntervalMsForWorkerMode } from '$lib/polling/schedule';
-import { screenStatus } from '$lib/reports/attempt-status';
-import type { Creator } from '$lib/reports/subheading';
-import { database, withDbErrorHandling } from '$lib/server/db';
+} from '#lib/hrefs.js';
+import { pollIntervalMsForWorkerMode } from '#lib/polling/schedule.js';
+import { screenStatus } from '#lib/reports/attempt-status.js';
+import type { Creator } from '#lib/reports/subheading.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
 import { parseCursor, type ReportsCursor } from './reports-list/pagination.ts';
 

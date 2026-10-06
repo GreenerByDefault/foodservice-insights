@@ -11,14 +11,14 @@ import {
 } from '@supabase/supabase-js';
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import * as mode from '$lib/auth/mode';
+import * as mode from '#lib/auth/mode.js';
 import { SERVER_LOGS } from '../testing/logs.ts';
 import { classifyAuthResult, identifyUser } from './identify.ts';
 
 const { createServerClient } = vi.hoisted(() => ({ createServerClient: vi.fn() }));
 vi.mock('@supabase/ssr', () => ({ createServerClient }));
-vi.mock('$lib/auth/mode', () => ({ authMode: vi.fn() }));
-vi.mock('$lib/server/env', () => ({ requirePublicVar: (name: string) => `<${name}>` }));
+vi.mock('#lib/auth/mode.js', () => ({ authMode: vi.fn() }));
+vi.mock('#lib/server/env.js', () => ({ requirePublicVar: (name: string) => `<${name}>` }));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 

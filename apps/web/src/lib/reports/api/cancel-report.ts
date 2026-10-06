@@ -1,5 +1,5 @@
-import { ApiError, apiCall } from '$lib/api/fetch';
-import { cancelReportApiHref } from '$lib/hrefs';
+import { ApiError, apiCall } from '#lib/api/fetch.js';
+import { cancelReportApiHref } from '#lib/hrefs.js';
 
 /** What happened when the user asked to cancel.
  *

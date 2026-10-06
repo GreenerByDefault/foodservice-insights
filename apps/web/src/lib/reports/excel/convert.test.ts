@@ -5,7 +5,7 @@ import {
   aWorkbookDeclaring,
   type WorkbookOptions,
   type WorkbookRow,
-} from '$lib/reports/excel/testing';
+} from '#lib/reports/excel/testing/index.js';
 import { MAX_WORKBOOK_UNPACKED_BYTES } from '../limits.ts';
 import { convertWorkbook } from './convert.ts';
 

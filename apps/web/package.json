@@ -59,5 +59,8 @@
     "vite": "catalog:",
     "vitest": "catalog:",
     "vitest-browser-svelte": "catalog:"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
   }
 }

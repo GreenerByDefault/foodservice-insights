@@ -1,13 +1,13 @@
 <script lang="ts">
 import MoreHorizontalIcon from '@lucide/svelte/icons/more-horizontal';
 import { toast } from 'svelte-sonner';
-import ConfirmAction from '$lib/components/confirm-action.svelte';
-import { Button } from '$lib/components/ui/button';
-import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-import type { ActionState } from '$lib/forms/action-state';
-import { changeMemberRole } from '$lib/orgs/api/change-member-role';
-import { removeMember } from '$lib/orgs/api/remove-member';
-import { focusPageHeading } from '$lib/utils/focus-page-heading';
+import ConfirmAction from '#lib/components/confirm-action.svelte';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+import type { ActionState } from '#lib/forms/action-state.js';
+import { changeMemberRole } from '#lib/orgs/api/change-member-role.js';
+import { removeMember } from '#lib/orgs/api/remove-member.js';
+import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 import type { MemberRow } from './+page.server.ts';
 import { confirmMemberWrite, LAST_ADMIN_MESSAGE } from './member-write.ts';
 

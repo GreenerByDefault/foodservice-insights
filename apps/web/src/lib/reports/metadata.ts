@@ -3,7 +3,7 @@
 import { exhaustiveArray } from '@gbd/core';
 import type { CountsBasis, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
-import { optionalText, parsedJson, requiredText } from '$lib/forms/validation';
+import { optionalText, parsedJson, requiredText } from '#lib/forms/validation.js';
 import { MAX_FREE_TEXT_LENGTH, MAX_MONTHS } from './limits.ts';
 
 /** The form field names, so the form and the parser cannot drift apart. */

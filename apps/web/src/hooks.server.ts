@@ -1,12 +1,12 @@
 import type { Handle, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
-import { authMode } from '$lib/auth/mode';
-import { UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
-import { loadAuthorization } from '$lib/server/auth/authorization';
-import { identifyUser } from '$lib/server/auth/identify';
-import type { AuthContext } from '$lib/server/auth/types';
-import { closeDatabase, database, withDbErrorHandling } from '$lib/server/db';
-import { logger } from '$lib/server/log';
-import { closeBlobStore } from '$lib/server/storage';
+import { authMode } from '#lib/auth/mode.js';
+import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
+import { loadAuthorization } from '#lib/server/auth/authorization.js';
+import { identifyUser } from '#lib/server/auth/identify.js';
+import type { AuthContext } from '#lib/server/auth/types.js';
+import { closeDatabase, database, withDbErrorHandling } from '#lib/server/db.js';
+import { logger } from '#lib/server/log.js';
+import { closeBlobStore } from '#lib/server/storage.js';
 
 /** The liveness probe reports on the database, so it must be able to answer without one. */
 const HEALTH_PATH = '/health';

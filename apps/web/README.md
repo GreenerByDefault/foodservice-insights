@@ -62,7 +62,7 @@ outcome.
 ## UI components
 
 **Anything under `src/lib` outside `server/` is imported by the browser.** The build rejects
-`$lib/server` and `$env/*/private` there, and nothing Node-only may go in either.
+`#lib/server` and `$env/*/private` there, and nothing Node-only may go in either.
 
 Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
 is purely vendored shadcn** — nothing hand-written goes there — so we own the components outright
@@ -197,7 +197,7 @@ rather than a variant of membership-table logic.
 ## Writes
 
 A write that changes something worth a record does one or two more things: every one of them
-records an audit event in the same transaction as the change (`$lib/server/audit.ts`); the subset
+records an audit event in the same transaction as the change (`#lib/server/audit.ts`); the subset
 `REQUIREMENTS.md` § GBD email notifications names also notifies GBD (`notifyGbd` in
-`$lib/server/email.ts`) once that transaction commits — never before, so a notification never
+`#lib/server/email.ts`) once that transaction commits — never before, so a notification never
 outlives a change that got rolled back.

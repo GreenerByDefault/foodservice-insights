@@ -1,9 +1,9 @@
 <script lang="ts">
 import { invalidateAll } from '$app/navigation';
-import { browserAuth } from '$lib/auth/browser';
-import SignInFlow from '$lib/components/auth/sign-in-flow.svelte';
-import PageHeading from '$lib/components/page-heading.svelte';
-import { describeError } from '$lib/errors/messages';
+import { browserAuth } from '#lib/auth/browser.js';
+import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
+import PageHeading from '#lib/components/page-heading.svelte';
+import { describeError } from '#lib/errors/messages.js';
 
 interface Props {
   status: number;

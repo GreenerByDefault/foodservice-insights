@@ -1,5 +1,5 @@
 import type { OrganizationInviteId, UserId } from '@gbd/db';
-import { jsonResponse } from '$lib/testing/fetch';
+import { jsonResponse } from '#lib/testing/fetch.js';
 import type { InviteRow, MemberRow } from '../+page.server.ts';
 
 export function aMember(overrides: Partial<MemberRow> = {}): MemberRow {

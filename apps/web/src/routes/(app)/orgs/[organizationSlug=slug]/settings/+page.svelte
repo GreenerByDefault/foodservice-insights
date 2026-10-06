@@ -1,6 +1,6 @@
 <script lang="ts">
-import PageHeading from '$lib/components/page-heading.svelte';
-import * as Field from '$lib/components/ui/field';
+import PageHeading from '#lib/components/page-heading.svelte';
+import * as Field from '#lib/components/ui/field/index.js';
 import type { PageProps } from './$types';
 import DeleteButton from './delete-button.svelte';
 import RenameForm from './rename-form.svelte';

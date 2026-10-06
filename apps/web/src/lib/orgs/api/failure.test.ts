@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
+import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
 import { classifyMemberWriteFailure, classifyNameWriteFailure } from './failure.ts';
 
 describe('classifyNameWriteFailure', () => {

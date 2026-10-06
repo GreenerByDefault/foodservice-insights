@@ -20,7 +20,7 @@ For how the database fits into the wider system, see [`ARCHITECTURE.md`](../../A
 Query helpers take a `DatabaseExecutor` as their first parameter, so a test can pass a
 rolled-back transaction where the app passes its long-lived handle.
 
-- **SvelteKit route handlers** call `database()` from `$lib/server/db`.
+- **SvelteKit route handlers** call `database()` from `#lib/server/db.js`.
 - **Everything outside the web app** imports `DATABASE` from `@gbd/db/env`.
 - **Tests** build rows with the fixtures in [`src/testing/fixtures.ts`](src/testing/fixtures.ts),
   exported from `@gbd/db/testing`, rather than inserting rows directly.

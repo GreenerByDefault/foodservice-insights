@@ -1,5 +1,5 @@
-import { apiCall } from '$lib/api/fetch';
-import { organizationApiHref } from '$lib/hrefs';
+import { apiCall } from '#lib/api/fetch.js';
+import { organizationApiHref } from '#lib/hrefs.js';
 import { classifyNameWriteFailure } from './failure.ts';
 
 export type RenameOrganizationOutcome =

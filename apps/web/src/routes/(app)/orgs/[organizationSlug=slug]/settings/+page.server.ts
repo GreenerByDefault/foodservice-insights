@@ -1,5 +1,5 @@
-import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
-import { database } from '$lib/server/db';
+import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
+import { database } from '#lib/server/db.js';
 import type { PageServerLoad } from './$types';
 
 /** The layout above only 404s someone with no access to the organization at all — a member

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { APP_NAME } from '@gbd/core';
-import PublicHeader from '$lib/components/public-header.svelte';
-import { Button } from '$lib/components/ui/button/index.js';
+import PublicHeader from '#lib/components/public-header.svelte';
+import { Button } from '#lib/components/ui/button/index.js';
 
 const steps = [
   {

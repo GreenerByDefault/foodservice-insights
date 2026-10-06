@@ -2,13 +2,13 @@ import { newInputFileId } from '@gbd/db';
 import { insertReport } from '@gbd/db/testing';
 import { listObjectKeys, organizationPrefix, putInputFile } from '@gbd/storage';
 import { describe, expect, test, vi } from 'vitest';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
-import { mockUnreachableEmailer, withOrganizationFixtures } from '$lib/server/testing/fixtures';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
+import { mockUnreachableEmailer, withOrganizationFixtures } from '#lib/server/testing/fixtures.js';
 import { _deleteOrganization } from './+server.ts';
 
 const CSV = new TextEncoder().encode('product name,date ordered,weight\n');
 
-vi.mock('$lib/server/email', (importOriginal) => mockUnreachableEmailer(importOriginal));
+vi.mock('#lib/server/email.js', (importOriginal) => mockUnreachableEmailer(importOriginal));
 
 describe('_deleteOrganization', () => {
   test('deletes the organization row', async () => {

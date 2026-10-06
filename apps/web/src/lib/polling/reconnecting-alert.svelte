@@ -1,6 +1,6 @@
 <script lang="ts">
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
-import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '#lib/components/ui/alert/index.js';
 
 let { subject }: { subject: 'report' | 'reports' } = $props();
 

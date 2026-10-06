@@ -6,7 +6,7 @@
 
 import type { Database, UserId } from '@gbd/db';
 import type { Selectable, Transaction } from 'kysely';
-import type { JsonValue } from '$lib/api/fetch';
+import type { JsonValue } from '#lib/api/fetch.js';
 import type { AuditAction, AuditTarget } from '../audit.ts';
 
 const AUDIT_EVENT_COLUMNS = [

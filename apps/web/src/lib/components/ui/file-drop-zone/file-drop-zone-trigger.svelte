@@ -1,5 +1,5 @@
 <script lang="ts">
-import { cn } from '$lib/utils/shadcn.js';
+import { cn } from '#lib/utils/shadcn.js';
 import { useFileDropZoneTrigger } from './file-drop-zone.svelte.js';
 import { displaySize } from './index.js';
 import type { FileDropZoneTriggerProps } from './types.js';

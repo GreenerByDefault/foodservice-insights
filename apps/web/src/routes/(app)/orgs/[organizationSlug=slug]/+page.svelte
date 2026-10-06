@@ -1,6 +1,6 @@
 <script lang="ts">
-import PageHeading from '$lib/components/page-heading.svelte';
-import { Button } from '$lib/components/ui/button';
+import PageHeading from '#lib/components/page-heading.svelte';
+import { Button } from '#lib/components/ui/button/index.js';
 import type { PageProps } from './$types';
 import ReportsView from './reports-list/reports-view.svelte';
 

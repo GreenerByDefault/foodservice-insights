@@ -16,11 +16,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '$lib/components/ui/alert-dialog';
-import { buttonVariants } from '$lib/components/ui/button';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
-import type { ActionState } from '$lib/forms/action-state';
+} from '#lib/components/ui/alert-dialog/index.js';
+import { buttonVariants } from '#lib/components/ui/button/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
+import type { ActionState } from '#lib/forms/action-state.js';
 
 /** The confirm dialog behind a destructive action that needs an "are you sure" step: the trigger,
  * the copy, and the loading/error state around one irreversible request.

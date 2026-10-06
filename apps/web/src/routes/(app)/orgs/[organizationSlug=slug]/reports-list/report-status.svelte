@@ -1,7 +1,7 @@
 <script lang="ts">
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 import type { AnalysisAttemptStatus } from '@gbd/db';
-import { STATUS_LABELS } from '$lib/reports/status-copy';
+import { STATUS_LABELS } from '#lib/reports/status-copy.js';
 
 interface Props {
   status: AnalysisAttemptStatus;

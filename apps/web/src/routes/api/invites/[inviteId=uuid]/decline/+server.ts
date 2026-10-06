@@ -1,10 +1,10 @@
 import type { DatabaseExecutor, OrganizationInviteId, UserId } from '@gbd/db';
 import { withTransaction } from '@gbd/db';
 import { json } from '@sveltejs/kit';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireAuth } from '$lib/server/auth/guards';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { lockInviteForEmailOrNotFound } from '$lib/server/invites/claim';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { lockInviteForEmailOrNotFound } from '#lib/server/invites/claim.js';
 import type { RequestHandler } from './$types';
 
 /** Decline an invite. Same guard as accepting, separate audit action. */

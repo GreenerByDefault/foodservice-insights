@@ -7,8 +7,8 @@
 
 import { json } from '@sveltejs/kit';
 import * as v from 'valibot';
-import { OrganizationNameSchema } from '$lib/orgs/name';
-import { parseBody } from '$lib/server/body';
+import { OrganizationNameSchema } from '#lib/orgs/name.js';
+import { parseBody } from '#lib/server/body.js';
 
 /** `body` if it holds a valid organization name, or the 400 response to send back otherwise. */
 export function parseOrganizationNameBody(

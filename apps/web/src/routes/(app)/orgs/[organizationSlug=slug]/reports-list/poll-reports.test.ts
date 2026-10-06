@@ -1,7 +1,7 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
-import { jsonResponse, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
+import { jsonResponse, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { pollReports } from './poll-reports.ts';
 
 const POLL_HREF = '/orgs/org-1/poll';

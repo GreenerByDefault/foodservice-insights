@@ -1,6 +1,6 @@
 import type { DatabaseExecutor, OrganizationId } from '@gbd/db';
-import type { AuthContext } from '$lib/server/auth/types';
-import { withDbErrorHandling } from '$lib/server/db';
+import type { AuthContext } from '#lib/server/auth/types.js';
+import { withDbErrorHandling } from '#lib/server/db.js';
 
 export type OrganizationRow = { id: OrganizationId; slug: string; name: string };
 

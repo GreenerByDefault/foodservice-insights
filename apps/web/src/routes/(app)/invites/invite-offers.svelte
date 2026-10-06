@@ -1,7 +1,7 @@
 <script lang="ts">
 import MailOpenIcon from '@lucide/svelte/icons/mail-open';
-import { Button } from '$lib/components/ui/button';
-import * as Card from '$lib/components/ui/card';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Card from '#lib/components/ui/card/index.js';
 import type { InviteOffer as InviteOfferRow } from './+page.server.ts';
 import InviteOffer from './invite-offer.svelte';
 

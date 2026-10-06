@@ -1,10 +1,10 @@
 import type { DatabaseExecutor, UserId } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import * as v from 'valibot';
-import { DisplayNameSchema } from '$lib/account/display-name';
-import { requireAuth } from '$lib/server/auth/guards';
-import { parseBody } from '$lib/server/body';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { DisplayNameSchema } from '#lib/account/display-name.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { parseBody } from '#lib/server/body.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
 import type { RequestHandler } from './$types';
 
 /** Rename yourself. Changing an email is not here: that is a browser-side Supabase call. */

@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { stubFetch, stubPendingFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import { goto } from '$app/navigation';
-import { stubFetch, stubPendingFetch, stubUnreachableFetch } from '$lib/testing/fetch';
-import { resetNavigationMocks } from '$lib/testing/navigation';
-import { resetToastMocks, toast } from '$lib/testing/toast';
 import DeleteButton from './delete-button.svelte';
 
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 const ORGANIZATION_SLUG = 'org-1';
 const REPORT_ID = 'report-1';

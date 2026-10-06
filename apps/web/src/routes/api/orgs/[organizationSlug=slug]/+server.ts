@@ -1,14 +1,14 @@
 import { type DatabaseExecutor, type OrganizationId, withTransaction } from '@gbd/db';
 import { deletePrefix, isBlobStoreError, organizationPrefix } from '@gbd/storage';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireAuth } from '$lib/server/auth/guards';
-import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
-import type { Actor } from '$lib/server/auth/types';
-import { database, isUniqueViolation, withDbErrorHandling } from '$lib/server/db';
-import { notifyGbd } from '$lib/server/email';
-import { logger } from '$lib/server/log';
-import { nameTakenResponse, parseOrganizationNameBody } from '$lib/server/orgs/name';
-import { blobStore } from '$lib/server/storage';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database, isUniqueViolation, withDbErrorHandling } from '#lib/server/db.js';
+import { notifyGbd } from '#lib/server/email.js';
+import { logger } from '#lib/server/log.js';
+import { nameTakenResponse, parseOrganizationNameBody } from '#lib/server/orgs/name.js';
+import { blobStore } from '#lib/server/storage.js';
 import type { RequestHandler } from './$types';
 
 /** Rename `organizationId`. Admin only. */

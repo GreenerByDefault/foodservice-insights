@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import type { Problem } from '../csv/describe/index.ts';
 import { uploadReport } from './upload.ts';
 

@@ -1,7 +1,7 @@
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
+import { database } from '#lib/server/db.js';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
 import { _renameOrganization } from './+server.ts';
 
 describe('a valid name', () => {

@@ -1,8 +1,8 @@
 <script lang="ts">
-import { createPoller } from '$lib/polling/create-poller.svelte';
-import ReconnectingAlert from '$lib/polling/reconnecting-alert.svelte';
-import { isWaiting, settledStatus } from '$lib/reports/attempt-status';
-import { SETTLED_IN_LIST } from '$lib/reports/status-copy';
+import { createPoller } from '#lib/polling/create-poller.svelte.js';
+import ReconnectingAlert from '#lib/polling/reconnecting-alert.svelte';
+import { isWaiting, settledStatus } from '#lib/reports/attempt-status.js';
+import { SETTLED_IN_LIST } from '#lib/reports/status-copy.js';
 import type { ReportListRow, ReportsPageData } from '../+page.server.ts';
 import { pollReports } from './poll-reports.ts';
 import ReportsList from './reports-list.svelte';

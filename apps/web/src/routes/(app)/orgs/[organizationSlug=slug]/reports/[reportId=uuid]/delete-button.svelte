@@ -2,9 +2,9 @@
 import Trash2Icon from '@lucide/svelte/icons/trash-2';
 import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
-import ConfirmAction from '$lib/components/confirm-action.svelte';
-import { organizationHref } from '$lib/hrefs';
-import { deleteReport } from '$lib/reports/api/delete-report';
+import ConfirmAction from '#lib/components/confirm-action.svelte';
+import { organizationHref } from '#lib/hrefs.js';
+import { deleteReport } from '#lib/reports/api/delete-report.js';
 
 interface Props {
   organizationSlug: string;

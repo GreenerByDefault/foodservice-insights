@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { lastFetchCall, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { goto } from '$app/navigation';
-import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
-import { resetNavigationMocks } from '$lib/testing/navigation';
 import CreateOrganizationForm from './create-organization-form.svelte';
 
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();

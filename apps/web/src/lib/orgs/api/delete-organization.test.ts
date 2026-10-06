@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
-import { stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
+import { stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { deleteOrganization } from './delete-organization.ts';
 
 afterEach(() => {

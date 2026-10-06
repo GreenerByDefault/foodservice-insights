@@ -9,7 +9,7 @@ import {
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
-import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '$lib/errors/messages';
+import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { requirePrivateVar } from './env.ts';
 import { logger } from './log.ts';
 

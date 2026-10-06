@@ -2,10 +2,10 @@ import type { RejectedUploadReason, ReportId } from '@gbd/db';
 import { insertReport } from '@gbd/db/testing';
 import { getObject } from '@gbd/storage';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_FIELD_BYTES } from '$lib/reports/limits';
-import { FIELD } from '$lib/reports/metadata';
-import { lockAndCheckReportRateLimit } from '$lib/server/reports/rate-limit';
-import { withOrganizationFixtures } from '$lib/server/testing/fixtures';
+import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_FIELD_BYTES } from '#lib/reports/limits.js';
+import { FIELD } from '#lib/reports/metadata.js';
+import { lockAndCheckReportRateLimit } from '#lib/server/reports/rate-limit.js';
+import { withOrganizationFixtures } from '#lib/server/testing/fixtures.js';
 import { _createReport } from './+server.ts';
 
 // A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
@@ -15,8 +15,8 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // Only `lockAndCheckReportRateLimit` is mocked, and it defaults to the real implementation — a
 // test below overrides it for one call to simulate the recheck losing a race that the initial
 // check won.
-vi.mock('$lib/server/reports/rate-limit', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('$lib/server/reports/rate-limit')>();
+vi.mock('#lib/server/reports/rate-limit.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/server/reports/rate-limit.js')>();
   return { ...actual, lockAndCheckReportRateLimit: vi.fn(actual.lockAndCheckReportRateLimit) };
 });
 

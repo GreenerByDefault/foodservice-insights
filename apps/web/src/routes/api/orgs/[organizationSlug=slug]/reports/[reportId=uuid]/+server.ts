@@ -5,12 +5,12 @@ import {
   withTransaction,
 } from '@gbd/db';
 import { sql } from 'kysely';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireReportRouteContext } from '$lib/server/auth/route-context';
-import type { Actor } from '$lib/server/auth/types';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { cancelActiveAttempt } from '$lib/server/reports/cancel';
-import { requireReportAccess } from '$lib/server/reports/guards';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireReportRouteContext } from '#lib/server/auth/route-context.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { cancelActiveAttempt } from '#lib/server/reports/cancel.js';
+import { requireReportAccess } from '#lib/server/reports/guards.js';
 import type { RequestHandler } from './$types';
 
 /** Delete a report; requests cancellation of its in-flight attempt too. */

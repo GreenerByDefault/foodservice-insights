@@ -1,7 +1,7 @@
 import { DB_NOW, dbMsAgo, insertOrganizationInvite, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { anOrganizationWithMembers } from '$lib/server/testing/fixtures';
+import { database } from '#lib/server/db.js';
+import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { _loadPendingInvites } from './+page.server.ts';
 
 describe('_loadPendingInvites', () => {

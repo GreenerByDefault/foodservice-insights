@@ -7,20 +7,20 @@ import {
   withTransaction,
 } from '@gbd/db';
 import { json } from '@sveltejs/kit';
-import { organizationHref } from '$lib/hrefs';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireAuth } from '$lib/server/auth/guards';
-import type { Actor } from '$lib/server/auth/types';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { notifyGbd } from '$lib/server/email';
+import { organizationHref } from '#lib/hrefs.js';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { notifyGbd } from '#lib/server/email.js';
 import {
   nameTakenResponse,
   parseOrganizationNameBody,
   slugReservedResponse,
   slugTakenResponse,
   slugUnderivableResponse,
-} from '$lib/server/orgs/name';
-import { deriveOrganizationSlug } from '$lib/server/orgs/slug';
+} from '#lib/server/orgs/name.js';
+import { deriveOrganizationSlug } from '#lib/server/orgs/slug.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, locals }) => {

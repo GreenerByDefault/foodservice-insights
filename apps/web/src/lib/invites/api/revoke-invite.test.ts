@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
-import { expectFetched, jsonResponse, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
+import {
+  expectFetched,
+  jsonResponse,
+  stubFetch,
+  stubUnreachableFetch,
+} from '#lib/testing/fetch.js';
 import { revokeInvite } from './revoke-invite.ts';
 
 afterEach(() => {

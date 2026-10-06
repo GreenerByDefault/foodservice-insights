@@ -5,7 +5,7 @@
  */
 
 import type { ReportId } from '@gbd/db';
-import { apiCall } from '$lib/api/fetch';
+import { apiCall } from '#lib/api/fetch.js';
 import type { ReportListRow, ReportsPollData } from '../+page.server.ts';
 
 type WireReportListRow = Omit<ReportListRow, 'createdAt' | 'now'> & {
@@ -16,7 +16,7 @@ type WireReportListRow = Omit<ReportListRow, 'createdAt' | 'now'> & {
 type WireReportsPollData = Omit<ReportsPollData, 'reports'> & { reports: WireReportListRow[] };
 
 /** Throws `ApiError` on a non-2xx response, `ApiUnreachableError` if none arrived — see
- * `$lib/api/fetch.ts`. */
+ * `#lib/api/fetch.ts`. */
 export async function pollReports(pollHref: string, ids: ReportId[]): Promise<ReportsPollData> {
   const response = await apiCall(pollHref, { method: 'POST', body: JSON.stringify({ ids }) });
   const wire: WireReportsPollData = await response.json();

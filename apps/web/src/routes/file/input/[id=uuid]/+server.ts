@@ -3,9 +3,9 @@
 import type { DatabaseExecutor, InputFileId } from '@gbd/db';
 import type { BlobStore } from '@gbd/storage';
 import { error } from '@sveltejs/kit';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { redirectToSignedUrl } from '$lib/server/files';
-import { blobStore } from '$lib/server/storage';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { redirectToSignedUrl } from '#lib/server/files.js';
+import { blobStore } from '#lib/server/storage.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params }) =>

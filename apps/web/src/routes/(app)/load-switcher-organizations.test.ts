@@ -1,7 +1,7 @@
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { anAuthContext, anOrganizationAccess } from '$lib/server/testing/fixtures';
+import { database } from '#lib/server/db.js';
+import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
 import { _loadSwitcherOrganizations } from './+layout.server.ts';
 import { SWITCHER_LIMIT } from './shell/switcher-limit';
 

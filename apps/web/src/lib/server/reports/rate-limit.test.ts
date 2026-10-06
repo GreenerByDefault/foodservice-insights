@@ -11,8 +11,8 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { HOURLY_REPORT_LIMIT, WEEKLY_REPORT_LIMIT } from '$lib/reports/limits';
-import { database } from '$lib/server/db';
+import { HOURLY_REPORT_LIMIT, WEEKLY_REPORT_LIMIT } from '#lib/reports/limits.js';
+import { database } from '#lib/server/db.js';
 import {
   checkReportRateLimit,
   describeRateLimitExceeded,

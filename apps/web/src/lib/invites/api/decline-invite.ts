@@ -1,5 +1,5 @@
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
-import { declineInviteApiHref } from '$lib/hrefs';
+import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { declineInviteApiHref } from '#lib/hrefs.js';
 
 /** `declined` covers dismissing an expired invite too: the endpoint answers both with a 204. */
 export type DeclineInviteOutcome =

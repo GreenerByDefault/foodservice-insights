@@ -5,11 +5,11 @@
 import type { DatabaseExecutor } from '@gbd/db';
 import { redirect } from '@sveltejs/kit';
 import { sql } from 'kysely';
-import { organizationHref } from '$lib/hrefs';
-import { requireAuth } from '$lib/server/auth/guards';
-import type { AuthContext } from '$lib/server/auth/types';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { listOrganizations, type OrganizationRow } from '$lib/server/orgs/list';
+import { organizationHref } from '#lib/hrefs.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import type { AuthContext } from '#lib/server/auth/types.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { listOrganizations, type OrganizationRow } from '#lib/server/orgs/list.js';
 import type { PageServerLoad } from './$types';
 
 export type OrganizationListRow = OrganizationRow;

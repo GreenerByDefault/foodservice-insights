@@ -1,8 +1,8 @@
 <script lang="ts">
 import { invalidateAll } from '$app/navigation';
-import DisplayNameForm from '$lib/components/account/display-name-form.svelte';
-import PageHeading from '$lib/components/page-heading.svelte';
-import * as Field from '$lib/components/ui/field';
+import DisplayNameForm from '#lib/components/account/display-name-form.svelte';
+import PageHeading from '#lib/components/page-heading.svelte';
+import * as Field from '#lib/components/ui/field/index.js';
 import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();

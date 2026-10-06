@@ -1,4 +1,4 @@
-import { ApiError, apiCall } from '$lib/api/fetch';
+import { ApiError, apiCall } from '#lib/api/fetch.js';
 import { classifyNameWriteFailure } from './failure.ts';
 
 export type CreateOrganizationOutcome =

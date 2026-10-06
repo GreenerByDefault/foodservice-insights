@@ -9,15 +9,15 @@ import {
 import { json } from '@sveltejs/kit';
 import { sql } from 'kysely';
 import * as v from 'valibot';
-import { emailAddress } from '$lib/forms/validation';
-import { HOURLY_INVITE_LIMIT } from '$lib/invites/limits';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireAuth } from '$lib/server/auth/guards';
-import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
-import type { Actor } from '$lib/server/auth/types';
-import { parseBody } from '$lib/server/body';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { sendInvite } from '$lib/server/email';
+import { emailAddress } from '#lib/forms/validation.js';
+import { HOURLY_INVITE_LIMIT } from '#lib/invites/limits.js';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { parseBody } from '#lib/server/body.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { sendInvite } from '#lib/server/email.js';
 import type { RequestHandler } from './$types';
 
 const CreateInviteBodySchema = v.object({

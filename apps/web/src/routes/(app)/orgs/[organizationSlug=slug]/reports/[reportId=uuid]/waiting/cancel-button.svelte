@@ -1,6 +1,6 @@
 <script lang="ts">
-import ConfirmAction from '$lib/components/confirm-action.svelte';
-import { cancelReport } from '$lib/reports/api/cancel-report';
+import ConfirmAction from '#lib/components/confirm-action.svelte';
+import { cancelReport } from '#lib/reports/api/cancel-report.js';
 
 interface Props {
   organizationSlug: string;

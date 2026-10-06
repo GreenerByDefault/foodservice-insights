@@ -1,6 +1,6 @@
-import { requireReportRouteContext } from '$lib/server/auth/route-context';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { requestCancellation } from '$lib/server/reports/cancel';
+import { requireReportRouteContext } from '#lib/server/auth/route-context.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { requestCancellation } from '#lib/server/reports/cancel.js';
 import type { RequestHandler } from './$types';
 
 /** Cancel a running analysis. */

@@ -3,7 +3,7 @@
 import type { Database, OrganizationId, ReportId } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
-import type { Actor } from '$lib/server/auth/types';
+import type { Actor } from '#lib/server/auth/types.js';
 
 /** The report `reportId`, if `actor` may act on it — a 404 or 403 otherwise.
  *

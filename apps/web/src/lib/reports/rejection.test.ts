@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ApiError, type JsonValue } from '$lib/api/fetch';
+import { ApiError, type JsonValue } from '#lib/api/fetch.js';
 import type { Problem } from './csv/describe/index.ts';
 import {
   parseUploadRejection,

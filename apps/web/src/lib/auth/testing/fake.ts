@@ -1,6 +1,6 @@
 import type { AuthError } from '@supabase/supabase-js';
 import { type Mock, vi } from 'vitest';
-import type { BrowserAuth } from '$lib/auth/browser';
+import type { BrowserAuth } from '#lib/auth/browser.js';
 
 /** A `BrowserAuth` whose every method is a `vi.fn()`, so the sign-in form can be driven without a
  * Supabase client, a network, or an environment. Assignable to `BrowserAuth`, while still

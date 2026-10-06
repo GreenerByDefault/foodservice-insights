@@ -1,6 +1,6 @@
 <script lang="ts">
-import PageHeading from '$lib/components/page-heading.svelte';
-import { subheading, type Creator } from '$lib/reports/subheading';
+import PageHeading from '#lib/components/page-heading.svelte';
+import { subheading, type Creator } from '#lib/reports/subheading.js';
 
 interface Props {
   name: string;

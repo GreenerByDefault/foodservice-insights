@@ -2,11 +2,11 @@ import type { Database, OrganizationId, UserId } from '@gbd/db';
 import { insertOrganizationMember, withRollback } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import type { Actor } from '$lib/server/auth/types';
-import { database } from '$lib/server/db';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
-import { anOrganizationWithMembers } from '$lib/server/testing/fixtures';
-import { statusOf } from '$lib/server/testing/http-error';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database } from '#lib/server/db.js';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
+import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
+import { statusOf } from '#lib/server/testing/http-error.js';
 import { _changeMemberRole } from './+server.ts';
 
 /** An organization and its sole admin, acting as themselves — the preamble every situation below

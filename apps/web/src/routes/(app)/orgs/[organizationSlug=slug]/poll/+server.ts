@@ -1,8 +1,8 @@
 import type { ReportId } from '@gbd/db';
 import { error, json } from '@sveltejs/kit';
 import * as v from 'valibot';
-import { requireOrganizationRouteContext } from '$lib/server/auth/route-context';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { _loadReportsByIds } from '../+page.server.ts';
 import type { RequestHandler } from './$types';
 

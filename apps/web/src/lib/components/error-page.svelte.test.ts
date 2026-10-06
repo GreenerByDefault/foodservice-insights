@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { fakeBrowserAuth } from '#lib/auth/testing/fake.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { invalidateAll } from '$app/navigation';
-import { fakeBrowserAuth } from '$lib/auth/testing/fake';
-import { resetNavigationMocks } from '$lib/testing/navigation';
 import ErrorPage from './error-page.svelte';
 
 const auth = vi.hoisted(() => ({ current: null as ReturnType<typeof fakeBrowserAuth> | null }));
-vi.mock('$lib/auth/browser', () => ({ browserAuth: () => auth.current }));
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('#lib/auth/browser.js', () => ({ browserAuth: () => auth.current }));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
 beforeEach(() => {
   auth.current = fakeBrowserAuth();

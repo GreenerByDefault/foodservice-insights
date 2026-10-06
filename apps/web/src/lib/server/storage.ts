@@ -5,7 +5,7 @@ import {
   shutdownBlobStore,
 } from '@gbd/storage';
 import { error } from '@sveltejs/kit';
-import { SERVICE_UNAVAILABLE_ERROR } from '$lib/errors/messages';
+import { SERVICE_UNAVAILABLE_ERROR } from '#lib/errors/messages.js';
 import { requirePrivateVar } from './env.ts';
 import { logger } from './log.ts';
 

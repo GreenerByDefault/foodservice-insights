@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { expectFetched, jsonResponse, stubFetch } from '$lib/testing/fetch';
+import { expectFetched, jsonResponse, stubFetch } from '#lib/testing/fetch.js';
 import { changeMemberRole } from './change-member-role.ts';
 
 afterEach(() => {

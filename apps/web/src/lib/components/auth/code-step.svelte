@@ -2,11 +2,11 @@
 import { REGEXP_ONLY_DIGITS } from 'bits-ui';
 import { onDestroy, tick } from 'svelte';
 import { toast } from 'svelte-sonner';
-import type { BrowserAuth } from '$lib/auth/browser';
-import { describeAuthError, FIELD, OTP_LENGTH, RESEND_COOLDOWN_S } from '$lib/auth/sign-in';
-import { Button } from '$lib/components/ui/button';
-import * as Field from '$lib/components/ui/field';
-import * as InputOTP from '$lib/components/ui/input-otp';
+import type { BrowserAuth } from '#lib/auth/browser.js';
+import { describeAuthError, FIELD, OTP_LENGTH, RESEND_COOLDOWN_S } from '#lib/auth/sign-in.js';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import * as InputOTP from '#lib/components/ui/input-otp/index.js';
 
 interface Props {
   auth: BrowserAuth;

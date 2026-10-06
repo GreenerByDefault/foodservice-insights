@@ -1,6 +1,6 @@
 <script lang="ts">
-import * as Card from '$lib/components/ui/card';
-import PageHeading from '$lib/components/page-heading.svelte';
+import * as Card from '#lib/components/ui/card/index.js';
+import PageHeading from '#lib/components/page-heading.svelte';
 import type { PageProps } from './$types';
 import InviteForm from './invite-form.svelte';
 import MembersList from './members-list.svelte';

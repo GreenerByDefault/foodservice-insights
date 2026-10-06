@@ -1,7 +1,7 @@
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { anAuthContext, anOrganizationAccess } from '$lib/server/testing/fixtures';
+import { database } from '#lib/server/db.js';
+import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
 import { _loadAllOrganizations } from './+page.server.ts';
 
 test('a non-superadmin gets their own memberships, not the organization table', async () => {

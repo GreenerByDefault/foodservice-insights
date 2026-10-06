@@ -1,14 +1,14 @@
 <script lang="ts">
 import type { CountsBasis } from '@gbd/db';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
-import type { MonthsFromFile } from '$lib/reports/metadata';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
+import type { MonthsFromFile } from '#lib/reports/metadata.js';
 import {
   type CountDraft,
   formatMonth,
   groupByYear,
   missingMonthCount,
-} from '$lib/reports/monthly-counts';
+} from '#lib/reports/monthly-counts.js';
 
 interface Props {
   months: MonthsFromFile;

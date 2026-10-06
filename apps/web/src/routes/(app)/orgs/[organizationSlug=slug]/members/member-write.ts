@@ -1,5 +1,5 @@
-import { ConfirmActionError } from '$lib/components/confirm-action.svelte';
-import type { MemberWriteOutcome } from '$lib/orgs/api/failure';
+import { ConfirmActionError } from '#lib/components/confirm-action.svelte';
+import type { MemberWriteOutcome } from '#lib/orgs/api/failure.js';
 
 export const LAST_ADMIN_MESSAGE = "You're the only admin. Make someone else an admin first.";
 

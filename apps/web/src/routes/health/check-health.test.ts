@@ -1,9 +1,9 @@
 import { divideByZero, withRollback } from '@gbd/db/testing';
 import { initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { requirePrivateVar } from '$lib/server/env';
-import { blobStore } from '$lib/server/storage';
+import { database } from '#lib/server/db.js';
+import { requirePrivateVar } from '#lib/server/env.js';
+import { blobStore } from '#lib/server/storage.js';
 import { _checkHealth } from './+server.ts';
 
 describe('_checkHealth', () => {

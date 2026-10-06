@@ -1,6 +1,6 @@
 import { insertAppUser, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
+import { database } from '#lib/server/db.js';
 import { _renameSelf } from './+server.ts';
 
 describe('_renameSelf', () => {

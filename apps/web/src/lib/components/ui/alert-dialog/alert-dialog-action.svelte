@@ -4,8 +4,8 @@ import {
   buttonVariants,
   type ButtonVariant,
   type ButtonSize,
-} from '$lib/components/ui/button/index.js';
-import { cn } from '$lib/utils/shadcn.js';
+} from '#lib/components/ui/button/index.js';
+import { cn } from '#lib/utils/shadcn.js';
 
 let {
   ref = $bindable(null),

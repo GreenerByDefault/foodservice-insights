@@ -1,6 +1,6 @@
 <script lang="ts">
 import { page } from '$app/state';
-import { organizationHref, organizationMembersHref, organizationSettingsHref } from '$lib/hrefs';
+import { organizationHref, organizationMembersHref, organizationSettingsHref } from '#lib/hrefs.js';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { stubFetch, stubPendingFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { stubFetch, stubPendingFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { atRetryCapFailure, notRetryableFailure, retryableFailure } from '../testing/fixtures.ts';
 import FailureView from './failure-view.svelte';
 

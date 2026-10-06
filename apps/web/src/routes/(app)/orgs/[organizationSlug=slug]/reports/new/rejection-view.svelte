@@ -1,8 +1,8 @@
 <script lang="ts">
-import { Button } from '$lib/components/ui/button';
-import { formatRowSpan } from '$lib/reports/csv/describe';
-import type { UploadRejection } from '$lib/reports/rejection';
-import { cn } from '$lib/utils/shadcn';
+import { Button } from '#lib/components/ui/button/index.js';
+import { formatRowSpan } from '#lib/reports/csv/describe/index.js';
+import type { UploadRejection } from '#lib/reports/rejection.js';
+import { cn } from '#lib/utils/shadcn.js';
 
 interface Props {
   rejection: UploadRejection;

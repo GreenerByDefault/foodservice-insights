@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ConfirmActionError } from '$lib/components/confirm-action.svelte';
+import { ConfirmActionError } from '#lib/components/confirm-action.svelte';
 import { confirmMemberWrite, LAST_ADMIN_MESSAGE } from './member-write.ts';
 
 describe('confirmMemberWrite', () => {

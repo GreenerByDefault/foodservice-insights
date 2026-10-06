@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { authError, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import { goto } from '$app/navigation';
-import { authError, fakeBrowserAuth } from '$lib/auth/testing/fake';
-import { resetNavigationMocks } from '$lib/testing/navigation';
-import { resetToastMocks, toast } from '$lib/testing/toast';
 import UserMenu from './user-menu.svelte';
 
 const auth = vi.hoisted(() => ({ current: null as ReturnType<typeof fakeBrowserAuth> | null }));
-vi.mock('$lib/auth/browser', () => ({ browserAuth: () => auth.current }));
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('#lib/auth/browser.js', () => ({ browserAuth: () => auth.current }));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 beforeEach(() => {
   auth.current = fakeBrowserAuth();
