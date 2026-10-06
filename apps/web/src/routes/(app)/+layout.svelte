@@ -41,6 +41,8 @@ const currentOrganization = $derived(page.data.organization);
     </div>
   </header>
 
+  <!-- Lists span this full width; a form caps itself at `max-w-md`. `items-start` shrinks a child
+       to its content, so a page's wrapper needs `w-full` or its width varies with its data. -->
   <main class="mx-auto flex w-full max-w-4xl flex-1 flex-col items-start gap-4 px-6 py-8 sm:px-8">
     {@render children()}
   </main>
