@@ -2,6 +2,7 @@
 import { APP_NAME } from '@gbd/core';
 import PublicHeader from '#lib/components/public-header.svelte';
 import { Button } from '#lib/components/ui/button/index.js';
+import { pageTitle } from '#lib/page-title.js';
 
 const steps = [
   {
@@ -20,7 +21,7 @@ const steps = [
 </script>
 
 <svelte:head>
-  <title>{APP_NAME}</title>
+  <title>{pageTitle()}</title>
   <meta
     name="description"
     content="Upload your foodservice purchasing data and get back a report on its climate impact, with recommendations."

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { ensureHydrated } from '@gbd/browser-testing';
+import { APP_NAME } from '@gbd/core';
 import type { ReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
 import { succeedLatestAttempt } from '../fixtures/reports.ts';
@@ -24,7 +25,7 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
   await page.getByRole('button', { name: 'Upload report' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/orgs/${org.slug}/reports/[0-9a-f-]+$`));
-  await expect(page).toHaveTitle('Q1 procurement');
+  await expect(page).toHaveTitle(`Q1 procurement · ${org.name} · ${APP_NAME}`);
 });
 
 test('uploading a CSV with bad rows shows the rejection view, naming them, without ever submitting', async ({

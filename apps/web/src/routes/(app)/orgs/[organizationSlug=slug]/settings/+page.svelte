@@ -4,9 +4,14 @@ import * as Field from '#lib/components/ui/field/index.js';
 import type { PageProps } from './$types';
 import DeleteButton from './delete-button.svelte';
 import RenameForm from './rename-form.svelte';
+import { pageTitle } from '#lib/page-title.js';
 
 let { data }: PageProps = $props();
 </script>
+
+<svelte:head>
+  <title>{pageTitle('Settings', data.organization.name)}</title>
+</svelte:head>
 
 <PageHeading>Settings</PageHeading>
 

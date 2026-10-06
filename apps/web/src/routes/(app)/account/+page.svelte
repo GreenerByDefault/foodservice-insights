@@ -4,9 +4,14 @@ import DisplayNameForm from '#lib/components/account/display-name-form.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import * as Field from '#lib/components/ui/field/index.js';
 import type { PageProps } from './$types';
+import { pageTitle } from '#lib/page-title.js';
 
 let { data }: PageProps = $props();
 </script>
+
+<svelte:head>
+  <title>{pageTitle('Account')}</title>
+</svelte:head>
 
 <PageHeading>Account</PageHeading>
 

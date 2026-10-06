@@ -1,17 +1,17 @@
 <script lang="ts">
-import { APP_NAME } from '@gbd/core';
 import { invalidateAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
 import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import PublicShell from '#lib/components/public-shell.svelte';
+import { pageTitle } from '#lib/page-title.js';
 import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 </script>
 
 <svelte:head>
-  <title>Sign in · {APP_NAME}</title>
+  <title>{pageTitle('Sign in')}</title>
 </svelte:head>
 
 <!-- Supabase is called from the browser — `signInWithOtp`, then `verifyOtp` — so no route of ours
