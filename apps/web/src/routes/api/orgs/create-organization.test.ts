@@ -157,7 +157,7 @@ describe('a name that derives to a reserved slug', () => {
 });
 
 describe('an invalid name', () => {
-  test.for([null, '', '   ', 'x'.repeat(1000)])('answers 400 for %j', async (name) => {
+  test.for([null, '', '   ', 'x', 'x'.repeat(1000)])('answers 400 for %j', async (name) => {
     await withRollback(database(), async (transaction) => {
       const creator = await anOrganizationCreator(transaction);
 

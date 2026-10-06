@@ -2,22 +2,41 @@
 
 import * as v from 'valibot';
 
-/** A text field the user may leave blank. Empty becomes `null`, which is what a nullable column holds. */
-export function optionalText(maxLength: number) {
+/** The shortest name we accept, for every kind of name: long enough to catch a slip like `a`, short
+ * enough for a real name like `Va` or `3M`.
+ *
+ * Enforced here and by the browser's `minlength`, not by a CHECK: both count UTF-16 code units,
+ * where Postgres's `char_length` counts code points, so a CHECK would refuse a lone emoji that the
+ * form had accepted. */
+export const MIN_NAME_LENGTH = 2;
+
+interface TextLimits {
+  readonly minLength: number;
+  readonly maxLength: number;
+}
+
+/** A text field the user may leave blank. Empty becomes `null`, which is what a nullable column
+ * holds; the minimum applies only to text the user did enter. */
+export function optionalText({ minLength, maxLength }: TextLimits) {
   return v.pipe(
     v.nullable(v.string()),
     v.transform((value) => value?.trim() ?? ''),
+    v.check(
+      (value) => value === '' || value.length >= minLength,
+      `needs at least ${minLength} characters`,
+    ),
     v.maxLength(maxLength),
     v.transform((value) => value || null),
   );
 }
 
 /** A text field the user must fill in. Trims whitespace, then rejects empty. */
-export function requiredText(maxLength: number) {
+export function requiredText({ minLength, maxLength }: TextLimits) {
   return v.pipe(
     v.nullable(v.string()),
     v.transform((value) => value?.trim() ?? ''),
     v.nonEmpty('is required'),
+    v.minLength(minLength, `needs at least ${minLength} characters`),
     v.maxLength(maxLength),
   );
 }

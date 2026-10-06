@@ -9,6 +9,7 @@ import type { FileRejectedReason } from '#lib/components/ui/file-drop-zone/index
 import * as Field from '#lib/components/ui/field/index.js';
 import { Input } from '#lib/components/ui/input/index.js';
 import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.js';
+import { MIN_NAME_LENGTH } from '#lib/forms/validation.js';
 import { organizationHref } from '#lib/hrefs.js';
 import { inspectFile } from '#lib/reports/inspect-file.js';
 import {
@@ -219,6 +220,7 @@ function backToForm() {
         <Input
           id={FIELD.name}
           name={FIELD.name}
+          minlength={MIN_NAME_LENGTH}
           maxlength={MAX_FREE_TEXT_LENGTH}
           required
           autocomplete="off"
@@ -231,6 +233,7 @@ function backToForm() {
         <Input
           id="site-name"
           name={FIELD.siteName}
+          minlength={MIN_NAME_LENGTH}
           maxlength={MAX_FREE_TEXT_LENGTH}
           autocomplete="off"
           bind:value={siteName}

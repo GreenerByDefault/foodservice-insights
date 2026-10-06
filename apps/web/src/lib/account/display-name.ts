@@ -1,7 +1,7 @@
 /** The form field name and the schema for a person's display name, shared by `/account` and
  * onboarding. */
 
-import { requiredText } from '#lib/forms/validation.js';
+import { MIN_NAME_LENGTH, requiredText } from '#lib/forms/validation.js';
 
 export const FIELD = {
   displayName: 'display-name',
@@ -13,4 +13,7 @@ export const FIELD = {
  * together. */
 export const MAX_DISPLAY_NAME_LENGTH = 100;
 
-export const DisplayNameSchema = requiredText(MAX_DISPLAY_NAME_LENGTH);
+export const DisplayNameSchema = requiredText({
+  minLength: MIN_NAME_LENGTH,
+  maxLength: MAX_DISPLAY_NAME_LENGTH,
+});
