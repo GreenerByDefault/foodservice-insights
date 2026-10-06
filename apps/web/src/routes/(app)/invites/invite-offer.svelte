@@ -8,6 +8,7 @@ import * as Card from '$lib/components/ui/card';
 import { organizationHref } from '$lib/hrefs';
 import { acceptInvite } from '$lib/invites/api/accept-invite';
 import { declineInvite } from '$lib/invites/api/decline-invite';
+import { focusPageHeading } from '$lib/utils/focus-page-heading';
 import type { InviteOffer } from './+page.server.ts';
 
 interface Props {
@@ -55,6 +56,7 @@ async function decline() {
       : "Couldn't decline this invitation — please try again.";
   } else {
     await invalidateAll();
+    await focusPageHeading();
     toast.success(
       invite.isExpired
         ? `Dismissed the invitation to ${invite.organizationName}`

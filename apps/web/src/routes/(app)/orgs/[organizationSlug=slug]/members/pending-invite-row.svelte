@@ -4,6 +4,7 @@ import { Button } from '$lib/components/ui/button';
 import RelativeTime from '$lib/components/relative-time.svelte';
 import type { ActionState } from '$lib/forms/action-state';
 import { revokeInvite } from '$lib/invites/api/revoke-invite';
+import { focusPageHeading } from '$lib/utils/focus-page-heading';
 import type { InviteRow } from './+page.server.ts';
 
 /** One row of `pending-invites.svelte`'s list: the invite's own state, and its Revoke button.
@@ -27,6 +28,7 @@ async function revoke() {
     await revokeInvite(organizationSlug, invite.inviteId);
     actionState = { status: 'idle' };
     await onRevoked();
+    await focusPageHeading();
     toast.success(`Revoked the invitation for ${invite.email}`);
   } catch {
     actionState = { status: 'error', message: "Couldn't revoke this invite — please try again." };

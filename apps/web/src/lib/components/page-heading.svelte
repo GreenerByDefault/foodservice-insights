@@ -9,4 +9,5 @@ interface Props {
 let { children }: Props = $props();
 </script>
 
-<h1 class="text-2xl font-semibold tracking-tight">{@render children()}</h1>
+<!-- `tabindex="-1"`: lets `focusPageHeading` land focus here without adding a tab stop. -->
+<h1 tabindex="-1" class="text-2xl font-semibold tracking-tight">{@render children()}</h1>

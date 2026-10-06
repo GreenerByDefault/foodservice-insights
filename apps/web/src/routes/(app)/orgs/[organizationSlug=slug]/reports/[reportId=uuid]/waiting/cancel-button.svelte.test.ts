@@ -76,7 +76,7 @@ describe('CancelButton', () => {
     await expect.poll(() => onReportChanged.mock.calls.length).toBe(1);
   });
 
-  test('while the request is in flight, the confirm button is disabled', async () => {
+  test('while the request is in flight, the confirm button is disabled and busy', async () => {
     const { resolve } = stubPendingFetch();
     const screen = await render(CancelButton, {
       organizationSlug: ORGANIZATION_SLUG,
@@ -87,7 +87,9 @@ describe('CancelButton', () => {
     await screen.getByRole('button', { name: 'Cancel report' }).click();
     await screen.getByRole('button', { name: 'Yes, cancel report' }).click();
 
-    await expect.element(screen.getByRole('button', { name: 'Yes, cancel report' })).toBeDisabled();
+    const confirm = screen.getByRole('button', { name: 'Yes, cancel report' });
+    await expect.element(confirm).toBeDisabled();
+    await expect.element(confirm).toHaveAttribute('aria-busy', 'true');
 
     resolve(new Response(null, { status: 204 }));
     await expect.poll(() => onReportChanged.mock.calls.length).toBe(1);

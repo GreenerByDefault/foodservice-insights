@@ -91,6 +91,23 @@ describe('MemberActions', () => {
       expect(toast.success).not.toHaveBeenCalled();
     });
 
+    test('the menu trigger is disabled and busy while the change is in flight', async () => {
+      const pending = Promise.withResolvers<Response>();
+      vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending.promise));
+      const screen = await opened({
+        organizationSlug: 'org-1',
+        member: aMember({ displayName: 'Ana Ruiz', role: 'member' }),
+        onDone: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await screen.getByRole('menuitem', { name: 'Make admin' }).click();
+
+      const trigger = screen.getByRole('button', { name: 'Manage Ana Ruiz' });
+      await expect.element(trigger).toBeDisabled();
+      await expect.element(trigger).toHaveAttribute('aria-busy', 'true');
+      pending.resolve(new Response(null, { status: 204 }));
+    });
+
     // This is the one "any other failure" case worth keeping: `setRole` renders its own alert
     // rather than going through `ConfirmAction`, so nothing else covers its fallback message.
     test('any other failure shows a generic message', async () => {
