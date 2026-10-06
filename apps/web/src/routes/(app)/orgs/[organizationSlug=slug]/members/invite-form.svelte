@@ -87,6 +87,7 @@ async function handleSubmit(event: SubmitEvent) {
         name={FIELD.role}
         value={role}
         onValueChange={(value) => (role = value as OrganizationRole)}
+        class="flex gap-6"
       >
         <Field.Label>
           <RadioGroupItem value="member" />

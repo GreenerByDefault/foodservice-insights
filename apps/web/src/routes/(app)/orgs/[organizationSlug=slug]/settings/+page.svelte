@@ -10,8 +10,13 @@ let { data }: PageProps = $props();
 
 <PageHeading>Settings</PageHeading>
 
-<RenameForm organizationSlug={data.organization.slug} initialName={data.organization.name} />
+<div class="flex w-full max-w-md flex-col gap-4">
+  <RenameForm organizationSlug={data.organization.slug} initialName={data.organization.name} />
 
-<Field.Separator />
+  <Field.Separator />
 
-<DeleteButton organizationSlug={data.organization.slug} organizationName={data.organization.name} />
+  <DeleteButton
+    organizationSlug={data.organization.slug}
+    organizationName={data.organization.name}
+  />
+</div>

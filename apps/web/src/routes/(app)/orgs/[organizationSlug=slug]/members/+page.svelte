@@ -1,5 +1,4 @@
 <script lang="ts">
-import * as Card from '#lib/components/ui/card/index.js';
 import PageHeading from '#lib/components/page-heading.svelte';
 import type { PageProps } from './$types';
 import InviteForm from './invite-form.svelte';
@@ -16,50 +15,34 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
 
 <PageHeading>Members</PageHeading>
 
-<div class="space-y-6">
-  <Card.Root>
-    <Card.Content>
-      <MembersList
-        members={data.members}
-        organizationSlug={data.organization.slug}
-        viewerRole={data.role}
-      />
-    </Card.Content>
-  </Card.Root>
+<div class="flex w-full flex-col gap-10">
+  <MembersList
+    members={data.members}
+    organizationSlug={data.organization.slug}
+    viewerRole={data.role}
+  />
 
   {#if data.invites}
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Pending invitations</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <PendingInvites invites={data.invites} organizationSlug={data.organization.slug} />
-      </Card.Content>
-    </Card.Root>
+    <section class="flex flex-col gap-3">
+      <h2 class="font-medium">Pending invitations</h2>
+      <PendingInvites invites={data.invites} organizationSlug={data.organization.slug} />
+    </section>
 
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Invite someone</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <InviteForm organizationSlug={data.organization.slug} />
-      </Card.Content>
-    </Card.Root>
+    <section class="flex max-w-md flex-col gap-3">
+      <h2 class="font-medium">Invite someone</h2>
+      <InviteForm organizationSlug={data.organization.slug} />
+    </section>
   {/if}
 
   {#if viewerUserId}
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Your membership</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <YourMembership
-          organizationSlug={data.organization.slug}
-          {viewerUserId}
-          viewerRole={data.role}
-          organizationName={data.organization.name}
-        />
-      </Card.Content>
-    </Card.Root>
+    <section class="flex flex-col gap-3">
+      <h2 class="font-medium">Your membership</h2>
+      <YourMembership
+        organizationSlug={data.organization.slug}
+        {viewerUserId}
+        viewerRole={data.role}
+        organizationName={data.organization.name}
+      />
+    </section>
   {/if}
 </div>

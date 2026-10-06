@@ -54,6 +54,9 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
            viewer's own row: that's the "Your membership" section's job, not this menu's. -->
       {#if viewerRole === 'admin' && !member.isYou}
         <MemberActions {organizationSlug} {member} onDone={() => invalidate(MEMBERS_DEPENDENCY)} />
+      {:else if viewerRole === 'admin'}
+        <!-- Holds the menu's place, so the viewer's role lines up with everyone else's. -->
+        <span class="size-9 shrink-0"></span>
       {/if}
     </li>
   {/snippet}

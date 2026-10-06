@@ -89,7 +89,7 @@ test('the roster as an admin, the viewer among them', async ({ page, organizatio
 
   await page.goto(`/orgs/${organizationSlug}/members`);
 
-  await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible();
   // `exact: true`, since each row's own "⋯" menu carries a sr-only "Manage {name}" label that
   // would otherwise also match a plain substring search.
   await expect(page.getByText('Priya Shah', { exact: true })).toBeVisible();
@@ -131,7 +131,7 @@ test('the roster as a member, who administers none of it', async ({ page, organi
 
   await page.goto(`/orgs/${organizationSlug}/members`);
 
-  await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible();
   await expect(page.getByText('Priya Shah', { exact: true })).toBeVisible();
   await expect(page.getByText('(You)')).toBeVisible();
   // No row offers a menu, not even their own — the admin-only "⋯".
