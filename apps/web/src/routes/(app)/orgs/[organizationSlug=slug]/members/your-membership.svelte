@@ -43,30 +43,32 @@ async function leave() {
   Leave organization
 {/snippet}
 
-<Field.Set>
+<Field.Set class="gap-3">
   <Field.Description>
     {viewerRole === 'admin'
       ? "You're an admin of this organization."
       : "You're a member of this organization."}
   </Field.Description>
-  {#if viewerRole === 'admin'}
+  <div class="flex flex-wrap gap-2">
+    {#if viewerRole === 'admin'}
+      <ConfirmAction
+        trigger={stepDownTrigger}
+        title="Step down as admin?"
+        description="You'll lose admin access to this organization. Another admin can make you one again."
+        confirmLabel="Yes, step down"
+        cancelLabel="Stay admin"
+        errorMessage="Could not update your role. Please try again."
+        onConfirm={stepDown}
+      />
+    {/if}
     <ConfirmAction
-      trigger={stepDownTrigger}
-      title="Step down as admin?"
-      description="You'll lose admin access to this organization. Another admin can make you one again."
-      confirmLabel="Yes, step down"
-      cancelLabel="Stay admin"
-      errorMessage="Could not update your role. Please try again."
-      onConfirm={stepDown}
+      trigger={leaveTrigger}
+      title="Leave this organization?"
+      description="You'll lose access to its reports and files. Another admin can add you back."
+      confirmLabel="Yes, leave"
+      cancelLabel="Stay"
+      errorMessage="Could not leave this organization. Please try again."
+      onConfirm={leave}
     />
-  {/if}
-  <ConfirmAction
-    trigger={leaveTrigger}
-    title="Leave this organization?"
-    description="You'll lose access to its reports and files. Another admin can add you back."
-    confirmLabel="Yes, leave"
-    cancelLabel="Stay"
-    errorMessage="Could not leave this organization. Please try again."
-    onConfirm={leave}
-  />
+  </div>
 </Field.Set>
