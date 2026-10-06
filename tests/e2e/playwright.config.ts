@@ -32,7 +32,6 @@ export default defineConfig(
         image: containerImages.web,
         runName,
         port,
-        baseURL,
         stack: containerStackFromEnv(),
       }),
       gracefulShutdown: { signal: 'SIGTERM', timeout: 15_000 },

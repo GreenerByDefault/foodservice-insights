@@ -13,6 +13,7 @@ test("a user outside the organization gets 404 for its report, and can't change 
   org,
   reports,
   users,
+  baseURL,
 }) => {
   const reportId = await reports.create('pending');
   const bystander = (await users.contextFor(await users.create())).request;
@@ -21,8 +22,13 @@ test("a user outside the organization gets 404 for its report, and can't change 
   expect((await request.get(reportHref(org.slug, reportId))).status()).toBe(200);
 
   expect((await bystander.get(reportHref(org.slug, reportId))).status()).toBe(404);
-  expect((await bystander.post(cancelReportApiHref(org.slug, reportId))).status()).toBe(404);
-  expect((await bystander.delete(reportApiHref(org.slug, reportId))).status()).toBe(404);
+  // With an origin, as a browser's own fetch would send; SvelteKit 3's CSRF check 403s a bodyless
+  // mutation without one before any handler runs.
+  const asBrowser = { headers: { origin: baseURL as string } };
+  expect((await bystander.post(cancelReportApiHref(org.slug, reportId), asBrowser)).status()).toBe(
+    404,
+  );
+  expect((await bystander.delete(reportApiHref(org.slug, reportId), asBrowser)).status()).toBe(404);
 
   const report = await db
     .selectFrom('report')
