@@ -85,8 +85,8 @@ catalog:
   '@supabase/supabase-js': ^2.117.2
 
   # --- Vitest -----------------------------------------------------------------
-  vitest: 4.1.10
-  '@vitest/browser-playwright': 4.1.10
+  vitest: 4.1.11
+  '@vitest/browser-playwright': 4.1.11
   vitest-browser-svelte: 3.1.0
 
   # --- Playwright -------------------------------------------------------------
@@ -105,3 +105,12 @@ patchedDependencies:
 # Dockerfile) prunes it out of scope entirely — pnpm would otherwise treat the patch above as
 # unused and fail that deploy.
 allowUnusedPatches: true
+
+# Security floors for transitive deps whose parents have not yet bumped them. Drop an entry once
+# the lockfile resolves past it without help (`pnpm audit` is clean).
+overrides:
+  brace-expansion@5: ^5.0.12
+  cookie@<0.7.0: ^0.7.0
+  devalue@<5.9.3: ^5.9.3
+  nanoid@3: ^3.3.18
+  source-map-js@<1.2.2: ^1.2.2
