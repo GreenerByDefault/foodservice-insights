@@ -68,7 +68,7 @@ describe('a name already taken', () => {
 });
 
 describe('an invalid name', () => {
-  test.for([null, '', '   ', 'x'.repeat(1000)])('answers 400 for %j', async (name) => {
+  test.for([null, '', '   ', 'x', 'x'.repeat(1000)])('answers 400 for %j', async (name) => {
     await withRollback(database(), async (transaction) => {
       const { organization, admin } = await insertOrganization(transaction);
 

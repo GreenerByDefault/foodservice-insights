@@ -5,6 +5,7 @@ import { renameSelf } from '#lib/account/api/rename-self.js';
 import { Button } from '#lib/components/ui/button/index.js';
 import * as Field from '#lib/components/ui/field/index.js';
 import { Input } from '#lib/components/ui/input/index.js';
+import { MIN_NAME_LENGTH } from '#lib/forms/validation.js';
 
 interface Props {
   initialName: string;
@@ -45,6 +46,7 @@ async function handleSubmit(event: SubmitEvent) {
     <Input
       id={FIELD.displayName}
       name={FIELD.displayName}
+      minlength={MIN_NAME_LENGTH}
       maxlength={MAX_DISPLAY_NAME_LENGTH}
       required
       autocomplete="name"

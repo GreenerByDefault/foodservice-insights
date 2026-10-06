@@ -48,6 +48,10 @@ describe('ReportMetadataSchema', () => {
     test('rejects a name over the cap', () => {
       expect(parse({ name: 'x'.repeat(1000) }).success).toBe(false);
     });
+
+    test('rejects a one-character name', () => {
+      expect(parse({ name: 'x' }).success).toBe(false);
+    });
   });
 
   describe('site name, an optional field', () => {
@@ -65,6 +69,10 @@ describe('ReportMetadataSchema', () => {
 
     test('rejects a site name over the cap', () => {
       expect(parse({ siteName: 'x'.repeat(1000) }).success).toBe(false);
+    });
+
+    test('rejects a one-character site name', () => {
+      expect(parse({ siteName: 'x' }).success).toBe(false);
     });
   });
 

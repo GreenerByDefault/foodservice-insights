@@ -20,6 +20,14 @@ describe('DisplayNameSchema', () => {
     expect(parse(name).success).toBe(false);
   });
 
+  test('rejects a one-character name', () => {
+    expect(parse('V').success).toBe(false);
+  });
+
+  test('accepts a two-character name', () => {
+    expect(parse('Va').success).toBe(true);
+  });
+
   test('rejects a name over the cap', () => {
     expect(parse('x'.repeat(MAX_DISPLAY_NAME_LENGTH + 1)).success).toBe(false);
   });

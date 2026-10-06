@@ -40,6 +40,7 @@ describe('_renameSelf', () => {
     ['null', { displayName: null }],
     ['empty', { displayName: '' }],
     ['blank', { displayName: '   ' }],
+    ['one-character', { displayName: 'x' }],
     ['over 100 chars', { displayName: 'x'.repeat(101) }],
     ['missing', {}],
   ] as const)('answers 400 for a %s displayName', async ([, body]) => {

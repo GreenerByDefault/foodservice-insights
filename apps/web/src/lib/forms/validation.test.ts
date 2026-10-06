@@ -19,7 +19,7 @@ function issuesOf<TSchema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unk
 }
 
 describe('optionalText', () => {
-  const schema = optionalText(5);
+  const schema = optionalText({ minLength: 2, maxLength: 5 });
 
   test.for([
     ['  hello  ', 'hello'],
@@ -34,10 +34,18 @@ describe('optionalText', () => {
   test('rejects text over the cap', () => {
     expect(v.safeParse(schema, 'hello!').success).toBe(false);
   });
+
+  test('rejects text under the minimum, once trimmed', () => {
+    expect(v.safeParse(schema, ' a ').success).toBe(false);
+  });
+
+  test('accepts text at the minimum', () => {
+    expect(v.parse(schema, 'ab')).toBe('ab');
+  });
 });
 
 describe('requiredText', () => {
-  const schema = requiredText(5);
+  const schema = requiredText({ minLength: 2, maxLength: 5 });
 
   test.for([
     ['  hello  ', 'hello'],
@@ -52,6 +60,14 @@ describe('requiredText', () => {
 
   test('rejects text over the cap', () => {
     expect(v.safeParse(schema, 'hello!').success).toBe(false);
+  });
+
+  test('rejects text under the minimum, once trimmed', () => {
+    expect(v.safeParse(schema, ' a ').success).toBe(false);
+  });
+
+  test('accepts text at the minimum', () => {
+    expect(v.parse(schema, 'ab')).toBe('ab');
   });
 });
 

@@ -1,6 +1,6 @@
 /** The form field name and the schema for an organization's name, shared by create and rename. */
 
-import { requiredText } from '#lib/forms/validation.js';
+import { MIN_NAME_LENGTH, requiredText } from '#lib/forms/validation.js';
 
 export const FIELD = {
   // We use `organization-name` rather than `name` so that iOS does not offer to autofill a
@@ -13,4 +13,7 @@ export const FIELD = {
  * `@gbd/db` here would pull `pg` into the browser bundle. `name.test.ts` pins the two together. */
 export const MAX_ORGANIZATION_NAME_LENGTH = 100;
 
-export const OrganizationNameSchema = requiredText(MAX_ORGANIZATION_NAME_LENGTH);
+export const OrganizationNameSchema = requiredText({
+  minLength: MIN_NAME_LENGTH,
+  maxLength: MAX_ORGANIZATION_NAME_LENGTH,
+});
