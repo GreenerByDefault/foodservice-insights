@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { rejectionWith } from '$lib/reports/csv/testing';
-import type { UploadRejection } from '$lib/reports/rejection';
+import { rejectionWith } from '#lib/reports/csv/testing/index.js';
+import type { UploadRejection } from '#lib/reports/rejection.js';
 import RejectionView from './rejection-view.svelte';
 
 describe('RejectionView', () => {

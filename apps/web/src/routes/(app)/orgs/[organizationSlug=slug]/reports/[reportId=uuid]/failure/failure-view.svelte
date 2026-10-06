@@ -2,9 +2,9 @@
 import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 import MailIcon from '@lucide/svelte/icons/mail';
 import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-import { Button } from '$lib/components/ui/button';
-import { retryReport } from '$lib/reports/api/retry-report';
-import type { ActionState } from '$lib/forms/action-state';
+import { Button } from '#lib/components/ui/button/index.js';
+import { retryReport } from '#lib/reports/api/retry-report.js';
+import type { ActionState } from '#lib/forms/action-state.js';
 import DeleteButton from '../delete-button.svelte';
 import type { FailureCopy } from './failure-copy.ts';
 import StatusLine from '../status-line.svelte';

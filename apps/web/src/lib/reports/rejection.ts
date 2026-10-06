@@ -1,7 +1,7 @@
 /** Why an upload never became a report. */
 
 import type { RejectedUploadReason } from '@gbd/db';
-import type { ApiError } from '$lib/api/fetch';
+import type { ApiError } from '#lib/api/fetch.js';
 import type { Problem } from './csv/describe/index.ts';
 
 export type RejectedUploadRecord = {

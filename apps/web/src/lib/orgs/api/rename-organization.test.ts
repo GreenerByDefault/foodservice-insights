@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { lastFetchCall, stubFetch } from '$lib/testing/fetch';
+import { lastFetchCall, stubFetch } from '#lib/testing/fetch.js';
 import { renameOrganization } from './rename-organization.ts';
 
 afterEach(() => {

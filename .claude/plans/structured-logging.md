@@ -50,10 +50,10 @@ Facts from the tree (2026-09-28) that shape the design:
   A failing loop goes through `failureStreak` in `failures.ts`, which logs the first failure of a
   streak and its recovery — the claim poll and every `startTicker` take one. Each exit is one
   record from `spawn.ts`, its stderr tail trimmed from the front to fit the bound.
-- **The web app's server code calls `logger()`** from `$lib/server/log.ts`, which today just
-  returns `rootLogger()`. That root sits alone in `$lib/server/root-log.ts`, built lazily for the
+- **The web app's server code calls `logger()`** from `#lib/server/log.ts`, which today just
+  returns `rootLogger()`. That root sits alone in `#lib/server/root-log.ts`, built lazily for the
   reason `database()` is lazy, so that the server test project's setup file can mock it onto
-  `SERVER_LOGS` (a `collectingLogger()` in `$lib/server/testing/logs.ts`, cleared before each test)
+  `SERVER_LOGS` (a `collectingLogger()` in `#lib/server/testing/logs.ts`, cleared before each test)
   while `logger()` itself stays real. `sendInvite(inviteId, message)` logs the invite's id, not the
   recipient. `init` installs the same two `fatal` process handlers as the worker, behind its
   listener guard. `biome.json`'s `noConsole` covers `src/lib/server/**`, `src/hooks.server.ts` and

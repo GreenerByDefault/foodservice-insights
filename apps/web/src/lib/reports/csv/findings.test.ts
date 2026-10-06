@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { weightFinding } from '$lib/reports/csv/testing';
+import { weightFinding } from '#lib/reports/csv/testing/index.js';
 import { MAX_EXAMPLE_VALUES, MAX_ROW_RANGES_REPORTED } from '../limits.ts';
 import {
   type DateOrderFinding,

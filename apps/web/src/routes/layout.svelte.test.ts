@@ -3,20 +3,20 @@ import type { Session } from '@supabase/supabase-js';
 import { createRawSnippet } from 'svelte';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { browserAuth } from '#lib/auth/browser.js';
+import type { AuthMode } from '#lib/auth/mode.js';
+import { type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { invalidateAll } from '$app/navigation';
-import { browserAuth } from '$lib/auth/browser';
-import type { AuthMode } from '$lib/auth/mode';
-import { type FakeBrowserAuth, fakeBrowserAuth } from '$lib/auth/testing/fake';
-import { resetNavigationMocks } from '$lib/testing/navigation';
 import Layout from './+layout.svelte';
 
 const state = vi.hoisted(() => ({
   auth: null as FakeBrowserAuth | null,
   mode: 'supabase' as AuthMode,
 }));
-vi.mock('$lib/auth/browser', () => ({ browserAuth: vi.fn(() => state.auth) }));
-vi.mock('$lib/auth/mode', () => ({ authMode: () => state.mode }));
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('#lib/auth/browser.js', () => ({ browserAuth: vi.fn(() => state.auth) }));
+vi.mock('#lib/auth/mode.js', () => ({ authMode: () => state.mode }));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
 beforeEach(() => {
   state.auth = fakeBrowserAuth();

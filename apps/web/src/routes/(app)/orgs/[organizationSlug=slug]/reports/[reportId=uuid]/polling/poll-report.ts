@@ -6,7 +6,7 @@
  * runtime is deliberate: this is our own endpoint, from the same deploy, not third-party input.
  */
 
-import { apiCall } from '$lib/api/fetch';
+import { apiCall } from '#lib/api/fetch.js';
 import type { Attempt, ReportPageData, ResultFiles } from '../+page.server.ts';
 import type { FailureCopy } from '../failure/failure-copy.ts';
 
@@ -29,7 +29,7 @@ type WireReportPageData = Omit<ReportPageData, 'now' | 'attempt'> & {
 };
 
 /** Throws `ApiError` on a non-2xx response, `ApiUnreachableError` if none arrived — see
- * `$lib/api/fetch.ts`. */
+ * `#lib/api/fetch.ts`. */
 export async function pollReport(pollHref: string): Promise<ReportPageData> {
   const response = await apiCall(pollHref);
   const wire: WireReportPageData = await response.json();

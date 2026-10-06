@@ -1,14 +1,14 @@
 import type { UserId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { expectFetched, jsonResponse, stubFetch } from '$lib/testing/fetch';
-import { resetToastMocks, toast } from '$lib/testing/toast';
+import { expectFetched, jsonResponse, stubFetch } from '#lib/testing/fetch.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import type { MemberRow } from './+page.server.ts';
 import MemberActions from './member-actions.svelte';
 import { LAST_ADMIN_MESSAGE } from './member-write.ts';
 import { aMember, lastAdminResponse } from './testing/fixtures.ts';
 
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();

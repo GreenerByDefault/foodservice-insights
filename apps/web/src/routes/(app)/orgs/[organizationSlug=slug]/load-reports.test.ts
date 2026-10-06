@@ -14,8 +14,8 @@ import {
   olderReportsHref,
   reportHref,
   reportsPollHref,
-} from '$lib/hrefs';
-import { database } from '$lib/server/db';
+} from '#lib/hrefs.js';
+import { database } from '#lib/server/db.js';
 import { _loadReports, _loadReportsByIds, _REPORTS_PAGE_SIZE } from './+page.server.ts';
 import type { ReportsCursor } from './reports-list/pagination.ts';
 

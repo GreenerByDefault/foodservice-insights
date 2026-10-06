@@ -22,10 +22,10 @@ import {
   type User,
 } from '@supabase/supabase-js';
 import { error, type RequestEvent } from '@sveltejs/kit';
-import { authMode } from '$lib/auth/mode';
-import { SERVICE_UNAVAILABLE_ERROR } from '$lib/errors/messages';
-import { requirePublicVar } from '$lib/server/env';
-import { logger } from '$lib/server/log';
+import { authMode } from '#lib/auth/mode.js';
+import { SERVICE_UNAVAILABLE_ERROR } from '#lib/errors/messages.js';
+import { requirePublicVar } from '#lib/server/env.js';
+import { logger } from '#lib/server/log.js';
 
 export async function identifyUser(event: RequestEvent): Promise<UserId | null> {
   if (authMode() === 'placeholder') return PLACEHOLDER_USER_ID;

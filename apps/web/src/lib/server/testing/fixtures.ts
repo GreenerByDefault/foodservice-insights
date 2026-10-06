@@ -124,11 +124,11 @@ export function anEmail(): string {
   return `${crypto.randomUUID()}@example.test`;
 }
 
-/** A `vi.mock('$lib/server/email', ...)` factory aimed at a port nothing listens on, so a test
+/** A `vi.mock('#lib/server/email.js', ...)` factory aimed at a port nothing listens on, so a test
  * proves `notifyGbd`'s own catch rather than depending on whatever Mailpit happens to be doing
  * locally.
  *
- * Use as `vi.mock('$lib/server/email', (importOriginal) => mockUnreachableEmailer(importOriginal))`
+ * Use as `vi.mock('#lib/server/email.js', (importOriginal) => mockUnreachableEmailer(importOriginal))`
  * — not a bare reference, which vi.mock's hoisting evaluates before this import is initialized. */
 export async function mockUnreachableEmailer(
   importOriginal: () => Promise<typeof import('../email.ts')>,

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { page } from '$app/state';
-import ErrorPage from '$lib/components/error-page.svelte';
-import PublicShell from '$lib/components/public-shell.svelte';
+import ErrorPage from '#lib/components/error-page.svelte';
+import PublicShell from '#lib/components/public-shell.svelte';
 </script>
 
 <!-- The boundary for everything outside a signed-in page: a bad URL, a failure in `handle`, and —

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { invalidate } from '$app/navigation';
-import ItemList from '$lib/components/item-list.svelte';
+import ItemList from '#lib/components/item-list.svelte';
 import type { InviteRow } from './+page.server.ts';
 import { MEMBERS_DEPENDENCY } from './dependencies.ts';
 import PendingInviteRow from './pending-invite-row.svelte';

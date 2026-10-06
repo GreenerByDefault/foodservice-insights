@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
 import { invalidate } from '$app/navigation';
-import ItemList from '$lib/components/item-list.svelte';
+import ItemList from '#lib/components/item-list.svelte';
 import MemberActions from './member-actions.svelte';
 import type { MemberRow } from './+page.server.ts';
 import { MEMBERS_DEPENDENCY } from './dependencies.ts';

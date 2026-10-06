@@ -1,8 +1,8 @@
 import type { DatabaseExecutor } from '@gbd/db';
-import { requireAuth } from '$lib/server/auth/guards';
-import type { AuthContext } from '$lib/server/auth/types';
-import { database } from '$lib/server/db';
-import { listOrganizations, type OrganizationRow } from '$lib/server/orgs/list';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import type { AuthContext } from '#lib/server/auth/types.js';
+import { database } from '#lib/server/db.js';
+import { listOrganizations, type OrganizationRow } from '#lib/server/orgs/list.js';
 import type { LayoutServerLoad } from './$types';
 import { SWITCHER_LIMIT } from './shell/switcher-limit';
 
@@ -10,7 +10,7 @@ export type SwitcherOrganization = OrganizationRow;
 
 /** The gate for everything inside `(app)`: a request gets no further without an identity.
  *
- * `requireAuth` throws a 401 rather than becoming a redirect to `/sign-in`: `$lib/components/
+ * `requireAuth` throws a 401 rather than becoming a redirect to `/sign-in`: `#lib/components/
  * error-page.svelte` renders a message today, and will offer sign-in in place once auth lands, so
  * the page the user actually asked for renders as soon as `invalidateAll()` re-runs this load.
  */

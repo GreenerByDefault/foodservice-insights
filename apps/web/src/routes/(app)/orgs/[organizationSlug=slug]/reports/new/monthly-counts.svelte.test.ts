@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { CountDraft } from '$lib/reports/monthly-counts';
+import type { CountDraft } from '#lib/reports/monthly-counts.js';
 import MonthlyCounts from './monthly-counts.svelte';
 
 describe('MonthlyCounts', () => {

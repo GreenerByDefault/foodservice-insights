@@ -9,7 +9,7 @@
 import { type Database, type DatabaseExecutor, withTransaction } from '@gbd/db';
 import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
-import { isCheckViolation } from '$lib/server/db';
+import { isCheckViolation } from '#lib/server/db.js';
 
 const ORGANIZATION_MEMBER_AT_LEAST_ONE_ADMIN = 'organization_member_at_least_one_admin';
 

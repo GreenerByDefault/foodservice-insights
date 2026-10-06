@@ -1,19 +1,19 @@
 import { DAY_MS } from '@gbd/core';
 import { insertOrganizationInvite, withRollback } from '@gbd/db/testing';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { HOURLY_INVITE_LIMIT } from '$lib/invites/limits';
-import type { Actor } from '$lib/server/auth/types';
-import { database } from '$lib/server/db';
-import { sendInvite } from '$lib/server/email';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
-import { anOrganizationWithMembers } from '$lib/server/testing/fixtures';
+import { HOURLY_INVITE_LIMIT } from '#lib/invites/limits.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database } from '#lib/server/db.js';
+import { sendInvite } from '#lib/server/email.js';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
+import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { _createInvite } from './+server.ts';
 
 // `sendInvite`'s own send path is `packages/email`'s job to prove; this only needs to know
 // whether the route asked it to send, with what, and how it answers each way `sendInvite` can
 // come back.
-vi.mock('$lib/server/email', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('$lib/server/email')>();
+vi.mock('#lib/server/email.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/server/email.js')>();
   return { ...actual, sendInvite: vi.fn() };
 });
 

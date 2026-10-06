@@ -1,5 +1,5 @@
-import { ApiError, apiCall } from '$lib/api/fetch';
-import { retryReportApiHref } from '$lib/hrefs';
+import { ApiError, apiCall } from '#lib/api/fetch.js';
+import { retryReportApiHref } from '#lib/hrefs.js';
 
 /** What happened when the user asked to retry.
  *

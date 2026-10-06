@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { fakeBrowserAuth } from '$lib/auth/testing/fake';
+import { fakeBrowserAuth } from '#lib/auth/testing/fake.js';
 import SignInFlow from './sign-in-flow.svelte';
 
 /** The two steps are covered by their own files; this is about the wiring between them. */

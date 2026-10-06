@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { expectFetched, jsonResponse, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import {
+  expectFetched,
+  jsonResponse,
+  stubFetch,
+  stubUnreachableFetch,
+} from '#lib/testing/fetch.js';
 import { renameSelf } from './rename-self.ts';
 
 afterEach(() => {

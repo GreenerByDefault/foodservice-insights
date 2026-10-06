@@ -1,5 +1,5 @@
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
-import { acceptInviteApiHref } from '$lib/hrefs';
+import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { acceptInviteApiHref } from '#lib/hrefs.js';
 
 export type AcceptInviteOutcome =
   | { kind: 'accepted'; organizationSlug: string }

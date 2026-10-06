@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from '$app/navigation';
-import OrganizationNameForm from '$lib/components/orgs/organization-name-form.svelte';
-import { createOrganization } from '$lib/orgs/api/create-organization';
+import OrganizationNameForm from '#lib/components/orgs/organization-name-form.svelte';
+import { createOrganization } from '#lib/orgs/api/create-organization.js';
 
 async function handleSubmit(
   name: string,

@@ -11,7 +11,7 @@ Every operation takes a `BlobStore` — a bucket plus a client that can reach it
 parameter, so that callers stay testable. Build one with `initializeBlobStore`, or take whichever
 your caller already has:
 
-- **The web app** calls `blobStore()` from `$lib/server/storage`, which reads
+- **The web app** calls `blobStore()` from `#lib/server/storage.js`, which reads
   `$env/dynamic/private` on first use.
 - **Everything outside Vite** imports `BLOB_STORE` from `@gbd/storage/env`, which reads the
   process environment. `TEST_DB=1` selects the test stack.

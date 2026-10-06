@@ -1,5 +1,5 @@
 <script lang="ts">
-import PageHeading from '$lib/components/page-heading.svelte';
+import PageHeading from '#lib/components/page-heading.svelte';
 import UploadForm from './upload-form.svelte';
 import type { PageProps } from './$types';
 

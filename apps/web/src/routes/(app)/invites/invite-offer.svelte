@@ -2,13 +2,13 @@
 import ClockIcon from '@lucide/svelte/icons/clock';
 import { toast } from 'svelte-sonner';
 import { goto, invalidateAll } from '$app/navigation';
-import RelativeTime from '$lib/components/relative-time.svelte';
-import { Button } from '$lib/components/ui/button';
-import * as Card from '$lib/components/ui/card';
-import { organizationHref } from '$lib/hrefs';
-import { acceptInvite } from '$lib/invites/api/accept-invite';
-import { declineInvite } from '$lib/invites/api/decline-invite';
-import { focusPageHeading } from '$lib/utils/focus-page-heading';
+import RelativeTime from '#lib/components/relative-time.svelte';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Card from '#lib/components/ui/card/index.js';
+import { organizationHref } from '#lib/hrefs.js';
+import { acceptInvite } from '#lib/invites/api/accept-invite.js';
+import { declineInvite } from '#lib/invites/api/decline-invite.js';
+import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 import type { InviteOffer } from './+page.server.ts';
 
 interface Props {

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { RESEND_COOLDOWN_S } from '$lib/auth/sign-in';
-import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '$lib/auth/testing/fake';
-import { resetToastMocks, toast } from '$lib/testing/toast';
+import { RESEND_COOLDOWN_S } from '#lib/auth/sign-in.js';
+import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import CodeStep from './code-step.svelte';
 
 function props(auth: FakeBrowserAuth, overrides: { onSignedIn?: () => Promise<void> } = {}) {
@@ -15,7 +15,7 @@ function props(auth: FakeBrowserAuth, overrides: { onSignedIn?: () => Promise<vo
   };
 }
 
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.useRealTimers();

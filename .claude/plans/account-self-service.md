@@ -60,7 +60,7 @@ REQUIREMENTS.md with the invite work):
   row, and the org's admin count is 1). Test.
 - `account/delete-account.svelte`: `Field.Set` "Delete account"; with sole-admin orgs, the
   explanation and a link per org to `organizationMembersHref`, trigger disabled; otherwise
-  `ConfirmAction` typing the email. Client `$lib/account/api/delete-account.ts` (throws). Component
+  `ConfirmAction` typing the email. Client `#lib/account/api/delete-account.ts` (throws). Component
   tests for both states and the post-success `signOut` + `goto('/')` (fake `BrowserAuth`).
 - **E2E** `account/account.e2e.ts` (per-test identities): sole admin → delete disabled and the org
   named; with `members: [{ role: 'admin' }]` → type the email → confirm → `/` → the org URL answers
@@ -73,9 +73,9 @@ REQUIREMENTS.md with the invite work):
 - Supabase config in both stacks: `double_confirm_changes = false`, `[auth.email.template.email_change]
   content_path` → our template with `{{ .Token }}`, the way `[auth.email.template.magic_link]`
   already is. Verify by hand against Mailpit first.
-- `BrowserAuth` gains `updateUser`; `$lib/auth/testing/fake.ts` follows.
+- `BrowserAuth` gains `updateUser`; `#lib/auth/testing/fake.ts` follows.
 - `account/change-email-form.svelte`: two steps, `'email' | 'code'`, reusing
-  `$lib/components/auth/code-step.svelte` (its second caller) and `describeAuthError`. Verified →
+  `#lib/components/auth/code-step.svelte` (its second caller) and `describeAuthError`. Verified →
   `invalidateAll()`; the menu and page show the new address. Component tests with the fake: the
   address is trimmed and sent, a bad code stays on the step with the mapped message.
 - **E2E**: change to `aTestEmailAddress()`, `waitForEmail(newAddress)` for the code, submit, the form

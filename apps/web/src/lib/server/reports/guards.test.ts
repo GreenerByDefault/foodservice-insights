@@ -1,8 +1,8 @@
 import type { ReportId } from '@gbd/db';
 import { insertAppUser, insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { statusOf } from '$lib/server/testing/http-error';
+import { database } from '#lib/server/db.js';
+import { statusOf } from '#lib/server/testing/http-error.js';
 import { requireReportAccess } from './guards';
 
 describe('requireReportAccess', () => {

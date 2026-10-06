@@ -1,7 +1,7 @@
 <script lang="ts">
-import ItemList from '$lib/components/item-list.svelte';
-import ItemListLink from '$lib/components/item-list-link.svelte';
-import { organizationHref } from '$lib/hrefs';
+import ItemList from '#lib/components/item-list.svelte';
+import ItemListLink from '#lib/components/item-list-link.svelte';
+import { organizationHref } from '#lib/hrefs.js';
 import type { OrganizationListRow } from './+page.server.ts';
 
 interface Props {

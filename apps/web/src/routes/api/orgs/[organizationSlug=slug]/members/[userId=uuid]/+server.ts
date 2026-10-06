@@ -1,13 +1,13 @@
 import type { DatabaseExecutor, OrganizationId, UserId } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import * as v from 'valibot';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireAuth } from '$lib/server/auth/guards';
-import { requireMemberRouteContext } from '$lib/server/auth/route-context';
-import type { Actor } from '$lib/server/auth/types';
-import { parseBody } from '$lib/server/body';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { attemptMemberWrite, lastAdminResponse } from '$lib/server/orgs/members';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { requireMemberRouteContext } from '#lib/server/auth/route-context.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { parseBody } from '#lib/server/body.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { attemptMemberWrite, lastAdminResponse } from '#lib/server/orgs/members.js';
 import type { RequestHandler } from './$types';
 
 const ChangeRoleBodySchema = v.object({ role: v.picklist(['admin', 'member']) });

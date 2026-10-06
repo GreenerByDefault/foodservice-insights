@@ -1,10 +1,10 @@
 <script lang="ts">
 import { toast } from 'svelte-sonner';
-import { FIELD, MAX_DISPLAY_NAME_LENGTH } from '$lib/account/display-name';
-import { renameSelf } from '$lib/account/api/rename-self';
-import { Button } from '$lib/components/ui/button';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
+import { FIELD, MAX_DISPLAY_NAME_LENGTH } from '#lib/account/display-name.js';
+import { renameSelf } from '#lib/account/api/rename-self.js';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
 
 interface Props {
   initialName: string;

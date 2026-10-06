@@ -1,7 +1,7 @@
 import type { DatabaseExecutor, OrganizationId, UserId } from '@gbd/db';
-import { requireAuth } from '$lib/server/auth/guards';
-import { database, withDbErrorHandling } from '$lib/server/db';
-import { checkReportRateLimit, describeRateLimitExceeded } from '$lib/server/reports/rate-limit';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { checkReportRateLimit, describeRateLimitExceeded } from '#lib/server/reports/rate-limit.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, parent }) => {

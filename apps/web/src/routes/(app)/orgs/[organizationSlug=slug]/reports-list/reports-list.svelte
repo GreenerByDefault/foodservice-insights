@@ -1,5 +1,5 @@
 <script lang="ts">
-import ItemList from '$lib/components/item-list.svelte';
+import ItemList from '#lib/components/item-list.svelte';
 import type { ReportsPageData } from '../+page.server.ts';
 import ReportRow from './report-row.svelte';
 

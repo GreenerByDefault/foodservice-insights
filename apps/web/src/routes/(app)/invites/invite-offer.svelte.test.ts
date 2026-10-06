@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { expectFetched, jsonResponse, stubFetch, stubPendingFetch } from '#lib/testing/fetch.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import { goto, invalidateAll } from '$app/navigation';
-import { expectFetched, jsonResponse, stubFetch, stubPendingFetch } from '$lib/testing/fetch';
-import { resetNavigationMocks } from '$lib/testing/navigation';
-import { resetToastMocks, toast } from '$lib/testing/toast';
 import InviteOffer from './invite-offer.svelte';
 import { anInviteOffer } from './testing/fixtures.ts';
 
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();

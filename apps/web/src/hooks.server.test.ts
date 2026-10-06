@@ -2,18 +2,18 @@ import type { UserId } from '@gbd/db';
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import * as mode from '$lib/auth/mode';
-import * as authorization from '$lib/server/auth/authorization';
-import * as identify from '$lib/server/auth/identify';
-import { anAuthContext } from '$lib/server/testing/fixtures';
-import { SERVER_LOGS } from '$lib/server/testing/logs';
+import * as mode from '#lib/auth/mode.js';
+import * as authorization from '#lib/server/auth/authorization.js';
+import * as identify from '#lib/server/auth/identify.js';
+import { anAuthContext } from '#lib/server/testing/fixtures.js';
+import { SERVER_LOGS } from '#lib/server/testing/logs.js';
 import { handle, handleError } from './hooks.server.ts';
 
 // This file tests only the hook's wiring, so identification and authorization are stubbed.
-// See $lib/server/auth/authorization.test.ts for their tests.
-vi.mock('$lib/server/auth/identify', () => ({ identifyUser: vi.fn() }));
-vi.mock('$lib/server/auth/authorization', () => ({ loadAuthorization: vi.fn() }));
-vi.mock('$lib/auth/mode', () => ({ authMode: vi.fn() }));
+// See #lib/server/auth/authorization.test.ts for their tests.
+vi.mock('#lib/server/auth/identify.js', () => ({ identifyUser: vi.fn() }));
+vi.mock('#lib/server/auth/authorization.js', () => ({ loadAuthorization: vi.fn() }));
+vi.mock('#lib/auth/mode.js', () => ({ authMode: vi.fn() }));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 

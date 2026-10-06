@@ -1,10 +1,10 @@
 <script lang="ts">
 import { toast } from 'svelte-sonner';
-import { Button } from '$lib/components/ui/button';
-import RelativeTime from '$lib/components/relative-time.svelte';
-import type { ActionState } from '$lib/forms/action-state';
-import { revokeInvite } from '$lib/invites/api/revoke-invite';
-import { focusPageHeading } from '$lib/utils/focus-page-heading';
+import { Button } from '#lib/components/ui/button/index.js';
+import RelativeTime from '#lib/components/relative-time.svelte';
+import type { ActionState } from '#lib/forms/action-state.js';
+import { revokeInvite } from '#lib/invites/api/revoke-invite.js';
+import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 import type { InviteRow } from './+page.server.ts';
 
 /** One row of `pending-invites.svelte`'s list: the invite's own state, and its Revoke button.

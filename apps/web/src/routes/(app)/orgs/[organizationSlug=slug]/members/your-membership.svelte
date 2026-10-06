@@ -2,10 +2,10 @@
 import type { OrganizationRole } from '@gbd/db';
 import { toast } from 'svelte-sonner';
 import { goto, invalidateAll } from '$app/navigation';
-import ConfirmAction from '$lib/components/confirm-action.svelte';
-import * as Field from '$lib/components/ui/field';
-import { changeMemberRole } from '$lib/orgs/api/change-member-role';
-import { removeMember } from '$lib/orgs/api/remove-member';
+import ConfirmAction from '#lib/components/confirm-action.svelte';
+import * as Field from '#lib/components/ui/field/index.js';
+import { changeMemberRole } from '#lib/orgs/api/change-member-role.js';
+import { removeMember } from '#lib/orgs/api/remove-member.js';
 import { confirmMemberWrite } from './member-write.ts';
 
 /** The page-level section for actions on the viewer's own row — the counterpart to

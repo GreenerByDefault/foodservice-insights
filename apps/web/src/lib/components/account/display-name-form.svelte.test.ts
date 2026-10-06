@@ -5,11 +5,11 @@ import {
   stubFetch,
   stubPendingFetch,
   stubUnreachableFetch,
-} from '$lib/testing/fetch';
-import { resetToastMocks, toast } from '$lib/testing/toast';
+} from '#lib/testing/fetch.js';
+import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import DisplayNameForm from './display-name-form.svelte';
 
-vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();

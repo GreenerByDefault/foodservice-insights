@@ -2,9 +2,9 @@ import type { DatabaseExecutor } from '@gbd/db';
 import { type BlobStore, bucketExists } from '@gbd/storage';
 import { json } from '@sveltejs/kit';
 import { sql } from 'kysely';
-import { database } from '$lib/server/db';
-import { logger } from '$lib/server/log';
-import { blobStore } from '$lib/server/storage';
+import { database } from '#lib/server/db.js';
+import { logger } from '#lib/server/log.js';
+import { blobStore } from '#lib/server/storage.js';
 import type { RequestHandler } from './$types';
 
 type HealthReport = { status: 'ok' | 'degraded' };

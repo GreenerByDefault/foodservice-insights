@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { BrowserAuth } from '$lib/auth/browser';
+import type { BrowserAuth } from '#lib/auth/browser.js';
 import CodeStep from './code-step.svelte';
 import EmailStep from './email-step.svelte';
 

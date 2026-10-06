@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { aWorkbook } from '#lib/reports/excel/testing/index.js';
+import { lastFetchCall, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
+import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { goto } from '$app/navigation';
-import { aWorkbook } from '$lib/reports/excel/testing';
-import { lastFetchCall, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
-import { resetNavigationMocks } from '$lib/testing/navigation';
 import UploadForm from './upload-form.svelte';
 
-vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
 const ORGANIZATION_SLUG = 'org-1';
 const CSV = 'product,date,weight\nbeef,2026-01-05,12\n';

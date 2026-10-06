@@ -1,12 +1,12 @@
 <script lang="ts">
 import { onDestroy } from 'svelte';
 import * as v from 'valibot';
-import type { BrowserAuth } from '$lib/auth/browser';
-import { describeAuthError, FIELD, OTP_LENGTH } from '$lib/auth/sign-in';
-import { Button } from '$lib/components/ui/button';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
-import { emailAddress, MAX_EMAIL_LENGTH } from '$lib/forms/validation';
+import type { BrowserAuth } from '#lib/auth/browser.js';
+import { describeAuthError, FIELD, OTP_LENGTH } from '#lib/auth/sign-in.js';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
+import { emailAddress, MAX_EMAIL_LENGTH } from '#lib/forms/validation.js';
 
 interface Props {
   auth: BrowserAuth;

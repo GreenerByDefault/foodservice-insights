@@ -1,5 +1,5 @@
-import { requireAuth, requireOrganizationAccess } from '$lib/server/auth/guards';
-import { database } from '$lib/server/db';
+import { requireAuth, requireOrganizationAccess } from '#lib/server/auth/guards.js';
+import { database } from '#lib/server/db.js';
 import type { LayoutServerLoad } from './$types';
 
 /** Settle which organization everything below this point acts on. */

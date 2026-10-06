@@ -2,7 +2,7 @@
 
 import type { DatabaseExecutor } from '@gbd/db';
 import { error } from '@sveltejs/kit';
-import { withDbErrorHandling } from '$lib/server/db';
+import { withDbErrorHandling } from '#lib/server/db.js';
 import type { AuthContext, OrganizationAccess } from './types.ts';
 
 /** The signed-in user, or a 401. */

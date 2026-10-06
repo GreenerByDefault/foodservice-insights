@@ -7,8 +7,8 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { anEmail } from '$lib/server/testing/fixtures';
+import { database } from '#lib/server/db.js';
+import { anEmail } from '#lib/server/testing/fixtures.js';
 import { _loadInvites } from './+page.server.ts';
 
 describe('_loadInvites', () => {

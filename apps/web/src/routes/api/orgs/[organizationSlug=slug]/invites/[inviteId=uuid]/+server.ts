@@ -5,10 +5,10 @@ import {
   withTransaction,
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireInviteRouteContext } from '$lib/server/auth/route-context';
-import type { Actor } from '$lib/server/auth/types';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireInviteRouteContext } from '#lib/server/auth/route-context.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
 import type { RequestHandler } from './$types';
 
 /** Revoke a pending invite. Admin only. */

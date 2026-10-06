@@ -2,13 +2,13 @@
 import type { OrganizationRole } from '@gbd/db';
 import { toast } from 'svelte-sonner';
 import { invalidate } from '$app/navigation';
-import { Button } from '$lib/components/ui/button';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group';
-import { MAX_EMAIL_LENGTH } from '$lib/forms/validation';
-import { createInvite } from '$lib/invites/api/create-invite';
-import { FIELD } from '$lib/invites/invite';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
+import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.js';
+import { MAX_EMAIL_LENGTH } from '#lib/forms/validation.js';
+import { createInvite } from '#lib/invites/api/create-invite.js';
+import { FIELD } from '#lib/invites/invite.js';
 import { MEMBERS_DEPENDENCY } from './dependencies.ts';
 
 interface Props {

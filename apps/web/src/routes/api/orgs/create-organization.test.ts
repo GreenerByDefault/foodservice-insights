@@ -1,12 +1,12 @@
 import { type OrganizationId, RESERVED_ORGANIZATION_SLUGS } from '@gbd/db';
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test, vi } from 'vitest';
-import { database } from '$lib/server/db';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
-import { anOrganizationCreator, mockUnreachableEmailer } from '$lib/server/testing/fixtures';
+import { database } from '#lib/server/db.js';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
+import { anOrganizationCreator, mockUnreachableEmailer } from '#lib/server/testing/fixtures.js';
 import { _createOrganization } from './+server.ts';
 
-vi.mock('$lib/server/email', (importOriginal) => mockUnreachableEmailer(importOriginal));
+vi.mock('#lib/server/email.js', (importOriginal) => mockUnreachableEmailer(importOriginal));
 
 describe('a valid name', () => {
   test('answers 201 with a location header', async () => {

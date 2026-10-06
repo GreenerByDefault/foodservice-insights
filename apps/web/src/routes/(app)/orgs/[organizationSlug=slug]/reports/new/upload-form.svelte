@@ -2,24 +2,24 @@
 import { XLSX_CONTENT_TYPE } from '@gbd/core';
 import type { CountsBasis, UnitSystem } from '@gbd/db';
 import { goto } from '$app/navigation';
-import { Alert, AlertDescription } from '$lib/components/ui/alert';
-import { Button } from '$lib/components/ui/button';
-import * as FileDropZone from '$lib/components/ui/file-drop-zone';
-import type { FileRejectedReason } from '$lib/components/ui/file-drop-zone';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group';
-import { organizationHref } from '$lib/hrefs';
-import { inspectFile } from '$lib/reports/inspect-file';
+import { Alert, AlertDescription } from '#lib/components/ui/alert/index.js';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as FileDropZone from '#lib/components/ui/file-drop-zone/index.js';
+import type { FileRejectedReason } from '#lib/components/ui/file-drop-zone/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
+import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.js';
+import { organizationHref } from '#lib/hrefs.js';
+import { inspectFile } from '#lib/reports/inspect-file.js';
 import {
   MAX_FREE_TEXT_LENGTH,
   MAX_UPLOAD_FIELD_BYTES,
   MAX_UPLOAD_FIELD_MEGABYTES,
-} from '$lib/reports/limits';
-import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '$lib/reports/metadata';
-import { type CountDraft, reconcileDraft, serializeCounts } from '$lib/reports/monthly-counts';
-import { userFacingRejection, type UploadRejection } from '$lib/reports/rejection';
-import { uploadReport } from '$lib/reports/api/upload';
+} from '#lib/reports/limits.js';
+import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '#lib/reports/metadata.js';
+import { type CountDraft, reconcileDraft, serializeCounts } from '#lib/reports/monthly-counts.js';
+import { userFacingRejection, type UploadRejection } from '#lib/reports/rejection.js';
+import { uploadReport } from '#lib/reports/api/upload.js';
 import MonthlyCounts from './monthly-counts.svelte';
 import RejectionView from './rejection-view.svelte';
 

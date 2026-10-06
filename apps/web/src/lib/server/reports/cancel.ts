@@ -9,9 +9,9 @@ import {
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import { sql, type Transaction } from 'kysely';
-import { recordAuditEvent } from '$lib/server/audit';
-import type { Actor } from '$lib/server/auth/types';
-import { requireReportAccess } from '$lib/server/reports/guards';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { requireReportAccess } from '#lib/server/reports/guards.js';
 
 /** Request cancellation of `reportId`'s in-flight attempt.
  *

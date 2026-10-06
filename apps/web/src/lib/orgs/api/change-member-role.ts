@@ -1,6 +1,6 @@
 import type { OrganizationRole } from '@gbd/db';
-import { apiCall } from '$lib/api/fetch';
-import { organizationMemberApiHref } from '$lib/hrefs';
+import { apiCall } from '#lib/api/fetch.js';
+import { organizationMemberApiHref } from '#lib/hrefs.js';
 import { classifyMemberWriteFailure, type MemberWriteOutcome } from './failure.ts';
 
 export async function changeMemberRole(

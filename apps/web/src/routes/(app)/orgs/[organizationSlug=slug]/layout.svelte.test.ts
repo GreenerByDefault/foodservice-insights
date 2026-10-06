@@ -2,11 +2,11 @@ import type { OrganizationId, UserId } from '@gbd/db';
 import { createRawSnippet } from 'svelte';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { page, resetPageMock } from '$lib/testing/state';
+import { page, resetPageMock } from '#lib/testing/state.js';
 import Layout from './+layout.svelte';
 import type { LayoutProps } from './$types';
 
-vi.mock('$app/state', () => import('$lib/testing/state'));
+vi.mock('$app/state', () => import('#lib/testing/state.js'));
 
 afterEach(() => {
   resetPageMock();

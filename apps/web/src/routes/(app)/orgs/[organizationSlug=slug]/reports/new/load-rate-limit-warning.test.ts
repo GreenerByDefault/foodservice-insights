@@ -2,9 +2,9 @@
 
 import { insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
 import { describe, expect, test, vi } from 'vitest';
-import { HOURLY_REPORT_LIMIT } from '$lib/reports/limits';
-import { database } from '$lib/server/db';
-import { describeRateLimitExceeded } from '$lib/server/reports/rate-limit';
+import { HOURLY_REPORT_LIMIT } from '#lib/reports/limits.js';
+import { database } from '#lib/server/db.js';
+import { describeRateLimitExceeded } from '#lib/server/reports/rate-limit.js';
 import { _loadRateLimitWarning } from './+page.server.ts';
 
 // A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the

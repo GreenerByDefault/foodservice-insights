@@ -52,18 +52,18 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
   B never receives a rotated refresh token and the failure is swallowed as a `warn`. Skip entirely.
 - cfa-web-app's `return { user, cookies: cookies.getAll() }` in the root layout: serializes the JWT
   into every page for no consumer.
-- cfa-app's regex nonce stamping, grep-based vitest project selection, `$lib/server` importing
+- cfa-app's regex nonce stamping, grep-based vitest project selection, `#lib/server` importing
   `hooks.server.ts`, and serial e2e as flake suppression.
 - Account-enumeration protection and `returnTo`: not applicable. Sign-up is open (anyone may create an
   organization), and `apps/web/README.md` already settled "a 401 is not a redirect".
 
 ### The sign-in form
 
-`$lib/components/auth/sign-in-flow.svelte` holds both steps of email OTP — `email-step.svelte` then
+`#lib/components/auth/sign-in-flow.svelte` holds both steps of email OTP — `email-step.svelte` then
 `code-step.svelte` — behind two props: `auth: BrowserAuth` and `onSignedIn: () => Promise<void>`. It
 keeps the address in its own `$state` so "Change email" returns to a filled field, and it lives in
-`$lib/components/` because two places mount it: `/sign-in` and the 401 branch of
-`$lib/components/error-page.svelte`.
+`#lib/components/` because two places mount it: `/sign-in` and the 401 branch of
+`#lib/components/error-page.svelte`.
 
 `/sign-in` passes `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, and needs nothing more:
 the invalidation re-runs its `load`, whose `locals.auth` redirect to `/orgs` takes over, and `/orgs`
@@ -76,27 +76,27 @@ The 401 page mounts the flow the same way, in the same `max-w-sm` column under t
 and copy, so the page that was asked for renders at its own URL once the loads re-run: no redirect,
 no `?next=`. It has no mode check, since in `placeholder` nothing is ever signed out. Because
 `error-page.svelte` calls `browserAuth()` itself, its component test `vi.mock`s
-`$lib/auth/browser` (below). Onboarding meets it here: a first-time user who signs in on a 401 is
+`#lib/auth/browser.js` (below). Onboarding meets it here: a first-time user who signs in on a 401 is
 still inside an `(app)` URL, so the invalidation runs the `(app)` gate, whose redirect has to take
 them to `/onboarding` rather than render the page they asked for.
 
 Three details of that seam constrain what is left:
 
-- **`BrowserAuth`** (`$lib/auth/browser.ts`) is `Pick`ed from `SupabaseClient['auth']` for
+- **`BrowserAuth`** (`#lib/auth/browser.ts`) is `Pick`ed from `SupabaseClient['auth']` for
   `signInWithOtp`, `verifyOtp` and `signOut`, but its **`onAuthStateChange` is promise-returning**
   where the real client's is synchronous — the client sits behind a lazy dynamic import, so there is
   no subscription to hand back until that import resolves. The root layout's `$effect` has to
   `await` it before it has anything to unsubscribe.
 - **`browserAuth()` is safe to call during SSR.** It returns an inert wrapper; only calling a method
   reaches for the environment and throws. A server-rendered page can pass it straight to the flow.
-- **`$lib/auth/testing/fake.ts`** gives component tests `fakeBrowserAuth()` (a `FakeBrowserAuth`,
+- **`#lib/auth/testing/fake.ts`** gives component tests `fakeBrowserAuth()` (a `FakeBrowserAuth`,
   every method a typed `vi.fn()`) and `authError(code)`. Anything mounting the flow in a component
   test uses those rather than a client. A component that calls `browserAuth()` itself rather than
   taking `auth` as a prop cannot even be imported in a component test — `$env/dynamic/public` has
-  no environment there — so its test `vi.mock`s `$lib/auth/browser` to hand back a fake, as
+  no environment there — so its test `vi.mock`s `#lib/auth/browser.js` to hand back a fake, as
   `(app)/shell/user-menu.svelte.test.ts` does.
 
-`$lib/auth/sign-in.ts` holds `FIELD`, `OTP_LENGTH`, `RESEND_COOLDOWN_S`, and the pure
+`#lib/auth/sign-in.ts` holds `FIELD`, `OTP_LENGTH`, `RESEND_COOLDOWN_S`, and the pure
 `describeAuthError({ code })`, which maps `otp_expired` / `over_email_send_rate_limit` / anything
 else to copy of ours — Supabase's own `message` is never rendered.
 
@@ -141,7 +141,7 @@ The root `+layout.svelte`, in `supabase` mode only, subscribes `browserAuth().on
 and calls `invalidateAll()` whenever `sessionUserChanged` says the event's session belongs to
 someone other than the root `+layout.server.ts`'s `sessionUserId`, the user the page was rendered
 for. It also adds a `pageshow` listener, `refreshWhenRestoredByBack(() => location.reload())`. Both
-pure halves are in `$lib/auth/follow-session.ts`. So in `supabase` mode every page fetches
+pure halves are in `#lib/auth/follow-session.ts`. So in `supabase` mode every page fetches
 supabase-js after hydration, anonymous ones included. Four details constrain what comes next:
 
 - **Events are compared by user, never by name.** auth-js 2.117 emits `SIGNED_IN` for a session it
@@ -166,9 +166,9 @@ its unit test.
 
 ### The display-name form
 
-`$lib/components/account/display-name-form.svelte` is the one form both screens mount: `/account`
+`#lib/components/account/display-name-form.svelte` is the one form both screens mount: `/account`
 today, `/onboarding` next. Its props are `initialName: string`, `submitLabel` and
-`onSaved: () => Promise<void>`; it calls `renameSelf` (`$lib/account/api/rename-self.ts`) itself,
+`onSaved: () => Promise<void>`; it calls `renameSelf` (`#lib/account/api/rename-self.ts`) itself,
 so a caller only decides what happens after a save. The field is labelled "Your name" with
 `autocomplete="name"`, and `required` plus `maxlength={MAX_DISPLAY_NAME_LENGTH}` are what refuse
 an empty or over-long name inline. The only failure it renders is an unknown outcome — nothing the
@@ -177,8 +177,8 @@ user to reload and check.
 
 `PATCH /api/account` takes `{ displayName }`: `requireAuth`, then `_renameSelf(db, userId, body)`,
 which answers `parseBody`'s shared 400 for a bad name and 204 after the `UPDATE app_user`. The
-schema is `DisplayNameSchema` in `$lib/account/display-name.ts`, with `MAX_DISPLAY_NAME_LENGTH`
-mirrored from `@gbd/db` (which now exports it) and pinned by a test, as `$lib/orgs/name.ts` does.
+schema is `DisplayNameSchema` in `#lib/account/display-name.ts`, with `MAX_DISPLAY_NAME_LENGTH`
+mirrored from `@gbd/db` (which now exports it) and pinned by a test, as `#lib/orgs/name.ts` does.
 
 `/account` reads the user from the `(app)` layout's data — its own `load` still returns nothing —
 and passes `initialName={data.user.displayName ?? ''}`, since that type is still nullable. It
@@ -262,7 +262,7 @@ the variable serves every visitor as one admin. Defaulting to `supabase` means a
 predates the variable gets 401s with no hint why. In `placeholder`, `init` also logs one warning, so
 a hosted log says which mode it is in.
 
-It is `PUBLIC_` and read through `$env/dynamic/public` by one parser, `$lib/auth/mode.ts`, because
+It is `PUBLIC_` and read through `$env/dynamic/public` by one parser, `#lib/auth/mode.ts`, because
 both halves branch on it and the browser must not load supabase-js in `placeholder`. Components
 take what they need as a prop — `user-menu.svelte` gets `canSignOut` — rather than reading the
 environment themselves.
@@ -317,8 +317,8 @@ instead.
 | Sign-out scope | `local`, error ignored | Signs out this device; matches CFA. The error is ignored because auth-js clears the local session regardless (§ Following the session). *Rejected: a "Could not sign out" alert* — by the time it rendered, the `SIGNED_OUT` invalidation had replaced the page with the 401 |
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
-| Email normalization in the form | Reused `$lib/forms/validation`'s `emailAddress` and `MAX_EMAIL_LENGTH`, not a schema of sign-in's own | It already trims, lowercases and caps at 254, matching `organization_invite_email_is_lowercase` — and GoTrue lowercases anyway, so the address the form sends is the address the fixtures read back |
-| OTP input | bits-ui `PinInput`, vendored as shadcn-svelte's `input-otp` in `$lib/components/ui/input-otp/` | `bits-ui` was already a dependency. The step completes itself on the last digit, so it is the self-completing exception in `apps/web/README.md` § Forms |
+| Email normalization in the form | Reused `#lib/forms/validation.js`'s `emailAddress` and `MAX_EMAIL_LENGTH`, not a schema of sign-in's own | It already trims, lowercases and caps at 254, matching `organization_invite_email_is_lowercase` — and GoTrue lowercases anyway, so the address the form sends is the address the fixtures read back |
+| OTP input | bits-ui `PinInput`, vendored as shadcn-svelte's `input-otp` in `#lib/components/ui/input-otp/index.js/` | `bits-ui` was already a dependency. The step completes itself on the last digit, so it is the self-completing exception in `apps/web/README.md` § Forms |
 | Env vars | `PUBLIC_AUTH_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY` via `$env/dynamic/public` (the last two landed with the form); `SUPABASE_SECRET_KEY` (tests only for now) | Runtime config keeps one artifact promotable — `ARCHITECTURE.md` § Images. `$env/dynamic/public` is what makes `PUBLIC_*` safe here; `$env/static/*` is the banned half |
 | Dependencies | `@supabase/ssr` ^0.12.7, `@supabase/supabase-js` ^2.116.0, both in the catalog, both `dependencies` of `apps/web` | Latest at the time; server code imports them, so not `devDependencies` |
 | Test sessions | `admin.createUser({ email, password, email_confirm: true })` once per user, then `signInWithPassword` per test, on the test stack only | Every password sign-in is an independent session, so any number of tests can be one user at once with nothing to coordinate. *Rejected: `generateLink` → `verifyOtp`, as CFA does.* GoTrue keeps one outstanding code per user (`one_time_tokens_user_id_token_type_key`), so two tests signing in as one user cancel each other's code. No real user has a password, and the Mailpit spec covers the real OTP path |

@@ -5,9 +5,9 @@ import {
   withRollback,
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { auditEventsFor, expectedAuditEvent } from '$lib/server/testing/audit';
-import { statusOf } from '$lib/server/testing/http-error';
+import { database } from '#lib/server/db.js';
+import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
+import { statusOf } from '#lib/server/testing/http-error.js';
 import { _deleteReport } from './+server.ts';
 
 // The 404/403 access checks are `requireReportAccess`'s own guarantee (see guards.test.ts) — these

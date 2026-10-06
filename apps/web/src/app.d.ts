@@ -2,7 +2,7 @@
 // for information about these interfaces
 
 import type { OrganizationId } from '@gbd/db';
-import type { AuthContext } from '$lib/server/auth/types.ts';
+import type { AuthContext } from '#lib/server/auth/types.ts';
 
 declare global {
   namespace App {

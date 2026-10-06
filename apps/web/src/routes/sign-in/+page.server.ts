@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import * as v from 'valibot';
-import { emailAddress } from '$lib/forms/validation';
+import { emailAddress } from '#lib/forms/validation.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url }) => {

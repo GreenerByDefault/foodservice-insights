@@ -5,10 +5,10 @@ import UserIcon from '@lucide/svelte/icons/user';
 import UserRoundIcon from '@lucide/svelte/icons/user-round';
 import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
-import { browserAuth } from '$lib/auth/browser';
-import { Button } from '$lib/components/ui/button';
-import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-import { cnChildProps } from '$lib/utils/shadcn.js';
+import { browserAuth } from '#lib/auth/browser.js';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+import { cnChildProps } from '#lib/utils/shadcn.js';
 import { initials } from './initials.ts';
 
 interface Props {

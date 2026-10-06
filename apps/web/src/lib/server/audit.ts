@@ -2,8 +2,8 @@
 
 import type { Database, OrganizationId } from '@gbd/db';
 import type { Transaction } from 'kysely';
-import type { JsonValue } from '$lib/api/fetch';
-import type { Actor } from '$lib/server/auth/types';
+import type { JsonValue } from '#lib/api/fetch.js';
+import type { Actor } from '#lib/server/auth/types.js';
 
 /** The `organization.*` audit actions a route may record. Extend this as new organization
  * actions are added. */

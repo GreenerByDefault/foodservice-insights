@@ -1,7 +1,7 @@
 import { insertOrganization, insertReport, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
-import { database } from '$lib/server/db';
-import { auditEventsFor } from '$lib/server/testing/audit';
+import { database } from '#lib/server/db.js';
+import { auditEventsFor } from '#lib/server/testing/audit.js';
 import { recordAuditEvent } from './audit';
 
 describe('recordAuditEvent', () => {

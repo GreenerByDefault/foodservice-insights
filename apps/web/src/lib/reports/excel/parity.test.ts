@@ -1,7 +1,7 @@
 /** Everything downstream of `normalizeCsv` is inherited on the strength of this equivalence. */
 
 import { describe, expect, test } from 'vitest';
-import { aWorkbook, type WorkbookRow } from '$lib/reports/excel/testing';
+import { aWorkbook, type WorkbookRow } from '#lib/reports/excel/testing/index.js';
 import { normalizeCsv } from '../csv/normalize.ts';
 import { convertWorkbook } from './convert.ts';
 

@@ -1,8 +1,8 @@
 <script lang="ts">
 import { toast } from 'svelte-sonner';
 import { invalidateAll } from '$app/navigation';
-import OrganizationNameForm from '$lib/components/orgs/organization-name-form.svelte';
-import { renameOrganization } from '$lib/orgs/api/rename-organization';
+import OrganizationNameForm from '#lib/components/orgs/organization-name-form.svelte';
+import { renameOrganization } from '#lib/orgs/api/rename-organization.js';
 
 interface Props {
   organizationSlug: string;

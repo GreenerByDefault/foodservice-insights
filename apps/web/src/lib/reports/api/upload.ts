@@ -1,5 +1,5 @@
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
-import { organizationHref, reportsApiHref } from '$lib/hrefs';
+import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { organizationHref, reportsApiHref } from '#lib/hrefs.js';
 import { parseUploadRejection, type UploadRejection } from '../rejection.ts';
 
 export type UploadOutcome =

@@ -7,11 +7,11 @@ import {
   withTransaction,
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
-import { recordAuditEvent } from '$lib/server/audit';
-import { requireReportRouteContext } from '$lib/server/auth/route-context';
-import type { Actor } from '$lib/server/auth/types';
-import { database, isUniqueViolation, withDbErrorHandling } from '$lib/server/db';
-import { requireReportAccess } from '$lib/server/reports/guards';
+import { recordAuditEvent } from '#lib/server/audit.js';
+import { requireReportRouteContext } from '#lib/server/auth/route-context.js';
+import type { Actor } from '#lib/server/auth/types.js';
+import { database, isUniqueViolation, withDbErrorHandling } from '#lib/server/db.js';
+import { requireReportAccess } from '#lib/server/reports/guards.js';
 import type { RequestHandler } from './$types';
 
 /** Retry a failed analysis. */

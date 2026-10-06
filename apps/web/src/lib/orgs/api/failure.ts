@@ -2,7 +2,7 @@
  * collision, everything else unreachable-or-server-side is answered the same "we don't know
  * whether it went through" way, and anything not from `apiCall` is a bug to surface, not hide. */
 
-import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
+import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
 
 export function classifyNameWriteFailure(
   error: unknown,

@@ -1,4 +1,4 @@
-import { ApiError, ApiUnreachableError, apiCall } from '$lib/api/fetch';
+import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
 
 export type RenameSelfOutcome = { kind: 'renamed' } | { kind: 'unknown' };
 

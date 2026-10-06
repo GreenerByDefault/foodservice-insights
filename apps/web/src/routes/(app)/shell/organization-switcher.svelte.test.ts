@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { organizationHref } from '$lib/hrefs';
+import { organizationHref } from '#lib/hrefs.js';
 import type { SwitcherOrganization } from '../+layout.server.ts';
 import OrganizationSwitcher from './organization-switcher.svelte';
 

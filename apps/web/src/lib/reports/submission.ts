@@ -8,8 +8,8 @@
 
 import type { InputFileVariants } from '@gbd/storage';
 import * as v from 'valibot';
-import { readFile, readText } from '$lib/forms/form-data';
-import { describeIssues, fieldsWithIssues } from '$lib/forms/validation';
+import { readFile, readText } from '#lib/forms/form-data.js';
+import { describeIssues, fieldsWithIssues } from '#lib/forms/validation.js';
 import { describeUnreadableFile } from './csv/describe/index.ts';
 import { normalizeCsv } from './csv/normalize.ts';
 import {

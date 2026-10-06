@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { findingGroup, sealedFindings } from '$lib/reports/csv/testing';
+import { findingGroup, sealedFindings } from '#lib/reports/csv/testing/index.js';
 import { MAX_PROBLEMS_REPORTED } from '../../limits.ts';
 import type { DateOrderFinding, FindingGroup, Findings } from '../findings.ts';
 import { describeFindings } from './findings.ts';

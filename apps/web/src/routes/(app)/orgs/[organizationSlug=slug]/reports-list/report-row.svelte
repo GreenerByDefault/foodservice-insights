@@ -1,8 +1,8 @@
 <script lang="ts">
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-import ItemListLink from '$lib/components/item-list-link.svelte';
-import RelativeTime from '$lib/components/relative-time.svelte';
-import { subheading } from '$lib/reports/subheading';
+import ItemListLink from '#lib/components/item-list-link.svelte';
+import RelativeTime from '#lib/components/relative-time.svelte';
+import { subheading } from '#lib/reports/subheading.js';
 import type { ReportListRow } from '../+page.server.ts';
 import ReportStatus from './report-status.svelte';
 

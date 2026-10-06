@@ -8,7 +8,7 @@ import type { OrganizationReportSpec } from '../fixtures/organizations.ts';
 import { test } from '../fixtures/test.ts';
 
 // Matches `_REPORTS_PAGE_SIZE` in `+page.server.ts` — not imported from there, since that route
-// module pulls in `$lib/server/db` and `$env`, which resolve only inside the SvelteKit app, not
+// module pulls in `#lib/server/db.js` and `$env`, which resolve only inside the SvelteKit app, not
 // this plain Playwright runtime.
 const REPORTS_PAGE_SIZE = 20;
 const REPORT_COUNT = REPORTS_PAGE_SIZE + 1;

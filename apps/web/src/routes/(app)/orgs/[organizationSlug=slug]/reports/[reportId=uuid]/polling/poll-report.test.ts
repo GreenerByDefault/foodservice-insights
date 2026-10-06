@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiError, ApiUnreachableError } from '$lib/api/fetch';
-import { jsonResponse, stubFetch, stubUnreachableFetch } from '$lib/testing/fetch';
+import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
+import { jsonResponse, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { pollReport } from './poll-report.ts';
 
 const POLL_HREF = '/orgs/org-1/reports/report-1/poll';

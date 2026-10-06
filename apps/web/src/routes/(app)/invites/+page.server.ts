@@ -1,7 +1,7 @@
 import type { DatabaseExecutor, OrganizationInviteId, OrganizationRole } from '@gbd/db';
 import { sql } from 'kysely';
-import { requireAuth } from '$lib/server/auth/guards';
-import { database, withDbErrorHandling } from '$lib/server/db';
+import { requireAuth } from '#lib/server/auth/guards.js';
+import { database, withDbErrorHandling } from '#lib/server/db.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

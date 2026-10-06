@@ -1,9 +1,9 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
-import { Button } from '$lib/components/ui/button';
-import * as Field from '$lib/components/ui/field';
-import { Input } from '$lib/components/ui/input';
-import { FIELD, MAX_ORGANIZATION_NAME_LENGTH } from '$lib/orgs/name';
+import { Button } from '#lib/components/ui/button/index.js';
+import * as Field from '#lib/components/ui/field/index.js';
+import { Input } from '#lib/components/ui/input/index.js';
+import { FIELD, MAX_ORGANIZATION_NAME_LENGTH } from '#lib/orgs/name.js';
 
 interface Props {
   initialName: string;

@@ -1,9 +1,9 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { BASE_POLL_INTERVAL_MS } from '$lib/polling/schedule';
-import { triggerImmediatePoll } from '$lib/polling/testing/trigger-immediate-poll';
-import { jsonResponse } from '$lib/testing/fetch';
+import { BASE_POLL_INTERVAL_MS } from '#lib/polling/schedule.js';
+import { triggerImmediatePoll } from '#lib/polling/testing/trigger-immediate-poll.js';
+import { jsonResponse } from '#lib/testing/fetch.js';
 import type { ReportPageData } from './+page.server.ts';
 import ReportView from './report-view.svelte';
 import { retryableFailure } from './testing/fixtures.ts';
