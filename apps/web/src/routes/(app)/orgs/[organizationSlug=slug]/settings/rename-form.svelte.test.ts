@@ -32,7 +32,9 @@ describe('RenameForm', () => {
     expect(url).toBe('/api/orgs/org-1');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body as string)).toEqual({ name: 'Riverside Foods' });
-    expect(toast.success).toHaveBeenCalledExactlyOnceWith('Organization renamed to Riverside Foods');
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      'Organization renamed to Riverside Foods',
+    );
   });
 
   test('an unreachable server shows the unknown-outcome message and neither refreshes nor toasts', async () => {
