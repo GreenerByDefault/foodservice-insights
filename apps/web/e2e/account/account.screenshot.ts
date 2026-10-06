@@ -43,7 +43,7 @@ test('saving a name, succeeded', async ({ page }) => {
   await page.getByLabel('Your name').fill('Alex Baker');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('[data-sonner-toast][data-mounted="true"]')).toContainText(
-    'Your name was updated',
+    'Name updated to Alex Baker',
   );
 
   await expectScreenshots(page, 'account-saved.png');

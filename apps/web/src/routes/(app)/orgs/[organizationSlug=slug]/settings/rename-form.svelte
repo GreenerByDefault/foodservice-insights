@@ -17,7 +17,7 @@ async function handleSubmit(name: string): Promise<'done' | 'name-taken' | 'unkn
 
   // The switcher and the org shell both read from the layout load this refreshes.
   await invalidateAll();
-  toast.success(`Renamed to ${name}`);
+  toast.success(`Organization renamed to ${name}`);
   return 'done';
 }
 </script>

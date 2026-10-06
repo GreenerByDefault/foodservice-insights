@@ -26,14 +26,15 @@ async function handleSubmit(event: SubmitEvent) {
   if (formState === 'submitting') return;
 
   formState = 'submitting';
-  const outcome = await renameSelf(name.trim());
+  const trimmedName = name.trim();
+  const outcome = await renameSelf(trimmedName);
   if (outcome.kind === 'unknown') {
     formState = 'outcome-unknown';
     return;
   }
 
   await onSaved();
-  toast.success('Your name was updated');
+  toast.success(`Name updated to ${trimmedName}`);
   formState = 'idle';
 }
 </script>
