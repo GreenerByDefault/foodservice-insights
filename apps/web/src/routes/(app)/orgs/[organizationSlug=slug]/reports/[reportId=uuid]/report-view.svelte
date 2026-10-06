@@ -47,10 +47,6 @@ function screenHeadline(report: ReportPageData): string {
 }
 </script>
 
-<svelte:head>
-  <title>{current.report.name}</title>
-</svelte:head>
-
 <ReportHeading
   name={current.report.name}
   siteName={current.report.siteName}

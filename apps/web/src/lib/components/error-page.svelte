@@ -4,6 +4,7 @@ import { browserAuth } from '#lib/auth/browser.js';
 import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import { describeError } from '#lib/errors/messages.js';
+import { pageTitle } from '#lib/page-title.js';
 
 interface Props {
   status: number;
@@ -15,7 +16,7 @@ const presentation = $derived(describeError(status));
 </script>
 
 <svelte:head>
-  <title>{presentation.title}</title>
+  <title>{pageTitle(presentation.title)}</title>
   <!-- A failed request is not a page, so keep it out of the index and out of search results. -->
   <meta name="robots" content="noindex">
 </svelte:head>

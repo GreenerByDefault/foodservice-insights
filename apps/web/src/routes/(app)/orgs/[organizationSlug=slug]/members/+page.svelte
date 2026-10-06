@@ -5,6 +5,7 @@ import InviteForm from './invite-form.svelte';
 import MembersList from './members-list.svelte';
 import PendingInvites from './pending-invites.svelte';
 import YourMembership from './your-membership.svelte';
+import { pageTitle } from '#lib/page-title.js';
 
 let { data }: PageProps = $props();
 
@@ -12,6 +13,10 @@ let { data }: PageProps = $props();
 // own here, so there is nothing for "Your membership" to say to them.
 let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId);
 </script>
+
+<svelte:head>
+  <title>{pageTitle('Members', data.organization.name)}</title>
+</svelte:head>
 
 <PageHeading>Members</PageHeading>
 

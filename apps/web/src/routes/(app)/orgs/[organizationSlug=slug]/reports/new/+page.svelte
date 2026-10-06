@@ -2,9 +2,14 @@
 import PageHeading from '#lib/components/page-heading.svelte';
 import UploadForm from './upload-form.svelte';
 import type { PageProps } from './$types';
+import { pageTitle } from '#lib/page-title.js';
 
 let { data }: PageProps = $props();
 </script>
+
+<svelte:head>
+  <title>{pageTitle('New report', data.organization.name)}</title>
+</svelte:head>
 
 <PageHeading>New report</PageHeading>
 <p>Uploading to <strong>{data.organization.name}</strong>.</p>

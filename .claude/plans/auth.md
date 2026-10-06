@@ -344,7 +344,9 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - **`/onboarding`** (outside `(app)`, `PublicShell`): `+page.server.ts` does `requireAuth(locals)`
   and redirects to `/orgs` when a name already exists; the page explains it is the only question,
   mounts `DisplayNameForm` with `initialName=''`, and on save does `goto('/orgs', { invalidateAll: true })` — from there
-  `_organizationsPageRedirect` lands them.
+  `_organizationsPageRedirect` lands them. Like every page, it sets
+  `<title>{pageTitle(<its heading>)}</title>` (`#lib/page-title.ts`);
+  `routes/page-titles.test.ts` fails until it does.
 - **`(app)/+layout.server.ts`:** `if (auth.user.displayName === null) redirect(303, '/onboarding')`
   after `requireAuth`, and return `displayName` as `string`. Narrow `user-menu.svelte`'s prop and
   `initials()` to `string`; simplify their tests. The menu also takes `canSignOut`, which stays.
