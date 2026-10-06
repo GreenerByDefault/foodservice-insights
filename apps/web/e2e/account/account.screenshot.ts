@@ -29,3 +29,22 @@ test('saving a name, failed', async ({ page }) => {
 
   await expectScreenshots(page, 'account-save-failed.png');
 });
+
+test('saving a name, succeeded', async ({ page }) => {
+  // Stubbed rather than saved: the pinned identity's name shows in every page's shell, so a real
+  // save would change every other screenshot of it.
+  await page.route('**/api/account', (route) => route.fulfill({ status: 204 }));
+  // Stops the toast's auto-dismiss from firing mid-capture.
+  await page.clock.install();
+
+  await page.goto('/account');
+  await ensureHydrated(page);
+
+  await page.getByLabel('Your name').fill('Alex Baker');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('[data-sonner-toast][data-mounted="true"]')).toContainText(
+    'Your name was updated',
+  );
+
+  await expectScreenshots(page, 'account-saved.png');
+});

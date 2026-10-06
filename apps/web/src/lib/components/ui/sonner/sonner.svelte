@@ -1,4 +1,15 @@
 <script lang="ts">
+// The one toaster, mounted in the root layout so a toast survives a navigation. Raise one with
+// `toast.success(...)` from `svelte-sonner`. When to:
+//
+// 1. Toast success only when the outcome isn't obvious where the user is looking, including when
+//    a navigation takes away the context. Don't toast when the new page is itself the
+//    confirmation (sign-in, create org, upload report, cancel, retry).
+// 2. Errors stay inline: the existing messages persist and carry recovery instructions, and a
+//    toast would time out before they're read. The exception is a failure with no inline place.
+// 3. Toast only after the refresh or navigation resolves (`await onDone()`, `invalidateAll()`,
+//    `goto()`), so it never claims success before the page reflects it.
+// 4. Copy names the thing: "Deleted Acme Foodservice", not "Success".
 import { Toaster as Sonner, type ToasterProps as SonnerProps } from 'svelte-sonner';
 import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
