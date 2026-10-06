@@ -23,6 +23,6 @@ export async function lockInviteForEmailOrNotFound(
     .forUpdate()
     .executeTakeFirst();
 
-  if (!invite) error(404, { message: 'Not found', code: 'not_found' });
+  if (!invite) error(404, 'Not found', { code: 'not_found' });
   return invite;
 }

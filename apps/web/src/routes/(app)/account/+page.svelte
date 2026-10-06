@@ -1,5 +1,5 @@
 <script lang="ts">
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import DisplayNameForm from '#lib/components/account/display-name-form.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import * as Field from '#lib/components/ui/field/index.js';
@@ -24,7 +24,7 @@ let { data }: PageProps = $props();
   <DisplayNameForm
     initialName={data.user.displayName ?? ''}
     submitLabel="Save"
-    onSaved={invalidateAll}
+    onSaved={refreshAll}
   />
 </div>
 

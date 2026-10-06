@@ -33,7 +33,7 @@ export async function requestCancellation(
     const report = await requireReportAccess(transaction, params, 'cancel it');
 
     if (!(await cancelActiveAttempt(transaction, report.id))) {
-      error(409, { message: 'This report already finished' });
+      error(409, 'This report already finished');
     }
 
     await recordAuditEvent(transaction, {

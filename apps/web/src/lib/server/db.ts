@@ -9,7 +9,7 @@ import {
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
-import { SERVICE_UNAVAILABLE_ERROR, UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
+import { SERVICE_UNAVAILABLE_MESSAGE, UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { requirePrivateVar } from './env.ts';
 import { logger } from './log.ts';
 
@@ -66,11 +66,11 @@ export async function withDbErrorHandling<T>(
         { ...options.context, err: cause },
         `Could not reach the database to ${options.action}`,
       );
-      error(503, SERVICE_UNAVAILABLE_ERROR);
+      error(503, SERVICE_UNAVAILABLE_MESSAGE, { code: 'service_unavailable' });
     }
     if (!isPermanentDatabaseError(cause)) throw cause;
     logger().error({ ...options.context, err: cause }, `Unexpected failure to ${options.action}`);
-    error(500, { message: UNEXPECTED_ERROR_MESSAGE });
+    error(500, UNEXPECTED_ERROR_MESSAGE);
   }
 }
 

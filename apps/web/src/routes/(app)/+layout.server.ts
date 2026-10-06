@@ -12,7 +12,7 @@ export type SwitcherOrganization = OrganizationRow;
  *
  * `requireAuth` throws a 401 rather than becoming a redirect to `/sign-in`: `#lib/components/
  * error-page.svelte` renders a message today, and will offer sign-in in place once auth lands, so
- * the page the user actually asked for renders as soon as `invalidateAll()` re-runs this load.
+ * the page the user actually asked for renders as soon as `refreshAll()` re-runs this load.
  */
 export const load: LayoutServerLoad = async ({ locals }) => {
   const auth = requireAuth(locals);

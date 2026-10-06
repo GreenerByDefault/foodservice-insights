@@ -7,7 +7,6 @@
  */
 
 import { expect } from '@playwright/test';
-import { UNEXPECTED_ERROR_MESSAGE } from '../src/lib/errors/messages';
 import { MAX_UPLOAD_FIELD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
 import { test } from './fixtures/test.ts';
 
@@ -90,5 +89,5 @@ test('rejects a file over the transport limit as adapter-node, not our own valid
   );
 
   expect(response.status()).toBe(413);
-  expect(await response.json()).toEqual({ message: UNEXPECTED_ERROR_MESSAGE });
+  expect(await response.json()).toEqual({ status: 413, message: 'Payload Too Large' });
 });

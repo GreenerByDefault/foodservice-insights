@@ -29,11 +29,10 @@ export async function requireReportAccess(
     .where('deletedAt', 'is', null)
     .executeTakeFirst();
 
-  if (!report) error(404, { message: 'Not found', code: 'not_found' });
+  if (!report) error(404, 'Not found', { code: 'not_found' });
 
   if (actor.role !== 'admin' && report.createdByUserId !== actor.userId) {
-    error(403, {
-      message: `Only the report's creator or an organization admin can ${verb}`,
+    error(403, `Only the report's creator or an organization admin can ${verb}`, {
       code: 'forbidden',
     });
   }

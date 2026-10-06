@@ -1,5 +1,5 @@
 <script lang="ts">
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
 import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
@@ -23,6 +23,6 @@ let { data }: PageProps = $props();
   <div class="flex w-full max-w-sm flex-col gap-4 self-center">
     <PageHeading>Sign in</PageHeading>
 
-    <SignInFlow auth={browserAuth()} initialEmail={data.initialEmail} onSignedIn={invalidateAll} />
+    <SignInFlow auth={browserAuth()} initialEmail={data.initialEmail} onSignedIn={refreshAll} />
   </div>
 </PublicShell>

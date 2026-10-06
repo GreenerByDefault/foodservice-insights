@@ -84,7 +84,7 @@ describe('DeleteButton', () => {
     const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe('/api/orgs/org-1');
     expect(options.method).toBe('DELETE');
-    expect(goto).toHaveBeenCalledWith('/orgs', { invalidateAll: true });
+    expect(goto).toHaveBeenCalledWith('/orgs', { refreshAll: true });
     await expect.poll(() => toast.success.mock.calls).toEqual([['Deleted Acme Foodservice']]);
   });
 

@@ -41,7 +41,7 @@ export const MAX_ORGANIZATION_SLUG_LENGTH = 48;
 /** What an organization's slug may look like, enforced by the `organization_slug_format` CHECK
  * constraint (`packages/db/public-schema.sql`): lowercase alphanumerics, hyphen-separated, no
  * leading, trailing, or doubled hyphen. Mirrored here, not read from the DB, for
- * `deriveOrganizationSlug`, `apps/web/src/params/slug.ts`, and their tests. */
+ * `deriveOrganizationSlug`, `apps/web/src/params.ts`, and their tests. */
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** Slugs no organization may take, enforced by the `organization_slug_not_reserved` CHECK

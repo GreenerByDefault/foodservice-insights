@@ -7,7 +7,7 @@ import { browserAuth } from '#lib/auth/browser.js';
 import type { AuthMode } from '#lib/auth/mode.js';
 import { type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import Layout from './+layout.svelte';
 
 const state = vi.hoisted(() => ({
@@ -59,10 +59,10 @@ describe('+layout.svelte', () => {
       await callback('SIGNED_IN', sessionFor('ana'));
       await callback('INITIAL_SESSION', sessionFor('ana'));
       await callback('SIGNED_IN', sessionFor('ana'));
-      expect(invalidateAll).not.toHaveBeenCalled();
+      expect(refreshAll).not.toHaveBeenCalled();
 
       await callback('SIGNED_OUT', null);
-      expect(invalidateAll).toHaveBeenCalledOnce();
+      expect(refreshAll).toHaveBeenCalledOnce();
     });
 
     test('re-runs the loads when the session ended before the client started', async () => {
@@ -70,7 +70,7 @@ describe('+layout.svelte', () => {
 
       await callback('INITIAL_SESSION', null);
 
-      expect(invalidateAll).toHaveBeenCalledOnce();
+      expect(refreshAll).toHaveBeenCalledOnce();
     });
 
     test('unsubscribes on unmount', async () => {

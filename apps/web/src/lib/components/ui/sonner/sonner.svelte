@@ -7,7 +7,7 @@
 //    confirmation (sign-in, create org, upload report, cancel, retry).
 // 2. Errors stay inline: the existing messages persist and carry recovery instructions, and a
 //    toast would time out before they're read. The exception is a failure with no inline place.
-// 3. Toast only after the refresh or navigation resolves (`await onDone()`, `invalidateAll()`,
+// 3. Toast only after the refresh or navigation resolves (`await onDone()`, `refreshAll()`,
 //    `goto()`), so it never claims success before the page reflects it.
 // 4. Copy names the thing: "Deleted Acme Foodservice", not "Success".
 import { Toaster as Sonner, type ToasterProps as SonnerProps } from 'svelte-sonner';

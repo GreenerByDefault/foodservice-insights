@@ -214,10 +214,10 @@ async function failNotFoundOrBug(
     .where('deletedAt', 'is', null)
     .executeTakeFirst();
 
-  if (!reportExists) error(404, { message: 'Not found', code: 'not_found' });
+  if (!reportExists) error(404, 'Not found', { code: 'not_found' });
 
   logger().error({ reportId: params.reportId }, 'A report has no analysis_attempt');
-  error(500, { message: UNEXPECTED_ERROR_MESSAGE });
+  error(500, UNEXPECTED_ERROR_MESSAGE);
 }
 
 async function toAttempt(

@@ -20,7 +20,7 @@ export const POST: RequestHandler = async (event) => {
 
   const body = v.safeParse(BodySchema, await event.request.json());
   if (!body.success) {
-    error(400, { message: 'Malformed poll request' });
+    error(400, 'Malformed poll request');
   }
 
   const data = await withDbErrorHandling(

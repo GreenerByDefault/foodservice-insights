@@ -20,8 +20,8 @@ catalog:
   # --- Svelte ------------------------------------------------------------
   svelte: ^5.57.1
   svelte-check: ^4.7.6
-  '@sveltejs/kit': ^2.70.2
-  '@sveltejs/adapter-node': ^5.5.7
+  '@sveltejs/kit': ^3.0.0
+  '@sveltejs/adapter-node': ^6.0.0
   '@sveltejs/vite-plugin-svelte': ^7.3.1
   vite: ^8.3.2
 
@@ -92,6 +92,12 @@ catalog:
   # --- Playwright -------------------------------------------------------------
   playwright: 1.63.0
   '@playwright/test': 1.63.0
+
+# runed's `@sveltejs/kit` peer is optional and only backs its `runed/kit` subpath, which we don't
+# import; no runed release declares SvelteKit 3 yet. Drop this once one does.
+peerDependencyRules:
+  allowedVersions:
+    runed>@sveltejs/kit: '3'
 
 # pnpm 11 blocks very-recently-published packages by default; exceptions go here.
 # Drop an entry once the version is no longer new.

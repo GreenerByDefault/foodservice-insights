@@ -38,7 +38,7 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
 - **Server hook:** `createServerClient` from `@supabase/ssr` with `getAll`/`setAll`, then
   `auth.getUser()`. Never `getSession()`. Any auth *error* degrades to signed out, never a 500
   (cfa-web-app #115, #210, #255). `getClaims()` is a later optimization — see Follow-ups.
-- **`onAuthStateChange` → `invalidateAll()`** in the root layout (cfa-app `auth-state-change.ts`,
+- **`onAuthStateChange` → `refreshAll()`** in the root layout (cfa-app `auth-state-change.ts`,
   though we invalidate on a change of user rather than skipping only `INITIAL_SESSION`), plus a reload when Back restores the browser's saved snapshot
   of a page (cfa-app `bfcache-auth-revalidate.ts`), so Back after sign-out cannot show a signed-in
   shell. Both landed; § Following the session.
@@ -65,7 +65,7 @@ keeps the address in its own `$state` so "Change email" returns to a filled fiel
 `#lib/components/` because two places mount it: `/sign-in` and the 401 branch of
 `#lib/components/error-page.svelte`.
 
-`/sign-in` passes `auth={browserAuth()}` and `onSignedIn={invalidateAll}`, and needs nothing more:
+`/sign-in` passes `auth={browserAuth()}` and `onSignedIn={refreshAll}`, and needs nothing more:
 the invalidation re-runs its `load`, whose `locals.auth` redirect to `/orgs` takes over, and `/orgs`
 forwards someone with a live invite to `/invites`. No `onAuthStateChange` listener is involved. The
 flow sits in a `max-w-sm` column centred in `PublicShell`, which now carries `PublicHeader` (the
@@ -129,7 +129,7 @@ Two test helpers the later PRs reuse:
 
 Sign out is the account menu's last item, shown only when `(app)/+layout.svelte` passes
 `canSignOut={authMode() === 'supabase'}`. It calls `browserAuth().signOut({ scope: 'local' })` and
-then `goto('/', { invalidateAll: true })`, **without checking the error**: auth-js 2.117 clears the
+then `goto('/', { refreshAll: true })`, **without checking the error**: auth-js 2.117 clears the
 device's session even when GoTrue answers the logout with a 5xx, so the device is signed out
 either way. The one failure that keeps a session — auth-js could not read it at all — lands on `/`,
 whose `locals.auth` redirect sends a still-signed-in visitor back to `/orgs`. If the client itself
@@ -138,7 +138,7 @@ So there is no failed state to render, and no screenshot of one. Anything else t
 account, `account-self-service.md`) can rely on the same behavior.
 
 The root `+layout.svelte`, in `supabase` mode only, subscribes `browserAuth().onAuthStateChange`
-and calls `invalidateAll()` whenever `sessionUserChanged` says the event's session belongs to
+and calls `refreshAll()` whenever `sessionUserChanged` says the event's session belongs to
 someone other than the root `+layout.server.ts`'s `sessionUserId`, the user the page was rendered
 for. It also adds a `pageshow` listener, `refreshWhenRestoredByBack(() => location.reload())`. Both
 pure halves are in `#lib/auth/follow-session.ts`. So in `supabase` mode every page fetches
@@ -151,9 +151,9 @@ supabase-js after hydration, anonymous ones included. Four details constrain wha
   that ended while a page's client was still loading emits no `SIGNED_OUT` there.
 - **Other tabs follow for free.** auth-js broadcasts `SIGNED_OUT` over a `BroadcastChannel`, so
   signing out in one tab turns every other tab's `(app)` page into the 401 in place.
-- **The callback does not await `invalidateAll()`.** supabase-js awaits its subscribers, so an
+- **The callback does not await `refreshAll()`.** supabase-js awaits its subscribers, so an
   awaited reload would hold `signOut()` — or `verifyOtp()` — until every load had re-run.
-- **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={invalidateAll}` and the
+- **A sign-in re-runs the loads twice**: the flow's own `onSignedIn={refreshAll}` and the
   listener's `SIGNED_IN`. Harmless, and the 401 page inherits it.
 
 `auth/auth.e2e.ts` covers both halves of sign-out. One signs out of an `(app)` page, lands on `/`, presses
@@ -182,7 +182,7 @@ mirrored from `@gbd/db` (which now exports it) and pinned by a test, as `#lib/or
 
 `/account` reads the user from the `(app)` layout's data — its own `load` still returns nothing —
 and passes `initialName={data.user.displayName ?? ''}`, since that type is still nullable. It
-shows the email above the form and saves with `onSaved={invalidateAll}`, which is what makes the
+shows the email above the form and saves with `onSaved={refreshAll}`, which is what makes the
 account menu follow. Change email and delete account remain a `**Stub:**` comment at the foot of
 its `+page.svelte`; `StubNotice` is gone. `account.e2e.ts` renames and reads the new name in the
 menu and after a reload; `account.screenshot.ts` runs as `pinned` for `account.png`.
@@ -313,7 +313,7 @@ instead.
 | Invalid/stale session | Signed out, cookie cleared via `signOut({ scope: 'local' })` on the server client, no log for `user_not_found` | A deleted user's token is normal; stop re-sending a dead cookie |
 | Valid token, no `app_user` row | Throw → 500 | The trigger writes the row in GoTrue's own transaction, so only a setup error gets here: the app reading a different database than GoTrue, users that predate the migration, or a fixture that skipped `mintUser`'s mirror. Signing out instead would loop a user who just entered a correct code back to the form |
 | Cookie name | Pinned: `AUTH_COOKIE_NAME` in `@gbd/core`, passed as `cookieOptions.name` to both clients | Default derives from the Supabase URL hostname, which differs between host (`127`) and Docker (`host`) tiers; pinning also survives project-ref changes |
-| Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`), `secure` left to SvelteKit | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. *Rejected: `secure: event.url.protocol === 'https:'`* — it fails open, since adapter-node reports `http:` behind a TLS-terminating proxy when `ORIGIN` is unset. SvelteKit's default already relaxes for the host test browser, which reaches the server as `http://localhost` |
+| Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`), `secure` left to SvelteKit | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. *Rejected: `secure: event.url.protocol === 'https:'`* — it fails open, since `event.url.protocol` is only what adapter-node assumes (`https` unless `PROTOCOL_HEADER` says otherwise), not what the connection was. SvelteKit's default already relaxes for the host test browser, which reaches the server as `http://localhost` |
 | Sign-out scope | `local`, error ignored | Signs out this device; matches CFA. The error is ignored because auth-js clears the local session regardless (§ Following the session). *Rejected: a "Could not sign out" alert* — by the time it rendered, the `SIGNED_OUT` invalidation had replaced the page with the 401 |
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
@@ -343,7 +343,7 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 
 - **`/onboarding`** (outside `(app)`, `PublicShell`): `+page.server.ts` does `requireAuth(locals)`
   and redirects to `/orgs` when a name already exists; the page explains it is the only question,
-  mounts `DisplayNameForm` with `initialName=''`, and on save does `goto('/orgs', { invalidateAll: true })` — from there
+  mounts `DisplayNameForm` with `initialName=''`, and on save does `goto('/orgs', { refreshAll: true })` — from there
   `_organizationsPageRedirect` lands them. Like every page, it sets
   `<title>{pageTitle(<its heading>)}</title>` (`#lib/page-title.ts`);
   `routes/page-titles.test.ts` fails until it does.

@@ -5,7 +5,7 @@ import {
   shutdownBlobStore,
 } from '@gbd/storage';
 import { error } from '@sveltejs/kit';
-import { SERVICE_UNAVAILABLE_ERROR } from '#lib/errors/messages.js';
+import { SERVICE_UNAVAILABLE_MESSAGE } from '#lib/errors/messages.js';
 import { requirePrivateVar } from './env.ts';
 import { logger } from './log.ts';
 
@@ -69,6 +69,6 @@ export async function withBlobStoreErrorHandling<T>(
       { ...options.context, err: cause },
       `Could not reach the blob store to ${options.action}`,
     );
-    error(503, SERVICE_UNAVAILABLE_ERROR);
+    error(503, SERVICE_UNAVAILABLE_MESSAGE, { code: 'service_unavailable' });
   }
 }

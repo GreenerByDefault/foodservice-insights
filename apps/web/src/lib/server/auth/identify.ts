@@ -23,7 +23,7 @@ import {
 } from '@supabase/supabase-js';
 import { error, type RequestEvent } from '@sveltejs/kit';
 import { authMode } from '#lib/auth/mode.js';
-import { SERVICE_UNAVAILABLE_ERROR } from '#lib/errors/messages.js';
+import { SERVICE_UNAVAILABLE_MESSAGE } from '#lib/errors/messages.js';
 import { requirePublicVar } from '#lib/server/env.js';
 import { logger } from '#lib/server/log.js';
 
@@ -102,7 +102,7 @@ async function identifyFromSession(event: RequestEvent): Promise<UserId | null> 
         { path: event.url.pathname, err: cause },
         'Could not reach Supabase Auth to validate a session',
       );
-      error(503, SERVICE_UNAVAILABLE_ERROR);
+      error(503, SERVICE_UNAVAILABLE_MESSAGE, { code: 'service_unavailable' });
       break;
     case 'signed-out':
       if (result.action.log) logger().warn({ path: event.url.pathname }, result.action.log);
@@ -123,7 +123,8 @@ function writeSessionCookies(
 ): void {
   for (const { name, value, options } of cookies) {
     // `secure` is left to SvelteKit's default, which fails closed. Don't derive it from
-    // `event.url.protocol`: behind a TLS-terminating proxy without `ORIGIN`, that reads `http:`.
+    // `event.url.protocol`: that is what adapter-node assumes (`https` unless `PROTOCOL_HEADER`
+    // says otherwise), not what the connection actually was.
     // `httpOnly: false` arrives from `@supabase/ssr` and stays: the browser client has to read this
     // cookie to sign out, which SvelteKit's default of `true` would make impossible.
     event.cookies.set(name, value, { ...options, path: '/' });

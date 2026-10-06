@@ -64,4 +64,4 @@ exactly the bytes a user could have saved from that sheet themselves, so everyth
 to a spreadsheet unchanged.
 
 Every file in this folder is imported by the browser as well as the server: keep them free of
-`$env`, `#lib/server`, and anything Node-only.
+`$app/env/private`, `#lib/server`, and anything Node-only.

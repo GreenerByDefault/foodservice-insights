@@ -100,7 +100,7 @@ test('a new code GoTrue refuses to send', async ({ page }) => {
 
 // GoTrue accepts the code, but the session it hands back is one the server's own `getUser()` then
 // refuses, so `/sign-in`'s load does not redirect and the step is still there when
-// `invalidateAll()` settles — the same outcome as a cookie the server could not read.
+// `refreshAll()` settles — the same outcome as a cookie the server could not read.
 test('a verified code that does not sign in', async ({ page }) => {
   await openSignIn(page);
   await page.route(VERIFY_URL, (route) =>

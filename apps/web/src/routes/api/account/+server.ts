@@ -24,7 +24,7 @@ export const PATCH: RequestHandler = async (event) => {
  *
  * Refuse while the user is the last admin of any organization. Notify GBD.
  */
-export const DELETE: RequestHandler = () => error(501, { message: 'Not implemented yet' });
+export const DELETE: RequestHandler = () => error(501, 'Not implemented yet');
 
 /** Set `userId`'s display name. 400 for an invalid one, 204 on success. */
 export async function _renameSelf(

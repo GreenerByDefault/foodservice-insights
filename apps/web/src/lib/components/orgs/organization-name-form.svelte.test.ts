@@ -32,7 +32,7 @@ describe('OrganizationNameForm', () => {
       .toHaveValue('Acme Foodservice');
   });
 
-  test('an unrelated re-render — e.g. a background invalidateAll() — does not clobber an in-progress edit', async () => {
+  test('an unrelated re-render — e.g. a background refreshAll() — does not clobber an in-progress edit', async () => {
     const screen = await render(OrganizationNameForm, props(vi.fn()));
     const input = screen.getByLabelText('Organization name');
 

@@ -17,12 +17,10 @@ export interface ErrorPresentation {
 export const UNEXPECTED_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
 /** For a failure in something we depend on, where the caller's own request was fine and retrying
- * it is the answer. An API client reads the `code`; a page reads only the 503 it comes with.
+ * it is the answer. Sent with `code: 'service_unavailable'`: an API client reads the `code`; a
+ * page reads only the 503 it comes with.
  */
-export const SERVICE_UNAVAILABLE_ERROR: App.Error = {
-  message: 'The service is temporarily unavailable',
-  code: 'service_unavailable',
-};
+export const SERVICE_UNAVAILABLE_MESSAGE = 'The service is temporarily unavailable';
 
 export function describeError(status: number): ErrorPresentation {
   switch (status) {

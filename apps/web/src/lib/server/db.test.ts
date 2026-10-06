@@ -96,7 +96,7 @@ describe('withDbErrorHandling', () => {
       try {
         await divideByZero(database());
       } catch {
-        error(409, { message: 'That report already has an attempt running' });
+        error(409, 'That report already has an attempt running');
       }
     };
 

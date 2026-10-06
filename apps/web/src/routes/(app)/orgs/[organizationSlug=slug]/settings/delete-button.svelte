@@ -18,7 +18,7 @@ async function confirm() {
   // The switcher and org list both read from the layout load this refreshes; from `/orgs`,
   // `_organizationsPageRedirect` lands the user on a remaining organization, or `/orgs/new`
   // if that was their last.
-  await goto('/orgs', { invalidateAll: true });
+  await goto('/orgs', { refreshAll: true });
   toast.success(`Deleted ${organizationName}`);
 }
 </script>

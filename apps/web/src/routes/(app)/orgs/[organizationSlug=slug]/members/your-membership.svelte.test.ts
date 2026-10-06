@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { expectFetched, stubFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
-import { goto, invalidateAll } from '$app/navigation';
+import { goto, refreshAll } from '$app/navigation';
 import { LAST_ADMIN_MESSAGE } from './member-write.ts';
 import { lastAdminResponse } from './testing/fixtures.ts';
 import YourMembership from './your-membership.svelte';
@@ -45,7 +45,7 @@ describe('YourMembership', () => {
       await screen.getByRole('button', { name: 'Step down as admin' }).click();
       await screen.getByRole('button', { name: 'Yes, step down' }).click();
 
-      await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+      await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
       expectFetched(fetchMock, {
         url: '/api/orgs/org-1/members/user-1',
         method: 'PATCH',
@@ -64,7 +64,7 @@ describe('YourMembership', () => {
       await screen.getByRole('button', { name: 'Yes, step down' }).click();
 
       await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
-      expect(invalidateAll).not.toHaveBeenCalled();
+      expect(refreshAll).not.toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
     });
   });
@@ -78,7 +78,7 @@ describe('YourMembership', () => {
       await screen.getByRole('button', { name: 'Yes, leave' }).click();
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
-      expect(goto).toHaveBeenCalledWith('/orgs', { invalidateAll: true });
+      expect(goto).toHaveBeenCalledWith('/orgs', { refreshAll: true });
       expectFetched(fetchMock, { url: '/api/orgs/org-1/members/user-1', method: 'DELETE' });
       await expect.poll(() => toast.success.mock.calls).toEqual([['You left Acme Foodservice']]);
     });

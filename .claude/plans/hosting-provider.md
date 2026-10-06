@@ -168,7 +168,11 @@ Four things, whichever provider wins:
    ([`deploy-migrations.md`](deploy-migrations.md)), both pointing at the Supavisor session pooler.
    Until there is an email provider, production runs as the placeholder identity behind a site
    password: set `PUBLIC_AUTH_MODE=placeholder` and run `pnpm seed:identity` once against the
-   hosted database ([`auth.md`](auth.md) § The mode switch).
+   hosted database ([`auth.md`](auth.md) § The mode switch). The web app has no `ORIGIN` to set
+   (adapter-node 6 removed it): it takes its origin from `Host` and assumes `https`, which is right
+   behind a TLS-terminating proxy. Set `HOST_HEADER=x-forwarded-host` only if the proxy rewrites
+   `Host` — a mismatch fails SvelteKit's CSRF check on every mutating request. Not `paths.origin`
+   in `vite.config.ts`, which would bake one environment's origin into the image.
 4. Set the spend and resource alerts, and on DigitalOcean, log forwarding.
 
 The deployed commit needs no provider-injected variable: every image carries
