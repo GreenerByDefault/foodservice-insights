@@ -1,7 +1,6 @@
 /** Parsing a JSON request body against a valibot schema, with the 400 every route answers a bad
  * one with. */
 
-import { json } from '@sveltejs/kit';
 import * as v from 'valibot';
 
 export function parseBody<T>(
@@ -12,7 +11,7 @@ export function parseBody<T>(
   if (!parsed.success) {
     return {
       ok: false,
-      response: json({ message: 'Fix the highlighted field.' }, { status: 400 }),
+      response: Response.json({ message: 'Fix the highlighted field.' }, { status: 400 }),
     };
   }
   return { ok: true, value: parsed.output };

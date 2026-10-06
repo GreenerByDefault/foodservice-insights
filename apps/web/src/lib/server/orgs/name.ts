@@ -5,7 +5,6 @@
  * answered in terms of the name too.
  */
 
-import { json } from '@sveltejs/kit';
 import * as v from 'valibot';
 import { OrganizationNameSchema } from '#lib/orgs/name.js';
 import { parseBody } from '#lib/server/body.js';
@@ -21,7 +20,7 @@ export function parseOrganizationNameBody(
 
 /** The 409 for a name another organization already holds. */
 export function nameTakenResponse(): Response {
-  return json(
+  return Response.json(
     { message: 'An organization with that name already exists.', code: 'name-taken' },
     { status: 409 },
   );
@@ -29,7 +28,7 @@ export function nameTakenResponse(): Response {
 
 /** The 422 for a name with no `a–z0–9` in it — `deriveOrganizationSlug` returned `null`. */
 export function slugUnderivableResponse(): Response {
-  return json(
+  return Response.json(
     {
       message: 'That name needs at least one letter or number in a–z or 0–9.',
       code: 'slug-underivable',
@@ -41,7 +40,7 @@ export function slugUnderivableResponse(): Response {
 /** The 422 for a name that derives to a reserved address — a static route SvelteKit would route
  * ahead of the organization's dynamic segment. */
 export function slugReservedResponse(): Response {
-  return json(
+  return Response.json(
     {
       message: "That name isn't available. Try adding your region or division.",
       code: 'slug-reserved',
@@ -53,7 +52,7 @@ export function slugReservedResponse(): Response {
 /** The 409 for a name that derives to an address another organization already has — rare by
  * construction, since names are already unique: it takes two distinct names deriving to one slug. */
 export function slugTakenResponse(slug: string): Response {
-  return json(
+  return Response.json(
     {
       message:
         "That name is too close to another organization's. Try adding your region or division.",

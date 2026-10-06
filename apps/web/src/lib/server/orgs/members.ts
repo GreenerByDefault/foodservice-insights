@@ -7,7 +7,6 @@
  */
 
 import { type Database, type DatabaseExecutor, withTransaction } from '@gbd/db';
-import { json } from '@sveltejs/kit';
 import type { Transaction } from 'kysely';
 import { isCheckViolation } from '#lib/server/db.js';
 
@@ -36,7 +35,7 @@ export async function attemptMemberWrite(
 
 /** The 409 for a write that would leave the organization with no admin. */
 export function lastAdminResponse(): Response {
-  return json(
+  return Response.json(
     {
       message: "You're the only admin. Make someone else an admin first.",
       code: 'last-admin',

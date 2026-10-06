@@ -1,5 +1,5 @@
 import type { ReportId } from '@gbd/db';
-import { error, json } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import * as v from 'valibot';
 import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
@@ -33,5 +33,5 @@ export const POST: RequestHandler = async (event) => {
     { action: 'poll the reports list', context: { organizationId } },
   );
 
-  return json(data);
+  return Response.json(data);
 };
