@@ -7,6 +7,7 @@ const STOPPED_AT = new Date('2026-01-15T10:07:00Z');
 const NEW_REPORT_HREF = '/orgs/00000000-0000-0000-0000-000000000000/reports/new';
 const ORGANIZATION_SLUG = 'org-1';
 const REPORT_ID = 'report-1';
+const REPORT_NAME = 'Q1 procurement';
 
 describe('CanceledView', () => {
   test('says the report was stopped and links to start a new one', async () => {
@@ -16,6 +17,7 @@ describe('CanceledView', () => {
       newReportHref: NEW_REPORT_HREF,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
     });
 
     await expect
@@ -33,6 +35,7 @@ describe('CanceledView', () => {
       newReportHref: NEW_REPORT_HREF,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
     });
 
     const time = screen.container.querySelector('time');

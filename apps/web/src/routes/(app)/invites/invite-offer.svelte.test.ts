@@ -3,14 +3,17 @@ import { render } from 'vitest-browser-svelte';
 import { goto, invalidateAll } from '$app/navigation';
 import { expectFetched, jsonResponse, stubFetch, stubPendingFetch } from '$lib/testing/fetch';
 import { resetNavigationMocks } from '$lib/testing/navigation';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import InviteOffer from './invite-offer.svelte';
 import { anInviteOffer } from './testing/fixtures.ts';
 
 vi.mock('$app/navigation', () => import('$lib/testing/navigation'));
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
   resetNavigationMocks();
+  resetToastMocks();
 });
 
 describe('InviteOffer', () => {
@@ -35,7 +38,7 @@ describe('InviteOffer', () => {
         .toBeVisible();
     });
 
-    test('accepting POSTs the invite and goes to the organization, reloading everything', async () => {
+    test('accepting POSTs the invite, goes to the organization reloading everything, and toasts', async () => {
       const fetchMock = stubFetch(jsonResponse({ organizationSlug: 'northgate' }));
       const invite = anInviteOffer();
       const screen = await render(InviteOffer, { invite });
@@ -47,6 +50,9 @@ describe('InviteOffer', () => {
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
       expect(goto).toHaveBeenCalledWith('/orgs/northgate', { invalidateAll: true });
       expectFetched(fetchMock, { url: `/api/invites/${invite.inviteId}/accept`, method: 'POST' });
+      await expect
+        .poll(() => toast.success.mock.calls)
+        .toEqual([['You joined Northgate Provisions']]);
     });
 
     test.for([
@@ -65,6 +71,7 @@ describe('InviteOffer', () => {
         await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
         expect(goto).not.toHaveBeenCalled();
         await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
+        expect(toast.success).not.toHaveBeenCalled();
       },
     );
 
@@ -101,7 +108,7 @@ describe('InviteOffer', () => {
       await expect.element(decline).toHaveAttribute('aria-busy', 'false');
     });
 
-    test('declining POSTs the invite and reloads the list', async () => {
+    test('declining POSTs the invite, reloads the list and toasts', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 204 }));
       const invite = anInviteOffer();
       const screen = await render(InviteOffer, { invite });
@@ -112,6 +119,9 @@ describe('InviteOffer', () => {
 
       await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
       expectFetched(fetchMock, { url: `/api/invites/${invite.inviteId}/decline`, method: 'POST' });
+      await expect
+        .poll(() => toast.success.mock.calls)
+        .toEqual([['Declined the invitation to Northgate Provisions']]);
     });
 
     test('a declined invite that was no longer valid reloads the list too', async () => {
@@ -137,6 +147,7 @@ describe('InviteOffer', () => {
         .element(screen.getByText("Couldn't decline this invitation — please try again."))
         .toBeVisible();
       expect(invalidateAll).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
     });
   });
 
@@ -157,7 +168,7 @@ describe('InviteOffer', () => {
         .not.toBeInTheDocument();
     });
 
-    test('dismissing POSTs a decline and reloads the list', async () => {
+    test('dismissing POSTs a decline, reloads the list and toasts', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 204 }));
       const invite = anInviteOffer({ isExpired: true });
       const screen = await render(InviteOffer, { invite });
@@ -168,6 +179,9 @@ describe('InviteOffer', () => {
 
       await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
       expectFetched(fetchMock, { url: `/api/invites/${invite.inviteId}/decline`, method: 'POST' });
+      await expect
+        .poll(() => toast.success.mock.calls)
+        .toEqual([['Dismissed the invitation to Northgate Provisions']]);
     });
 
     test('a failed dismiss says so', async () => {

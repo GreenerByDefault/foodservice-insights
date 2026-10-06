@@ -3,6 +3,7 @@ import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { RESEND_COOLDOWN_S } from '$lib/auth/sign-in';
 import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '$lib/auth/testing/fake';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import CodeStep from './code-step.svelte';
 
 function props(auth: FakeBrowserAuth, overrides: { onSignedIn?: () => Promise<void> } = {}) {
@@ -14,8 +15,11 @@ function props(auth: FakeBrowserAuth, overrides: { onSignedIn?: () => Promise<vo
   };
 }
 
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+
 afterEach(() => {
   vi.useRealTimers();
+  resetToastMocks();
 });
 
 /** The code field, which `InputOTP` renders as one hidden input behind the six cells. */
@@ -203,7 +207,7 @@ describe('CodeStep', () => {
     });
   });
 
-  test('resend is held for the cooldown, then sends without creating a user', async () => {
+  test('resend is held for the cooldown, then sends without creating a user, and toasts', async () => {
     // Fake timers only until the countdown is spent: a locator action while they are installed
     // would have its own retries frozen along with the clock.
     vi.useFakeTimers();
@@ -225,6 +229,9 @@ describe('CodeStep', () => {
       email: 'ada@example.com',
       options: { shouldCreateUser: false },
     });
+    await expect
+      .poll(() => toast.success.mock.calls)
+      .toEqual([['Sent a new code to ada@example.com']]);
   });
 
   test('a successful resend clears the typed code and restarts the cooldown', async () => {
@@ -317,6 +324,7 @@ describe('CodeStep', () => {
     await expect
       .element(screen.getByRole('alert'))
       .toHaveTextContent('Too many codes requested. Wait a minute, then try again.');
+    expect(toast.success).not.toHaveBeenCalled();
     // Re-armed, not left clickable: the error just said to wait, so the button has to agree.
     await expect
       .element(screen.getByRole('button', { name: `Send a new code in ${RESEND_COOLDOWN_S}s` }))

@@ -3,6 +3,7 @@ import LogOutIcon from '@lucide/svelte/icons/log-out';
 import MailIcon from '@lucide/svelte/icons/mail';
 import UserIcon from '@lucide/svelte/icons/user';
 import UserRoundIcon from '@lucide/svelte/icons/user-round';
+import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
 import { browserAuth } from '$lib/auth/browser';
 import { Button } from '$lib/components/ui/button';
@@ -32,6 +33,7 @@ async function signOut() {
     // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
     // Nothing was signed out, so there is nowhere to go; the next click loads it afresh.
     console.error('Could not sign out', cause);
+    toast.error("Couldn't sign out. Try again.");
     return;
   }
   await goto('/', { invalidateAll: true });

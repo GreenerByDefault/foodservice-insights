@@ -52,7 +52,7 @@ describe('DisplayNameForm', () => {
       body: { displayName: 'Alex Baker' },
     });
     await expect.element(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
-    expect(toast.success).toHaveBeenCalledExactlyOnceWith('Your name was updated');
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith('Name updated to Alex Baker');
   });
 
   test('an unknown outcome shows an alert, and neither calls onSaved nor toasts', async () => {

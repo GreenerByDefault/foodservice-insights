@@ -1,4 +1,5 @@
 <script lang="ts">
+import { toast } from 'svelte-sonner';
 import { Button } from '$lib/components/ui/button';
 import RelativeTime from '$lib/components/relative-time.svelte';
 import type { ActionState } from '$lib/forms/action-state';
@@ -26,6 +27,7 @@ async function revoke() {
     await revokeInvite(organizationSlug, invite.inviteId);
     actionState = { status: 'idle' };
     await onRevoked();
+    toast.success(`Revoked the invitation for ${invite.email}`);
   } catch {
     actionState = { status: 'error', message: "Couldn't revoke this invite — please try again." };
   }

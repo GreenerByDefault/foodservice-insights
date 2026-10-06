@@ -17,7 +17,7 @@ test('an admin promotes a member to admin, then demotes them back, with no reloa
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  const memberRow = page.getByRole('listitem').filter({ hasText: memberName });
+  const memberRow = page.getByRole('main').getByRole('listitem').filter({ hasText: memberName });
   await expect(memberRow.getByText('Member')).toBeVisible();
 
   const loads = watchPageLoads(page);
@@ -45,7 +45,7 @@ test('the sole admin stepping down is refused, and told how to proceed', async (
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  const ownRow = page.getByRole('listitem').filter({ hasText: user.email });
+  const ownRow = page.getByRole('main').getByRole('listitem').filter({ hasText: user.email });
 
   await page.getByRole('button', { name: 'Step down as admin' }).click();
   await page.getByRole('button', { name: 'Yes, step down' }).click();
@@ -68,7 +68,7 @@ test('an admin removes a member, and the row disappears', async ({ page, organiz
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
-  const memberRow = page.getByRole('listitem').filter({ hasText: memberName });
+  const memberRow = page.getByRole('main').getByRole('listitem').filter({ hasText: memberName });
   await memberRow.getByRole('button', { name: `Manage ${memberName}` }).click();
   await page.getByRole('menuitem', { name: 'Remove from organization' }).click();
   await page.getByRole('button', { name: 'Yes, remove' }).click();

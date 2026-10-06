@@ -3,7 +3,7 @@ import { dbMsAgo } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
 
-test('confirm stays disabled until the name is typed; confirming lands on /orgs, drops it from the switcher, and its reports are gone', async ({
+test('confirm stays disabled until the name is typed; confirming lands on /orgs, toasts, drops it from the switcher, and its reports are gone', async ({
   page,
   organizations,
 }) => {
@@ -41,6 +41,10 @@ test('confirm stays disabled until the name is typed; confirming lands on /orgs,
   // forwards that on to a single remaining organization when there is one — so the deterministic
   // assertion is just that the browser is no longer anywhere under the deleted organization.
   await page.waitForURL((url) => !url.pathname.includes(organizationSlug));
+
+  // Raised after the navigation, from the root layout's toaster — so it survives landing on a
+  // different page than the one that deleted the organization.
+  await expect(page.getByText(`Deleted ${name}`)).toBeVisible();
 
   if (new URL(page.url()).pathname === '/orgs') {
     // Landed on the bare list rather than being forwarded further — the deleted organization

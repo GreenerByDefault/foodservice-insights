@@ -15,6 +15,7 @@ const INPUT_FILE = {
 };
 const ORGANIZATION_SLUG = 'org-1';
 const REPORT_ID = 'report-1';
+const REPORT_NAME = 'Q1 procurement';
 
 describe('ResultView', () => {
   test('links to the pdf, the excel file, and the original file', async () => {
@@ -25,6 +26,7 @@ describe('ResultView', () => {
       inputFile: INPUT_FILE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
+      reportName: REPORT_NAME,
     });
 
     await expect

@@ -80,6 +80,7 @@ function screenHeadline(report: ReportPageData): string {
     inputFile={current.inputFile}
     organizationSlug={current.organizationSlug}
     reportId={current.report.id}
+    reportName={current.report.name}
   />
 {:else if current.attempt.status === 'failed'}
   <FailureView
@@ -87,6 +88,7 @@ function screenHeadline(report: ReportPageData): string {
     failure={current.attempt.failure}
     organizationSlug={current.organizationSlug}
     reportId={current.report.id}
+    reportName={current.report.name}
     onReportChanged={poller.pollNow}
   />
 {:else if current.attempt.status === 'canceled'}
@@ -96,5 +98,6 @@ function screenHeadline(report: ReportPageData): string {
     newReportHref={current.newReportHref}
     organizationSlug={current.organizationSlug}
     reportId={current.report.id}
+    reportName={current.report.name}
   />
 {/if}

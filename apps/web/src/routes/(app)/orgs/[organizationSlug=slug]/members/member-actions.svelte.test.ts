@@ -2,13 +2,17 @@ import type { UserId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { expectFetched, jsonResponse, stubFetch } from '$lib/testing/fetch';
+import { resetToastMocks, toast } from '$lib/testing/toast';
 import type { MemberRow } from './+page.server.ts';
 import MemberActions from './member-actions.svelte';
 import { LAST_ADMIN_MESSAGE } from './member-write.ts';
 import { aMember, lastAdminResponse } from './testing/fixtures.ts';
 
+vi.mock('svelte-sonner', () => import('$lib/testing/toast'));
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetToastMocks();
 });
 
 /** Opens the menu and returns the screen — the content is portalled, so it only exists once open. */
@@ -50,10 +54,14 @@ describe('MemberActions', () => {
   });
 
   describe('changing a role', () => {
-    test('promoting PATCHes the member with role admin, then calls onDone', async () => {
+    test('promoting PATCHes the member with role admin, calls onDone and toasts', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 204 }));
       const onDone = vi.fn().mockResolvedValue(undefined);
-      const member = aMember({ role: 'member', userId: 'user-1' as UserId });
+      const member = aMember({
+        role: 'member',
+        userId: 'user-1' as UserId,
+        displayName: 'Ana Ruiz',
+      });
       const screen = await opened({ organizationSlug: 'org-1', member, onDone });
 
       await screen.getByRole('menuitem', { name: 'Make admin' }).click();
@@ -64,6 +72,7 @@ describe('MemberActions', () => {
         method: 'PATCH',
         body: { role: 'admin' },
       });
+      await expect.poll(() => toast.success.mock.calls).toEqual([['Ana Ruiz is now an admin']]);
     });
 
     test('a 409 shows the last-admin message and does not call onDone', async () => {
@@ -79,6 +88,7 @@ describe('MemberActions', () => {
 
       await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
       expect(onDone).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
     });
 
     // This is the one "any other failure" case worth keeping: `setRole` renders its own alert
@@ -100,10 +110,10 @@ describe('MemberActions', () => {
   });
 
   describe('removing another member', () => {
-    test('confirming DELETEs the member, then calls onDone', async () => {
+    test('confirming DELETEs the member, calls onDone and toasts', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 204 }));
       const onDone = vi.fn().mockResolvedValue(undefined);
-      const member = aMember({ userId: 'user-1' as UserId });
+      const member = aMember({ userId: 'user-1' as UserId, displayName: 'Ana Ruiz' });
       const screen = await opened({ organizationSlug: 'org-1', member, onDone });
 
       await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
@@ -111,6 +121,7 @@ describe('MemberActions', () => {
 
       await expect.poll(() => onDone.mock.calls.length).toBe(1);
       expectFetched(fetchMock, { url: '/api/orgs/org-1/members/user-1', method: 'DELETE' });
+      await expect.poll(() => toast.success.mock.calls).toEqual([['Removed Ana Ruiz']]);
     });
 
     test('a 409 shows the last-admin message and does not call onDone', async () => {
@@ -123,6 +134,7 @@ describe('MemberActions', () => {
 
       await expect.element(screen.getByText(LAST_ADMIN_MESSAGE)).toBeVisible();
       expect(onDone).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
     });
   });
 });
