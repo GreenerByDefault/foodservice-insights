@@ -204,10 +204,6 @@ Turborepo.
 
 To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web dev`. However, not all packages implement every command.
 
-To run the production build, use `pnpm --filter @gbd/web start`, then go to
-<http://localhost:3000> — not the `0.0.0.0:3000` the server logs, which is unreachable on
-macOS.
-
 ### Uploading reports by hand
 
 [`apps/web/sample-reports/`](apps/web/sample-reports/) has CSVs to upload: one that is

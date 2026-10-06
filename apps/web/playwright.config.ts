@@ -72,17 +72,6 @@ export default defineConfig({
         timeout: 180_000,
       },
     ],
-    webServer: {
-      env: {
-        // SvelteKit's CSRF check rejects a POST whose Origin header doesn't match this. It's set
-        // to `baseURL`, which is correct for `e2e` (host Chromium, hits it directly) but NOT for
-        // `screenshots` (container browser, hits `baseURLFromContainer`) — a form submitted there
-        // gets a 403. GETs are unaffected; keep the screenshots project to navigation and seeded
-        // DB state, or give the two projects separate webServer origins if that stops being
-        // enough.
-        ORIGIN: baseURL,
-      },
-    },
   }),
 
   // One canonical file per shot: no `-darwin`/`-chromium` suffixes, so a screenshot taken outside

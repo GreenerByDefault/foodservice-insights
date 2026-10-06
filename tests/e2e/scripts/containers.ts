@@ -255,20 +255,18 @@ export function webContainerCommand(options: {
   image: string;
   runName: string;
   port: number;
-  baseURL: string;
   stack: ContainerStack;
 }): string {
-  const { image, runName, port, baseURL, stack } = options;
+  const { image, runName, port, stack } = options;
   const args = [
     ...baseRunArgs('web', runName),
-    // Loopback-only, and the same number inside and out so `PORT`, `ORIGIN` and `baseURL` stay
-    // the one value the rest of the harness already agrees on.
+    // Loopback-only, and the same number inside and out so `PORT` stays the one value the rest of the
+    // harness already agrees on.
     `--publish=127.0.0.1:${port}:${port}`,
     ...envFlags({
       PORT: String(port),
-      // The browser reaches the container through the published port, so the origin it sends is
-      // still the host's — SvelteKit's CSRF check 403s the upload otherwise.
-      ORIGIN: baseURL,
+      // See `extraHTTPHeaders` in `@gbd/browser-testing`'s Playwright config.
+      PROTOCOL_HEADER: 'x-forwarded-proto',
       // Whatever `test-run.ts` chose, which matches how production is hosted and flips with it.
       PUBLIC_AUTH_MODE: requireEnv('PUBLIC_AUTH_MODE'),
       ...sharedEnv(stack),

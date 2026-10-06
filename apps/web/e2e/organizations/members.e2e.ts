@@ -126,6 +126,7 @@ test('a member removing someone else through the API is refused', async ({
   page,
   organizations,
   db,
+  baseURL,
 }) => {
   const adminEmail = `sole-admin-${crypto.randomUUID()}@example.test`;
   const { slug: organizationSlug } = await organizations.create({
@@ -140,8 +141,11 @@ test('a member removing someone else through the API is refused', async ({
     .where('auth.users.email', '=', adminEmail)
     .executeTakeFirstOrThrow();
 
+  // With an origin, as a browser's own fetch would send, so the 403 is the admin check's and not
+  // SvelteKit 3's CSRF refusal of a bodyless DELETE.
   const response = await page.request.delete(
     organizationMemberApiHref(organizationSlug, otherMember.id),
+    { headers: { origin: baseURL as string } },
   );
 
   expect(response.status()).toBe(403);

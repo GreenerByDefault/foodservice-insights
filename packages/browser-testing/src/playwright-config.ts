@@ -37,12 +37,12 @@ export type CreatePlaywrightConfigOptions = {
      *
      * **`env` below does not reach a command that is only a launcher.** Playwright sets it on the
      * process it spawns, so for a `docker run` it lands on the CLI rather than in the container:
-     * such a command has to carry `PORT`, `ORIGIN` and the rest itself. */
+     * such a command has to carry `PORT`, `PROTOCOL_HEADER` and the rest itself. */
     command?: string;
     /** Set when the config isn't itself next to the app's `start.js` — e.g. `tests/e2e`, which
      * runs `apps/web`'s build from outside that package. */
     cwd?: string;
-    /** Merged on top of the shared `PORT`/`ORIGIN`/`TEST_DB`. */
+    /** Merged on top of the shared `PORT`/`PROTOCOL_HEADER`/`TEST_DB`. */
     env?: Record<string, string>;
     /** Opt in to a SIGTERM-then-wait teardown. Playwright's default is SIGKILL to the process
      * group, which is fine for a server it owns directly but strands whatever a launcher command
@@ -74,6 +74,11 @@ export function createPlaywrightConfig(
     use: {
       baseURL,
       trace: 'retain-on-failure',
+      // Pairs with `PROTOCOL_HEADER` below, standing in for the TLS proxy that fronts production.
+      // Without it adapter-node assumes `https`, so SvelteKit's CSRF check would refuse every POST
+      // to this plain-HTTP server. Not `ORIGIN`: SvelteKit 3 replaces it with a build-time
+      // `paths.origin`, and this runs the production build.
+      extraHTTPHeaders: { 'x-forwarded-proto': 'http' },
     },
     projects,
     ...(timeout !== undefined ? { timeout } : {}),
@@ -92,10 +97,7 @@ export function createPlaywrightConfig(
         : {}),
       env: {
         PORT: String(port),
-        // SvelteKit's CSRF check rejects a POST whose Origin header doesn't match this. A caller
-        // whose browser hits the server through a different address (e.g. from inside a
-        // container) overrides it via `webServer.env`.
-        ORIGIN: baseURL,
+        PROTOCOL_HEADER: 'x-forwarded-proto',
         TEST_DB: '1',
         // Off, so only the client ever closes an idle connection. Playwright's API client
         // (`request`, `page.request`) pools keep-alive sockets per worker and ignores the server's
