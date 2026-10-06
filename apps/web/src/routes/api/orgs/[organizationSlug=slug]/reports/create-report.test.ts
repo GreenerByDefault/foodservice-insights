@@ -10,7 +10,10 @@ import { _createReport } from './+server.ts';
 
 // A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
 // tests below that depend on it being enforced.
-vi.mock('$env/dynamic/private', () => ({ env: {} }));
+vi.mock('$app/env/private', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$app/env/private')>()),
+  REPORT_RATE_LIMIT: undefined,
+}));
 
 // Only `lockAndCheckReportRateLimit` is mocked, and it defaults to the real implementation — a
 // test below overrides it for one call to simulate the recheck losing a race that the initial

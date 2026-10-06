@@ -43,6 +43,7 @@ export default defineConfig(({ command }) => ({
           filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
       },
       adapter: adapter(),
+      experimental: { explicitEnvironmentVariables: true },
     }),
   ],
   test: {
@@ -73,7 +74,7 @@ export default defineConfig(({ command }) => ({
           name: 'server',
           environment: 'node',
           globalSetup: ['./src/lib/server/testing/global-setup.ts'],
-          setupFiles: ['./src/lib/server/testing/setup-file.ts'],
+          setupFiles: ['./src/lib/server/testing/env.ts', './src/lib/server/testing/setup-file.ts'],
           include: ['src/**/*.{test,spec}.{js,ts}'],
           exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 

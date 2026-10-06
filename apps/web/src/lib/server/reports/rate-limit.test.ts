@@ -20,11 +20,13 @@ import {
   type RateLimitExceeded,
 } from './rate-limit';
 
-const { mockEnv } = vi.hoisted(() => ({ mockEnv: {} as Record<string, string> }));
-vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
+const { mockEnv } = vi.hoisted(() => ({
+  mockEnv: { REPORT_RATE_LIMIT: undefined as string | undefined },
+}));
+vi.mock('$app/env/private', () => mockEnv);
 
 afterEach(() => {
-  delete mockEnv.REPORT_RATE_LIMIT;
+  mockEnv.REPORT_RATE_LIMIT = undefined;
 });
 
 describe('checkReportRateLimit', () => {

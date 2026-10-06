@@ -14,7 +14,7 @@ import {
 } from '@gbd/db';
 import { HOURLY_REPORT_LIMIT, WEEKLY_REPORT_LIMIT } from '#lib/reports/limits.js';
 import type { RejectedUploadRecord } from '#lib/reports/rejection.js';
-import { env } from '$env/dynamic/private';
+import { REPORT_RATE_LIMIT } from '$app/env/private';
 
 export type RateLimitScope = 'organization' | 'user';
 export type RateLimitWindow = 'hourly' | 'weekly';
@@ -31,7 +31,7 @@ export async function checkReportRateLimit(
   database: DatabaseExecutor,
   { organizationId, userId }: { organizationId: OrganizationId; userId: UserId },
 ): Promise<RateLimitExceeded | undefined> {
-  if (env.REPORT_RATE_LIMIT === 'off') return undefined;
+  if (REPORT_RATE_LIMIT === 'off') return undefined;
 
   const hourly = await countReportsSince(database, {
     organizationId,

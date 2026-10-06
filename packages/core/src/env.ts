@@ -1,7 +1,7 @@
 /** Reading environment variables outside of Vite.
  *
  * **Node only.** Never import this from Svelte components or SvelteKit `load`/route code —
- * use `$env/dynamic/private` there, which SvelteKit populates from the same `.env` files in
+ * use `$app/env/private` there, which SvelteKit populates from the same `.env` files in
  * dev and from the real environment in production.
  *
  * This module exists for the places that run outside Vite, like the worker process.

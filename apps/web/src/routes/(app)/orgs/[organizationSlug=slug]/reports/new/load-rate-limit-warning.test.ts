@@ -9,7 +9,10 @@ import { _loadRateLimitWarning } from './+page.server.ts';
 
 // A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
 // test below that depends on it being enforced.
-vi.mock('$env/dynamic/private', () => ({ env: {} }));
+vi.mock('$app/env/private', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$app/env/private')>()),
+  REPORT_RATE_LIMIT: undefined,
+}));
 
 describe('_loadRateLimitWarning', () => {
   test('undefined when neither the organization nor the user is near a limit', async () => {

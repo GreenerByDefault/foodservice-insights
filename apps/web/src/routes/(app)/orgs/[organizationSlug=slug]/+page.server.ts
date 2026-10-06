@@ -11,7 +11,7 @@ import { pollIntervalMsForWorkerMode } from '#lib/polling/schedule.js';
 import { screenStatus } from '#lib/reports/attempt-status.js';
 import type { Creator } from '#lib/reports/subheading.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
-import { env } from '$env/dynamic/private';
+import { WORKER_MODE } from '$app/env/private';
 import type { PageServerLoad } from './$types';
 import { parseCursor, type ReportsCursor } from './reports-list/pagination.ts';
 
@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ url, parent }) => {
         organizationId: organization.id,
         organizationSlug: organization.slug,
         cursor,
-        pollIntervalMs: pollIntervalMsForWorkerMode(env.WORKER_MODE),
+        pollIntervalMs: pollIntervalMsForWorkerMode(WORKER_MODE),
       }),
     { action: "load an organization's reports", context: { organizationId: organization.id } },
   );

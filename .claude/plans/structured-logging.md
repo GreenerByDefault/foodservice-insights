@@ -34,7 +34,7 @@ Facts from the tree (2026-09-28) that shape the design:
   keep logging it.
 - **`LOG_LEVEL` and `LOG_FORMAT` are wired.** Turbo passes both through; `.env.example` sets
   `LOG_FORMAT=pretty` and `.env.test` sets `LOG_LEVEL=warn`. The worker reads them from
-  `process.env`, the web app from `$env/dynamic/private`.
+  `process.env`, the web app from `$app/env/private`.
 - **The worker's loggers are parameters, bar one.** `WORKER_LOG` in `apps/worker/src/log.ts` is
   the root, a singleton because `WORKER_DATABASE`'s pool logs through it at import. `main.ts` binds
   it to `workerId` and passes that as `WorkerDependencies.log`, which `AttemptDependencies.log`,
@@ -83,7 +83,7 @@ tail.
 ## Decisions
 
 - **Settings come from the caller's environment.** The worker passes `process.env` to
-  `parseLogSettings` and the web app passes `$env/dynamic/private`, so `vite dev` and the worker
+  `parseLogSettings` and the web app passes `$app/env/private`, so `vite dev` and the worker
   cannot disagree. `LOG_FORMAT=pretty` loads pino-pretty, a dev dependency of core that the images
   lack; asking for it there throws with a message saying so.
 - **Errors go under `err`**, pino's own key, which is where `log.error(error, '…')` puts it. `error`

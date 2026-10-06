@@ -130,7 +130,8 @@ Applies to `packages/storage` and every app or package that imports it.
 
 - **Svelte 5 runes only.** Never `export let` or `<slot>`. Most Svelte code in training
   data is Svelte 4, so check the Svelte MCP server rather than recalling an API.
-- **Runtime config comes from `$env/dynamic/private`**, never `$env/static/private`.
+- **Runtime config comes from `$app/env/private`**, declared in `src/env.ts` — dynamic, never
+  `static: true`, and read through `requirePrivateVar` when it must be set.
 - **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
 - **`svelte-kit sync` is inlined into the `check` and `test:unit` scripts** because it has
   to run before typechecking or testing. It looks redundant; it isn't. Don't delete it and

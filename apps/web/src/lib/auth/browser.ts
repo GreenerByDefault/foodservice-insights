@@ -12,8 +12,8 @@
 
 import { AUTH_COOKIE_NAME } from '@gbd/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { browser } from '$app/environment';
-import { env } from '$env/dynamic/public';
+import { browser } from '$app/env';
+import { PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from '$app/env/public';
 
 type SupabaseAuth = SupabaseClient['auth'];
 
@@ -43,8 +43,8 @@ async function loadAuth(): Promise<SupabaseAuth> {
 
 async function createAuth(): Promise<SupabaseAuth> {
   const { createBrowserClient } = await import('@supabase/ssr');
-  const url = env.PUBLIC_SUPABASE_URL;
-  const key = env.PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const url = PUBLIC_SUPABASE_URL;
+  const key = PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) {
     throw new Error(
       'PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_PUBLISHABLE_KEY must both be set to sign in.',

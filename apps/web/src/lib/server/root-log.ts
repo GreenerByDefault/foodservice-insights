@@ -5,13 +5,13 @@
  */
 
 import { createLogger, type Logger, parseLogSettings } from '@gbd/core/log';
-import { env } from '$env/dynamic/private';
+import { LOG_FORMAT, LOG_LEVEL } from '$app/env/private';
 
 let root: Logger | undefined;
 
 /** Built on first use, for the reason `database()` is: the build imports server modules with no
  * env vars set. */
 export function rootLogger(): Logger {
-  root ??= createLogger(parseLogSettings({ level: env.LOG_LEVEL, format: env.LOG_FORMAT }));
+  root ??= createLogger(parseLogSettings({ level: LOG_LEVEL, format: LOG_FORMAT }));
   return root;
 }

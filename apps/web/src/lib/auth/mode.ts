@@ -13,7 +13,7 @@
  * `placeholder`. Read here and nowhere else — components take what they need as a prop.
  */
 
-import { env } from '$env/dynamic/public';
+import { PUBLIC_AUTH_MODE } from '$app/env/public';
 
 export type AuthMode = 'placeholder' | 'supabase';
 
@@ -29,5 +29,5 @@ export function parseAuthMode(raw: string | undefined): AuthMode {
 }
 
 export function authMode(): AuthMode {
-  return parseAuthMode(env.PUBLIC_AUTH_MODE);
+  return parseAuthMode(PUBLIC_AUTH_MODE);
 }
