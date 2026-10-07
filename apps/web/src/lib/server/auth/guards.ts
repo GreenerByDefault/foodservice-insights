@@ -6,7 +6,7 @@ import { withDbErrorHandling } from '#lib/server/db.js';
 import type { AuthContext, OrganizationAccess } from './types.ts';
 
 /** The signed-in user, or a 401. */
-export function requireAuth(locals: App.Locals): AuthContext {
+export function requireAuth(locals: Pick<App.Locals, 'auth'>): AuthContext {
   if (!locals.auth) error(401, 'Not signed in', { code: 'unauthenticated' });
   return locals.auth;
 }
