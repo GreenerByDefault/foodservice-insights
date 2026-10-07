@@ -32,6 +32,7 @@ function anEvent(pathname = '/', routeId: RouteId | null = null): RequestEvent {
     url: new URL(`http://localhost${pathname}`),
     request: new Request(`http://localhost${pathname}`),
     route: { id: routeId },
+    isDataRequest: false,
     locals: {},
   } as RequestEvent;
 }
@@ -73,10 +74,22 @@ describe('handle', () => {
         method: 'GET',
         routeId: '/(app)/orgs/[organizationSlug=slug]/members',
         path: '/orgs/acme/members',
+        isDataRequest: false,
         status: 201,
         durationMs: expect.any(Number),
         userId: auth.user.id,
       },
+    ]);
+  });
+
+  test("marks a client-side navigation's load, which shares its page's path", async () => {
+    await handle({
+      event: { ...anEvent('/orgs', '/(app)/orgs'), isDataRequest: true },
+      resolve: respond,
+    });
+
+    expect(SERVER_LOGS.records).toEqual([
+      expect.objectContaining({ path: '/orgs', isDataRequest: true }),
     ]);
   });
 
@@ -170,6 +183,7 @@ describe('handle', () => {
         method: 'GET',
         routeId: null,
         path: '/',
+        isDataRequest: false,
         status: 503,
         durationMs: expect.any(Number),
       },

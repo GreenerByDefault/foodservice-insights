@@ -45,6 +45,9 @@ function logAccess(event: RequestEvent, status: number, startedAt: number): void
       method: event.request.method,
       routeId,
       path: FILE_LINK_ROUTES.has(routeId) ? undefined : event.url.pathname,
+      // SvelteKit strips `/__data.json` from the path, so this is what tells a client-side
+      // navigation's load apart from rendering its page.
+      isDataRequest: event.isDataRequest,
       status,
       durationMs: Math.round(performance.now() - startedAt),
       userId: event.locals.auth?.user.id,
