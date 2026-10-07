@@ -75,7 +75,8 @@ integration. [Kanel](https://kristiandupont.github.io/kanel/) generates the type
 database. Kysely also handles migrations.
 
 How routes are structured within `apps/web` — including why they call `+server.ts` handlers with
-plain `fetch()` rather than form actions — is in [`apps/web/README.md`](apps/web/README.md#routes).
+plain `fetch()` rather than form actions or remote functions — is in
+[`apps/web/README.md`](apps/web/README.md#routes).
 
 ## Auth
 
