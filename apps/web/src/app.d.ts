@@ -1,6 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 
+import type { Logger } from '@gbd/core/log';
 import type { OrganizationId } from '@gbd/db';
 import type { AuthContext } from '#lib/server/auth/types.ts';
 
@@ -19,6 +20,8 @@ declare global {
     interface Locals {
       /** Set on every request by `handle` in `hooks.server.ts`. Null when nobody is signed in. */
       auth: AuthContext | null;
+      /** Bound to the request's id by `handle`. Server code reaches it through `logger()`. */
+      log: Logger;
     }
     interface PageData {
       /** The organization the current route acts on, returned by the layout under

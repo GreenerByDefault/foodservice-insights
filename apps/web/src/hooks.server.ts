@@ -1,4 +1,5 @@
-import type { RequestEvent } from '@sveltejs/kit';
+import { randomUUID } from 'node:crypto';
+import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
 import { authMode } from '#lib/auth/mode.js';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
@@ -6,17 +7,50 @@ import { loadAuthorization } from '#lib/server/auth/authorization.js';
 import { identifyUser } from '#lib/server/auth/identify.js';
 import type { AuthContext } from '#lib/server/auth/types.js';
 import { closeDatabase, database, withDbErrorHandling } from '#lib/server/db.js';
-import { logger } from '#lib/server/log.js';
+import { bindRequestLogger, logger } from '#lib/server/log.js';
 import { closeBlobStore } from '#lib/server/storage.js';
+import type { RouteId } from '$app/types';
 
 /** The liveness probe reports on the database, so it must be able to answer without one. */
 const HEALTH_PATH = '/health';
 
-function applySecurityHeaders(response: Response): Response {
+/** Called on a timer rather than by a person, so their access lines are `debug`, not `info`. A
+ * failure on one still writes its own line at `error`. */
+const POLLED_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
+  '/health',
+  '/(app)/orgs/[organizationSlug=slug]/poll',
+  '/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/poll',
+]);
+
+/** Anyone holding a file link can download the file, so these paths stay out of the log. */
+const FILE_LINK_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
+  '/file/input/[id=uuid]',
+  '/file/result/[id=uuid]',
+]);
+
+function applyHeaders(response: Response, requestId: string): Response {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('X-Request-Id', requestId);
   return response;
+}
+
+/** One line per request. The duration runs until the response's headers, not the end of its body. */
+function logAccess(event: RequestEvent, status: number, startedAt: number): void {
+  const routeId = event.route.id;
+  const level = POLLED_ROUTES.has(routeId) ? 'debug' : 'info';
+  event.locals.log[level](
+    {
+      method: event.request.method,
+      routeId,
+      path: FILE_LINK_ROUTES.has(routeId) ? undefined : event.url.pathname,
+      status,
+      durationMs: Math.round(performance.now() - startedAt),
+      userId: event.locals.auth?.user.id,
+    },
+    'Request',
+  );
 }
 
 /** Identify the caller, then look up what they may do, once per request. */
@@ -44,13 +78,27 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-  event.locals.auth = await resolveAuth(event);
-  const response = await resolve(event);
-  return applySecurityHeaders(response);
+  // Ours rather than one the request arrived with: the edge's id exists only on some hosts, and
+  // any client can send one. Once the host is chosen, its id can join the access line as a field.
+  // The response header also lands in Playwright traces, joining a failed e2e request to its lines.
+  const requestId = randomUUID();
+  bindRequestLogger(event, requestId);
+  const startedAt = performance.now();
+
+  try {
+    event.locals.auth = await resolveAuth(event);
+    const response = applyHeaders(await resolve(event), requestId);
+    logAccess(event, response.status, startedAt);
+    return response;
+  } catch (thrown) {
+    // SvelteKit answers with this status, through its own error response and without our headers.
+    logAccess(event, isHttpError(thrown) ? thrown.status : 500, startedAt);
+    throw thrown;
+  }
 };
 
 /** The last resort for a failure no route anticipated. */
-export const handleError: HandleServerError = ({ kind, error: cause, event }) => {
+export const handleError: HandleServerError = ({ kind, error: cause }) => {
   // Our own `error()` already carries the body we chose, and whoever threw it logged it if it
   // deserved logging. Returning nothing keeps that body, `code` included.
   if (kind === 'app') return;
@@ -59,17 +107,8 @@ export const handleError: HandleServerError = ({ kind, error: cause, event }) =>
   // logging every crawler that guesses a URL would bury the failures that are.
   if (kind !== 'unknown') return cause.status === 404 ? { code: 'not_found' } : undefined;
 
-  // Enough of a fingerprint to find this line again from a user saying "it broke around 2pm".
-  logger().error(
-    {
-      method: event.request.method,
-      path: event.url.pathname,
-      routeId: event.route.id,
-      userId: event.locals.auth?.user.id,
-      err: cause,
-    },
-    'Unhandled server error',
-  );
+  // Which request this was is on its access line, which shares this line's `requestId`.
+  logger().error({ err: cause }, 'Unhandled server error');
   // `cause` is a bug or an outage, whose message and stack may say more about the system than a
   // stranger should learn. None of it crosses back to the client; it stays in the log line above.
   return { message: UNEXPECTED_ERROR_MESSAGE };

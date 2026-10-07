@@ -269,6 +269,8 @@ export function webContainerCommand(options: {
       PROTOCOL_HEADER: 'x-forwarded-proto',
       // Whatever `test-run.ts` chose, which matches how production is hosted and flips with it.
       PUBLIC_AUTH_MODE: requireEnv('PUBLIC_AUTH_MODE'),
+      // Playwright pipes this server's stdout, which would otherwise carry an access line per request.
+      LOG_LEVEL: requireEnv('LOG_LEVEL'),
       ...sharedEnv(stack),
     }),
     image,

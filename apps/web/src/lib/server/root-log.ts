@@ -1,7 +1,8 @@
 /** The web app's root logger, configured from the environment.
  *
- * Server code calls `logger()` from `./log.ts`, not this. The root lives in a module of its own so
- * the test setup file can replace it while `logger()` itself stays under test.
+ * Server code calls `logger()` from `./log.ts`, not this, unless what it builds outlives a request.
+ * The root lives in a module of its own so the test setup file can replace it while `logger()`
+ * itself stays under test.
  */
 
 import { createLogger, type Logger, parseLogSettings } from '@gbd/core/log';

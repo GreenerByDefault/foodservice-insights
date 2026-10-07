@@ -8,8 +8,8 @@
 > `## PR N` sections that `/plan-advance` folds in, and the PR that lands the last one deletes
 > this file.
 >
-> Two parts need no decision here and are plans of their own:
-> [`structured-logging.md`](structured-logging.md) (what the processes write) and
+> Two parts need no decision here and live elsewhere: what the processes write, which is
+> [`@gbd/core/log`](../../packages/core/src/log.ts), and
 > [`metrics-dashboards.md`](metrics-dashboards.md) (the metric views, Grafana running locally,
 > and dashboards as code deployed to Grafana Cloud). The team has settled on Grafana Cloud, so
 > § 3 records that choice rather than proposing it.
@@ -55,8 +55,8 @@ the other two signals:
 Each signal has one natural home, and the design puts each in it rather than pushing all three
 through one tool. What exists today:
 
-- **No logger.** Every server-side log line is a `console.*` call, unstructured and tied to no
-  request or worker. [`structured-logging.md`](structured-logging.md) § Context has the survey.
+- **Structured logs on stdout, going nowhere yet.** Both apps log JSON lines through
+  [`@gbd/core/log`](../../packages/core/src/log.ts), but no host forwards them anywhere.
 - **The child's output is nearly all discarded.** [`spawn.ts`](../../apps/worker/src/child/spawn.ts)
   ignores stdout and keeps the last 8 KB of stderr, which reaches `failure_detail` only when the
   child dies by signal or an unexpected exit code. The Python side logs at WARNING to stderr; the
@@ -72,9 +72,9 @@ through one tool. What exists today:
 
 ### 2.1 Inside the process
 
-One JSON object per line on stdout, from pino. The design and its PRs are in
-[`structured-logging.md`](structured-logging.md), which lands ahead of this plan because none of it
-waits on a vendor. What this file relies on from it: the host reads stdout and the process never
+One JSON object per line on stdout, from pino through
+[`@gbd/core/log`](../../packages/core/src/log.ts), which needed no vendor. What this file relies on
+from it: the host reads stdout and the process never
 configures a destination (`ARCHITECTURE.md` § Images); every web request writes one access line
 carrying the `x-request-id` the response returns (§ 3.3); worker lines carry `workerId`,
 `attemptId` and `reportId`; and every record fits § 2.2's 2000-byte line cap.
@@ -289,8 +289,7 @@ forwards to it, else Nano from day one.
 
 ## After the decision
 
-Two plans land ahead of this one, and neither waits on it:
-[`structured-logging.md`](structured-logging.md), and
+One plan lands ahead of this one and does not wait on it:
 [`metrics-dashboards.md`](metrics-dashboards.md), whose last PR creates the Grafana Cloud stack
 that steps 3 and 4 below configure further. What follows is roughly one PR each, in this order.
 The first needs no vendor account or hosting decision, so it can land now. The second contends
