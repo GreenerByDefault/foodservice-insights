@@ -32,9 +32,9 @@ offer sign-in in place once auth lands, which is why there is no `?next=` to car
 discriminated union rather than leaving the view to branch on nullable columns.** See
 `reports/[reportId]/+page.server.ts` for an example.
 
-**A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions and remote functions.*
-Both add a layer of indirection over a `fetch()` call to a `+server.ts` handler, which makes the
-code harder for newcomers to follow without a strong enough payoff. See
+**A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions, because they add a
+layer of indirection over a `fetch()` without a strong enough payoff; and remote functions, for
+now — see [Remote functions](#remote-functions).* See
 [Calling the API from the browser](#calling-the-api-from-the-browser) for how the client calls it.
 
 A few routes are still scaffolding. Each one says so with a `**Stub:**` marker naming what
@@ -44,6 +44,30 @@ belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is le
 the user's one organization if they belong to exactly one, or to `/orgs/new` if they belong to
 none. A superadmin always sees the full picker, since it doubles as their view of every
 organization.
+
+### Remote functions
+
+> [!NOTE]
+> Evaluated with a working spike in October 2026, on SvelteKit 3.0. Not adopted *yet*: revisit
+> once the blockers below are gone.
+
+The payoff is real. A write returns its outcome union directly, instead of a status that
+`apiCall` and a classifier turn back into one, and polled data keeps its `Date`s without reviving.
+
+The blockers:
+
+- **Still experimental**, and it needs Svelte's `experimental.async` compiler flag app-wide, which
+  shifts timing enough to fail existing component tests.
+- **A failed `query` refresh rejects the `await`.** The docs' recommended `await getX()` form turns
+  one dropped poll into the error page, breaking "a failed poll is not a failed analysis"
+  (`ARCHITECTURE.md` § Client ↔ server). Only `e2e/reports/reconnect.e2e.ts` catches it.
+- **No timeout or abort signal**, against `REQUIREMENTS.md`'s "set timeouts for all requests."
+- **Component tests must mock every `.remote.ts` module**: SvelteKit's client runtime does not
+  load under vitest-browser.
+
+For whoever revisits: a `.remote.ts` file is not guarded by its route's layout, and its arguments
+skip param matchers like `[reportId=uuid]`, so it must repeat both. Prefer `command` to `form`,
+which conflicts with [Forms](#forms).
 
 ## Calling the API from the browser
 
@@ -94,7 +118,7 @@ into the `catalog:` block in [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 
 **A form's own schema lives with its feature**. What is not specific to one form lives in
 `src/lib/forms/`.
 
-**Native constraint validation, no form library** — consistent with `ARCHITECTURE.md` rejecting
+**Native constraint validation, no form library** — consistent with [Routes](#routes) rejecting
 form actions. A real `<form>` with `onsubmit` and a `<button type="submit">` means the browser
 blocks an invalid submit and focuses the first bad field; `reportValidity()` is only for a
 programmatic submit. Async failures and hand-written checks render in a `<Field.Error>`.
