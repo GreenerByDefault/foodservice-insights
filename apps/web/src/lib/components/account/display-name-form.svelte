@@ -15,7 +15,7 @@ interface Props {
 
 let { initialName, submitLabel, onSaved }: Props = $props();
 
-// Seeded once and never re-synced, so `onSaved`'s `invalidateAll()` cannot clobber an edit — the
+// Seeded once and never re-synced, so `onSaved`'s `refreshAll()` cannot clobber an edit — the
 // same reason as `organization-name-form.svelte`.
 // svelte-ignore state_referenced_locally
 let name = $state(initialName);

@@ -5,9 +5,9 @@ import { vi } from 'vitest';
  * place of `$app/navigation`:
  * `vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'))`. */
 export const goto = vi.fn();
-export const invalidateAll = vi.fn();
+export const refreshAll = vi.fn();
 
 export function resetNavigationMocks() {
   goto.mockClear();
-  invalidateAll.mockClear();
+  refreshAll.mockClear();
 }

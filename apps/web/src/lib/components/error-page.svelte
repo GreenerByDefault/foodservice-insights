@@ -1,5 +1,5 @@
 <script lang="ts">
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
 import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
@@ -28,7 +28,7 @@ const presentation = $derived(describeError(status));
     <PageHeading>{presentation.title}</PageHeading>
     <p class="text-muted-foreground">{presentation.body}</p>
 
-    <SignInFlow auth={browserAuth()} onSignedIn={invalidateAll} />
+    <SignInFlow auth={browserAuth()} onSignedIn={refreshAll} />
   </div>
 {:else}
   <!-- No calls to action yet, deliberately. The 5xx cases want a retry plus somewhere to report

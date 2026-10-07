@@ -28,7 +28,7 @@ let { initialName, legend, submitLabel, submittingLabel, unknownNotice, onSubmit
 // Seeded once and never re-synced to `initialName`. Reassigning a destructured prop directly is
 // Svelte's documented pattern for unsaved, ephemeral state, but the override only survives until
 // the *next* unrelated parent re-render — even one where the org's name hasn't actually changed,
-// such as a background `invalidateAll()` — at which point it's silently clobbered back to the
+// such as a background `refreshAll()` — at which point it's silently clobbered back to the
 // prop. A local `$state` frozen at mount can't lose an in-progress edit that way.
 // svelte-ignore state_referenced_locally
 let name = $state(initialName);

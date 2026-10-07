@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Subscription } from '@supabase/supabase-js';
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import favicon from '#lib/assets/favicon.svg';
 import { browserAuth } from '#lib/auth/browser.js';
 import { refreshWhenRestoredByBack, sessionUserChanged } from '#lib/auth/follow-session.js';
@@ -31,7 +31,7 @@ $effect(() => {
       // Async only to match the overload `BrowserAuth` picks. Not awaited: supabase-js awaits its
       // subscribers, so `signOut()` would wait on every load re-running before it returned.
       const subscribed = await browserAuth().onAuthStateChange(async (_event, session) => {
-        if (sessionUserChanged(data.sessionUserId, session)) void invalidateAll();
+        if (sessionUserChanged(data.sessionUserId, session)) void refreshAll();
       });
       subscription = subscribed.data.subscription;
     } catch (cause) {

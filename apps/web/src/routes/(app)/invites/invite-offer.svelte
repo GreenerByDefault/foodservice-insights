@@ -1,7 +1,7 @@
 <script lang="ts">
 import ClockIcon from '@lucide/svelte/icons/clock';
 import { toast } from 'svelte-sonner';
-import { goto, invalidateAll } from '$app/navigation';
+import { goto, refreshAll } from '$app/navigation';
 import RelativeTime from '#lib/components/relative-time.svelte';
 import { Button } from '#lib/components/ui/button/index.js';
 import * as Card from '#lib/components/ui/card/index.js';
@@ -30,14 +30,14 @@ async function accept() {
   switch (outcome.kind) {
     case 'accepted':
       // Left pending: this card unmounts with the navigation.
-      await goto(organizationHref(outcome.organizationSlug), { invalidateAll: true });
+      await goto(organizationHref(outcome.organizationSlug), { refreshAll: true });
       toast.success(`You joined ${invite.organizationName}`);
       return;
     // The list is stale — it ran out, or was revoked or superseded, since the page loaded. The
     // reload shows it expired, or gone, which says so better than an error would.
     case 'expired':
     case 'no-longer-valid':
-      await invalidateAll();
+      await refreshAll();
       break;
     case 'unknown':
       errorMessage = "Couldn't accept this invitation — please try again.";
@@ -55,7 +55,7 @@ async function decline() {
       ? "Couldn't dismiss this invitation — please try again."
       : "Couldn't decline this invitation — please try again.";
   } else {
-    await invalidateAll();
+    await refreshAll();
     await focusPageHeading();
     toast.success(
       invite.isExpired

@@ -101,7 +101,7 @@ describe('UserMenu', () => {
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
       expect(auth.current?.signOut.mock.calls).toEqual([[{ scope: 'local' }]]);
-      expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
+      expect(goto).toHaveBeenCalledWith('/', { refreshAll: true });
       expect(auth.current?.signOut).toHaveBeenCalledBefore(vi.mocked(goto));
       expect(toast.error).not.toHaveBeenCalled();
     });
@@ -112,7 +112,7 @@ describe('UserMenu', () => {
       await clickSignOut();
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
-      expect(goto).toHaveBeenCalledWith('/', { invalidateAll: true });
+      expect(goto).toHaveBeenCalledWith('/', { refreshAll: true });
     });
 
     test('stays put, and says so, when the client itself could not load', async () => {

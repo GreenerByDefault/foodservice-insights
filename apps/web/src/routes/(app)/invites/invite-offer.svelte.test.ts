@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import { expectFetched, jsonResponse, stubFetch, stubPendingFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
-import { goto, invalidateAll } from '$app/navigation';
+import { goto, refreshAll } from '$app/navigation';
 import InviteOffer from './invite-offer.svelte';
 import { anInviteOffer } from './testing/fixtures.ts';
 
@@ -48,7 +48,7 @@ describe('InviteOffer', () => {
         .click();
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
-      expect(goto).toHaveBeenCalledWith('/orgs/northgate', { invalidateAll: true });
+      expect(goto).toHaveBeenCalledWith('/orgs/northgate', { refreshAll: true });
       expectFetched(fetchMock, { url: `/api/invites/${invite.inviteId}/accept`, method: 'POST' });
       await expect
         .poll(() => toast.success.mock.calls)
@@ -68,7 +68,7 @@ describe('InviteOffer', () => {
           .getByRole('button', { name: 'Accept invitation to Northgate Provisions' })
           .click();
 
-        await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+        await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
         expect(goto).not.toHaveBeenCalled();
         await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
         expect(toast.success).not.toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe('InviteOffer', () => {
         .element(screen.getByText("Couldn't accept this invitation — please try again."))
         .toBeVisible();
       expect(goto).not.toHaveBeenCalled();
-      expect(invalidateAll).not.toHaveBeenCalled();
+      expect(refreshAll).not.toHaveBeenCalled();
     });
 
     test('both buttons are disabled while an answer is in flight', async () => {
@@ -117,7 +117,7 @@ describe('InviteOffer', () => {
         .getByRole('button', { name: 'Decline invitation to Northgate Provisions' })
         .click();
 
-      await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+      await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
       expectFetched(fetchMock, { url: `/api/invites/${invite.inviteId}/decline`, method: 'POST' });
       await expect
         .poll(() => toast.success.mock.calls)
@@ -132,7 +132,7 @@ describe('InviteOffer', () => {
         .getByRole('button', { name: 'Decline invitation to Northgate Provisions' })
         .click();
 
-      await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+      await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
     });
 
     test('a failed decline shows an error and reloads nothing', async () => {
@@ -146,7 +146,7 @@ describe('InviteOffer', () => {
       await expect
         .element(screen.getByText("Couldn't decline this invitation — please try again."))
         .toBeVisible();
-      expect(invalidateAll).not.toHaveBeenCalled();
+      expect(refreshAll).not.toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
     });
   });
@@ -177,7 +177,7 @@ describe('InviteOffer', () => {
         .getByRole('button', { name: 'Dismiss invitation to Northgate Provisions' })
         .click();
 
-      await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+      await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
       expectFetched(fetchMock, { url: `/api/invites/${invite.inviteId}/decline`, method: 'POST' });
       await expect
         .poll(() => toast.success.mock.calls)

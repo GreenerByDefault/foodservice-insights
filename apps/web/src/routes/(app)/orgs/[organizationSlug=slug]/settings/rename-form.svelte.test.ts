@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import { lastFetchCall, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import RenameForm from './rename-form.svelte';
 
 vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
@@ -26,7 +26,7 @@ describe('RenameForm', () => {
     await screen.getByLabelText('Organization name').fill('Riverside Foods');
     await screen.getByRole('button', { name: 'Save' }).click();
 
-    await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+    await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = lastFetchCall(fetchMock);
     expect(url).toBe('/api/orgs/org-1');
@@ -50,7 +50,7 @@ describe('RenameForm', () => {
     await expect
       .element(screen.getByText(/not sure whether that rename went through/))
       .toBeInTheDocument();
-    expect(invalidateAll).not.toHaveBeenCalled();
+    expect(refreshAll).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
   });
 });

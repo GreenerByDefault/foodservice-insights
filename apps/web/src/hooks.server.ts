@@ -1,4 +1,5 @@
-import type { Handle, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
+import type { RequestEvent } from '@sveltejs/kit';
+import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
 import { authMode } from '#lib/auth/mode.js';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { loadAuthorization } from '#lib/server/auth/authorization.js';
@@ -49,15 +50,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 };
 
 /** The last resort for a failure no route anticipated. */
-export const handleError: HandleServerError = ({ error: cause, event, status, message }) => {
-  // 404s come through here too. A missing page is not a failure of ours, and logging every crawler
-  // that guesses a URL would bury the failures that are.
-  if (status === 404) return { message, code: 'not_found' };
+export const handleError: HandleServerError = ({ kind, error: cause, event }) => {
+  // Our own `error()` already carries the body we chose, and whoever threw it logged it if it
+  // deserved logging. Returning nothing keeps that body, `code` included.
+  if (kind === 'app') return;
+
+  // SvelteKit's own errors — a 404 for an unknown route, a 405 — are not failures of ours, and
+  // logging every crawler that guesses a URL would bury the failures that are.
+  if (kind !== 'unknown') return cause.status === 404 ? { code: 'not_found' } : undefined;
 
   // Enough of a fingerprint to find this line again from a user saying "it broke around 2pm".
   logger().error(
     {
-      status,
       method: event.request.method,
       path: event.url.pathname,
       routeId: event.route.id,
@@ -66,9 +70,8 @@ export const handleError: HandleServerError = ({ error: cause, event, status, me
     },
     'Unhandled server error',
   );
-  // SvelteKit skips this hook for an expected `error()`, so `cause` is always a bug or an outage,
-  // whose message and stack may say more about the system than a stranger should learn. None of it
-  // crosses back to the client; it stays in the log line above.
+  // `cause` is a bug or an outage, whose message and stack may say more about the system than a
+  // stranger should learn. None of it crosses back to the client; it stays in the log line above.
   return { message: UNEXPECTED_ERROR_MESSAGE };
 };
 

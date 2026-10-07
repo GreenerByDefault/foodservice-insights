@@ -35,7 +35,7 @@ export async function redirectToSignedUrl(
 
   if (!exists) {
     logger().error({ storageKey }, 'A file row points at an object that is not there');
-    error(404, { message: 'That file is not available.' });
+    error(404, 'That file is not available.');
   }
 
   const url = await signedObjectUrl(store, storageKey, {

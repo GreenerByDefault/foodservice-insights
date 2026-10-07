@@ -32,7 +32,7 @@ export async function _downloadInputFile(
     { action: 'load input file for download', context: { fileId } },
   );
 
-  if (!file) error(404, { message: 'That file is not available.' });
+  if (!file) error(404, 'That file is not available.');
 
   // The workbook the user uploaded, not the CSV they never saw, when there was one.
   return await redirectToSignedUrl(

@@ -36,7 +36,7 @@ async function signOut() {
     toast.error("Couldn't sign out. Try again.");
     return;
   }
-  await goto('/', { invalidateAll: true });
+  await goto('/', { refreshAll: true });
 }
 </script>
 

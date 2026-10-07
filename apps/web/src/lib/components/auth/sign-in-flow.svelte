@@ -8,7 +8,7 @@ interface Props {
   auth: BrowserAuth;
   /** An address to start with, from an invite link's `?email=`. */
   initialEmail?: string | null;
-  /** What to do once the session cookie exists. An `invalidateAll()`, so the server sees the
+  /** What to do once the session cookie exists. A `refreshAll()`, so the server sees the
    * session and its own redirect takes over. */
   onSignedIn: () => Promise<void>;
 }

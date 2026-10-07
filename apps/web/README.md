@@ -62,7 +62,8 @@ outcome.
 ## UI components
 
 **Anything under `src/lib` outside `server/` is imported by the browser.** The build rejects
-`#lib/server` and `$app/env/private` there, and nothing Node-only may go in either.
+any `server` directory or `*.server.*` module and `$app/env/private` there, and nothing Node-only
+may go in either.
 
 Styling is Tailwind plus [shadcn-svelte](https://www.shadcn-svelte.com). **`src/lib/components/ui/`
 is purely vendored shadcn** — nothing hand-written goes there — so we own the components outright
@@ -131,7 +132,7 @@ in `hooks.server.ts` logs it and hands the client a generic message.
 **An outcome the caller expects is returned, not thrown.** `error()`'s body is typed by the app-wide
 `App.Error`, so anything a route wants to attach has to be declared globally — which is the wrong
 trade for a payload one route sets and one client reads. A route that fails in a way its own UI
-renders answers `json(body, { status })` with a type it owns. `error()` is left to the failures every caller handles
+renders answers `Response.json(body, { status })` with a type it owns. `error()` is left to the failures every caller handles
 the same way, like 404s.
 
 **What the user sees is three surfaces, never merged:** a field problem at the field, a rejected
@@ -162,7 +163,7 @@ The client gets the user from the `(app)` route group's `+layout.server.ts`, whi
 every page inside the group and passes the user down to `.svelte` files. Routes outside the group —
 the marketing page, sign-in, the health probe, and the deliberately public file links — are not
 guarded. When the frontend
-changes auth state, such as logging out, it calls `invalidateAll()` so that SvelteKit re-runs the
+changes auth state, such as logging out, it calls `refreshAll()` so that SvelteKit re-runs the
 server `load()` functions without a full page refresh.
 
 **`PUBLIC_AUTH_MODE` decides who a request is**, and is required ([`src/lib/auth/mode.ts`](src/lib/auth/mode.ts)).

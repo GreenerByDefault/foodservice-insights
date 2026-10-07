@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { fakeBrowserAuth } from '#lib/auth/testing/fake.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import ErrorPage from './error-page.svelte';
 
 const auth = vi.hoisted(() => ({ current: null as ReturnType<typeof fakeBrowserAuth> | null }));
@@ -41,7 +41,7 @@ describe('ErrorPage', () => {
     await screen.getByRole('button', { name: 'Send code' }).click();
     await screen.getByLabelText('Sign-in code').fill('123456');
 
-    await expect.poll(() => vi.mocked(invalidateAll).mock.calls.length).toBe(1);
+    await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
     expect(auth.current?.verifyOtp).toHaveBeenCalledExactlyOnceWith({
       email: 'ada@example.com',
       token: '123456',

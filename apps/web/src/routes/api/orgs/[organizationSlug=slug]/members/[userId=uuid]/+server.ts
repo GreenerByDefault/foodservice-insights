@@ -67,7 +67,7 @@ export async function _changeMemberRole(
           .forUpdate()
           .executeTakeFirst();
 
-        if (!member) error(404, { message: 'Not found', code: 'not_found' });
+        if (!member) error(404, 'Not found', { code: 'not_found' });
         if (member.role === role) return;
 
         await transaction
@@ -113,7 +113,7 @@ export async function _removeMember(
           .returning('userId')
           .executeTakeFirst();
 
-        if (!removed) error(404, { message: 'Not found', code: 'not_found' });
+        if (!removed) error(404, 'Not found', { code: 'not_found' });
 
         await recordAuditEvent(transaction, {
           action: targetUserId === actor.userId ? 'member.left' : 'member.removed',

@@ -25,7 +25,7 @@ export function sessionUserChanged(
  * A restored snapshot runs no load, no hook and no listener. So a signed-in page left for another
  * site, then returned to with Back after the session ended elsewhere — another tab, or a later
  * visit that signed out — would still show the signed-in shell. `refresh` should be a full reload
- * rather than `invalidateAll()`: the snapshot keeps SvelteKit's client-side state too, and a
+ * rather than `refreshAll()`: the snapshot keeps SvelteKit's client-side state too, and a
  * reload is the one refresh that owes nothing to it. */
 export function refreshWhenRestoredByBack(
   refresh: () => void,

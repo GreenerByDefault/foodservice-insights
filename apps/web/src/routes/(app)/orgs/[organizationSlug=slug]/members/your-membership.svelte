@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { OrganizationRole } from '@gbd/db';
 import { toast } from 'svelte-sonner';
-import { goto, invalidateAll } from '$app/navigation';
+import { goto, refreshAll } from '$app/navigation';
 import ConfirmAction from '#lib/components/confirm-action.svelte';
 import * as Field from '#lib/components/ui/field/index.js';
 import { changeMemberRole } from '#lib/orgs/api/change-member-role.js';
@@ -22,7 +22,7 @@ let { organizationSlug, viewerUserId, viewerRole, organizationName }: Props = $p
 
 async function stepDown() {
   confirmMemberWrite(await changeMemberRole(organizationSlug, viewerUserId, 'member'));
-  await invalidateAll();
+  await refreshAll();
   toast.success(`You're no longer an admin of ${organizationName}`);
 }
 
@@ -30,7 +30,7 @@ async function leave() {
   confirmMemberWrite(await removeMember(organizationSlug, viewerUserId));
   // Same landing as delete-organization: `/orgs` forwards to a remaining organization, or
   // `/orgs/new` if this was the viewer's last.
-  await goto('/orgs', { invalidateAll: true });
+  await goto('/orgs', { refreshAll: true });
   toast.success(`You left ${organizationName}`);
 }
 </script>

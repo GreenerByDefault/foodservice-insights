@@ -7,7 +7,7 @@ import type { AuthContext, OrganizationAccess } from './types.ts';
 
 /** The signed-in user, or a 401. */
 export function requireAuth(locals: App.Locals): AuthContext {
-  if (!locals.auth) error(401, { message: 'Not signed in', code: 'unauthenticated' });
+  if (!locals.auth) error(401, 'Not signed in', { code: 'unauthenticated' });
   return locals.auth;
 }
 
@@ -36,7 +36,7 @@ export async function requireOrganizationAccess(
           .select(['id', 'name', 'slug'])
           .where('slug', '=', organizationSlug)
           .executeTakeFirst();
-        if (!organization) error(404, { message: 'Not found', code: 'not_found' });
+        if (!organization) error(404, 'Not found', { code: 'not_found' });
         return {
           organizationId: organization.id,
           organizationSlug: organization.slug,
@@ -51,7 +51,7 @@ export async function requireOrganizationAccess(
   const access = auth.memberships.find(
     (membership) => membership.organizationSlug === organizationSlug,
   );
-  if (!access) error(404, { message: 'Not found', code: 'not_found' });
+  if (!access) error(404, 'Not found', { code: 'not_found' });
   return access;
 }
 
@@ -67,7 +67,7 @@ export async function requireOrganizationAdmin(
 ): Promise<OrganizationAccess> {
   const access = await requireOrganizationAccess(db, auth, organizationSlug);
   if (access.role !== 'admin') {
-    error(403, { message: 'Only an admin can do that', code: 'forbidden' });
+    error(403, 'Only an admin can do that', { code: 'forbidden' });
   }
   return access;
 }

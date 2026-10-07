@@ -1,8 +1,9 @@
 import type { UserId } from '@gbd/db';
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
-import { type HandleServerError, isHttpError, type RequestEvent } from '@sveltejs/kit';
+import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as mode from '#lib/auth/mode.js';
+import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import * as authorization from '#lib/server/auth/authorization.js';
 import * as identify from '#lib/server/auth/identify.js';
 import { anAuthContext } from '#lib/server/testing/fixtures.js';
@@ -31,13 +32,6 @@ function anEvent(pathname = '/'): RequestEvent {
     route: { id: null },
     locals: {},
   } as RequestEvent;
-}
-
-/** `handleError` may return nothing, and may be async. Ours is neither. */
-async function bodyFrom(input: Parameters<HandleServerError>[0]): Promise<App.Error> {
-  const body = await handleError(input);
-  if (!body) throw new Error('Expected handleError to return a body.');
-  return body;
 }
 
 const respond = async () => new Response('ok');
@@ -152,36 +146,53 @@ describe('handleError', () => {
   test('logs an unexpected failure with enough to find it again, and tells the client none of it', async () => {
     const cause = new Error('password authentication failed for user "app"');
 
-    const body = await bodyFrom({
-      error: cause,
-      event: anEvent('/reports'),
-      status: 500,
-      message: 'Internal Error',
-    });
+    const body = await handleError({ kind: 'unknown', error: cause, event: anEvent('/reports') });
 
     expect(SERVER_LOGS.records).toEqual([
       {
         level: 'error',
         msg: 'Unhandled server error',
-        status: 500,
         method: 'GET',
         path: '/reports',
         routeId: null,
         err: expect.objectContaining({ type: 'Error', message: cause.message }),
       },
     ]);
-    expect(JSON.stringify(body)).not.toContain('password authentication');
+    expect(body).toEqual({ message: UNEXPECTED_ERROR_MESSAGE });
   });
 
-  test('stays quiet about a 404, which is not a failure of ours', async () => {
-    const body = await bodyFrom({
-      error: new Error('Not found'),
-      event: anEvent('/no-such-page'),
-      status: 404,
-      message: 'Not Found',
+  test('keeps the body of our own error(), code and all, without logging it', async () => {
+    const body = await handleError({
+      kind: 'app',
+      error: { status: 403, message: 'Only an admin can do that', code: 'forbidden' },
+      event: anEvent('/orgs/acme/settings'),
     });
 
-    expect(body).toEqual({ message: 'Not Found', code: 'not_found' });
+    expect(body).toBeUndefined();
     expect(SERVER_LOGS.records).toEqual([]);
+  });
+
+  describe('an error from SvelteKit itself', () => {
+    test('tags a 404 as not_found, without logging it', async () => {
+      const body = await handleError({
+        kind: 'framework',
+        error: { status: 404, message: 'Not Found' },
+        event: anEvent('/no-such-page'),
+      });
+
+      expect(body).toEqual({ code: 'not_found' });
+      expect(SERVER_LOGS.records).toEqual([]);
+    });
+
+    test('keeps any other status as SvelteKit wrote it, without logging it', async () => {
+      const body = await handleError({
+        kind: 'framework',
+        error: { status: 405, message: 'Method Not Allowed' },
+        event: anEvent('/health'),
+      });
+
+      expect(body).toBeUndefined();
+      expect(SERVER_LOGS.records).toEqual([]);
+    });
   });
 });

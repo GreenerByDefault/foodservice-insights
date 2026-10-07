@@ -29,7 +29,7 @@ export async function _downloadResultFile(
     { action: 'load result file for download', context: { fileId } },
   );
 
-  if (!file) error(404, { message: 'That file is not available.' });
+  if (!file) error(404, 'That file is not available.');
 
   const downloadFilename = `${file.name ?? 'report'}.${RESULT_FILE_FORMATS[file.kind].extension}`;
 

@@ -149,7 +149,7 @@ async function finishSigningIn() {
   } catch (cause) {
     console.error('Could not finish signing in', cause);
   }
-  // A navigation unmounts this step before `onSignedIn` resolves — `invalidateAll()` awaits the
+  // A navigation unmounts this step before `onSignedIn` resolves — `refreshAll()` awaits the
   // redirect it causes — so still being here means there was none.
   if (!isMounted) return;
 

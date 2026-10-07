@@ -66,7 +66,7 @@ export async function _retryReport(
             isUniqueViolation(cause) ||
             (isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_CHECK_VIOLATION)
           ) {
-            error(409, { message: 'This report cannot be retried right now' });
+            error(409, 'This report cannot be retried right now');
           }
           throw cause;
         }

@@ -40,7 +40,7 @@ export async function _revokeInvite(
           .returning('id')
           .executeTakeFirst();
 
-        if (!revoked) error(404, { message: 'Not found', code: 'not_found' });
+        if (!revoked) error(404, 'Not found', { code: 'not_found' });
 
         await recordAuditEvent(transaction, {
           action: 'invite.revoked',
