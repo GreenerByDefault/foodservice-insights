@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
-from gbd_foodservice_insights.report import aggregation, diagnostics, parsing
+from gbd_foodservice_insights.report import aggregation, checks, parsing
 from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
     calculate_plant_protein_share,
@@ -393,7 +393,7 @@ def build_food_report(
 
     diagnostics_list: list[Finding] = []
     try:
-        diagnostics_list = diagnostics.run_all_diagnostics(
+        diagnostics_list = checks.run_all_diagnostics(
             df=df,
             diner_meal_mapping=dm_mapping,
             serving=(mode == "serving"),

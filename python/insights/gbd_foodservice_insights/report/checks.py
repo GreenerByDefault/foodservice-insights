@@ -1,4 +1,4 @@
-"""Data quality checks, validation, and anomaly detection for food reports."""
+"""Data quality checks and anomaly detection for food reports."""
 
 import logging
 from datetime import timedelta

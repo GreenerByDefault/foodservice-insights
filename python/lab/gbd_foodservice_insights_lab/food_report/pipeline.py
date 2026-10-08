@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from gbd_foodservice_insights.report import diagnostics, excel, pdf
+from gbd_foodservice_insights.report import checks, excel, pdf
 from gbd_foodservice_insights.report.food_report import (
     Finding,
     FoodReport,
@@ -103,7 +103,7 @@ def _collect_diagnostic_export_sheets(
     diagnostic_export_sheets: dict[str, pd.DataFrame] = {}
 
     try:
-        _, numeric_coercion_loss_df = diagnostics.detect_numeric_coercion_loss(
+        _, numeric_coercion_loss_df = checks.detect_numeric_coercion_loss(
             df,
             [metric_total],
         )
@@ -113,7 +113,7 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build numeric coercion loss export: %s", exc)
 
     try:
-        _, potential_name_splits_df = diagnostics.detect_near_duplicate_product_names(
+        _, potential_name_splits_df = checks.detect_near_duplicate_product_names(
             df,
             metric_total=metric_total,
             pdf_extracted=pdf_extracted,
@@ -124,7 +124,7 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build potential name splits export: %s", exc)
 
     try:
-        _, outlier_line_items_df = diagnostics.detect_unusual_sales(
+        _, outlier_line_items_df = checks.detect_unusual_sales(
             df,
             summary_col=metric_total,
             product_name_col="product",
@@ -136,7 +136,7 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build outlier line items export: %s", exc)
 
     try:
-        _, category_discontinuity_df = diagnostics.detect_category_discontinuity(
+        _, category_discontinuity_df = checks.detect_category_discontinuity(
             df,
             metric_total=metric_total,
         )
@@ -146,7 +146,7 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build category discontinuity export: %s", exc)
 
     try:
-        _, denominator_qc_df = diagnostics.check_diner_meal_reasonableness(diner_meal_mapping)
+        _, denominator_qc_df = checks.check_diner_meal_reasonableness(diner_meal_mapping)
         if not denominator_qc_df.empty:
             diagnostic_export_sheets["Denominator_QC"] = denominator_qc_df
     except Exception as exc:
@@ -154,7 +154,7 @@ def _collect_diagnostic_export_sheets(
 
     if monthly_product_data is not None and monthly_category_data is not None:
         try:
-            _, aggregation_reconciliation_df = diagnostics.check_aggregation_reconciliation(
+            _, aggregation_reconciliation_df = checks.check_aggregation_reconciliation(
                 df,
                 monthly_product_data,
                 monthly_category_data,

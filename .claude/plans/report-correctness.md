@@ -14,13 +14,13 @@ output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff
 Other plans own neighbouring problems and are referenced where the sequencing matters:
 `categorization-cache.md` PR 5 (what reaches the report from the cache),
 `categorization-pipeline.md` (what the model may answer), `diagnostics-split.md` (splitting
-`diagnostics.py`, typed inputs).
+`checks.py`, typed inputs).
 
 **Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
 because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
 `worker_child/failures.py` classifies `unknown`.
 
-- `detect_exact_duplicate_rows` (`diagnostics.py`) files an `error` when rows identical on
+- `detect_exact_duplicate_rows` (`checks.py`) files an `error` when rows identical on
   `(date, product, category, weight)` exceed 2% of the file (`diagnostic_thresholds.yaml`
   `error_share_threshold`); three identical lines in a 38-row file abort the run. Two cases of
   one item on one invoice is ordinary procurement data, and `apps/web` does not dedupe.
@@ -137,7 +137,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 - `diagnostic_thresholds.yaml`: `exact_duplicate_rows.error_share_threshold` and
   `diner_meal_count_reasonableness.error_if_flagged_months` go; `_duplicate_row_status` and
-  `check_diner_meal_reasonableness` lose their `error` branch. The `test_diagnostics.py` tests
+  `check_diner_meal_reasonableness` lose their `error` branch. The `test_checks.py` tests
   that assert `error` or read those two keys flip.
 - Tests: 8% duplicate lines and two outlier months succeed through `analyze()` with a `warning`
   finding each; a missing required column still raises.
