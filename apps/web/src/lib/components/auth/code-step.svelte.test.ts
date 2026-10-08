@@ -6,11 +6,12 @@ import { authError, type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/test
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import CodeStep from './code-step.svelte';
 
-function props(auth: FakeBrowserAuth, overrides: { onSignedIn?: () => Promise<void> } = {}) {
+function props(auth: FakeBrowserAuth, overrides: { onVerified?: () => Promise<void> } = {}) {
   return {
     auth,
+    purpose: 'sign-in' as const,
     email: 'ada@example.com',
-    onSignedIn: overrides.onSignedIn ?? vi.fn().mockResolvedValue(undefined),
+    onVerified: overrides.onVerified ?? vi.fn().mockResolvedValue(undefined),
     onChangeEmail: vi.fn(),
   };
 }
@@ -46,12 +47,12 @@ function cellText(screen: Awaited<ReturnType<typeof render>>): string[] {
 describe('CodeStep', () => {
   test('verifies the code against the address it was sent to, then hands off', async () => {
     const auth = fakeBrowserAuth();
-    const onSignedIn = vi.fn().mockResolvedValue(undefined);
-    const screen = await render(CodeStep, props(auth, { onSignedIn }));
+    const onVerified = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(CodeStep, props(auth, { onVerified }));
 
     await codeField(screen).fill('123456');
 
-    await expect.poll(() => onSignedIn.mock.calls.length).toBe(1);
+    await expect.poll(() => onVerified.mock.calls.length).toBe(1);
     // Once, not twice: the sixth digit is the only trigger, and the form locks behind it.
     expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
       email: 'ada@example.com',
@@ -66,8 +67,8 @@ describe('CodeStep', () => {
       data: { user: null, session: null },
       error: authError('otp_expired'),
     });
-    const onSignedIn = vi.fn().mockResolvedValue(undefined);
-    const screen = await render(CodeStep, props(auth, { onSignedIn }));
+    const onVerified = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(CodeStep, props(auth, { onVerified }));
 
     await codeField(screen).fill('123456');
 
@@ -78,7 +79,7 @@ describe('CodeStep', () => {
         ),
       )
       .toBeInTheDocument();
-    expect(onSignedIn).not.toHaveBeenCalled();
+    expect(onVerified).not.toHaveBeenCalled();
 
     // The step is live again rather than spent: the next complete code is verified in its turn.
     await codeField(screen).fill('654321');
@@ -93,8 +94,8 @@ describe('CodeStep', () => {
   test('a verify that throws, as it does when the client cannot load, hands the field back', async () => {
     const auth = fakeBrowserAuth();
     auth.verifyOtp.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
-    const onSignedIn = vi.fn().mockResolvedValue(undefined);
-    const screen = await render(CodeStep, props(auth, { onSignedIn }));
+    const onVerified = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(CodeStep, props(auth, { onVerified }));
 
     await codeField(screen).fill('123456');
 
@@ -102,13 +103,13 @@ describe('CodeStep', () => {
     await expect.element(codeField(screen)).toBeEnabled();
     await expect.element(codeField(screen)).toHaveValue('');
     expect(auth.verifyOtp).toHaveBeenCalledOnce();
-    expect(onSignedIn).not.toHaveBeenCalled();
+    expect(onVerified).not.toHaveBeenCalled();
   });
 
   test('stays disabled after a verified code, so the navigation cannot be raced into a second verifyOtp', async () => {
     const auth = fakeBrowserAuth();
-    // A real `onSignedIn` navigates; it never resolves back into an interactive form.
-    const screen = await render(CodeStep, props(auth, { onSignedIn: () => new Promise(() => {}) }));
+    // A real `onVerified` navigates; it never resolves back into an interactive form.
+    const screen = await render(CodeStep, props(auth, { onVerified: () => new Promise(() => {}) }));
 
     await codeField(screen).fill('123456');
 
@@ -120,8 +121,8 @@ describe('CodeStep', () => {
     const auth = fakeBrowserAuth();
     const verify = Promise.withResolvers<Awaited<ReturnType<FakeBrowserAuth['verifyOtp']>>>();
     auth.verifyOtp.mockReturnValue(verify.promise);
-    const onSignedIn = vi.fn().mockResolvedValue(undefined);
-    const screen = await render(CodeStep, props(auth, { onSignedIn }));
+    const onVerified = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(CodeStep, props(auth, { onVerified }));
 
     await codeField(screen).fill('123456');
     await expect.poll(() => auth.verifyOtp.mock.calls.length).toBe(1);
@@ -129,14 +130,14 @@ describe('CodeStep', () => {
     verify.resolve({ data: { user: null, session: null }, error: null });
     await verify.promise;
 
-    expect(onSignedIn).not.toHaveBeenCalled();
+    expect(onVerified).not.toHaveBeenCalled();
   });
 
   describe('a verified code that does not navigate', () => {
-    test('offers to try again, which re-runs onSignedIn rather than spending the code twice', async () => {
+    test('offers to try again, which re-runs onVerified rather than spending the code twice', async () => {
       const auth = fakeBrowserAuth();
-      const onSignedIn = vi.fn().mockResolvedValue(undefined);
-      const screen = await render(CodeStep, props(auth, { onSignedIn }));
+      const onVerified = vi.fn().mockResolvedValue(undefined);
+      const screen = await render(CodeStep, props(auth, { onVerified }));
 
       await codeField(screen).fill('123456');
       await expect
@@ -146,14 +147,14 @@ describe('CodeStep', () => {
 
       await screen.getByRole('button', { name: 'Try again' }).click();
 
-      await expect.poll(() => onSignedIn.mock.calls.length).toBe(2);
+      await expect.poll(() => onVerified.mock.calls.length).toBe(2);
       expect(auth.verifyOtp).toHaveBeenCalledOnce();
     });
 
-    test('an onSignedIn that rejects stalls the same way', async () => {
+    test('an onVerified that rejects stalls the same way', async () => {
       const auth = fakeBrowserAuth();
-      const onSignedIn = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
-      const screen = await render(CodeStep, props(auth, { onSignedIn }));
+      const onVerified = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+      const screen = await render(CodeStep, props(auth, { onVerified }));
 
       await codeField(screen).fill('123456');
 
@@ -334,9 +335,9 @@ describe('CodeStep', () => {
   describe('one request at a time', () => {
     /** Rendered with the cooldown already spent, which is the case that matters: anyone who waited
      * for their email has a live resend button by the time they type the code. */
-    async function renderPastCooldown(auth: FakeBrowserAuth, onSignedIn?: () => Promise<void>) {
+    async function renderPastCooldown(auth: FakeBrowserAuth, onVerified?: () => Promise<void>) {
       vi.useFakeTimers();
-      const screen = await render(CodeStep, props(auth, { onSignedIn }));
+      const screen = await render(CodeStep, props(auth, { onVerified }));
       await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
       vi.useRealTimers();
       return screen;
@@ -395,5 +396,49 @@ describe('CodeStep', () => {
       .element(screen.getByRole('alert'))
       .toHaveTextContent('Something went wrong. Try again.');
     await expect.element(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+  });
+
+  describe('changing email', () => {
+    function emailChangeProps(auth: FakeBrowserAuth) {
+      return { ...props(auth), purpose: 'email-change' as const };
+    }
+
+    test('verifies the code as an email change, then hands off', async () => {
+      const auth = fakeBrowserAuth();
+      const onVerified = vi.fn().mockResolvedValue(undefined);
+      const screen = await render(CodeStep, { ...emailChangeProps(auth), onVerified });
+
+      await screen.getByLabelText('Confirmation code').fill('123456');
+
+      await expect.poll(() => onVerified.mock.calls.length).toBe(1);
+      expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
+        email: 'ada@example.com',
+        token: '123456',
+        type: 'email_change',
+      });
+    });
+
+    test('a new code asks GoTrue for the same change again, rather than signing in', async () => {
+      vi.useFakeTimers();
+      const auth = fakeBrowserAuth();
+      const screen = await render(CodeStep, emailChangeProps(auth));
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_S * 1000);
+      vi.useRealTimers();
+
+      await screen.getByRole('button', { name: 'Send a new code' }).click();
+
+      await expect.poll(() => auth.updateUser.mock.calls).toEqual([[{ email: 'ada@example.com' }]]);
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
+    });
+
+    test('offers the way back under its own name', async () => {
+      const auth = fakeBrowserAuth();
+      const onChangeEmail = vi.fn();
+      const screen = await render(CodeStep, { ...emailChangeProps(auth), onChangeEmail });
+
+      await screen.getByRole('button', { name: 'Use a different address' }).click();
+
+      expect(onChangeEmail).toHaveBeenCalledOnce();
+    });
   });
 });

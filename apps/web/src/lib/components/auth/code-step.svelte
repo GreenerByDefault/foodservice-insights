@@ -8,25 +8,55 @@ import { Button } from '#lib/components/ui/button/index.js';
 import * as Field from '#lib/components/ui/field/index.js';
 import * as InputOTP from '#lib/components/ui/input-otp/index.js';
 
+type Purpose = 'sign-in' | 'email-change';
+
 interface Props {
   auth: BrowserAuth;
+  purpose: Purpose;
   email: string;
-  onSignedIn: () => Promise<void>;
+  onVerified: () => Promise<void>;
   onChangeEmail: () => void;
 }
 
-let { auth, email, onSignedIn, onChangeEmail }: Props = $props();
+let { auth, purpose, email, onVerified, onChangeEmail }: Props = $props();
+
+interface PurposeCopy {
+  label: string;
+  outcome: string;
+  verifying: string;
+  stalled: string;
+  changeEmail: string;
+}
+
+const COPY: Record<Purpose, PurposeCopy> = {
+  'sign-in': {
+    label: 'Sign-in code',
+    outcome: "We'll sign you in as soon as you enter it.",
+    verifying: 'Signing in…',
+    stalled: "Your code was verified, but we couldn't finish signing you in.",
+    changeEmail: 'Change email',
+  },
+  'email-change': {
+    label: 'Confirmation code',
+    outcome: 'Your email changes as soon as you enter it.',
+    verifying: 'Changing your email…',
+    stalled: "Your email was changed, but we couldn't finish. Reload the page.",
+    changeEmail: 'Use a different address',
+  },
+};
+
+const copy = $derived(COPY[purpose]);
 
 type VerificationState =
   | { status: 'idle' }
   | { status: 'verifying' }
   | { status: 'failed'; message: string }
-  /** Held until the navigation `onSignedIn` starts takes this step away: re-enabling the form
+  /** Held until the navigation `onVerified` starts takes this step away: re-enabling the form
    * during it would invite a second `verifyOtp` with a code GoTrue has already spent. */
   | { status: 'verified' }
-  /** Verified, but `onSignedIn` settled with the step still here, so it did not navigate — a
+  /** Verified, but `onVerified` settled with the step still here, so it did not navigate — a
    * cookie the server could not read, say. The code is spent, so the way forward is another
-   * `onSignedIn`, never another `verifyOtp`. */
+   * `onVerified`, never another `verifyOtp`. */
   | { status: 'stalled' };
 
 type ResendState =
@@ -113,17 +143,35 @@ function keepDigits(text: string): string {
   return text.replaceAll(/\D/g, '');
 }
 
+function verify(token: string) {
+  return auth.verifyOtp({
+    email,
+    token,
+    type: purpose === 'sign-in' ? 'email' : 'email_change',
+  });
+}
+
+function sendNewCode() {
+  // Sign-in passes `shouldCreateUser: false`, unlike its first send: reaching this step already
+  // proved the account exists (see email-step.svelte), so needing to create one here would be a
+  // bug, not a normal resend. An email change asks for the same address again, which GoTrue
+  // answers with a fresh code.
+  return purpose === 'sign-in'
+    ? auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+    : auth.updateUser({ email });
+}
+
 async function submitCode() {
   if (isCodeLocked || !hasFullCode) return;
 
   verificationState = { status: 'verifying' };
   let errorMessage: string | null;
   try {
-    const { error } = await auth.verifyOtp({ email, token: code, type: 'email' });
+    const { error } = await verify(code);
     errorMessage = error && describeAuthError(error);
   } catch (cause) {
     // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
-    console.error('Could not verify a sign-in code', cause);
+    console.error(`Could not verify a ${purpose} code`, cause);
     errorMessage = describeAuthError({});
   }
   if (!isMounted) return;
@@ -139,17 +187,17 @@ async function submitCode() {
     codeInput?.focus();
     return;
   }
-  await finishSigningIn();
+  await finishVerifying();
 }
 
-async function finishSigningIn() {
+async function finishVerifying() {
   verificationState = { status: 'verified' };
   try {
-    await onSignedIn();
+    await onVerified();
   } catch (cause) {
-    console.error('Could not finish signing in', cause);
+    console.error(`Could not finish a verified ${purpose}`, cause);
   }
-  // A navigation unmounts this step before `onSignedIn` resolves — `refreshAll()` awaits the
+  // A navigation unmounts this step before `onVerified` resolves — `refreshAll()` awaits the
   // redirect it causes — so still being here means there was none.
   if (!isMounted) return;
 
@@ -173,14 +221,11 @@ async function resendCode() {
   let errorMessage: string | null;
   let errorCode: string | null | undefined;
   try {
-    // Passes `shouldCreateUser: false`, unlike the first send: reaching this step already proved
-    // the account exists (see email-step.svelte), so needing to create one here would be a bug,
-    // not a normal resend.
-    const { error } = await auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    const { error } = await sendNewCode();
     errorMessage = error && describeAuthError(error);
     errorCode = error?.code;
   } catch (cause) {
-    console.error('Could not resend a sign-in code', cause);
+    console.error(`Could not resend a ${purpose} code`, cause);
     errorMessage = describeAuthError({});
   }
   if (!isMounted) return;
@@ -206,7 +251,7 @@ async function resendCode() {
 
 <form onsubmit={handleSubmit} class="w-full space-y-4">
   <Field.Field>
-    <Field.Label for={fieldId}>Sign-in code</Field.Label>
+    <Field.Label for={fieldId}>{copy.label}</Field.Label>
     <InputOTP.Root
       inputId={fieldId}
       name={FIELD.code}
@@ -236,7 +281,7 @@ async function resendCode() {
       {/snippet}
     </InputOTP.Root>
     <Field.Description id={descriptionId}>
-      We sent a code to {email}. It expires shortly. We'll sign you in as soon as you enter it.
+      We sent a code to {email}. It expires shortly. {copy.outcome}
     </Field.Description>
     {#if verificationState.status === 'failed'}
       <Field.Error id={errorId}>{verificationState.message}</Field.Error>
@@ -248,7 +293,7 @@ async function resendCode() {
        that appears along with its message is read by nobody. -->
   <p role="status" class="text-sm text-muted-foreground">
     {#if verificationState.status === 'verifying' || verificationState.status === 'verified'}
-      Signing in…
+      {copy.verifying}
     {/if}
   </p>
 </form>
@@ -256,9 +301,9 @@ async function resendCode() {
 {#if verificationState.status === 'stalled'}
   <div class="space-y-2">
     <p role="alert" class="text-sm text-destructive">
-      Your code was verified, but we couldn't finish signing you in.
+      {copy.stalled}
     </p>
-    <Button bind:ref={retryButton} onclick={finishSigningIn} disabled={isResending(resendState)}>
+    <Button bind:ref={retryButton} onclick={finishVerifying} disabled={isResending(resendState)}>
       Try again
     </Button>
   </div>
@@ -281,7 +326,7 @@ async function resendCode() {
   </Button>
   <span aria-hidden="true" class="text-muted-foreground">•</span>
   <Button variant="link" class="px-0" onclick={onChangeEmail} disabled={isLocked}>
-    Change email
+    {copy.changeEmail}
   </Button>
 </div>
 
