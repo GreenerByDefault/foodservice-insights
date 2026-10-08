@@ -550,8 +550,6 @@
           "small_category_ratio_threshold": 5.0,
           "mad_threshold": 5.0,
           "min_category_rows": 5,
-          "legacy_median_floor": 3.0,
-          "legacy_absolute_threshold_if_below_floor": 30.0,
           "sample_rows": [
             {
               "date": "2023-11-02 00:00:00",

@@ -300,7 +300,6 @@ def test_detect_unusual_sales_flags_category_outliers_with_export_table(unusual_
         summary_col="quantity_sold",
         product_name_col="product_name",
         threshold=5,
-        return_details=True,
     )
 
     assert findings[0]["status"] == "warning"
@@ -319,13 +318,14 @@ def test_detect_unusual_sales_returns_nothing_within_normal_range():
             "quantity_sold": [10, 11, 10, 9, 12],
         }
     )
-    abnormal_products = detect_unusual_sales(
+    findings, outlier_rows = detect_unusual_sales(
         df,
         summary_col="quantity_sold",
         product_name_col="product_name",
         threshold=5,
     )
-    assert len(abnormal_products) == 0
+    assert [finding["status"] for finding in findings] == ["success"]
+    assert outlier_rows.empty
 
 
 def test_detect_unusual_sales_handles_string_metric_values_when_returning_details():
@@ -346,7 +346,6 @@ def test_detect_unusual_sales_handles_string_metric_values_when_returning_detail
         summary_col="quantity_sold",
         product_name_col="product_name",
         threshold=5,
-        return_details=True,
     )
 
     assert findings[0]["status"] == "warning"
@@ -372,7 +371,6 @@ def test_detect_unusual_sales_flags_severe_small_category_outlier():
         df,
         summary_col="quantity_sold",
         product_name_col="product_name",
-        return_details=True,
     )
 
     assert findings[0]["status"] == "warning"
@@ -382,31 +380,17 @@ def test_detect_unusual_sales_flags_severe_small_category_outlier():
     assert "small-category severe ratio fallback" in outlier_rows["flag_reason"].iloc[0]
 
 
-def test_detect_unusual_sales_returns_empty_list_for_no_rows():
+def test_detect_unusual_sales_returns_success_for_no_rows():
     df = pd.DataFrame({"product_name": [], "category": [], "quantity_sold": []})
-    result = detect_unusual_sales(df, "quantity_sold", "product_name")
-    assert result == []
+    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+    assert [finding["status"] for finding in findings] == ["success"]
+    assert outlier_rows.empty
 
 
 def test_detect_unusual_sales_raises_for_missing_columns():
     df = pd.DataFrame({"p": ["A"], "q": [1]})
     with pytest.raises(KeyError):
         detect_unusual_sales(df, "quantity_sold", "product_name")
-
-
-def test_detect_unusual_sales_returns_legacy_product_list():
-    """Keeps the legacy return shape for callers that only need product names."""
-    df = pd.DataFrame(
-        {
-            "product_name": ["A"] * 5 + ["B"] * 5,
-            "category": ["Legumes"] * 5 + ["Poultry"] * 5,
-            "quantity_sold": [10, 11, 12, 10, 50, 5, 5, 5, 5, 60],
-        }
-    )
-
-    flagged_products = detect_unusual_sales(df, "quantity_sold", "product_name")
-
-    assert flagged_products == ["A", "B"]
 
 
 def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
@@ -1119,11 +1103,6 @@ def _curry_split_in_a_pdf_extract() -> dict[str, object]:
     }
 
 
-def _legacy_spike_below_the_median_floor() -> list[str]:
-    df = pd.DataFrame({"product_name": ["A"] * 5, "quantity_sold": [9, 9, 9, 9, 46]})
-    return detect_unusual_sales(df, "quantity_sold", "product_name")
-
-
 def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
     df = pd.DataFrame({"product": ["Beans", "Tofu", "Tempeh"], "kilos_total": [1.5, 10.0, 11.0]})
     findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
@@ -1233,17 +1212,6 @@ def _top_category_at_35_percent() -> dict[str, object]:
             _names_two_edits_apart,
             0,
             id="max_levenshtein_distance",
-        ),
-        pytest.param(
-            {
-                "outlier_line_items": {
-                    "legacy_median_floor": 10,
-                    "legacy_absolute_threshold_if_below_floor": 50,
-                }
-            },
-            _legacy_spike_below_the_median_floor,
-            [],
-            id="outlier_line_items_legacy",
         ),
         pytest.param(
             {"per_product_weight_bounds": {"low": 2, "high": 10}},
