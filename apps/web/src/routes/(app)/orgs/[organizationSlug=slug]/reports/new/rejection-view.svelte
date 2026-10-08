@@ -11,14 +11,6 @@ interface Props {
 
 let { rejection, onBack }: Props = $props();
 
-let headingElement: HTMLHeadingElement | undefined = $state();
-
-// A rejection is a finished verdict, not a live update — README.md § Errors rules out a live
-// region for a document this long, so the fix is moving focus, once, to the heading that names it.
-$effect(() => {
-  headingElement?.focus();
-});
-
 // Whether there's a row list or date-order block below the heading long enough that a
 // reader scrolling back up benefits from a button up there too, instead of hunting for the
 // one at the bottom.
@@ -35,7 +27,10 @@ let hasScrollableDetail = $derived(
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-start justify-between gap-4">
-    <h2 bind:this={headingElement} tabindex="-1" class="text-lg font-semibold outline-none">
+    <!-- A rejection is a finished verdict, not a live update — README.md § Errors rules out a live
+         region for a document this long, so the fix is moving focus, once, to the heading that
+         names it. -->
+    <h2 {@attach (node) => node.focus()} tabindex="-1" class="text-lg font-semibold outline-none">
       {rejection.summary}
     </h2>
     {#if hasScrollableDetail}
