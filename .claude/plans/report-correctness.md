@@ -41,10 +41,9 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 **Layout.**
 
-- Each figure's size becomes its page's size: a 28-page run has ten paper sizes. Label
-  wrapping grows the page: five 200-character product names (the web's cap) make the overall
-  drivers page 10 × 13.25 in.
 - One near-empty page per category, alphabetical: 12 on the sample data, up to 26 on real data.
+  Now that every chart is a full landscape Letter page, a category with one driver is a single
+  bar stretched across 11 × 8.5 in.
 
 **Silent failures.**
 
@@ -117,10 +116,16 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - **A split, share, chart or stage failure fails the run, with its own traceback.** `_safe_plot`
   goes, placeholder page and input checks alike, and so do the emissions, emissions-summary and
   diagnostics `except` blocks. `ReportCharts` then carries no findings.
-- **Fixed page sizes.** Every page is US Letter, portrait for text and landscape for charts and
-  tables (the Category Template needs the width); wrapped labels truncate with an ellipsis
-  rather than grow the page, since the workbook keeps every full product name. The Category
-  Template already fits by measurement: `create_table_page` sizes each column to its widest
+- **Fixed page sizes.** Every page is US Letter: `LETTER_PORTRAIT` for text and
+  `LETTER_LANDSCAPE` for charts and tables (the Category Template needs the width), both in
+  `plotting_utils.py`, and `test_analysis.py` reads every page's size out of an `analyze()` PDF
+  with a 200-character product name, so a new page in another size fails there. Labels never grow
+  the page: `wrap_labels` ends in an ellipsis past three lines, since the workbook keeps every
+  full product name. `create_horizontal_percentage_barplot` keys its bars on the full label and
+  shortens only the tick text, because seaborn averages rows that share a label into one bar;
+  any new drivers drawer must keep that. A two-panel trend page stacks its panels, which share
+  the month axis, rather than setting them side by side as tall, narrow charts that steepen every
+  swing. The Category Template already fits by measurement: `create_table_page` sizes each column to its widest
   rendered text and splits months across pages ("Category Template (1 of 2)") against
   `_table_width_in(fig_size)`, which derives the table's width from the page size and the
   `figure.subplot` rcParams. A change to the page size carries through; a change to where table
@@ -166,17 +171,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 4 — fixed page sizes
-
-- Every figure in `report/plots/figures.py` and the placeholder drop their own sizes for the
-  two Letter orientations; `calculate_figure_height_for_wrapped_labels` goes, and the drivers
-  charts truncate labels past a line cap instead.
-- Tests: every page of a `mock_llm` run is one of two sizes; a 200-character product name does
-  not change any page's size.
-- Worth it: a report of ten paper sizes prints and scales unevenly, and a long product name
-  stretches its page.
-
-## PR 5 — category pages grouped by emissions
+## PR 4 — category pages grouped by emissions
 
 - `plot_category_drivers`' body becomes `draw_category_drivers(ax, ...)`, the way #388 split
   the combined pages; a new page function lays out four categories per page, ordered by
@@ -193,9 +188,10 @@ handed and what the sheets contain, not that files exist.
 
 - Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2 and 3, which change what the lab's QA
   workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
-- PRs 4 and 5: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; both also `2. Produce Food Report.py` on
-  `python/lab/test_data`.
+- PR 4: `python -m worker_child.mock_llm` on the golden input before and after,
+  and compare the pages side by side; also `2. Produce Food Report.py` on the categorized rows
+  of `python/insights/tests/data/aggregated_baseline.csv` (`python/lab/test_data` stops before
+  `kilos_total` exists, so the report rejects it).
 
 ## Risks
 

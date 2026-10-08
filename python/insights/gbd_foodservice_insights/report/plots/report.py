@@ -8,6 +8,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights.plotting_utils import (
+    LETTER_LANDSCAPE,
     close_new_figures_on_error,
     standardize_title_case,
 )
@@ -28,7 +29,7 @@ from gbd_foodservice_insights.report.schema import metric_display_label
 
 def _placeholder_figure(title: str, message: str) -> Figure:
     """Create a placeholder figure when a plot cannot be generated."""
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     ax.axis("off")
     ax.text(0.5, 0.72, title, ha="center", va="center", fontsize=14, fontweight="bold")
     ax.text(0.5, 0.42, message, ha="center", va="center", fontsize=11, wrap=True)

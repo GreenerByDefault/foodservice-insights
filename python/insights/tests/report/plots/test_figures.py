@@ -13,9 +13,9 @@ def _figure_title(fig: Figure) -> str:
     return fig.texts[0].get_text() if fig.texts else fig.axes[0].get_title()
 
 
-def _is_side_by_side(left: plt.Axes, right: plt.Axes) -> bool:
-    left_pos, right_pos = left.get_position(), right.get_position()
-    return left_pos.x0 < right_pos.x0 and abs(left_pos.y0 - right_pos.y0) < 0.05
+def _is_stacked(top: plt.Axes, bottom: plt.Axes) -> bool:
+    top_pos, bottom_pos = top.get_position(), bottom.get_position()
+    return top_pos.y0 > bottom_pos.y0 and abs(top_pos.x0 - bottom_pos.x0) < 0.05
 
 
 def test_plot_category_drivers_draws_one_titled_chart_per_category():
@@ -50,7 +50,7 @@ def test_plot_emissions_by_category_labels_each_bar_with_its_share_skipping_miss
     assert [text.get_text() for text in fig.axes[0].texts] == ["14.6%", "84.3%"]
 
 
-def test_food_and_drink_comparison_page_puts_totals_beside_per_diner(
+def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
     fig = figures.plot_food_and_drink_comparison_page(
@@ -61,7 +61,7 @@ def test_food_and_drink_comparison_page_puts_totals_beside_per_diner(
 
     assert _figure_title(fig) == "Kilos Over Time"
     assert [ax.get_title() for ax in fig.axes] == ["Total Kilos", "Kilos per Diner"]
-    assert _is_side_by_side(*fig.axes)
+    assert _is_stacked(*fig.axes)
 
 
 def test_food_and_drink_comparison_page_requires_diner_meals(
@@ -71,7 +71,7 @@ def test_food_and_drink_comparison_page_requires_diner_meals(
         figures.plot_food_and_drink_comparison_page(fruit_and_juice_months())
 
 
-def test_emissions_summary_page_puts_total_beside_per_diner(
+def test_emissions_summary_page_puts_total_above_per_diner(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
     fig = figures.plot_emissions_summary_over_time(
@@ -84,7 +84,7 @@ def test_emissions_summary_page_puts_total_beside_per_diner(
         "Total Carbon Emissions Over Time",
         "Carbon Emissions per Diner Over Time",
     ]
-    assert _is_side_by_side(*fig.axes)
+    assert _is_stacked(*fig.axes)
 
 
 def test_plant_breakdown_overview_puts_the_split_above_protein_with_monthly_on_the_right():
