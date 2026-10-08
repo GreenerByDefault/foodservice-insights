@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-import gbd_foodservice_insights.report.diagnostics as report_diagnostics
+import gbd_foodservice_insights.report.thresholds as report_thresholds
 import pandas as pd
 import pytest
 import yaml
@@ -1036,7 +1036,7 @@ def _override_thresholds(
     overrides: dict[str, dict[str, float]],
 ) -> None:
     config_path.write_text(yaml.safe_dump(overrides))
-    monkeypatch.setattr(report_diagnostics, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+    monkeypatch.setattr(report_thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
 
 
 def test_load_diagnostic_thresholds_refreshes_when_the_path_changes(tmp_path, monkeypatch):
@@ -1048,7 +1048,7 @@ def test_load_diagnostic_thresholds_refreshes_when_the_path_changes(tmp_path, mo
         )
 
         assert (
-            report_diagnostics.get_diagnostic_threshold("outlier_line_items", "mad_threshold")
+            report_thresholds.get_diagnostic_threshold("outlier_line_items", "mad_threshold")
             == mad_threshold
         )
 
