@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 import { organizationHref } from '../../src/lib/hrefs.ts';
 import { clearOrganizationFixture, insertOrganizationFixture } from '../fixtures/organizations.ts';
 import { test } from '../fixtures/test.ts';
-import { waitForSignInCode } from '../lib/sign-in-code.ts';
+import { waitForSignInCode } from '../lib/emailed-code.ts';
 
 // The whole chain in one assertion: a real session cookie, `getUser()` in `identifyUser`, the
 // lookup in `hooks.server.ts`, the guard on `(app)`, and the data reaching a component. Goes

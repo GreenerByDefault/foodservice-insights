@@ -14,6 +14,9 @@ export function describeAuthError(error: { code?: string | null }): string {
       return 'That code is wrong or has expired. Check the latest email, or send a new code.';
     case 'over_email_send_rate_limit':
       return 'Too many codes requested. Wait a minute, then try again.';
+    // Only changing your email can collide: sign-in signs into the account the address has.
+    case 'email_exists':
+      return 'That address belongs to another account.';
     default:
       return 'Something went wrong. Try again.';
   }

@@ -30,18 +30,21 @@ function props(): PageProps {
 }
 
 describe('+page.svelte', () => {
-  test('in supabase mode, offers to delete the account', async () => {
+  test('in supabase mode, offers to change the email and delete the account', async () => {
     const screen = await render(Page, props());
 
+    await expect.element(screen.getByLabelText('Email')).toHaveValue('sam.cook@example.test');
+    await expect.element(screen.getByRole('button', { name: 'Change email' })).toBeVisible();
     await expect.element(screen.getByRole('button', { name: 'Delete account' })).toBeVisible();
   });
 
-  test('in placeholder mode, has no delete section', async () => {
+  test('in placeholder mode, shows the email without offering to change it, and has no delete section', async () => {
     state.mode = 'placeholder';
 
     const screen = await render(Page, props());
 
-    await expect.element(screen.getByLabelText('Your name')).toBeVisible();
+    await expect.element(screen.getByText('sam.cook@example.test')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Change email' }).query()).toBeNull();
     expect(screen.getByRole('button', { name: 'Delete account' }).query()).toBeNull();
   });
 });

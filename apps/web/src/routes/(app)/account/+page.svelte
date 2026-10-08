@@ -7,6 +7,7 @@ import PageHeading from '#lib/components/page-heading.svelte';
 import * as Field from '#lib/components/ui/field/index.js';
 import type { PageProps } from './$types';
 import { pageTitle } from '#lib/page-title.js';
+import ChangeEmailForm from './change-email-form.svelte';
 import DeleteAccount from './delete-account.svelte';
 
 let { data }: PageProps = $props();
@@ -18,11 +19,17 @@ let { data }: PageProps = $props();
 
 <PageHeading>Account</PageHeading>
 
+<!-- `placeholder` mode has no session to change or end, and deleting its one user breaks every
+     request. -->
 <div class="flex w-full max-w-md flex-col gap-8">
-  <Field.Field>
-    <Field.Title>Email</Field.Title>
-    <p class="text-sm text-muted-foreground">{data.user.email}</p>
-  </Field.Field>
+  {#if authMode() === 'supabase'}
+    <ChangeEmailForm auth={browserAuth()} currentEmail={data.user.email} />
+  {:else}
+    <Field.Field>
+      <Field.Title>Email</Field.Title>
+      <p class="text-sm text-muted-foreground">{data.user.email}</p>
+    </Field.Field>
+  {/if}
 
   <DisplayNameForm
     initialName={data.user.displayName ?? ''}
@@ -30,7 +37,6 @@ let { data }: PageProps = $props();
     onSaved={refreshAll}
   />
 
-  <!-- `placeholder` mode has no session to end, and deleting its one user breaks every request. -->
   {#if authMode() === 'supabase'}
     <Field.Separator />
 
@@ -41,9 +47,3 @@ let { data }: PageProps = $props();
     />
   {/if}
 </div>
-
-<!-- **Stub:** changing the email is still to come. It is a browser-side `updateUser` followed by
-     `verifyOtp` with type `email_change`, like the rest of auth — no route of ours is involved.
-     That holds only while Supabase's email-change template is set to send `{{ .Token }}`; left as
-     the default link, the flow needs a server route to receive the click, which is exactly what
-     email OTP was chosen to avoid. -->

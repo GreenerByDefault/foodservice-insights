@@ -8,6 +8,7 @@ describe('describeAuthError', () => {
       'That code is wrong or has expired. Check the latest email, or send a new code.',
     ],
     ['over_email_send_rate_limit', 'Too many codes requested. Wait a minute, then try again.'],
+    ['email_exists', 'That address belongs to another account.'],
   ] as const)('maps %s to its own copy', ([code, message]) => {
     expect(describeAuthError({ code })).toBe(message);
   });
