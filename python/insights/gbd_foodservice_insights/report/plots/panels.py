@@ -10,8 +10,11 @@ from gbd_foodservice_insights.categories import get_drink_categories, get_food_c
 from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
+    convert_percentage_to_float,
+    create_horizontal_percentage_barplot,
     format_month_labels,
     set_title_font,
+    standardize_title_case,
 )
 from gbd_foodservice_insights.report.schema import metric_display_label, per_diner_metric_name
 from gbd_foodservice_insights.report.utils import divide_by_diner_meals, monthly_totals
@@ -427,3 +430,26 @@ def draw_plant_protein_share_by_month(
         y_label="% plant protein",
         empty_message="Monthly plant protein data was not available.",
     )
+
+
+def draw_category_drivers(
+    ax: plt.Axes,
+    category_drivers: pd.DataFrame,
+    category: str,
+    *,
+    metric_label: str = "Kilos",
+) -> None:
+    """The products making up most of one category, each as its share of the category."""
+    drivers = category_drivers[category_drivers["category"] == category]
+    if drivers.empty:
+        raise ValueError(f"No drivers for category {category!r}")
+    create_horizontal_percentage_barplot(
+        ax=ax,
+        data=convert_percentage_to_float(drivers, "percentage"),
+        y_col="product",
+        percentage_col="percentage",
+        add_percentage_labels=False,
+    )
+    ax.set_xlabel(f"% of category {metric_label.lower()}")
+    ax.set_ylabel("")
+    set_title_font(ax, standardize_title_case(category), fontsize=12)

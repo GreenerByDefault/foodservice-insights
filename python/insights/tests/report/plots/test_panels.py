@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.plots import panels
+from matplotlib.patches import Rectangle
 
 
 def _y_values(ax: plt.Axes) -> list[list[float]]:
@@ -268,3 +269,30 @@ def test_plant_drawers_keep_their_title_when_data_is_unavailable(
 
     assert not ax.axison
     assert _texts(ax) == expected
+
+
+CATEGORY_DRIVERS = pd.DataFrame(
+    {
+        "category": ["fruit", "fruit", "juice"],
+        "product": ["apple", "banana", "apple juice"],
+        "percentage": ["60.0%", "40.0%", "100.0%"],
+    }
+)
+
+
+def test_draw_category_drivers_draws_only_its_categorys_products():
+    _fig, ax = plt.subplots()
+
+    panels.draw_category_drivers(ax, CATEGORY_DRIVERS, "fruit", metric_label="Servings")
+
+    assert ax.get_title() == "Fruit"
+    assert ax.get_xlabel() == "% of category servings"
+    assert [label.get_text() for label in ax.get_yticklabels()] == ["apple", "banana"]
+    assert [bar.get_width() for bar in ax.patches if isinstance(bar, Rectangle)] == [60.0, 40.0]
+
+
+def test_draw_category_drivers_rejects_a_category_without_drivers():
+    _fig, ax = plt.subplots()
+
+    with pytest.raises(ValueError, match="No drivers for category 'beef'"):
+        panels.draw_category_drivers(ax, CATEGORY_DRIVERS, "beef")

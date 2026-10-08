@@ -690,25 +690,17 @@
         "Top Products Driving Overall (Kilos)"
       ],
       [
-        "Top Products Driving Cheese"
+        "Top Products by Category (1 of 2)",
+        "Cheese",
+        "Fish & Mollusks",
+        "Legumes",
+        "Mayo"
       ],
       [
-        "Top Products Driving Fish & Mollusks"
-      ],
-      [
-        "Top Products Driving Legumes"
-      ],
-      [
-        "Top Products Driving Mayo"
-      ],
-      [
-        "Top Products Driving Milk (Cow's Milk)"
-      ],
-      [
-        "Top Products Driving Poultry (Chicken & Turkey)"
-      ],
-      [
-        "Top Products Driving Whole Grains"
+        "Top Products by Category (2 of 2)",
+        "Milk (Cow's Milk)",
+        "Poultry (Chicken & Turkey)",
+        "Whole Grains"
       ]
     ]
   },

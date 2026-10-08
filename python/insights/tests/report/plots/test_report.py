@@ -167,7 +167,7 @@ def test_generate_all_report_plots_orders_every_page(
         "Carbon Emissions Over Time",
         "Plant and Protein Breakdown",
         "Top Products Driving Overall (Kilos)",
-        "Top Products Driving Fruit",
+        "Top Products by Category",
     ]
 
 
@@ -204,7 +204,7 @@ def test_generate_all_report_plots_leaves_out_pages_without_their_data(
         "Kilos by Category Across All Months",
         *expected_carbon_pages,
         "Top Products Driving Overall (Kilos)",
-        "Top Products Driving Fruit",
+        "Top Products by Category",
     ]
 
 
@@ -247,7 +247,7 @@ def test_generate_all_report_plots_marks_driver_charts_whose_input_is_incomplete
         quality_findings=findings,
     )
 
-    assert _figure_title(plots_output[-1][1]) == "Top Products — Fruit [DATA WARNING]"
+    assert _figure_title(plots_output[-1][1]) == "Top Products by Category [DATA WARNING]"
     assert findings == [
         {
             "stage": "plots",
@@ -266,11 +266,11 @@ def test_generate_all_report_plots_substitutes_one_placeholder_when_driver_chart
     monkeypatch.setattr(panels, "get_food_categories", lambda **_: ["fruit"])
     monkeypatch.setattr(panels, "get_drink_categories", lambda **_: [])
 
-    def plot_category_drivers(*_args: Any, **_kwargs: Any):
+    def plot_category_drivers_pages(*_args: Any, **_kwargs: Any):
         plt.figure()
         raise ValueError("boom")
 
-    monkeypatch.setattr(report, "plot_category_drivers", plot_category_drivers)
+    monkeypatch.setattr(report, "plot_category_drivers_pages", plot_category_drivers_pages)
     findings: list[dict[str, Any]] = []
     before = set(plt.get_fignums())
 

@@ -18,21 +18,44 @@ def _is_stacked(top: plt.Axes, bottom: plt.Axes) -> bool:
     return top_pos.y0 > bottom_pos.y0 and abs(top_pos.x0 - bottom_pos.x0) < 0.05
 
 
-def test_plot_category_drivers_draws_one_titled_chart_per_category():
-    drivers = pd.DataFrame(
-        {
-            "category": ["fruit", "fruit", "farmer's oat milk"],
-            "product": ["apple", "banana", "oat milk"],
-            "percentage": ["60.0%", "40.0%", "100.0%"],
-        }
+@pytest.mark.parametrize(
+    ("category_count", "expected_pages"),
+    [
+        (4, [["Category 1", "Category 2", "Category 3", "Category 4"]]),
+        (
+            5,
+            [
+                ["Category 1", "Category 2", "Category 3", "Category 4"],
+                ["Category 5", "", "", ""],
+            ],
+        ),
+        (
+            8,
+            [
+                ["Category 1", "Category 2", "Category 3", "Category 4"],
+                ["Category 5", "Category 6", "Category 7", "Category 8"],
+            ],
+        ),
+    ],
+)
+def test_plot_category_drivers_pages_puts_four_categories_on_each_page_in_order(
+    category_count: int, expected_pages: list[list[str]]
+):
+    categories = [f"category {n}" for n in range(1, category_count + 1)]
+    drivers = pd.DataFrame({"category": categories, "product": "apple", "percentage": "100.0%"})
+
+    pages = figures.plot_category_drivers_pages(drivers, categories)
+
+    assert [[ax.get_title() for ax in page.axes] for page in pages] == expected_pages
+    assert [[ax.axison for ax in page.axes] for page in pages] == [
+        [bool(title) for title in page] for page in expected_pages
+    ]
+    page_count = len(expected_pages)
+    assert [page.get_suptitle() for page in pages] == (
+        ["Top Products by Category"]
+        if page_count == 1
+        else [f"Top Products by Category ({n} of {page_count})" for n in range(1, page_count + 1)]
     )
-
-    figs = figures.plot_category_drivers(drivers, metric="kilos_total")
-
-    assert {category: _figure_title(fig) for category, fig in figs.items()} == {
-        "fruit": "Top Products Driving Fruit",
-        "farmer's oat milk": "Top Products Driving Farmer's Oat Milk",
-    }
 
 
 def test_plot_emissions_by_category_labels_each_bar_with_its_share_skipping_missing_ones():
