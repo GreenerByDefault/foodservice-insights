@@ -29,7 +29,7 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_with_llm,
     clean_product_names,
 )
-from gbd_foodservice_insights.report.diagnostics import (
+from gbd_foodservice_insights.report.parsing import (
     clean_weight_column,
     parse_and_validate_date_column,
 )
