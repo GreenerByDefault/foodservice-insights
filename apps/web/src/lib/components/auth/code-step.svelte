@@ -38,9 +38,9 @@ const COPY: Record<Purpose, PurposeCopy> = {
   },
   'email-change': {
     label: 'Confirmation code',
-    outcome: 'Your email changes as soon as you enter it.',
+    outcome: 'Enter the code to finish changing your email.',
     verifying: 'Changing your email…',
-    stalled: "Your email was changed, but we couldn't finish. Reload the page.",
+    stalled: "Your email was changed, but this page couldn't refresh.",
     changeEmail: 'Use a different address',
   },
 };

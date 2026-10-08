@@ -116,7 +116,8 @@ async function finishChange() {
         bind:value={email}
       />
       <Field.Description id={descriptionId}>
-        To change it, we'll email a {OTP_LENGTH}-digit code to the new address.
+        To change your email, enter a new address. We'll send a {OTP_LENGTH}-digit code there to
+        confirm.
       </Field.Description>
       {#if sendState.status === 'failed'}
         <Field.Error id={errorId}>{sendState.message}</Field.Error>
