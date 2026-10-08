@@ -1,11 +1,13 @@
 <script lang="ts">
 import type { Subscription } from '@supabase/supabase-js';
-import { refreshAll } from '$app/navigation';
+import { beforeNavigate, refreshAll } from '$app/navigation';
+import { updated } from '$app/state';
 import favicon from '#lib/assets/favicon.svg';
 import { browserAuth } from '#lib/auth/browser.js';
 import { refreshWhenRestoredByBack, sessionUserChanged } from '#lib/auth/follow-session.js';
 import { authMode } from '#lib/auth/mode.js';
 import { Toaster } from '#lib/components/ui/sonner/index.js';
+import { fullLoadForNewVersion } from '#lib/navigation/new-version.js';
 import type { LayoutProps } from './$types';
 import './layout.css';
 
@@ -54,6 +56,11 @@ $effect(() => {
 // browser no longer holds.
 const onPageShow =
   authMode() === 'supabase' ? refreshWhenRestoredByBack(() => location.reload()) : undefined;
+
+beforeNavigate((navigation) => {
+  const url = fullLoadForNewVersion(updated.current, navigation);
+  if (url) location.href = url.href;
+});
 </script>
 
 <!-- No chrome, deliberately: the pages above the `(app)` gate each carry their own, so that a

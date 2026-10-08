@@ -4,10 +4,12 @@ import { vi } from 'vitest';
  * one it didn't before stops failing with `undefined is not a function`. Import this module in
  * place of `$app/navigation`:
  * `vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'))`. */
+export const beforeNavigate = vi.fn();
 export const goto = vi.fn();
 export const refreshAll = vi.fn();
 
 export function resetNavigationMocks() {
+  beforeNavigate.mockClear();
   goto.mockClear();
   refreshAll.mockClear();
 }
