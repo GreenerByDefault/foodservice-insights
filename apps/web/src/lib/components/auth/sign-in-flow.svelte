@@ -34,5 +34,11 @@ let returningFromCodeStep = $state(false);
     }}
   />
 {:else}
-  <CodeStep {auth} {email} {onSignedIn} onChangeEmail={() => (step = 'email')} />
+  <CodeStep
+    {auth}
+    purpose="sign-in"
+    {email}
+    onVerified={onSignedIn}
+    onChangeEmail={() => (step = 'email')}
+  />
 {/if}

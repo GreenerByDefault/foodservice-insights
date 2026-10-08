@@ -3,7 +3,7 @@
  *
  * Narrow for two reasons. It keeps supabase-js out of the root chunk — in `supabase` mode it is
  * fetched after hydration, when the root layout subscribes to the session, and in `placeholder`
- * mode never — and it makes the seam a component test has to fake four functions wide instead of a
+ * mode never — and it makes the seam a component test has to fake five functions wide instead of a
  * whole client (`testing/fake.ts`).
  *
  * Supabase is a token service here and nothing else: no `locals.supabase`, no callback route, no
@@ -17,8 +17,11 @@ import { PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from '$app/env/p
 
 type SupabaseAuth = SupabaseClient['auth'];
 
-/** The four calls the app makes, picked from the real client so their signatures cannot drift. */
-export type BrowserAuth = Pick<SupabaseAuth, 'signInWithOtp' | 'verifyOtp' | 'signOut'> & {
+/** The calls the app makes, picked from the real client so their signatures cannot drift. */
+export type BrowserAuth = Pick<
+  SupabaseAuth,
+  'signInWithOtp' | 'verifyOtp' | 'updateUser' | 'signOut'
+> & {
   /** Promise-returning where the real client's is synchronous: the client is behind a dynamic
    * import, so the subscription cannot exist until that import has resolved. */
   onAuthStateChange: (
@@ -72,6 +75,9 @@ export function browserAuth(): BrowserAuth {
     },
     async verifyOtp(...args) {
       return (await loadAuth()).verifyOtp(...args);
+    },
+    async updateUser(...args) {
+      return (await loadAuth()).updateUser(...args);
     },
     async signOut(...args) {
       return (await loadAuth()).signOut(...args);

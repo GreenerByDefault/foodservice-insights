@@ -1,4 +1,4 @@
-import type { AuthError } from '@supabase/supabase-js';
+import type { AuthError, User } from '@supabase/supabase-js';
 import { type Mock, vi } from 'vitest';
 import type { BrowserAuth } from '#lib/auth/browser.js';
 
@@ -18,6 +18,10 @@ export function fakeBrowserAuth(): FakeBrowserAuth {
     verifyOtp: vi
       .fn<BrowserAuth['verifyOtp']>()
       .mockResolvedValue({ data: { user: null, session: null }, error: null }),
+    // Nothing reads the user it answers with, so an empty one stands in.
+    updateUser: vi
+      .fn<BrowserAuth['updateUser']>()
+      .mockResolvedValue({ data: { user: {} as User }, error: null }),
     signOut: vi.fn<BrowserAuth['signOut']>().mockResolvedValue({ error: null }),
     onAuthStateChange: vi.fn<BrowserAuth['onAuthStateChange']>().mockResolvedValue({
       data: { subscription: { id: 'fake', callback: () => {}, unsubscribe: () => {} } },
