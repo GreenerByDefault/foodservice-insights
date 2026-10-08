@@ -18,8 +18,7 @@ $effect(() => {
 });
 
 // Keeps the page on the session the browser holds: a sign-in or sign-out, here or in another tab,
-// re-runs every load, and a page restored by Back is reloaded rather than shown as it was.
-// `placeholder` has no session to follow, and must not load supabase-js.
+// re-runs every load. `placeholder` has no session to follow, and must not load supabase-js.
 $effect(() => {
   if (authMode() !== 'supabase') return;
 
@@ -45,19 +44,22 @@ $effect(() => {
     else unsubscribe = () => subscription.unsubscribe();
   })();
 
-  const onPageShow = refreshWhenRestoredByBack(() => location.reload());
-  window.addEventListener('pageshow', onPageShow);
-
   return () => {
     unmounted = true;
     unsubscribe?.();
-    window.removeEventListener('pageshow', onPageShow);
   };
 });
+
+// A page restored by Back is reloaded rather than shown as it was, so it cannot show a session the
+// browser no longer holds.
+const onPageShow =
+  authMode() === 'supabase' ? refreshWhenRestoredByBack(() => location.reload()) : undefined;
 </script>
 
 <!-- No chrome, deliberately: the pages above the `(app)` gate each carry their own, so that a
      stranger is never shown the signed-in header. -->
+
+<svelte:window onpageshow={onPageShow} />
 
 <svelte:head>
   <!-- The `.ico` first, for browsers without SVG favicons; the rest prefer the SVG after it. -->

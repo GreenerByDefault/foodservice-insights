@@ -56,7 +56,6 @@ let unitSystemError: string | undefined = $state();
 /** A hint to the file picker only; what a file actually is, `inspectFile` decides from its bytes. */
 const ACCEPTED_FILE_TYPES = `.csv,text/csv,.xlsx,${XLSX_CONTENT_TYPE}`;
 
-let formElement: HTMLFormElement | undefined = $state();
 let dropZoneTriggerElement: HTMLElement | null = $state(null);
 let unitSystemElement: HTMLElement | null = $state(null);
 
@@ -108,11 +107,11 @@ function replaceFile() {
   formState = { status: 'idle' };
 }
 
-async function handleSubmit(event: SubmitEvent) {
+async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElement }) {
+  // `currentTarget` is null once dispatch ends, so it must be read before the first `await`.
+  const form = event.currentTarget;
   event.preventDefault();
   if (formState.status === 'submitting') return;
-  const form = formElement;
-  if (!form) return;
 
   // Two traps native validation can't see: the drop zone's file input is hidden (`required`
   // there produces a console error and no visible message), and a `RadioGroup` submits through
@@ -169,7 +168,7 @@ function backToForm() {
 {#if formState.status === 'rejected'}
   <RejectionView rejection={formState.rejection} onBack={backToForm} />
 {:else}
-  <form bind:this={formElement} onsubmit={handleSubmit} class="space-y-8">
+  <form onsubmit={handleSubmit} class="space-y-8">
     {#if rateLimitWarning}
       <Alert>
         <AlertDescription>{rateLimitWarning}</AlertDescription>
