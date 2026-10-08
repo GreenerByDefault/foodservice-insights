@@ -160,7 +160,7 @@ works, but they compete for the same memory and CPU, especially across concurren
 | Stack | For | Ports | Yours to modify? |
 | --- | --- | --- | --- |
 | [`supabase-dev/`](supabase-dev/) | Local development | `553xx` | Yes — seed it, hand-edit rows, break it |
-| [`supabase-test/`](supabase-test/) | Automated tests | `653xx` | No. The test suites own it and truncate it |
+| [`supabase-test/`](supabase-test/) | Automated tests | `653xx` | No. The test suites own it; Playwright clones its own databases from it |
 
 `TEST_DB=1` is the single switch that picks the test stack — for the CLI, for the `db:*`
 scripts, and for vitest. Always go through the [`scripts/supabase`](scripts/supabase)
@@ -266,7 +266,8 @@ to use its sibling `withTemporaryOrganization` instead.
 exceptions that send through Mailpit for real.
 
 **E2E tests commit transactions and leave objects in the blob store, unlike the rest of the
-suite** — Playwright truncates both before a run. Generate IDs with `crypto.randomUUID()` to
+suite** — but Playwright gives each run its own database, cloned from a migrated template, and its own
+bucket, and deletes both afterwards, so runs do not see each other's rows. Generate IDs with `crypto.randomUUID()` to
 avoid clashes between tests. If the test database gets into a strange state,
 [reset it](#reset-a-database).
 
@@ -292,7 +293,8 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 Which to run when:
 
 - After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
-- For tests, `test:e2e` and `test:screenshots` truncate, migrate, and seed the test stack themselves.
+- For tests, `test:e2e` and `test:screenshots` clone a fresh, migrated database per run and seed it
+  themselves. The vitest tiers migrate the shared test database and never truncate it.
 
 #### Add a database migration
 
