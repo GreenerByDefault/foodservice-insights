@@ -39,6 +39,18 @@ Facts from the tree (2026-09-27) that shape the design:
   `unique_violation`, not `duplicate_object`.
 - **Nothing runs Grafana locally**, and the dev database holds only what someone has clicked
   into it, so a dashboard over it would draw almost nothing.
+- **The test stack's `postgres` database is shared by every worktree, whatever its branch.**
+  Each package's vitest `globalSetup` migrates it and nothing truncates it; isolation comes from
+  `withRollback`, and from claim and sweep tests narrowing to their own reports. So it can hold
+  another branch's migrations, and rows nobody here wrote. Playwright avoids both by cloning a
+  private run database from a template named for this worktree's migrations
+  ([`run-database.ts`](../../packages/db/src/testing/run-database.ts)).
+- **A dev worker acts on whatever is in the dev database.** `pnpm dev:worker` claims any
+  `pending` attempt and its sweeps reap any `processing` one whose lease has run out. A
+  synthetic attempt in either state would be picked up, fail for want of its input file, and
+  write a fresh row that no generator meant.
+- **`CONNECTION LIMIT` counts across the whole cluster**, not per database, so every concurrent
+  panel check on the test stack draws on one `metrics_reader` allowance.
 - **The repo is public.** No Grafana file can hold a secret, and the hosted project's hostnames
   stay out of it too.
 - **`deploy.yml` does not migrate yet.** [`deploy-migrations.md`](deploy-migrations.md) adds that
@@ -117,6 +129,10 @@ user country, which Cloudflare's dashboard already shows.
   the SQL editor. On the two local stacks the Grafana scripts set a fixed local password before
   anything connects. That password is committed in the same spirit as `.env.test`'s S3 keys:
   it opens nothing that is not already open on localhost.
+  Setting it is an `ALTER ROLE` on the same shared catalog row, so concurrent sessions would race
+  on it as they do on `CREATE ROLE`. The helper first tries to log in as `metrics_reader`, and
+  only if that fails takes an advisory lock in the `postgres` database and sets the password. A
+  stack that already has it, which is nearly every call, writes nothing.
 
 ### Grafana, locally
 
@@ -168,10 +184,28 @@ user country, which Cloudflare's dashboard already shows.
   - One API call upserts it into the dev, test or Cloud Grafana.
   - Grafana's pool is capped below the role's `CONNECTION LIMIT`, so Grafana waits for a free
     connection instead of being refused one.
-- **Local data is synthetic.** `pnpm seed:history` backdates several months of organizations,
-  users, reports and attempts into the dev stack through `@gbd/db/testing`'s fixtures, so a
-  panel has a shape before production exists. It refuses any connection string that is not
-  local.
+- **Local data is synthetic, from one generator with two callers.** `insertSyntheticHistory`, in
+  `@gbd/db/testing`, writes several months of backdated organizations, users, reports and
+  attempts through the fixtures, so a panel has a shape before production exists. The dev seed
+  and the panel check both call it.
+  - **Deterministic.** A seeded PRNG picks the rows, so every call writes the same history,
+    shifted to end at Postgres's `now()`. It covers every attempt status it is allowed to write
+    and every failure reason, and a pure test of the row plan says so.
+  - **Settled attempts only**: `succeeded`, `failed` and `canceled`, never `pending` or
+    `processing`, per § Context. A past queue is still visible, because the queue depth at time
+    *t* comes from `created_at` and `claimed_at`, which settled rows carry.
+  - **Marked as its own.** Its organizations have a `synthetic-history-` slug and their own
+    names, and its users have addresses at `synthetic-history.example.test`. Nobody else is a
+    member of those organizations, so the app does not show them to the dev user, except on a
+    superadmin's list of all organizations.
+- **`pnpm seed:history` replaces; it never appends.** In one transaction, under an advisory lock,
+  it deletes every marked organization, which cascades to its reports, attempts and uploads,
+  then every marked user, and then calls the generator. Running it twice leaves what running it
+  once does, with the dates moved up to today. It never touches the placeholder identity or rows
+  someone made by hand, and `pnpm truncate` still clears everything. It refuses any connection
+  string that is not local.
+  *Rejected: append a batch per run.* A second run doubles every count, so a panel's shape
+  depends on how many times someone ran a command.
 
 *Rejected: our own push, pull and file watcher over Grafana's API.* Push and pull take an
 afternoon to write. A browser that reloads on a file edit, and a UI save that lands in the file,
@@ -192,12 +226,34 @@ where agents operate. Explore production data in Grafana Cloud instead.
 
 - **Every panel query runs in `pnpm test`.** A vitest file in `apps/grafana` reads every
   dashboard file, starts the test-stack Grafana if it is not already up, and sends each panel's
-  SQL through Grafana's `/api/ds/query`. There is one test case per panel, and it fails on any
-  error. Grafana expands its own macros, so we never reimplement `$__timeGroup`. The check reads
-  queries from the files rather than from Grafana, so worktrees that share the one test Grafana
-  never see each other's dashboards; all they share is the data source. It runs against the test
-  stack's migrated `postgres` database. That database may hold no rows, so the check proves that a
-  query runs, not what it returns.
+  SQL through Grafana's `/api/ds/query`. There is one test case per panel. Grafana expands its own
+  macros, so we never reimplement `$__timeGroup`. The check reads queries from the files rather
+  than from Grafana, so worktrees that share the one test Grafana never see each other's
+  dashboards.
+- **It runs against a database of its own, holding the synthetic history.** Its `globalSetup`
+  clones a run database from Playwright's template, with `ensureTemplateDatabase` and
+  `createRunDatabase`, and calls `insertSyntheticHistory` there. So:
+  - the views are the ones this worktree's migrations define, never another branch's;
+  - every panel can be required to return at least one row, over a time range that matches the
+    generator's span. That catches a query that runs but matches nothing, such as a filter on the
+    wrong status, as well as one that errors;
+  - no other test sees the rows, and the run database is dropped afterwards. A killed run's
+    database is left to the existing `sweepStaleRunDatabases`.
+
+  A Grafana data source names one database, so each run upserts its own, with a uid like
+  `metrics-run-<timestamp>-<suffix>`. The check sends each query to that uid instead of the
+  `metrics` the files name, and teardown deletes it. A sweep of the same shape as
+  `sweepStaleRunDatabases` removes run data sources a kill left behind. The run's data source
+  holds at most one connection and keeps none idle, and the check sends its queries in sequence,
+  so concurrent runs stay inside the role's cluster-wide `CONNECTION LIMIT`.
+  The data source still logs in as `metrics_reader`, so a panel that reads past the role's
+  grants fails here, not in Grafana Cloud.
+  *Rejected: the test stack's shared `postgres` database.* Another branch may have migrated it,
+  so a check could fail or pass on views this worktree does not have. It may also hold no rows,
+  and committing history to it would leave rows behind for every other worktree, so the check
+  could prove only that a query runs.
+  *Rejected: putting the history in the template.* Every Playwright run would clone it, and pages
+  that list organizations would render it in e2e tests and screenshots.
 
   So adding a metric is a migration, a view test and a panel, and the standard gate —
   `pnpm lint && pnpm check && pnpm test` — says whether all three are right. That loop is what
@@ -277,8 +333,9 @@ All in `packages/db`.
     volume so Grafana's own state survives a restart.
   - `src/data-source.ts`: builds the data source from a connection string and upserts it. The
     builder is pure and gets a unit test.
-  - `scripts/start.ts`, behind `pnpm grafana`. It sets the local role password, which it refuses
-    to do against a host that is not local. Then it brings the dev container up, waits for
+  - `src/local-password.ts`: the guarded helper from Decisions that sets the local role password.
+    It refuses a host that is not local. PR 4's setup calls it too.
+  - `scripts/start.ts`, behind `pnpm grafana`. It sets the local role password with that helper. Then it brings the dev container up, waits for
     `/api/health`, upserts the data source, and runs `gcx dev serve` over `resources/`.
     `pnpm grafana:stop` takes the container down.
   - `resources/`: the folder, plus `product`, the first dashboard, with four panels:
@@ -301,28 +358,52 @@ All in `packages/db`.
 
 ## PR 3 — synthetic history
 
-- `packages/db/scripts/seed-history.ts`, behind `pnpm seed:history`. It adds a batch of backdated
-  organizations, users, reports and attempts through the fixtures, across every status and a
-  spread of failure reasons, so each panel has something to draw. It refuses a non-local
-  connection string. Re-running it adds another batch, and `pnpm truncate` clears everything.
-- A test that the refusal holds. The fixtures it composes already have tests of their own.
-- The root README's § Seeding says when to run it.
+- The fixtures gain the timestamp overrides the generator needs and lack today:
+  `insertAppUser` takes `createdAt` and `emailConfirmedAt`, and `insertOrganization` and
+  `insertReport` take `createdAt` if they do not already. Each gets a case in `fixtures.test.ts`.
+- `packages/db/src/testing/history.ts`: the generator from Decisions, split into a pure
+  `planSyntheticHistory(seed)`, which returns the rows to write with offsets from now rather
+  than dates, and `insertSyntheticHistory(database)`, which writes a plan through the fixtures
+  with `dbMsAgo`. Exported from `@gbd/db/testing`.
+- `packages/db/scripts/seed-history.ts`, behind `pnpm seed:history` and its Turbo task: the
+  replace from Decisions, in one transaction under `pg_advisory_xact_lock`. It refuses a
+  connection string whose host is not `localhost`, `127.0.0.1` or `host.docker.internal`.
+- Tests:
+  - The plan, purely: the same seed gives the same plan; it holds no `pending` or `processing`
+    attempt; it covers every failure reason; every timestamp falls inside its span.
+  - `insertSyntheticHistory` inside `withRollback` writes what the plan says, which also proves
+    the plan satisfies every constraint.
+  - The replace, inside `withRollback` with an unmarked organization beside it: running it twice
+    leaves one history, and the unmarked organization untouched.
+  - The refusal.
+- The root README's § Seeding says when to run it, and that re-running it is safe.
 
 This PR needs only the tables, so it can land in any order relative to PRs 1 and 2.
 
 ## PR 4 — every panel query runs in `pnpm test`
 
-- `apps/grafana`'s vitest `globalSetup` migrates the test stack, as every database tier does. It
-  then starts the test Grafana if it is not already running, sets the local role password, and
-  upserts the data source with PR 2's function. No gcx is involved.
+- `apps/grafana`'s vitest `globalSetup`:
+  - sweeps stale run databases and run data sources;
+  - builds or reuses the template, clones a run database, and writes the synthetic history into
+    it;
+  - starts the test Grafana if it is not already running, and sets the local role password with
+    the guarded helper;
+  - upserts the run's data source with PR 2's function, given the run database's connection
+    string as Grafana sees it;
+  - hands the data source's uid to the tests through vitest's `provide`.
+  Its teardown deletes the data source, then drops the run database. No gcx is involved.
 - The panel check from Decisions, with one test case per panel, named by dashboard and panel
-  title. It also checks that every panel names the `metrics` data source, and that every file
-  is at the pinned `apiVersion`.
+  title. Each case fails on an error or on zero rows. The file also checks that every panel names
+  the `metrics` data source, and that every file is at the pinned `apiVersion`.
+- PR 2's data source builder takes the pool limits as an argument, so the test passes one
+  connection and no idle ones while dev and Cloud keep theirs.
 - `@gbd/grafana` depends on `@gbd/db`, so Turbo's affected filter reruns the check when a
   migration changes. The `ts-unit` job needs no change beyond Docker, which its runner already
   has for Supabase.
 - `.claude/rules/typescript.md` gains a note that a change to a `metrics` view or a dashboard
   is covered by `pnpm test`, with the panel check as the reason.
+
+This PR needs PR 3's generator and PR 2's data source builder.
 
 ## PR 5 — Grafana Cloud
 
@@ -354,9 +435,11 @@ Each PR is verified by `pnpm lint && pnpm check && pnpm test`. Then by hand:
 
 - After PR 2, `pnpm grafana` serves the product dashboard. Editing a panel's SQL in the file
   reloads the open tab. Saving a change in the UI gives a diff containing only that change.
-- After PR 3, every panel draws a shape.
+- After PR 3, every panel draws a shape. Running `pnpm seed:history` a second time leaves every
+  panel's totals unchanged.
 - After PR 4, renaming a column in a view without touching the dashboard fails `pnpm test`, and
-  names the panel.
+  names the panel. So does a panel whose filter matches nothing. Two worktrees running
+  `pnpm test` at once both pass, and leave no run database or run data source behind.
 - After PR 5, the first deploy creates the folder, the data source and the dashboard in Grafana
   Cloud. A real attempt shows the right `queue_seconds`. Deleting the dashboard's file removes it
   at the next deploy.
