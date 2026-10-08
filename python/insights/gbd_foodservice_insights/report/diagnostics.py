@@ -367,7 +367,6 @@ def detect_exact_duplicate_rows(
     return findings, duplicate_rows
 
 
-@overload
 def detect_unusual_sales(
     df: pd.DataFrame,
     summary_col: str,
@@ -381,61 +380,7 @@ def detect_unusual_sales(
     zero_mad_ratio_threshold: float | None = None,
     small_category_ratio_threshold: float | None = None,
     sample_limit: int = 5,
-    return_details: Literal[False] = False,
-) -> list[str]: ...
-
-
-@overload
-def detect_unusual_sales(
-    df: pd.DataFrame,
-    summary_col: str,
-    product_name_col: str,
-    threshold: float | None = None,
-    *,
-    category_col: str = "category",
-    min_category_rows: int | None = None,
-    warning_share_threshold: float | None = None,
-    extreme_ratio_threshold: float | None = None,
-    zero_mad_ratio_threshold: float | None = None,
-    small_category_ratio_threshold: float | None = None,
-    sample_limit: int = 5,
-    return_details: Literal[True],
-) -> tuple[list[dict[str, Any]], pd.DataFrame]: ...
-
-
-@overload
-def detect_unusual_sales(
-    df: pd.DataFrame,
-    summary_col: str,
-    product_name_col: str,
-    threshold: float | None = None,
-    *,
-    category_col: str = "category",
-    min_category_rows: int | None = None,
-    warning_share_threshold: float | None = None,
-    extreme_ratio_threshold: float | None = None,
-    zero_mad_ratio_threshold: float | None = None,
-    small_category_ratio_threshold: float | None = None,
-    sample_limit: int = 5,
-    return_details: bool,
-) -> list[str] | tuple[list[dict[str, Any]], pd.DataFrame]: ...
-
-
-def detect_unusual_sales(
-    df: pd.DataFrame,
-    summary_col: str,
-    product_name_col: str,
-    threshold: float | None = None,
-    *,
-    category_col: str = "category",
-    min_category_rows: int | None = None,
-    warning_share_threshold: float | None = None,
-    extreme_ratio_threshold: float | None = None,
-    zero_mad_ratio_threshold: float | None = None,
-    small_category_ratio_threshold: float | None = None,
-    sample_limit: int = 5,
-    return_details: bool = False,
-) -> list[str] | tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[dict[str, Any]], pd.DataFrame]:
     """Flag unusually large line items before bad rows distort totals and trends.
 
     This exists to catch row-level values that are implausibly high for their
@@ -479,70 +424,29 @@ def detect_unusual_sales(
         "small_category_ratio_threshold",
         small_category_ratio_threshold,
     )
-    legacy_median_floor = get_diagnostic_threshold(
-        "outlier_line_items",
-        "legacy_median_floor",
-    )
-    legacy_absolute_threshold = get_diagnostic_threshold(
-        "outlier_line_items",
-        "legacy_absolute_threshold_if_below_floor",
-    )
 
-    legacy_required_columns = [summary_col, product_name_col]
-    missing_legacy_columns = [
-        column for column in legacy_required_columns if column not in df.columns
+    required_columns = (summary_col, product_name_col, category_col)
+    missing_columns = [column for column in required_columns if column not in df.columns]
+    if missing_columns:
+        raise KeyError(f"Missing required columns for unusual sales check: {missing_columns}")
+
+    no_outliers = [
+        make_finding(
+            stage="diagnostics",
+            category="outlier_line_items",
+            status="success",
+            message="No unusually large line items found.",
+            count=0,
+            metadata={
+                "outlier_row_share": 0.0,
+                "warning_share_threshold": warning_share_threshold,
+                "extreme_ratio_threshold": extreme_ratio_threshold,
+            },
+        )
     ]
-    if missing_legacy_columns:
-        raise KeyError(
-            f"Missing required columns for unusual sales check: {missing_legacy_columns}"
-        )
-
-    if category_col not in df.columns:
-        if return_details:
-            raise KeyError(f"Missing required columns for unusual sales check: ['{category_col}']")
-
-        print(
-            f"Checking for products that have any rows where {summary_col} is {threshold}x "
-            f"the median (if median > {legacy_median_floor:g}) or greater than "
-            f"{legacy_absolute_threshold:g} if median ≤ {legacy_median_floor:g}"
-        )
-        abnormal_products: list[str] = []
-
-        for product in df[product_name_col].unique():
-            product_data = df[df[product_name_col] == product]
-            if len(product_data) < 5:
-                continue
-
-            median = product_data[summary_col].median()
-            if median <= 0:
-                raise AssertionError(f"median below 0 for product {product}")
-
-            unusual_threshold = (
-                median * threshold if median > legacy_median_floor else legacy_absolute_threshold
-            )
-            if product_data[summary_col].max() > unusual_threshold:
-                abnormal_products.append(product)
-
-        return abnormal_products
 
     if df.empty:
-        if return_details:
-            findings = [
-                make_finding(
-                    stage="diagnostics",
-                    category="outlier_line_items",
-                    status="success",
-                    message="No unusually large line items found.",
-                    count=0,
-                    metadata={
-                        "outlier_row_share": 0.0,
-                        "warning_share_threshold": warning_share_threshold,
-                        "extreme_ratio_threshold": extreme_ratio_threshold,
-                    },
-                )
-            ]
-            return findings, pd.DataFrame()
-        return []
+        return no_outliers, pd.DataFrame()
 
     working = df.copy()
     working["_row_index"] = working.index
@@ -555,23 +459,7 @@ def detect_unusual_sales(
     ].copy()
 
     if valid_rows.empty:
-        if return_details:
-            findings = [
-                make_finding(
-                    stage="diagnostics",
-                    category="outlier_line_items",
-                    status="success",
-                    message="No unusually large line items found.",
-                    count=0,
-                    metadata={
-                        "outlier_row_share": 0.0,
-                        "warning_share_threshold": warning_share_threshold,
-                        "extreme_ratio_threshold": extreme_ratio_threshold,
-                    },
-                )
-            ]
-            return findings, pd.DataFrame()
-        return []
+        return no_outliers, pd.DataFrame()
 
     grouped = valid_rows.groupby(category_col)["_metric_value"]
     stats = grouped.agg(category_row_count="size", category_median="median").reset_index()
@@ -631,23 +519,7 @@ def detect_unusual_sales(
 
     flagged_rows = valid_rows.loc[valid_rows["is_outlier"]].copy()
     if flagged_rows.empty:
-        if return_details:
-            findings = [
-                make_finding(
-                    stage="diagnostics",
-                    category="outlier_line_items",
-                    status="success",
-                    message="No unusually large line items found.",
-                    count=0,
-                    metadata={
-                        "outlier_row_share": 0.0,
-                        "warning_share_threshold": warning_share_threshold,
-                        "extreme_ratio_threshold": extreme_ratio_threshold,
-                    },
-                )
-            ]
-            return findings, pd.DataFrame()
-        return []
+        return no_outliers, pd.DataFrame()
 
     flagged_rows["flag_reason"] = flagged_rows.apply(
         lambda row: ", ".join(
@@ -673,9 +545,6 @@ def detect_unusual_sales(
     abnormal_products = sorted(
         flagged_rows[product_name_col].dropna().astype(str).unique().tolist()
     )
-    if not return_details:
-        return abnormal_products
-
     outlier_row_count = len(flagged_rows)
     outlier_row_share = outlier_row_count / len(df)
     has_severe_ratio_flag = bool(
@@ -727,8 +596,6 @@ def detect_unusual_sales(
                 "small_category_ratio_threshold": small_category_ratio_threshold,
                 "mad_threshold": threshold,
                 "min_category_rows": min_category_rows,
-                "legacy_median_floor": legacy_median_floor,
-                "legacy_absolute_threshold_if_below_floor": legacy_absolute_threshold,
                 "sample_rows": flagged_rows.head(sample_limit)
                 .replace({pd.NaT: None, pd.NA: None})
                 .to_dict("records"),
@@ -2697,7 +2564,6 @@ def run_all_diagnostics(
             summary_col=metric_total,
             product_name_col="product",
             category_col="category",
-            return_details=True,
         )
         findings.extend(unusual_sales_findings)
     if "product" in df.columns and metric_total in df.columns:

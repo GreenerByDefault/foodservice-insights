@@ -9,8 +9,6 @@ near_duplicate_product_names:
 outlier_line_items:
   mad_threshold: 5.0
   min_category_rows: 5
-  legacy_median_floor: 3.0
-  legacy_absolute_threshold_if_below_floor: 30.0
   warning_share_threshold: 0.0025
   extreme_ratio_threshold: 100.0
   zero_mad_ratio_threshold: 10.0

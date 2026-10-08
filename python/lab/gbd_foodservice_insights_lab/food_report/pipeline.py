@@ -128,7 +128,6 @@ def _collect_diagnostic_export_sheets(
             summary_col=metric_total,
             product_name_col="product",
             category_col="category",
-            return_details=True,
         )
         if not outlier_line_items_df.empty:
             diagnostic_export_sheets["Outlier_Line_Items"] = outlier_line_items_df
