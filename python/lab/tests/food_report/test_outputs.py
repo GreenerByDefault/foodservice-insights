@@ -296,6 +296,48 @@ def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
     assert "Data Profile" not in pd.ExcelFile(result["qa_excel_path"]).sheet_names
 
 
+def test_run_food_report_reports_meat_quantities_last(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "categorized_serving.csv"
+    pd.DataFrame(
+        {
+            "date": ["2024-01-05", "2024-02-05"],
+            "product": ["tofu", "beef stew"],
+            "category": ["legumes", "beef and buffalo meat"],
+            "servings total": [10.0, 5.0],
+            "quantity": [10, 2.5],
+        }
+    ).to_csv(input_path, index=False)
+    diner_path = tmp_path / "diner_meals.json"
+    diner_path.write_text(json.dumps({"2024-01": 1000, "2024-02": 1100}))
+    captured_pdf_kwargs: dict[str, object] = {}
+
+    def fake_build_pdf_report(output_path: str, **kwargs: object) -> str:
+        captured_pdf_kwargs.update(kwargs)
+        Path(output_path).write_text("placeholder pdf")
+        return output_path
+
+    monkeypatch.setattr(
+        "gbd_foodservice_insights.report.pdf.build_pdf_report",
+        fake_build_pdf_report,
+    )
+    monkeypatch.setattr(
+        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
+        lambda **kwargs: [],
+    )
+
+    result = run_food_report(
+        input_file=input_path,
+        diner_meal_file=diner_path,
+        output_dir=tmp_path,
+        procurement_serving="serving",
+    )
+
+    meat_finding = result["diagnostics"][-1]
+    assert (meat_finding["category"], meat_finding["status"]) == ("meat_weights", "warning")
+    assert meat_finding in result["missing_data_findings"]
+    assert meat_finding in cast(list[object], captured_pdf_kwargs["missing_data_findings"])
+
+
 def test_run_food_report_defaults_outputs_to_named_subdirectory(monkeypatch, food_report_tmp_data):
     input_path, diner_path, _ = food_report_tmp_data
 

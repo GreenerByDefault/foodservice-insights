@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from Levenshtein import distance
 
-from gbd_foodservice_insights.categories import get_GBD_categories, get_meat_categories
+from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.report.quality import make_finding
 from gbd_foodservice_insights.report.schema import ReportMode, required_columns_for_mode
 from gbd_foodservice_insights.report.thresholds import (
@@ -2289,44 +2289,6 @@ def check_zero_category_month_combos(
     return findings
 
 
-def identify_potentially_abnormal_weight_meat_items(
-    df: pd.DataFrame,
-    quantity_col: str = "quantity",
-    category_col: str = "category",
-) -> pd.DataFrame | bool:
-    """Identify meat rows with suspicious quantities or fractional counts."""
-    out = df.copy()
-    out[quantity_col] = pd.to_numeric(out[quantity_col], errors="coerce")
-    meat_categories = get_meat_categories(lowercase=True)
-    large_quantity_threshold = get_diagnostic_threshold(
-        "meat_quantity_reasonableness",
-        "large_quantity_threshold",
-    )
-
-    if not out[category_col].fillna("").astype(str).str.lower().isin(meat_categories).any():
-        raise AssertionError("No rows found where category is in meat categories.")
-
-    out["has_decimal"] = (~(out[quantity_col] % 1 == 0)).astype("boolean")
-    out["over_large_quantity_threshold"] = (out[quantity_col] > large_quantity_threshold).astype(
-        "boolean"
-    )
-    out["quantity_may_indicate_total_weight"] = (
-        out["has_decimal"] | out["over_large_quantity_threshold"]
-    ).astype("boolean")
-
-    out["large_quantity_threshold"] = large_quantity_threshold
-    mask_meat = out[category_col].fillna("").astype(str).str.lower().isin(meat_categories)
-    out.loc[
-        ~mask_meat,
-        ["has_decimal", "over_large_quantity_threshold", "quantity_may_indicate_total_weight"],
-    ] = pd.NA
-
-    flagged = out.loc[out["quantity_may_indicate_total_weight"].fillna(False)]
-    if flagged.empty:
-        return True
-    return flagged
-
-
 def check_date_distribution(df: pd.DataFrame) -> list[dict[str, Any]]:
     """Check if first/last months look partial based on row count."""
     findings: list[dict[str, Any]] = []
@@ -2562,49 +2524,6 @@ def run_all_diagnostics(
 
     if monthly_category_data is not None:
         findings.extend(check_zero_category_month_combos(monthly_category_data, metric_total))
-
-    # Meat anomalies
-    if "quantity" in df.columns and "category" in df.columns:
-        meat_cats = get_meat_categories(lowercase=True)
-        has_meat = df["category"].fillna("").astype(str).str.lower().isin(meat_cats).any()
-        if has_meat:
-            try:
-                result = identify_potentially_abnormal_weight_meat_items(
-                    df.copy(), "quantity", "category"
-                )
-                if isinstance(result, pd.DataFrame) and len(result) > 0:
-                    large_quantity_threshold = float(result["large_quantity_threshold"].iloc[0])
-                    findings.append(
-                        make_finding(
-                            stage="diagnostics",
-                            category="meat_weights",
-                            status="warning",
-                            message=(
-                                f"{len(result)} meat items have suspicious quantity values "
-                                f"(fractional or > {large_quantity_threshold:g})."
-                            ),
-                            count=len(result),
-                            metadata={"large_quantity_threshold": large_quantity_threshold},
-                        )
-                    )
-                else:
-                    findings.append(
-                        make_finding(
-                            stage="diagnostics",
-                            category="meat_weights",
-                            status="success",
-                            message="No suspicious meat quantity values found.",
-                        )
-                    )
-            except Exception as exc:
-                findings.append(
-                    make_finding(
-                        stage="diagnostics",
-                        category="meat_weights",
-                        status="info",
-                        message=f"Could not check meat weights: {exc}",
-                    )
-                )
 
     return findings
 

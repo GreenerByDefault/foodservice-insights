@@ -1,7 +1,13 @@
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights_lab.food_report.diagnostics import summarise_numeric_columns
+import yaml
+from gbd_foodservice_insights.report import thresholds
+from gbd_foodservice_insights_lab.food_report.diagnostics import (
+    check_meat_quantities,
+    identify_potentially_abnormal_weight_meat_items,
+    summarise_numeric_columns,
+)
 
 
 @pytest.fixture
@@ -63,3 +69,52 @@ def test_summarise_numeric_columns_empty_df():
     col_a_summary = summary_df[summary_df["column"] == "a"].iloc[0]
     assert col_a_summary["nan_count"] == 0  # An empty series has 0 NaNs
     assert np.isnan(col_a_summary["mean"])
+
+
+def test_identify_potentially_abnormal_weight_meat_items_flags_large_or_fractional_quantities():
+    df = pd.DataFrame(
+        {
+            "product": ["beef steak", "pork chop", "tofu", "beef stew"],
+            "quantity": [5, 50, 10, 2.5],
+            "category": [
+                "beef and buffalo meat",
+                "pork (pig meat)",
+                "legumes",
+                "beef and buffalo meat",
+            ],
+        }
+    )
+
+    result = identify_potentially_abnormal_weight_meat_items(df)
+
+    assert isinstance(result, pd.DataFrame)
+    assert sorted(result["product"].tolist()) == ["beef stew", "pork chop"]
+
+
+def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
+    tmp_path, monkeypatch
+):
+    config_path = tmp_path / "diagnostic_thresholds.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"meat_quantity_reasonableness": {"large_quantity_threshold": 50}})
+    )
+    monkeypatch.setattr(thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+    df = pd.DataFrame({"category": ["Poultry (Chicken & Turkey)"] * 2, "quantity": [40, 2]})
+
+    assert identify_potentially_abnormal_weight_meat_items(df) is True
+
+
+def test_check_meat_quantities_warns_about_suspicious_quantities():
+    df = pd.DataFrame({"category": ["beef and buffalo meat"] * 2, "quantity": [5, 2.5]})
+
+    findings = check_meat_quantities(df)
+
+    assert [(f["category"], f["status"], f["count"]) for f in findings] == [
+        ("meat_weights", "warning", 1)
+    ]
+
+
+def test_check_meat_quantities_skips_rows_without_a_quantity():
+    df = pd.DataFrame({"category": ["beef and buffalo meat"], "kilos_total": [5.0]})
+
+    assert check_meat_quantities(df) == []

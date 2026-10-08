@@ -23,7 +23,6 @@ from gbd_foodservice_insights.report.diagnostics import (
     detect_numeric_coercion_loss,
     detect_unusual_sales,
     find_close_product_pairs,
-    identify_potentially_abnormal_weight_meat_items,
     parse_and_validate_date_column,
     run_all_diagnostics,
 )
@@ -449,26 +448,6 @@ def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_met
     assert findings[0]["metadata"]["unit_label"] == "servings"
     assert "0.5000 servings" in findings[0]["sample_values"][0]
     assert list(flagged_rows["row_index"]) == [20, 22]
-
-
-def test_identify_potentially_abnormal_weight_meat_items_flags_large_or_fractional_quantities():
-    df = pd.DataFrame(
-        {
-            "product": ["beef steak", "pork chop", "tofu", "beef stew"],
-            "quantity": [5, 50, 10, 2.5],
-            "category": [
-                "beef and buffalo meat",
-                "pork (pig meat)",
-                "legumes",
-                "beef and buffalo meat",
-            ],
-        }
-    )
-
-    result = identify_potentially_abnormal_weight_meat_items(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert sorted(result["product"].tolist()) == ["beef stew", "pork chop"]
 
 
 # ----------------------------------------------------------------------
@@ -1267,19 +1246,6 @@ def test_checks_read_their_thresholds_from_yaml(
     _override_thresholds(monkeypatch, tmp_path / "diagnostic_thresholds.yaml", overrides)
 
     assert observe() == expected
-
-
-def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
-    tmp_path, monkeypatch
-):
-    _override_thresholds(
-        monkeypatch,
-        tmp_path / "diagnostic_thresholds.yaml",
-        {"meat_quantity_reasonableness": {"large_quantity_threshold": 50}},
-    )
-    df = pd.DataFrame({"category": ["Poultry (Chicken & Turkey)"] * 2, "quantity": [40, 2]})
-
-    assert identify_potentially_abnormal_weight_meat_items(df) is True
 
 
 # ----------------------------------------------------------------------

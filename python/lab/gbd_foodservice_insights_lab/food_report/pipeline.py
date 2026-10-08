@@ -7,6 +7,7 @@ the bundle, all lab-only: chart PNGs, the QA workbook, the run manifest, the run
 write-back into `client_metadata.json`.
 """
 
+import dataclasses
 import json
 import logging
 from collections.abc import Callable, Mapping
@@ -257,6 +258,13 @@ def run_food_report(
             top_n_drivers=top_n_drivers,
             pdf_extracted=metadata.get("pdf_extracted"),
             report_progress=report_progress,
+        )
+        # Last, where `run_all_diagnostics` used to put it before the check moved to the lab.
+        meat_findings = qa_diagnostics.check_meat_quantities(report.rows)
+        report = dataclasses.replace(
+            report,
+            diagnostics=(*report.diagnostics, *meat_findings),
+            findings=(*report.findings, *meat_findings),
         )
         quality_findings = list(report.findings)
 
