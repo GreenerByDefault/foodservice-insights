@@ -17,9 +17,9 @@ from gbd_foodservice_insights.plotting_utils import (
     set_suptitle_font,
     set_title_font,
     set_ylim_with_padding,
-    standardize_title_case,
 )
 from gbd_foodservice_insights.report.plots.panels import (
+    draw_category_drivers,
     draw_emissions_per_diner,
     draw_food_and_drink_per_diner,
     draw_food_and_drink_totals,
@@ -59,39 +59,36 @@ def plot_diner_meal_numbers(
     return fig
 
 
-def plot_category_drivers(
-    top_drivers: pd.DataFrame,
-    metric: str = "kilos per diner-meal",
-    total_products: int | None = None,
-) -> dict[str, Figure]:
-    """Bar charts of top products driving each category."""
-    categories = top_drivers["category"].dropna().unique()
-    figs: dict[str, Figure] = {}
-    max_label_width = 30
+CATEGORY_DRIVERS_PER_PAGE = 4
 
-    for category in categories:
-        data = top_drivers[top_drivers["category"] == category].copy()
-        data = convert_percentage_to_float(data, "percentage")
 
-        fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
-        create_horizontal_percentage_barplot(
-            ax=ax,
-            data=data,
-            y_col="product",
-            percentage_col="percentage",
-            max_label_width=max_label_width,
-            add_percentage_labels=False,
-        )
-        ax.set_xlabel("Percentage of Category Total (%)")
-        ax.set_ylabel("")
-        title = f"Top Products Driving {standardize_title_case(category)}"
-        if total_products:
-            title += f" ({total_products} total products)"
-        set_title_font(ax, title)
-        plt.tight_layout()
-        figs[str(category)] = fig
-
-    return figs
+def plot_category_drivers_pages(
+    category_drivers: pd.DataFrame,
+    categories: list[str],
+    *,
+    metric_label: str = "Kilos",
+) -> list[Figure]:
+    """Each category's drivers, four to a page, in the order of `categories`."""
+    page_chunks = [
+        categories[start : start + CATEGORY_DRIVERS_PER_PAGE]
+        for start in range(0, len(categories), CATEGORY_DRIVERS_PER_PAGE)
+    ]
+    pages: list[Figure] = []
+    for page_number, page_categories in enumerate(page_chunks, start=1):
+        fig, axes = plt.subplots(2, 2, figsize=LETTER_LANDSCAPE)
+        title = "Top Products by Category"
+        if len(page_chunks) > 1:
+            title += f" ({page_number} of {len(page_chunks)})"
+        set_suptitle_font(fig, title, fontsize=16)
+        # A short last page keeps its panels the size of a full page's rather than stretching
+        # them.
+        for ax, category in zip(axes.flat, page_categories, strict=False):
+            draw_category_drivers(ax, category_drivers, category, metric_label=metric_label)
+        for ax in axes.flat[len(page_categories) :]:
+            ax.axis("off")
+        fig.tight_layout(rect=(0, 0, 1, 0.93))
+        pages.append(fig)
+    return pages
 
 
 def plot_overall_drivers(overall_drivers: pd.DataFrame, metric: str = "kilos_total") -> Figure:

@@ -39,12 +39,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   kilos count toward weights and the plant share and vanish from every CO2e figure.
   `categorization-cache.md` PR 5 drops them before they reach the report.
 
-**Layout.**
-
-- One near-empty page per category, alphabetical: 12 on the sample data, up to 26 on real data.
-  Now that every chart is a full landscape Letter page, a category with one driver is a single
-  bar stretched across 11 × 8.5 in.
-
 **Silent failures.**
 
 - A plant/animal split or plant-protein share failure is logged and the page and narrative
@@ -130,11 +124,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   `_table_width_in(fig_size)`, which derives the table's width from the page size and the
   `figure.subplot` rcParams. A change to the page size carries through; a change to where table
   axes sit on the page must go through `_table_width_in` too, or the template clips again.
-- **Every category keeps its drivers, four to a page.** Category panels are ordered by
-  emissions, highest first, in a 2 × 2 grid on a landscape page, each drawn by a
-  `draw_category_drivers` panel drawer like those in `report/plots/panels.py`: 26 categories
-  take 7 pages, not 26. *Rejected: only the top categories* — a customer looking for one
-  category's drivers would find nothing.
+- **Every category keeps its drivers, four to a page.** `plot_category_drivers_pages`
+  (`report/plots/figures.py`) lays `draw_category_drivers` panels (`report/plots/panels.py`) in
+  a 2 × 2 grid on a landscape page, alphabetically, so 26 categories take 7 pages, not 26.
+  *Rejected: only the top categories* — a customer looking for one category's drivers would
+  find nothing. **Open:** ordering the panels by emissions, highest first, to match the emissions
+  page. Alphabetical is easier to look a category up in, and nothing yet says a reader wants the
+  other; if we do, it is its own PR, and a serving report, which has no emissions, needs an
+  order of its own.
 
 ## PR 1 — the two escalations become warnings
 
@@ -171,16 +168,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
-## PR 4 — category pages grouped by emissions
-
-- `plot_category_drivers`' body becomes `draw_category_drivers(ax, ...)`, the way #388 split
-  the combined pages; a new page function lays out four categories per page, ordered by
-  emissions.
-- Tests: 5 categories make 2 pages and 8 make 2; the first panel is the highest-emitting
-  category.
-- Worth it: one near-empty page per category, alphabetical, is most of the PDF's length on a
-  real upload.
-
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
 handed and what the sheets contain, not that files exist.
 
@@ -188,10 +175,6 @@ handed and what the sheets contain, not that files exist.
 
 - Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2 and 3, which change what the lab's QA
   workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
-- PR 4: `python -m worker_child.mock_llm` on the golden input before and after,
-  and compare the pages side by side; also `2. Produce Food Report.py` on the categorized rows
-  of `python/insights/tests/data/aggregated_baseline.csv` (`python/lab/test_data` stops before
-  `kilos_total` exists, so the report rejects it).
 
 ## Risks
 
@@ -202,5 +185,4 @@ handed and what the sheets contain, not that files exist.
   positive. Land it first.
 - `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 3 here touch it, and whichever
   lands second rebases.
-- No PR here waits on GBD; the null-emission-factor restoration and the category-page count are
-  both decided in this plan.
+- No PR here waits on GBD; the null-emission-factor restoration is decided in this plan.

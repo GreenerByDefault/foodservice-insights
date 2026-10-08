@@ -10,10 +10,9 @@ from matplotlib.figure import Figure
 from gbd_foodservice_insights.plotting_utils import (
     LETTER_LANDSCAPE,
     close_new_figures_on_error,
-    standardize_title_case,
 )
 from gbd_foodservice_insights.report.plots.figures import (
-    plot_category_drivers,
+    plot_category_drivers_pages,
     plot_category_totals,
     plot_diner_meal_numbers,
     plot_emissions_by_category,
@@ -312,13 +311,20 @@ def generate_all_report_plots(
         # All or nothing: on a failure, the placeholder below replaces every category's chart.
         category_plots: list[tuple[str, Figure]] = []
         with close_new_figures_on_error():
-            cat_figs = plot_category_drivers(category_drivers, metric=metric_total)
-            for cat_name, fig in cat_figs.items():
+            pages = plot_category_drivers_pages(
+                category_drivers,
+                category_drivers["category"].dropna().unique().tolist(),
+                metric_label=metric_label,
+            )
+            for fig in pages:
                 fig = _remove_duplicate_xlabels(fig)
-                caption = f"Top Products — {standardize_title_case(cat_name)}"
                 if has_input_warning:
-                    caption += " [DATA WARNING]"
-                    fig.suptitle(caption, fontsize=10, color="#b22222", y=0.99)
+                    fig.suptitle(
+                        f"{fig.get_suptitle()} [DATA WARNING]",
+                        fontsize=10,
+                        color="#b22222",
+                        y=0.99,
+                    )
                 category_plots.append(("", fig))
         plots.extend(category_plots)
     except Exception as exc:
