@@ -38,9 +38,6 @@ diner_meal_count_reasonableness:
   high_ratio_threshold: 2.0
   error_if_flagged_months: 2
 
-numeric_coercion_loss:
-  allowed_loss_count: 0
-
 aggregation_reconciliation:
   rel_error_threshold: 0.001
 

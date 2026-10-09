@@ -108,16 +108,6 @@ def _collect_diagnostic_export_sheets(
     diagnostic_export_sheets: dict[str, pd.DataFrame] = {}
 
     try:
-        _, numeric_coercion_loss_df = checks.detect_numeric_coercion_loss(
-            df,
-            [metric_total],
-        )
-        if not numeric_coercion_loss_df.empty:
-            diagnostic_export_sheets["Numeric_Coercion_Loss"] = numeric_coercion_loss_df
-    except Exception as exc:
-        logger.warning("Could not build numeric coercion loss export: %s", exc)
-
-    try:
         _, potential_name_splits_df = checks.detect_near_duplicate_product_names(
             df,
             metric_total=metric_total,

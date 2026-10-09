@@ -8,9 +8,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from gbd_foodservice_insights.report.checks import MISSING_TEXT_TOKENS
-
 logger = logging.getLogger(__name__)
+
+MISSING_TEXT_TOKENS = {"", "na", "n/a", "nan", "none", "null", "nat", "missing"}
 
 
 def clean_weight_column(
