@@ -106,8 +106,8 @@ class CategorizationCache:
 
         # Dropped rather than rejected: a typo among tens of thousands of hand-maintained rows
         # must not fail every report, and dropping it costs only LLM calls and a review-table
-        # entry. Kept, the row would hit, `categorize_with_llm` would rewrite its category to
-        # "No Matches Found", and as a cache hit it would never reach the review table.
+        # entry. Kept, the row would hit, carry a category with no emission factor into the
+        # report, and as a cache hit it would never reach the review table.
         allowed_categories = {*get_GBD_categories(), NO_MATCHES_FOUND}
         unknown_category = ~products["category"].isin(allowed_categories)
         _warn_dropped(

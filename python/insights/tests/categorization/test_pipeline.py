@@ -99,11 +99,11 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     assert categorized.ai_review_df.empty
 
 
-def test_categorize_unique_products_characterization() -> None:
-    """Pins today's silent drops, so each later change to them shows up as a diff here: every
-    near-miss answer becomes "No Matches Found". A cache row with surrounding whitespace hits;
-    one with a blank or non-canonical category is dropped, so its product goes to the LLM and
-    the review table."""
+def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFixture) -> None:
+    """Near-miss model answers resolve to their category; an answer that names no category
+    ("pork", "None") becomes "No Matches Found" with a warning. A cache row with surrounding
+    whitespace hits; one with a blank or non-canonical category is dropped, so its product goes
+    to the LLM."""
     products = [
         "Cheddar Shred",
         "Salted Butter",
@@ -111,6 +111,7 @@ def test_categorize_unique_products_characterization() -> None:
         "Oat Milk Carton",
         "Mozzarella Block",
         "Whole Milk Gallon",
+        "Cheesecake Slice",
     ]
     df = pd.DataFrame(
         {
@@ -139,6 +140,7 @@ def test_categorize_unique_products_characterization() -> None:
             "salted butter": '"Butter"',
             "pork loin": "pork",
             "mozzarella block": "cheese",
+            "cheesecake slice": "None",
         }
     )
 
@@ -150,10 +152,18 @@ def test_categorize_unique_products_characterization() -> None:
         pd.DataFrame(
             {
                 "product": products,
-                "category": [no_match] * 3 + ["Oat Milk", no_match, "Milk (Cow's milk)"],
-                "previously_categorized": [False] * 3 + [True, False, True],
+                "category": [
+                    "Cheese",
+                    "Butter",
+                    no_match,
+                    "Oat Milk",
+                    "Cheese",
+                    "Milk (Cow's milk)",
+                    no_match,
+                ],
+                "previously_categorized": [False] * 3 + [True, False, True, False],
                 "match_type": pd.Series(
-                    ["llm"] * 3 + ["raw_product_history", "llm", "raw_product_history"],
+                    ["llm"] * 3 + ["raw_product_history", "llm", "raw_product_history", "llm"],
                     dtype="object",
                 ),
                 "cleaned_item_names": [
@@ -163,6 +173,7 @@ def test_categorize_unique_products_characterization() -> None:
                     "Oat Milk Carton",
                     "mozzarella block",
                     "Whole Milk Gallon",
+                    "cheesecake slice",
                 ],
             }
         ),
@@ -171,10 +182,19 @@ def test_categorize_unique_products_characterization() -> None:
         categorized.ai_review_df,
         pd.DataFrame(
             {
-                "category": [no_match] * 4,
-                "product": ["Cheddar Shred", "Mozzarella Block", "Pork Loin", "Salted Butter"],
-                "occurrence_count": [1] * 4,
+                "category": ["Butter", "Cheese", "Cheese", no_match, no_match],
+                "product": [
+                    "Salted Butter",
+                    "Cheddar Shred",
+                    "Mozzarella Block",
+                    "Cheesecake Slice",
+                    "Pork Loin",
+                ],
+                "occurrence_count": [1] * 5,
             }
         ),
     )
-    assert categorized.match_type_counts == {"llm": 4, "raw_product_history": 2}
+    assert [r.getMessage() for r in caplog.records if r.name.endswith(".steps")] == [
+        "2 of 5 LLM answers were not recognized; most common: [('pork', 1), ('None', 1)]",
+    ]
+    assert categorized.match_type_counts == {"llm": 5, "raw_product_history": 2}
