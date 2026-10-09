@@ -3,8 +3,7 @@
 import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.categories import get_meat_categories
-from gbd_foodservice_insights.report.food_report import Finding
-from gbd_foodservice_insights.report.quality import make_finding
+from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 
 

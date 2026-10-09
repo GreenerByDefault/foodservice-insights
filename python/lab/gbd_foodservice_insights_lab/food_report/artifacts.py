@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from gbd_foodservice_insights.report.quality import Finding
+
 logger = logging.getLogger(__name__)
 
 MANIFEST_VERSION = 1
@@ -178,10 +180,10 @@ def build_run_result(
     artifact_paths: dict[str, str],
     run_id: str,
     run_status: str,
-    diagnostics: list[dict[str, Any]],
+    diagnostics: list[Finding],
     summary: dict[str, Any],
     quality_status: str,
-    missing_data_findings: list[dict[str, Any]],
+    missing_data_findings: list[Finding],
     quality_summary: dict[str, Any],
     graph_paths: list[str] | None = None,
 ) -> dict[str, Any]:

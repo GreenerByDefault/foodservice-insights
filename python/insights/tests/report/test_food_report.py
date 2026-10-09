@@ -13,7 +13,7 @@ from gbd_foodservice_insights.report.food_report import (
     build_report_charts,
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
-from gbd_foodservice_insights.report.quality import QualityCheckError
+from gbd_foodservice_insights.report.quality import Finding, QualityCheckError
 
 JAN = pd.Period("2024-01", freq="M")
 FEB = pd.Period("2024-02", freq="M")
@@ -94,7 +94,7 @@ def _build(rows: pd.DataFrame, **overrides: Any) -> FoodReport:
     return build_food_report(rows, **(kwargs | overrides))
 
 
-def _findings(report: FoodReport, category: str) -> list[dict[str, Any]]:
+def _findings(report: FoodReport, category: str) -> list[Finding]:
     return [finding for finding in report.findings if finding["category"] == category]
 
 

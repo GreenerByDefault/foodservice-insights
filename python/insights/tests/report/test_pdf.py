@@ -28,8 +28,8 @@ from gbd_foodservice_insights.report.pdf import (
     create_title_page,
     write_report_pdf,
 )
-from gbd_foodservice_insights.report.quality import summarize_findings
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.quality import Finding, make_finding, summarize_findings
+from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
@@ -78,22 +78,28 @@ def test_wrap_to_width_keeps_an_overlong_word_on_its_own_line() -> None:
     assert _wrap_to_width("   ", 1.0, fontsize=12, fontfamily="Lato") == []
 
 
+def _finding(
+    status: DiagnosticStatus, message: str, *, sample_values: list[str] | None = None
+) -> Finding:
+    return make_finding(
+        stage="test", category="test", status=status, message=message, sample_values=sample_values
+    )
+
+
 def test_build_pdf_report_splits_long_quality_pages(tmp_path: Path) -> None:
     output_path = tmp_path / "quality-report.pdf"
     long_findings = [
-        {
-            "status": "warning",
-            "message": (
-                "Found duplicate line items across the report fields. This explanatory "
-                "sentence is intentionally long so the rendered PDF needs multiple "
-                "wrapped rows for each finding."
-            ),
-            "sample_values": [
+        _finding(
+            "warning",
+            "Found duplicate line items across the report fields. This explanatory "
+            "sentence is intentionally long so the rendered PDF needs multiple "
+            "wrapped rows for each finding.",
+            sample_values=[
                 "Eggs Medium Av51g on 2024-07-01 00:00:00 appears 149 times and remains "
                 "long enough to wrap.",
             ]
             * 5,
-        }
+        )
         for _ in range(12)
     ]
 
@@ -211,7 +217,7 @@ def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:
         summary_stats={"Rows": 100},
         quality_status="warning",
         quality_summary={"by_status": {"warning": 1}},
-        missing_data_findings=[{"status": "warning", "message": "Example quality finding"}],
+        missing_data_findings=[_finding("warning", "Example quality finding")],
     )
 
     reader = PdfReader(str(output_path))
@@ -330,8 +336,8 @@ def test_quality_lines_explain_an_invalid_status() -> None:
         "invalid",
         {"by_status": {"success": 1, "error": 1}},
         [
-            {"status": "success", "message": "All required columns present."},
-            {"status": "error", "message": "Found 2 negative values in 'kilos_total'."},
+            _finding("success", "All required columns present."),
+            _finding("error", "Found 2 negative values in 'kilos_total'."),
         ],
     ) == [
         "This section summarises the automated checks run on your data before this report "
@@ -352,9 +358,9 @@ def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
         "warning",
         {"by_status": {"success": 1, "info": 1, "warning": 1}},
         [
-            {"status": "success", "message": "All required columns present."},
-            {"status": "info", "message": "GBD categories absent from data: ['Butter']"},
-            {"status": "warning", "message": "Found 1 month with a large swing."},
+            _finding("success", "All required columns present."),
+            _finding("info", "GBD categories absent from data: ['Butter']"),
+            _finding("warning", "Found 1 month with a large swing."),
         ],
         show_successes=False,
     ) == [
@@ -692,7 +698,9 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
 ) -> None:
     report = _report()
     fig = plt.figure()
-    chart_finding = {"stage": "plots", "category": "plot_failed", "status": "error"}
+    chart_finding = make_finding(
+        stage="plots", category="plot_failed", status="error", message="Chart failed."
+    )
     charts = ReportCharts(figures=[("caption", fig)], findings=(chart_finding,))
 
     kwargs = _capture_pdf_kwargs(monkeypatch, report, charts)
@@ -759,12 +767,12 @@ def test_write_report_pdf_serving_has_only_the_template_table_and_no_narrative(
     [(None, False), ("info", False), ("warning", True)],
 )
 def test_write_report_pdf_caveats_only_a_warning(
-    tmp_path: Path, extra_status: str | None, caveat_shown: bool
+    tmp_path: Path, extra_status: DiagnosticStatus | None, caveat_shown: bool
 ) -> None:
     report = _report()
     findings = tuple(f for f in report.findings if f["status"] == "success")
     if extra_status is not None:
-        findings += ({"status": extra_status, "category": "x", "message": "Extra finding"},)
+        findings += (_finding(extra_status, "Extra finding"),)
     path = tmp_path / "report.pdf"
 
     write_report_pdf(

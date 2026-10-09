@@ -30,14 +30,6 @@ on the product path it always files `success`, which the golden pins, and the la
 `Numeric_Coercion_Loss` sheet appears only when it is non-empty. `parsing.py` imports
 `MISSING_TEXT_TOKENS` from `checks.py` only because this check shares it.
 
-**Findings are `dict[str, Any]`** and are built by `quality.make_finding`, whose `status` is a
-`str` even though `schema.DiagnosticStatus` exists. About 45 annotations carry that type across
-`checks.py`, `quality.py`, `schema.py`, `food_report.py` and the lab's `food_report/`.
-`food_report.py`'s `type Finding = dict[str, Any]` can't serve `checks.py` or `quality.py`,
-because `food_report.py` imports them. `checks.py` also types `diner_meal_mapping` as
-`dict[Any, Any]`, but what it receives is `normalize_diner_meal_mapping`'s
-`dict[pd.Period, float]`. `thresholds.py`'s `dict[str, Any]` is parsed YAML and stays.
-
 **Driver percentages round-trip through text.** `aggregation.identify_overall_drivers` and
 `identify_category_drivers` format `percentage` as `"12.3%"` via `format_percentage_column`.
 Their only readers are the two driver charts (`plots/figures.py`, `plots/panels.py`), which
@@ -70,15 +62,11 @@ called four times in three lab modules: `plotting_extras.py`, `pilot/plots.py` a
 - **The export tables stay in `checks.py`.** *Rejected: moving them to the lab with the QA
   workbook* — each check samples its finding from the frame it returns
   (`flagged_rows.head(sample_limit)`), so splitting them out would compute each frame twice.
-- **`Finding` is a `TypedDict` in `quality.py`, beside `make_finding`.** Findings stay plain dicts
-  at runtime, so the golden and the lab's manifest JSON do not move. *Rejected: a dataclass* —
-  `findings_to_frame`, the manifest's `json.dumps` and the PDF builder all read findings as
-  mappings, while a `TypedDict` adds types without changing any of those readers.
 - **Percentages stay numbers until drawn.**
 - **One kind of change per PR.** A deletion, a move, a type change or a boundary change each
   lands alone, so each golden or fixture diff shows one change.
 
-PR order: 1, 4, 5 and 6 can land any time. 2 lands after 1. 3 lands after 1, 2 and
+PR order: 1, 4 and 5 can land any time. 2 lands after 1. 3 lands after 1, 2 and
 `categorization-pipeline.md` PR 2.
 
 ## PR 1 — `build_food_report` takes typed rows
@@ -122,20 +110,7 @@ After `categorization-pipeline.md` PR 2, `parsing.py`'s only callers are the lab
   import paths, and point `test_utils.py`'s docstring at the new place.
 - After this, the product has no text parsing outside `read_input_csv`.
 
-## PR 4 — a `Finding` type
-
-- `quality.py`: `class Finding(TypedDict)` with `stage`, `category`, `status: DiagnosticStatus`
-  and `message`, plus `NotRequired` `column`, `count`, `sample_values` and `metadata`.
-  `make_finding` takes `status: DiagnosticStatus` and returns `Finding`.
-- Every `dict[str, Any]` that holds a finding becomes `Finding`, in `checks.py`, `quality.py`,
-  `schema.py`, `food_report.py` (its alias goes and it imports from `quality.py`) and the lab.
-  The lab's `from ...food_report import Finding` switches with it.
-- Helpers that compute a status, such as `_duplicate_row_status`, return `DiagnosticStatus`.
-- `checks.py`'s three `diner_meal_mapping: dict[Any, Any]` become `Mapping[pd.Period, float]`,
-  since these are the same signatures.
-- No runtime change. The type checker is the test, and the golden does not move.
-
-## PR 5 — driver percentages stay numeric
+## PR 4 — driver percentages stay numeric
 
 - `aggregation.py`: both driver functions leave `percentage` as a float rounded to one decimal.
   `format_percentage_column` and `convert_percentage_to_float` go, and
@@ -145,7 +120,7 @@ After `categorization-pipeline.md` PR 2, `parsing.py`'s only callers are the lab
   assert `12.3` instead.
 - No workbook or golden change. The driver pages must render identically (see Verification).
 
-## PR 6 — `isinstance(dtype, pd.PeriodDtype)`
+## PR 5 — `isinstance(dtype, pd.PeriodDtype)`
 
 The four `is_period_dtype` calls in the lab become `isinstance(<series>.dtype, pd.PeriodDtype)`.
 
@@ -167,17 +142,14 @@ The four `is_period_dtype` calls in the lab become `isinstance(<series>.dtype, p
      folder.
   3. Repeat on `main`, using a detached `git worktree` on `PYTHONPATH`.
   4. Diff the client and QA workbooks sheet by sheet. Expect them to be identical.
-- PR 5: render the PDF with `mock_llm` on the branch and on `main`, and compare the driver pages
+- PR 4: render the PDF with `mock_llm` on the branch and on `main`, and compare the driver pages
   pixel for pixel.
-- PR 6: the `just test-lab` output has no `Pandas4Warning`.
+- PR 5: the `just test-lab` output has no `Pandas4Warning`.
 
 ## Risks
 
 - Lab regressions are silent, and the hand-run check above is the only guard.
 - PR 1 changes how the lab reports a bad date: the parser's `ValueError` replaces the
   `date_parse_failure` finding. Tell the data scientists.
-- Conflicts:
-  - PR 1 and `report-correctness.md` PR 2 both edit `build_food_report`'s stages.
-  - PR 4 touches most of `checks.py`'s signatures and conflicts with `report-correctness.md`
-    PRs 1 and 3.
-  - In both cases, whichever lands second rebases.
+- PR 1 and `report-correctness.md` PR 2 both edit `build_food_report`'s stages, so whichever
+  lands second rebases.

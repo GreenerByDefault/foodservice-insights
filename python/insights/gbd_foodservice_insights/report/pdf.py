@@ -22,7 +22,7 @@ from gbd_foodservice_insights.plotting_utils import (
     close_new_figures_on_error,
 )
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
-from gbd_foodservice_insights.report.quality import summarize_findings
+from gbd_foodservice_insights.report.quality import Finding, summarize_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
 from gbd_foodservice_insights.utils import rel_path
 
@@ -700,7 +700,7 @@ _STATUS_LABELS = {
 def _quality_to_lines(
     quality_status: str,
     quality_summary: dict[str, Any] | None,
-    missing_data_findings: list[dict[str, Any]] | None,
+    missing_data_findings: list[Finding] | None,
     show_successes: bool = True,
 ) -> list[str]:
     """Turn quality-check results into plain lines for the PDF report.
@@ -1030,7 +1030,7 @@ def build_pdf_report(
     summary_stats: dict[str, Any],
     quality_status: str = "pass",
     quality_summary: dict[str, Any] | None = None,
-    missing_data_findings: list[dict[str, Any]] | None = None,
+    missing_data_findings: list[Finding] | None = None,
     show_quality_successes: bool = True,
     diner_or_meal: DinerOrMeal = "diner",
     narrative: dict[str, Any] | None = None,

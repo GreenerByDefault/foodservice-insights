@@ -2,26 +2,37 @@
 
 from collections import Counter
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 import pandas as pd
 
-from gbd_foodservice_insights.report.schema import summarize_status_counts
+from gbd_foodservice_insights.report.schema import DiagnosticStatus, summarize_status_counts
+
+
+class Finding(TypedDict):
+    stage: str
+    category: str
+    status: DiagnosticStatus
+    message: str
+    column: NotRequired[str]
+    count: NotRequired[int]
+    sample_values: NotRequired[list[Any]]
+    metadata: NotRequired[dict[str, Any]]
 
 
 def make_finding(
     *,
     stage: str,
     category: str,
-    status: str,
+    status: DiagnosticStatus,
     message: str,
     column: str | None = None,
     count: int | None = None,
     sample_values: list[Any] | None = None,
     metadata: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> Finding:
     """Build a standardized structured finding."""
-    finding: dict[str, Any] = {
+    finding: Finding = {
         "stage": stage,
         "category": category,
         "status": status,
@@ -43,7 +54,7 @@ def check_required_columns(
     required_columns: Iterable[str],
     *,
     stage: str,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Create error finding for missing required columns."""
     missing = [col for col in required_columns if col not in df.columns]
     if not missing:
@@ -66,9 +77,9 @@ def check_required_non_null(
     *,
     stage: str,
     sample_limit: int = 5,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Create findings for required columns that contain missing values."""
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     sample_context_cols = ["date", "month_year", "product", "category"]
     for column in required_non_null_columns:
         if column not in df.columns:
@@ -118,9 +129,9 @@ def compare_missing_snapshots(
     after: dict[str, int],
     *,
     stage: str,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Create findings for missingness a stage introduced into columns it was handed."""
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     for column, after_count in after.items():
         # A column the stage added is its own output, which its own checks report: an unfactored
         # category's missing emissions are `unmatched_emission_factors`.
@@ -148,7 +159,7 @@ def check_row_count_drift(
     after_rows: int,
     *,
     stage: str,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Report row-count drift between stages."""
     if before_rows == after_rows:
         return []
@@ -171,7 +182,7 @@ def check_row_count_drift(
     ]
 
 
-def findings_to_frame(findings: Iterable[dict[str, Any]]) -> pd.DataFrame:
+def findings_to_frame(findings: Iterable[Finding]) -> pd.DataFrame:
     """Convert findings to a DataFrame."""
     rows = list(findings)
     if not rows:
@@ -196,7 +207,7 @@ def missingness_summary_frame(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("missing_count", ascending=False)
 
 
-def summarize_findings(findings: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def summarize_findings(findings: Iterable[Finding]) -> dict[str, Any]:
     """Build compact quality summary payload."""
     rows = list(findings)
     by_stage = Counter(item.get("stage", "unknown") for item in rows)
@@ -210,7 +221,7 @@ def summarize_findings(findings: Iterable[dict[str, Any]]) -> dict[str, Any]:
 class QualityCheckError(ValueError):
     """`findings` is every finding collected before the abort, not only the errors."""
 
-    def __init__(self, findings: list[dict[str, Any]]) -> None:
+    def __init__(self, findings: list[Finding]) -> None:
         messages = [
             f"[{item.get('stage', 'unknown')}::{item.get('category', 'unknown')}] "
             f"{item.get('message', '')}"
@@ -221,6 +232,6 @@ class QualityCheckError(ValueError):
         self.findings = findings
 
 
-def raise_on_error_findings(findings: list[dict[str, Any]]) -> None:
+def raise_on_error_findings(findings: list[Finding]) -> None:
     if any(item.get("status") == "error" for item in findings):
         raise QualityCheckError(list(findings))

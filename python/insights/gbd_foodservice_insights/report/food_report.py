@@ -26,6 +26,7 @@ from gbd_foodservice_insights.report.aggregation import (
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import (
+    Finding,
     QualityCheckError,
     check_required_columns,
     check_required_non_null,
@@ -50,8 +51,6 @@ from gbd_foodservice_insights.report.utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-type Finding = dict[str, Any]
 
 _STAGE_MESSAGES = {
     "ingestion": "Loading the input data.",

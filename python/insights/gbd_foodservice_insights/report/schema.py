@@ -2,7 +2,12 @@
 
 from collections import Counter
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal
+
+# quality.py imports this module at runtime, so its `Finding` can only be imported for the type
+# checker. Annotations are lazy on 3.14, so no quotes are needed.
+if TYPE_CHECKING:
+    from gbd_foodservice_insights.report.quality import Finding
 
 ReportMode = Literal["procurement", "serving"]
 Region = Literal["us", "europe"]
@@ -77,7 +82,7 @@ def validate_region(region: str) -> Region:
     return normalized
 
 
-def quality_status_from_findings(findings: Iterable[dict[str, Any]]) -> QualityStatus:
+def quality_status_from_findings(findings: Iterable[Finding]) -> QualityStatus:
     """Compute overall quality status from finding severities; ``info`` never counts."""
     statuses = {str(item.get("status", "info")) for item in findings}
     if "error" in statuses:
@@ -87,7 +92,7 @@ def quality_status_from_findings(findings: Iterable[dict[str, Any]]) -> QualityS
     return "pass"
 
 
-def summarize_status_counts(findings: Iterable[dict[str, Any]]) -> dict[str, int]:
+def summarize_status_counts(findings: Iterable[Finding]) -> dict[str, int]:
     """Count findings by status."""
     counter = Counter(str(item.get("status", "info")) for item in findings)
     return {
