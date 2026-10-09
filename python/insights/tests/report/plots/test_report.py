@@ -25,13 +25,11 @@ def _aggregated_data(
     """Aggregates where apple drives everything, for tests that only vary the months."""
     return {
         "monthly_category_data": monthly_category_data,
-        "overall_drivers": pd.DataFrame({"product": ["apple"], "percentage": ["100.0%"]}),
+        "overall_drivers": pd.DataFrame({"product": ["apple"], "percentage": [100.0]}),
         "category_drivers": (
             category_drivers
             if category_drivers is not None
-            else pd.DataFrame(
-                {"category": ["fruit"], "product": ["apple"], "percentage": ["100.0%"]}
-            )
+            else pd.DataFrame({"category": ["fruit"], "product": ["apple"], "percentage": [100.0]})
         ),
     }
 
@@ -239,7 +237,7 @@ def test_generate_all_report_plots_marks_driver_charts_whose_input_is_incomplete
                 {
                     "category": ["fruit", "fruit"],
                     "product": ["apple", "pear"],
-                    "percentage": ["60.0%", None],
+                    "percentage": [60.0, None],
                 }
             ),
         ),

@@ -10,7 +10,6 @@ from gbd_foodservice_insights.categories import get_drink_categories, get_food_c
 from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
-    convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
     set_title_font,
@@ -445,7 +444,7 @@ def draw_category_drivers(
         raise ValueError(f"No drivers for category {category!r}")
     create_horizontal_percentage_barplot(
         ax=ax,
-        data=convert_percentage_to_float(drivers, "percentage"),
+        data=drivers,
         y_col="product",
         percentage_col="percentage",
         add_percentage_labels=False,

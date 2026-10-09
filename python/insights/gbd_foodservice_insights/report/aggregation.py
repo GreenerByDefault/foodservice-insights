@@ -12,7 +12,6 @@ from gbd_foodservice_insights.categories import (
     get_protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
-from gbd_foodservice_insights.plotting_utils import format_percentage_column
 from gbd_foodservice_insights.report.schema import per_diner_metric_name
 from gbd_foodservice_insights.report.utils import (
     compute_month_alignment,
@@ -170,7 +169,7 @@ def identify_category_drivers(
         .head(top_n)
         .sort_values(["category", metric], ascending=[True, False])
     )
-    return format_percentage_column(top_products)
+    return top_products
 
 
 def identify_overall_drivers(
@@ -195,7 +194,7 @@ def identify_overall_drivers(
         )
 
     top_overall = product_totals.sort_values(metric, ascending=False).head(top_n)
-    return format_percentage_column(top_overall)
+    return top_overall
 
 
 def category_highest_vs_lowest_months(

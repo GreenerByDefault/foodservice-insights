@@ -11,7 +11,6 @@ from gbd_foodservice_insights.plotting_utils import (
     LETTER_LANDSCAPE,
     GBD_colors,
     add_grid,
-    convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
     set_suptitle_font,
@@ -93,8 +92,6 @@ def plot_category_drivers_pages(
 
 def plot_overall_drivers(overall_drivers: pd.DataFrame, metric: str = "kilos_total") -> Figure:
     """Horizontal bar chart of top products driving overall totals."""
-    overall_drivers = convert_percentage_to_float(overall_drivers, "percentage")
-
     max_label_width = 30
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     create_horizontal_percentage_barplot(
