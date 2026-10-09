@@ -114,7 +114,30 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
             llm=KeywordLlmClient(),
         )
 
-    pd.testing.assert_frame_equal(mock_categorize_unique_products.call_args.kwargs["df"], input_df)
+    pd.testing.assert_frame_equal(
+        mock_categorize_unique_products.call_args.kwargs["df"],
+        input_df.assign(date=pd.to_datetime(input_df["date"])),
+    )
+
+
+def test_categorize_spreadsheet_to_csvs_raises_when_weight_cleaning_leaves_missing_values(tmp_path):
+    input_path = tmp_path / "input.csv"
+    pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": ["unknown"]}).to_csv(
+        input_path, index=False
+    )
+
+    with pytest.raises(ValueError, match="Column 'weight' contains missing values"):
+        categorize_spreadsheet_to_csvs(input_filepath=input_path, llm=KeywordLlmClient())
+
+
+def test_categorize_spreadsheet_to_csvs_raises_for_an_unparseable_date(tmp_path):
+    input_path = tmp_path / "input.csv"
+    pd.DataFrame({"product": ["apple"], "date": ["not a date"], "weight": [1.0]}).to_csv(
+        input_path, index=False
+    )
+
+    with pytest.raises(ValueError, match="Date parsing failed for column 'date'"):
+        categorize_spreadsheet_to_csvs(input_filepath=input_path, llm=KeywordLlmClient())
 
 
 def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_path):

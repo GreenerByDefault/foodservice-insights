@@ -4,7 +4,7 @@ Food Product Categorization — Orchestrator
 
 Public entry point for categorization:
 
-    categorize_unique_products() — clean the input and categorize each unique product
+    categorize_unique_products() — categorize each unique product of already-typed rows
 
 Callers merge the result back onto the rows with `steps.merge_categorizations`.
 
@@ -29,17 +29,13 @@ from gbd_foodservice_insights.categorization.steps import (
     categorize_with_llm,
     clean_product_names,
 )
-from gbd_foodservice_insights.report.parsing import (
-    clean_weight_column,
-    parse_and_validate_date_column,
-)
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class CategorizedProducts:
-    cleaned_df: pd.DataFrame  # the input rows, with product, date and weight cleaned
+    cleaned_df: pd.DataFrame  # the input rows, with product stripped
     unique_products_df: pd.DataFrame  # one row per product, with its category
     ai_review_df: pd.DataFrame  # the products an LLM categorized, for human review
     match_type_counts: dict[str, int]
@@ -52,32 +48,27 @@ def categorize_unique_products(
     df: pd.DataFrame,
     llm: LlmClient,
     cache: CategorizationCache,
-    date_format: str | None = None,
 ) -> CategorizedProducts:
-    """Clean the input and assign a GBD emissions category to each unique product.
+    """Assign a GBD emissions category to each unique product.
 
-    `df` needs product, date, and weight columns. `date_format=None` auto-detects the date
-    format.
+    `df` needs `str` product, `datetime64` date and numeric weight columns with no missing values:
+    a wrong dtype raises `TypeError`, a missing column or value `ValueError`.
     """
-    # --- Validate required columns ---
     for col in ("product", "date", "weight"):
         if col not in df.columns:
             raise ValueError(f"Column '{col}' not found in DataFrame.")
+    if not pd.api.types.is_string_dtype(df["product"]):
+        raise TypeError(f"product must be str, not {df['product'].dtype}")
+    if not pd.api.types.is_datetime64_dtype(df["date"]):
+        raise TypeError(f"date must be datetime64, not {df['date'].dtype}")
+    if not pd.api.types.is_numeric_dtype(df["weight"]):
+        raise TypeError(f"weight must be numeric, not {df['weight'].dtype}")
+    for col in ("product", "date", "weight"):
+        if df[col].isna().any():
+            raise ValueError(f"Column '{col}' contains missing values.")
 
-    df = df.copy()
-
-    # --- Clean input data ---
-    df["product"] = df["product"].astype(str).str.strip()
-
-    df = parse_and_validate_date_column(df=df, date_col="date", date_format=date_format)
-    df = clean_weight_column(df, "weight")
-
-    if df["product"].isna().any():
-        raise ValueError("Column 'product' contains NaN values after cleaning.")
-    if df["weight"].isna().any():
-        raise ValueError("Column 'weight' contains NaN values after cleaning.")
-    if df["date"].isna().any():
-        raise ValueError("Column 'date' contains NaN values after cleaning.")
+    # Stripping is the cache's match-key rule (`CategorizationCache.from_frame` strips too).
+    df = df.assign(product=df["product"].str.strip())
 
     # --- Match against historical categorizations ---
     unique_products_df = df[["product"]].drop_duplicates().copy()

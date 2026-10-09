@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization import pipeline, steps
+from gbd_foodservice_insights.categorization import steps
 from gbd_foodservice_insights.categorization.cache import CategorizationCache
 from gbd_foodservice_insights.categorization.pipeline import (
     categorize_unique_products,
@@ -41,31 +41,23 @@ def test_categorize_unique_products_raises_when_a_required_column_is_missing(mis
         categorize_unique_products(df=df, llm=KeywordLlmClient(), cache=EMPTY_CACHE)
 
 
-def test_categorize_unique_products_raises_when_date_cleaning_leaves_missing_values():
-    df = pd.DataFrame({"product": ["apple"], "date": ["not a date"], "weight": [1.0]})
-    parsed_df = df.copy()
-    parsed_df["date"] = pd.NaT
+def test_categorize_unique_products_rejects_an_unparsed_date_column():
+    df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.0]})
 
-    with (
-        patch.object(pipeline, "parse_and_validate_date_column", return_value=parsed_df),
-        patch.object(pipeline, "clean_weight_column", return_value=parsed_df),
-        pytest.raises(ValueError, match=r"Column 'date' contains NaN values after cleaning."),
-    ):
+    with pytest.raises(TypeError, match="date must be datetime64, not str"):
         categorize_unique_products(df=df, llm=KeywordLlmClient(), cache=EMPTY_CACHE)
 
 
-def test_categorize_unique_products_raises_when_weight_cleaning_leaves_missing_values():
-    df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": ["unknown"]})
-    parsed_df = df.copy()
-    parsed_df["date"] = pd.to_datetime(parsed_df["date"])
-    cleaned_df = parsed_df.copy()
-    cleaned_df["weight"] = pd.NA
+def test_categorize_unique_products_rejects_a_missing_product():
+    df = pd.DataFrame(
+        {
+            "product": ["apple", None],
+            "date": pd.to_datetime(["2025-01-01"] * 2),
+            "weight": [1.0, 2.0],
+        }
+    )
 
-    with (
-        patch.object(pipeline, "parse_and_validate_date_column", return_value=parsed_df),
-        patch.object(pipeline, "clean_weight_column", return_value=cleaned_df),
-        pytest.raises(ValueError, match=r"Column 'weight' contains NaN values after cleaning."),
-    ):
+    with pytest.raises(ValueError, match="Column 'product' contains missing values"):
         categorize_unique_products(df=df, llm=KeywordLlmClient(), cache=EMPTY_CACHE)
 
 
@@ -73,7 +65,7 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     df = pd.DataFrame(
         {
             "product": ["MLK WHOLE 2L", "Whole Milk Carton"],
-            "date": ["2025-01-01", "2025-01-01"],
+            "date": pd.to_datetime(["2025-01-01", "2025-01-01"]),
             "weight": [1.0, 2.0],
         }
     )
