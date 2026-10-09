@@ -7,8 +7,9 @@ product's categorization path: exact cache match, LLM name cleaning, cleaned-nam
 category match, then `merge_categorizations` with the 80% cut. `analyze()` composes it; the lab's
 `categorize_spreadsheet_to_csvs` composes it the same way and adds entree detection. The cache is
 the gitignored `data_files/previously_categorized_items.csv`; `categorization-cache.md` moves it
-into Postgres later and is sequenced after this plan. `report-typed-data.md` PR 2 waits on PR 2
-here.
+into Postgres later and is sequenced after this plan. The pipeline takes typed rows — `str`
+products, `datetime64` dates, numeric weights — and parses nothing; the lab's
+`categorize_spreadsheet_to_csvs` parses its spreadsheet before calling it.
 
 This plan is the product side only: the cache the library reads and the pipeline that reads it.
 How new rows get back into the cache — from the web app or from GBD's reviewers — is
@@ -62,11 +63,6 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows):
   § Concurrency and scaling names a `ThreadPoolExecutor` inside the library as the lever. The
   parent kills a child after 20 minutes total (`killAfterTotalRuntimeMs`), and there is no cap on
   unique products per upload.
-- **`categorize_unique_products` re-parses parsed input.** `read_input_csv` already yields
-  `datetime64` dates and float weights; re-running `parse_and_validate_date_column` and
-  `clean_weight_column` changes no value, but `max_future_days=30` uses the container's local date
-  while `apps/web` uses UTC (`calendar.ts`), so a row dated exactly 30 days out can pass the web
-  and fail the run as `unknown`. The NaN check after `astype(str)` on `product` is dead.
 
 ## Decisions
 
@@ -86,10 +82,6 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows):
   `No Matches Found`, and the list is one category per line. It is the one PR here that changes
   categorizations on real data, so it ships alone, with a before/after diff GBD's data scientist
   has seen.
-- **`categorize_unique_products` parses nothing.** It requires non-empty `str` products, a
-  `datetime64` `date` and a float `weight` and raises `ValueError` otherwise; `date_format` goes and
-  the lab parses messy input before calling it. *Rejected: passing `max_future_days` through from
-  `analyze()`* — a second copy of a web rule in the library.
 - **LLM calls run through a bounded `ThreadPoolExecutor`**, via one helper shared by the two loops:
   results in input order, progress per completion, the first exception propagates after
   `shutdown(cancel_futures=True)` so nothing queued starts. `OpenAiLlmClient` is a frozen dataclass
@@ -102,7 +94,7 @@ Verified facts, September 2026, against GBD's copy of the cache (38,692 rows):
 - **One behaviour change per PR.** Each PR's diff of the characterization test
   is its review.
 
-PR order: 1 and 2 any time; 3 after 1, since both edit `categorize_with_llm`.
+PR order: 2 after 1, since both edit `categorize_with_llm`.
 
 ## PR 1 — accept what the model means
 
@@ -123,17 +115,7 @@ PR order: 1 and 2 any time; 3 after 1, since both edit `categorize_with_llm`.
   still unrecognized; and a diff of `1. Categorize Runscript.py`'s output on a real client file
   before and after, reviewed by GBD's data scientist.
 
-## PR 2 — typed input, no re-parsing
-
-- `categorize_unique_products` asserts its dtypes, drops `date_format`, the two parsing calls and
-  the dead NaN check, and keeps the `product` strip (it is the match key rule, and cheap).
-- `categorize_spreadsheet_to_csvs` runs `parse_and_validate_date_column`, `clean_weight_column`
-  and the product cleaning itself, with the two "cleaning leaves missing values" tests moving from
-  `test_pipeline.py` to the lab's `test_spreadsheet.py`.
-- Tests: `test_pipeline.py` hands typed frames; a `str` date column and a NaN product are rejected.
-  `report-typed-data.md` PR 2 then moves `report/parsing.py` whole to the lab.
-
-## PR 3 — concurrent LLM calls
+## PR 2 — concurrent LLM calls
 
 - `steps.py`: `_map_llm_calls(fn, items)` over `ThreadPoolExecutor(LLM_CONCURRENCY)` as decided,
   used by `clean_product_names` and `categorize_with_llm`; `print_progress` per completion.
@@ -149,7 +131,7 @@ PR order: 1 and 2 any time; 3 after 1, since both edit `categorize_with_llm`.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; PR 2 also `just test-lab`.
+- Every PR: `just lint && just check && just test`.
 - Every PR changes what `analyze()` runs: also `pnpm test:system`.
 - PR 1: the live 200-product sample and the runscript diff above.
 

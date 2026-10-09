@@ -27,10 +27,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - `check_diner_meal_reasonableness` files an `error` when two or more months' counts fall
   outside 0.5× to 2× the median (`error_if_flagged_months: 2`). Two summer months at 30% of
   term time abort a twelve-month upload over numbers the user typed and the web validated.
-- `categorize_unique_products` re-runs `parse_and_validate_date_column` on dates
-  `read_input_csv` already parsed, so its `max_future_days=30` against the container's local
-  date can reject a date the web accepted against UTC. Only a non-UTC container (a developer's
-  machine) can hit it; `categorization-pipeline.md` PR 2 fixes it by taking typed input.
 
 **Wrong numbers.**
 

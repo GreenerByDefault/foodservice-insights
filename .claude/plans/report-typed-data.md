@@ -12,11 +12,8 @@ and the metric is numeric, since `read_input_csv` guarantees both on the product
 `pd.read_csv` output before calling it, so a bad date in the lab raises the parser's
 `ValueError`, which the failed manifest records as `error_message`.
 
-**One product function still parses text, and the lab relies on it.**
-`categorize_unique_products` runs `parse_and_validate_date_column` and `clean_weight_column` on
-whatever it is handed. `categorization-pipeline.md` PR 2 makes it take typed input. Until then,
-`max_future_days=30` against the container's local date can reject a date the web accepted
-against UTC (`report-correctness.md`).
+**`categorize_unique_products` takes typed rows too**, so `parsing.py`'s only callers are the
+lab's `categorize_spreadsheet_to_csvs` and `run_food_report`.
 
 **A check can no longer find anything.** Several checks call `pd.to_numeric(..., errors="coerce")`
 on the metric themselves, and `detect_numeric_coercion_loss` reports the text tokens that
@@ -50,7 +47,7 @@ these tables.
 - **One kind of change per PR.** A deletion, a move, a type change or a boundary change each
   lands alone, so each golden or fixture diff shows one change.
 
-PR order: 1 and 3 can land any time. 2 lands after 1 and `categorization-pipeline.md` PR 2.
+PR order: 1 and 3 can land any time. 2 lands after 1.
 
 ## PR 1 — delete `detect_numeric_coercion_loss`
 
@@ -63,9 +60,6 @@ PR order: 1 and 3 can land any time. 2 lands after 1 and `categorization-pipelin
   `success` finding; anything more is a bug.
 
 ## PR 2 — parsing moves to the lab
-
-After `categorization-pipeline.md` PR 2, `parsing.py`'s only callers are the lab's
-`categorize_spreadsheet_to_csvs` and `run_food_report`.
 
 - `git mv` `report/parsing.py` to `gbd_foodservice_insights_lab/parsing.py`, and
   `tests/report/test_parsing.py` to `lab/tests/test_parsing.py`, so history follows. Change only

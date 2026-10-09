@@ -14,6 +14,10 @@ from gbd_foodservice_insights.categorization.cache import load_categorization_ca
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
+from gbd_foodservice_insights.report.parsing import (
+    clean_weight_column,
+    parse_and_validate_date_column,
+)
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     get_previously_classified_entrees,
@@ -76,11 +80,16 @@ def categorize_spreadsheet_to_csvs(
 
     logger.info("Read %d rows from %s", len(df), input_filepath.name)
 
+    for col in ("product", "date", "weight"):
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in {input_filepath.name}.")
+    df = df.assign(product=df["product"].astype(str))
+    df = clean_weight_column(parse_and_validate_date_column(df, date_format=date_format), "weight")
+
     categorized = categorize_unique_products(
         df=df,
         llm=llm,
         cache=load_categorization_cache(),
-        date_format=date_format,
     )
     df_result, counts = merge_categorizations(
         categorized.cleaned_df, categorized.unique_products_df
