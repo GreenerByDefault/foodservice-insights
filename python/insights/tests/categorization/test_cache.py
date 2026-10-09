@@ -80,6 +80,22 @@ def test_from_frame_drops_blank_and_unknown_categories_and_blank_products(caplog
     assert "dropped 2 rows with a blank or unknown category ['', 'cheese']" in caplog.text
 
 
+def test_constructor_rejects_a_category_outside_the_gbd_list():
+    with pytest.raises(ValueError, match=r"categories outside the GBD list: \['Mlik'\]"):
+        CategorizationCache(
+            products=_frame([("Whole Milk", "Mlik", "milk"), ("Cheddar", "Cheese", "cheddar")]),
+            cleaned_name_index={},
+        )
+
+
+def test_constructor_rejects_no_matches_found_in_the_cleaned_name_index():
+    with pytest.raises(ValueError, match=r"non-GBD categories: \['No Matches Found'\]"):
+        CategorizationCache(
+            products=_frame([("Plate", "No Matches Found", "plate")]),
+            cleaned_name_index={"plate": "No Matches Found"},
+        )
+
+
 def test_from_frame_rejects_a_missing_column():
     with pytest.raises(ValueError, match=r"missing columns: \['cleaned_item_names'\]"):
         CategorizationCache.from_frame(pd.DataFrame({"product": ["a"], "category": ["Cheese"]}))

@@ -77,7 +77,8 @@ NO_MATCHES_FOUND: Final = "No Matches Found"
 @dataclass(frozen=True)
 class CategorizationCache:
     """The reviewed cache, in the one shape the pipeline matches against: build it with
-    `from_frame`, which enforces that shape.
+    `from_frame`, which enforces that shape. The constructor rejects only a category outside the
+    GBD list, the one flaw that would reach a report rather than fail a merge.
 
     `products` holds `CACHE_COLUMNS` as `str`, one row per stripped, non-empty product, each with
     a GBD category or "No Matches Found"; a missing cleaned name is "". `cleaned_name_index` maps
@@ -86,6 +87,16 @@ class CategorizationCache:
 
     products: pd.DataFrame
     cleaned_name_index: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        gbd_categories = set(get_GBD_categories())
+        unknown = sorted(set(self.products["category"]) - {*gbd_categories, NO_MATCHES_FOUND})
+        if unknown:
+            raise ValueError(f"Categorization cache has categories outside the GBD list: {unknown}")
+        # Reusing "No Matches Found" would skip the LLM and the review table for good.
+        unreusable = sorted(set(self.cleaned_name_index.values()) - gbd_categories)
+        if unreusable:
+            raise ValueError(f"Cleaned-name index has non-GBD categories: {unreusable}")
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> CategorizationCache:
@@ -106,8 +117,7 @@ class CategorizationCache:
 
         # Dropped rather than rejected: a typo among tens of thousands of hand-maintained rows
         # must not fail every report, and dropping it costs only LLM calls and a review-table
-        # entry. Kept, the row would hit, `categorize_with_llm` would rewrite its category to
-        # "No Matches Found", and as a cache hit it would never reach the review table.
+        # entry. Kept, the row would fail the constructor's check, and with it every report.
         allowed_categories = {*get_GBD_categories(), NO_MATCHES_FOUND}
         unknown_category = ~products["category"].isin(allowed_categories)
         _warn_dropped(
