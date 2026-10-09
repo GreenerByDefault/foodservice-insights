@@ -147,7 +147,7 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     # One per LLM call, plus one per `build_food_report` stage and one before each of the
     # charts, the PDF and the workbook.
     assert llm.calls
-    assert progress_calls == len(llm.calls) + 11
+    assert progress_calls == len(llm.calls) + 10
 
 
 class NaIsCheeseLlmClient(KeywordLlmClient):

@@ -3,7 +3,7 @@
 import logging
 import re
 from datetime import date, datetime, timedelta
-from typing import Any, Literal, overload
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -148,17 +148,12 @@ def _normalize_date_boundary(
     return timestamp.normalize()
 
 
-def _build_date_parse_error_message(
-    date_col: str,
-    diagnostics: pd.DataFrame,
-    allow_missing: bool,
-) -> str:
-    """Build a concise, actionable date parsing error message."""
-    failing_statuses = ["ambiguous", "invalid", "missing", "out_of_range"]
-    if allow_missing:
-        failing_statuses = [status for status in failing_statuses if status != "missing"]
+_FAILING_STATUSES = ("ambiguous", "invalid", "missing", "out_of_range")
 
-    failing = diagnostics[diagnostics["parse_status"].isin(failing_statuses)].copy()
+
+def _build_date_parse_error_message(date_col: str, diagnostics: pd.DataFrame) -> str:
+    """Build a concise, actionable date parsing error message."""
+    failing = diagnostics[diagnostics["parse_status"].isin(_FAILING_STATUSES)].copy()
     counts = failing["parse_status"].value_counts().to_dict()
 
     lines = [
@@ -166,9 +161,7 @@ def _build_date_parse_error_message(
         f"Issue counts: {counts}.",
     ]
 
-    for status in ("ambiguous", "invalid", "missing", "out_of_range"):
-        if status not in failing_statuses:
-            continue
+    for status in _FAILING_STATUSES:
         status_rows = failing[failing["parse_status"] == status]
         if status_rows.empty:
             continue
@@ -179,7 +172,6 @@ def _build_date_parse_error_message(
     return "\n".join(lines)
 
 
-@overload
 def parse_and_validate_date_column(
     df: pd.DataFrame,
     date_col: str = "date",
@@ -188,50 +180,7 @@ def parse_and_validate_date_column(
     min_date: str | datetime | pd.Timestamp | None = None,
     max_date: str | datetime | pd.Timestamp | None = None,
     max_future_days: int = 30,
-    allow_missing: bool = False,
-    return_diagnostics: Literal[False] = False,
-) -> pd.DataFrame: ...
-
-
-@overload
-def parse_and_validate_date_column(
-    df: pd.DataFrame,
-    date_col: str = "date",
-    *,
-    date_format: str | None = None,
-    min_date: str | datetime | pd.Timestamp | None = None,
-    max_date: str | datetime | pd.Timestamp | None = None,
-    max_future_days: int = 30,
-    allow_missing: bool = False,
-    return_diagnostics: Literal[True],
-) -> tuple[pd.DataFrame, pd.DataFrame]: ...
-
-
-@overload
-def parse_and_validate_date_column(
-    df: pd.DataFrame,
-    date_col: str = "date",
-    *,
-    date_format: str | None = None,
-    min_date: str | datetime | pd.Timestamp | None = None,
-    max_date: str | datetime | pd.Timestamp | None = None,
-    max_future_days: int = 30,
-    allow_missing: bool = False,
-    return_diagnostics: bool,
-) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]: ...
-
-
-def parse_and_validate_date_column(
-    df: pd.DataFrame,
-    date_col: str = "date",
-    *,
-    date_format: str | None = None,
-    min_date: str | datetime | pd.Timestamp | None = None,
-    max_date: str | datetime | pd.Timestamp | None = None,
-    max_future_days: int = 30,
-    allow_missing: bool = False,
-    return_diagnostics: bool = False,
-) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Parse and validate a date column using a strict multi-pass strategy.
 
@@ -246,9 +195,7 @@ def parse_and_validate_date_column(
     5. dateutil fallback for remaining non-ambiguous strings
     6. Date range validation
 
-    With ``return_diagnostics=True``, also returns a diagnostics frame with ``original_value``,
-    ``parsed_date``, ``parse_status``, and ``parser_used``. Raises ValueError if parsing fails,
-    values are ambiguous, missing dates are disallowed, or dates are out of range.
+    Raises ValueError if any date is missing, invalid, ambiguous, or out of range.
     """
     if date_col not in df.columns:
         raise ValueError(f"Column '{date_col}' not found in DataFrame.")
@@ -434,20 +381,8 @@ def parse_and_validate_date_column(
         index=df_copy.index,
     )
 
-    failing_statuses = {"ambiguous", "invalid", "out_of_range"}
-    if not allow_missing:
-        failing_statuses.add("missing")
-
-    if diagnostics_df["parse_status"].isin(failing_statuses).any():
-        raise ValueError(
-            _build_date_parse_error_message(
-                date_col=date_col,
-                diagnostics=diagnostics_df,
-                allow_missing=allow_missing,
-            )
-        )
+    if diagnostics_df["parse_status"].isin(_FAILING_STATUSES).any():
+        raise ValueError(_build_date_parse_error_message(date_col, diagnostics_df))
 
     df_copy[date_col] = parsed_dates
-    if return_diagnostics:
-        return df_copy, diagnostics_df
     return df_copy

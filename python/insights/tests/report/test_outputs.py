@@ -18,7 +18,7 @@ def _report(**overrides: Any) -> FoodReport:
     metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
     rows = pd.DataFrame(
         {
-            "date": ["2024-01-15", "2024-02-20"],
+            "date": pd.to_datetime(["2024-01-15", "2024-02-20"]),
             "product": ["Ground Beef", "Lentils"],
             "category": ["Beef and Buffalo Meat", "Legumes"],
             metric: [10.0, 20.0],

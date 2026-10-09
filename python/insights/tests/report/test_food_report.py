@@ -75,7 +75,7 @@ def test_attach_monthly_category_emissions_leaves_unfactored_category_missing():
 def _rows(metric: str = "kilos_total") -> pd.DataFrame:
     return pd.DataFrame(
         {
-            "date": ["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"],
+            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
             "product": ["Ground Beef", "Lentils", "Ground Beef", "Lentils"],
             "category": ["Beef and Buffalo Meat", "Legumes", "Beef and Buffalo Meat", "Legumes"],
             metric: [10.0, 20.0, 12.0, 18.0],
@@ -153,7 +153,9 @@ def test_an_error_finding_raises_with_every_finding_so_far():
             "column": "category",
             "count": 1,
             "metadata": {
-                "sample_rows": [{"date": "2024-01-20", "product": "Lentils", "category": None}]
+                "sample_rows": [
+                    {"date": pd.Timestamp("2024-01-20"), "product": "Lentils", "category": None}
+                ]
             },
         }
     ]
@@ -281,7 +283,7 @@ def test_aggregation_failure_raises_from_the_original_exception(
 def test_a_category_bought_at_zero_weight_has_no_share_or_intensity():
     zero_pork = pd.DataFrame(
         {
-            "date": ["2024-01-10"],
+            "date": pd.to_datetime(["2024-01-10"]),
             "product": ["Pork Chop"],
             "category": ["Pork (pig meat)"],
             "kilos_total": [0.0],
@@ -354,7 +356,7 @@ def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
 def test_a_category_bought_in_some_months_only_is_an_info_finding():
     lamb = pd.DataFrame(
         {
-            "date": ["2024-01-10"],
+            "date": pd.to_datetime(["2024-01-10"]),
             "product": ["Lamb Shoulder"],
             "category": ["Lamb/mutton & goat meat"],
             "kilos_total": [5.0],
@@ -378,7 +380,7 @@ def test_a_category_bought_in_some_months_only_is_an_info_finding():
 def test_an_unfactored_category_files_no_new_missing_values():
     typo = pd.DataFrame(
         {
-            "date": ["2024-01-10"],
+            "date": pd.to_datetime(["2024-01-10"]),
             "product": ["Oat Milk"],
             "category": ["Mlik"],
             "kilos_total": [5.0],
@@ -422,18 +424,24 @@ def test_summary_stats_names_the_emissions_factor_region(region, label):
 
 
 def test_summary_stats_prints_a_single_month_once():
-    dates = ["2024-01-15", "2024-01-20", "2024-01-25", "2024-01-30"]
+    dates = pd.to_datetime(["2024-01-15", "2024-01-20", "2024-01-25", "2024-01-30"])
     report = _build(_rows().assign(date=dates), diner_meal_mapping={"2024-01": 100})
 
     assert report.summary_stats["Date range"] == "Jan 2024"
 
 
-@pytest.mark.parametrize("region", ["us", "europe"])
-def test_ambiguous_dates_abort_whatever_the_region(region):
-    rows = _rows().assign(date=["01/01/2024", "01/01/2024", "01/02/2024", "01/02/2024"])
+def test_a_text_date_raises_type_error():
+    rows = _rows().assign(date=["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"])
 
-    with pytest.raises(QualityCheckError, match=r"\[date_normalization::date_parse_failure\]"):
-        _build(rows, region=region)
+    with pytest.raises(TypeError, match="date must be datetime64"):
+        _build(rows)
+
+
+def test_a_text_metric_raises_type_error():
+    rows = _rows().assign(kilos_total=["10", "20", "12", "18"])
+
+    with pytest.raises(TypeError, match="kilos_total must be numeric"):
+        _build(rows)
 
 
 # ----------------------------------------------------------------------

@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
-from gbd_foodservice_insights.report import aggregation, checks, parsing
+from gbd_foodservice_insights.report import aggregation, checks
 from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
     calculate_plant_protein_share,
@@ -54,7 +54,6 @@ logger = logging.getLogger(__name__)
 
 _STAGE_MESSAGES = {
     "ingestion": "Loading the input data.",
-    "date_normalization": "Checking and standardizing dates.",
     "month_normalization": "Creating the month summary column.",
     "diner_meal_mapping": "Loading the diner-meal mapping.",
     "emissions": "Calculating emissions values.",
@@ -125,7 +124,8 @@ def build_food_report(
     pdf_extracted: bool | None = None,
     report_progress: Callable[[], None] = _ignore,
 ) -> FoodReport:
-    """An error finding raises `QualityCheckError`; rows that weigh nothing, `UnusableDataError`."""
+    """An error finding raises `QualityCheckError`; rows that weigh nothing, `UnusableDataError`;
+    a `date` that is not `datetime64` or a metric that is not numeric, `TypeError`."""
     metric_total = metric_for_mode(mode)
     quality_findings: list[Finding] = []
     df = rows.copy()
@@ -143,53 +143,16 @@ def build_food_report(
         )
     )
     raise_on_error_findings(quality_findings)
+    if not pd.api.types.is_datetime64_dtype(df["date"]):
+        raise TypeError(f"date must be datetime64, not {df['date'].dtype}")
+    if not pd.api.types.is_numeric_dtype(df[metric_total]):
+        raise TypeError(f"{metric_total} must be numeric, not {df[metric_total].dtype}")
     # Every figure is a share of this total. `apps/web` refuses a file whose weights are all 0,
     # but only categorized rows reach here, so its uncategorized products can have held them all.
     if (df[metric_total] == 0).all():
         raise UnusableDataError(
             f"Every row has a {metric_total} of 0, so there is nothing to report."
         )
-
-    # Date normalization with explicit diagnostics
-    _log_stage("date_normalization", report_progress)
-    before = missing_snapshot(df)
-    before_rows = len(df)
-    try:
-        df, date_diag = parsing.parse_and_validate_date_column(
-            df,
-            date_col="date",
-            allow_missing=True,
-            return_diagnostics=True,
-        )
-    except ValueError as exc:
-        quality_findings.append(
-            make_finding(
-                stage="date_normalization",
-                category="date_parse_failure",
-                status="error",
-                message=str(exc),
-            )
-        )
-        raise QualityCheckError(quality_findings) from exc
-    status_counts = date_diag["parse_status"].value_counts(dropna=False).to_dict()
-    for status, count in status_counts.items():
-        if status == "parsed":
-            continue
-        mapped_status = "warning" if status == "missing" else "error"
-        quality_findings.append(
-            make_finding(
-                stage="date_normalization",
-                category="date_parse_status",
-                status=mapped_status,
-                message=f"Date parsing status '{status}' occurred {int(count)} times.",
-                count=int(count),
-                metadata={"parse_status": status},
-            )
-        )
-    quality_findings.extend(
-        compare_missing_snapshots(before, missing_snapshot(df), stage="date_normalization")
-    )
-    quality_findings.extend(check_row_count_drift(before_rows, len(df), stage="date_normalization"))
 
     _log_stage("month_normalization", report_progress)
     before = missing_snapshot(df)

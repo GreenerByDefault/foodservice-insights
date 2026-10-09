@@ -69,12 +69,7 @@ def categorize_unique_products(
     # --- Clean input data ---
     df["product"] = df["product"].astype(str).str.strip()
 
-    df = parse_and_validate_date_column(
-        df=df,
-        date_col="date",
-        date_format=date_format,
-        allow_missing=False,
-    )
+    df = parse_and_validate_date_column(df=df, date_col="date", date_format=date_format)
     df = clean_weight_column(df, "weight")
 
     if df["product"].isna().any():

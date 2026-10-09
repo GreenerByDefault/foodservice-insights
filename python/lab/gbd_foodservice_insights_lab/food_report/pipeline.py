@@ -22,6 +22,10 @@ from gbd_foodservice_insights.report.food_report import (
     build_food_report,
     build_report_charts,
 )
+from gbd_foodservice_insights.report.parsing import (
+    clean_weight_column,
+    parse_and_validate_date_column,
+)
 from gbd_foodservice_insights.report.quality import (
     Finding,
     QualityCheckError,
@@ -33,6 +37,7 @@ from gbd_foodservice_insights.report.schema import (
     VALID_REPORT_MODES,
     DinerOrMeal,
     ReportMode,
+    metric_for_mode,
     quality_status_from_findings,
     validate_region,
 )
@@ -244,14 +249,13 @@ def run_food_report(
 
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
+        if diner_meal_mapping is None:
+            diner_meal_mapping = load_diner_meal_mapping_from_json(diner_meal_file)
+        df = clean_weight_column(parse_and_validate_date_column(df), metric_for_mode(mode))
 
         report = build_food_report(
             df,
-            diner_meal_mapping=(
-                diner_meal_mapping
-                if diner_meal_mapping is not None
-                else load_diner_meal_mapping_from_json(diner_meal_file)
-            ),
+            diner_meal_mapping=diner_meal_mapping,
             mode=mode,
             region=region,
             diner_or_meal=diner_or_meal,
