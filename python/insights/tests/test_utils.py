@@ -3,7 +3,7 @@ Tests for gbd_foodservice_insights/utils.py
 
 This module tests the remaining utility helpers after the
 LLM compatibility bridge was removed.
-Date parsing tests are in report/test_parsing.py.
+Date parsing tests are in the lab's tests/test_parsing.py.
 """
 
 import logging

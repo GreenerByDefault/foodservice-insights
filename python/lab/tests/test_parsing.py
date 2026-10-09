@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.parsing import parse_and_validate_date_column
+from gbd_foodservice_insights_lab.parsing import parse_and_validate_date_column
 
 
 class TestParseAndValidateDateColumn:

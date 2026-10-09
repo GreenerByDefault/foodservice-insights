@@ -22,10 +22,6 @@ from gbd_foodservice_insights.report.food_report import (
     build_food_report,
     build_report_charts,
 )
-from gbd_foodservice_insights.report.parsing import (
-    clean_weight_column,
-    parse_and_validate_date_column,
-)
 from gbd_foodservice_insights.report.quality import (
     Finding,
     QualityCheckError,
@@ -46,6 +42,10 @@ from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_loggi
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
 from gbd_foodservice_insights_lab.food_report import excel as qa_excel
 from gbd_foodservice_insights_lab.food_report.utils import load_diner_meal_mapping_from_json
+from gbd_foodservice_insights_lab.parsing import (
+    clean_weight_column,
+    parse_and_validate_date_column,
+)
 
 logger = logging.getLogger(__name__)
 
