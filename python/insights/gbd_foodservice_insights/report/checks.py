@@ -25,8 +25,6 @@ from gbd_foodservice_insights.report.utils import compute_month_alignment, ensur
 
 logger = logging.getLogger(__name__)
 
-MISSING_TEXT_TOKENS = {"", "na", "n/a", "nan", "none", "null", "nat", "missing"}
-
 
 def _duplicate_row_status(duplicate_share: float) -> DiagnosticStatus:
     """Map duplicate-row share to a finding severity for row-level QA checks."""
@@ -1053,125 +1051,6 @@ def detect_month_over_month_total_volatility(
         )
     ]
     return findings
-
-
-def detect_numeric_coercion_loss(
-    df: pd.DataFrame,
-    numeric_columns: list[str],
-    *,
-    sample_limit: int = 10,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Catch unreadable numeric tokens before they silently drop out of totals.
-
-    This exists because text like "ten kg" or "1..2" can turn into missing
-    values during numeric coercion without causing a hard failure, which then
-    understates totals and emissions. The report should surface those tokens
-    clearly so they can be fixed before users trust the results.
-    """
-    missing_columns = [column for column in numeric_columns if column not in df.columns]
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="numeric_coercion_loss",
-                    status="info",
-                    message=(
-                        "Could not check numeric coercion loss because these columns are "
-                        f"missing: {missing_columns}"
-                    ),
-                    metadata={"missing_columns": missing_columns},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    allowed_loss_count = int(
-        get_diagnostic_threshold(
-            "numeric_coercion_loss",
-            "allowed_loss_count",
-        )
-    )
-    allowed_loss_count = max(allowed_loss_count, 0)
-
-    bad_token_frames: list[pd.DataFrame] = []
-    for column in numeric_columns:
-        raw_values = df[column]
-        coerced_values = pd.to_numeric(raw_values, errors="coerce")
-        raw_strings = raw_values.astype("string")
-        normalized_strings = raw_strings.str.strip().str.lower()
-        meaningful_raw_mask = raw_values.notna() & ~normalized_strings.isin(MISSING_TEXT_TOKENS)
-        became_missing_mask = meaningful_raw_mask & coerced_values.isna()
-
-        if not became_missing_mask.any():
-            continue
-
-        column_bad_tokens = df.loc[became_missing_mask, [column]].copy()
-        column_bad_tokens.insert(0, "row_index", column_bad_tokens.index)
-        column_bad_tokens.insert(1, "column", column)
-        column_bad_tokens = column_bad_tokens.rename(columns={column: "raw_value"})
-        bad_token_frames.append(column_bad_tokens)
-
-    if not bad_token_frames:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="numeric_coercion_loss",
-                    status="success",
-                    message="All required numeric fields could be read as numbers.",
-                    count=0,
-                    metadata={
-                        "allowed_loss_count": allowed_loss_count,
-                        "numeric_columns": numeric_columns,
-                    },
-                )
-            ],
-            pd.DataFrame(columns=["row_index", "column", "raw_value"]),
-        )
-
-    bad_tokens_df = pd.concat(bad_token_frames, ignore_index=True)
-    bad_token_count = len(bad_tokens_df)
-    sample_rows = (
-        bad_tokens_df.head(sample_limit)
-        .replace({pd.NaT: None, pd.NA: None, np.nan: None})
-        .to_dict("records")
-    )
-    sample_values = [
-        f"Row {row['row_index']} in '{row['column']}' could not be read: {row['raw_value']}"
-        for row in sample_rows
-    ]
-
-    status = "error" if bad_token_count > allowed_loss_count else "warning"
-    message = (
-        f"Found {bad_token_count} non-empty value{'' if bad_token_count == 1 else 's'} in "
-        "required numeric fields that could not be read as numbers and would drop out of "
-        "the report totals."
-    )
-    if status == "error":
-        message += " Please fix these values before relying on the report."
-    else:
-        message += (
-            " This is within the configured tolerance, but it still needs review because "
-            "those values will be excluded from totals."
-        )
-
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="numeric_coercion_loss",
-            status=status,
-            message=message,
-            count=bad_token_count,
-            sample_values=sample_values,
-            metadata={
-                "allowed_loss_count": allowed_loss_count,
-                "numeric_columns": numeric_columns,
-                "sample_rows": sample_rows,
-            },
-        )
-    ]
-    return findings, bad_tokens_df
 
 
 def check_aggregation_reconciliation(
@@ -2341,9 +2220,6 @@ def run_all_diagnostics(
         metric_total = "servings total"
 
     findings: list[Finding] = []
-    numeric_coercion_findings, _ = detect_numeric_coercion_loss(df, [metric_total])
-    findings.extend(numeric_coercion_findings)
-
     duplicate_findings, _ = detect_exact_duplicate_rows(df, metric_total)
     findings.extend(duplicate_findings)
     near_duplicate_findings, _ = detect_near_duplicate_product_names(

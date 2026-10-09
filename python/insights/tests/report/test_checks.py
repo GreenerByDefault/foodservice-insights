@@ -20,7 +20,6 @@ from gbd_foodservice_insights.report.checks import (
     detect_exact_duplicate_rows,
     detect_month_over_month_total_volatility,
     detect_near_duplicate_product_names,
-    detect_numeric_coercion_loss,
     detect_unusual_sales,
     find_close_product_pairs,
     run_all_diagnostics,
@@ -240,24 +239,6 @@ def test_check_required_columns_requires_the_metric_column():
 
     assert check_required_columns(df) is True
     assert check_required_columns(df.drop(columns=["kilos_total"])) is False
-
-
-def test_detect_numeric_coercion_loss_errors_for_unreadable_required_metric_tokens():
-    """Unreadable numeric tokens should fail loudly before they silently reduce totals."""
-    df = pd.DataFrame(
-        {
-            "kilos_total": ["12.5", "two cases", None, " "],
-        }
-    )
-
-    findings, export_df = detect_numeric_coercion_loss(df, ["kilos_total"])
-
-    assert findings[0]["status"] == "error"
-    assert findings[0]["count"] == 1
-    assert "two cases" in findings[0]["sample_values"][0]
-    assert export_df.to_dict("records") == [
-        {"row_index": 1, "column": "kilos_total", "raw_value": "two cases"}
-    ]
 
 
 # ----------------------------------------------------------------------
@@ -974,16 +955,6 @@ def _first_month_at_40_percent_of_the_median() -> list[Finding]:
     return check_date_distribution(df)
 
 
-def _two_unreadable_weights() -> dict[str, object]:
-    df = pd.DataFrame({"kilos_total": ["bad token", "still bad", "4.5"]})
-    findings, _ = detect_numeric_coercion_loss(df, ["kilos_total"])
-    return {
-        "status": findings[0]["status"],
-        "count": findings[0]["count"],
-        "allowed_loss_count": findings[0]["metadata"]["allowed_loss_count"],
-    }
-
-
 def _aggregates_0_15_percent_off_the_raw_total() -> dict[str, object]:
     findings, _ = check_aggregation_reconciliation(
         pd.DataFrame({"kilos_total": [1000.0]}),
@@ -1080,12 +1051,6 @@ def _top_category_at_35_percent() -> dict[str, object]:
             _first_month_at_40_percent_of_the_median,
             [],
             id="date_distribution",
-        ),
-        pytest.param(
-            {"numeric_coercion_loss": {"allowed_loss_count": 2}},
-            _two_unreadable_weights,
-            {"status": "warning", "count": 2, "allowed_loss_count": 2},
-            id="numeric_coercion_loss",
         ),
         pytest.param(
             {"aggregation_reconciliation": {"rel_error_threshold": 0.002}},
@@ -1210,7 +1175,6 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
-        ("numeric_coercion_loss", "success"),
         ("exact_duplicate_rows", "success"),
         ("near_duplicate_product_names", "success"),
         ("month_over_month_total_volatility", "warning"),

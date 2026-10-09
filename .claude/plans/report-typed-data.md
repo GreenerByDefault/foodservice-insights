@@ -13,13 +13,8 @@ and the metric is numeric, since `read_input_csv` guarantees both on the product
 `ValueError`, which the failed manifest records as `error_message`.
 
 **`categorize_unique_products` takes typed rows too**, so `parsing.py`'s only callers are the
-lab's `categorize_spreadsheet_to_csvs` and `run_food_report`.
-
-**A check can no longer find anything.** Several checks call `pd.to_numeric(..., errors="coerce")`
-on the metric themselves, and `detect_numeric_coercion_loss` reports the text tokens that
-coercion would drop. With the metric numeric on every path, it always files `success`, which the
-golden pins, and the lab's `Numeric_Coercion_Loss` sheet never appears. `parsing.py` imports
-`MISSING_TEXT_TOKENS` from `checks.py` only because this check shares it.
+lab's `categorize_spreadsheet_to_csvs` and `run_food_report`. It imports nothing from the rest
+of the product; `MISSING_TEXT_TOKENS` lives in it.
 
 **Driver percentages round-trip through text.** `aggregation.identify_overall_drivers` and
 `identify_category_drivers` format `percentage` as `"12.3%"` via `format_percentage_column`.
@@ -47,26 +42,16 @@ these tables.
 - **One kind of change per PR.** A deletion, a move, a type change or a boundary change each
   lands alone, so each golden or fixture diff shows one change.
 
-PR order: 1 and 3 can land any time. 2 lands after 1.
+The two PRs are independent and can land in either order.
 
-## PR 1 — delete `detect_numeric_coercion_loss`
-
-- `checks.py`: the check and its `run_all_diagnostics` call go. `MISSING_TEXT_TOKENS` moves to
-  `parsing.py`, its only remaining user, so `parsing.py` stops importing `checks.py`.
-- `diagnostic_thresholds.yaml`: `numeric_coercion_loss` goes.
-- The lab: the `Numeric_Coercion_Loss` export sheet goes.
-- Tests: its two tests and its threshold case go, and the aggregate `run_all_diagnostics` test
-  loses its row. Regenerate the golden with `UPDATE_GOLDEN=1`. Its diff should be exactly the one
-  `success` finding; anything more is a bug.
-
-## PR 2 — parsing moves to the lab
+## PR 1 — parsing moves to the lab
 
 - `git mv` `report/parsing.py` to `gbd_foodservice_insights_lab/parsing.py`, and
   `tests/report/test_parsing.py` to `lab/tests/test_parsing.py`, so history follows. Change only
   import paths, and point `test_utils.py`'s docstring at the new place.
 - After this, the product has no text parsing outside `read_input_csv`.
 
-## PR 3 — driver percentages stay numeric
+## PR 2 — driver percentages stay numeric
 
 - `aggregation.py`: both driver functions leave `percentage` as a float rounded to one decimal.
   `format_percentage_column` and `convert_percentage_to_float` go, and
@@ -78,15 +63,14 @@ PR order: 1 and 3 can land any time. 2 lands after 1.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test && just test-lab`. The golden stays unchanged
-  except in PR 1.
-- PR 2: `uv sync --package worker-child --no-dev --no-editable` into a fresh venv
+- Every PR: `just lint && just check && just test && just test-lab`. The golden stays unchanged.
+- PR 1: `uv sync --package worker-child --no-dev --no-editable` into a fresh venv
   (`UV_PROJECT_ENVIRONMENT=<scratch>/venv`), where the lab is not importable. In that venv,
   `python -m worker_child.mock_llm <runDirectory>` must still exit 0 with a PDF and a workbook,
   which shows that nothing product-side imports a moved symbol. Build the run directory the way
   `worker_child/tests/conftest.py`'s `run_directory` fixture does, with `sample_input_csv()` as
   the input.
-- PR 2 (no CI job runs the lab against data, so do this by hand):
+- PR 1 (no CI job runs the lab against data, so do this by hand):
   1. Categorize `python/lab/test_data/step_2_output/validated_data.csv` (rename its
      `weight_lbs` to `weight`) through `categorize_spreadsheet_to_csvs`, with `KeywordLlmClient`
      and the cache path pointed at a missing file.
@@ -94,7 +78,7 @@ PR order: 1 and 3 can land any time. 2 lands after 1.
      folder.
   3. Repeat on `main`, using a detached `git worktree` on `PYTHONPATH`.
   4. Diff the client and QA workbooks sheet by sheet. Expect them to be identical.
-- PR 3: render the PDF with `mock_llm` on the branch and on `main`, and compare the driver pages
+- PR 2: render the PDF with `mock_llm` on the branch and on `main`, and compare the driver pages
   pixel for pixel.
 
 ## Risks
