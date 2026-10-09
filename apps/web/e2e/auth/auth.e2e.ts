@@ -110,7 +110,7 @@ test.describe('signed out', () => {
   // test's session comes from the fixtures' password sign-in. It signs an existing user *in*, not
   // up: GoTrue writes a new user to the stack's main database, never this run's clone, so the app
   // would find no `app_user` for them (`@gbd/browser-testing`'s `identity.ts`).
-  test('signing in with an emailed code lands a user with no organization on creating one', async ({
+  test('signing in with an emailed code, across a reload, lands a user with no organization on creating one', async ({
     page,
     users,
   }) => {
@@ -121,6 +121,12 @@ test.describe('signed out', () => {
 
     await page.getByLabel('Email address').fill(person.signInEmail);
     await page.getByRole('button', { name: 'Send code' }).click();
+    await expect(page.getByLabel('Sign-in code')).toBeVisible();
+
+    // As the hop to a mail app can cost a mobile tab: the code already sent must still have a field.
+    await page.reload();
+    await ensureHydrated(page);
+    await expect(page.getByText(`We sent a code to ${person.signInEmail}.`)).toBeVisible();
     await page.getByLabel('Sign-in code').fill(await waitForSignInCode(person.signInEmail));
 
     // They belong to no organization, so `/orgs` sends them on to make one.

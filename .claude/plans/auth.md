@@ -23,7 +23,8 @@ already has a display name — the placeholder and every test user — so nothin
 onboarding when its gate arrives (§ Where a test identity comes from). `/account` renames the
 signed-in user through the form onboarding will mount (§ The display-name form). In `supabase`
 mode a developer can sign in through Mailpit and out again today, from `/sign-in` or from any
-page that refused them, and an invitee can go from the email to `/invites`.
+page that refused them, and an invitee can go from the email to `/invites`. A code already sent
+survives a reload of the tab that asked for it (§ The sign-in form).
 
 Invites, memberships, CSP, and the site password itself are out of scope. Change-email and
 delete-account are `account-self-service.md`; CSP becomes an Open item in `ARCHITECTURE.md`.
@@ -52,6 +53,10 @@ Kysely does everything else. That matches `ARCHITECTURE.md` § Supabase exactly.
   B never receives a rotated refresh token and the failure is swallowed as a `warn`. Skip entirely.
 - cfa-web-app's `return { user, cookies: cookies.getAll() }` in the root layout: serializes the JWT
   into every page for no consumer.
+- cfa-app's `restoring` stage (`auth-flow.svelte`, CFA-224): since SSR cannot read
+  `sessionStorage`, it renders "Loading your sign-in…" in place of the form for every signed-out
+  visitor, to spare the rare one restoring a sent code a one-frame flash. For us it would also blank
+  every 401 page. `SignInFlow` renders the email step and swaps on mount instead.
 - cfa-app's regex nonce stamping, grep-based vitest project selection, `#lib/server` importing
   `hooks.server.ts`, and serial e2e as flake suppression.
 - Account-enumeration protection and `returnTo`: not applicable. Sign-up is open (anyone may create an
@@ -104,6 +109,12 @@ else to copy of ours — Supabase's own `message` is never rendered.
 re-synced. Only `/sign-in` passes one: its load reads the invite email's `?email=` (built by
 `signInUrl`, `packages/email/src/messages/links.ts`) through `_initialEmail`, which normalizes it
 with `emailAddress` and drops an invalid one silently. The 401 page has no address to offer.
+
+A sent code survives a reload: `#lib/auth/pending-code.ts` keeps the address in the tab's
+`sessionStorage` for GoTrue's default code lifetime, and `SignInFlow` swaps to the code step on
+mount, unless `initialEmail` names someone else. "Change email" and a verified code forget it. The
+email has no link, so without this a mobile tab evicted on the hop to the mail app strands a valid
+code, and asking again is rate-limited or spends it.
 
 `/sign-in`'s redirect fires on every request in `placeholder` mode, so only `supabase` ever shows
 the form; in the `apps/web` suite an `identity: 'anonymous'` test reaches it.
@@ -361,10 +372,6 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
 - **Open:** whether `placeholder` mode survives once production flips — kept for local dev, where it
   saves an OTP per fresh database, or deleted with the seed, `prepareRunIdentity` and the fixtures'
   `placeholder` branch. Decide when `email-provider.md` lands.
-- Pending-OTP persistence: `cfa-app` keeps `{ email, createdAt }` in `sessionStorage` for an hour
-  and restores the code step on remount (`auth-flow.svelte:66-129`), so a reload does not cost a
-  second code and a second cooldown. Needs a `restoring` state held through hydration, and changes
-  what `auth/sign-in.screenshot.ts` captures.
 - CSP and `getClaims()`: both **Open** in `ARCHITECTURE.md` § Auth.
 
 ## Verification
