@@ -112,9 +112,9 @@ with `emailAddress` and drops an invalid one silently. The 401 page has no addre
 
 A sent code survives a reload: `#lib/auth/pending-code.ts` keeps the address in the tab's
 `sessionStorage` for GoTrue's default code lifetime, and `SignInFlow` swaps to the code step on
-mount, unless `initialEmail` names someone else. "Change email" and a verified code forget it. The
-email has no link, so without this a mobile tab evicted on the hop to the mail app strands a valid
-code, and asking again is rate-limited or spends it.
+mount, unless `initialEmail` names someone else. A resent code restarts that lifetime; "Change
+email" and a verified code forget it. The email has no link, so without this a mobile tab evicted
+on the hop to the mail app strands a valid code, and asking again is rate-limited or spends it.
 
 `/sign-in`'s redirect fires on every request in `placeholder` mode, so only `supabase` ever shows
 the form; in the `apps/web` suite an `identity: 'anonymous'` test reaches it.

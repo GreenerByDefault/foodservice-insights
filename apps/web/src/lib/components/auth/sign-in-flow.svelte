@@ -61,5 +61,6 @@ onMount(() => {
       forgetPendingCode();
       step = 'email';
     }}
+    onCodeResent={() => rememberPendingCode(email)}
   />
 {/if}
