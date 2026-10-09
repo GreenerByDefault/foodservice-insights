@@ -7,7 +7,7 @@ product's categorization path: exact cache match, LLM name cleaning, cleaned-nam
 category match, then `merge_categorizations` with the 80% cut. `analyze()` composes it; the lab's
 `categorize_spreadsheet_to_csvs` composes it the same way and adds entree detection. The cache is
 the gitignored `data_files/previously_categorized_items.csv`; `categorization-cache.md` moves it
-into Postgres later and is sequenced after this plan. `report-typed-data.md` PR 3 waits on PR 2
+into Postgres later and is sequenced after this plan. `report-typed-data.md` PR 2 waits on PR 2
 here.
 
 This plan is the product side only: the cache the library reads and the pipeline that reads it.
@@ -131,7 +131,7 @@ PR order: 1 and 2 any time; 3 after 1, since both edit `categorize_with_llm`.
   and the product cleaning itself, with the two "cleaning leaves missing values" tests moving from
   `test_pipeline.py` to the lab's `test_spreadsheet.py`.
 - Tests: `test_pipeline.py` hands typed frames; a `str` date column and a NaN product are rejected.
-  `report-typed-data.md` PR 3 then moves `report/parsing.py` whole to the lab.
+  `report-typed-data.md` PR 2 then moves `report/parsing.py` whole to the lab.
 
 ## PR 3 — concurrent LLM calls
 

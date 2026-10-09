@@ -661,7 +661,7 @@ def _report(**overrides: Any) -> FoodReport:
     metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
     rows = pd.DataFrame(
         {
-            "date": ["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"],
+            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
             "product": ["Ground Beef", "Lentils", "Ground Beef", "Lentils"],
             "category": ["Beef and Buffalo Meat", "Legumes", "Beef and Buffalo Meat", "Legumes"],
             metric: [10.0, 20.0, 12.0, 18.0],
@@ -877,7 +877,7 @@ def test_format_co2e(kg: float, expected: str) -> None:
 def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
     rows = pd.DataFrame(
         {
-            "date": ["2024-01-15", "2024-02-15"],
+            "date": pd.to_datetime(["2024-01-15", "2024-02-15"]),
             "product": ["Lentils", "Chickpeas"],
             "category": ["Legumes", "Legumes"],
             "kilos_total": [20.0, 18.0],

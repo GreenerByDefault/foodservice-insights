@@ -4,7 +4,7 @@ from gbd_foodservice_insights.report.parsing import parse_and_validate_date_colu
 
 
 class TestParseAndValidateDateColumn:
-    def test_parses_mixed_date_formats_with_diagnostics(self):
+    def test_parses_mixed_date_formats(self):
         df = pd.DataFrame(
             {
                 "date": [
@@ -20,11 +20,7 @@ class TestParseAndValidateDateColumn:
             }
         )
 
-        parsed_df, diagnostics = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            return_diagnostics=True,
-        )
+        parsed_df = parse_and_validate_date_column(df, date_col="date")
 
         expected = pd.to_datetime(
             [
@@ -42,10 +38,6 @@ class TestParseAndValidateDateColumn:
         pd.testing.assert_series_equal(
             parsed_df["date"].reset_index(drop=True),
             pd.Series(expected, name="date"),
-        )
-        assert diagnostics["parse_status"].eq("parsed").all()
-        assert {"original_value", "parsed_date", "parse_status", "parser_used"}.issubset(
-            set(diagnostics.columns)
         )
 
     @pytest.mark.parametrize(
@@ -77,33 +69,20 @@ class TestParseAndValidateDateColumn:
         """
         df = pd.DataFrame({"date": ["04/2025", "2025-05", "Jun 2025"]})
 
-        parsed_df, diagnostics = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            return_diagnostics=True,
-        )
+        parsed_df = parse_and_validate_date_column(df, date_col="date")
 
         expected = pd.to_datetime(["2025-04-01", "2025-05-01", "2025-06-01"])
         pd.testing.assert_series_equal(
             parsed_df["date"].reset_index(drop=True),
             pd.Series(expected, name="date"),
         )
-        assert diagnostics["parse_status"].tolist() == ["parsed", "parsed", "parsed"]
 
-    def test_missing_dates_can_be_allowed_or_blocked(self):
-        df = pd.DataFrame({"date": ["2024-01-01", None]})
+    @pytest.mark.parametrize("value", [None, "n/a"])
+    def test_raises_on_missing_dates(self, value):
+        df = pd.DataFrame({"date": ["2024-01-01", value]})
 
         with pytest.raises(ValueError, match="missing"):
-            parse_and_validate_date_column(df, date_col="date", allow_missing=False)
-
-        parsed_df, diagnostics = parse_and_validate_date_column(
-            df,
-            date_col="date",
-            allow_missing=True,
-            return_diagnostics=True,
-        )
-        assert pd.isna(parsed_df["date"].iloc[1])
-        assert diagnostics["parse_status"].tolist() == ["parsed", "missing"]
+            parse_and_validate_date_column(df, date_col="date")
 
     def test_out_of_range_dates_raise(self):
         df = pd.DataFrame({"date": ["2099-01-01"]})

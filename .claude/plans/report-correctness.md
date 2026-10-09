@@ -27,11 +27,10 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - `check_diner_meal_reasonableness` files an `error` when two or more months' counts fall
   outside 0.5× to 2× the median (`error_if_flagged_months: 2`). Two summer months at 30% of
   term time abort a twelve-month upload over numbers the user typed and the web validated.
-- `build_food_report` re-runs `parse_and_validate_date_column` on dates `read_input_csv`
-  already parsed, so its `max_future_days=30` against the container's local date can reject a
-  date the web accepted against UTC. Only a non-UTC container (a developer's machine) can hit
-  it; the fix is typed inputs at both boundaries: `report-typed-data.md` PR 1 and
-  `categorization-pipeline.md` PR 2.
+- `categorize_unique_products` re-runs `parse_and_validate_date_column` on dates
+  `read_input_csv` already parsed, so its `max_future_days=30` against the container's local
+  date can reject a date the web accepted against UTC. Only a non-UTC container (a developer's
+  machine) can hit it; `categorization-pipeline.md` PR 2 fixes it by taking typed input.
 
 **Wrong numbers.**
 
@@ -183,6 +182,4 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `report-typed-data.md` PR 1 edits `build_food_report`'s stages like PR 2 here, and its PR 4
-  retypes most of `checks.py`, which PRs 1 and 3 here touch; whichever lands second rebases.
 - No PR here waits on GBD; the null-emission-factor restoration is decided in this plan.
