@@ -7,6 +7,7 @@ LLM categorization, and merge-back.
 """
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +15,7 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.categorization.cache import (
+    NO_MATCHES_FOUND,
     CategorizationCache,
     normalize_product_name,
 )
@@ -174,11 +176,15 @@ def categorize_with_llm(
     """Apply LLM-based categorization to products not matched historically.
 
     `products_df` needs 'category' and 'cleaned_item_names'. Returns a copy with 'category'
-    filled for uncategorized rows; any category that is not a GBD category becomes
-    "No Matches Found".
+    filled for uncategorized rows. An answer is matched to a GBD category ignoring case and
+    punctuation; any other answer becomes "No Matches Found", counted in one warning. Raises
+    ValueError if a category outside the GBD list was already in `products_df`.
     """
     products_df = products_df.copy()
     gbd_categories = get_GBD_categories()
+    canonical_by_normalized = {
+        normalize_product_name(name): name for name in [*gbd_categories, NO_MATCHES_FOUND]
+    }
 
     mask_needs_categorization = products_df["category"].isna()
     total_to_categorize = int(mask_needs_categorization.sum())
@@ -200,17 +206,37 @@ def categorize_with_llm(
         # to every row that shares it — duplicate cleaned names cost one call.
         unique_names = pd.unique(items_to_categorize.dropna())
         name_to_category: dict[Any, str] = {}
+        unrecognized: Counter[str] = Counter()
         for idx, name in enumerate(unique_names, 1):
-            name_to_category[name] = llm.match_product_to_category(str(name), gbd_categories)
+            answer = llm.match_product_to_category(str(name), gbd_categories)
+            category = canonical_by_normalized.get(normalize_product_name(answer))
+            if category is None:
+                unrecognized[answer] += 1
+                category = NO_MATCHES_FOUND
+            name_to_category[name] = category
             print_progress("Categorization", idx, len(unique_names))
+
+        # One bounded line, not one per item: the worker keeps only the last 8 KB of the child's
+        # stderr. It names no items, though an answer can echo one.
+        if unrecognized:
+            logger.warning(
+                "%d of %d LLM answers were not recognized; most common: %s",
+                unrecognized.total(),
+                len(unique_names),
+                unrecognized.most_common(5),
+            )
 
         products_df.loc[mask_needs_categorization, "category"] = items_to_categorize.map(
             name_to_category
         )
 
-    # Ensure category is string and set non-GBD results to "No Matches Found"
-    products_df["category"] = products_df["category"].fillna("No Matches Found").astype(str)
-    products_df.loc[~products_df["category"].isin(gbd_categories), "category"] = "No Matches Found"
+    products_df["category"] = products_df["category"].fillna(NO_MATCHES_FOUND).astype(str)
+
+    # `CategorizationCache.from_frame` drops cached rows with an unknown category, but the
+    # constructor does not, and a category with no emission factor would reach the report.
+    unknown = sorted(set(products_df["category"]) - set(canonical_by_normalized.values()))
+    if unknown:
+        raise ValueError(f"Categories outside the GBD list reached categorization: {unknown}")
 
     return products_df
 

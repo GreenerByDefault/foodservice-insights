@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from collections.abc import Sequence
 
 import numpy as np
@@ -182,7 +183,9 @@ def test_categorize_using_cleaned_name_history_leaves_products_unchanged(
 # ----------------------------------------------------------------------
 # LLM categorization
 # ----------------------------------------------------------------------
-def test_categorize_with_llm_dedupes_identical_cleaned_names():
+def test_categorize_with_llm_dedupes_identical_cleaned_names(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     products_df = pd.DataFrame(
         {
             "product": ["RAW_A", "RAW_B"],
@@ -203,6 +206,7 @@ def test_categorize_with_llm_dedupes_identical_cleaned_names():
             match_type=pd.Series(["llm"] * 2, dtype="object"),
         ),
     )
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 def test_categorize_with_llm_skips_the_llm_when_everything_is_already_categorized():
@@ -241,32 +245,62 @@ def test_categorize_with_llm_tolerates_a_missing_match_type_column():
     )
 
 
-def test_categorize_with_llm_discards_an_answer_outside_the_gbd_categories():
-    class AnswersOffList(KeywordLlmClient):
+def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    answers = {
+        "oat drink": "Unspecified non-dairy milk.",
+        "fried chicken": "Chicken",
+        "chicken wings": "Chicken",
+        "cheesecake": '"No Matches Found".',
+    }
+
+    class Scripted(KeywordLlmClient):
         def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
             super().match_product_to_category(item, categories)
-            return "Chicken"
+            return answers[item]
 
     products_df = pd.DataFrame(
         {
-            "product": ["RAW_A", "RAW_B"],
-            "category": [pd.NA, "Cheese"],
-            "cleaned_item_names": ["chicken breast", "cheese"],
-            "match_type": [pd.NA, "raw_product_history"],
+            "product": ["RAW_A", "RAW_B", "RAW_C", "RAW_D", "RAW_E"],
+            "category": [pd.NA, pd.NA, pd.NA, pd.NA, "Cheese"],
+            "cleaned_item_names": [*answers, "cheese"],
+            "match_type": [pd.NA, pd.NA, pd.NA, pd.NA, "raw_product_history"],
         }
     )
-    llm = AnswersOffList()
 
-    result = categorize_with_llm(products_df, llm)
+    result = categorize_with_llm(products_df, Scripted())
 
-    assert llm.calls == [("match", "chicken breast")]
     pd.testing.assert_frame_equal(
         result,
         products_df.assign(
-            category=["No Matches Found", "Cheese"],
-            match_type=["llm", "raw_product_history"],
+            category=[
+                "Unspecified non dairy milk",
+                "No Matches Found",
+                "No Matches Found",
+                "No Matches Found",
+                "Cheese",
+            ],
+            match_type=["llm"] * 4 + ["raw_product_history"],
         ),
     )
+    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING] == [
+        "2 of 4 LLM answers were not recognized; most common: [('Chicken', 2)]"
+    ]
+
+
+def test_categorize_with_llm_rejects_a_category_outside_the_gbd_list() -> None:
+    products_df = pd.DataFrame(
+        {
+            "product": ["RAW_A"],
+            "category": ["Mlik"],
+            "cleaned_item_names": ["milk"],
+            "match_type": ["raw_product_history"],
+        }
+    )
+
+    with pytest.raises(ValueError, match=r"\['Mlik'\]"):
+        categorize_with_llm(products_df, KeywordLlmClient())
 
 
 # ----------------------------------------------------------------------
