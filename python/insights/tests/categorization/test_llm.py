@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, cast
@@ -119,6 +120,26 @@ def test_match_prompt_lists_the_categories() -> None:
     client.match_product_to_category("cheddar", ["Cheese", "Butter"])
 
     assert "['Cheese', 'Butter']" in fake.requests[0]["messages"][0]["content"]
+
+
+@pytest.mark.parametrize(
+    ("template", "found"),
+    [
+        ("Pick one of the categories.", "[]"),
+        ("Pick one of {categories} as {format}.", "['categories', 'format']"),
+    ],
+)
+def test_match_prompt_rejects_a_template_without_exactly_the_categories_placeholder(
+    monkeypatch: pytest.MonkeyPatch, template: str, found: str
+) -> None:
+    monkeypatch.setattr(
+        "gbd_foodservice_insights.categorization.llm.load_prompt", lambda _name: template
+    )
+    client, fake, _ = _client("Cheese")
+
+    with pytest.raises(ValueError, match=rf"found {re.escape(found)}$"):
+        client.match_product_to_category("cheddar", ["Cheese"])
+    assert fake.requests == []
 
 
 def test_requests_go_out_with_sdk_retries_off() -> None:

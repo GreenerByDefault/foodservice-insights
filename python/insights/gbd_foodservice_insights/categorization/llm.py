@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import re
+import string
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -64,10 +65,14 @@ def _strip_pack_counts(item: str) -> str:
 
 def _categories_prompt(template_name: str, categories: Sequence[str]) -> str:
     template = load_prompt(template_name)
-    try:
-        return template.format(categories=list(categories))
-    except KeyError as err:
-        raise ValueError("Placeholder {categories} not found in prompt template") from err
+    # Checked up front because `format` ignores a missing placeholder, sending the model no list.
+    fields = {field for _, field, _, _ in string.Formatter().parse(template) if field is not None}
+    if fields != {"categories"}:
+        raise ValueError(
+            f"{template_name} must have exactly one placeholder, {{categories}}; "
+            f"found {sorted(fields)}"
+        )
+    return template.format(categories=list(categories))
 
 
 @dataclass(frozen=True)
