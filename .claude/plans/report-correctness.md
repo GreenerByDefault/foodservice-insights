@@ -13,8 +13,8 @@ output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff
 
 Other plans own neighbouring problems and are referenced where the sequencing matters:
 `categorization-cache.md` PR 5 (what reaches the report from the cache),
-`categorization-pipeline.md` (what the model may answer), `diagnostics-split.md` (splitting
-`checks.py`, typed inputs).
+`categorization-pipeline.md` (what the model may answer), `report-typed-data.md` (typed inputs
+at the report boundary, the `Finding` type).
 
 **Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
 because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
@@ -30,7 +30,8 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - `build_food_report` re-runs `parse_and_validate_date_column` on dates `read_input_csv`
   already parsed, so its `max_future_days=30` against the container's local date can reject a
   date the web accepted against UTC. Only a non-UTC container (a developer's machine) can hit
-  it; the fix is typed inputs at the report boundary, which `diagnostics-split.md` owns.
+  it; the fix is typed inputs at both boundaries: `report-typed-data.md` PR 1 and
+  `categorization-pipeline.md` PR 2.
 
 **Wrong numbers.**
 
@@ -165,7 +166,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   size names `MAX_DATA_ROWS`.
 - Tests: pair results unchanged on a fixture with near pairs; timings at 30k rows / 2k products
   and at the cap in the PR body.
-- Lands after `diagnostics-split.md` PR 1 splits `diagnostics.py`.
 - Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
 
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
@@ -183,6 +183,6 @@ handed and what the sheets contain, not that files exist.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
   positive. Land it first.
-- `diagnostics-split.md` PR 1 moves `diagnostics.py`; PRs 1 and 3 here touch it, and whichever
-  lands second rebases.
+- `report-typed-data.md` PR 1 edits `build_food_report`'s stages like PR 2 here, and its PR 4
+  retypes most of `checks.py`, which PRs 1 and 3 here touch; whichever lands second rebases.
 - No PR here waits on GBD; the null-emission-factor restoration is decided in this plan.
