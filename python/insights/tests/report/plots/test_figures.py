@@ -42,7 +42,7 @@ def test_plot_category_drivers_pages_puts_four_categories_on_each_page_in_order(
     category_count: int, expected_pages: list[list[str]]
 ):
     categories = [f"category {n}" for n in range(1, category_count + 1)]
-    drivers = pd.DataFrame({"category": categories, "product": "apple", "percentage": "100.0%"})
+    drivers = pd.DataFrame({"category": categories, "product": "apple", "percentage": 100.0})
 
     pages = figures.plot_category_drivers_pages(drivers, categories)
 

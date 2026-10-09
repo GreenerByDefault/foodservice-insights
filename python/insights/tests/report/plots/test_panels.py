@@ -275,7 +275,7 @@ CATEGORY_DRIVERS = pd.DataFrame(
     {
         "category": ["fruit", "fruit", "juice"],
         "product": ["apple", "banana", "apple juice"],
-        "percentage": ["60.0%", "40.0%", "100.0%"],
+        "percentage": [60.0, 40.0, 100.0],
     }
 )
 

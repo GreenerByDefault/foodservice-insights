@@ -6,10 +6,8 @@ from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
     TITLE_FONT,
     close_new_figures_on_error,
-    convert_percentage_to_float,
     create_horizontal_percentage_barplot,
     format_month_labels,
-    format_percentage_column,
     set_suptitle_font,
     set_title_font,
     set_ylim_with_padding,
@@ -83,8 +81,8 @@ def test_wrap_labels_ends_in_an_ellipsis_past_max_lines():
 
 def test_horizontal_percentage_barplot_keeps_labels_that_truncate_alike_as_separate_bars():
     prefix = "Chicken Breast Boneless Skinless Raw Individually Quick Frozen 4 Ounce Portion"
-    data = convert_percentage_to_float(
-        pd.DataFrame({"product": [f"{prefix} Case A", f"{prefix} Case B"], "percentage": [70, 30]})
+    data = pd.DataFrame(
+        {"product": [f"{prefix} Case A", f"{prefix} Case B"], "percentage": [70, 30]}
     )
     _, ax = plt.subplots()
 
@@ -94,24 +92,6 @@ def test_horizontal_percentage_barplot_keeps_labels_that_truncate_alike_as_separ
     assert [label.get_text() for label in ax.get_yticklabels()] == [
         "Chicken Breast Boneless\nSkinless Raw Individually\nQuick Frozen 4 Ounce Portion …"
     ] * 2
-
-
-def test_format_percentage_column_rounds_to_one_decimal_without_mutating_input():
-    df = pd.DataFrame({"percentage": [10.0, 10.456]})
-
-    result = format_percentage_column(df)
-
-    assert result["percentage"].tolist() == ["10.0%", "10.5%"]
-    assert df["percentage"].tolist() == [10.0, 10.456]
-
-
-@pytest.mark.parametrize(
-    "percentages", [["10.5%", "20.0%"], [10.5, 20.0]], ids=["strings", "numbers"]
-)
-def test_convert_percentage_to_float(percentages):
-    result = convert_percentage_to_float(pd.DataFrame({"percentage": percentages}))
-
-    assert result["percentage_float"].tolist() == [10.5, 20.0]
 
 
 def test_standardize_title_case_keeps_possessive_s_lowercase():

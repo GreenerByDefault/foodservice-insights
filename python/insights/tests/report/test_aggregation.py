@@ -89,7 +89,7 @@ def test_identify_category_drivers_ranks_products_within_each_category(fruit_row
     assert "percentage" in drivers_df.columns
     assert len(drivers_df) == 1
     assert drivers_df["product"].iloc[0] == "apple"
-    assert drivers_df["percentage"].iloc[0] == "55.6%"
+    assert drivers_df["percentage"].iloc[0] == 55.6
 
 
 def test_identify_overall_drivers_ranks_products_across_categories(fruit_rows):
@@ -97,7 +97,7 @@ def test_identify_overall_drivers_ranks_products_across_categories(fruit_rows):
     assert "percentage" in drivers_df.columns
     assert len(drivers_df) == 1
     assert drivers_df["product"].iloc[0] == "apple"
-    assert drivers_df["percentage"].iloc[0] == "55.6%"
+    assert drivers_df["percentage"].iloc[0] == 55.6
 
 
 def test_category_highest_vs_lowest_months_reports_the_peak_to_trough_ratio():

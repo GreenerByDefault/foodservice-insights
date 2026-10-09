@@ -176,15 +176,6 @@ def wrap_labels(labels: list[str], max_width: int = 30, max_lines: int = 3) -> l
     ]
 
 
-def format_percentage_column(df: pd.DataFrame, column: str = "percentage") -> pd.DataFrame:
-    """
-    Format a percentage column by adding '%' suffix.
-    """
-    df = df.copy()
-    df[column] = df[column].round(1).astype(str) + "%"
-    return df
-
-
 # ----------------------------------------------------------------------
 # Specialized Plotting Helpers
 # ----------------------------------------------------------------------
@@ -196,23 +187,6 @@ def standardize_title_case(text: str) -> str:
     Farmer'S oat milk
     """
     return text.title().replace("'S", "'s")
-
-
-def convert_percentage_to_float(
-    df: pd.DataFrame, percentage_col: str = "percentage"
-) -> pd.DataFrame:
-    """Convert a percentage column to float, handling both string and numeric types.
-
-    If the column contains strings with '%' suffix (e.g., "25.5%"), removes the '%'
-    and converts to float. If already numeric, creates a copy as float. The result goes in a
-    new "{percentage_col}_float" column.
-    """
-    df = df.copy()
-    if pd.api.types.is_string_dtype(df[percentage_col]):
-        df[f"{percentage_col}_float"] = df[percentage_col].str.rstrip("%").astype(float)
-    else:
-        df[f"{percentage_col}_float"] = df[percentage_col].astype(float)
-    return df
 
 
 def create_horizontal_percentage_barplot(
@@ -229,8 +203,7 @@ def create_horizontal_percentage_barplot(
     This function creates a horizontal bar plot where the x-axis represents percentages
     (0-100) and optionally adds percentage text labels at the end of each bar.
 
-    `data` must have been processed with convert_percentage_to_float() to have
-    "{percentage_col}_float". `palette` defaults to GBD_colors.
+    `palette` defaults to GBD_colors.
     """
     if palette is None:
         palette = GBD_colors
@@ -238,7 +211,7 @@ def create_horizontal_percentage_barplot(
     sns.barplot(
         data=data,
         y=y_col,
-        x=f"{percentage_col}_float",
+        x=percentage_col,
         hue=y_col,
         palette=palette,
         legend=False,
@@ -253,7 +226,7 @@ def create_horizontal_percentage_barplot(
     if add_percentage_labels:
         bar_rectangles = [patch for patch in ax.patches if isinstance(patch, Rectangle)]
         for i, patch in enumerate(bar_rectangles):
-            pct = data.iloc[i][f"{percentage_col}_float"]
+            pct = data.iloc[i][percentage_col]
             x = patch.get_width()
             y = patch.get_y() + patch.get_height() / 2
             ax.text(x + 1, y, f"{pct:.1f}%", va="center", fontsize=10, color="black")
