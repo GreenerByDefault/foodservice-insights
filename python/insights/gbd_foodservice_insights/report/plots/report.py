@@ -22,7 +22,7 @@ from gbd_foodservice_insights.report.plots.figures import (
     plot_plant_breakdown_overview,
 )
 from gbd_foodservice_insights.report.plots.panels import filter_monthly_categories_by_type
-from gbd_foodservice_insights.report.quality import make_finding
+from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import metric_display_label
 
 
@@ -61,7 +61,7 @@ def _safe_plot(
     *,
     caption: str,
     plot_fn: Callable[..., Figure],
-    quality_findings: list[dict[str, Any]],
+    quality_findings: list[Finding],
     warning_message: str,
     warning_stage: str = "plots",
     input_checks: list[tuple[pd.DataFrame, str]] | None = None,
@@ -141,7 +141,7 @@ def generate_all_report_plots(
     emissions_summary: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
     serving: bool = False,
-    quality_findings: list[dict[str, Any]] | None = None,
+    quality_findings: list[Finding] | None = None,
     plant_animal_split: dict[str, Any] | None = None,
     plant_protein_share: dict[str, Any] | None = None,
     diner_or_meal: str = "diner",

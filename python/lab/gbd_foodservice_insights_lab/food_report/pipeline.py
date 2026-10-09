@@ -18,12 +18,12 @@ from typing import Any
 import pandas as pd
 from gbd_foodservice_insights.report import checks, excel, pdf
 from gbd_foodservice_insights.report.food_report import (
-    Finding,
     FoodReport,
     build_food_report,
     build_report_charts,
 )
 from gbd_foodservice_insights.report.quality import (
+    Finding,
     QualityCheckError,
     findings_to_frame,
     missingness_summary_frame,

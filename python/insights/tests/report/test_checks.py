@@ -25,6 +25,8 @@ from gbd_foodservice_insights.report.checks import (
     find_close_product_pairs,
     run_all_diagnostics,
 )
+from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
 
 # ----------------------------------------------------------------------
 # Product names and duplicate rows
@@ -750,11 +752,7 @@ def test_check_zero_category_month_combos_names_missing_months_in_plain_english(
 
 def test_check_diner_meal_reasonableness_respects_boundary_ratios():
     findings, export_df = check_diner_meal_reasonableness(
-        {
-            "2025-01": 50,
-            "2025-02": 100,
-            "2025-03": 200,
-        }
+        normalize_diner_meal_mapping({"2025-01": 50, "2025-02": 100, "2025-03": 200})
     )
 
     assert findings[0]["status"] == "success"
@@ -765,11 +763,7 @@ def test_check_diner_meal_reasonableness_respects_boundary_ratios():
 
 def test_check_diner_meal_reasonableness_flags_outside_boundary_ratios_and_escalates():
     findings, export_df = check_diner_meal_reasonableness(
-        {
-            "2025-01": 49,
-            "2025-02": 100,
-            "2025-03": 201,
-        }
+        normalize_diner_meal_mapping({"2025-01": 49, "2025-02": 100, "2025-03": 201})
     )
 
     assert findings[0]["status"] == "error"
@@ -928,7 +922,7 @@ def _category_discontinuity_with_a_one_month_gap() -> dict[str, object]:
 
 def _diner_meal_counts_about_20_percent_off_the_median() -> dict[str, object]:
     findings, export_df = check_diner_meal_reasonableness(
-        {"2025-01": 79, "2025-02": 100, "2025-03": 121}
+        normalize_diner_meal_mapping({"2025-01": 79, "2025-02": 100, "2025-03": 121})
     )
     return {
         "status": findings[0]["status"],
@@ -975,7 +969,7 @@ def _names_two_edits_apart() -> int:
     return len(find_close_product_pairs(pd.DataFrame({"product": ["abcd", "abef"]}), "product"))
 
 
-def _first_month_at_40_percent_of_the_median() -> list[dict[str, object]]:
+def _first_month_at_40_percent_of_the_median() -> list[Finding]:
     df = pd.DataFrame({"month_year": ["2025-01"] * 4 + ["2025-02"] * 10 + ["2025-03"] * 10})
     return check_date_distribution(df)
 

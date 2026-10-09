@@ -1,6 +1,7 @@
 """Data quality checks and anomaly detection for food reports."""
 
 import logging
+from collections.abc import Mapping
 from datetime import timedelta
 from itertools import combinations, pairwise
 from typing import Any
@@ -10,8 +11,12 @@ import pandas as pd
 from Levenshtein import distance
 
 from gbd_foodservice_insights.categories import get_GBD_categories
-from gbd_foodservice_insights.report.quality import make_finding
-from gbd_foodservice_insights.report.schema import ReportMode, required_columns_for_mode
+from gbd_foodservice_insights.report.quality import Finding, make_finding
+from gbd_foodservice_insights.report.schema import (
+    DiagnosticStatus,
+    ReportMode,
+    required_columns_for_mode,
+)
 from gbd_foodservice_insights.report.thresholds import (
     get_diagnostic_threshold,
     resolve_diagnostic_threshold,
@@ -23,7 +28,7 @@ logger = logging.getLogger(__name__)
 MISSING_TEXT_TOKENS = {"", "na", "n/a", "nan", "none", "null", "nat", "missing"}
 
 
-def _duplicate_row_status(duplicate_share: float) -> str:
+def _duplicate_row_status(duplicate_share: float) -> DiagnosticStatus:
     """Map duplicate-row share to a finding severity for row-level QA checks."""
     error_threshold = get_diagnostic_threshold(
         "exact_duplicate_rows",
@@ -86,7 +91,7 @@ def detect_exact_duplicate_rows(
     metric_total: str,
     *,
     sample_limit: int = 5,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Flag exact duplicate line items before duplicated rows inflate report totals.
 
     This diagnostic exists because duplicated transactions usually come from an
@@ -254,7 +259,7 @@ def detect_unusual_sales(
     zero_mad_ratio_threshold: float | None = None,
     small_category_ratio_threshold: float | None = None,
     sample_limit: int = 5,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Flag unusually large line items before bad rows distort totals and trends.
 
     This exists to catch row-level values that are implausibly high for their
@@ -509,7 +514,7 @@ def check_per_product_weight_bounds(
     low: float | None = None,
     high: float | None = None,
     sample_limit: int = 20,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Flag line items with weights outside the hard bounds used for unit-error QA.
 
     This exists to catch near-certain unit mistakes that are easy to explain and
@@ -752,7 +757,7 @@ def detect_near_duplicate_product_names(
     product_column: str = "product",
     pdf_extracted: bool | None = None,
     sample_limit: int = 5,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Surface materially important near-duplicate product names before totals fragment.
 
     This exists because OCR and small typing mistakes can split one product into
@@ -893,7 +898,7 @@ def detect_month_over_month_total_volatility(
     month_col: str = "month_year",
     date_col: str = "date",
     sample_limit: int = 6,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Flag sudden monthly total swings before users trust a misleading trend.
 
     This exists because large month-to-month changes are often caused by
@@ -1055,7 +1060,7 @@ def detect_numeric_coercion_loss(
     numeric_columns: list[str],
     *,
     sample_limit: int = 10,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Catch unreadable numeric tokens before they silently drop out of totals.
 
     This exists because text like "ten kg" or "1..2" can turn into missing
@@ -1176,7 +1181,7 @@ def check_aggregation_reconciliation(
     metric_col: str,
     *,
     rel_error_threshold: float | None = None,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Reconcile totals across raw rows and both report aggregation grains.
 
     This exists to catch filtering, grouping, or join mistakes that let summary
@@ -1293,7 +1298,7 @@ def _check_top_share_concentration(
     threshold_key: str,
     subject_label: str,
     threshold_override: float | None = None,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Check whether one grouped value dominates the report total.
 
     This exists because highly concentrated totals can mean the dataset is
@@ -1416,7 +1421,7 @@ def check_single_product_dominance(
     *,
     product_col: str = "product",
     threshold_pct: float | None = None,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Flag a single product dominating totals before the report is over-read.
 
     This exists because one unusually dominant product can make overall report
@@ -1438,7 +1443,7 @@ def check_category_concentration(
     metric_col: str,
     *,
     category_col: str = "category",
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Flag heavily concentrated category mixes before users over-read the summary.
 
     This exists because one category dominating the report can be a real pattern,
@@ -1461,7 +1466,7 @@ def check_missing_weeks_within_month(
     date_col: str = "date",
     max_gap_days: float | None = None,
     sample_limit: int = 6,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Flag long within-month stretches with no transactions in day-level data.
 
     This exists to catch likely missing extracts in datasets that normally
@@ -1619,13 +1624,13 @@ def _format_category_month_missing_sample(category: Any, month: Any) -> str:
 
 
 def check_diner_meal_reasonableness(
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
     low: float | None = None,
     high: float | None = None,
     error_if_flagged_months: int | None = None,
     sample_limit: int = 6,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Flag unusual denominator months before intensity KPIs become misleading.
 
     This exists because diner or meal counts are denominator data for
@@ -1834,7 +1839,7 @@ def check_missing_internal_months(
     *,
     month_col: str = "month_year",
     date_col: str = "date",
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Flag fully missing months before short report windows are misread as complete.
 
     This exists because a missing internal month can distort averages, trends,
@@ -1938,7 +1943,7 @@ def detect_category_discontinuity(
     month_col: str = "month_year",
     date_col: str = "date",
     sample_limit: int = 6,
-) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+) -> tuple[list[Finding], pd.DataFrame]:
     """Flag categories that disappear mid-period and then return.
 
     This exists because a category that is present, then missing for an internal
@@ -2186,7 +2191,7 @@ def check_required_columns(df: pd.DataFrame, serving: bool = False) -> bool:
 
 def ensure_date_alignment(
     df: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
 ) -> dict[str, list[pd.Period]]:
     """Return month alignment diff between data and diner-meal mapping."""
     if "month_year" not in df.columns:
@@ -2197,9 +2202,9 @@ def ensure_date_alignment(
 def check_zero_category_month_combos(
     monthly_data: pd.DataFrame,
     metric_col: str,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Return structured findings for missing/zero category x month combos."""
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     if "month_year" not in monthly_data.columns or "category" not in monthly_data.columns:
         return findings
     if metric_col not in monthly_data.columns:
@@ -2249,9 +2254,9 @@ def check_zero_category_month_combos(
     return findings
 
 
-def check_date_distribution(df: pd.DataFrame) -> list[dict[str, Any]]:
+def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     """Check if first/last months look partial based on row count."""
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
 
     if "month_year" not in df.columns:
         return findings
@@ -2290,9 +2295,9 @@ def check_date_distribution(df: pd.DataFrame) -> list[dict[str, Any]]:
     return findings
 
 
-def check_negative_values(df: pd.DataFrame, metric_col: str) -> list[dict[str, Any]]:
+def check_negative_values(df: pd.DataFrame, metric_col: str) -> list[Finding]:
     """Return finding if negative values are present."""
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     if metric_col not in df.columns:
         return findings
 
@@ -2324,18 +2329,18 @@ def check_negative_values(df: pd.DataFrame, metric_col: str) -> list[dict[str, A
 
 def run_all_diagnostics(
     df: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     serving: bool = False,
     monthly_product_data: pd.DataFrame | None = None,
     monthly_category_data: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
     pdf_extracted: bool | None = None,
-) -> list[dict[str, Any]]:
+) -> list[Finding]:
     """Run report diagnostics and return structured findings only."""
     if serving and metric_total == "kilos_total" and "servings total" in df.columns:
         metric_total = "servings total"
 
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     numeric_coercion_findings, _ = detect_numeric_coercion_loss(df, [metric_total])
     findings.extend(numeric_coercion_findings)
 

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.plots import panels, report
+from gbd_foodservice_insights.report.quality import Finding
 from matplotlib.figure import Figure
 
 DINER_MEALS = {"2023-01": 100, "2023-02": 100}
@@ -57,7 +58,7 @@ def test_remove_duplicate_xlabels_clears_only_an_x_label_that_repeats_the_title(
 
 def test_safe_plot_marks_placeholder_figures_with_data_warning():
     """A fallback chart should still show a visible warning label in the PDF itself."""
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
 
     caption, fig = report._safe_plot(
         caption="Carbon Emissions by Category",
@@ -130,7 +131,7 @@ def test_safe_plot_closes_the_figure_a_failed_plot_opened():
 def test_safe_plot_keeps_the_chart_but_marks_it_when_its_input_is_incomplete(
     column: str, expected_finding: dict[str, Any]
 ):
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     chart, _ax = plt.subplots()
 
     caption, fig = report._safe_plot(
@@ -229,7 +230,7 @@ def test_generate_all_report_plots_raises_for_untyped_categories():
 def test_generate_all_report_plots_marks_driver_charts_whose_input_is_incomplete(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
 
     plots_output = report.generate_all_report_plots(
         aggregated_data=_aggregated_data(
@@ -271,7 +272,7 @@ def test_generate_all_report_plots_substitutes_one_placeholder_when_driver_chart
         raise ValueError("boom")
 
     monkeypatch.setattr(report, "plot_category_drivers_pages", plot_category_drivers_pages)
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     before = set(plt.get_fignums())
 
     plots_output = report.generate_all_report_plots(

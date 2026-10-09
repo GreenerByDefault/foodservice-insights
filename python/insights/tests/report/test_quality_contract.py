@@ -5,10 +5,13 @@ import pytest
 from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.report.aggregation import aggregate_data
 from gbd_foodservice_insights.report.quality import (
+    Finding,
     check_required_columns,
     check_required_non_null,
+    make_finding,
 )
 from gbd_foodservice_insights.report.schema import (
+    DiagnosticStatus,
     quality_status_from_findings,
 )
 from gbd_foodservice_insights.report.utils import (
@@ -186,11 +189,15 @@ def test_monthly_totals_preserve_all_missing_month_as_missing():
     assert pd.isna(totals.iloc[0])
 
 
+def _finding(status: DiagnosticStatus) -> Finding:
+    return make_finding(stage="test", category="test", status=status, message="")
+
+
 def test_quality_status_rolls_up_the_worst_finding():
-    assert quality_status_from_findings([{"status": "success"}]) == "pass"
-    assert quality_status_from_findings([{"status": "success"}, {"status": "info"}]) == "pass"
-    assert quality_status_from_findings([{"status": "warning"}]) == "warning"
-    assert quality_status_from_findings([{"status": "error"}]) == "invalid"
+    assert quality_status_from_findings([_finding("success")]) == "pass"
+    assert quality_status_from_findings([_finding("success"), _finding("info")]) == "pass"
+    assert quality_status_from_findings([_finding("warning")]) == "warning"
+    assert quality_status_from_findings([_finding("error")]) == "invalid"
 
 
 def test_check_required_non_null_handles_context_column_as_required_column():

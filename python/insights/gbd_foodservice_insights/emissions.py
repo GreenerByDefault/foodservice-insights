@@ -1,13 +1,13 @@
 """Emission factor lookup and carbon metric calculations."""
 
 from functools import cache
-from typing import Any, Literal, overload
+from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
 
 from gbd_foodservice_insights.categories import get_gbd_categories_metadata
-from gbd_foodservice_insights.report.quality import make_finding
+from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import validate_region
 
 
@@ -61,7 +61,7 @@ def calculate_emissions(
     region: str = "us",
     *,
     return_findings: Literal[True],
-) -> tuple[pd.DataFrame, list[dict[str, Any]]]: ...
+) -> tuple[pd.DataFrame, list[Finding]]: ...
 
 
 @overload
@@ -72,7 +72,7 @@ def calculate_emissions(
     region: str = "us",
     *,
     return_findings: bool,
-) -> pd.DataFrame | tuple[pd.DataFrame, list[dict[str, Any]]]: ...
+) -> pd.DataFrame | tuple[pd.DataFrame, list[Finding]]: ...
 
 
 def calculate_emissions(
@@ -82,7 +82,7 @@ def calculate_emissions(
     region: str = "us",
     *,
     return_findings: bool = False,
-) -> pd.DataFrame | tuple[pd.DataFrame, list[dict[str, Any]]]:
+) -> pd.DataFrame | tuple[pd.DataFrame, list[Finding]]:
     """Multiply each row's weight by category emission factor.
 
     Returns DataFrame with columns:
@@ -109,7 +109,7 @@ def calculate_emissions(
 
     out["emissions_kg_co2e"] = out[weight_col] * out["emission_factor_used"]
 
-    findings: list[dict[str, Any]] = []
+    findings: list[Finding] = []
     unmatched_series = out.loc[out["emission_factor_used"].isna(), category_col]
     if len(unmatched_series) > 0:
         unmatched = sorted(str(value) for value in unmatched_series.dropna().unique())
