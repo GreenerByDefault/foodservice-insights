@@ -8,7 +8,7 @@ import { waitForEmail } from '@gbd/email/testing';
 import { expect } from '@playwright/test';
 import { organizationHref, organizationMembersHref } from '../../src/lib/hrefs.ts';
 import { test } from '../fixtures/test.ts';
-import { waitForSignInCode } from '../lib/sign-in-code.ts';
+import { waitForSignInCode } from '../lib/emailed-code.ts';
 
 test('an invitee is forwarded to /invites, accepts, and lands in the organization', async ({
   organizations,

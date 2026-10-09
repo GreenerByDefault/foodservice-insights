@@ -308,9 +308,12 @@ provider, and `EMAIL_TRANSPORT` already selects between implementations. Switchi
 4. Point Supabase Auth at the provider's SMTP credentials, and raise Supabase's own auth email
    rate limit, which defaults to 30/hour once custom SMTP is configured. Set both the "Magic link"
    and "Confirm signup" templates to `supabase-dev/supabase/templates/sign-in-code.html` — GoTrue's
-   defaults send a link, and the sign-in form needs the code. Check that "Confirm email" is still
-   on (`auth.md` § Settled decisions) and that the Data API is disabled: nothing uses it, and with
-   no RLS it could expose the tables to the publishable key the browser now holds.
+   defaults send a link, and the sign-in form needs the code. Likewise set "Change email address" to
+   `email-change.html` beside it, and turn "Secure email change" off, as both local `config.toml`s
+   do (`double_confirm_changes = false`): `/account` asks for one code, from the new address.
+   Check that "Confirm email" is still on (`auth.md` § Settled decisions) and that the Data API is
+   disabled: nothing uses it, and with no RLS it could expose the tables to the publishable key the
+   browser now holds.
 5. Flip production to `PUBLIC_AUTH_MODE=supabase`, and in the same change flip `tests/e2e`'s run
    with it — `webContainerCommand` then also needs `PUBLIC_SUPABASE_URL` through `forContainer`,
    and the publishable key. The placeholder's organization and reports belong to an address nobody

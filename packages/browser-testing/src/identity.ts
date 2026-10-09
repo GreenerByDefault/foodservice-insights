@@ -140,6 +140,14 @@ export async function deleteGoTrueUser(id: UserId): Promise<void> {
   if (error) console.warn(`identity: could not delete GoTrue user ${id}`, error);
 }
 
+/** GoTrue's address for a user, which a change of email writes and the run database never sees
+ * (see the file header). */
+export async function readGoTrueEmail(id: UserId): Promise<string | undefined> {
+  const { data, error } = await adminClient().auth.admin.getUserById(id);
+  if (error) throw error;
+  return data.user.email;
+}
+
 /** The address the pinned identity signs in with: unique to the run, so nothing is shared across
  * runs or worktrees, and derived from `TEST_RUN_ID` so the fixtures can find it again. */
 function pinnedSignInEmail(runName: string): string {

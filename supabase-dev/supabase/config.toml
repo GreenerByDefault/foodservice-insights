@@ -30,10 +30,19 @@ port = 55321
 enabled = true
 site_url = "http://localhost:5173"
 
-# GoTrue's built-in template sends a link; the sign-in form needs a code instead.
+# One code, to the new address only. Two codes in two inboxes is the ceremony OTP was chosen to
+# avoid, and whoever asks for the change has just signed in.
+[auth.email]
+double_confirm_changes = false
+
+# GoTrue's built-in templates send a link; the sign-in and change-email forms need a code instead.
 [auth.email.template.magic_link]
 subject = "Your Foodservice Insights sign-in code"
 content_path = "./supabase/templates/sign-in-code.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new Foodservice Insights email"
+content_path = "./supabase/templates/email-change.html"
 
 # Mailpit: catches outbound email so nothing escapes locally.
 #

@@ -33,6 +33,28 @@ test('the account page', async ({ page, showEmailAs }) => {
   await expectScreenshots(page, 'account.png');
 });
 
+test('changing the email, entering the code', async ({ page, showEmailAs, user }) => {
+  await showEmailAs('sam.cook+email@example.test');
+  // As in `sign-in.screenshot.ts`: a paused clock holds the resend countdown still, and GoTrue is
+  // answered by `page.route`, since the containerized browser cannot reach it.
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1000);
+  await page.route('**/auth/v1/user', (route) =>
+    route.fulfill({ status: 200, json: { id: user.id, new_email: 'alex.baker@example.test' } }),
+  );
+
+  await page.goto('/account');
+  await ensureHydrated(page);
+
+  await page.getByLabel('Email').fill('alex.baker@example.test');
+  await page.getByLabel('Email').press('Enter');
+  await expect(page.getByLabel('Confirmation code')).toBeFocused();
+  // Fires bits-ui's password-manager badge check, as `sign-in.screenshot.ts`'s `sendCode` explains.
+  await page.clock.runFor(1);
+
+  await expectScreenshots(page, 'account-email-code.png');
+});
+
 test('saving a name, failed', async ({ page, showEmailAs }) => {
   await showEmailAs('sam.cook+name@example.test');
   await page.route('**/api/account', (route) =>

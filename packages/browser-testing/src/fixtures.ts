@@ -23,6 +23,8 @@ import {
   type TestIdentity,
 } from './identity.ts';
 
+export { GOTRUE_TEST_DOMAIN, readGoTrueEmail } from './identity.ts';
+
 export type TestOrganization = {
   id: OrganizationId;
   slug: string;

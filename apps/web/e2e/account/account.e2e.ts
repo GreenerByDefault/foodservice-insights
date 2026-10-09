@@ -1,8 +1,10 @@
 import { ensureHydrated } from '@gbd/browser-testing';
+import { GOTRUE_TEST_DOMAIN, readGoTrueEmail } from '@gbd/browser-testing/fixtures';
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
 import { waitForEmail } from '@gbd/email/testing';
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/test.ts';
+import { waitForEmailChangeCode } from '../lib/emailed-code.ts';
 
 test('renaming yourself on /account changes the name the account menu shows', async ({ page }) => {
   await page.goto('/account');
@@ -19,6 +21,24 @@ test('renaming yourself on /account changes the name the account menu shows', as
   // And it was stored, not just rendered.
   await page.reload();
   await expect(page.getByLabel('Your name')).toHaveValue('Alex Baker');
+});
+
+// Only as far as GoTrue: it writes the change to the stack's main database, and the app under test
+// reads the run's clone, so here `/account` and the menu keep the old address. The component test
+// covers the refresh that shows the new one.
+test('changing your email confirms the new address with a code', async ({ page, user }) => {
+  // At GoTrue's test domain, which keeps the user inside the stale-user sweep's reach.
+  const newEmail = `${crypto.randomUUID()}@${GOTRUE_TEST_DOMAIN}`;
+
+  await page.goto('/account');
+  await ensureHydrated(page);
+
+  await page.getByLabel('Email').fill(newEmail);
+  await page.getByRole('button', { name: 'Change email' }).click();
+  await page.getByLabel('Confirmation code').fill(await waitForEmailChangeCode(newEmail));
+
+  await expect(page.getByText(`Changed your email to ${newEmail}`)).toBeVisible();
+  expect(await readGoTrueEmail(user.id)).toBe(newEmail);
 });
 
 test.describe('deleting your account', () => {
