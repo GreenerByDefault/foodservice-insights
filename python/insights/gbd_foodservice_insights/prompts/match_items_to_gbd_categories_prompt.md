@@ -25,7 +25,7 @@ Examples of Yogurt include parfait
 
 - If something contains a meat term alongside "meatless" or "vegan" or "plant-based" then classify it as "Plant-based Meats". For example "pork sub meatless" is not "Pork (pig meat)", it is "Plant-based Meats". However "apple crumble (vegan)" would not be "Plant-based Meats" because "apple crumble" is not a meat.
 
-- non-dairy milks that are not specifically named should be classified as "Oat Milk"
+- non-dairy milks that are not specifically named should be classified as "Unspecified non dairy milk"
 
 - "Liquid Eggs" only covers where eggs are used as an ingredient.
 - Scrambled eggs should be classified as "Shelled Eggs".
