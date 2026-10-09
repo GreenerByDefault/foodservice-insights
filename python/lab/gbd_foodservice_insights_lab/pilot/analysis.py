@@ -817,7 +817,7 @@ def calculate_monthly_plant_animal_split(monthly_category_data: pd.DataFrame) ->
     monthly_wide["animal_kilos"] = monthly_wide["animal_kilos"].round(0).astype(int)
     monthly_wide["total_kilos"] = monthly_wide["total_kilos"].round(0).astype(int)
 
-    if pd.api.types.is_period_dtype(monthly_wide["month_year"]):
+    if isinstance(monthly_wide["month_year"].dtype, pd.PeriodDtype):
         monthly_wide["month_year"] = monthly_wide["month_year"].dt.strftime("%b-%Y")
     else:
         monthly_wide["month_year"] = monthly_wide["month_year"].apply(
@@ -900,7 +900,7 @@ def calculate_monthly_milk_split(
 
         display_df = monthly_wide.copy()
 
-        if pd.api.types.is_period_dtype(display_df["month_year"]):
+        if isinstance(display_df["month_year"].dtype, pd.PeriodDtype):
             display_df["Month"] = display_df["month_year"].astype(str)
         else:
             display_df["Month"] = display_df["month_year"].apply(

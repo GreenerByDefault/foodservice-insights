@@ -36,10 +36,6 @@ Their only readers are the two driver charts (`plots/figures.py`, `plots/panels.
 parse it back with `convert_percentage_to_float` and draw from the float. No workbook carries
 these tables.
 
-**`pd.api.types.is_period_dtype`** raises `Pandas4Warning` on pandas 3 and is gone in 4. It is
-called four times in three lab modules: `plotting_extras.py`, `pilot/plots.py` and
-`pilot/analysis.py`.
-
 ## Decisions
 
 - **The product keeps what `analyze()` reaches.** Code that only the lab imports moves to the
@@ -66,7 +62,7 @@ called four times in three lab modules: `plotting_extras.py`, `pilot/plots.py` a
 - **One kind of change per PR.** A deletion, a move, a type change or a boundary change each
   lands alone, so each golden or fixture diff shows one change.
 
-PR order: 1, 4 and 5 can land any time. 2 lands after 1. 3 lands after 1, 2 and
+PR order: 1 and 4 can land any time. 2 lands after 1. 3 lands after 1, 2 and
 `categorization-pipeline.md` PR 2.
 
 ## PR 1 — `build_food_report` takes typed rows
@@ -120,10 +116,6 @@ After `categorization-pipeline.md` PR 2, `parsing.py`'s only callers are the lab
   assert `12.3` instead.
 - No workbook or golden change. The driver pages must render identically (see Verification).
 
-## PR 5 — `isinstance(dtype, pd.PeriodDtype)`
-
-The four `is_period_dtype` calls in the lab become `isinstance(<series>.dtype, pd.PeriodDtype)`.
-
 ## Verification
 
 - Every PR: `just lint && just check && just test && just test-lab`. The golden stays unchanged
@@ -144,7 +136,6 @@ The four `is_period_dtype` calls in the lab become `isinstance(<series>.dtype, p
   4. Diff the client and QA workbooks sheet by sheet. Expect them to be identical.
 - PR 4: render the PDF with `mock_llm` on the branch and on `main`, and compare the driver pages
   pixel for pixel.
-- PR 5: the `just test-lab` output has no `Pandas4Warning`.
 
 ## Risks
 

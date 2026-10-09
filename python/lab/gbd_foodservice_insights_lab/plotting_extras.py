@@ -153,7 +153,7 @@ def plot_time_series_with_periods(
     data_sorted = data.sort_values(x_col).copy()
 
     # Convert Period objects to strings for plotting compatibility
-    if pd.api.types.is_period_dtype(data_sorted[x_col]):
+    if isinstance(data_sorted[x_col].dtype, pd.PeriodDtype):
         data_sorted[x_col] = data_sorted[x_col].astype(str)
 
     fig, ax = plt.subplots(figsize=figsize)
