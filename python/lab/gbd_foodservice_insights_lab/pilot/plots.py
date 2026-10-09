@@ -198,7 +198,7 @@ def plot_category_trends(
 
             # Convert Period to string for plotting if needed
             x_values = complete_data["month_year"]
-            if pd.api.types.is_period_dtype(x_values):
+            if isinstance(x_values.dtype, pd.PeriodDtype):
                 x_values = x_values.astype(str)
 
             ax.plot(
