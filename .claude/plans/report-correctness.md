@@ -11,9 +11,8 @@ frames. The deliverable aborts on ordinary data, carries wrong numbers, and says
 does not support. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's
 output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff is the review.
 
-Other plans own neighbouring problems and are referenced where the sequencing matters:
-`categorization-cache.md` PR 5 (what reaches the report from the cache),
-and `categorization-pipeline.md` (what the model may answer).
+Another plan owns a neighbouring problem and is referenced where the sequencing matters:
+`categorization-cache.md` PR 5 (what reaches the report from the cache).
 
 **Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
 because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which

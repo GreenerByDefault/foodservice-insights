@@ -64,10 +64,7 @@ def _strip_pack_counts(item: str) -> str:
 
 def _categories_prompt(template_name: str, categories: Sequence[str]) -> str:
     template = load_prompt(template_name)
-    try:
-        return template.format(categories=list(categories))
-    except KeyError as err:
-        raise ValueError("Placeholder {categories} not found in prompt template") from err
+    return template.format(categories="\n".join(categories))
 
 
 @dataclass(frozen=True)

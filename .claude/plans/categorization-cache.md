@@ -21,10 +21,10 @@ weights cache is lab-only and used by a manual step, so it can stay a file until
 needs it. Not designed here; the table pattern and import script below are what it would reuse.
 
 PR 5 here edits `categorization/cache.py` and the `analyze()` seam in `analysis.py`, and assumes
-`categorization-pipeline.md` has landed: the library's cache is read-only, the pipeline is handed
-a `CategorizationCache` built only by `CategorizationCache.from_frame`, and `analyze()` is the one
-product caller that loads the CSV. PRs 1–4 touch only `packages/db`, `contract/`, and
-`apps/worker`, and can start any time.
+the library's cache is read-only, the pipeline is handed a `CategorizationCache` built only by
+`CategorizationCache.from_frame`, and `analyze()` is the one product caller that loads the CSV
+(all true today). It edits the same functions as `llm-concurrency.md`; whichever lands second
+rebases. PRs 1–4 touch only `packages/db`, `contract/`, and `apps/worker`, and can start any time.
 
 Requirement: REQUIREMENTS.md § Product categorization cache. The seam docstring in `analysis.py`
 already commits to this shape ("a Postgres table with a human-approved flag; the parent
