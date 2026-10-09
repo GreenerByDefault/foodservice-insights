@@ -105,7 +105,7 @@ describe('EmailStep', () => {
     expect(onCodeSent).not.toHaveBeenCalled();
   });
 
-  test('the button disables and swaps its label while the send is in flight', async () => {
+  test('the button disables and swaps its label, and the address locks, while the send is in flight', async () => {
     const auth = fakeBrowserAuth();
     auth.signInWithOtp.mockReturnValue(new Promise(() => {}));
     const screen = await render(EmailStep, {
@@ -119,5 +119,6 @@ describe('EmailStep', () => {
     await screen.getByRole('button', { name: 'Send code' }).click();
 
     await expect.element(screen.getByRole('button', { name: 'Sending code…' })).toBeDisabled();
+    await expect.element(screen.getByLabelText('Email address')).toHaveAttribute('readonly');
   });
 });

@@ -84,6 +84,8 @@ async function handleSubmit(event: SubmitEvent) {
 <form onsubmit={handleSubmit} class="w-full space-y-8">
   <Field.Field>
     <Field.Label for={fieldId}>Email address</Field.Label>
+    <!-- Read-only while sending: the code step shows `email`, and the tab remembers it, so an edit
+         that lands mid-send would name an address the code never went to. -->
     <Input
       bind:ref={emailInputElement}
       id={fieldId}
@@ -92,6 +94,7 @@ async function handleSubmit(event: SubmitEvent) {
       autocomplete="email"
       maxlength={MAX_EMAIL_LENGTH}
       required
+      readonly={formState.status === 'sending'}
       aria-invalid={formState.status === 'failed' || undefined}
       aria-describedby={formState.status === 'failed'
         ? `${descriptionId} ${errorId}`

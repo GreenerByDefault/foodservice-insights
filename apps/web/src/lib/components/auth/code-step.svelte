@@ -16,9 +16,10 @@ interface Props {
   email: string;
   onVerified: () => Promise<void>;
   onChangeEmail: () => void;
+  onCodeResent?: () => void;
 }
 
-let { auth, purpose, email, onVerified, onChangeEmail }: Props = $props();
+let { auth, purpose, email, onVerified, onChangeEmail, onCodeResent }: Props = $props();
 
 interface PurposeCopy {
   label: string;
@@ -239,6 +240,7 @@ async function resendCode() {
         : { status: 'failed', message: errorMessage };
     return;
   }
+  onCodeResent?.();
   code = '';
   verificationState = { status: 'idle' };
   resendState = { status: 'waiting', remainingSeconds: RESEND_COOLDOWN_S };
