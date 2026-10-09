@@ -121,6 +121,12 @@ def test_match_prompt_lists_the_categories() -> None:
     assert "['Cheese', 'Butter']" in fake.requests[0]["messages"][0]["content"]
 
 
+def test_match_returns_the_models_text_untouched() -> None:
+    client, _, _ = _client('"Cheese."')
+
+    assert client.match_product_to_category("cheddar", ["Cheese"]) == '"Cheese."'
+
+
 def test_requests_go_out_with_sdk_retries_off() -> None:
     client, fake, _ = _client("Cheese")
 
