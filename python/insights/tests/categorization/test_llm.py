@@ -105,11 +105,11 @@ def test_empty_content_is_an_error() -> None:
 def test_clean_product_name_strips_pack_counts_and_lowercases() -> None:
     client, fake, _ = _client("Cheddar Cheese")
 
-    assert client.clean_product_name("CHEDDAR (12) 5.LB") == "cheddar cheese"
+    assert client.clean_product_name("CHEDDAR (12) .5 2.5 5.LB") == "cheddar cheese"
     messages = fake.requests[0]["messages"]
     assert messages[1] == {
         "role": "user",
-        "content": "classify CHEDDAR  5LB according to your instructions",
+        "content": "classify CHEDDAR  .5 2.5 5LB according to your instructions",
     }
 
 
