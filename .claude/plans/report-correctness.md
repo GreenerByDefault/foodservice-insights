@@ -13,8 +13,7 @@ output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff
 
 Other plans own neighbouring problems and are referenced where the sequencing matters:
 `categorization-cache.md` PR 5 (what reaches the report from the cache),
-`categorization-pipeline.md` (what the model may answer), `report-typed-data.md` (typed inputs
-at the report boundary, the `Finding` type).
+and `categorization-pipeline.md` (what the model may answer).
 
 **Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
 because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
