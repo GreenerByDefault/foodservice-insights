@@ -41,7 +41,10 @@ def categorize_using_historical_classifications(
     NaN), a boolean 'previously_categorized', and 'match_type' added.
     """
     unique_products_df = unique_products_df.merge(
-        cache.products[["product", "category"]], on="product", how="left"
+        cache.products[["product", "category"]],
+        on="product",
+        how="left",
+        validate="many_to_one",
     )
     unique_products_df["previously_categorized"] = unique_products_df["category"].notna()
 
@@ -270,6 +273,7 @@ def merge_categorizations(
         categorized_products_df[["product", "category"]],
         on="product",
         how="left",
+        validate="many_to_one",
     )
     df_final["category"] = df_final["category"].fillna("No Matches Found")
 

@@ -36,31 +36,56 @@ def test_categorization_cache_path():
 # ----------------------------------------------------------------------
 # CategorizationCache.from_frame
 # ----------------------------------------------------------------------
-def test_from_frame_keeps_the_last_duplicate_but_indexes_every_row():
-    result = CategorizationCache.from_frame(
-        _frame(
-            [
-                ("Chicken Breast", BEEF, "chicken breast"),
-                ("Chicken Breast", POULTRY, "chicken breast"),
-                ("Paper Towels", "No Matches Found", None),
-            ]
+def test_from_frame_strips_products_and_keeps_the_last_duplicate(caplog):
+    with caplog.at_level("WARNING"):
+        result = CategorizationCache.from_frame(
+            _frame(
+                [
+                    (" Chicken Breast ", "Cheese", "chicken breast"),
+                    ("Chicken Breast", POULTRY, "chicken breast"),
+                    ("Paper Towels", "No Matches Found", None),
+                ]
+            )
         )
-    )
 
     pd.testing.assert_frame_equal(
-        result.products.reset_index(drop=True),
+        result.products,
         _frame(
             [
                 ("Chicken Breast", POULTRY, "chicken breast"),
-                ("Paper Towels", "No Matches Found", None),
+                ("Paper Towels", "No Matches Found", ""),
             ]
         ),
     )
-    # The overwritten row still votes, so the disagreement keeps the name out.
-    assert result.cleaned_name_index == {}
+    assert result.cleaned_name_index == {"chicken breast": POULTRY}
+    assert "dropped 1 rows with a product repeated by a later row" in caplog.text
 
 
-def test_from_frame_indexes_only_unanimous_canonical_categories():
+def test_from_frame_drops_blank_and_unknown_categories_and_blank_products(caplog):
+    with caplog.at_level("WARNING"):
+        result = CategorizationCache.from_frame(
+            _frame(
+                [
+                    ("Mozzarella Block", "cheese", "mozzarella"),
+                    ("Salted Butter", None, None),
+                    ("  ", "Butter", "butter"),
+                    ("Cheddar", "Cheese", "cheddar"),
+                ]
+            )
+        )
+
+    pd.testing.assert_frame_equal(result.products, _frame([("Cheddar", "Cheese", "cheddar")]))
+    assert result.cleaned_name_index == {"cheddar": "Cheese"}
+    assert "dropped 1 rows with a blank product" in caplog.text
+    assert "dropped 2 rows with a blank or unknown category ['', 'cheese']" in caplog.text
+
+
+def test_from_frame_rejects_a_missing_column():
+    with pytest.raises(ValueError, match=r"missing columns: \['cleaned_item_names'\]"):
+        CategorizationCache.from_frame(pd.DataFrame({"product": ["a"], "category": ["Cheese"]}))
+
+
+def test_from_frame_indexes_only_unanimous_real_categories():
     result = CategorizationCache.from_frame(
         _frame(
             [
@@ -70,7 +95,7 @@ def test_from_frame_indexes_only_unanimous_canonical_categories():
                 ("d", BEEF, "mystery"),
                 ("e", "No Matches Found", "plate"),
                 ("f", "No Matches Found", "chicken breast"),
-                ("g", "cheese", "cheddar"),
+                ("g", BEEF, ""),
             ]
         )
     )
@@ -79,30 +104,33 @@ def test_from_frame_indexes_only_unanimous_canonical_categories():
     assert result.cleaned_name_index == {"chicken breast": POULTRY}
 
 
-def test_from_frame_has_an_empty_index_without_cleaned_names():
-    result = CategorizationCache.from_frame(pd.DataFrame({"product": ["a"], "category": [BEEF]}))
-
-    assert result.cleaned_name_index == {}
-
-
 # ----------------------------------------------------------------------
 # Reading the file
 # ----------------------------------------------------------------------
-def test_load_categorization_cache_reads_the_file(cache_path):
-    expected = _frame([("test_item", BEEF, "test item"), ("another_item", POULTRY, "another")])
-    expected.to_csv(cache_path, index=False)
+def test_load_categorization_cache_keeps_a_product_named_like_a_missing_value(cache_path):
+    cache_path.write_text(
+        "product,category,cleaned_item_names\nNA,Cheese,\nnull,Butter,null\n", encoding="utf-8"
+    )
 
     result = load_categorization_cache()
 
-    pd.testing.assert_frame_equal(result.products, expected)
-    assert result.cleaned_name_index == {"test item": BEEF, "another": POULTRY}
+    pd.testing.assert_frame_equal(
+        result.products, _frame([("NA", "Cheese", ""), ("null", "Butter", "null")])
+    )
+    assert result.cleaned_name_index == {"null": "Butter"}
+
+
+def test_read_categorization_cache_csv_keeps_rows_the_loader_drops(cache_path):
+    cache_path.write_text("product,category,cleaned_item_names\n Mlk ,Mlik,\n", encoding="utf-8")
+
+    pd.testing.assert_frame_equal(read_categorization_cache_csv(), _frame([(" Mlk ", "Mlik", "")]))
 
 
 def test_load_categorization_cache_is_empty_when_the_file_is_missing(cache_path, caplog):
     with caplog.at_level("WARNING"):
         result = load_categorization_cache()
 
-    pd.testing.assert_frame_equal(result.products, _frame([]), check_index_type=False)
+    pd.testing.assert_frame_equal(result.products, _frame([]).astype(str), check_index_type=False)
     assert result.cleaned_name_index == {}
     assert "not found" in caplog.text
 

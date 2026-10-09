@@ -34,6 +34,16 @@ def test_save_historical_categorizations_overrides_older_decisions(tmp_path: Pat
     )
 
 
+def test_save_historical_categorizations_keeps_rows_the_loader_drops(tmp_path: Path) -> None:
+    historical_csv_path = tmp_path / "historical.csv"
+    historical_csv_path.write_text("product,category\n Mlk ,Mlik\n", encoding="utf-8")
+
+    with patch.object(cache, "categorization_cache_path", return_value=historical_csv_path):
+        save_historical_categorizations(pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}))
+
+    assert pd.read_csv(historical_csv_path, dtype=str)["product"].tolist() == [" Mlk ", "apple"]
+
+
 def test_save_historical_categorizations_starts_from_empty_when_missing(tmp_path: Path) -> None:
     historical_csv_path = tmp_path / "historical.csv"
     new_df = pd.DataFrame({"product": ["apple"], "category": ["Fruit"]})
