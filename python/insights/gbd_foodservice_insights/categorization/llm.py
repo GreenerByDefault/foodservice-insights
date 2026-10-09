@@ -59,7 +59,7 @@ def _is_retryable(error: openai.APIError) -> bool:
 
 
 def _strip_pack_counts(item: str) -> str:
-    return re.sub(r"\(\d+\)", "", item).replace(".", "").strip()
+    return re.sub(r"\(\d+\)|\.(?!\d)", "", item).strip()
 
 
 def _categories_prompt(template_name: str, categories: Sequence[str]) -> str:
