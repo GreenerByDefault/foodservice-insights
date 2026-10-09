@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { AUTH_COOKIE_NAME } from '@gbd/core';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const { mockEnv, createBrowserClient } = vi.hoisted(() => ({
   mockEnv: {
@@ -31,6 +32,11 @@ beforeEach(() => {
   mockEnv.PUBLIC_SUPABASE_PUBLISHABLE_KEY = undefined;
   createBrowserClient.mockReset().mockReturnValue({ auth: { signOut } });
   signOut.mockClear();
+  vi.stubGlobal('location', { protocol: 'https:' });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('browserAuth', () => {
@@ -62,5 +68,22 @@ describe('browserAuth', () => {
     setEnv();
     await expect(auth.signOut({ scope: 'local' })).resolves.toEqual({ error: null });
     expect(createBrowserClient).toHaveBeenCalledTimes(1);
+  });
+
+  describe('the session cookie', () => {
+    async function cookieOptionsFor(protocol: string) {
+      vi.stubGlobal('location', { protocol });
+      setEnv();
+      await (await freshBrowserAuth()).signOut({ scope: 'local' });
+      return createBrowserClient.mock.calls[0]?.[2].cookieOptions;
+    }
+
+    test('is Secure on an https page', async () => {
+      expect(await cookieOptionsFor('https:')).toEqual({ name: AUTH_COOKIE_NAME, secure: true });
+    });
+
+    test('is not Secure on an http page, which could not set it otherwise', async () => {
+      expect(await cookieOptionsFor('http:')).toEqual({ name: AUTH_COOKIE_NAME, secure: false });
+    });
   });
 });

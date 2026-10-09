@@ -313,7 +313,7 @@ instead.
 | Invalid/stale session | Signed out, cookie cleared via `signOut({ scope: 'local' })` on the server client, no log for `user_not_found` | A deleted user's token is normal; stop re-sending a dead cookie |
 | Valid token, no `app_user` row | Throw → 500 | The trigger writes the row in GoTrue's own transaction, so only a setup error gets here: the app reading a different database than GoTrue, users that predate the migration, or a fixture that skipped `mintUser`'s mirror. Signing out instead would loop a user who just entered a correct code back to the form |
 | Cookie name | Pinned: `AUTH_COOKIE_NAME` in `@gbd/core`, passed as `cookieOptions.name` to both clients | Default derives from the Supabase URL hostname, which differs between host (`127`) and Docker (`host`) tiers; pinning also survives project-ref changes |
-| Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`), `secure` left to SvelteKit | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. *Rejected: `secure: event.url.protocol === 'https:'`* — it fails open, since `event.url.protocol` is only what adapter-node assumes (`https` unless `PROTOCOL_HEADER` says otherwise), not what the connection was. SvelteKit's default already relaxes for the host test browser, which reaches the server as `http://localhost` |
+| Cookie attributes | `@supabase/ssr` defaults (`httpOnly: false`, `sameSite: lax`), `secure` left to SvelteKit on the server and set from `location.protocol` in the browser | The browser client must read the cookie, so HttpOnly is impossible in this model; document the trade-off. The browser writes the cookie itself on sign-in, and `@supabase/ssr`'s defaults omit `secure`. *Rejected: `secure: event.url.protocol === 'https:'`* — it fails open, since `event.url.protocol` is only what adapter-node assumes (`https` unless `PROTOCOL_HEADER` says otherwise), not what the connection was. SvelteKit's default already relaxes for the host test browser, which reaches the server as `http://localhost` |
 | Sign-out scope | `local`, error ignored | Signs out this device; matches CFA. The error is ignored because auth-js clears the local session regardless (§ Following the session). *Rejected: a "Could not sign out" alert* — by the time it rendered, the `SIGNED_OUT` invalidation had replaced the page with the 401 |
 | Onboarding | Redirect from the `(app)` gate to `/onboarding` (outside `(app)`, `PublicShell`) when `displayName === null` | One gate, no header for a half-made account. First-time users have no page to "lose" |
 | Display name | Required by the flow; DB stays nullable, with a trimmed/length CHECK (`app_user_display_name_trimmed_length`, `MAX_DISPLAY_NAME_LENGTH = 100`) already landed as a prefactor in `001_initial_schema.ts` | Trigger creates the row with NULL; mirrors `organization_name_*` constraints |
@@ -366,9 +366,6 @@ The `app_user_display_name_trimmed_length` CHECK already exists on `display_name
   second code and a second cooldown. Needs a `restoring` state held through hydration, and changes
   what `auth/sign-in.screenshot.ts` captures.
 - CSP and `getClaims()`: both **Open** in `ARCHITECTURE.md` § Auth.
-- **`createBrowserClient`'s cookie has no `Secure` flag** (`lib/auth/browser.ts`'s
-  `cookieOptions: { name }` — `@supabase/ssr`'s default omits it). Non-Secure until the server
-  hook next rotates the token. Add `secure: location.protocol === 'https:'`.
 
 ## Verification
 

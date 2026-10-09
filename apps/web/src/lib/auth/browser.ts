@@ -55,7 +55,15 @@ async function createAuth(): Promise<SupabaseAuth> {
   }
 
   return createBrowserClient(url, key, {
-    cookieOptions: { name: AUTH_COOKIE_NAME },
+    cookieOptions: {
+      name: AUTH_COOKIE_NAME,
+      // `@supabase/ssr` omits `secure`, and this client writes the cookie itself on sign-in, so
+      // without it the token goes out over plain HTTP until the server next rotates it. Not a
+      // constant `true`: a browser may drop a Secure cookie written from an `http:` page, as under
+      // `pnpm dev` and in the e2e suites. Unlike the server's `event.url.protocol`, this is the
+      // scheme the page actually loaded over, so it cannot fail open behind a proxy.
+      secure: location.protocol === 'https:',
+    },
     // The server hook refreshes the token on every request, through its own `getUser()`. Left
     // on, the two race for the single-use refresh token and whichever loses is signed out —
     // supabase/ssr#68.
