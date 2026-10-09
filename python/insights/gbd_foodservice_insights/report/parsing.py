@@ -8,7 +8,7 @@ from typing import Any, Literal, overload
 import numpy as np
 import pandas as pd
 
-from gbd_foodservice_insights.report.diagnostics import MISSING_TEXT_TOKENS
+from gbd_foodservice_insights.report.checks import MISSING_TEXT_TOKENS
 
 logger = logging.getLogger(__name__)
 

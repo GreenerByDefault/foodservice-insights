@@ -20,7 +20,7 @@ manifest, the run log) — see its README. To change:
 | How those tables are computed | `report/aggregation.py` |
 | Which charts, in what order | `report/plots/report.py` — `generate_all_report_plots()` |
 | How a page or panel is drawn | `report/plots/figures.py` (`plot_*`), then `report/plots/panels.py` (`draw_*`) |
-| Warnings and diagnostics on the quality pages | `report/diagnostics.py` — `run_all_diagnostics()` |
+| Warnings and diagnostics on the quality pages | `report/checks.py` — `run_all_diagnostics()` |
 | Client workbook tabs | `report/excel.py` — `write_client_workbook()` |
 
 `report/pdf.py` is PDF-only. Never edit a generated PDF; change the code and regenerate.

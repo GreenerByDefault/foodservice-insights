@@ -5,7 +5,7 @@ import gbd_foodservice_insights.report.thresholds as report_thresholds
 import pandas as pd
 import pytest
 import yaml
-from gbd_foodservice_insights.report.diagnostics import (
+from gbd_foodservice_insights.report.checks import (
     check_aggregation_reconciliation,
     check_category_concentration,
     check_date_distribution,
