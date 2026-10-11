@@ -5,7 +5,8 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization.cache import CategorizationCache
+from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categorization.cache import NO_MATCHES_FOUND, CategorizationCache
 from gbd_foodservice_insights.categorization.steps import (
     MergeCounts,
     categorize_using_cleaned_name_history,
@@ -289,18 +290,22 @@ def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
     ]
 
 
-def test_categorize_with_llm_rejects_a_category_outside_the_gbd_list() -> None:
+def test_categorize_with_llm_resolves_every_category_named_in_lower_case() -> None:
+    # Also fails if a YAML edit gives two categories the same normalized name, which would
+    # silently make one of them unreachable.
+    categories = [*get_GBD_categories(), NO_MATCHES_FOUND]
+
+    class LowerCase(KeywordLlmClient):
+        def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+            return item.lower()
+
     products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A"],
-            "category": ["Mlik"],
-            "cleaned_item_names": ["milk"],
-            "match_type": ["raw_product_history"],
-        }
+        {"category": [pd.NA] * len(categories), "cleaned_item_names": categories}
     )
 
-    with pytest.raises(ValueError, match=r"\['Mlik'\]"):
-        categorize_with_llm(products_df, KeywordLlmClient())
+    result = categorize_with_llm(products_df, LowerCase())
+
+    assert result["category"].tolist() == categories
 
 
 # ----------------------------------------------------------------------

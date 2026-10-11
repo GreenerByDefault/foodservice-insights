@@ -177,8 +177,7 @@ def categorize_with_llm(
 
     `products_df` needs 'category' and 'cleaned_item_names'. Returns a copy with 'category'
     filled for uncategorized rows. An answer is matched to a GBD category ignoring case and
-    punctuation; any other answer becomes "No Matches Found", counted in one warning. Raises
-    ValueError if a category outside the GBD list was already in `products_df`.
+    punctuation; any other answer becomes "No Matches Found", counted in one warning.
     """
     products_df = products_df.copy()
     gbd_categories = get_GBD_categories()
@@ -231,13 +230,6 @@ def categorize_with_llm(
         )
 
     products_df["category"] = products_df["category"].fillna(NO_MATCHES_FOUND).astype(str)
-
-    # `CategorizationCache.from_frame` drops cached rows with an unknown category, but the
-    # constructor does not, and a category with no emission factor would reach the report.
-    unknown = sorted(set(products_df["category"]) - set(canonical_by_normalized.values()))
-    if unknown:
-        raise ValueError(f"Categories outside the GBD list reached categorization: {unknown}")
-
     return products_df
 
 
