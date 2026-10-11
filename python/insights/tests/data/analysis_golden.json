@@ -25,15 +25,15 @@
     },
     "quality_status": "warning",
     "quality_summary": {
-      "total_findings": 8,
+      "total_findings": 5,
       "by_status": {
-        "success": 4,
-        "info": 2,
+        "success": 3,
+        "info": 0,
         "warning": 2,
         "error": 0
       },
       "by_stage": {
-        "diagnostics": 8
+        "diagnostics": 5
       }
     },
     "narrative": {
@@ -409,16 +409,6 @@
       },
       {
         "stage": "diagnostics",
-        "category": "category_discontinuity",
-        "status": "success",
-        "message": "No category continuity issues found.",
-        "count": 0,
-        "metadata": {
-          "min_gap_months": 1
-        }
-      },
-      {
-        "stage": "diagnostics",
         "category": "diner_meal_count_reasonableness",
         "status": "success",
         "message": "No month's diner count looks out of line with the food in the file.",
@@ -429,40 +419,6 @@
           "median_food_per_count": 0.00964790184,
           "low_ratio_threshold": 0.5,
           "high_ratio_threshold": 2.0
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "single_product_dominance",
-        "status": "info",
-        "message": "'JUICE, APPL 100% SS CUP FRESH' accounts for 60.1% of total kilos total, above the 30% product concentration threshold.",
-        "count": 1,
-        "sample_values": [
-          "JUICE, APPL 100% SS CUP FRESH: 106.70 of 177.52 (60.1%)"
-        ],
-        "metadata": {
-          "metric_col": "kilos_total",
-          "threshold_pct": 0.3,
-          "top_product": "JUICE, APPL 100% SS CUP FRESH",
-          "top_product_total": 106.702982,
-          "top_product_share": 0.601068043
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "category_concentration",
-        "status": "info",
-        "message": "'Legumes' accounts for 60.1% of total kilos total, above the 30% category concentration threshold.",
-        "count": 1,
-        "sample_values": [
-          "Legumes: 106.70 of 177.52 (60.1%)"
-        ],
-        "metadata": {
-          "metric_col": "kilos_total",
-          "threshold_pct": 0.3,
-          "top_category": "Legumes",
-          "top_category_total": 106.702982,
-          "top_category_share": 0.601068043
         }
       },
       {

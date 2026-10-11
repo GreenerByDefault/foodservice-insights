@@ -85,6 +85,20 @@ def test_food_report_end_to_end_produces_valid_artifacts(staged_report_inputs, t
     assert result["run_status"] == "success"
     assert result["quality_status"] in {"pass", "warning", "invalid"}
 
+    # The product's findings, then the lab's own. Missing weeks stays silent: one date a month
+    # cannot show a gap within one.
+    assert [(finding["category"], finding["status"]) for finding in result["diagnostics"]] == [
+        ("month_over_month_total_volatility", "warning"),
+        ("missing_internal_months", "success"),
+        ("diner_meal_count_reasonableness", "success"),
+        ("outlier_line_items", "warning"),
+        ("per_product_weight_bounds", "success"),
+        ("near_duplicate_product_names", "success"),
+        ("category_discontinuity", "success"),
+        ("single_product_dominance", "info"),
+        ("category_concentration", "info"),
+    ]
+
     # 2. All six artifacts exist on disk.
     for key in (
         "pdf_path",

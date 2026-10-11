@@ -295,7 +295,7 @@ def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
     assert "Data Profile" not in pd.ExcelFile(result["qa_excel_path"]).sheet_names
 
 
-def test_run_food_report_reports_meat_quantities_last(monkeypatch, tmp_path: Path):
+def test_run_food_report_hands_the_pdf_its_meat_quantity_finding(monkeypatch, tmp_path: Path):
     input_path = tmp_path / "categorized_serving.csv"
     pd.DataFrame(
         {
@@ -331,8 +331,10 @@ def test_run_food_report_reports_meat_quantities_last(monkeypatch, tmp_path: Pat
         procurement_serving="serving",
     )
 
-    meat_finding = result["diagnostics"][-1]
-    assert (meat_finding["category"], meat_finding["status"]) == ("meat_weights", "warning")
+    meat_finding = next(
+        finding for finding in result["diagnostics"] if finding["category"] == "meat_weights"
+    )
+    assert meat_finding["status"] == "warning"
     assert meat_finding in result["missing_data_findings"]
     assert meat_finding in cast(list[object], captured_pdf_kwargs["missing_data_findings"])
 
