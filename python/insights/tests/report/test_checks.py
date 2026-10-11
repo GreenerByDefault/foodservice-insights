@@ -484,20 +484,6 @@ def test_check_missing_internal_months_warns_for_missing_middle_month():
     assert "one-third of the expected period is missing" in findings[0]["message"]
 
 
-def test_check_missing_internal_months_accepts_month_only_date_strings():
-    df = pd.DataFrame(
-        {
-            "date": ["01/2025", "03/2025"],
-            "kilos_total": [100.0, 120.0],
-        }
-    )
-
-    findings = check_missing_internal_months(df)
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["sample_values"] == ["Feb 2025"]
-
-
 def test_check_missing_internal_months_does_not_flag_boundary_months():
     df = pd.DataFrame(
         {
@@ -516,14 +502,8 @@ def test_detect_category_discontinuity_warns_when_category_disappears_and_return
     """Flags a missing middle month because that often means a category-level data gap."""
     df = pd.DataFrame(
         {
-            "date": pd.to_datetime(
-                [
-                    "2025-01-10",
-                    "2025-03-10",
-                    "2025-01-15",
-                    "2025-02-15",
-                    "2025-03-15",
-                ]
+            "month_year": pd.PeriodIndex(
+                ["2025-01", "2025-03", "2025-01", "2025-02", "2025-03"], freq="M"
             ),
             "product": [
                 "Bean Chili",
@@ -550,41 +530,6 @@ def test_detect_category_discontinuity_warns_when_category_disappears_and_return
     assert "Legumes" in findings[0]["sample_values"][0]
     assert "Feb 2025" in findings[0]["sample_values"][0]
     assert export_df.iloc[0]["category"] == "Legumes"
-    assert export_df.iloc[0]["gap_months"] == "Feb 2025"
-
-
-def test_detect_category_discontinuity_accepts_month_only_date_strings():
-    df = pd.DataFrame(
-        {
-            "date": [
-                "01/2025",
-                "03/2025",
-                "01/2025",
-                "02/2025",
-                "03/2025",
-            ],
-            "product": [
-                "Bean Chili",
-                "Bean Chili",
-                "Tofu Curry",
-                "Tofu Curry",
-                "Tofu Curry",
-            ],
-            "category": [
-                "Legumes",
-                "Legumes",
-                "Plant-based meats",
-                "Plant-based meats",
-                "Plant-based meats",
-            ],
-            "kilos_total": [10.0, 9.0, 4.0, 5.0, 6.0],
-        }
-    )
-
-    findings, export_df = detect_category_discontinuity(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 1
     assert export_df.iloc[0]["gap_months"] == "Feb 2025"
 
 
@@ -970,6 +915,7 @@ def test_run_all_diagnostics_excludes_no_matches_from_missing_categories():
     df = pd.DataFrame(
         {
             "date": [pd.Timestamp("2025-01-01")],
+            "month_year": pd.PeriodIndex(["2025-01"], freq="M"),
             "product": ["example product"],
             "category": ["No Matches Found"],
             "kilos_total": [1.0],
@@ -989,6 +935,7 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
     df = pd.DataFrame(
         {
             "date": pd.to_datetime(["2025-01-01", "2025-01-02", "2025-01-03"]),
+            "month_year": pd.PeriodIndex(["2025-01"] * 3, freq="M"),
             "product": ["Beans", "Soup", "Salad"],
             "category": ["Legumes", "Legumes", "Legumes"],
             "servings total": [0.5, 600.0, 1200.0],
