@@ -1,15 +1,18 @@
 import pandas as pd
 from gbd_foodservice_insights.categories import (
-    get_animal_product_categories,
-    get_dairy_categories,
-    get_drink_categories,
-    get_egg_categories,
-    get_food_categories,
-    get_GBD_categories,
-    get_meat_categories,
-    get_plant_based_categories,
-    get_plant_protein_categories,
-    get_protein_categories,
+    animal_product_categories,
+    category_names,
+    drink_categories,
+    food_categories,
+    plant_based_categories,
+    plant_protein_categories,
+    protein_categories,
+)
+
+from gbd_foodservice_insights_lab.categories import (
+    dairy_categories,
+    egg_categories,
+    meat_categories,
 )
 
 
@@ -222,9 +225,9 @@ def plant_animal_split(monthly_category_data: pd.DataFrame) -> pd.Series:
     contains categories not defined in the GBD categories YAML.
     """
     # Get valid protein and animal categories from YAML (lowercase for comparison)
-    valid_gbd_categories = set(get_GBD_categories(lowercase=True))
-    protein_categories = set(get_protein_categories(lowercase=True))
-    animal_proteins = set(get_animal_product_categories(lowercase=True))
+    valid_gbd_categories = {c.lower() for c in category_names()}
+    proteins = {c.lower() for c in protein_categories()}
+    animal_proteins = {c.lower() for c in animal_product_categories()}
 
     # Validate that all categories in the data are valid GBD categories
     data_categories = set(monthly_category_data["category"].str.lower().unique())
@@ -238,7 +241,7 @@ def plant_animal_split(monthly_category_data: pd.DataFrame) -> pd.Series:
 
     # Filter data for protein categories only
     protein_data = monthly_category_data[
-        monthly_category_data["category"].str.lower().isin(protein_categories)
+        monthly_category_data["category"].str.lower().isin(proteins)
     ].copy()
 
     # Add animal/plant classification based on YAML data
@@ -297,8 +300,8 @@ def compare_plant_based_product_counts(monthly_product_category_data: pd.DataFra
 
     # Get canonical plant-based categories from YAML so we can return a complete
     # category-by-category breakdown for the full plant-based meta category.
-    plant_based_categories = get_plant_based_categories(lowercase=False)
-    plant_based_lookup = {category.lower(): category for category in plant_based_categories}
+    plant_based = plant_based_categories()
+    plant_based_lookup = {category.lower(): category for category in plant_based}
 
     # Normalize categories and product names so harmless casing/spacing differences
     # do not create fake product-count changes between baseline and pilot.
@@ -313,20 +316,20 @@ def compare_plant_based_product_counts(monthly_product_category_data: pd.DataFra
         print("Warning: No plant-based categories found in the data.")
         return pd.DataFrame(
             {
-                "meta_category": ["Plant-Based"] * len(plant_based_categories),
-                "category": plant_based_categories,
-                "baseline_count": [0] * len(plant_based_categories),
-                "pilot_count": [0] * len(plant_based_categories),
-                "change": [0] * len(plant_based_categories),
-                "pct_change": [0.0] * len(plant_based_categories),
-                "retained_count": [0] * len(plant_based_categories),
-                "products_added_count": [0] * len(plant_based_categories),
-                "products_removed_count": [0] * len(plant_based_categories),
-                "increased": [False] * len(plant_based_categories),
-                "baseline_products": [[] for _ in plant_based_categories],
-                "pilot_products": [[] for _ in plant_based_categories],
-                "products_added": [[] for _ in plant_based_categories],
-                "products_removed": [[] for _ in plant_based_categories],
+                "meta_category": ["Plant-Based"] * len(plant_based),
+                "category": plant_based,
+                "baseline_count": [0] * len(plant_based),
+                "pilot_count": [0] * len(plant_based),
+                "change": [0] * len(plant_based),
+                "pct_change": [0.0] * len(plant_based),
+                "retained_count": [0] * len(plant_based),
+                "products_added_count": [0] * len(plant_based),
+                "products_removed_count": [0] * len(plant_based),
+                "increased": [False] * len(plant_based),
+                "baseline_products": [[] for _ in plant_based],
+                "pilot_products": [[] for _ in plant_based],
+                "products_added": [[] for _ in plant_based],
+                "products_removed": [[] for _ in plant_based],
             }
         )
 
@@ -434,18 +437,18 @@ def analyze_category_consumption(
     if categories is None:
         category_label_lower = category_label.lower()
         category_getters = {
-            "meat": get_meat_categories,
-            "dairy": get_dairy_categories,
-            "animal products": get_animal_product_categories,
-            "eggs": get_egg_categories,
-            "plant protein": get_plant_protein_categories,
-            "protein": get_protein_categories,
-            "food": get_food_categories,
-            "drink": get_drink_categories,
+            "meat": meat_categories,
+            "dairy": dairy_categories,
+            "animal products": animal_product_categories,
+            "eggs": egg_categories,
+            "plant protein": plant_protein_categories,
+            "protein": protein_categories,
+            "food": food_categories,
+            "drink": drink_categories,
         }
 
         if category_label_lower in category_getters:
-            categories = category_getters[category_label_lower](lowercase=True)
+            categories = [c.lower() for c in category_getters[category_label_lower]()]
         else:
             raise ValueError(
                 f"Cannot auto-resolve categories for label '{category_label}'. Please "
@@ -658,9 +661,13 @@ def create_period_category_data(
 
     if include_total_meat:
         # Define meat categories and calculate totals
-        meat_categories = ["beef and buffalo meat", "pork (pig meat)", "poultry (chicken & turkey)"]
+        meats = [
+            "beef and buffalo meat",
+            "pork (pig meat)",
+            "poultry (chicken & turkey)",
+        ]
         meat_totals = (
-            period_category_data.loc[period_category_data["category"].isin(meat_categories)]
+            period_category_data.loc[period_category_data["category"].isin(meats)]
             .groupby("period")[["kilos_total"]]
             .sum()
             .reset_index()
@@ -756,9 +763,9 @@ def calculate_monthly_plant_animal_split(monthly_category_data: pd.DataFrame) ->
     GBD categories YAML.
     """
     # Get valid protein and animal categories from YAML (lowercase for comparison)
-    valid_gbd_categories = set(get_GBD_categories(lowercase=True))
-    protein_categories = set(get_protein_categories(lowercase=True))
-    animal_proteins = set(get_animal_product_categories(lowercase=True))
+    valid_gbd_categories = {c.lower() for c in category_names()}
+    proteins = {c.lower() for c in protein_categories()}
+    animal_proteins = {c.lower() for c in animal_product_categories()}
 
     # Validate that all categories in the data are valid GBD categories
     data_categories = set(monthly_category_data["category"].str.lower().unique())
@@ -771,7 +778,7 @@ def calculate_monthly_plant_animal_split(monthly_category_data: pd.DataFrame) ->
 
     # Filter data for protein categories only
     protein_data = monthly_category_data[
-        monthly_category_data["category"].str.lower().isin(protein_categories)
+        monthly_category_data["category"].str.lower().isin(proteins)
     ].copy()
 
     # Add animal/plant classification based on YAML data
@@ -837,7 +844,7 @@ def calculate_monthly_milk_split(
     ``total_milk_kilos``, ``plant_milk_percentage``, and ``dairy_milk_percentage`` columns,
     or None if the data has no milk categories.
     """
-    dairy_categories = set(get_dairy_categories(lowercase=True))
+    dairies = {c.lower() for c in dairy_categories()}
 
     # Filter for milk-specific categories
     milk_keywords = ["milk", "dairy alternative"]
@@ -854,9 +861,7 @@ def calculate_monthly_milk_split(
 
     # Classify as dairy or plant milk
     milk_data["milk_type"] = (
-        milk_data["category"]
-        .str.lower()
-        .apply(lambda x: "dairy" if x in dairy_categories else "plant")
+        milk_data["category"].str.lower().apply(lambda x: "dairy" if x in dairies else "plant")
     )
 
     group_cols = ["month_year"]

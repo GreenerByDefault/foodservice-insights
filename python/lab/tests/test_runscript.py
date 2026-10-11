@@ -34,7 +34,6 @@ def _summary(output_file: str) -> dict:
         "n_rows_after": 1,
         "row_elimination_details": {},
         "output_file": output_file,
-        "human_review_file": output_file.replace(".csv", "_for_human_review.csv"),
     }
 
 

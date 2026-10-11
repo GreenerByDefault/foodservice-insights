@@ -2,7 +2,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 
 # Functions to allow easy testing of the LLM models in our existing pipelines
@@ -63,7 +63,7 @@ def test_new_categorization_LLM(n_test_samples: int = 100) -> None:
         for item in test_sample["cleaned_item_names"]
     ]
 
-    gbd_categories = get_GBD_categories()
+    gbd_categories = category_names()
 
     percent_in_gbd = test_sample["challenger_LLM_categorization"].isin(gbd_categories).mean() * 100
     print(f"{percent_in_gbd:.2f}% of challenger_LLM_categorization values are in GBD categories.")

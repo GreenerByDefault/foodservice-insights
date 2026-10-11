@@ -1,22 +1,23 @@
 """Chart panels: each `draw_*` fills an `Axes` it is handed, empty state included."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
-from gbd_foodservice_insights.categories import get_drink_categories, get_food_categories
+from gbd_foodservice_insights.categories import drink_categories, food_categories
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_colors,
+    GBD_COLORS,
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
     set_title_font,
     standardize_title_case,
 )
-from gbd_foodservice_insights.report.schema import metric_display_label, per_diner_metric_name
-from gbd_foodservice_insights.report.utils import divide_by_diner_meals, monthly_totals
+from gbd_foodservice_insights.report.schema import metric_display_label
+from gbd_foodservice_insights.report.utils import monthly_totals
 
 
 def prepare_monthly_trend_data(
@@ -24,26 +25,24 @@ def prepare_monthly_trend_data(
     metric: str,
     *,
     per_diner_meal: bool,
-    diner_meal_mapping: dict[Any, Any] | None,
-) -> tuple[pd.DataFrame, str]:
+    diner_meal_mapping: Mapping[pd.Period, float] | None,
+) -> pd.DataFrame:
     """Prepare canonical monthly trend table for plotting."""
     totals = monthly_totals(monthly_category_data, metric, month_col="month_year")
 
     if per_diner_meal:
         if diner_meal_mapping is None:
             raise ValueError("diner_meal_mapping is required when per_diner_meal=True")
-        values, _, _ = divide_by_diner_meals(
-            totals,
-            diner_meal_mapping,
-            strict=False,
-        )
-        metric_label = per_diner_metric_name(metric)
+        values = _per_diner(totals, diner_meal_mapping)
     else:
         values = totals
-        metric_label = "Total " + metric_display_label(metric)
 
-    plot_data = pd.DataFrame({"month_year": values.index, "value": values.values})
-    return plot_data, metric_label
+    return pd.DataFrame({"month_year": values.index, "value": values.values})
+
+
+def _per_diner(monthly: pd.Series, diner_meal_mapping: Mapping[pd.Period, float]) -> pd.Series:
+    # A month without a count comes out NaN; `build_food_report` refuses one before any chart.
+    return monthly / monthly.index.map(diner_meal_mapping)
 
 
 def filter_monthly_categories_by_type(
@@ -55,35 +54,8 @@ def filter_monthly_categories_by_type(
     if "category" not in monthly_category_data.columns:
         return monthly_category_data.iloc[0:0].copy()
 
-    food_categories = set(get_food_categories(lowercase=True))
-    drink_categories = set(get_drink_categories(lowercase=True))
-    known_categories = food_categories | drink_categories
-
-    filtered = monthly_category_data.copy()
-    filtered["_category_lower"] = filtered["category"].astype(str).str.strip().str.lower()
-
-    unknown_categories = sorted(
-        str(category).strip()
-        for category in filtered.loc[
-            filtered["_category_lower"].notna()
-            & ~filtered["_category_lower"].isin(known_categories),
-            "category",
-        ]
-        .dropna()
-        .unique()
-    )
-    if unknown_categories:
-        raise ValueError(
-            "All monthly categories must be tagged as food or drink before plotting. "
-            f"Unknown categories: {unknown_categories}"
-        )
-
-    categories = set(food_categories)
-    if include_drinks:
-        categories.update(drink_categories)
-
-    filtered = filtered[filtered["_category_lower"].isin(categories)].copy()
-    return filtered.drop(columns="_category_lower")
+    categories = food_categories() + drink_categories() if include_drinks else food_categories()
+    return monthly_category_data[monthly_category_data["category"].isin(categories)].copy()
 
 
 def _draw_unavailable(ax: plt.Axes, title: str, message: str) -> None:
@@ -125,7 +97,7 @@ def _draw_metric_over_time_on_axis(
         data_sorted["value"].values,
         marker="o",
         linewidth=2,
-        color=GBD_colors[0] if GBD_colors else None,
+        color=GBD_COLORS[0] if GBD_COLORS else None,
     )
     ax.set_xticks(x_positions)
     ax.set_xticklabels(format_month_labels(data_sorted["month_year"]), rotation=45)
@@ -170,7 +142,7 @@ def _draw_multi_series_metric_over_time_on_axis(
     month_to_x = {month: idx for idx, month in enumerate(month_order)}
 
     for idx, (label, plot_data) in enumerate(non_empty_payloads):
-        color = GBD_colors[idx % len(GBD_colors)] if GBD_colors else None
+        color = GBD_COLORS[idx % len(GBD_COLORS)] if GBD_COLORS else None
         x_values = [month_to_x[month] for month in plot_data["month_year"]]
         ax.plot(
             x_values,
@@ -195,7 +167,7 @@ def _food_and_drink_trends(
     metric: str,
     *,
     per_diner_meal: bool,
-    diner_meal_mapping: dict[Any, Any] | None = None,
+    diner_meal_mapping: Mapping[pd.Period, float] | None = None,
 ) -> list[tuple[str, pd.DataFrame]]:
     """Monthly trends of `metric` for food only and for food + drink, as labelled series."""
     if metric not in {"kilos_total", "servings total"}:
@@ -207,13 +179,12 @@ def _food_and_drink_trends(
         )
         if subset.empty:
             return pd.DataFrame(columns=["month_year", "value"])
-        plot_data, _ = prepare_monthly_trend_data(
+        return prepare_monthly_trend_data(
             subset,
             metric,
             per_diner_meal=per_diner_meal,
             diner_meal_mapping=diner_meal_mapping,
         )
-        return plot_data
 
     return [
         ("Food Only", trend(include_drinks=False)),
@@ -240,7 +211,7 @@ def draw_food_and_drink_totals(
 def draw_food_and_drink_per_diner(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
     metric: str = "kilos_total",
     diner_or_meal: str = "diner",
@@ -266,7 +237,7 @@ def draw_total_emissions(
     *,
     emissions_col: str = "emissions_kg_co2e",
 ) -> None:
-    """Total kg CO2e by month."""
+    """Total kg CO₂e by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
     _draw_metric_over_time_on_axis(
         ax,
@@ -280,24 +251,24 @@ def draw_total_emissions(
 def draw_emissions_per_diner(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
     emissions_col: str = "emissions_kg_co2e",
     diner_or_meal: str = "diner",
 ) -> None:
-    """kg CO2e per diner (or meal) by month."""
+    """kg CO₂e per diner (or meal) by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
-    per_dm, _, _ = divide_by_diner_meals(totals, diner_meal_mapping, strict=False)
+    per_dm = _per_diner(totals, diner_meal_mapping)
     _draw_metric_over_time_on_axis(
         ax,
         pd.DataFrame({"month_year": per_dm.index, "value": per_dm.values}),
         title=f"Carbon Emissions per {diner_or_meal.title()} Over Time",
-        y_label=f"kg CO2e per {diner_or_meal.title()}",
+        y_label=f"kg CO₂e per {diner_or_meal.title()}",
     )
 
 
-_PLANT_COLOR = GBD_colors[2]
-_NON_PLANT_COLOR = GBD_colors[0]
+_PLANT_COLOR = GBD_COLORS[2]
+_NON_PLANT_COLOR = GBD_COLORS[0]
 
 
 def _draw_share_bar_axis(

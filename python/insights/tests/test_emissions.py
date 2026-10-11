@@ -1,35 +1,19 @@
 import pandas as pd
 import pytest
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.report.schema import VALID_REGIONS
+from gbd_foodservice_insights.categories import categories
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 
 def _known_category_with_us_factor() -> tuple[str, float]:
-    factors = emissions.load_emission_factors()
-    for category, values in factors.items():
-        if values["us"] is not None:
-            return category, float(values["us"])
-    raise AssertionError("Expected at least one category with a US emission factor.")
+    category = categories()[0]
+    return category.name, category.emission_factor_us
 
 
-def test_get_emission_factor_is_case_insensitive():
-    """Ensures category lookup works regardless of category-name casing."""
+def test_get_emission_factor_matches_the_exact_name_only():
     category, factor = _known_category_with_us_factor()
-    assert emissions.get_emission_factor(category.lower(), region="us") == factor
-    assert emissions.get_emission_factor(category.upper(), region="us") == factor
-
-
-@pytest.mark.parametrize("region", VALID_REGIONS)
-def test_every_category_has_an_emission_factor(region):
-    factors = emissions.load_emission_factors()
-    assert [category for category, values in factors.items() if values[region] is None] == []
-
-
-def test_get_emission_factor_invalid_region_raises():
-    """Ensures unsupported region names fail fast instead of silently defaulting."""
-    category, _ = _known_category_with_us_factor()
-    with pytest.raises(ValueError, match="region must be one of"):
-        emissions.get_emission_factor(category, region="mars")
+    assert emissions.get_emission_factor(category, region="us") == factor
+    assert emissions.get_emission_factor(category.lower(), region="us") is None
 
 
 def test_calculate_emissions_multiplies_weight_by_factor():
@@ -63,17 +47,20 @@ def test_calculate_emissions_per_diner_meal_handles_zero_or_missing_denominator(
     """Ensures per-diner metrics do not divide by zero and remain missing when unsupported."""
     summary = pd.DataFrame({"category": ["A"], "total_kg_co2e": [10.0]})
 
-    out_zero = emissions.calculate_emissions_per_diner_meal(summary, total_diner_meals=0)
-    out_none = emissions.calculate_emissions_per_diner_meal(summary, total_diner_meals=None)
+    out_zero = emissions.calculate_emissions_per_diner_meal(summary, 0, "diner")
+    out_none = emissions.calculate_emissions_per_diner_meal(summary, None, "diner")
 
-    assert pd.isna(out_zero.loc[0, "kg_co2e_per_diner_meal"])
-    assert pd.isna(out_none.loc[0, "kg_co2e_per_diner_meal"])
+    assert pd.isna(out_zero.loc[0, "kg_co2e_per_diner"])
+    assert pd.isna(out_none.loc[0, "kg_co2e_per_diner"])
 
 
-def test_calculate_emissions_per_diner_meal_rounds_to_three_significant_figures():
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_calculate_emissions_per_diner_meal_rounds_to_three_significant_figures(
+    diner_or_meal: DinerOrMeal,
+):
     """A tiny category reads its magnitude instead of rounding down to 0.0."""
     summary = pd.DataFrame({"category": ["Spices"], "total_kg_co2e": [0.0000312]})
 
-    out = emissions.calculate_emissions_per_diner_meal(summary, total_diner_meals=1)
+    out = emissions.calculate_emissions_per_diner_meal(summary, 1, diner_or_meal)
 
-    assert out.loc[0, "kg_co2e_per_diner_meal"] == pytest.approx(0.0000312)
+    assert out.loc[0, f"kg_co2e_per_{diner_or_meal}"] == pytest.approx(0.0000312)

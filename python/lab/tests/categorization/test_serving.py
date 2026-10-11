@@ -122,19 +122,9 @@ def test_serving_end_to_end(tmp_path):
         },
         "match_type_counts": {"llm": 5},
         "output_file": str(tmp_path / "output.csv"),
-        "human_review_file": str(tmp_path / "output_for_human_review.csv"),
-        "human_review_n_unique_products": 5,
         "entree_human_review_file": str(tmp_path / "output_entree_for_human_review.csv"),
         "entree_human_review_n_unique_products": 3,
     }
-    assert (tmp_path / "output_for_human_review.csv").read_text() == (
-        "category,product,occurrence_count\n"
-        "Beef and Buffalo Meat,Ground Beef 80/20,1\n"
-        "Fish & Mollusks,Salmon Fillet,1\n"
-        "No Matches Found,Paper Towels,1\n"
-        "Poultry (Chicken & Turkey),Chicken Breast Boneless,2\n"
-        "Whole Grains,Brown Rice,3\n"
-    )
     # Chicken came from the entree history, so only the other three are up for review.
     assert (tmp_path / "output_entree_for_human_review.csv").read_text() == (
         "entree_classification,product,category,occurrence_count\n"

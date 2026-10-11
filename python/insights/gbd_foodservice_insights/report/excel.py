@@ -13,8 +13,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from gbd_foodservice_insights.report.aggregation import (
+    AnimalEmissionsConcentration,
+    ProcurementAggregation,
+)
 from gbd_foodservice_insights.report.food_report import FoodReport
-from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -72,22 +75,58 @@ def write_excel_workbook(
 
 
 def write_client_workbook(report: FoodReport, path: Path) -> None:
+    aggregation = report.aggregation
     sheets: dict[str, pd.DataFrame | None] = {
-        "Monthly by Product": report.aggregation["monthly_product_data"],
-        "Monthly by Category": report.aggregation["monthly_category_data"],
-        "Template": report.aggregation["template_data"].reset_index(),
+        "Monthly by Product": aggregation.monthly_product,
+        "Monthly by Category": aggregation.monthly_category,
+        "Template": aggregation.template.reset_index(),
         f"{report.diner_or_meal.title()}s": diner_meals_frame(report),
         "Emissions Summary": report.emissions_summary,
-        "Animal Emissions Intensity": report.procurement_table("animal_emissions_intensity"),
-        "Decision_KPIs": report.procurement_table("decision_kpis"),
-        "Substitution_Scenarios": report.procurement_table("substitution_scenarios"),
+        **procurement_sheets(aggregation.procurement),
     }
     saved_path = write_excel_workbook(str(path), sheets)
-    logger.info("Client Excel report saved to %s", rel_path(saved_path))
+    logger.info("Client Excel report saved to %s", saved_path)
 
 
 def diner_meals_frame(report: FoodReport) -> pd.DataFrame:
     return pd.DataFrame(
         list(report.diner_meal_mapping.items()),
         columns=["month_year", f"{report.diner_or_meal}s"],
+    )
+
+
+def procurement_sheets(
+    procurement: ProcurementAggregation | None,
+) -> dict[str, pd.DataFrame | None]:
+    if procurement is None:
+        return {}
+    return {
+        "Animal Emissions Intensity": procurement.animal_emissions_intensity,
+        "Decision KPIs": _animal_emissions_concentration_frame(
+            procurement.animal_emissions_concentration
+        ),
+        "Substitution Scenarios": procurement.substitution_scenarios,
+    }
+
+
+def _animal_emissions_concentration_frame(
+    concentration: AnimalEmissionsConcentration | None,
+) -> pd.DataFrame | None:
+    if concentration is None:
+        return None
+    return pd.DataFrame(
+        [
+            {
+                "KPI": (
+                    f"Top {len(concentration.top_products)} animal products share of "
+                    "animal-product emissions"
+                ),
+                "Value": round(concentration.share_pct, 1),
+                "Unit": "%",
+                "Denominator": "Animal-product emissions only",
+                "Top products": " | ".join(concentration.top_products),
+                "Top product emissions (kg CO2e)": round(concentration.top_products_kg_co2e, 1),
+                "Total animal emissions (kg CO2e)": round(concentration.total_animal_kg_co2e, 1),
+            }
+        ]
     )

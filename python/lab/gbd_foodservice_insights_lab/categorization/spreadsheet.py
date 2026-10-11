@@ -13,7 +13,7 @@ import pandas as pd
 from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
-from gbd_foodservice_insights.categorization.steps import merge_categorizations
+from gbd_foodservice_insights.categorization.steps import MergeCounts, merge_categorizations
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     get_previously_classified_entrees,
@@ -32,6 +32,36 @@ from gbd_foodservice_insights_lab.parsing import (
 logger = logging.getLogger(__name__)
 
 
+def merge_summary(counts: MergeCounts, *, n_rows_non_entree: int | None = None) -> dict[str, Any]:
+    """The runscripts' categorization stats; the non-entree keys appear only for serving data."""
+
+    def pct_of_rows(n_rows: int) -> float:
+        return n_rows / counts.n_rows_before if counts.n_rows_before > 0 else 0
+
+    n_rows_eliminated = counts.n_rows_before - counts.n_rows_after
+    row_elimination_details: dict[str, Any] = {
+        "total_rows_initial": counts.n_rows_before,
+        "total_rows_final": counts.n_rows_after,
+        "total_rows_eliminated": n_rows_eliminated,
+        "total_eliminated_pct": pct_of_rows(n_rows_eliminated),
+        "rows_eliminated_uncategorized": counts.n_rows_uncategorized,
+        "rows_eliminated_uncategorized_pct": pct_of_rows(counts.n_rows_uncategorized),
+    }
+    if n_rows_non_entree is not None:
+        row_elimination_details |= {
+            "rows_eliminated_non_entree": n_rows_non_entree,
+            "rows_eliminated_non_entree_pct": pct_of_rows(n_rows_non_entree),
+        }
+    return {
+        "n_products_before": counts.n_products_before,
+        "n_products_after": counts.n_products_after,
+        "pct_remaining": counts.n_products_after / counts.n_products_before,
+        "n_rows_before": counts.n_rows_before,
+        "n_rows_after": counts.n_rows_after,
+        "row_elimination_details": row_elimination_details,
+    }
+
+
 def categorize_spreadsheet_to_csvs(
     input_filepath: str | Path,
     llm: LlmClient,
@@ -48,10 +78,9 @@ def categorize_spreadsheet_to_csvs(
     data also runs entree detection, keeps only the entree rows, and requires ``gemini_client``.
 
     ``update_historical_entree_classifications`` appends new entree classifications to the
-    historical file. New product categorizations are never cached here; see
-    ``product_cache.promote_local_review_file_to_reviewed_cache``.
+    historical file. New product categorizations are never cached here.
 
-    Returns the categorized frame and a summary dict: ``MergeCounts.to_summary()``, plus
+    Returns the categorized frame and a summary dict: `merge_summary`, plus
     ``match_type_counts`` and the output file keys.
     """
     if data_type not in ("procurement", "serving"):
@@ -96,6 +125,7 @@ def categorize_spreadsheet_to_csvs(
     )
 
     entree_review_df = None
+    n_rows_non_entree = None
     if data_type == "serving":
         classified_products = run_entree_detector(
             categorized.unique_products_df,
@@ -111,21 +141,17 @@ def categorize_spreadsheet_to_csvs(
         )
         if update_historical_entree_classifications:
             save_historical_entree_classifications(classified_products)
-        df_result, counts = filter_to_entrees(df_result, counts, classified_products)
+        df_result, counts, n_rows_non_entree = filter_to_entrees(
+            df_result, counts, classified_products
+        )
 
-    summary = counts.to_summary()
+    summary = merge_summary(counts, n_rows_non_entree=n_rows_non_entree)
     summary["match_type_counts"] = categorized.match_type_counts
 
     # Write output
     df_result.to_csv(output_filepath, index=False)
     summary["output_file"] = str(output_filepath)
     logger.info("Wrote categorized output to %s", output_filepath)
-
-    human_review_filepath = output_filepath.with_stem(output_filepath.stem + "_for_human_review")
-    categorized.ai_review_df.to_csv(human_review_filepath, index=False)
-    summary["human_review_file"] = str(human_review_filepath)
-    summary["human_review_n_unique_products"] = len(categorized.ai_review_df)
-    logger.info("Wrote human review output to %s", human_review_filepath)
 
     if entree_review_df is not None:
         entree_human_review_filepath = output_filepath.with_stem(

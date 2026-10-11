@@ -1,13 +1,14 @@
 """
-Shared plotting utilities for GBD analysis.
+GBD's chart styling and the helpers shared by `report/plots` and the lab's plots.
 
-This module provides common plotting functions, styles, and utilities used across
-aggregate.py and results.py to reduce code duplication and ensure consistent styling.
+Importing this module applies the house style: the Agg backend, the palette, and the Lato and
+Montserrat fonts.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from typing import Any, Literal
+from itertools import cycle, islice
+from typing import Literal
 
 import matplotlib
 import pandas as pd
@@ -27,7 +28,7 @@ from gbd_foodservice_insights import PACKAGE_DIR
 # Color Palette & Style Constants
 # ----------------------------------------------------------------------
 
-GBD_colors = [
+GBD_COLORS = [
     "#234162",
     "#1b9f8d",
     "#d9e027",
@@ -112,7 +113,7 @@ def set_suptitle_font(fig: plt.Figure, title: str, fontsize: int = 16, **kwargs)
 
 
 # Apply GBD styling on module import
-sns.set_palette(GBD_colors)
+sns.set_palette(GBD_COLORS)
 setup_gbd_fonts()
 
 # ----------------------------------------------------------------------
@@ -120,41 +121,9 @@ setup_gbd_fonts()
 # ----------------------------------------------------------------------
 
 
-def set_ylim_with_padding(ax: plt.Axes, data: pd.Series, padding: float = 0.2) -> None:
-    """Set y-axis limits with padding above and below the data range. We do this to give the graph
-    better perspective.
-
-    The lower limit is scaled by `1 - padding` and the upper by `1 + padding`, so the padding is
-    relative to each limit's value, not the range; this assumes positive data.
-    """
-    ymin, ymax = data.min(), data.max()
-    ax.set_ylim(ymin * (1 - padding), ymax * (1 + padding))
-
-
-def format_month_labels(month_values: Any) -> list[str]:
-    """Converts month values in 'Jan-2025' format
-
-    Handles an array-like of pandas Period objects, datetime objects, or strings in various
-    formats.
-    """
-    formatted_labels = []
-    for month in month_values:
-        try:
-            # Handle pandas Period objects
-            if hasattr(month, "strftime"):
-                formatted_labels.append(month.strftime("%b-%Y"))
-            # Handle string formats like '2024-01' or '2024-01-01'
-            elif isinstance(month, str):
-                dt = pd.to_datetime(month)
-                formatted_labels.append(dt.strftime("%b-%Y"))
-            else:
-                # Fallback: convert to string as-is
-                formatted_labels.append(str(month))
-        except ValueError, AttributeError:
-            # If all parsing fails, use string representation
-            formatted_labels.append(str(month))
-
-    return formatted_labels
+def format_month_labels(months: Iterable[pd.Period]) -> list[str]:
+    """Labels like 'Jan-2025'."""
+    return [month.strftime("%b-%Y") for month in months]
 
 
 def add_grid(
@@ -203,17 +172,18 @@ def create_horizontal_percentage_barplot(
     This function creates a horizontal bar plot where the x-axis represents percentages
     (0-100) and optionally adds percentage text labels at the end of each bar.
 
-    `palette` defaults to GBD_colors.
+    `palette` defaults to GBD_COLORS.
     """
     if palette is None:
-        palette = GBD_colors
+        palette = GBD_COLORS
 
     sns.barplot(
         data=data,
         y=y_col,
         x=percentage_col,
         hue=y_col,
-        palette=palette,
+        # Exactly one color per bar: seaborn warns when the list is longer or shorter.
+        palette=list(islice(cycle(palette), data[y_col].nunique())),
         legend=False,
         ax=ax,
     )

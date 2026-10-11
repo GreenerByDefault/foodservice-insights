@@ -47,6 +47,15 @@ REQUEST_TIMEOUT_S: Final = 30.0
 # run as `unknown` rather than inviting the user to retry something that cannot succeed.
 RETRYABLE_STATUS_CODES: Final = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
+# How many LLM calls one analysis has in flight at once. The account's rate limits see
+# workers × `maxConcurrentAttempts` × this, and a 429 storm costs this × MAX_ATTEMPTS requests
+# before the run fails as `upstream_api`. Nothing checks that product against the limits: no
+# single process knows how many workers are running, so `WORKER_MAX_CONCURRENT_ATTEMPTS` is the
+# lever to pull in an incident. Conservative until measured.
+# *Rejected: a worker config field checked in `apps/worker/src/config.ts`* — its relations need
+# the fleet size and the account's limits, neither of which that file knows either.
+LLM_CONCURRENCY: Final = 3
+
 DEFAULT_MODEL: Final = "gpt-4.1-mini"
 MAX_TOKENS: Final = 30
 
@@ -59,15 +68,12 @@ def _is_retryable(error: openai.APIError) -> bool:
 
 
 def _strip_pack_counts(item: str) -> str:
-    return re.sub(r"\(\d+\)", "", item).replace(".", "").strip()
+    return re.sub(r"\(\d+\)|\.(?!\d)", "", item).strip()
 
 
 def _categories_prompt(template_name: str, categories: Sequence[str]) -> str:
     template = load_prompt(template_name)
-    try:
-        return template.format(categories=list(categories))
-    except KeyError as err:
-        raise ValueError("Placeholder {categories} not found in prompt template") from err
+    return template.format(categories="\n".join(categories))
 
 
 @dataclass(frozen=True)

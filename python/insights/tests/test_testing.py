@@ -7,7 +7,7 @@ from gbd_foodservice_insights.analysis import (
     UnusableDataError,
     UpstreamApiError,
 )
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.testing import (
     KEYWORD_CATEGORIES,
     PDF_MAGIC_BYTES,
@@ -72,7 +72,7 @@ def test_stub_analysis_writes_nothing_when_it_raises(tmp_path: Path) -> None:
 
 
 def test_keyword_table_names_only_gbd_categories() -> None:
-    gbd_categories = set(get_GBD_categories())
+    gbd_categories = set(category_names())
     assert {category for _, category in KEYWORD_CATEGORIES} <= gbd_categories
 
 

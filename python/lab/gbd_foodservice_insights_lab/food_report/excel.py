@@ -3,7 +3,8 @@
 import logging
 
 import pandas as pd
-from gbd_foodservice_insights.report.excel import write_excel_workbook
+from gbd_foodservice_insights.report.aggregation import ProcurementAggregation
+from gbd_foodservice_insights.report.excel import procurement_sheets, write_excel_workbook
 from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
@@ -19,9 +20,7 @@ def build_qa_excel_report(
     highest_lowest: pd.DataFrame | None = None,
     diner_meals_df: pd.DataFrame | None = None,
     emissions_summary: pd.DataFrame | None = None,
-    animal_emissions_intensity: pd.DataFrame | None = None,
-    decision_kpis: pd.DataFrame | None = None,
-    substitution_scenarios: pd.DataFrame | None = None,
+    procurement: ProcurementAggregation | None = None,
     quality_findings_df: pd.DataFrame | None = None,
     missingness_summary_df: pd.DataFrame | None = None,
     data_profile_df: pd.DataFrame | None = None,
@@ -45,9 +44,7 @@ def build_qa_excel_report(
         "Category Stability": highest_lowest,
         f"{diner_or_meal.title()}s": diner_meals_df,
         "Emissions Summary": emissions_summary,
-        "Animal Emissions Intensity": animal_emissions_intensity,
-        "Decision_KPIs": decision_kpis,
-        "Substitution_Scenarios": substitution_scenarios,
+        **procurement_sheets(procurement),
         "Data_Quality_Findings": quality_findings_df,
         "Missingness_Summary": missingness_summary_df,
         "Data Profile": data_profile_df,

@@ -97,7 +97,7 @@ def test_run_entree_detector_raises_when_a_product_maps_to_multiple_categories(t
     )
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit", "Dairy"]),
+        patch.object(entrees, "category_names", return_value=["Fruit", "Dairy"]),
         pytest.raises(ValueError, match="mystery meal"),
     ):
         run_entree_detector(
@@ -114,7 +114,7 @@ def test_run_entree_detector_skips_gemini_when_no_products_are_gbd_eligible(tmp_
     )
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "category_names", return_value=["Fruit"]),
         patch.object(entrees, "call_gemini_api") as mock_call_gemini_api,
         patch("pandas.DataFrame.to_csv"),
     ):
@@ -138,7 +138,7 @@ def test_run_entree_detector_raises_when_gemini_client_missing_for_new_products(
     classified_products = pd.DataFrame({"product": ["banana"], "category": ["Fruit"]})
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "category_names", return_value=["Fruit"]),
         pytest.raises(ValueError, match="gemini_client must be provided"),
     ):
         run_entree_detector(
@@ -173,7 +173,7 @@ def test_run_entree_detector_uses_historical_before_llm(tmp_path):
         return "side/add-on"
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "category_names", return_value=["Fruit"]),
         patch.object(entrees, "load_prompt", return_value="Prompt"),
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
@@ -213,7 +213,7 @@ def test_run_entree_detector_retries_transient_gemini_failures_before_succeeding
         return "entree"
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "category_names", return_value=["Fruit"]),
         patch.object(entrees, "load_prompt", return_value="Prompt"),
         patch.object(entrees, "call_gemini_api", side_effect=flaky_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
@@ -237,7 +237,7 @@ def test_run_entree_detector_raises_after_exhausting_gemini_retries(tmp_path):
     classified_products = pd.DataFrame({"product": ["banana"], "category": ["Fruit"]})
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "category_names", return_value=["Fruit"]),
         patch.object(entrees, "load_prompt", return_value="Prompt"),
         patch.object(entrees, "call_gemini_api", side_effect=RuntimeError("persistent failure")),
         patch.object(entrees, "print_progress", return_value=None),
@@ -286,7 +286,7 @@ def test_run_entree_detector_escalates_unsure_items_to_pro_marks_review(caplog, 
         raise AssertionError(f"Unexpected prompt/model: {prompt} / {model}")
 
     with (
-        patch.object(entrees, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(entrees, "category_names", return_value=["Fruit"]),
         patch.object(entrees, "load_prompt", return_value="Prompt"),
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
@@ -370,7 +370,7 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
         n_products_after=3,
         n_rows_uncategorized=1,
     )
-    df_final, filtered_counts = filter_to_entrees(
+    df_final, filtered_counts, n_rows_non_entree = filter_to_entrees(
         _merged_rows(["steak", "bread roll", "pot roast", "steak"]),
         counts,
         classified_products=pd.DataFrame(
@@ -387,7 +387,8 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
         .set_axis([0, 2, 3])
         .assign(entree_classification="entree"),
     )
-    assert filtered_counts == dataclasses.replace(counts, n_rows_after=3, n_rows_non_entree=1)
+    assert filtered_counts == dataclasses.replace(counts, n_rows_after=3)
+    assert n_rows_non_entree == 1
 
 
 def test_build_entree_human_review_table_excludes_historical():

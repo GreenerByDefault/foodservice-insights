@@ -1,58 +1,23 @@
+import dataclasses
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.pipeline import CategorizedProducts
+from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
 from gbd_foodservice_insights_lab.categorization import spreadsheet
-from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
+from gbd_foodservice_insights_lab.categorization.spreadsheet import (
+    categorize_spreadsheet_to_csvs,
+    merge_summary,
+)
 
 
 @pytest.fixture(autouse=True)
 def absent_cache(tmp_path, monkeypatch):
     """Keeps the developer's local copy of GBD's cache out of these tests."""
     monkeypatch.setattr(cache, "categorization_cache_path", lambda: tmp_path / "absent.csv")
-
-
-def test_categorize_spreadsheet_to_csvs_writes_human_review_csv(tmp_path):
-    input_path = tmp_path / "input.csv"
-    output_path = tmp_path / "output_categorized.csv"
-    input_df = pd.DataFrame(
-        {
-            "product": ["apple"],
-            "date": ["2025-01-01"],
-            "weight": [1.0],
-        }
-    )
-    input_df.to_csv(input_path, index=False)
-
-    human_review_df = pd.DataFrame(
-        {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
-    )
-    categorized = CategorizedProducts(
-        cleaned_df=input_df,
-        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        ai_review_df=human_review_df,
-        match_type_counts={"llm": 1},
-    )
-
-    with patch.object(spreadsheet, "categorize_unique_products", return_value=categorized):
-        _, result_summary = categorize_spreadsheet_to_csvs(
-            input_filepath=input_path,
-            output_filepath=output_path,
-            llm=KeywordLlmClient(),
-        )
-
-    expected_review_path = tmp_path / "output_categorized_for_human_review.csv"
-
-    assert output_path.exists()
-    assert expected_review_path.exists()
-    assert result_summary["human_review_file"] == str(expected_review_path)
-    assert result_summary["human_review_n_unique_products"] == 1
-
-    written_review_df = pd.read_csv(expected_review_path)
-    pd.testing.assert_frame_equal(written_review_df, human_review_df)
 
 
 def test_categorize_spreadsheet_to_csvs_raises_for_an_unsupported_file_type(tmp_path):
@@ -95,13 +60,9 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
     input_df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.5]})
     input_df.to_excel(input_path, index=False)
 
-    human_review_df = pd.DataFrame(
-        {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
-    )
     categorized = CategorizedProducts(
         cleaned_df=input_df,
         unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        ai_review_df=human_review_df,
         match_type_counts={"llm": 1},
     )
 
@@ -147,7 +108,6 @@ def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_p
     categorized = CategorizedProducts(
         cleaned_df=input_df,
         unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        ai_review_df=pd.DataFrame(),
         match_type_counts={"llm": 1},
     )
 
@@ -158,3 +118,68 @@ def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_p
 
     assert result_summary["output_file"] == str(tmp_path / "input_categorized.csv")
     assert (tmp_path / "input_categorized.csv").exists()
+
+
+def test_merge_summary_omits_non_entree_keys_until_the_entree_filter_runs():
+    counts = MergeCounts(
+        n_rows_before=8,
+        n_rows_after=5,
+        n_products_before=5,
+        n_products_after=4,
+        n_rows_uncategorized=3,
+    )
+    expected = {
+        "n_products_before": 5,
+        "n_products_after": 4,
+        "pct_remaining": 0.8,
+        "n_rows_before": 8,
+        "n_rows_after": 5,
+        "row_elimination_details": {
+            "total_rows_initial": 8,
+            "total_rows_final": 5,
+            "total_rows_eliminated": 3,
+            "total_eliminated_pct": 0.375,
+            "rows_eliminated_uncategorized": 3,
+            "rows_eliminated_uncategorized_pct": 0.375,
+        },
+    }
+    assert merge_summary(counts) == expected
+
+    filtered = dataclasses.replace(counts, n_rows_after=4)
+    assert merge_summary(filtered, n_rows_non_entree=1) == expected | {
+        "n_rows_after": 4,
+        "row_elimination_details": expected["row_elimination_details"]
+        | {
+            "total_rows_final": 4,
+            "total_rows_eliminated": 4,
+            "total_eliminated_pct": 0.5,
+            "rows_eliminated_non_entree": 1,
+            "rows_eliminated_non_entree_pct": 0.125,
+        },
+    }
+
+
+def test_merge_summary_avoids_division_by_zero_with_no_rows_before():
+    counts = MergeCounts(
+        n_rows_before=0,
+        n_rows_after=0,
+        n_products_before=1,
+        n_products_after=1,
+        n_rows_uncategorized=0,
+    )
+
+    assert merge_summary(counts) == {
+        "n_products_before": 1,
+        "n_products_after": 1,
+        "pct_remaining": 1.0,
+        "n_rows_before": 0,
+        "n_rows_after": 0,
+        "row_elimination_details": {
+            "total_rows_initial": 0,
+            "total_rows_final": 0,
+            "total_rows_eliminated": 0,
+            "total_eliminated_pct": 0,
+            "rows_eliminated_uncategorized": 0,
+            "rows_eliminated_uncategorized_pct": 0,
+        },
+    }

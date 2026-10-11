@@ -77,19 +77,24 @@ export function classifyAuthResult(result: {
   };
 }
 
+/** The Supabase project `supabase` mode validates sessions against. */
+export function supabaseProject(): { url: string; publishableKey: string } {
+  return {
+    url: requirePublicVar('PUBLIC_SUPABASE_URL'),
+    publishableKey: requirePublicVar('PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+  };
+}
+
 async function identifyFromSession(event: RequestEvent): Promise<UserId | null> {
-  const supabase = createServerClient(
-    requirePublicVar('PUBLIC_SUPABASE_URL'),
-    requirePublicVar('PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
-    {
-      cookieOptions: { name: AUTH_COOKIE_NAME },
-      cookies: {
-        getAll: () => event.cookies.getAll(),
-        setAll: (cookies, headers) => writeSessionCookies(event, cookies, headers),
-      },
-      global: { fetch: event.fetch },
+  const { url, publishableKey } = supabaseProject();
+  const supabase = createServerClient(url, publishableKey, {
+    cookieOptions: { name: AUTH_COOKIE_NAME },
+    cookies: {
+      getAll: () => event.cookies.getAll(),
+      setAll: (cookies, headers) => writeSessionCookies(event, cookies, headers),
     },
-  );
+    global: { fetch: event.fetch },
+  });
 
   const { data, error: cause } = await supabase.auth.getUser();
   const result = classifyAuthResult({ user: data.user, error: cause });

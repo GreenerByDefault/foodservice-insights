@@ -4,7 +4,8 @@ import * as v from 'valibot';
 // Every variable is optional here, and dynamic (SvelteKit's default): one built image runs in any
 // environment, and a missing value fails where it is read — `requirePrivateVar` and
 // `requirePublicVar` in `#lib/server/env.ts`, with a pointer at the setup instructions — rather
-// than stopping a process that never needed it.
+// than stopping a process that never needed it. The server does need them, so it reads them all
+// at startup: `assertConfigured` in `#lib/server/config.ts`.
 const optional = { schema: v.optional(v.string()) };
 const optionalPublic = { ...optional, public: true };
 

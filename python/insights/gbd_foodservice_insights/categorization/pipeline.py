@@ -11,7 +11,6 @@ Callers merge the result back onto the rows with `steps.merge_categorizations`.
 All helper logic lives in sibling modules:
 
     steps.py    — historical reuse, name cleaning, LLM categorization, merge-back
-    reviews.py  — human-review table construction
     cache.py    — the reviewed cache, which callers load and pass in
 """
 
@@ -22,7 +21,6 @@ import pandas as pd
 
 from gbd_foodservice_insights.categorization.cache import CategorizationCache
 from gbd_foodservice_insights.categorization.llm import LlmClient
-from gbd_foodservice_insights.categorization.reviews import build_ai_review_table
 from gbd_foodservice_insights.categorization.steps import (
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
@@ -37,7 +35,6 @@ logger = logging.getLogger(__name__)
 class CategorizedProducts:
     cleaned_df: pd.DataFrame  # the input rows, with product stripped
     unique_products_df: pd.DataFrame  # one row per product, with its category
-    ai_review_df: pd.DataFrame  # the products an LLM categorized, for human review
     match_type_counts: dict[str, int]
 
 
@@ -84,12 +81,6 @@ def categorize_unique_products(
     # --- LLM categorization for still-uncategorized items ---
     unique_products_df = categorize_with_llm(unique_products_df, llm)
 
-    # Build human-review table for AI-only categorizations
-    ai_review_df = build_ai_review_table(
-        original_df=df,
-        unique_products_df=unique_products_df,
-    )
-
     # Provenance breakdown (raw-history / cleaned-name-history / llm) for the
     # cleaned-name reuse hit-rate. Cast to plain str/int so the summary stays
     # JSON-serialisable for the report manifest.
@@ -102,6 +93,5 @@ def categorize_unique_products(
     return CategorizedProducts(
         cleaned_df=df,
         unique_products_df=unique_products_df,
-        ai_review_df=ai_review_df,
         match_type_counts=match_type_counts,
     )

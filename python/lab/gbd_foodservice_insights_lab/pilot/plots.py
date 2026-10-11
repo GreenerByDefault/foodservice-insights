@@ -5,18 +5,20 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from gbd_foodservice_insights.categories import (
-    get_drink_categories,
-    get_food_categories,
+    drink_categories,
+    food_categories,
 )
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_colors,
+    GBD_COLORS,
     add_grid,
     format_month_labels,
     set_suptitle_font,
     set_title_font,
 )
 from gbd_foodservice_insights.report.plots.panels import prepare_monthly_trend_data
+from gbd_foodservice_insights.report.schema import metric_display_label
 
+from gbd_foodservice_insights_lab.food_report.utils import normalize_diner_meal_mapping
 from gbd_foodservice_insights_lab.plotting_extras import (
     PERIOD_COLORS,
     clean_category_label,
@@ -61,7 +63,7 @@ def plot_kilos_per_diner_meal_pilot_changes_by_category(
     """Plot a horizontal barplot of kilos per diner-meal by category, grouped by period.
 
     `period_category_data` needs 'category', 'kilos per diner-meal', and 'period' columns.
-    Category labels are cleaned with clean_GBD_category_name() if available, otherwise shown
+    Category labels are cleaned with short_name() if available, otherwise shown
     as-is. `categories` sets which to include, in display order (top to bottom); None includes
     all, sorted by kilos per diner-meal.
     """
@@ -305,7 +307,7 @@ def _plot_baseline_pilot_split(
             y_positions[i],
             row[plant_label],
             height=bar_height,
-            color=GBD_colors[1],  # Green
+            color=GBD_COLORS[1],  # Green
             label=plant_label if i == 0 else "",
         )
 
@@ -315,7 +317,7 @@ def _plot_baseline_pilot_split(
             row[animal_label],
             height=bar_height,
             left=row[plant_label],
-            color=GBD_colors[0],  # Blue
+            color=GBD_COLORS[0],  # Blue
             label=animal_label if i == 0 else "",
         )
 
@@ -627,7 +629,7 @@ def plot_unique_products_over_time(
             marker="o",
             markersize=8,
             linewidth=2,
-            color=GBD_colors[0] if isinstance(GBD_colors, list) and GBD_colors else None,
+            color=GBD_COLORS[0] if isinstance(GBD_COLORS, list) and GBD_COLORS else None,
             ax=ax,
         )
 
@@ -899,13 +901,13 @@ def print_baseline_pilot_percent_changes(
     monthly_category_data = monthly_category_data.copy()
     monthly_category_data["category"] = monthly_category_data["category"].str.lower()
 
-    food_categories = set(get_food_categories(lowercase=True))
-    drink_categories = set(get_drink_categories(lowercase=True))
+    food = {c.lower() for c in food_categories()}
+    drink = {c.lower() for c in drink_categories()}
 
-    food_data = monthly_category_data[monthly_category_data["category"].isin(food_categories)]
-    drink_data = monthly_category_data[monthly_category_data["category"].isin(drink_categories)]
+    food_data = monthly_category_data[monthly_category_data["category"].isin(food)]
+    drink_data = monthly_category_data[monthly_category_data["category"].isin(drink)]
     food_plus_drink_data = monthly_category_data[
-        monthly_category_data["category"].isin(food_categories | drink_categories)
+        monthly_category_data["category"].isin(food | drink)
     ]
 
     food_totals = _aggregate_totals(food_data)
@@ -1162,6 +1164,12 @@ def plot_kilos_per_diner_over_time(
     )
 
 
+def _as_months(month_year: pd.Series) -> pd.Series:
+    if isinstance(month_year.dtype, pd.PeriodDtype):
+        return month_year
+    return pd.to_datetime(month_year.astype(str)).dt.to_period("M")
+
+
 def plot_metric_over_time(
     monthly_category_data: pd.DataFrame,
     metric: str = "kilos_total",
@@ -1174,11 +1182,20 @@ def plot_metric_over_time(
     if metric not in {"kilos_total", "servings total"}:
         raise ValueError("metric must be 'kilos_total' or 'servings total'")
 
-    plot_data, metric_label = prepare_monthly_trend_data(
-        monthly_category_data,
+    plot_data = prepare_monthly_trend_data(
+        # A workbook read back with `pd.read_excel` can hold months as strings or timestamps,
+        # which would not match the mapping's `Period` keys and plot as NaN.
+        monthly_category_data.assign(month_year=_as_months(monthly_category_data["month_year"])),
         metric,
         per_diner_meal=per_diner_meal,
-        diner_meal_mapping=diner_meal_mapping,
+        diner_meal_mapping=(
+            None if diner_meal_mapping is None else normalize_diner_meal_mapping(diner_meal_mapping)
+        ),
+    )
+    metric_label = (
+        f"{metric_display_label(metric)} per diner-meal"
+        if per_diner_meal
+        else f"Total {metric_display_label(metric)}"
     )
 
     plot_title = custom_title or f"{metric_label.title()} Over Time"

@@ -6,10 +6,12 @@ import pandas as pd
 from gbd_foodservice_insights.report.excel import diner_meals_frame, write_client_workbook
 from gbd_foodservice_insights.report.food_report import FoodReport, build_food_report
 
+JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
+
 
 def _report(**overrides: Any) -> FoodReport:
     kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {"2024-01": 100, "2024-02": 120},
+        "diner_meal_mapping": {JAN: 100, FEB: 120},
         "mode": "procurement",
         "region": "us",
         "diner_or_meal": "diner",
@@ -40,8 +42,8 @@ def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
         "Diners",
         "Emissions Summary",
         "Animal Emissions Intensity",
-        "Decision_KPIs",
-        "Substitution_Scenarios",
+        "Decision KPIs",
+        "Substitution Scenarios",
     ]
     assert sheets["Template"].columns.tolist() == ["category", "2024-01", "2024-02", "total"]
     pd.testing.assert_frame_equal(

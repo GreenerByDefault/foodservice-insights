@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import normalize_product_name
 from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.utils import print_progress
@@ -367,7 +367,7 @@ def run_entree_detector(
         errors="ignore",
     )
 
-    gbd_categories = set(get_GBD_categories())
+    gbd_categories = set(category_names())
     products_to_check = _build_unique_entree_products(classified_products, gbd_categories)
 
     logger.info("Running entree detector, detected %d products to check.", len(products_to_check))
@@ -532,9 +532,11 @@ def filter_to_entrees(
     merged_df: pd.DataFrame,
     counts: MergeCounts,
     classified_products: pd.DataFrame,
-) -> tuple[pd.DataFrame, MergeCounts]:
+) -> tuple[pd.DataFrame, MergeCounts, int]:
     """
     Keep only the entree rows of `merge_categorizations`' output, and update its counts.
+
+    Also returns how many rows were side/add-ons.
 
     This runs after the merge, not before, so that side/add-ons do not count toward the
     merge's "over 80% of products eliminated" check: a file that is mostly sides is still
@@ -547,11 +549,8 @@ def filter_to_entrees(
         classifications == ENTREE_LABEL_ENTREE
     ]
     logger.info("Entree filter: kept %d/%d rows.", len(entrees), len(merged_df))
-    return entrees, dataclasses.replace(
-        counts,
-        n_rows_after=len(entrees),
-        n_rows_non_entree=int((classifications == ENTREE_LABEL_SIDE_ADDON).sum()),
-    )
+    n_rows_non_entree = int((classifications == ENTREE_LABEL_SIDE_ADDON).sum())
+    return entrees, dataclasses.replace(counts, n_rows_after=len(entrees)), n_rows_non_entree
 
 
 def build_entree_human_review_table(

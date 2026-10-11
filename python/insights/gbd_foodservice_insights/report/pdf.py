@@ -21,10 +21,10 @@ from gbd_foodservice_insights.plotting_utils import (
     LETTER_PORTRAIT,
     close_new_figures_on_error,
 )
+from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding, summarize_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
-from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ def create_title_page(
 
 
 def _format_co2e(kg: float) -> str:
-    """Human-scale CO2e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
+    """Human-scale CO₂e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
     if kg < 2000:
         return f"{kg:,.0f} kg"
     tonnes = kg / 1000
@@ -210,13 +210,11 @@ def create_executive_summary_page(
         return
 
     # --- Plain-English mode -------------------------------------------------
-    # Plain "CO2e" throughout: the report fonts (Montserrat/Lato) lack the
-    # subscript-two glyph, which renders as a missing-character box.
     headline = _format_co2e(narrative["total_co2e_kg"])
     ax.text(
         0.5,
         0.76,
-        f"{headline} CO2e",
+        f"{headline} CO₂e",
         transform=ax.transAxes,
         ha="center",
         va="top",
@@ -271,11 +269,11 @@ def _narrative_paragraphs(narrative: dict[str, Any]) -> list[str]:
     sentence = (
         f"Over this period the kitchen purchased about {narrative['total_food_kg']:,.0f} kg "
         f"of categorised food. Producing that food released an estimated {headline} of carbon "
-        "dioxide equivalent (CO2e), the standard measure for comparing the climate impact of "
+        "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
         "different foods."
     )
     if narrative.get("per_dm_kg"):
-        sentence += f" That works out at roughly {narrative['per_dm_kg']:.2f} kg of CO2e per {dm}."
+        sentence += f" That works out at roughly {narrative['per_dm_kg']:.2f} kg of CO₂e per {dm}."
     paragraphs.append(sentence)
 
     top = narrative.get("top_categories") or []
@@ -608,7 +606,7 @@ def create_decision_kpis_page(
     row = dataframe.iloc[0].to_dict()
     focus = str(row.get("Focus", "top animal products")).strip()
     share = row.get("Share of Animal Emissions (%)", "")
-    top_products_emissions = row.get("Top Products Kg CO2e", "")
+    top_products_emissions = row.get("Top Products Kg CO₂e", "")
     top_products = str(row.get("Top Animal Products", "")).strip()
 
     def _clean_numeric_text(value: Any) -> str:
@@ -633,7 +631,7 @@ def create_decision_kpis_page(
 
     intro_lines = _wrap_text_lines(
         [
-            (f"The {focus.lower()} was {share_text}% amounting to {emissions_text} kg CO2e."),
+            (f"The {focus.lower()} was {share_text}% amounting to {emissions_text} kg CO₂e."),
             "",
             f"The top {product_count} animal {product_label}:",
         ],
@@ -896,24 +894,24 @@ def _format_animal_emissions_intensity_for_pdf(dataframe: pd.DataFrame) -> pd.Da
         columns={
             "category": "Category",
             "kilos_total": "Kilos of Food",
-            "total_kg_co2e": "Kg CO2e",
-            "kg_co2e_per_kg_food": "CO2e Per Kg Food",
+            "total_kg_co2e": "Kg CO₂e",
+            "kg_co2e_per_kg_food": "CO₂e Per Kg Food",
         }
     )
 
     ordered_columns = [
         column
-        for column in ["Category", "Kilos of Food", "CO2e Per Kg Food", "Kg CO2e"]
+        for column in ["Category", "Kilos of Food", "CO₂e Per Kg Food", "Kg CO₂e"]
         if column in display_df.columns
     ]
     display_df = display_df[ordered_columns]
 
-    for column in ["Kilos of Food", "Kg CO2e"]:
+    for column in ["Kilos of Food", "Kg CO₂e"]:
         if column in display_df.columns:
             display_df[column] = display_df[column].round().astype("Int64")
 
-    if "CO2e Per Kg Food" in display_df.columns:
-        display_df["CO2e Per Kg Food"] = display_df["CO2e Per Kg Food"].round(2)
+    if "CO₂e Per Kg Food" in display_df.columns:
+        display_df["CO₂e Per Kg Food"] = display_df["CO₂e Per Kg Food"].round(2)
 
     return display_df
 
@@ -937,44 +935,23 @@ def _format_category_template_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
     return display_df
 
 
-def _format_decision_kpis_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a compact, client-facing version of the decision KPI table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    display_df = display_df.rename(
-        columns={
-            "KPI": "Focus",
-            "Value": "Share of Animal Emissions (%)",
-            "Top products": "Top Animal Products",
-            "Top product emissions (kg CO2e)": "Top Products Kg CO2e",
-            "Total animal emissions (kg CO2e)": "Total Animal Kg CO2e",
+def _format_decision_kpis_for_pdf(concentration: AnimalEmissionsConcentration) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Focus": [
+                f"Top {len(concentration.top_products)} animal products share of "
+                "animal-product emissions"
+            ],
+            "Share of Animal Emissions (%)": [round(concentration.share_pct, 1)],
+            "Top Animal Products": [" | ".join(concentration.top_products)],
+            "Top Products Kg CO₂e": pd.array(
+                [round(concentration.top_products_kg_co2e)], dtype="Int64"
+            ),
+            "Total Animal Kg CO₂e": pd.array(
+                [round(concentration.total_animal_kg_co2e)], dtype="Int64"
+            ),
         }
     )
-
-    keep_columns = [
-        "Focus",
-        "Share of Animal Emissions (%)",
-        "Top Animal Products",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
-    ]
-    display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
-
-    for column in [
-        "Share of Animal Emissions (%)",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
-    ]:
-        if column in display_df.columns:
-            rounded = pd.to_numeric(display_df[column], errors="coerce")
-            if column == "Share of Animal Emissions (%)":
-                display_df[column] = rounded.round(1)
-            else:
-                display_df[column] = rounded.round().astype("Int64")
-
-    return display_df
 
 
 def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -995,16 +972,16 @@ def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFr
         columns={
             "scenario": "Scenario",
             "replaced_weight_kg": "Weight Replaced (kg)",
-            "projected_emissions_kg_co2e": "Projected Kg CO2e",
-            "avoidable_kg_co2e": "Avoidable Kg CO2e",
+            "projected_emissions_kg_co2e": "Projected Kg CO₂e",
+            "avoidable_kg_co2e": "Avoidable Kg CO₂e",
             "institution_emissions_avoided_pct": "Institution Emissions Averted (%)",
         }
     )
 
     for column in [
         "Weight Replaced (kg)",
-        "Projected Kg CO2e",
-        "Avoidable Kg CO2e",
+        "Projected Kg CO₂e",
+        "Avoidable Kg CO₂e",
         "Institution Emissions Averted (%)",
     ]:
         if column in display_df.columns:
@@ -1084,7 +1061,7 @@ def build_pdf_report(
         )
         create_text_page(pdf, "Data Completeness & Quality", quality_lines)
 
-    logger.info("PDF report saved to %s", rel_path(output_path))
+    logger.info("PDF report saved to %s", output_path)
     return output_path
 
 
@@ -1097,25 +1074,24 @@ def write_report_pdf(
     baseline_pilot: str,
     show_quality_successes: bool,
 ) -> None:
-    findings = [*report.findings, *charts.findings]
+    findings = list(report.findings)
     quality_status = quality_status_from_findings(findings)
 
-    tables = {
-        "Category Template": _format_category_template_for_pdf(report.aggregation["template_data"])
-    }
-    animal_emissions_intensity = report.procurement_table("animal_emissions_intensity")
-    if animal_emissions_intensity is not None:
-        tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
-            animal_emissions_intensity
-        )
-    decision_kpis = report.procurement_table("decision_kpis")
-    if decision_kpis is not None:
-        tables["Decision KPIs"] = _format_decision_kpis_for_pdf(decision_kpis)
-    substitution_scenarios = report.procurement_table("substitution_scenarios")
-    if substitution_scenarios is not None:
-        tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
-            substitution_scenarios
-        )
+    aggregation = report.aggregation
+    tables = {"Category Template": _format_category_template_for_pdf(aggregation.template)}
+    if (procurement := aggregation.procurement) is not None:
+        if procurement.animal_emissions_intensity is not None:
+            tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
+                procurement.animal_emissions_intensity
+            )
+        if procurement.animal_emissions_concentration is not None:
+            tables["Decision KPIs"] = _format_decision_kpis_for_pdf(
+                procurement.animal_emissions_concentration
+            )
+        if procurement.substitution_scenarios is not None:
+            tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
+                procurement.substitution_scenarios
+            )
 
     build_pdf_report(
         output_path=str(path),

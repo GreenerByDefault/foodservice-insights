@@ -24,7 +24,6 @@ from gbd_foodservice_insights.report.food_report import (
 )
 from gbd_foodservice_insights.report.quality import (
     Finding,
-    QualityCheckError,
     findings_to_frame,
     missingness_summary_frame,
     summarize_findings,
@@ -34,14 +33,18 @@ from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
     ReportMode,
     metric_for_mode,
+    per_diner_metric_name,
     quality_status_from_findings,
-    validate_region,
 )
 
 from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
 from gbd_foodservice_insights_lab.food_report import excel as qa_excel
-from gbd_foodservice_insights_lab.food_report.utils import load_diner_meal_mapping_from_json
+from gbd_foodservice_insights_lab.food_report.utils import (
+    load_diner_meal_mapping_from_json,
+    normalize_diner_meal_mapping,
+    validate_region,
+)
 from gbd_foodservice_insights_lab.parsing import (
     clean_weight_column,
     parse_and_validate_date_column,
@@ -93,12 +96,12 @@ def _resolve_input_file(input_file: str | Path | None) -> Path:
 
 def _collect_diagnostic_export_sheets(
     df: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
+    diner_or_meal: DinerOrMeal,
     metric_total: str,
-    monthly_product_data: pd.DataFrame | None = None,
-    monthly_category_data: pd.DataFrame | None = None,
-    pdf_extracted: bool | None = None,
+    potential_name_splits: pd.DataFrame,
+    category_discontinuity: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
     """Collect export-ready diagnostic tables for the QA workbook.
 
@@ -106,17 +109,10 @@ def _collect_diagnostic_export_sheets(
     orchestration function does not have to manage that bookkeeping inline.
     """
     diagnostic_export_sheets: dict[str, pd.DataFrame] = {}
-
-    try:
-        _, potential_name_splits_df = checks.detect_near_duplicate_product_names(
-            df,
-            metric_total=metric_total,
-            pdf_extracted=pdf_extracted,
-        )
-        if not potential_name_splits_df.empty:
-            diagnostic_export_sheets["Potential_Name_Splits"] = potential_name_splits_df
-    except Exception as exc:
-        logger.warning("Could not build potential name splits export: %s", exc)
+    if not potential_name_splits.empty:
+        diagnostic_export_sheets["Potential_Name_Splits"] = potential_name_splits
+    if not category_discontinuity.empty:
+        diagnostic_export_sheets["Category_Discontinuity"] = category_discontinuity
 
     try:
         _, outlier_line_items_df = checks.detect_unusual_sales(
@@ -131,36 +127,13 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build outlier line items export: %s", exc)
 
     try:
-        _, category_discontinuity_df = checks.detect_category_discontinuity(
-            df,
-            metric_total=metric_total,
+        _, denominator_qc_df = checks.check_diner_meal_reasonableness(
+            df, diner_meal_mapping, metric_total, diner_or_meal=diner_or_meal
         )
-        if not category_discontinuity_df.empty:
-            diagnostic_export_sheets["Category_Discontinuity"] = category_discontinuity_df
-    except Exception as exc:
-        logger.warning("Could not build category discontinuity export: %s", exc)
-
-    try:
-        _, denominator_qc_df = checks.check_diner_meal_reasonableness(diner_meal_mapping)
         if not denominator_qc_df.empty:
             diagnostic_export_sheets["Denominator_QC"] = denominator_qc_df
     except Exception as exc:
         logger.warning("Could not build denominator QC export: %s", exc)
-
-    if monthly_product_data is not None and monthly_category_data is not None:
-        try:
-            _, aggregation_reconciliation_df = checks.check_aggregation_reconciliation(
-                df,
-                monthly_product_data,
-                monthly_category_data,
-                metric_total,
-            )
-            if not aggregation_reconciliation_df.empty:
-                diagnostic_export_sheets["Aggregation_Reconciliation"] = (
-                    aggregation_reconciliation_df
-                )
-        except Exception as exc:
-            logger.warning("Could not build aggregation reconciliation export: %s", exc)
 
     return diagnostic_export_sheets
 
@@ -239,33 +212,49 @@ def run_food_report(
 
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
-        if diner_meal_mapping is None:
-            diner_meal_mapping = load_diner_meal_mapping_from_json(diner_meal_file)
+        counts = (
+            load_diner_meal_mapping_from_json(diner_meal_file)
+            if diner_meal_mapping is None
+            else normalize_diner_meal_mapping(diner_meal_mapping)
+        )
         df = clean_weight_column(parse_and_validate_date_column(df), metric_for_mode(mode))
 
         report = build_food_report(
             df,
-            diner_meal_mapping=diner_meal_mapping,
+            diner_meal_mapping=counts,
             mode=mode,
             region=region,
             diner_or_meal=diner_or_meal,
             top_n_drivers=top_n_drivers,
-            pdf_extracted=metadata.get("pdf_extracted"),
             report_progress=report_progress,
         )
-        # Last, where `run_all_diagnostics` used to put it before the check moved to the lab.
-        meat_findings = qa_diagnostics.check_meat_quantities(report.rows)
-        report = dataclasses.replace(
-            report,
-            diagnostics=(*report.diagnostics, *meat_findings),
-            findings=(*report.findings, *meat_findings),
+        # The product cannot reach these checks, or they would mislead its customer: it has no
+        # PDF extracts, so a name split is only ever an `info` finding; its CSVs carry no
+        # `quantity`; and in one validated export a category skipping a month is purchasing,
+        # not missing data.
+        name_split_findings, potential_name_splits = (
+            qa_diagnostics.detect_near_duplicate_product_names(
+                report.rows,
+                report.metric_total,
+                pdf_extracted=metadata.get("pdf_extracted"),
+            )
         )
+        discontinuity_findings, category_discontinuity = (
+            qa_diagnostics.detect_category_discontinuity(report.rows, report.metric_total)
+        )
+        lab_findings = (
+            *name_split_findings,
+            *qa_diagnostics.check_meat_quantities(report.rows),
+            *discontinuity_findings,
+            *qa_diagnostics.check_single_product_dominance(report.rows, report.metric_total),
+            *qa_diagnostics.check_category_concentration(report.rows, report.metric_total),
+            *qa_diagnostics.check_missing_weeks_within_month(report.rows),
+        )
+        report = dataclasses.replace(report, findings=(*report.findings, *lab_findings))
         quality_findings = list(report.findings)
 
         _log_stage("plot_generation", report_progress)
         with build_report_charts(report) as charts:
-            quality_findings.extend(charts.findings)
-
             _log_stage("plot_export", report_progress)
             graph_paths = plots.export_report_plots(
                 charts.figures,
@@ -294,7 +283,8 @@ def run_food_report(
             report,
             artifact_paths["qa_excel_path"],
             quality_findings=quality_findings,
-            pdf_extracted=metadata.get("pdf_extracted"),
+            potential_name_splits=potential_name_splits,
+            category_discontinuity=category_discontinuity,
         )
 
         _log_stage("metadata_update", report_progress)
@@ -330,7 +320,7 @@ def run_food_report(
             artifact_paths=artifact_paths,
             run_id=run_id,
             run_status="success",
-            diagnostics=list(report.diagnostics),
+            diagnostics=list(report.findings),
             summary=summary_stats,
             quality_status=quality_status,
             missing_data_findings=quality_findings,
@@ -339,8 +329,6 @@ def run_food_report(
         )
     except Exception as exc:
         logger.exception("Food report run failed.")
-        if isinstance(exc, QualityCheckError):
-            quality_findings = exc.findings
         failure_quality_summary = summarize_findings(quality_findings) if quality_findings else None
         failure_quality_status = (
             quality_status_from_findings(quality_findings) if quality_findings else None
@@ -376,9 +364,11 @@ def _write_qa_workbook(
     path: str,
     *,
     quality_findings: list[Finding],
-    pdf_extracted: bool | None,
+    potential_name_splits: pd.DataFrame,
+    category_discontinuity: pd.DataFrame,
 ) -> str:
     df = report.rows
+    aggregation = report.aggregation
     data_profile_df = None
     try:
         data_profile_df = qa_diagnostics.summarise_numeric_columns(df)
@@ -388,25 +378,26 @@ def _write_qa_workbook(
     return qa_excel.build_qa_excel_report(
         output_path=path,
         raw_df=df,
-        monthly_product_data=report.aggregation["monthly_product_data"],
-        monthly_category_data=report.aggregation["monthly_category_data"],
-        template_data=report.aggregation["template_data"],
-        highest_lowest=report.aggregation["highest_lowest"],
+        monthly_product_data=aggregation.monthly_product,
+        monthly_category_data=aggregation.monthly_category,
+        template_data=aggregation.template,
+        highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
+            aggregation.monthly_category,
+            metric_col=per_diner_metric_name(report.metric_total, report.diner_or_meal),
+        ),
         diner_meals_df=excel.diner_meals_frame(report),
         emissions_summary=report.emissions_summary,
-        animal_emissions_intensity=report.procurement_table("animal_emissions_intensity"),
-        decision_kpis=report.procurement_table("decision_kpis"),
-        substitution_scenarios=report.procurement_table("substitution_scenarios"),
+        procurement=aggregation.procurement,
         quality_findings_df=findings_to_frame(quality_findings),
         missingness_summary_df=missingness_summary_frame(df),
         data_profile_df=data_profile_df,
         diagnostic_sheets=_collect_diagnostic_export_sheets(
             df,
             report.diner_meal_mapping,
+            diner_or_meal=report.diner_or_meal,
             metric_total=report.metric_total,
-            monthly_product_data=report.aggregation.get("monthly_product_data"),
-            monthly_category_data=report.aggregation.get("monthly_category_data"),
-            pdf_extracted=pdf_extracted,
+            potential_name_splits=potential_name_splits,
+            category_discontinuity=category_discontinuity,
         ),
         diner_or_meal=report.diner_or_meal,
     )

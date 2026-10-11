@@ -3,7 +3,7 @@ Categorization Cache
 ====================
 
 Reads the reviewed product-categorization cache. The product never writes it: new rows reach
-it only through GBD's review, via the lab's `categorization.product_cache`.
+it only through GBD's review.
 """
 
 import logging
@@ -16,7 +16,7 @@ from typing import Any, Final
 import pandas as pd
 
 from gbd_foodservice_insights import PACKAGE_DIR
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class CategorizationCache:
     cleaned_name_index: Mapping[str, str]
 
     def __post_init__(self) -> None:
-        gbd_categories = set(get_GBD_categories())
+        gbd_categories = set(category_names())
         unknown = sorted(set(self.products["category"]) - {*gbd_categories, NO_MATCHES_FOUND})
         if unknown:
             raise ValueError(f"Categorization cache has categories outside the GBD list: {unknown}")
@@ -121,7 +121,7 @@ class CategorizationCache:
         # Dropped rather than rejected: a typo among tens of thousands of hand-maintained rows
         # must not fail every report, and dropping it costs only LLM calls and a review-table
         # entry. Kept, the row would fail the constructor's check, and with it every report.
-        allowed_categories = {*get_GBD_categories(), NO_MATCHES_FOUND}
+        allowed_categories = {*category_names(), NO_MATCHES_FOUND}
         unknown_category = ~products["category"].isin(allowed_categories)
         _warn_dropped(
             unknown_category,

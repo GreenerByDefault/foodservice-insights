@@ -8,6 +8,8 @@ import pytest
 from gbd_foodservice_insights.report.plots import panels
 from matplotlib.patches import Rectangle
 
+JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
+
 
 def _y_values(ax: plt.Axes) -> list[list[float]]:
     return [np.asarray(line.get_ydata()).tolist() for line in ax.lines]
@@ -20,26 +22,57 @@ def _texts(ax: plt.Axes) -> list[str]:
 def test_prepare_monthly_trend_data_totals_by_month(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
-    plot_data, label = panels.prepare_monthly_trend_data(
+    plot_data = panels.prepare_monthly_trend_data(
         fruit_and_juice_months(), "kilos_total", per_diner_meal=False, diner_meal_mapping=None
     )
 
-    assert label == "Total Kilos"
-    assert plot_data.to_dict("list") == {"month_year": ["2023-01", "2023-02"], "value": [125, 190]}
+    assert plot_data.to_dict("list") == {
+        "month_year": [pd.Period("2023-01"), pd.Period("2023-02")],
+        "value": [125, 190],
+    }
 
 
 def test_prepare_monthly_trend_data_divides_by_diner_meals(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
-    plot_data, label = panels.prepare_monthly_trend_data(
+    plot_data = panels.prepare_monthly_trend_data(
         fruit_and_juice_months(),
         "kilos_total",
         per_diner_meal=True,
-        diner_meal_mapping={"2023-01": 100, "2023-02": 50},
+        diner_meal_mapping={JAN: 100, FEB: 50},
     )
 
-    assert label == "kilos per diner-meal"
-    assert plot_data.to_dict("list") == {"month_year": ["2023-01", "2023-02"], "value": [1.25, 3.8]}
+    assert plot_data.to_dict("list") == {
+        "month_year": [pd.Period("2023-01"), pd.Period("2023-02")],
+        "value": [1.25, 3.8],
+    }
+
+
+def test_prepare_monthly_trend_data_leaves_an_uncounted_month_missing(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    plot_data = panels.prepare_monthly_trend_data(
+        fruit_and_juice_months(),
+        "kilos_total",
+        per_diner_meal=True,
+        diner_meal_mapping={JAN: 100},
+    )
+
+    pd.testing.assert_frame_equal(
+        plot_data, pd.DataFrame({"month_year": [JAN, FEB], "value": [1.25, np.nan]})
+    )
+
+
+def test_prepare_monthly_trend_data_keeps_an_all_missing_month_missing():
+    months = pd.DataFrame(
+        {"month_year": [pd.Period("2024-01"), pd.Period("2024-01")], "kilos_total": [pd.NA, pd.NA]}
+    )
+
+    plot_data = panels.prepare_monthly_trend_data(
+        months, "kilos_total", per_diner_meal=False, diner_meal_mapping=None
+    )
+
+    assert plot_data["value"].isna().tolist() == [True]
 
 
 def test_prepare_monthly_trend_data_requires_diner_meals_per_diner(
@@ -94,7 +127,7 @@ def test_draw_food_and_drink_per_diner_divides_by_diner_meals(
     panels.draw_food_and_drink_per_diner(
         ax,
         fruit_and_juice_months(),
-        {"2023-01": 100, "2023-02": 100},
+        {JAN: 100, FEB: 100},
         metric="kilos_total",
         diner_or_meal="meal",
     )
@@ -155,7 +188,7 @@ def test_draw_emissions_per_diner_divides_by_diner_meals(
     panels.draw_emissions_per_diner(
         ax,
         fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-        {"2023-01": 10, "2023-02": 20},
+        {JAN: 10, FEB: 20},
     )
 
     assert ax.get_title() == "Carbon Emissions per Diner Over Time"
@@ -196,7 +229,10 @@ def test_draw_plant_protein_share_labels_both_shares():
             panels.draw_plant_share_by_month,
             {
                 "monthly": pd.DataFrame(
-                    {"month_year": ["2023-02", "2023-01"], "plant_pct": [55.3, 48.0]}
+                    {
+                        "month_year": [pd.Period("2023-02"), pd.Period("2023-01")],
+                        "plant_pct": [55.3, 48.0],
+                    }
                 )
             },
             "Plant-Based % by Month",
@@ -205,7 +241,10 @@ def test_draw_plant_protein_share_labels_both_shares():
             panels.draw_plant_protein_share_by_month,
             {
                 "monthly": pd.DataFrame(
-                    {"month_year": ["2023-02", "2023-01"], "plant_protein_pct": [55.3, 48.0]}
+                    {
+                        "month_year": [pd.Period("2023-02"), pd.Period("2023-01")],
+                        "plant_protein_pct": [55.3, 48.0],
+                    }
                 )
             },
             "Plant Protein % by Month",
@@ -248,7 +287,10 @@ def test_monthly_plant_drawers_plot_the_share_in_month_order(
         ),
         (
             panels.draw_plant_protein_share_by_month,
-            {"plant_protein_pct": 55.0, "monthly": pd.DataFrame({"month_year": ["2023-01"]})},
+            {
+                "plant_protein_pct": 55.0,
+                "monthly": pd.DataFrame({"month_year": [pd.Period("2023-01")]}),
+            },
             ["Plant Protein % by Month", "Monthly plant protein data was not available."],
         ),
         (

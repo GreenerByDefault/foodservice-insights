@@ -138,8 +138,8 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
         "Diners",
         "Emissions Summary",
         "Animal Emissions Intensity",
-        "Decision_KPIs",
-        "Substitution_Scenarios",
+        "Decision KPIs",
+        "Substitution Scenarios",
     ]
     assert workbook["Diners"].to_dict("records") == [
         {"month_year": month, "diners": 1000} for month in SAMPLE_MONTHS
@@ -179,6 +179,93 @@ def test_a_product_bought_at_zero_weight_still_reports(tmp_path: Path) -> None:
 
     products = pd.read_excel(outcome.xlsx, sheet_name="Monthly by Product")
     assert products.loc[products["product"] == "Pork Loin", "kilos_total"].tolist() == [0.0] * 3
+
+
+def test_identical_lines_each_count_toward_the_report(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    rows = [
+        (product, f"{month}-15", 10.0) for month in SAMPLE_MONTHS for product in KEYWORD_PRODUCTS
+    ]
+    rice_in_january = ("Brown Rice", f"{SAMPLE_MONTHS[0]}-15", 10.0)
+    request.input_csv.write_text(input_csv_text([*rows, rice_in_january, rice_in_january]))
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    products = pd.read_excel(outcome.xlsx, sheet_name="Monthly by Product")
+    assert products.loc[products["product"] == "Brown Rice", "kilos_total"].tolist() == [
+        30.0,
+        10.0,
+        10.0,
+    ]
+
+
+def _headcount_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    counts: dict[str, int],
+    weight_by_month: dict[str, float],
+) -> dict[str, Any]:
+    """The headcount finding `analyze()` hands the PDF, buying `weight_by_month[month]` of every
+    product each month."""
+    request = dataclasses.replace(_request(tmp_path), monthly_counts=MappingProxyType(counts))
+    request.input_csv.write_text(
+        input_csv_text(
+            (product, f"{month}-15", weight)
+            for month, weight in weight_by_month.items()
+            for product in KEYWORD_PRODUCTS
+        )
+    )
+    pdf_findings: list[dict[str, Any]] = []
+    build_pdf_report = pdf.build_pdf_report
+
+    def record_findings(**kwargs: Any) -> str:
+        pdf_findings.extend(kwargs["missing_data_findings"])
+        return build_pdf_report(**kwargs)
+
+    monkeypatch.setattr(pdf, "build_pdf_report", record_findings)
+
+    analyze(request, llm=KeywordLlmClient())
+
+    return next(f for f in pdf_findings if f["category"] == "diner_meal_count_reasonableness")
+
+
+SCHOOL_YEAR = [f"2025-{month:02d}" for month in range(1, 13)]
+
+
+def test_a_school_year_whose_purchases_fall_with_its_summer_counts_has_no_headcount_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summer = ("2025-07", "2025-08")
+    headcount = _headcount_finding(
+        tmp_path,
+        monkeypatch,
+        counts={month: 300 if month in summer else 1000 for month in SCHOOL_YEAR},
+        weight_by_month={month: 3.0 if month in summer else 10.0 for month in SCHOOL_YEAR},
+    )
+
+    assert headcount["status"] == "success"
+
+
+def test_a_mistyped_count_reports_with_a_headcount_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headcount = _headcount_finding(
+        tmp_path,
+        monkeypatch,
+        counts={month: 10_000 if month == "2025-03" else 1000 for month in SCHOOL_YEAR},
+        weight_by_month=dict.fromkeys(SCHOOL_YEAR, 10.0),
+    )
+
+    assert (headcount["status"], headcount["count"], headcount["sample_values"]) == (
+        "warning",
+        1,
+        [
+            (
+                "Mar 2025: 10,000 diners, against 1,000 in a typical month, with no matching "
+                "rise in food."
+            )
+        ],
+    )
 
 
 def test_every_pdf_page_is_letter_even_with_a_product_name_at_the_webs_cap(
@@ -343,7 +430,7 @@ def test_hands_the_report_the_forms_answers(
     analyze(request, report_progress=report_progress, llm=KeywordLlmClient())
 
     assert fake_report.kwargs == {
-        "diner_meal_mapping": request.monthly_counts,
+        "diner_meal_mapping": {pd.Period(month, freq="M"): 1000.0 for month in SAMPLE_MONTHS},
         "mode": "procurement",
         "region": "us",
         "diner_or_meal": diner_or_meal,

@@ -1,7 +1,3 @@
-exact_duplicate_rows:
-  warning_share_threshold: 0.005
-  error_share_threshold: 0.02
-
 near_duplicate_product_names:
   max_levenshtein_distance: 2
   warning_share_threshold: 0.03
@@ -36,10 +32,6 @@ category_discontinuity:
 diner_meal_count_reasonableness:
   low_ratio_threshold: 0.5
   high_ratio_threshold: 2.0
-  error_if_flagged_months: 2
-
-aggregation_reconciliation:
-  rel_error_threshold: 0.001
 
 single_product_dominance:
   threshold_pct: 0.30

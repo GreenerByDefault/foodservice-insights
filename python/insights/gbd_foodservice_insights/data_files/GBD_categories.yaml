@@ -7,6 +7,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: true
+  protein: true
   serving_weight_oz: 3
 
 - name: Lamb
@@ -17,6 +18,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: true
+  protein: true
   serving_weight_oz: 3
 
 - name: Pork
@@ -27,6 +29,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: true
+  protein: true
   serving_weight_oz: 3
 
 - name: Poultry
@@ -37,6 +40,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: true
+  protein: true
   serving_weight_oz: 3
 
 - name: Fish & Mollusks
@@ -47,6 +51,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: true
+  protein: true
   serving_weight_oz: 3
 
 - name: Shellfish (Shrimp & Lobster)
@@ -57,6 +62,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: true
+  protein: true
   serving_weight_oz: 3
 
 - name: Liquid Eggs
@@ -67,6 +73,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 1.5
 
 - name: Shelled Eggs
@@ -77,6 +84,7 @@ categories:
   template_product_category: Animal Based Proteins
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 1.75
 
 - name: Cheese
@@ -87,6 +95,7 @@ categories:
   template_product_category: Dairy
   type: food
   meat: false
+  protein: false
   serving_weight_oz: 1
 
 - name: Butter
@@ -97,6 +106,7 @@ categories:
   template_product_category: Dairy
   type: food
   meat: false
+  protein: false
   serving_weight_oz: null
 
 - name: Ice Cream
@@ -107,6 +117,7 @@ categories:
   template_product_category: Dairy
   type: food
   meat: false
+  protein: false
   serving_weight_oz: null
 
 - name: Cream
@@ -117,6 +128,7 @@ categories:
   template_product_category: Dairy
   type: food
   meat: false
+  protein: false
   serving_weight_oz: null
 
 - name: Milk
@@ -127,6 +139,7 @@ categories:
   template_product_category: Dairy
   type: drink
   meat: false
+  protein: false
   serving_weight_oz: 8
 
 - name: Yogurt
@@ -137,6 +150,7 @@ categories:
   template_product_category: Dairy
   type: food
   meat: false
+  protein: false
   serving_weight_oz: 5
 
 - name: Mayo
@@ -147,6 +161,7 @@ categories:
   template_product_category: Dairy
   type: food
   meat: false
+  protein: false
   serving_weight_oz: null
 
 - name: Whole Grains
@@ -157,6 +172,7 @@ categories:
   template_product_category: Plant-Based Proteins
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 4.5
 
 - name: Plant-based Meats
@@ -167,6 +183,7 @@ categories:
   template_product_category: Plant-Based Proteins
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 3
 
 - name: Legumes
@@ -177,6 +194,7 @@ categories:
   template_product_category: Plant-Based Proteins
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 3
 
 - name: Nuts & Seeds
@@ -187,6 +205,7 @@ categories:
   template_product_category: Plant-Based Proteins
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 3
 
 - name: Almond/Coconut Milk
@@ -197,6 +216,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: drink
   meat: false
+  protein: false
   serving_weight_oz: 8
 
 - name: Oat Milk
@@ -207,6 +227,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: drink
   meat: false
+  protein: false
   serving_weight_oz: 8
 
 - name: Rice Milk
@@ -217,6 +238,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: drink
   meat: false
+  protein: false
   serving_weight_oz: 8
 
 - name: Soy Milk
@@ -227,6 +249,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: drink
   meat: false
+  protein: false
   serving_weight_oz: 8
 
 - name: Plant-based Cheese
@@ -237,6 +260,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: food
   meat: false
+  protein: false
   serving_weight_oz: 1
 
 - name: Plant-based Yogurt
@@ -247,6 +271,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: food
   meat: false
+  protein: false
   serving_weight_oz: 5
 
 - name: Plant-based Egg
@@ -257,6 +282,7 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: food
   meat: false
+  protein: true
   serving_weight_oz: 0.11
 
 - name: Dairy Alternative (Unspecified)
@@ -268,4 +294,5 @@ categories:
   template_product_category: Plant-Based Dairy & Egg
   type: drink
   meat: false
+  protein: false
   serving_weight_oz: null

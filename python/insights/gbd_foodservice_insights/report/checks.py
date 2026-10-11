@@ -2,260 +2,45 @@
 
 import logging
 from collections.abc import Mapping
-from datetime import timedelta
-from itertools import combinations, pairwise
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from Levenshtein import distance
 
-from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
-    DiagnosticStatus,
-    ReportMode,
-    required_columns_for_mode,
+    DinerOrMeal,
+    metric_display_label,
 )
-from gbd_foodservice_insights.report.thresholds import (
-    get_diagnostic_threshold,
-    resolve_diagnostic_threshold,
-)
-from gbd_foodservice_insights.report.utils import compute_month_alignment, ensure_month_year_column
+from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 
 logger = logging.getLogger(__name__)
 
 
-def _duplicate_row_status(duplicate_share: float) -> DiagnosticStatus:
-    """Map duplicate-row share to a finding severity for row-level QA checks."""
-    error_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "error_share_threshold",
-    )
-    warning_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "warning_share_threshold",
-    )
-    if duplicate_share > error_threshold:
-        return "error"
-    if duplicate_share > warning_threshold:
-        return "warning"
-    return "success"
+def _unit_label(metric_col: str) -> str:
+    return "servings" if metric_col == "servings total" else "kg"
 
 
-def _dates_appear_month_bucketed(date_series: pd.Series) -> bool:
-    """Whether dates appear to encode month/year buckets rather than transaction dates."""
-    parsed_dates = pd.to_datetime(date_series, errors="coerce")
-    non_missing_dates = parsed_dates.dropna()
-    if non_missing_dates.empty:
-        return False
-
-    if not non_missing_dates.dt.normalize().eq(non_missing_dates).all():
-        return False
-
-    if not non_missing_dates.dt.day.eq(1).all():
-        return False
-
-    unique_dates = int(non_missing_dates.nunique())
-    unique_months = int(non_missing_dates.dt.to_period("M").nunique())
-    return unique_dates == unique_months
-
-
-def _dates_support_within_month_gap_detection(date_series: pd.Series) -> bool:
-    """Whether dates contain enough day-level variation to support missing-weeks QA.
-
-    This exists so the missing-weeks diagnostic does not misread month-only data
-    as daily transactions. We only run the check when at least one month has
-    more than one distinct transaction date after parsing and normalization.
-    """
-    parsed_dates = pd.to_datetime(date_series, errors="coerce")
-    non_missing_dates = parsed_dates.dropna()
-    if non_missing_dates.empty:
-        return False
-
-    normalized_dates = non_missing_dates.dt.normalize()
-    if _dates_appear_month_bucketed(normalized_dates):
-        return False
-
-    unique_dates_per_month = normalized_dates.groupby(normalized_dates.dt.to_period("M")).nunique()
-    if unique_dates_per_month.empty:
-        return False
-
-    return bool(unique_dates_per_month.gt(1).any())
-
-
-def detect_exact_duplicate_rows(
-    df: pd.DataFrame,
-    metric_total: str,
-    *,
-    sample_limit: int = 5,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Flag exact duplicate line items before duplicated rows inflate report totals.
-
-    This diagnostic exists because duplicated transactions usually come from an
-    export, merge, or pipeline issue rather than real purchasing behaviour. The
-    report needs to surface them clearly before totals, emissions, and category
-    summaries are overstated.
-    """
-    required_key_columns = ["date", "product", "category", metric_total]
-    key_columns = [*required_key_columns]
-    if "quantity" in df.columns:
-        key_columns.append("quantity")
-
-    missing_columns = [column for column in required_key_columns if column not in df.columns]
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="exact_duplicate_rows",
-                    status="info",
-                    message=(
-                        "Could not check for exact duplicate rows because these columns are "
-                        f"missing: {missing_columns}"
-                    ),
-                    metadata={"missing_columns": missing_columns},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    if df.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="exact_duplicate_rows",
-                    status="success",
-                    message="No duplicate rows found.",
-                    count=0,
-                    metadata={
-                        "duplicate_row_share": 0.0,
-                        "duplicate_row_count": 0,
-                        "duplicate_group_count": 0,
-                        "key_columns": key_columns,
-                    },
-                )
-            ],
-            pd.DataFrame(columns=[*key_columns, "duplicate_group_size"]),
-        )
-
-    duplicate_mask = df.duplicated(subset=key_columns, keep=False)
-    duplicate_rows = df.loc[duplicate_mask].copy()
-
-    if duplicate_rows.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="exact_duplicate_rows",
-                    status="success",
-                    message="No duplicate rows found.",
-                    count=0,
-                    metadata={
-                        "duplicate_row_share": 0.0,
-                        "duplicate_row_count": 0,
-                        "duplicate_group_count": 0,
-                        "key_columns": key_columns,
-                    },
-                )
-            ],
-            pd.DataFrame(columns=[*df.columns, "duplicate_group_size"]),
-        )
-
-    duplicate_group_sizes = duplicate_rows.groupby(key_columns, dropna=False).size()
-    duplicate_rows = duplicate_rows.merge(
-        duplicate_group_sizes.rename("duplicate_group_size").reset_index(),
-        on=key_columns,
-        how="left",
-    )
-    duplicate_rows = duplicate_rows.sort_values(
-        ["duplicate_group_size", *key_columns],
-        ascending=[False, *([True] * len(key_columns))],
-    )
-
-    duplicate_row_count = len(duplicate_rows)
-    duplicate_group_count = int(duplicate_group_sizes.shape[0])
-    duplicate_share = duplicate_row_count / len(df)
-    status = _duplicate_row_status(duplicate_share)
-    month_bucketed_dates = "date" in df.columns and _dates_appear_month_bucketed(df["date"])
-    if month_bucketed_dates and status == "error":
-        status = "warning"
-    warning_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "warning_share_threshold",
-    )
-    error_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "error_share_threshold",
-    )
-
-    sample_rows = (
-        duplicate_rows.loc[:, [*key_columns, "duplicate_group_size"]]
-        .head(sample_limit)
-        .replace({pd.NaT: None, pd.NA: None})
-        .to_dict("records")
-    )
-    sample_values = [
-        (
-            f"{row.get('product', 'Unknown product')} on {row.get('date')} appears "
-            f"{row.get('duplicate_group_size')} times."
-        )
-        for row in sample_rows
-    ]
-
-    if month_bucketed_dates:
-        message_tail = (
-            "The input dates appear to be month-level placeholders rather than transaction "
-            "dates, so repeated purchases within a month can look identical. Treat this as a "
-            "warning to review rather than proof of a duplicate-row bug."
-        )
+def _format_quantity(value: float, unit: str) -> str:
+    # Below 0.01, two significant figures: a fixed two decimals would print the tiny weights
+    # the bounds check exists to catch as 0.
+    if 0 < abs(value) < 0.01:
+        number = np.format_float_positional(value, precision=2, fractional=False)
     else:
-        severity_phrase = (
-            "serious duplicate rows issue" if status == "error" else "duplicate rows issue"
-        )
-        message_tail = (
-            f"This suggests a {severity_phrase} that could overstate totals and emissions."
-        )
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="exact_duplicate_rows",
-            status=status,
-            message=(
-                f"Found {duplicate_row_count} rows that are exact duplicates across the key "
-                f"report fields ({duplicate_share:.1%} of all rows) across "
-                f"{duplicate_group_count} duplicated line item patterns. {message_tail}"
-            ),
-            count=duplicate_row_count,
-            sample_values=sample_values,
-            metadata={
-                "duplicate_row_share": duplicate_share,
-                "duplicate_row_count": duplicate_row_count,
-                "duplicate_group_count": duplicate_group_count,
-                "month_bucketed_dates": month_bucketed_dates,
-                "key_columns": key_columns,
-                "warning_share_threshold": warning_threshold,
-                "error_share_threshold": error_threshold,
-                "sample_rows": sample_rows,
-            },
-        )
-    ]
-    return findings, duplicate_rows
+        number = f"{value:,.2f}".rstrip("0").rstrip(".")
+    return f"{number} {unit.removesuffix('s') if number == '1' else unit}"
+
+
+def _format_line_count(count: int) -> str:
+    return f"{count:,} line{'' if count == 1 else 's'}"
 
 
 def detect_unusual_sales(
     df: pd.DataFrame,
     summary_col: str,
     product_name_col: str,
-    threshold: float | None = None,
     *,
     category_col: str = "category",
-    min_category_rows: int | None = None,
-    warning_share_threshold: float | None = None,
-    extreme_ratio_threshold: float | None = None,
-    zero_mad_ratio_threshold: float | None = None,
-    small_category_ratio_threshold: float | None = None,
     sample_limit: int = 5,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag unusually large line items before bad rows distort totals and trends.
@@ -266,40 +51,21 @@ def detect_unusual_sales(
     robust to skewed data, while ratio-based fallbacks still catch obvious
     extremes in categories with very low spread.
     """
-    threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "mad_threshold",
-        threshold,
-    )
+    threshold = get_diagnostic_threshold("outlier_line_items", "mad_threshold")
     min_category_rows = max(
-        int(
-            resolve_diagnostic_threshold(
-                "outlier_line_items",
-                "min_category_rows",
-                float(min_category_rows) if min_category_rows is not None else None,
-            )
-        ),
-        1,
+        int(get_diagnostic_threshold("outlier_line_items", "min_category_rows")), 1
     )
-    warning_share_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "warning_share_threshold",
-        warning_share_threshold,
+    warning_share_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "warning_share_threshold"
     )
-    extreme_ratio_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "extreme_ratio_threshold",
-        extreme_ratio_threshold,
+    extreme_ratio_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "extreme_ratio_threshold"
     )
-    zero_mad_ratio_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "zero_mad_ratio_threshold",
-        zero_mad_ratio_threshold,
+    zero_mad_ratio_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "zero_mad_ratio_threshold"
     )
-    small_category_ratio_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "small_category_ratio_threshold",
-        small_category_ratio_threshold,
+    small_category_ratio_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "small_category_ratio_threshold"
     )
 
     required_columns = (summary_col, product_name_col, category_col)
@@ -419,9 +185,6 @@ def detect_unusual_sales(
         ascending=[False, False],
     )
 
-    abnormal_products = sorted(
-        flagged_rows[product_name_col].dropna().astype(str).unique().tolist()
-    )
     outlier_row_count = len(flagged_rows)
     outlier_row_share = outlier_row_count / len(df)
     has_severe_ratio_flag = bool(
@@ -434,19 +197,17 @@ def detect_unusual_sales(
         else "info"
     )
 
+    unit = _unit_label(summary_col)
     top_row = flagged_rows.iloc[0]
-    sample_values = ["Affected products: " + ", ".join(abnormal_products)]
-    sample_values.extend(
-        [
-            (
-                f"{row[product_name_col]} in {row[category_col]} has "
-                f"{row['_metric_value']:.2f}, which is "
-                f"{row['ratio_to_category_median']:.1f}x the category median of "
-                f"{row['category_median']:.2f}."
-            )
-            for _, row in flagged_rows.head(sample_limit).iterrows()
-        ]
-    )
+    sample_values = [
+        (
+            f"{row[product_name_col]} in {row[category_col]}: "
+            f"{_format_quantity(row['_metric_value'], unit)}, "
+            f"{row['ratio_to_category_median']:.1f}x the category's typical line of "
+            f"{_format_quantity(row['category_median'], unit)}."
+        )
+        for _, row in flagged_rows.head(sample_limit).iterrows()
+    ]
 
     findings = [
         make_finding(
@@ -454,13 +215,14 @@ def detect_unusual_sales(
             category="outlier_line_items",
             status=status,
             message=(
-                f"Found {outlier_row_count} unusually large line items "
-                f"({outlier_row_share:.2%} of all rows). The largest was "
+                f"Found {_format_line_count(outlier_row_count)} far larger than is typical for "
+                f"{'its' if outlier_row_count == 1 else 'their'} category "
+                f"({outlier_row_share:.2%} of all lines). The largest is "
                 f"{top_row[product_name_col]} in {top_row[category_col]} at "
-                f"{top_row['_metric_value']:.2f}, which is "
-                f"{top_row['ratio_to_category_median']:.1f}x that category's median of "
-                f"{top_row['category_median']:.2f}. These rows may need review for unit, "
-                "entry, or OCR mistakes."
+                f"{_format_quantity(top_row['_metric_value'], unit)}, "
+                f"{top_row['ratio_to_category_median']:.1f}x that category's typical line of "
+                f"{_format_quantity(top_row['category_median'], unit)}. Lines like these are "
+                "often a unit or entry mistake."
             ),
             column=summary_col,
             count=outlier_row_count,
@@ -473,9 +235,6 @@ def detect_unusual_sales(
                 "small_category_ratio_threshold": small_category_ratio_threshold,
                 "mad_threshold": threshold,
                 "min_category_rows": min_category_rows,
-                "sample_rows": flagged_rows.head(sample_limit)
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
             },
         )
     ]
@@ -509,8 +268,6 @@ def detect_unusual_sales(
 def check_per_product_weight_bounds(
     df: pd.DataFrame,
     metric_col: str,
-    low: float | None = None,
-    high: float | None = None,
     sample_limit: int = 20,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag line items with weights outside the hard bounds used for unit-error QA.
@@ -522,14 +279,15 @@ def check_per_product_weight_bounds(
     """
     threshold_group = "per_product_weight_bounds"
     subject_label = "per-product weights"
-    unit_label = "kg"
+    line_subject = "weight"
     if metric_col == "servings total":
         threshold_group = "per_product_serving_bounds"
         subject_label = "per-product serving counts"
-        unit_label = "servings"
+        line_subject = "serving count"
+    unit_label = _unit_label(metric_col)
 
-    low = resolve_diagnostic_threshold(threshold_group, "low", low)
-    high = resolve_diagnostic_threshold(threshold_group, "high", high)
+    low = get_diagnostic_threshold(threshold_group, "low")
+    high = get_diagnostic_threshold(threshold_group, "high")
     if low > high:
         raise ValueError(f"Per-product weight bounds must satisfy low <= high; got {low} > {high}.")
 
@@ -571,9 +329,10 @@ def check_per_product_weight_bounds(
     working["_row_index"] = working.index
     working["_metric_value"] = pd.to_numeric(working[metric_col], errors="coerce")
 
+    # A zero line is ordinary data, not a unit mistake: the report counts it like any other.
     flagged_rows = working.loc[
-        working["_metric_value"].notna()
-        & ((working["_metric_value"] < low) | (working["_metric_value"] > high))
+        ((working["_metric_value"] > 0) & (working["_metric_value"] < low))
+        | (working["_metric_value"] > high)
     ].copy()
 
     if flagged_rows.empty:
@@ -601,24 +360,27 @@ def check_per_product_weight_bounds(
         low,
         high,
     )
-    flagged_rows = flagged_rows.sort_values(
-        ["breached_bound", "_metric_value", "_row_index"],
-        ascending=[True, True, True],
+    # Most extreme first on each side, so the examples are the lines least likely to be real.
+    flagged_rows = (
+        flagged_rows.assign(
+            _extremity=np.where(
+                flagged_rows["breached_bound"] == "lower",
+                flagged_rows["_metric_value"],
+                -flagged_rows["_metric_value"],
+            )
+        )
+        .sort_values(["breached_bound", "_extremity", "_row_index"])
+        .drop(columns="_extremity")
     )
 
-    sample_values = [
-        (
-            f"Row {int(row['_row_index'])}: {row['product']} has "
-            f"{row['_metric_value']:.4f} {unit_label}, which is "
-            f"{'below' if row['breached_bound'] == 'lower' else 'above'} the "
-            f"{row['breached_threshold']:.3f} {unit_label} "
-            f"{'lower' if row['breached_bound'] == 'lower' else 'upper'} bound."
+    def describe(row: pd.Series) -> str:
+        side = "below the lower" if row["breached_bound"] == "lower" else "above the upper"
+        return (
+            f"{row['product']} at {_format_quantity(row['_metric_value'], unit_label)}, "
+            f"{side} bound of {_format_quantity(row['breached_threshold'], unit_label)}."
         )
-        for _, row in flagged_rows.head(sample_limit).iterrows()
-    ]
-    top_row = flagged_rows.iloc[0]
-    direction = "below" if top_row["breached_bound"] == "lower" else "above"
-    bound_label = "lower" if top_row["breached_bound"] == "lower" else "upper"
+
+    sample_values = [describe(row) for _, row in flagged_rows.head(sample_limit).iterrows()]
 
     findings = [
         make_finding(
@@ -626,11 +388,10 @@ def check_per_product_weight_bounds(
             category="per_product_weight_bounds",
             status="warning",
             message=(
-                f"Found {len(flagged_rows)} rows with {subject_label} outside the hard review "
-                f"bounds of {low:.3f} to {high:.3f} {unit_label}. The first flagged row was "
-                f"{top_row['product']} at row {int(top_row['_row_index'])} with "
-                f"{top_row['_metric_value']:.4f} {unit_label}, which is {direction} the "
-                f"{bound_label} bound."
+                f"Found {_format_line_count(len(flagged_rows))} with a {line_subject} above "
+                f"zero but under {_format_quantity(low, unit_label)}, or over "
+                f"{_format_quantity(high, unit_label)}, which usually means a unit mistake. "
+                f"For example, {describe(flagged_rows.iloc[0])}"
             ),
             column=metric_col,
             count=len(flagged_rows),
@@ -640,9 +401,6 @@ def check_per_product_weight_bounds(
                 "high": high,
                 "unit_label": unit_label,
                 "flagged_row_count": len(flagged_rows),
-                "sample_rows": flagged_rows.head(sample_limit)
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
             },
         )
     ]
@@ -669,232 +427,11 @@ def check_per_product_weight_bounds(
     return findings, export_df
 
 
-def find_close_product_pairs(
-    df: pd.DataFrame,
-    product_column: str,
-    *,
-    metric_column: str | None = None,
-    max_levenshtein_distance: int | None = None,
-) -> pd.DataFrame:
-    """Identify close product-name pairs so likely name splits can be reviewed.
-
-    This exists because OCR mistakes and minor typing differences can split one
-    real product into multiple names, fragmenting totals and weakening the
-    report's category and trend summaries.
-    """
-    if product_column not in df.columns:
-        return pd.DataFrame()
-
-    max_levenshtein_distance = max(
-        int(
-            resolve_diagnostic_threshold(
-                "near_duplicate_product_names",
-                "max_levenshtein_distance",
-                float(max_levenshtein_distance) if max_levenshtein_distance is not None else None,
-            )
-        ),
-        0,
-    )
-
-    product_counts: pd.Series = df[product_column].value_counts()
-    products: list[str] = product_counts.index.tolist()
-    metric_by_product: pd.Series | None = None
-    total_metric = 0.0
-    if metric_column is not None and metric_column in df.columns:
-        metric_values = pd.to_numeric(df[metric_column], errors="coerce").fillna(0.0)
-        metric_by_product = metric_values.groupby(df[product_column]).sum(min_count=1)
-        total_metric = float(metric_values.sum())
-
-    close_pairs: list[dict[str, Any]] = []
-    for prod1, prod2 in combinations(products, 2):
-        pair_distance = distance(str(prod1), str(prod2))
-        if pair_distance <= max_levenshtein_distance:
-            sorted_pair = sorted([str(prod1), str(prod2)])
-            pair_record: dict[str, Any] = {
-                "Product 1": sorted_pair[0],
-                "Product 2": sorted_pair[1],
-                "Product 1 Row Count": int(product_counts[sorted_pair[0]]),
-                "Product 2 Row Count": int(product_counts[sorted_pair[1]]),
-                "Levenshtein Distance": int(pair_distance),
-            }
-            if metric_by_product is not None:
-                product_1_metric = float(metric_by_product.get(sorted_pair[0], 0.0))
-                product_2_metric = float(metric_by_product.get(sorted_pair[1], 0.0))
-                combined_metric = product_1_metric + product_2_metric
-                pair_record.update(
-                    {
-                        "Product 1 Metric Total": product_1_metric,
-                        "Product 2 Metric Total": product_2_metric,
-                        "Combined Metric Total": combined_metric,
-                        "Combined Metric Share": (
-                            combined_metric / total_metric if total_metric > 0 else 0.0
-                        ),
-                    }
-                )
-            close_pairs.append(pair_record)
-
-    close_pairs_df = pd.DataFrame(close_pairs)
-    if close_pairs_df.empty:
-        return close_pairs_df
-
-    close_pairs_df["distance_between_counts"] = np.abs(
-        close_pairs_df["Product 1 Row Count"] - close_pairs_df["Product 2 Row Count"]
-    )
-    sort_columns = ["distance_between_counts"]
-    ascending = [False]
-    if "Combined Metric Share" in close_pairs_df.columns:
-        sort_columns = ["Combined Metric Share", "distance_between_counts"]
-        ascending = [False, False]
-    return close_pairs_df.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
-
-
-def detect_near_duplicate_product_names(
-    df: pd.DataFrame,
-    metric_total: str,
-    *,
-    product_column: str = "product",
-    pdf_extracted: bool | None = None,
-    sample_limit: int = 5,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Surface materially important near-duplicate product names before totals fragment.
-
-    This exists because OCR and small typing mistakes can split one product into
-    multiple names. Weighting candidate pairs by their share of the main report
-    metric keeps the diagnostic focused on issues that could meaningfully change
-    the story a catering manager sees in the report.
-    """
-    if product_column not in df.columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="near_duplicate_product_names",
-                    status="info",
-                    message=(
-                        "Could not check for near-duplicate product names because the "
-                        "product column is missing."
-                    ),
-                    metadata={"missing_columns": [product_column]},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    if metric_total not in df.columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="near_duplicate_product_names",
-                    status="info",
-                    message=(
-                        "Could not check for near-duplicate product names because "
-                        f"'{metric_total}' is missing."
-                    ),
-                    metadata={"missing_columns": [metric_total]},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    warning_share_threshold = get_diagnostic_threshold(
-        "near_duplicate_product_names",
-        "warning_share_threshold",
-    )
-    max_levenshtein_distance = int(
-        get_diagnostic_threshold(
-            "near_duplicate_product_names",
-            "max_levenshtein_distance",
-        )
-    )
-
-    close_pairs = find_close_product_pairs(
-        df,
-        product_column,
-        metric_column=metric_total,
-        max_levenshtein_distance=max_levenshtein_distance,
-    )
-    if close_pairs.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="near_duplicate_product_names",
-                    status="success",
-                    message="No near-duplicate product names found.",
-                    count=0,
-                    metadata={
-                        "pdf_extracted": pdf_extracted,
-                        "material_pair_count": 0,
-                        "max_levenshtein_distance": max_levenshtein_distance,
-                        "warning_share_threshold": warning_share_threshold,
-                    },
-                )
-            ],
-            close_pairs,
-        )
-
-    material_pairs = close_pairs[
-        close_pairs["Combined Metric Share"] >= warning_share_threshold
-    ].copy()
-    material_pair_count = len(material_pairs)
-
-    if material_pair_count == 0:
-        status = "info"
-        message = (
-            f"Found {len(close_pairs)} near-duplicate product-name pairs, but none account "
-            f"for {warning_share_threshold:.0%} or more of the total report volume."
-        )
-        surfaced_pairs = close_pairs.head(sample_limit)
-    else:
-        status = "warning" if pdf_extracted else "info"
-        source_phrase = "PDF-extracted data" if pdf_extracted else "tabular data"
-        message = (
-            f"Found {material_pair_count} near-duplicate product-name pairs in "
-            f"{source_phrase} that each account for at least "
-            f"{warning_share_threshold:.0%} of the total report volume. These names may "
-            "need to be combined so the same product is not split across multiple labels."
-        )
-        surfaced_pairs = material_pairs.head(sample_limit)
-
-    sample_values = [
-        (
-            f"{row['Product 1']} / {row['Product 2']} together make up "
-            f"{row['Combined Metric Total']:.2f} "
-            f"({row['Combined Metric Share']:.1%}) of the total."
-        )
-        for _, row in surfaced_pairs.iterrows()
-    ]
-
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="near_duplicate_product_names",
-            status=status,
-            message=message,
-            count=material_pair_count,
-            sample_values=sample_values,
-            metadata={
-                "pdf_extracted": pdf_extracted,
-                "max_levenshtein_distance": max_levenshtein_distance,
-                "warning_share_threshold": warning_share_threshold,
-                "candidate_pair_count": len(close_pairs),
-                "material_pair_count": material_pair_count,
-                "sample_pairs": surfaced_pairs.replace({pd.NaT: None, pd.NA: None}).to_dict(
-                    "records"
-                ),
-            },
-        )
-    ]
-    return findings, close_pairs
-
-
 def detect_month_over_month_total_volatility(
     df: pd.DataFrame,
     metric_total: str,
     *,
     month_col: str = "month_year",
-    date_col: str = "date",
     sample_limit: int = 6,
 ) -> list[Finding]:
     """Flag sudden monthly total swings before users trust a misleading trend.
@@ -918,23 +455,8 @@ def detect_month_over_month_total_volatility(
             )
         ]
 
-    try:
-        monthly_df = ensure_month_year_column(
-            df[[*df.columns]].copy(), date_col=date_col, month_col=month_col
-        )
-    except ValueError as exc:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="month_over_month_total_volatility",
-                status="info",
-                message=f"Could not check month-to-month total volatility: {exc}",
-                metadata={"missing_columns": [date_col, month_col]},
-            )
-        ]
-
     monthly_totals = (
-        monthly_df.dropna(subset=[month_col])
+        df.dropna(subset=[month_col])
         .groupby(month_col, dropna=False)[metric_total]
         .sum(min_count=1)
         .sort_index()
@@ -1008,21 +530,18 @@ def detect_month_over_month_total_volatility(
             )
         ]
 
-    def _format_pct_change(value: float) -> str:
-        if np.isinf(value):
-            return "an undefined percentage jump from 0"
-        sign = "+" if value > 0 else ""
-        return f"{sign}{value:.0%}"
-
-    sample_values = [
-        (
-            f"{_format_month_label(row[month_col])}: {row['current_total']:.2f} versus "
-            f"{row['previous_total']:.2f} in "
-            f"{_format_month_label(row['previous_month'])} "
-            f"({_format_pct_change(row['pct_change'])})."
+    def describe(row: pd.Series) -> str:
+        # A rise from zero has no percentage; the two totals already say what happened.
+        change = "" if np.isinf(row["pct_change"]) else f" ({row['pct_change']:+.0%})"
+        return (
+            f"{_format_month_label(row[month_col])}: "
+            f"{_format_quantity(row['current_total'], unit)} against "
+            f"{_format_quantity(row['previous_total'], unit)} in "
+            f"{_format_month_label(row['previous_month'])}{change}."
         )
-        for _, row in volatile_months.head(sample_limit).iterrows()
-    ]
+
+    unit = _unit_label(metric_total)
+    sample_values = [describe(row) for _, row in volatile_months.head(sample_limit).iterrows()]
 
     findings = [
         make_finding(
@@ -1030,465 +549,18 @@ def detect_month_over_month_total_volatility(
             category="month_over_month_total_volatility",
             status="warning",
             message=(
-                f"Found {len(volatile_months)} months where the total "
-                f"{metric_total.replace('_', ' ')} changed by more than "
-                f"{change_threshold:.0%} versus the previous month. Large swings like this "
+                f"Found {len(volatile_months)} month{'' if len(volatile_months) == 1 else 's'} "
+                f"where the total {metric_display_label(metric_total).lower()} changed by more "
+                f"than {change_threshold:.0%} from the month before. Large swings like this "
                 "often mean a month is missing, partial, or counted twice."
             ),
             column=metric_total,
             count=len(volatile_months),
             sample_values=sample_values,
-            metadata={
-                "warning_pct_change_threshold": change_threshold,
-                "sample_rows": volatile_months.head(sample_limit)
-                .assign(
-                    month_label=lambda x: x[month_col].map(_format_month_label),
-                    previous_month_label=lambda x: x["previous_month"].map(_format_month_label),
-                )
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
-            },
+            metadata={"warning_pct_change_threshold": change_threshold},
         )
     ]
     return findings
-
-
-def check_aggregation_reconciliation(
-    raw_df: pd.DataFrame,
-    monthly_product_df: pd.DataFrame,
-    monthly_category_df: pd.DataFrame,
-    metric_col: str,
-    *,
-    rel_error_threshold: float | None = None,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Reconcile totals across raw rows and both report aggregation grains.
-
-    This exists to catch filtering, grouping, or join mistakes that let summary
-    tables drift away from the raw metric total without causing a hard crash.
-    """
-    required_sources = {
-        "raw_df": raw_df,
-        "monthly_product_df": monthly_product_df,
-        "monthly_category_df": monthly_category_df,
-    }
-    missing_columns = {
-        source_name: [column for column in [metric_col] if column not in frame.columns]
-        for source_name, frame in required_sources.items()
-        if metric_col not in frame.columns
-    }
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="aggregation_reconciliation",
-                    status="info",
-                    message=(
-                        "Could not check aggregation reconciliation because the metric "
-                        f"column '{metric_col}' is missing in: {sorted(missing_columns)}"
-                    ),
-                    metadata={"missing_columns": missing_columns, "metric_col": metric_col},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    rel_error_threshold = resolve_diagnostic_threshold(
-        "aggregation_reconciliation",
-        "rel_error_threshold",
-        rel_error_threshold,
-    )
-    rel_error_threshold = max(float(rel_error_threshold), 0.0)
-
-    raw_total = float(pd.to_numeric(raw_df[metric_col], errors="coerce").sum(min_count=1) or 0.0)
-    monthly_product_total = float(
-        pd.to_numeric(monthly_product_df[metric_col], errors="coerce").sum(min_count=1) or 0.0
-    )
-    monthly_category_total = float(
-        pd.to_numeric(monthly_category_df[metric_col], errors="coerce").sum(min_count=1) or 0.0
-    )
-
-    totals = {
-        "raw_total": raw_total,
-        "monthly_product_total": monthly_product_total,
-        "monthly_category_total": monthly_category_total,
-    }
-    baseline = max((abs(total) for total in totals.values()), default=0.0)
-    max_abs_difference = max(totals.values()) - min(totals.values()) if totals else 0.0
-    relative_difference = 0.0 if baseline == 0.0 else max_abs_difference / baseline
-
-    export_df = pd.DataFrame(
-        [
-            {
-                "metric_col": metric_col,
-                "raw_total": raw_total,
-                "monthly_product_total": monthly_product_total,
-                "monthly_category_total": monthly_category_total,
-                "max_abs_difference": max_abs_difference,
-                "relative_difference": relative_difference,
-                "rel_error_threshold": rel_error_threshold,
-                "is_flagged": relative_difference > rel_error_threshold,
-            }
-        ]
-    )
-
-    status = "error" if relative_difference > rel_error_threshold else "success"
-    message = (
-        f"Raw total {raw_total:,.3f}, monthly-by-product total {monthly_product_total:,.3f}, "
-        f"and monthly-by-category total {monthly_category_total:,.3f} reconcile within the "
-        f"{rel_error_threshold:.1%} tolerance."
-    )
-    if status == "error":
-        message = (
-            f"Aggregation totals differ by {relative_difference:.4%}, above the "
-            f"{rel_error_threshold:.1%} reconciliation tolerance. Raw total: "
-            f"{raw_total:,.3f}; monthly-by-product total: {monthly_product_total:,.3f}; "
-            f"monthly-by-category total: {monthly_category_total:,.3f}."
-        )
-
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="aggregation_reconciliation",
-            status=status,
-            message=message,
-            column=metric_col,
-            count=int(relative_difference > rel_error_threshold),
-            metadata={
-                "metric_col": metric_col,
-                "raw_total": raw_total,
-                "monthly_product_total": monthly_product_total,
-                "monthly_category_total": monthly_category_total,
-                "max_abs_difference": max_abs_difference,
-                "relative_difference": relative_difference,
-                "rel_error_threshold": rel_error_threshold,
-            },
-        )
-    ]
-    return findings, export_df
-
-
-def _check_top_share_concentration(
-    df: pd.DataFrame,
-    metric_col: str,
-    *,
-    group_col: str,
-    diagnostic_name: str,
-    threshold_key: str,
-    subject_label: str,
-    threshold_override: float | None = None,
-) -> list[Finding]:
-    """Check whether one grouped value dominates the report total.
-
-    This exists because highly concentrated totals can mean the dataset is
-    genuinely dominated by one product or category, but they can also be an
-    early sign of mapping, unit, or coverage problems that would distort the
-    story a catering manager takes from the report.
-    """
-    missing_columns = [column for column in [group_col, metric_col] if column not in df.columns]
-    if missing_columns:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category=diagnostic_name,
-                status="info",
-                message=(
-                    f"Could not check for {subject_label} concentration because these "
-                    f"columns are missing: {missing_columns}"
-                ),
-                metadata={"missing_columns": missing_columns},
-            )
-        ]
-
-    threshold_pct = resolve_diagnostic_threshold(
-        diagnostic_name,
-        threshold_key,
-        threshold_override,
-    )
-    threshold_pct = max(float(threshold_pct), 0.0)
-
-    grouped_totals = (
-        df.assign(_metric_value=pd.to_numeric(df[metric_col], errors="coerce"))
-        .dropna(subset=[group_col])
-        .groupby(group_col, dropna=False)["_metric_value"]
-        .sum(min_count=1)
-        .dropna()
-        .sort_values(ascending=False)
-    )
-
-    if grouped_totals.empty:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category=diagnostic_name,
-                status="info",
-                message=(
-                    f"Could not check for {subject_label} concentration because no valid "
-                    "totals were available."
-                ),
-                metadata={"threshold_pct": threshold_pct, "metric_col": metric_col},
-            )
-        ]
-
-    total_metric = float(grouped_totals.sum())
-    if total_metric <= 0:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category=diagnostic_name,
-                status="info",
-                message=(
-                    f"Could not check for {subject_label} concentration because the total "
-                    "metric was zero or below."
-                ),
-                metadata={"threshold_pct": threshold_pct, "metric_col": metric_col},
-            )
-        ]
-
-    top_value = str(grouped_totals.index[0])
-    top_total = float(grouped_totals.iloc[0])
-    top_share = top_total / total_metric
-    metric_label = metric_col.replace("_", " ")
-
-    if top_share > threshold_pct:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category=diagnostic_name,
-                status="info",
-                message=(
-                    f"'{top_value}' accounts for {top_share:.1%} of total {metric_label}, "
-                    f"above the {threshold_pct:.0%} {subject_label} concentration threshold."
-                ),
-                count=1,
-                sample_values=[
-                    f"{top_value}: {top_total:.2f} of {total_metric:.2f} ({top_share:.1%})"
-                ],
-                metadata={
-                    "metric_col": metric_col,
-                    "threshold_pct": threshold_pct,
-                    f"top_{group_col}": top_value,
-                    f"top_{group_col}_total": top_total,
-                    f"top_{group_col}_share": top_share,
-                },
-            )
-        ]
-
-    return [
-        make_finding(
-            stage="diagnostics",
-            category=diagnostic_name,
-            status="success",
-            message=(
-                f"No single {subject_label} exceeded {threshold_pct:.0%} of total {metric_label}."
-            ),
-            count=0,
-            metadata={
-                "metric_col": metric_col,
-                "threshold_pct": threshold_pct,
-                f"top_{group_col}": top_value,
-                f"top_{group_col}_total": top_total,
-                f"top_{group_col}_share": top_share,
-            },
-        )
-    ]
-
-
-def check_single_product_dominance(
-    df: pd.DataFrame,
-    metric_col: str,
-    *,
-    product_col: str = "product",
-    threshold_pct: float | None = None,
-) -> list[Finding]:
-    """Flag a single product dominating totals before the report is over-read.
-
-    This exists because one unusually dominant product can make overall report
-    metrics look more representative or diversified than they really are.
-    """
-    return _check_top_share_concentration(
-        df,
-        metric_col,
-        group_col=product_col,
-        diagnostic_name="single_product_dominance",
-        threshold_key="threshold_pct",
-        subject_label="product",
-        threshold_override=threshold_pct,
-    )
-
-
-def check_category_concentration(
-    df: pd.DataFrame,
-    metric_col: str,
-    *,
-    category_col: str = "category",
-) -> list[Finding]:
-    """Flag heavily concentrated category mixes before users over-read the summary.
-
-    This exists because one category dominating the report can be a real pattern,
-    but it can also point to a mapping issue or a dataset that is much less
-    balanced than the headline figures imply.
-    """
-    return _check_top_share_concentration(
-        df,
-        metric_col,
-        group_col=category_col,
-        diagnostic_name="category_concentration",
-        threshold_key="threshold_pct",
-        subject_label="category",
-    )
-
-
-def check_missing_weeks_within_month(
-    df: pd.DataFrame,
-    *,
-    date_col: str = "date",
-    max_gap_days: float | None = None,
-    sample_limit: int = 6,
-) -> list[Finding]:
-    """Flag long within-month stretches with no transactions in day-level data.
-
-    This exists to catch likely missing extracts in datasets that normally
-    arrive daily or weekly. It deliberately skips month-level or one-date-per-
-    month series, because those inputs cannot support a reliable missing-weeks
-    check and would otherwise create false alarms.
-    """
-    if date_col not in df.columns:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="missing_weeks_within_month",
-                status="info",
-                message=(
-                    f"Could not check for missing weeks within month because '{date_col}' "
-                    "is missing."
-                ),
-                metadata={"missing_columns": [date_col]},
-            )
-        ]
-
-    max_gap_days = max(
-        int(
-            resolve_diagnostic_threshold(
-                "missing_weeks_within_month",
-                "max_gap_days",
-                max_gap_days,
-            )
-        ),
-        1,
-    )
-
-    if not _dates_support_within_month_gap_detection(df[date_col]):
-        return []
-
-    unique_dates = (
-        pd.to_datetime(df[date_col], errors="coerce")
-        .dropna()
-        .dt.normalize()
-        .drop_duplicates()
-        .sort_values()
-    )
-
-    if unique_dates.empty:
-        return []
-
-    gap_rows: list[dict[str, Any]] = []
-    for month, month_dates in unique_dates.groupby(unique_dates.dt.to_period("M")):
-        month_dates = month_dates.sort_values().reset_index(drop=True)
-
-        month_start = month.start_time.normalize()
-        month_end = month.end_time.normalize()
-        first_date = month_dates.iloc[0]
-        missing_start_days = int((first_date - month_start).days)
-        if missing_start_days > max_gap_days:
-            gap_rows.append(
-                {
-                    "month_year": month,
-                    "gap_position": "start_of_month",
-                    "last_transaction_date": None,
-                    "next_transaction_date": first_date.date().isoformat(),
-                    "missing_start_date": month_start.date().isoformat(),
-                    "missing_end_date": (first_date - timedelta(days=1)).date().isoformat(),
-                    "missing_day_count": missing_start_days,
-                }
-            )
-
-        for previous_date, next_date in pairwise(month_dates):
-            missing_day_count = int((next_date - previous_date).days - 1)
-            if missing_day_count <= max_gap_days:
-                continue
-
-            gap_rows.append(
-                {
-                    "month_year": month,
-                    "gap_position": "within_month",
-                    "last_transaction_date": previous_date.date().isoformat(),
-                    "next_transaction_date": next_date.date().isoformat(),
-                    "missing_start_date": (previous_date + timedelta(days=1)).date().isoformat(),
-                    "missing_end_date": (next_date - timedelta(days=1)).date().isoformat(),
-                    "missing_day_count": missing_day_count,
-                }
-            )
-
-        last_date = month_dates.iloc[-1]
-        missing_end_days = int((month_end - last_date).days)
-        if missing_end_days > max_gap_days:
-            gap_rows.append(
-                {
-                    "month_year": month,
-                    "gap_position": "end_of_month",
-                    "last_transaction_date": last_date.date().isoformat(),
-                    "next_transaction_date": None,
-                    "missing_start_date": (last_date + timedelta(days=1)).date().isoformat(),
-                    "missing_end_date": month_end.date().isoformat(),
-                    "missing_day_count": missing_end_days,
-                }
-            )
-
-    if not gap_rows:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="missing_weeks_within_month",
-                status="success",
-                message=(f"No within-month date gaps longer than {max_gap_days} days were found."),
-                count=0,
-                metadata={"max_gap_days": max_gap_days},
-            )
-        ]
-
-    gap_df = pd.DataFrame(gap_rows).sort_values(
-        ["missing_day_count", "month_year", "missing_start_date"],
-        ascending=[False, True, True],
-    )
-
-    sample_values = [
-        (
-            f"{_format_month_label(row['month_year'])}: no transactions from "
-            f"{row['missing_start_date']} to {row['missing_end_date']} "
-            f"({int(row['missing_day_count'])} consecutive days)."
-        )
-        for _, row in gap_df.head(sample_limit).iterrows()
-    ]
-
-    return [
-        make_finding(
-            stage="diagnostics",
-            category="missing_weeks_within_month",
-            status="info",
-            message=(
-                f"Found {len(gap_df)} within-month date gaps longer than {max_gap_days} "
-                "days. In data that normally arrives daily or weekly, this can mean part "
-                "of a month's transactions were missed."
-            ),
-            count=len(gap_df),
-            sample_values=sample_values,
-            metadata={
-                "max_gap_days": max_gap_days,
-                "sample_rows": gap_df.head(sample_limit).to_dict("records"),
-            },
-        )
-    ]
 
 
 def _format_month_label(value: Any) -> str:
@@ -1496,73 +568,55 @@ def _format_month_label(value: Any) -> str:
     return pd.Period(str(value), freq="M").strftime("%b %Y")
 
 
-def _format_category_month_missing_sample(category: Any, month: Any) -> str:
-    """Turn a missing category-month combo into a plain-English sample line."""
-    category_text = str(category).replace("&", "and").strip()
-    return f"{category_text} missing during {_format_month_label(month)}"
+def _describe_unmatched_count(
+    month_label: str,
+    count: float,
+    count_ratio: float,
+    median_count: float,
+    diner_or_meal: DinerOrMeal,
+) -> str:
+    noun = diner_or_meal if count == 1 else f"{diner_or_meal}s"
+    change = "rise" if count_ratio > 1 else "drop"
+    return (
+        f"{month_label}: {count:,.0f} {noun}, against {median_count:,.0f} in a typical month, "
+        f"with no matching {change} in food."
+    )
 
 
 def check_diner_meal_reasonableness(
+    df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
+    metric_total: str,
     *,
-    low: float | None = None,
-    high: float | None = None,
-    error_if_flagged_months: int | None = None,
+    diner_or_meal: DinerOrMeal,
     sample_limit: int = 6,
 ) -> tuple[list[Finding], pd.DataFrame]:
-    """Flag unusual denominator months before intensity KPIs become misleading.
-
-    This exists because diner or meal counts are denominator data for
-    per-diner and per-meal metrics. A few unusual denominator months can make
-    those KPIs look better or worse than they really are.
-    """
-    if not diner_meal_mapping:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="diner_meal_count_reasonableness",
-                    status="info",
-                    message=(
-                        "Could not check diner or meal count reasonableness because no "
-                        "monthly diner-meal mapping was provided."
-                    ),
-                    count=0,
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    low_threshold = resolve_diagnostic_threshold(
-        "diner_meal_count_reasonableness",
-        "low_ratio_threshold",
-        low,
+    """Flag months whose diner or meal count looks mistyped, which would make that month's
+    per-diner and per-meal figures wrong. Expects `month_year` as `Period[M]`."""
+    low_threshold = get_diagnostic_threshold(
+        "diner_meal_count_reasonableness", "low_ratio_threshold"
     )
-    high_threshold = resolve_diagnostic_threshold(
-        "diner_meal_count_reasonableness",
-        "high_ratio_threshold",
-        high,
+    high_threshold = get_diagnostic_threshold(
+        "diner_meal_count_reasonableness", "high_ratio_threshold"
     )
-    escalation_threshold = max(
-        1,
-        int(
-            resolve_diagnostic_threshold(
-                "diner_meal_count_reasonableness",
-                "error_if_flagged_months",
-                float(error_if_flagged_months) if error_if_flagged_months is not None else None,
-            )
-        ),
-    )
+    thresholds = {"low_ratio_threshold": low_threshold, "high_ratio_threshold": high_threshold}
 
-    monthly_counts = pd.Series(diner_meal_mapping, dtype="object").rename("diner_meal_count")
-    monthly_counts.index = [
-        pd.Period(str(month), freq="M") if pd.notna(month) else pd.NA
-        for month in monthly_counts.index
-    ]
-    monthly_counts = pd.to_numeric(monthly_counts, errors="coerce").sort_index()
-    monthly_counts = monthly_counts[monthly_counts.index.notna()]
+    counts = pd.Series(diner_meal_mapping, dtype="float64")
+    # Only months with both a count and rows have a per-diner figure. Rows without a count already
+    # failed aggregation; a count without rows is a month the customer bought nothing in.
+    monthly = pd.concat(
+        [
+            counts[counts > 0].rename("diner_meal_count"),
+            df.groupby("month_year")[metric_total].sum().rename("food_total"),
+        ],
+        axis=1,
+        join="inner",
+    ).sort_index()
+    monthly["food_per_count"] = monthly["food_total"] / monthly["diner_meal_count"]
+    median_count = float(monthly["diner_meal_count"].median())
+    median_food_per_count = float(monthly["food_per_count"].median())
 
-    if monthly_counts.empty:
+    if monthly.empty or not median_food_per_count > 0:
         return (
             [
                 make_finding(
@@ -1570,88 +624,59 @@ def check_diner_meal_reasonableness(
                     category="diner_meal_count_reasonableness",
                     status="info",
                     message=(
-                        "Could not check diner or meal count reasonableness because the "
-                        "monthly counts could not be read as numbers."
+                        f"Could not check the {diner_or_meal} counts for typos, because no "
+                        "month has both a count and food in the file."
                     ),
                     count=0,
+                    metadata=thresholds,
                 )
             ],
             pd.DataFrame(),
         )
 
-    valid_counts = monthly_counts.dropna()
-    if valid_counts.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="diner_meal_count_reasonableness",
-                    status="info",
-                    message=(
-                        "Could not check diner or meal count reasonableness because every "
-                        "monthly count was missing."
-                    ),
-                    count=0,
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    median_count = float(valid_counts.median())
-    if median_count <= 0:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="diner_meal_count_reasonableness",
-                    status="info",
-                    message=(
-                        "Could not check diner or meal count reasonableness because the "
-                        "typical monthly count was zero or below."
-                    ),
-                    count=0,
-                    metadata={"median_count": median_count},
-                )
-            ],
-            pd.DataFrame(),
-        )
+    count_ratio = monthly["diner_meal_count"] / median_count
+    food_per_count_ratio = monthly["food_per_count"] / median_food_per_count
+    # A count far from the usual is not enough: a school's summer counts can fall to 30% of term
+    # time, and its purchases with them. A mistyped count moves alone, so food per head swings
+    # the other way. Food that swings with an ordinary count is month volatility, not this.
+    count_too_high = count_ratio.gt(high_threshold) & food_per_count_ratio.lt(low_threshold)
+    count_too_low = count_ratio.lt(low_threshold) & food_per_count_ratio.gt(high_threshold)
 
     qc_df = pd.DataFrame(
         {
-            "month_year": monthly_counts.index.astype(str),
-            "month_label": [_format_month_label(month) for month in monthly_counts.index],
-            "diner_meal_count": monthly_counts.to_numpy(),
+            "month_year": monthly.index.astype(str),
+            "month_label": [_format_month_label(month) for month in monthly.index],
+            "diner_meal_count": monthly["diner_meal_count"].to_numpy(),
+            "food_total": monthly["food_total"].to_numpy(),
+            "food_per_count": monthly["food_per_count"].to_numpy(),
+            "count_ratio_to_median": count_ratio.to_numpy(),
+            "food_per_count_ratio_to_median": food_per_count_ratio.to_numpy(),
+            "is_flagged": (count_too_high | count_too_low).to_numpy(),
+            "flag_reason": np.select(
+                [count_too_high.to_numpy(), count_too_low.to_numpy()],
+                [
+                    (
+                        "Count far above a typical month with no matching rise in food: "
+                        f"per-{diner_or_meal} figures look too low."
+                    ),
+                    (
+                        "Count far below a typical month with no matching drop in food: "
+                        f"per-{diner_or_meal} figures look too high."
+                    ),
+                ],
+                default="",
+            ),
         }
     )
-    qc_df["median_count"] = median_count
-    qc_df["ratio_to_median"] = qc_df["diner_meal_count"] / median_count
-    qc_df["is_flagged"] = (
-        qc_df["ratio_to_median"].lt(low_threshold) | qc_df["ratio_to_median"].gt(high_threshold)
-    ) & qc_df["ratio_to_median"].notna()
-    qc_df["flag_reason"] = np.where(
-        qc_df["ratio_to_median"].isna(),
-        "Count is missing, so this month could not be compared with the typical month.",
-        np.where(
-            qc_df["ratio_to_median"] < low_threshold,
-            (
-                "Count is lower than expected for this dataset and may make per-diner "
-                "metrics look too high."
-            ),
-            np.where(
-                qc_df["ratio_to_median"] > high_threshold,
-                (
-                    "Count is higher than expected for this dataset and may make "
-                    "per-diner metrics look too low."
-                ),
-                "",
-            ),
-        ),
-    )
+    metadata = {
+        "metric_col": metric_total,
+        "median_count": median_count,
+        "median_food_per_count": median_food_per_count,
+        **thresholds,
+    }
 
-    flagged_df = qc_df[qc_df["is_flagged"]].copy()
+    flagged_df = qc_df[qc_df["is_flagged"]]
     flagged_count = len(flagged_df)
-    missing_count = int(qc_df["diner_meal_count"].isna().sum())
-
     if flagged_count == 0:
         return (
             [
@@ -1660,54 +685,54 @@ def check_diner_meal_reasonableness(
                     category="diner_meal_count_reasonableness",
                     status="success",
                     message=(
-                        "Monthly diner or meal counts looked broadly consistent across "
-                        "the reporting period."
+                        f"No month's {diner_or_meal} count looks out of line with the food in "
+                        "the file."
                     ),
                     count=0,
-                    metadata={
-                        "median_count": median_count,
-                        "low_ratio_threshold": low_threshold,
-                        "high_ratio_threshold": high_threshold,
-                        "error_if_flagged_months": escalation_threshold,
-                        "missing_month_count": missing_count,
-                    },
+                    metadata=metadata,
                 )
             ],
             qc_df,
         )
 
-    status = "error" if flagged_count >= escalation_threshold else "warning"
     sample_values = [
-        (
-            f"{row['month_label']}: {row['diner_meal_count']:.0f} versus a median of "
-            f"{row['median_count']:.0f} ({row['ratio_to_median']:.2f}x)."
+        _describe_unmatched_count(
+            row["month_label"],
+            row["diner_meal_count"],
+            row["count_ratio_to_median"],
+            median_count,
+            diner_or_meal,
         )
         for _, row in flagged_df.head(sample_limit).iterrows()
     ]
+
+    # A finished report's counts cannot be edited in the web app; the fix is a new report.
+    if flagged_count == 1:
+        message = (
+            f"The {diner_or_meal} count entered for one month is far higher or lower than in a "
+            "typical month, but the food in the file did not rise or fall with it. That can "
+            f"mean a typo, which would make that month's per-{diner_or_meal} figures wrong. If "
+            "the count is wrong, create a new report with the same file and the corrected count."
+        )
+    else:
+        message = (
+            f"The {diner_or_meal} counts entered for {flagged_count} months are far higher or "
+            "lower than in a typical month, but the food in the file did not rise or fall with "
+            "them. That can mean a typo, which would make that month's "
+            f"per-{diner_or_meal} figures wrong. If a count is wrong, create a new report with "
+            "the same file and the corrected count."
+        )
 
     findings = [
         make_finding(
             stage="diagnostics",
             category="diner_meal_count_reasonableness",
-            status=status,
-            message=(
-                f"Found {flagged_count} month{'' if flagged_count == 1 else 's'} where the "
-                "diner or meal count was much lower or higher than usual for this dataset. "
-                "This can make per-diner and per-meal figures look misleading even when the "
-                "food data is correct."
-            ),
+            # Never an error: a flagged count is still one the user typed, and may be right.
+            status="warning",
+            message=message,
             count=flagged_count,
             sample_values=sample_values,
-            metadata={
-                "median_count": median_count,
-                "low_ratio_threshold": low_threshold,
-                "high_ratio_threshold": high_threshold,
-                "error_if_flagged_months": escalation_threshold,
-                "missing_month_count": missing_count,
-                "sample_rows": flagged_df.head(sample_limit)
-                .replace({pd.NaT: None, pd.NA: None, np.nan: None})
-                .to_dict("records"),
-            },
+            metadata=metadata,
         )
     ]
     return findings, qc_df
@@ -1717,7 +742,6 @@ def check_missing_internal_months(
     df: pd.DataFrame,
     *,
     month_col: str = "month_year",
-    date_col: str = "date",
 ) -> list[Finding]:
     """Flag fully missing months before short report windows are misread as complete.
 
@@ -1726,30 +750,7 @@ def check_missing_internal_months(
     reporting window where one absent month means a third of the expected period
     is missing.
     """
-    try:
-        monthly_df = ensure_month_year_column(
-            df[[*df.columns]].copy(),
-            date_col=date_col,
-            month_col=month_col,
-        )
-    except ValueError as exc:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="missing_internal_months",
-                status="info",
-                message=f"Could not check for missing internal months: {exc}",
-                metadata={"missing_columns": [date_col, month_col]},
-            )
-        ]
-
-    observed_months = (
-        monthly_df[month_col]
-        .dropna()
-        .map(lambda value: pd.Period(str(value), freq="M"))
-        .sort_values()
-        .unique()
-    )
+    observed_months = df[month_col].dropna().sort_values().unique()
 
     if len(observed_months) < 2:
         return [
@@ -1814,325 +815,6 @@ def check_missing_internal_months(
     ]
 
 
-def detect_category_discontinuity(
-    df: pd.DataFrame,
-    metric_total: str,
-    *,
-    category_col: str = "category",
-    month_col: str = "month_year",
-    date_col: str = "date",
-    sample_limit: int = 6,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Flag categories that disappear mid-period and then return.
-
-    This exists because a category that is present, then missing for an internal
-    month, and then present again is often a data gap rather than a real product
-    exit. Catching that pattern helps users trust short reporting windows where
-    one missing middle month can change the story materially.
-    """
-    missing_columns = [
-        column for column in [category_col, metric_total] if column not in df.columns
-    ]
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="category_discontinuity",
-                    status="info",
-                    message=(
-                        "Could not check category continuity because these columns are "
-                        f"missing: {missing_columns}"
-                    ),
-                    metadata={"missing_columns": missing_columns},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    try:
-        monthly_df = ensure_month_year_column(
-            df[[*df.columns]].copy(),
-            date_col=date_col,
-            month_col=month_col,
-        )
-    except ValueError as exc:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="category_discontinuity",
-                    status="info",
-                    message=f"Could not check category continuity: {exc}",
-                    metadata={"missing_columns": [date_col, month_col]},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    working = monthly_df.copy()
-    working[metric_total] = pd.to_numeric(working[metric_total], errors="coerce")
-    valid_rows = working[
-        working[category_col].notna() & working[month_col].notna() & working[metric_total].notna()
-    ].copy()
-
-    if valid_rows.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="category_discontinuity",
-                    status="success",
-                    message="No category continuity issues found.",
-                    count=0,
-                    metadata={
-                        "min_gap_months": int(
-                            get_diagnostic_threshold(
-                                "category_discontinuity",
-                                "min_gap_months",
-                            )
-                        )
-                    },
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    min_gap_months = int(
-        get_diagnostic_threshold(
-            "category_discontinuity",
-            "min_gap_months",
-        )
-    )
-    min_gap_months = max(min_gap_months, 1)
-
-    monthly_category_totals = (
-        valid_rows.groupby([category_col, month_col], dropna=False)[metric_total]
-        .sum(min_count=1)
-        .reset_index()
-    )
-    monthly_category_totals[month_col] = monthly_category_totals[month_col].apply(
-        lambda value: pd.Period(str(value), freq="M")
-    )
-    monthly_category_totals = monthly_category_totals.sort_values([category_col, month_col])
-
-    all_months = pd.period_range(
-        monthly_category_totals[month_col].min(),
-        monthly_category_totals[month_col].max(),
-        freq="M",
-    )
-    all_categories = (
-        monthly_category_totals[category_col].dropna().astype(str).sort_values().unique().tolist()
-    )
-
-    if len(all_months) < 3 or not all_categories:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="category_discontinuity",
-                    status="success",
-                    message="No category continuity issues found.",
-                    count=0,
-                    metadata={"min_gap_months": min_gap_months},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    complete_index = pd.MultiIndex.from_product(
-        [all_categories, all_months],
-        names=[category_col, month_col],
-    )
-    monthly_category_panel = (
-        monthly_category_totals.assign(**{category_col: lambda x: x[category_col].astype(str)})
-        .set_index([category_col, month_col])
-        .reindex(complete_index)
-        .reset_index()
-    )
-    monthly_category_panel["metric_total_value"] = monthly_category_panel[metric_total]
-    monthly_category_panel["has_non_zero_data"] = (
-        monthly_category_panel[metric_total].fillna(0).gt(0)
-    )
-
-    discontinuity_rows: list[dict[str, Any]] = []
-    for category, category_panel in monthly_category_panel.groupby(category_col, sort=True):
-        category_panel = category_panel.sort_values(month_col).reset_index(drop=True)
-        active_positions = np.flatnonzero(category_panel["has_non_zero_data"].to_numpy())
-        if len(active_positions) < 2:
-            continue
-
-        for start_position, end_position in pairwise(active_positions):
-            gap_size = int(end_position - start_position - 1)
-            if gap_size < min_gap_months:
-                continue
-
-            gap_rows = category_panel.iloc[start_position + 1 : end_position].copy()
-            if gap_rows.empty:
-                continue
-            if gap_rows["has_non_zero_data"].any():
-                continue
-
-            gap_months = gap_rows[month_col].tolist()
-            discontinuity_rows.append(
-                {
-                    "category": category,
-                    "last_month_with_data": category_panel.iloc[start_position][month_col],
-                    "first_month_back_with_data": category_panel.iloc[end_position][month_col],
-                    "gap_month_count": gap_size,
-                    "gap_months": ", ".join(_format_month_label(month) for month in gap_months),
-                }
-            )
-
-    discontinuity_df = pd.DataFrame(discontinuity_rows)
-    if discontinuity_df.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="category_discontinuity",
-                    status="success",
-                    message="No category continuity issues found.",
-                    count=0,
-                    metadata={"min_gap_months": min_gap_months},
-                )
-            ],
-            pd.DataFrame(
-                columns=[
-                    "category",
-                    "last_month_with_data",
-                    "first_month_back_with_data",
-                    "gap_month_count",
-                    "gap_months",
-                ]
-            ),
-        )
-
-    discontinuity_df = discontinuity_df.sort_values(
-        ["gap_month_count", "category"],
-        ascending=[False, True],
-    ).reset_index(drop=True)
-
-    sample_values = [
-        (
-            f"{row['category']} is missing in {row['gap_months']} and then appears "
-            f"again in {_format_month_label(row['first_month_back_with_data'])}."
-        )
-        for _, row in discontinuity_df.head(sample_limit).iterrows()
-    ]
-
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="category_discontinuity",
-            status="warning",
-            message=(
-                f"Found {len(discontinuity_df)} category continuity issues where a "
-                f"category had data, went missing for at least {min_gap_months} internal "
-                f"month{'' if min_gap_months == 1 else 's'}, and then came back. This "
-                "usually points to a missing month of data rather than a real category "
-                "disappearance."
-            ),
-            column=metric_total,
-            count=len(discontinuity_df),
-            sample_values=sample_values,
-            metadata={
-                "min_gap_months": min_gap_months,
-                "sample_rows": discontinuity_df.head(sample_limit)
-                .assign(
-                    last_month_with_data_label=lambda x: x["last_month_with_data"].map(
-                        _format_month_label
-                    ),
-                    first_month_back_with_data_label=lambda x: x["first_month_back_with_data"].map(
-                        _format_month_label
-                    ),
-                )
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
-            },
-        )
-    ]
-
-    export_df = discontinuity_df.assign(
-        last_month_with_data=lambda x: x["last_month_with_data"].astype(str),
-        first_month_back_with_data=lambda x: x["first_month_back_with_data"].astype(str),
-    )
-    return findings, export_df
-
-
-def check_required_columns(df: pd.DataFrame, serving: bool = False) -> bool:
-    """Verify that DataFrame includes required report columns."""
-    mode: ReportMode = "serving" if serving else "procurement"
-    required = required_columns_for_mode(mode)
-    missing = [column for column in required if column not in df.columns]
-    return len(missing) == 0
-
-
-def ensure_date_alignment(
-    df: pd.DataFrame,
-    diner_meal_mapping: Mapping[pd.Period, float],
-) -> dict[str, list[pd.Period]]:
-    """Return month alignment diff between data and diner-meal mapping."""
-    if "month_year" not in df.columns:
-        return {"missing_in_mapping": [], "missing_in_data": []}
-    return compute_month_alignment(df["month_year"].dropna().unique(), diner_meal_mapping.keys())
-
-
-def check_zero_category_month_combos(
-    monthly_data: pd.DataFrame,
-    metric_col: str,
-) -> list[Finding]:
-    """Return structured findings for missing/zero category x month combos."""
-    findings: list[Finding] = []
-    if "month_year" not in monthly_data.columns or "category" not in monthly_data.columns:
-        return findings
-    if metric_col not in monthly_data.columns:
-        return findings
-
-    all_months = monthly_data["month_year"].dropna().unique()
-    all_categories = monthly_data["category"].dropna().unique()
-
-    expected = {(cat, month) for month in all_months for cat in all_categories}
-    actual = set(zip(monthly_data["category"], monthly_data["month_year"], strict=True))
-    missing = sorted(expected - actual)
-
-    if missing:
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="missing_category_month_combos",
-                status="info",
-                message=f"Missing {len(missing)} category×month combinations.",
-                count=len(missing),
-                sample_values=[
-                    _format_category_month_missing_sample(cat, month) for cat, month in missing[:10]
-                ],
-            )
-        )
-
-    zero_rows = monthly_data[monthly_data[metric_col] == 0]
-    if not zero_rows.empty:
-        combos = [
-            f"{row['category']} / {row['month_year']}"
-            for _, row in zero_rows[["category", "month_year"]].head(10).iterrows()
-        ]
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="zero_category_month_combos",
-                status="warning",
-                message=(
-                    f"Found {len(zero_rows)} category×month rows with zero values for "
-                    f"'{metric_col}'."
-                ),
-                count=len(zero_rows),
-                sample_values=combos,
-            )
-        )
-
-    return findings
-
-
 def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     """Check if first/last months look partial based on row count."""
     findings: list[Finding] = []
@@ -2152,9 +834,8 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     if median_count == 0:
         return findings
 
-    for label, idx in [("First", 0), ("Last", -1)]:
+    for label, idx in [("first", 0), ("last", -1)]:
         count = month_counts.iloc[idx]
-        month_name = month_counts.index[idx]
         ratio = count / median_count
         if ratio < partial_month_ratio_threshold:
             findings.append(
@@ -2163,8 +844,9 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
                     category="date_distribution",
                     status="warning",
                     message=(
-                        f"{label} month ({month_name}) has {count} rows, only {ratio:.0%} "
-                        f"of median ({median_count:.0f})."
+                        f"{_format_month_label(month_counts.index[idx])}, the {label} month in "
+                        f"the file, has {_format_line_count(int(count))} against about "
+                        f"{median_count:,.0f} in a typical month, so it may be a partial month."
                     ),
                     count=int(count),
                     metadata={"partial_month_ratio_threshold": partial_month_ratio_threshold},
@@ -2174,68 +856,24 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     return findings
 
 
-def check_negative_values(df: pd.DataFrame, metric_col: str) -> list[Finding]:
-    """Return finding if negative values are present."""
-    findings: list[Finding] = []
-    if metric_col not in df.columns:
-        return findings
-
-    numeric_metric = pd.to_numeric(df[metric_col], errors="coerce")
-    neg_count = int((numeric_metric < 0).sum())
-    if neg_count > 0:
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="negative_values",
-                status="error",
-                message=f"Found {neg_count} negative values in '{metric_col}'.",
-                column=metric_col,
-                count=neg_count,
-            )
-        )
-    else:
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="negative_values",
-                status="success",
-                message="No product has weights that are below 0.",
-                column=metric_col,
-            )
-        )
-    return findings
-
-
 def run_all_diagnostics(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
+    diner_or_meal: DinerOrMeal,
     serving: bool = False,
-    monthly_product_data: pd.DataFrame | None = None,
-    monthly_category_data: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
-    pdf_extracted: bool | None = None,
 ) -> list[Finding]:
-    """Run report diagnostics and return structured findings only."""
+    """Run report diagnostics on rows whose `month_year` is already `Period[M]`."""
     if serving and metric_total == "kilos_total" and "servings total" in df.columns:
         metric_total = "servings total"
 
     findings: list[Finding] = []
-    duplicate_findings, _ = detect_exact_duplicate_rows(df, metric_total)
-    findings.extend(duplicate_findings)
-    near_duplicate_findings, _ = detect_near_duplicate_product_names(
-        df,
-        metric_total,
-        pdf_extracted=pdf_extracted,
-    )
-    findings.extend(near_duplicate_findings)
     findings.extend(detect_month_over_month_total_volatility(df, metric_total))
     findings.extend(check_missing_internal_months(df))
-    category_discontinuity_findings, _ = detect_category_discontinuity(df, metric_total)
-    findings.extend(category_discontinuity_findings)
-    denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(diner_meal_mapping)
+    denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
+        df, diner_meal_mapping, metric_total, diner_or_meal=diner_or_meal
+    )
     findings.extend(denominator_reasonableness_findings)
-    findings.extend(check_single_product_dominance(df, metric_total))
-    findings.extend(check_category_concentration(df, metric_total))
     if "category" in df.columns and "product" in df.columns and metric_total in df.columns:
         unusual_sales_findings, _ = detect_unusual_sales(
             df,
@@ -2247,123 +885,5 @@ def run_all_diagnostics(
     if "product" in df.columns and metric_total in df.columns:
         per_product_weight_bound_findings, _ = check_per_product_weight_bounds(df, metric_total)
         findings.extend(per_product_weight_bound_findings)
-    findings.extend(check_missing_weeks_within_month(df))
-
-    # Required columns
-    if check_required_columns(df, serving=serving):
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="required_columns",
-                status="success",
-                message="All required columns present.",
-            )
-        )
-    else:
-        mode: ReportMode = "serving" if serving else "procurement"
-        missing = [column for column in required_columns_for_mode(mode) if column not in df.columns]
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="required_columns",
-                status="error",
-                message=f"Missing required columns: {missing}",
-                metadata={"missing_columns": missing},
-            )
-        )
-
-    # Month alignment
-    if "month_year" in df.columns:
-        alignment = ensure_date_alignment(df, diner_meal_mapping)
-        if alignment["missing_in_mapping"]:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="date_alignment",
-                    status="warning",
-                    message=(
-                        f"Months in data but not in diner-meals: {alignment['missing_in_mapping']}"
-                    ),
-                    count=len(alignment["missing_in_mapping"]),
-                )
-            )
-        if alignment["missing_in_data"]:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="date_alignment",
-                    status="info",
-                    message=(
-                        f"Months in diner-meals but not in data: {alignment['missing_in_data']}"
-                    ),
-                    count=len(alignment["missing_in_data"]),
-                )
-            )
-        if not alignment["missing_in_mapping"] and not alignment["missing_in_data"]:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="date_alignment",
-                    status="success",
-                    message="All months aligned between data and diner-meals.",
-                )
-            )
-
     findings.extend(check_date_distribution(df))
-    findings.extend(check_negative_values(df, metric_total))
-
-    if monthly_product_data is not None and monthly_category_data is not None:
-        aggregation_reconciliation_findings, _ = check_aggregation_reconciliation(
-            df,
-            monthly_product_data,
-            monthly_category_data,
-            metric_total,
-        )
-        findings.extend(aggregation_reconciliation_findings)
-
-    # GBD category validity
-    if "category" in df.columns:
-        gbd_cats = set(get_GBD_categories())
-        gbd_plus = gbd_cats | {"No Matches Found"}
-        df_cats = set(df["category"].dropna().astype(str).unique())
-        non_gbd = sorted(df_cats - gbd_plus)
-        # "No Matches Found" is allowed as a placeholder category, but should not be
-        # reported as an expected GBD category if absent from final report data.
-        missing_gbd = sorted(gbd_cats - df_cats)
-
-        if non_gbd:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="gbd_categories",
-                    status="warning",
-                    message=f"Non-GBD categories found: {non_gbd}",
-                    count=len(non_gbd),
-                    sample_values=non_gbd[:10],
-                )
-            )
-        else:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="gbd_categories",
-                    status="success",
-                    message="All categories are valid GBD categories.",
-                )
-            )
-
-        if missing_gbd:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="gbd_categories_absent",
-                    status="info",
-                    message=f"GBD categories absent from data: {missing_gbd}",
-                    count=len(missing_gbd),
-                )
-            )
-
-    if monthly_category_data is not None:
-        findings.extend(check_zero_category_month_combos(monthly_category_data, metric_total))
-
     return findings

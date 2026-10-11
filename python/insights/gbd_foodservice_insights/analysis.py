@@ -7,7 +7,8 @@ Two properties keep this seam agnostic and are worth preserving:
    handed a CSV, an output directory, and the form's answers.
 2. **`report_progress` is a plain no-argument callable with a no-op default**, so notebooks and
    the lab are unaffected. It carries no payload; the child's only use of it is to bump
-   `sequence`.
+   `sequence`. It is called after every LLM call, from whichever thread made it, so it must be
+   thread-safe.
 
 **Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
 materializes it into the run directory per run, and the child reports new values back through the
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 import matplotlib
+import pandas as pd
 
 # Before the report modules import pyplot: the child has no display, and on macOS the default
 # backend would try to open a window.
@@ -106,9 +108,16 @@ def analyze(
     rows = df_final.rename(columns={"weight": "kilos_total"})[
         ["date", "product", "category", "kilos_total"]
     ].reset_index(drop=True)
+    # A `PeriodIndex` rather than `pd.Period(month)` per key, which pandas' stubs type as
+    # possibly `NaT`.
+    months = pd.PeriodIndex(list(request.monthly_counts), freq="M")
+    monthly_counts = {
+        month: float(count)
+        for month, count in zip(months, request.monthly_counts.values(), strict=True)
+    }
     report = build_food_report(
         rows,
-        diner_meal_mapping=request.monthly_counts,
+        diner_meal_mapping=monthly_counts,
         mode="procurement",
         region="us",
         diner_or_meal=_DINER_OR_MEAL[request.counts_basis],

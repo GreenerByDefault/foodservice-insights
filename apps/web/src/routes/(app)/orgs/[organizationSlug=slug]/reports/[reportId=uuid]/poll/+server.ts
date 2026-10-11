@@ -1,3 +1,4 @@
+import { jsonFromThisDeploy } from '#lib/api/deploy-version.js';
 import { requireReportRouteContext } from '#lib/server/auth/route-context.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { _loadReport, _reportEnvironment } from '../+page.server.ts';
@@ -27,5 +28,5 @@ export const GET: RequestHandler = async (event) => {
     { action: 'poll a report', context: { organizationId, reportId } },
   );
 
-  return Response.json(data);
+  return jsonFromThisDeploy(data);
 };

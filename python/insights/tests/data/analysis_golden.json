@@ -12,8 +12,8 @@
       "Total diners": "3,000",
       "Data type": "Procurement",
       "Region used for climate emissions factors": "US/Canada",
-      "Total CO2e": "513 kg",
-      "CO2e per diner": "0.171 kg",
+      "Total CO₂e": "513 kg",
+      "CO₂e per diner": "0.171 kg",
       "Plant-based (% of classified food)": "71.9%",
       "Animal-based (% of classified food)": "28.1%",
       "Plant-based total": "127.7 kg",
@@ -25,15 +25,15 @@
     },
     "quality_status": "warning",
     "quality_summary": {
-      "total_findings": 17,
+      "total_findings": 5,
       "by_status": {
-        "success": 11,
-        "info": 4,
+        "success": 3,
+        "info": 0,
         "warning": 2,
         "error": 0
       },
       "by_stage": {
-        "diagnostics": 17
+        "diagnostics": 5
       }
     },
     "narrative": {
@@ -274,8 +274,8 @@
         "columns": [
           "Category",
           "Kilos of Food",
-          "CO2e Per Kg Food",
-          "Kg CO2e"
+          "CO₂e Per Kg Food",
+          "Kg CO₂e"
         ],
         "index": [
           0,
@@ -322,8 +322,8 @@
           "Focus",
           "Share of Animal Emissions (%)",
           "Top Animal Products",
-          "Top Products Kg CO2e",
-          "Total Animal Kg CO2e"
+          "Top Products Kg CO₂e",
+          "Total Animal Kg CO₂e"
         ],
         "index": [
           0
@@ -342,8 +342,8 @@
         "columns": [
           "Scenario",
           "Weight Replaced (kg)",
-          "Projected Kg CO2e",
-          "Avoidable Kg CO2e",
+          "Projected Kg CO₂e",
+          "Avoidable Kg CO₂e",
           "Institution Emissions Averted (%)"
         ],
         "index": [
@@ -387,70 +387,17 @@
     "findings": [
       {
         "stage": "diagnostics",
-        "category": "exact_duplicate_rows",
-        "status": "success",
-        "message": "No duplicate rows found.",
-        "count": 0,
-        "metadata": {
-          "duplicate_row_share": 0.0,
-          "duplicate_row_count": 0,
-          "duplicate_group_count": 0,
-          "key_columns": [
-            "date",
-            "product",
-            "category",
-            "kilos_total"
-          ]
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "near_duplicate_product_names",
-        "status": "success",
-        "message": "No near-duplicate product names found.",
-        "count": 0,
-        "metadata": {
-          "pdf_extracted": null,
-          "material_pair_count": 0,
-          "max_levenshtein_distance": 2,
-          "warning_share_threshold": 0.03
-        }
-      },
-      {
-        "stage": "diagnostics",
         "category": "month_over_month_total_volatility",
         "status": "warning",
-        "message": "Found 2 months where the total kilos total changed by more than 30% versus the previous month. Large swings like this often mean a month is missing, partial, or counted twice.",
+        "message": "Found 2 months where the total kilos changed by more than 30% from the month before. Large swings like this often mean a month is missing, partial, or counted twice.",
         "column": "kilos_total",
         "count": 2,
         "sample_values": [
-          "Nov 2023: 9.65 versus 162.93 in Oct 2023 (-94%).",
-          "Dec 2023: 4.94 versus 9.65 in Nov 2023 (-49%)."
+          "Nov 2023: 9.65 kg against 162.93 kg in Oct 2023 (-94%).",
+          "Dec 2023: 4.94 kg against 9.65 kg in Nov 2023 (-49%)."
         ],
         "metadata": {
-          "warning_pct_change_threshold": 0.3,
-          "sample_rows": [
-            {
-              "month_year": "2023-11",
-              "current_total": 9.64790184,
-              "previous_month": "2023-10",
-              "previous_total": 162.934782,
-              "pct_change": -0.940786726,
-              "abs_pct_change": 0.940786726,
-              "month_label": "Nov 2023",
-              "previous_month_label": "Oct 2023"
-            },
-            {
-              "month_year": "2023-12",
-              "current_total": 4.93961688,
-              "previous_month": "2023-11",
-              "previous_total": 9.64790184,
-              "pct_change": -0.488011283,
-              "abs_pct_change": 0.488011283,
-              "month_label": "Dec 2023",
-              "previous_month_label": "Nov 2023"
-            }
-          ]
+          "warning_pct_change_threshold": 0.3
         }
       },
       {
@@ -462,72 +409,27 @@
       },
       {
         "stage": "diagnostics",
-        "category": "category_discontinuity",
-        "status": "success",
-        "message": "No category continuity issues found.",
-        "count": 0,
-        "metadata": {
-          "min_gap_months": 1
-        }
-      },
-      {
-        "stage": "diagnostics",
         "category": "diner_meal_count_reasonableness",
         "status": "success",
-        "message": "Monthly diner or meal counts looked broadly consistent across the reporting period.",
+        "message": "No month's diner count looks out of line with the food in the file.",
         "count": 0,
         "metadata": {
+          "metric_col": "kilos_total",
           "median_count": 1000.0,
+          "median_food_per_count": 0.00964790184,
           "low_ratio_threshold": 0.5,
-          "high_ratio_threshold": 2.0,
-          "error_if_flagged_months": 2,
-          "missing_month_count": 0
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "single_product_dominance",
-        "status": "info",
-        "message": "'JUICE, APPL 100% SS CUP FRESH' accounts for 60.1% of total kilos total, above the 30% product concentration threshold.",
-        "count": 1,
-        "sample_values": [
-          "JUICE, APPL 100% SS CUP FRESH: 106.70 of 177.52 (60.1%)"
-        ],
-        "metadata": {
-          "metric_col": "kilos_total",
-          "threshold_pct": 0.3,
-          "top_product": "JUICE, APPL 100% SS CUP FRESH",
-          "top_product_total": 106.702982,
-          "top_product_share": 0.601068043
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "category_concentration",
-        "status": "info",
-        "message": "'Legumes' accounts for 60.1% of total kilos total, above the 30% category concentration threshold.",
-        "count": 1,
-        "sample_values": [
-          "Legumes: 106.70 of 177.52 (60.1%)"
-        ],
-        "metadata": {
-          "metric_col": "kilos_total",
-          "threshold_pct": 0.3,
-          "top_category": "Legumes",
-          "top_category_total": 106.702982,
-          "top_category_share": 0.601068043
+          "high_ratio_threshold": 2.0
         }
       },
       {
         "stage": "diagnostics",
         "category": "outlier_line_items",
         "status": "warning",
-        "message": "Found 1 unusually large line items (5.26% of all rows). The largest was PLATE, PAPR 6  SNGL POLY COTED in Mayo at 7.63, which is 6.0x that category's median of 1.27. These rows may need review for unit, entry, or OCR mistakes.",
+        "message": "Found 1 line far larger than is typical for its category (5.26% of all lines). The largest is PLATE, PAPR 6  SNGL POLY COTED in Mayo at 7.63 kg, 6.0x that category's typical line of 1.27 kg. Lines like these are often a unit or entry mistake.",
         "column": "kilos_total",
         "count": 1,
         "sample_values": [
-          "Affected products: PLATE, PAPR 6  SNGL POLY COTED",
-          "PLATE, PAPR 6  SNGL POLY COTED in Mayo has 7.63, which is 6.0x the category median of 1.27."
+          "PLATE, PAPR 6  SNGL POLY COTED in Mayo: 7.63 kg, 6.0x the category's typical line of 1.27 kg."
         ],
         "metadata": {
           "outlier_row_share": 0.0526315789,
@@ -536,31 +438,7 @@
           "zero_mad_ratio_threshold": 10.0,
           "small_category_ratio_threshold": 5.0,
           "mad_threshold": 5.0,
-          "min_category_rows": 5,
-          "sample_rows": [
-            {
-              "date": "2023-11-02 00:00:00",
-              "product": "PLATE, PAPR 6  SNGL POLY COTED",
-              "category": "Mayo",
-              "kilos_total": 7.63395336,
-              "month_year": "2023-11",
-              "emission_factor_used": 3.36,
-              "emissions_kg_co2e": 25.6500833,
-              "_row_index": 14,
-              "_metric_value": 7.63395336,
-              "category_row_count": 4,
-              "category_median": 1.26552168,
-              "category_mad": 0.5783298,
-              "ratio_to_category_median": 6.03225806,
-              "modified_z_score": 7.42743529,
-              "flagged_by_mad": false,
-              "flagged_by_zero_mad_ratio": false,
-              "flagged_by_small_category_ratio": true,
-              "flagged_by_extreme_ratio": false,
-              "is_outlier": true,
-              "flag_reason": "small-category severe ratio fallback"
-            }
-          ]
+          "min_category_rows": 5
         }
       },
       {
@@ -574,74 +452,6 @@
           "high": 500.0,
           "flagged_row_count": 0
         }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "required_columns",
-        "status": "success",
-        "message": "All required columns present."
-      },
-      {
-        "stage": "diagnostics",
-        "category": "date_alignment",
-        "status": "success",
-        "message": "All months aligned between data and diner-meals."
-      },
-      {
-        "stage": "diagnostics",
-        "category": "negative_values",
-        "status": "success",
-        "message": "No product has weights that are below 0.",
-        "column": "kilos_total"
-      },
-      {
-        "stage": "diagnostics",
-        "category": "aggregation_reconciliation",
-        "status": "success",
-        "message": "Raw total 177.522, monthly-by-product total 177.522, and monthly-by-category total 177.522 reconcile within the 0.1% tolerance.",
-        "column": "kilos_total",
-        "count": 0,
-        "metadata": {
-          "metric_col": "kilos_total",
-          "raw_total": 177.522301,
-          "monthly_product_total": 177.522301,
-          "monthly_category_total": 177.522301,
-          "max_abs_difference": 0.0,
-          "relative_difference": 0.0,
-          "rel_error_threshold": 0.001
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "gbd_categories",
-        "status": "success",
-        "message": "All categories are valid GBD categories."
-      },
-      {
-        "stage": "diagnostics",
-        "category": "gbd_categories_absent",
-        "status": "info",
-        "message": "GBD categories absent from data: ['Almond/Coconut Milk', 'Beef and Buffalo Meat', 'Butter', 'Cream', 'Ice Cream', 'Lamb/mutton & goat meat', 'Liquid Eggs', 'Nuts & Seeds', 'Oat Milk', 'Plant-Based Cheese', 'Plant-Based Egg', 'Plant-Based Yogurt', 'Plant-based Meats', 'Pork (pig meat)', 'Rice Milk', 'Shelled Eggs', 'Shellfish (Shrimp & lobster)', 'Soy Milk', 'Unspecified non dairy milk', 'Yogurt']",
-        "count": 20
-      },
-      {
-        "stage": "diagnostics",
-        "category": "missing_category_month_combos",
-        "status": "info",
-        "message": "Missing 12 category×month combinations.",
-        "count": 12,
-        "sample_values": [
-          "Cheese missing during Nov 2023",
-          "Cheese missing during Dec 2023",
-          "Fish and Mollusks missing during Nov 2023",
-          "Fish and Mollusks missing during Dec 2023",
-          "Legumes missing during Nov 2023",
-          "Legumes missing during Dec 2023",
-          "Mayo missing during Oct 2023",
-          "Milk (Cow's milk) missing during Oct 2023",
-          "Milk (Cow's milk) missing during Nov 2023",
-          "Poultry (Chicken and Turkey) missing during Dec 2023"
-        ]
       }
     ],
     "chart_titles": [
@@ -695,7 +505,7 @@
         "month_year",
         "product",
         "kilos_total",
-        "kilos per diner-meal"
+        "kilos per diner"
       ],
       "index": [
         0,
@@ -840,7 +650,7 @@
         "month_year",
         "category",
         "kilos_total",
-        "kilos per diner-meal",
+        "kilos per diner",
         "emissions_kg_co2e"
       ],
       "index": [
@@ -1187,7 +997,7 @@
         "category",
         "total_kg_co2e",
         "pct_of_total",
-        "kg_co2e_per_diner_meal"
+        "kg_co2e_per_diner"
       ],
       "index": [
         0,
@@ -1290,7 +1100,7 @@
         ]
       ]
     },
-    "Decision_KPIs": {
+    "Decision KPIs": {
       "columns": [
         "KPI",
         "Value",
@@ -1315,16 +1125,16 @@
         ]
       ]
     },
-    "Substitution_Scenarios": {
+    "Substitution Scenarios": {
       "columns": [
         "scenario",
         "substitution_pct",
         "source_categories",
         "replacement_category",
-        "baseline_ruminant_weight_kg",
-        "baseline_ruminant_emissions_kg_co2e",
+        "baseline_source_weight_kg",
+        "baseline_source_emissions_kg_co2e",
         "replaced_weight_kg",
-        "remaining_ruminant_weight_kg",
+        "remaining_source_weight_kg",
         "replacement_weight_kg",
         "replacement_emission_factor_kg_co2e_per_kg",
         "projected_emissions_kg_co2e",
