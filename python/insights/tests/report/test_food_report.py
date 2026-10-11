@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.report import aggregation, checks
+from gbd_foodservice_insights.report import aggregation, checks, food_report
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     _attach_monthly_category_emissions,
@@ -202,6 +202,8 @@ def test_emissions_that_drop_a_row_abort_before_any_later_stage_runs(
     [
         (emissions, "calculate_emissions"),
         (emissions, "calculate_emissions_summary"),
+        (food_report, "calculate_plant_animal_split"),
+        (food_report, "calculate_plant_protein_share"),
         (checks, "run_all_diagnostics"),
     ],
 )
@@ -265,8 +267,6 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
             "kg_co2e_per_kg_food": pytest.approx(np.nan, nan_ok=True),
         }
     ]
-    with build_report_charts(report) as charts:
-        assert charts.findings == ()
 
 
 def test_a_data_month_missing_from_the_mapping_aborts():
@@ -414,14 +414,15 @@ def test_report_charts_close_when_the_block_raises():
     assert set(plt.get_fignums()) == before
 
 
-def test_report_charts_close_what_was_drawn_when_generation_raises(
+def test_a_chart_that_raises_fails_the_report_and_closes_what_was_drawn(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    def generate_all_report_plots(**_kwargs: Any):
+    # The last chart drawn, so every page before it is open when it raises.
+    def plot_category_drivers_pages(*_args: Any, **_kwargs: Any):
         plt.figure()
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(report_plots, "generate_all_report_plots", generate_all_report_plots)
+    monkeypatch.setattr(report_plots, "plot_category_drivers_pages", plot_category_drivers_pages)
     before = set(plt.get_fignums())
 
     with pytest.raises(RuntimeError, match="boom"), build_report_charts(_build(_rows())):

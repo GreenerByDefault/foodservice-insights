@@ -79,10 +79,9 @@ class FoodReport:
     plant_animal_split: dict[str, Any] | None
     plant_protein_share: dict[str, Any] | None
     diagnostics: tuple[Finding, ...]
-    # In the order they were collected, which is the order the PDF lists them in. Chart
-    # findings come later, in `ReportCharts.findings`.
+    # In the order they were collected, which is the order the PDF lists them in.
     findings: tuple[Finding, ...]
-    # Without "Data Quality Status", which depends on the chart findings too.
+    # Without "Data Quality Status", which the lab's own findings can still change.
     summary_stats: dict[str, str]
 
     @property
@@ -101,7 +100,6 @@ class ReportCharts:
     """Closed when the `build_report_charts` block exits."""
 
     figures: list[tuple[str, Figure]]
-    findings: tuple[Finding, ...]
 
 
 def _log_stage(stage_key: str, report_progress: Callable[[], None]) -> None:
@@ -267,16 +265,8 @@ def build_food_report(
             )
 
     _log_stage("client_metrics_and_diagnostics", report_progress)
-    plant_animal_split = None
-    plant_protein_share = None
-    try:
-        plant_animal_split = calculate_plant_animal_split(df, metric_col=metric_total)
-    except Exception as exc:
-        logger.warning("Could not calculate plant/animal split: %s", exc)
-    try:
-        plant_protein_share = calculate_plant_protein_share(df, metric_col=metric_total)
-    except Exception as exc:
-        logger.warning("Could not calculate plant protein share: %s", exc)
+    plant_animal_split = calculate_plant_animal_split(df, metric_col=metric_total)
+    plant_protein_share = calculate_plant_protein_share(df, metric_col=metric_total)
 
     diagnostics_list = checks.run_all_diagnostics(
         df=df,
@@ -318,7 +308,6 @@ def build_food_report(
 
 @contextmanager
 def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
-    findings: list[Finding] = []
     with close_new_figures_on_error():
         figures = report_plots.generate_all_report_plots(
             aggregated_data=report.aggregation,
@@ -326,13 +315,12 @@ def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
             emissions_summary=report.emissions_summary,
             metric_total=report.metric_total,
             serving=(report.mode == "serving"),
-            quality_findings=findings,
             plant_animal_split=report.plant_animal_split,
             plant_protein_share=report.plant_protein_share,
             diner_or_meal=report.diner_or_meal,
         )
     try:
-        yield ReportCharts(figures=figures, findings=tuple(findings))
+        yield ReportCharts(figures=figures)
     finally:
         for _caption, figure in figures:
             plt.close(figure)
