@@ -24,6 +24,9 @@ from gbd_foodservice_insights.analysis import (
 )
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.report import pdf
+from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
+from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.schema import quality_status_from_findings
 from gbd_foodservice_insights.testing import (
     KEYWORD_PRODUCTS,
     SAMPLE_MONTHS,
@@ -204,7 +207,7 @@ def _headcount_finding(
     monkeypatch: pytest.MonkeyPatch,
     counts: dict[str, int],
     weight_by_month: dict[str, float],
-) -> dict[str, Any]:
+) -> Finding:
     """The headcount finding `analyze()` hands the PDF, buying `weight_by_month[month]` of every
     product each month."""
     request = dataclasses.replace(_request(tmp_path), monthly_counts=MappingProxyType(counts))
@@ -215,14 +218,14 @@ def _headcount_finding(
             for product in KEYWORD_PRODUCTS
         )
     )
-    pdf_findings: list[dict[str, Any]] = []
-    build_pdf_report = pdf.build_pdf_report
+    pdf_findings: list[Finding] = []
+    write_report_pdf = analysis.write_report_pdf
 
-    def record_findings(**kwargs: Any) -> str:
-        pdf_findings.extend(kwargs["missing_data_findings"])
-        return build_pdf_report(**kwargs)
+    def record_findings(report: FoodReport, *args: Any, **kwargs: Any) -> None:
+        pdf_findings.extend(report.findings)
+        write_report_pdf(report, *args, **kwargs)
 
-    monkeypatch.setattr(pdf, "build_pdf_report", record_findings)
+    monkeypatch.setattr(analysis, "write_report_pdf", record_findings)
 
     analyze(request, llm=KeywordLlmClient())
 
@@ -332,24 +335,44 @@ def test_analyze_golden_deliverables(
     )
 
     pdf_inputs: dict[str, Any] = {}
-    build_pdf_report = pdf.build_pdf_report
+    write_report_pdf = analysis.write_report_pdf
 
-    def record_pdf_inputs(**kwargs: Any) -> str:
+    def record_pdf_inputs(
+        report: FoodReport, charts: ReportCharts, path: Path, *, client_name: str, **kwargs: Any
+    ) -> None:
+        procurement = report.aggregation.procurement
+        assert procurement is not None
+        assert procurement.animal_emissions_intensity is not None
+        assert procurement.animal_emissions_concentration is not None
+        assert procurement.substitution_scenarios is not None
+        narrative = pdf._executive_narrative(
+            report, client_name, quality_status_from_findings(report.findings)
+        )
+        assert narrative is not None
         pdf_inputs.update(
             {
-                "title_info": kwargs["title_info"],
-                "summary_stats": kwargs["summary_stats"],
-                "quality_status": kwargs["quality_status"],
-                "quality_summary": kwargs["quality_summary"],
-                "narrative": kwargs["narrative"],
-                "tables": kwargs["tables"],
-                "findings": kwargs["missing_data_findings"],
-                "chart_titles": [_chart_titles(figure) for _, figure in kwargs["plots"]],
+                "title": [client_name, kwargs["baseline_pilot"], report.mode],
+                "summary_stats": report.summary_stats,
+                "narrative": narrative,
+                "tables": {
+                    "Category Template": pdf._format_category_template_for_pdf(
+                        report.aggregation.template
+                    ),
+                    "Animal Emissions Intensity": pdf._format_animal_emissions_intensity_for_pdf(
+                        procurement.animal_emissions_intensity
+                    ),
+                    "Decision KPIs": dataclasses.asdict(procurement.animal_emissions_concentration),
+                    "Substitution Scenarios": pdf._format_substitution_scenarios_for_pdf(
+                        procurement.substitution_scenarios
+                    ),
+                },
+                "findings": report.findings,
+                "chart_titles": [_chart_titles(figure) for _, figure in charts.figures],
             }
         )
-        return build_pdf_report(**kwargs)
+        write_report_pdf(report, charts, path, client_name=client_name, **kwargs)
 
-    monkeypatch.setattr(pdf, "build_pdf_report", record_pdf_inputs)
+    monkeypatch.setattr(analysis, "write_report_pdf", record_pdf_inputs)
     llm = KeywordLlmClient()
 
     outcome = analyze(request, llm=llm)
