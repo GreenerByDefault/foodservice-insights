@@ -139,7 +139,7 @@ class TestPlotTimeSeriesWithPeriods:
     def test_returns_figure(self):
         data = pd.DataFrame(
             {
-                "month_year": ["2024-01", "2024-02", "2024-03"],
+                "month_year": pd.period_range("2024-01", periods=3, freq="M"),
                 "value": [10, 20, 15],
                 "period": ["baseline", "baseline", "pilot"],
             }

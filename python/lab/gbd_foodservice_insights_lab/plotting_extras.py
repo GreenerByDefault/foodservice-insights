@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_colors,
+    GBD_COLORS,
     add_grid,
     format_month_labels,
     set_title_font,
@@ -14,18 +14,18 @@ from gbd_foodservice_insights.plotting_utils import (
 
 from gbd_foodservice_insights_lab.categories import short_name
 
-GBD_cmap = mcolors.ListedColormap(GBD_colors)
+GBD_cmap = mcolors.ListedColormap(GBD_COLORS)
 
 # Period color mapping for baseline vs pilot comparisons
 PERIOD_COLORS = {
-    "baseline": GBD_colors[0],
-    "pilot": GBD_colors[1],
+    "baseline": GBD_COLORS[0],
+    "pilot": GBD_COLORS[1],
 }
 
 
 def setup_seaborn_palette() -> None:
     """Set up seaborn with GBD color palette."""
-    sns.set_palette(GBD_colors)
+    sns.set_palette(GBD_COLORS)
 
 
 def update_legend_to_title_case(ax: plt.Axes) -> None:
@@ -179,7 +179,7 @@ def plot_time_series_with_periods(
             marker=marker,
             markersize=markersize,
             linewidth=linewidth,
-            color=GBD_colors[0] if isinstance(GBD_colors, list) and GBD_colors else None,
+            color=GBD_COLORS[0] if isinstance(GBD_COLORS, list) and GBD_COLORS else None,
             ax=ax,
         )
 
@@ -188,7 +188,7 @@ def plot_time_series_with_periods(
     set_title_font(ax, title, fontsize=14)
 
     unique_months = sorted(data_sorted[x_col].unique())
-    formatted_labels = format_month_labels(unique_months)
+    formatted_labels = format_month_labels(pd.PeriodIndex(unique_months, freq="M"))
     ax.set_xticks(unique_months)
     ax.set_xticklabels(formatted_labels, rotation=45)
 

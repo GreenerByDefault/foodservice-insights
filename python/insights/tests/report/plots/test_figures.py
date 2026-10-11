@@ -58,6 +58,37 @@ def test_plot_category_drivers_pages_puts_four_categories_on_each_page_in_order(
     )
 
 
+def test_plot_category_totals_titles_and_labels_its_own_axes_with_categories_largest_first():
+    monthly = pd.DataFrame(
+        {
+            "category": ["fruit", "fruit", "dairy"],
+            "kilos_total": [10.0, 5.0, 20.0],
+        }
+    )
+
+    fig = figures.plot_category_totals(monthly, "kilos_total")
+
+    (ax,) = fig.axes
+    assert ax.get_title() == "Kilos by Category Across All Months"
+    assert ax.get_xlabel() == "Kilos"
+    assert ax.get_ylabel() == ""
+    assert [label.get_text() for label in ax.get_yticklabels()] == ["dairy", "fruit"]
+
+
+def test_plot_diner_meal_numbers_pads_the_y_axis_by_a_fifth_of_each_limit():
+    months = pd.period_range("2024-01", periods=3, freq="M")
+
+    fig = figures.plot_diner_meal_numbers(pd.Series([10, 20, 30], index=months))
+
+    (ax,) = fig.axes
+    assert ax.get_ylim() == pytest.approx((8, 36))
+    assert [label.get_text() for label in ax.get_xticklabels()] == [
+        "Jan-2024",
+        "Feb-2024",
+        "Mar-2024",
+    ]
+
+
 def test_plot_emissions_by_category_labels_each_bar_with_its_share_skipping_missing_ones():
     fig = figures.plot_emissions_by_category(
         pd.DataFrame(
@@ -79,7 +110,7 @@ def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
     fig = figures.plot_food_and_drink_comparison_page(
         fruit_and_juice_months(),
         metric="kilos_total",
-        diner_meal_mapping={"2023-01": 100, "2023-02": 100},
+        diner_meal_mapping={pd.Period("2023-01"): 100, pd.Period("2023-02"): 100},
     )
 
     assert _figure_title(fig) == "Kilos Over Time"
@@ -99,7 +130,7 @@ def test_emissions_summary_page_puts_total_above_per_diner(
 ):
     fig = figures.plot_emissions_summary_over_time(
         fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-        {"2023-01": 100, "2023-02": 100},
+        {pd.Period("2023-01"): 100, pd.Period("2023-02"): 100},
     )
 
     assert _figure_title(fig) == "Carbon Emissions Over Time"
@@ -111,7 +142,7 @@ def test_emissions_summary_page_puts_total_above_per_diner(
 
 
 def test_plant_breakdown_overview_puts_the_split_above_protein_with_monthly_on_the_right():
-    months = ["2023-01", "2023-02"]
+    months = [pd.Period("2023-01"), pd.Period("2023-02")]
     fig = figures.plot_plant_breakdown_overview(
         {
             "plant_pct": 52.0,

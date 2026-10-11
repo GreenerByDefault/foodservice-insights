@@ -24,7 +24,6 @@ from gbd_foodservice_insights.plotting_utils import (
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding, summarize_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
-from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -1082,7 +1081,7 @@ def build_pdf_report(
         )
         create_text_page(pdf, "Data Completeness & Quality", quality_lines)
 
-    logger.info("PDF report saved to %s", rel_path(output_path))
+    logger.info("PDF report saved to %s", output_path)
     return output_path
 
 

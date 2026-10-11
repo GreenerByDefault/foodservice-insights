@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_colors,
+    GBD_COLORS,
     add_grid,
     set_title_font,
     setup_gbd_fonts,
@@ -727,7 +727,7 @@ def plot_share_scatter(
     ax.scatter(
         shared["procurement_share_pct"],
         shared["serving_share_pct"],
-        color=GBD_colors[0],
+        color=GBD_COLORS[0],
         alpha=0.8,
     )
     axis_max = float(
@@ -775,14 +775,14 @@ def plot_share_comparison(
         positions - width / 2,
         plot_data["procurement_share_pct"],
         height=width,
-        color=GBD_colors[0],
+        color=GBD_COLORS[0],
         label="Procurement share",
     )
     ax.barh(
         positions + width / 2,
         plot_data["serving_share_pct"],
         height=width,
-        color=GBD_colors[1],
+        color=GBD_COLORS[1],
         label="Serving share",
     )
     ax.set_yticks(positions)
@@ -819,14 +819,14 @@ def plot_per_person_share_comparison(
         positions - width / 2,
         plot_data["procurement_per_person_share_pct"],
         height=width,
-        color=GBD_colors[2],
+        color=GBD_COLORS[2],
         label="Procurement per-person share",
     )
     ax.barh(
         positions + width / 2,
         plot_data["serving_per_person_share_pct"],
         height=width,
-        color=GBD_colors[3],
+        color=GBD_COLORS[3],
         label="Serving per-person share",
     )
     ax.set_yticks(positions)
@@ -859,14 +859,14 @@ def plot_diner_number_comparison(
         positions - width / 2,
         data["value_procurement"],
         width=width,
-        color=GBD_colors[0],
+        color=GBD_COLORS[0],
         label="Procurement",
     )
     ax.bar(
         positions + width / 2,
         data["value_serving"],
         width=width,
-        color=GBD_colors[1],
+        color=GBD_COLORS[1],
         label="Serving",
     )
     ax.set_xticks(positions)
@@ -918,14 +918,14 @@ def plot_monthly_category_share_comparison(
         positions - width / 2,
         data["procurement_share_pct"],
         height=width,
-        color=GBD_colors[0],
+        color=GBD_COLORS[0],
         label="Procurement share",
     )
     ax.barh(
         positions + width / 2,
         data["serving_share_pct"],
         height=width,
-        color=GBD_colors[1],
+        color=GBD_COLORS[1],
         label="Serving share",
     )
     ax.set_yticks(positions)

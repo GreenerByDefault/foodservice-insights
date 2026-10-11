@@ -8,14 +8,13 @@ from gbd_foodservice_insights import PACKAGE_DIR
 from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
     FONT_FILES,
+    GBD_COLORS,
     TITLE_FONT,
-    GBD_colors,
     close_new_figures_on_error,
     create_horizontal_percentage_barplot,
     format_month_labels,
     set_suptitle_font,
     set_title_font,
-    set_ylim_with_padding,
     setup_gbd_fonts,
     standardize_title_case,
     wrap_labels,
@@ -54,29 +53,11 @@ def test_titles_use_the_title_font():
     assert fig.texts[0].get_fontname() == TITLE_FONT
 
 
-def test_set_ylim_with_padding_scales_each_limit_by_the_padding():
-    _fig, ax = plt.subplots()
-
-    set_ylim_with_padding(ax, pd.Series([10, 20, 30]), padding=0.2)
-
-    assert ax.get_ylim() == pytest.approx((8, 36))
-
-
-@pytest.mark.parametrize(
-    "months",
-    [
-        ["2024-01", "2024-02"],
-        pd.to_datetime(["2024-01-01", "2024-02-01"]),
-        pd.period_range("2024-01", periods=2, freq="M"),
-    ],
-    ids=["strings", "datetimes", "periods"],
-)
-def test_format_month_labels(months):
-    assert format_month_labels(months) == ["Jan-2024", "Feb-2024"]
-
-
-def test_format_month_labels_falls_back_to_str_for_unparseable_values():
-    assert format_month_labels([123, "invalid", None]) == ["123", "invalid", "None"]
+def test_format_month_labels_formats_periods():
+    assert format_month_labels(pd.period_range("2024-01", periods=2, freq="M")) == [
+        "Jan-2024",
+        "Feb-2024",
+    ]
 
 
 def test_wrap_labels_wraps_only_labels_longer_than_max_width():
@@ -107,7 +88,7 @@ def test_horizontal_percentage_barplot_keeps_labels_that_truncate_alike_as_separ
     ] * 2
 
 
-@pytest.mark.parametrize("bar_count", [2, len(GBD_colors) + 2])
+@pytest.mark.parametrize("bar_count", [2, len(GBD_COLORS) + 2])
 def test_horizontal_percentage_barplot_cycles_the_palette_without_warning(
     bar_count: int,
 ):
@@ -120,8 +101,8 @@ def test_horizontal_percentage_barplot_cycles_the_palette_without_warning(
         create_horizontal_percentage_barplot(ax, data, "product", add_percentage_labels=False)
 
     colors = [bar.get_facecolor() for bar in ax.patches if isinstance(bar, Rectangle)]
-    assert len(set(colors)) == min(bar_count, len(GBD_colors))
-    assert colors == [colors[i % len(GBD_colors)] for i in range(bar_count)]
+    assert len(set(colors)) == min(bar_count, len(GBD_COLORS))
+    assert colors == [colors[i % len(GBD_COLORS)] for i in range(bar_count)]
 
 
 def test_standardize_title_case_keeps_possessive_s_lowercase():
