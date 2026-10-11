@@ -55,8 +55,12 @@ def test_aggregate_data_keeps_rows_with_missing_group_keys():
 
     out = aggregate_data(df, group_by="category", metrics=["kilos_total"])
 
-    assert out["category"].isna().sum() == 1
-    assert out["kilos_total"].sum() == 15.0
+    pd.testing.assert_frame_equal(
+        out,
+        pd.DataFrame(
+            {"month_year": [JAN, JAN], "category": ["legumes", pd.NA], "kilos_total": [10.0, 5.0]}
+        ),
+    )
 
 
 def test_create_template_data_preserves_values_when_category_case_differs():

@@ -58,7 +58,9 @@ def test_prepare_monthly_trend_data_leaves_an_uncounted_month_missing(
         diner_meal_mapping={JAN: 100},
     )
 
-    assert plot_data["value"].tolist() == pytest.approx([1.25, np.nan], nan_ok=True)
+    pd.testing.assert_frame_equal(
+        plot_data, pd.DataFrame({"month_year": [JAN, FEB], "value": [1.25, np.nan]})
+    )
 
 
 def test_prepare_monthly_trend_data_keeps_an_all_missing_month_missing():

@@ -56,9 +56,18 @@ class TestPlotMetricOverTime:
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
-    def test_per_diner_meal(self):
+    @pytest.mark.parametrize(
+        "months",
+        [
+            [pd.Period("2023-01"), pd.Period("2023-02")],
+            ["2023-01", "2023-02"],
+            [pd.Timestamp("2023-01-01"), pd.Timestamp("2023-02-01")],
+        ],
+        ids=["period", "string", "timestamp"],
+    )
+    def test_per_diner_meal(self, months: list):
         data = {
-            "month_year": [pd.Period("2023-01"), pd.Period("2023-02")],
+            "month_year": months,
             "category": ["fruit", "fruit"],
             "kilos_total": [100, 150],
         }

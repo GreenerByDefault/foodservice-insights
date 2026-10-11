@@ -213,6 +213,12 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
     ]
 
 
+def test_month_year_comes_from_date_even_when_the_rows_carry_one():
+    report = _build(_rows().assign(month_year="1999-12"))
+
+    assert report.rows["month_year"].tolist() == [JAN, JAN, FEB, FEB]
+
+
 def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     aligned = _build(_rows())
     report = _build(_rows(), diner_meal_mapping={JAN: 100, FEB: 120, MAR: 0})

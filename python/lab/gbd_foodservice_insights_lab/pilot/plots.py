@@ -1164,6 +1164,12 @@ def plot_kilos_per_diner_over_time(
     )
 
 
+def _as_months(month_year: pd.Series) -> pd.Series:
+    if isinstance(month_year.dtype, pd.PeriodDtype):
+        return month_year
+    return pd.to_datetime(month_year.astype(str)).dt.to_period("M")
+
+
 def plot_metric_over_time(
     monthly_category_data: pd.DataFrame,
     metric: str = "kilos_total",
@@ -1177,7 +1183,9 @@ def plot_metric_over_time(
         raise ValueError("metric must be 'kilos_total' or 'servings total'")
 
     plot_data = prepare_monthly_trend_data(
-        monthly_category_data,
+        # A workbook read back with `pd.read_excel` can hold months as strings or timestamps,
+        # which would not match the mapping's `Period` keys and plot as NaN.
+        monthly_category_data.assign(month_year=_as_months(monthly_category_data["month_year"])),
         metric,
         per_diner_meal=per_diner_meal,
         diner_meal_mapping=(
