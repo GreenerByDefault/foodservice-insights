@@ -1,48 +1,7 @@
 /** The guarded `cancel_requested_at` write shared by `POST /cancel` and `DELETE` */
 
-import {
-  type Database,
-  type DatabaseExecutor,
-  type OrganizationId,
-  type ReportId,
-  withTransaction,
-} from '@gbd/db';
-import { error } from '@sveltejs/kit';
+import type { Database, ReportId } from '@gbd/db';
 import { sql, type Transaction } from 'kysely';
-import { recordAuditEvent } from '#lib/server/audit.js';
-import type { Actor } from '#lib/server/auth/types.js';
-import { requireReportAccess } from '#lib/server/reports/guards.js';
-
-/** Request cancellation of `reportId`'s in-flight attempt.
- *
- * Never writes `analysis_attempt.status` — only a worker does; this only records that the user
- * asked, and a worker converges the request later.
- *
- * - 404 if the report doesn't exist in this organization, or is already soft-deleted.
- * - 403 if the caller neither created the report nor is an organization admin.
- * - 409 if there is no `pending`/`processing` attempt to cancel: the attempt already finished, so
- *   there is nothing to report as done.
- */
-export async function requestCancellation(
-  db: DatabaseExecutor,
-  params: { organizationId: OrganizationId; reportId: ReportId; actor: Actor },
-): Promise<void> {
-  const { organizationId, actor } = params;
-
-  await withTransaction(db, async (transaction) => {
-    const report = await requireReportAccess(transaction, params, 'cancel it');
-
-    if (!(await cancelActiveAttempt(transaction, report.id))) {
-      error(409, 'This report already finished');
-    }
-
-    await recordAuditEvent(transaction, {
-      action: 'report.cancel_requested',
-      actor,
-      target: { type: 'report', id: report.id, organizationId },
-    });
-  });
-}
 
 /** Record `cancel_requested_at` on `reportId`'s attempt if one is still `pending`/`processing`.
  *

@@ -28,9 +28,7 @@ export const DELETE: RequestHandler = async (event) => {
   });
   const actorEmail = requireAuth(event.locals).user.email;
 
-  await _deleteOrganization(database(), { organizationId, actor, actorEmail });
-
-  return new Response(null, { status: 204 });
+  return await _deleteOrganization(database(), { organizationId, actor, actorEmail });
 };
 
 /** Rename an organization, and audit it in the same transaction as the update.
@@ -97,7 +95,7 @@ export async function _renameOrganization(
 export async function _deleteOrganization(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId; actor: Actor; actorEmail: string },
-): Promise<void> {
+): Promise<Response> {
   const { organizationId, actor, actorEmail } = params;
 
   const { name } = await withDbErrorHandling(
@@ -129,4 +127,6 @@ export async function _deleteOrganization(
   }
 
   await notifyGbd({ kind: 'gbd-organization-deleted', organizationName: name, actorEmail });
+
+  return new Response(null, { status: 204 });
 }

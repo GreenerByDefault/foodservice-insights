@@ -22,11 +22,12 @@ describe('_deleteReport', () => {
         createdByUserId: admin.id,
       });
 
-      await _deleteReport(transaction, {
+      const response = await _deleteReport(transaction, {
         organizationId: organization.id,
         reportId: report.id,
         actor: { userId: admin.id, role: 'member' },
       });
+      expect(response.status).toBe(204);
 
       const updatedReport = await transaction
         .selectFrom('report')
@@ -68,11 +69,12 @@ describe('_deleteReport', () => {
         status: 'succeeded',
       });
 
-      await _deleteReport(transaction, {
+      const response = await _deleteReport(transaction, {
         organizationId: organization.id,
         reportId: report.id,
         actor: { userId: admin.id, role: 'admin' },
       });
+      expect(response.status).toBe(204);
 
       const updatedReport = await transaction
         .selectFrom('report')
@@ -92,7 +94,7 @@ describe('_deleteReport', () => {
   });
 
   // The full status/no-attempt matrix for "nothing active to cancel" is covered exhaustively by
-  // cancelActiveAttempt's own tests (cancel.test.ts); this just checks _deleteReport's wiring
+  // cancelActiveAttempt's own tests (lib/server/reports/cancel.test.ts); this just checks _deleteReport's wiring
   // when that lookup comes back false.
   test('deleting a report whose attempt already finished still deletes it, with no cancel event', async () => {
     await withRollback(database(), async (transaction) => {
@@ -103,11 +105,12 @@ describe('_deleteReport', () => {
         status: 'succeeded',
       });
 
-      await _deleteReport(transaction, {
+      const response = await _deleteReport(transaction, {
         organizationId: organization.id,
         reportId: report.id,
         actor: { userId: admin.id, role: 'admin' },
       });
+      expect(response.status).toBe(204);
 
       const updatedReport = await transaction
         .selectFrom('report')

@@ -13,11 +13,12 @@ vi.mock('#lib/server/email.js', (importOriginal) => mockUnreachableEmailer(impor
 describe('_deleteOrganization', () => {
   test('deletes the organization row', async () => {
     await withOrganizationFixtures(async ({ transaction, organizationId, adminUserId }) => {
-      await _deleteOrganization(transaction, {
+      const response = await _deleteOrganization(transaction, {
         organizationId,
         actor: { userId: adminUserId, role: 'admin' },
         actorEmail: 'admin@example.test',
       });
+      expect(response.status).toBe(204);
 
       const remaining = await transaction
         .selectFrom('organization')

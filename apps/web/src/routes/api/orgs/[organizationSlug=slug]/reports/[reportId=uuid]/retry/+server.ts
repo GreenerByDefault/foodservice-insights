@@ -18,9 +18,7 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async (event) => {
   const { organizationId, reportId, actor } = await requireReportRouteContext(database(), event);
 
-  await _retryReport(database(), { organizationId, reportId, actor });
-
-  return new Response(null, { status: 204 });
+  return await _retryReport(database(), { organizationId, reportId, actor });
 };
 
 /** Insert the next `analysis_attempt` for `reportId`, so a worker can claim it. A retry is a new
@@ -34,7 +32,7 @@ export const POST: RequestHandler = async (event) => {
 export async function _retryReport(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId; reportId: ReportId; actor: Actor },
-): Promise<void> {
+): Promise<Response> {
   const { organizationId, actor } = params;
 
   await withDbErrorHandling(
@@ -79,4 +77,6 @@ export async function _retryReport(
       }),
     { action: 'retry a report', context: { organizationId, reportId: params.reportId } },
   );
+
+  return new Response(null, { status: 204 });
 }
