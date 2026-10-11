@@ -27,10 +27,12 @@
       "period": "Oct 2023 – Dec 2023",
       "total_food_kg": 177.522301,
       "total_co2e_kg": 513.260939,
-      "per_dm_kg": 0.17108698,
-      "dm_label": "diner",
-      "plant_pct": 71.9,
-      "animal_pct": 28.1,
+      "co2e_kg_per_diner_or_meal": 0.17108698,
+      "diner_or_meal": "diner",
+      "plant_and_animal_pct": [
+        71.9,
+        28.1
+      ],
       "top_categories": [
         [
           "Cheese",

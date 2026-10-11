@@ -353,7 +353,7 @@ def test_analyze_golden_deliverables(
             {
                 "title": [client_name, kwargs["baseline_pilot"], report.mode],
                 "summary_stats": report.summary_stats,
-                "narrative": narrative,
+                "narrative": dataclasses.asdict(narrative),
                 "tables": {
                     "Category Template": pdf._format_category_template_for_pdf(
                         report.aggregation.template
