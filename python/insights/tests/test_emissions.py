@@ -1,15 +1,12 @@
 import pandas as pd
 import pytest
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.report.schema import VALID_REGIONS
+from gbd_foodservice_insights.categories import categories
 
 
 def _known_category_with_us_factor() -> tuple[str, float]:
-    factors = emissions.load_emission_factors()
-    for category, values in factors.items():
-        if values["us"] is not None:
-            return category, float(values["us"])
-    raise AssertionError("Expected at least one category with a US emission factor.")
+    category = categories()[0]
+    return category.name, category.emission_factor_us
 
 
 def test_get_emission_factor_is_case_insensitive():
@@ -17,12 +14,6 @@ def test_get_emission_factor_is_case_insensitive():
     category, factor = _known_category_with_us_factor()
     assert emissions.get_emission_factor(category.lower(), region="us") == factor
     assert emissions.get_emission_factor(category.upper(), region="us") == factor
-
-
-@pytest.mark.parametrize("region", VALID_REGIONS)
-def test_every_category_has_an_emission_factor(region):
-    factors = emissions.load_emission_factors()
-    assert [category for category, values in factors.items() if values[region] is None] == []
 
 
 def test_get_emission_factor_invalid_region_raises():

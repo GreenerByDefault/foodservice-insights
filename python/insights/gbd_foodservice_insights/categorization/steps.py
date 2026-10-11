@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import (
     NO_MATCHES_FOUND,
     CategorizationCache,
@@ -182,7 +182,7 @@ def categorize_with_llm(
     punctuation; any other answer becomes "No Matches Found", counted in one warning.
     """
     products_df = products_df.copy()
-    gbd_categories = get_GBD_categories()
+    gbd_categories = category_names()
     canonical_by_normalized = {
         normalize_product_name(name): name for name in [*gbd_categories, NO_MATCHES_FOUND]
     }

@@ -66,7 +66,7 @@ def test_promote_local_review_file_to_reviewed_cache(tmp_path: Path) -> None:
 
     with (
         patch.object(cache, "categorization_cache_path", return_value=historical_cache),
-        patch.object(product_cache, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(product_cache, "category_names", return_value=["Fruit"]),
     ):
         summary = promote_local_review_file_to_reviewed_cache(review_file, reviewed_by="reviewer")
 
@@ -95,7 +95,7 @@ def test_promote_local_review_file_rejects_a_non_canonical_category(tmp_path: Pa
 
     with (
         patch.object(cache, "categorization_cache_path", return_value=historical_cache),
-        patch.object(product_cache, "get_GBD_categories", return_value=["Fruit"]),
+        patch.object(product_cache, "category_names", return_value=["Fruit"]),
         pytest.raises(ValueError, match=r"Invalid values: \['Fruits'\]"),
     ):
         promote_local_review_file_to_reviewed_cache(review_file)

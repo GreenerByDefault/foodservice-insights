@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.report.excel import write_client_workbook
 from gbd_foodservice_insights.report.food_report import build_food_report, build_report_charts
 from gbd_foodservice_insights.report.pdf import write_report_pdf
@@ -42,7 +42,7 @@ DINERS_PER_MONTH = 30_000
 def synthetic_rows(row_count: int, seed: int = 0) -> pd.DataFrame:
     """Rows shaped like what `analyze()` hands `build_food_report`."""
     rng = np.random.default_rng(seed)
-    categories = np.array(get_GBD_categories())
+    categories = np.array(category_names())
     product_ids = rng.integers(PRODUCT_COUNT, size=row_count)
     start = MONTHS[0].start_time
     days = (MONTHS[-1].end_time - start).days + 1

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report import pdf as pdf_module
-from gbd_foodservice_insights.report.aggregation import get_GBD_categories
+from gbd_foodservice_insights.report.aggregation import category_names
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
 from gbd_foodservice_insights.report.pdf import (
     _executive_narrative,
@@ -439,7 +439,7 @@ class _RecordingTablePdf:
 @pytest.mark.parametrize("months", [3, 6, 12, 24])
 def test_category_template_fits_every_cell_and_splits_months_across_pages(months: int) -> None:
     month_labels = [str(month) for month in pd.period_range("2024-01", periods=months, freq="M")]
-    categories = [*get_GBD_categories(), "total"]
+    categories = [*category_names(), "total"]
     table = _format_category_template_for_pdf(
         pd.DataFrame(
             123_456.78,
