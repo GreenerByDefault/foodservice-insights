@@ -6,6 +6,7 @@ import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { loadAuthorization } from '#lib/server/auth/authorization.js';
 import { identifyUser } from '#lib/server/auth/identify.js';
 import type { AuthContext } from '#lib/server/auth/types.js';
+import { assertConfigured } from '#lib/server/config.js';
 import { closeDatabase, database, withDbErrorHandling } from '#lib/server/db.js';
 import { bindRequestLogger, logger } from '#lib/server/log.js';
 import { closeBlobStore } from '#lib/server/storage.js';
@@ -128,7 +129,7 @@ export const init: ServerInit = () => {
   // session would add another listener and eventually trip MaxListenersExceededWarning.
   if (process.listenerCount('sveltekit:shutdown') > 0) return;
 
-  // Stops the server on an unset or unknown value, rather than on its first request.
+  assertConfigured();
   if (authMode() === 'placeholder') {
     logger().warn(
       'PUBLIC_AUTH_MODE=placeholder: every request is the one seeded user, with no sign-in.',

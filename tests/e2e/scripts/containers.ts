@@ -216,7 +216,11 @@ function sharedEnv(stack: ContainerStack): Record<string, string> {
     S3_ACCESS_KEY_ID: requireEnv('S3_ACCESS_KEY_ID'),
     S3_SECRET_ACCESS_KEY: requireEnv('S3_SECRET_ACCESS_KEY'),
     S3_BUCKET: stack.s3Bucket,
-    // The web app reads this one too, for the report page's support link.
+    SITE_URL: stack.siteUrl,
+    EMAIL_TRANSPORT: requireEnv('EMAIL_TRANSPORT'),
+    EMAIL_ENDPOINT: forContainer(requireEnv('EMAIL_ENDPOINT')),
+    EMAIL_FROM_ADDRESS: requireEnv('EMAIL_FROM_ADDRESS'),
+    EMAIL_GBD_ADDRESS: requireEnv('EMAIL_GBD_ADDRESS'),
     EMAIL_SUPPORT_ADDRESS: requireEnv('EMAIL_SUPPORT_ADDRESS'),
     // Fixed, not `.env.test`'s: the specs rely on a real analysis — a real PDF, and a failure
     // provoked by the input itself. The web app reads it too, for the report page's poll interval.
@@ -302,18 +306,7 @@ export function startWorkerContainer(options: {
 
   const container = spawn(
     'docker',
-    [
-      ...baseRunArgs('worker', runName),
-      ...envFlags({
-        ...sharedEnv(stack),
-        SITE_URL: stack.siteUrl,
-        EMAIL_TRANSPORT: requireEnv('EMAIL_TRANSPORT'),
-        EMAIL_ENDPOINT: forContainer(requireEnv('EMAIL_ENDPOINT')),
-        EMAIL_FROM_ADDRESS: requireEnv('EMAIL_FROM_ADDRESS'),
-        EMAIL_GBD_ADDRESS: requireEnv('EMAIL_GBD_ADDRESS'),
-      }),
-      image,
-    ],
+    [...baseRunArgs('worker', runName), ...envFlags(sharedEnv(stack)), image],
     { stdio: 'inherit' },
   );
 
