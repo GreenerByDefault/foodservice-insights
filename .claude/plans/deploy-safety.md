@@ -5,8 +5,10 @@
 A review on 2026-10-08 of what can break when deploying web and worker, on top of the mitigations
 already in place: image-per-commit promotion, `deploy-web`'s supersession guard, the
 worker-runs-behind invariant, the drain with its `config.ts` relations, migrations from the
-workspace rather than the image, rollbacks skipping migrations, and report pages that reload once
-their poll is answered by another deploy. Nothing deploys for real yet
+workspace rather than the image, rollbacks skipping migrations, report pages that reload once
+their poll is answered by another deploy, and a CI check that fails a migration the hosted database
+would refuse or the deployed worker and web would not survive
+([`check_migrations.py`](../../scripts/ci/check_migrations.py)). Nothing deploys for real yet
 — [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -120,34 +122,7 @@ service would each get their own cap; weigh that against one more credential to 
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 4 — CI checks new migrations for what a fresh database cannot show
-
-`ts-db-types` migrates a *fresh* database, so two failures only surface against the hosted one:
-
-1. **Out-of-order names.** `migrateToLatest` uses Kysely's default `allowUnorderedMigrations:
-   false` (**verified**), so a migration that sorts before one already applied is refused at
-   deploy — and every later push fails at the same step until someone renames it. Parallel
-   sessions each writing `002_*` make this likely.
-2. **Breaking the running worker.** § Worker deploys only on demand requires the schema to stay
-   compatible with an older worker (and, between migrate and deploy, an older web). Nothing checks
-   that.
-
-`scripts/ci/check_migrations.py`, stdlib only, beside `check_filters.py`, run from `ts-static` on
-pull requests:
-
-- Files *added* under `packages/db/migrations/` (`git diff --diff-filter=A` against
-  `$TURBO_SCM_BASE`) must each sort after every migration file on the base branch.
-- An added file containing a contract-breaking builder call — `dropColumn`, `renameColumn`,
-  `renameTo`, `dropTable`, `setNotNull`, `setDataType`, `dropType` — or the same in raw `sql`
-  (`DROP`, `RENAME`, `SET NOT NULL`, `ALTER … TYPE`) fails unless that line, or the line above it,
-  carries `// contract-change: <why the deployed worker and web survive this>`.
-
-A grep, not a parser: it can be fooled, and the marker is what makes a reviewer look. The base
-branch can be stale (no strict up-to-date rule), so check 1 is a cheap partial; PR 1's CI gate and
-Kysely's own refusal are the backstops. `README.md` § Add a database migration gains a line on the
-marker.
-
-## PR 5 — Smoke-test every deploy
+## PR 4 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -179,7 +154,7 @@ Not PRs here; sequencing checks for whoever flips production on.
 
 ## Verification
 
-Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`; `just lint` for PR 4's script.
+Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
 PR 1 by dispatching against a fork or with the deploy step still stubbed: a branch dispatch is
 refused, a worker dispatch ahead of `deploy/web` is refused, and a rollback logs the current
 `deploy-service` rather than the target's. PR 2 by holding more session-mode connections than Pool

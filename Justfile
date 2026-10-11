@@ -27,9 +27,9 @@ fmt:
 check:
     uv run ty check python scripts
 
-# Test everything we ship.
+# Test everything we ship, and the CI scripts.
 test:
-    uv run pytest -n auto python/insights python/worker_child
+    uv run pytest -n auto python/insights python/worker_child scripts/ci
 
 # Test the lab, which ships nothing.
 test-lab:
