@@ -15,8 +15,7 @@ manifest, the run log) — see its README. To change:
 
 | What | Where |
 | --- | --- |
-| PDF text, section wording, page order, quality-summary wording | `report/pdf.py` — `build_pdf_report()` and its `create_*_page()` helpers |
-| Which tables the PDF includes | `report/pdf.py` — `write_report_pdf()` |
+| PDF text, section wording, page order and which tables it includes, quality-summary wording | `report/pdf.py` — `write_report_pdf()` and its `create_*_page()` helpers |
 | How those tables are computed | `report/aggregation.py` |
 | Which charts, in what order | `report/plots/report.py` — `generate_all_report_plots()` |
 | How a page or panel is drawn | `report/plots/figures.py` (`plot_*`), then `report/plots/panels.py` (`draw_*`) |

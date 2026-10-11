@@ -13,20 +13,22 @@ from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.pdf import (
     CategoryShare,
     ExecutiveNarrative,
+    _display_table,
     _executive_narrative,
     _format_animal_emissions_intensity_for_pdf,
     _format_category_template_for_pdf,
     _format_co2e,
-    _format_decision_kpis_for_pdf,
     _format_substitution_scenarios_for_pdf,
     _narrative_paragraphs,
     _pack_columns,
     _quality_to_lines,
     _wrap_text_lines,
     _wrap_to_width,
-    build_pdf_report,
+    create_category_template_pages,
+    create_decision_kpis_page,
     create_executive_summary_page,
-    create_table_page,
+    create_substitution_scenarios_page,
+    create_text_page,
     create_title_page,
     write_report_pdf,
 )
@@ -98,139 +100,6 @@ def _finding(
     )
 
 
-def test_build_pdf_report_splits_long_quality_pages(tmp_path: Path) -> None:
-    output_path = tmp_path / "quality-report.pdf"
-    long_findings = [
-        _finding(
-            "warning",
-            "Found duplicate line items across the report fields. This explanatory "
-            "sentence is intentionally long so the rendered PDF needs multiple "
-            "wrapped rows for each finding.",
-            sample_values=[
-                "Eggs Medium Av51g on 2024-07-01 00:00:00 appears 149 times and remains "
-                "long enough to wrap.",
-            ]
-            * 5,
-        )
-        for _ in range(12)
-    ]
-
-    build_pdf_report(
-        output_path=str(output_path),
-        title_info={
-            "client": "test client",
-            "baseline_pilot": "baseline",
-            "procurement_serving": "procurement",
-        },
-        plots=[],
-        tables={},
-        summary_stats={"Rows": "100"},
-        missing_data_findings=long_findings,
-    )
-
-    reader = PdfReader(str(output_path))
-
-    assert len(reader.pages) >= 4
-
-
-def test_build_pdf_report_does_not_render_plot_captions(tmp_path: Path) -> None:
-    output_path = tmp_path / "captionless-report.pdf"
-    fig = plt.figure()
-
-    build_pdf_report(
-        output_path=str(output_path),
-        title_info={
-            "client": "test client",
-            "baseline_pilot": "baseline",
-            "procurement_serving": "procurement",
-        },
-        plots=[("This chart caption should not appear in the PDF output.", fig)],
-        tables={},
-        summary_stats={"Rows": "100"},
-        missing_data_findings=[],
-    )
-
-    reader = PdfReader(str(output_path))
-    page_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-
-    assert "This chart caption should not appear in the PDF output." not in page_text
-    plt.close(fig)
-
-
-def test_build_pdf_report_closes_its_own_figures_when_a_page_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    output_path = tmp_path / "error-report.pdf"
-    before = set(plt.get_fignums())
-    fig = plt.figure()
-
-    def _boom(*_args: object, **_kwargs: object) -> None:
-        plt.figure()
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(pdf_module, "create_key_value_summary_page", _boom)
-
-    with pytest.raises(RuntimeError, match="boom"):
-        build_pdf_report(
-            output_path=str(output_path),
-            title_info={
-                "client": "test client",
-                "baseline_pilot": "baseline",
-                "procurement_serving": "procurement",
-            },
-            plots=[("caption", fig)],
-            tables={},
-            summary_stats={"Rows": "100"},
-            missing_data_findings=[],
-        )
-
-    assert set(plt.get_fignums()) == before | {fig.number}
-    plt.close(fig)
-
-
-def test_build_pdf_report_leaves_the_callers_plots_open(tmp_path: Path) -> None:
-    before = set(plt.get_fignums())
-    fig = plt.figure()
-
-    build_pdf_report(
-        output_path=str(tmp_path / "report.pdf"),
-        title_info={
-            "client": "test client",
-            "baseline_pilot": "baseline",
-            "procurement_serving": "procurement",
-        },
-        plots=[("caption", fig)],
-        tables={},
-        summary_stats={"Rows": "100"},
-    )
-
-    assert set(plt.get_fignums()) == before | {fig.number}
-    plt.close(fig)
-
-
-def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:
-    output_path = tmp_path / "quality-last-report.pdf"
-
-    build_pdf_report(
-        output_path=str(output_path),
-        title_info={
-            "client": "test client",
-            "baseline_pilot": "baseline",
-            "procurement_serving": "procurement",
-        },
-        plots=[],
-        tables={},
-        summary_stats={"Rows": "100"},
-        missing_data_findings=[_finding("warning", "Example quality finding")],
-    )
-
-    reader = PdfReader(str(output_path))
-    page_titles = [page.extract_text() or "" for page in reader.pages]
-
-    assert "About This Report" in page_titles[-2]
-    assert "Data Completeness & Quality" in page_titles[-1]
-
-
 @dataclass(frozen=True)
 class _PageText:
     text: str
@@ -252,6 +121,57 @@ class _RecordingPdf:
                 for t in ax.texts
             ]
         )
+
+
+@pytest.fixture
+def recording_pdf(monkeypatch: pytest.MonkeyPatch) -> _RecordingPdf:
+    pdf = _RecordingPdf()
+    monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
+    return pdf
+
+
+def _page_titles(pdf: _RecordingPdf) -> list[str]:
+    """Each page's first text, which is its title; a chart page has none."""
+    return [page[0].text if page else "" for page in pdf.pages]
+
+
+def _report(
+    animal_product: tuple[str, str] | None = ("Ground Beef", "Beef and Buffalo Meat"),
+    **overrides: Any,
+) -> FoodReport:
+    """Two months of lentils, alongside ``animal_product`` (its name and category) or, without
+    one, chickpeas."""
+    kwargs: dict[str, Any] = {
+        "diner_meal_mapping": {JAN: 100, FEB: 120},
+        "mode": "procurement",
+        "region": "us",
+        "diner_or_meal": "diner",
+        "top_n_drivers": 5,
+    }
+    product, category = animal_product or ("Chickpeas", "Legumes")
+    metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
+    rows = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
+            "product": [product, "Lentils", product, "Lentils"],
+            "category": [category, "Legumes", category, "Legumes"],
+            metric: [10.0, 20.0, 12.0, 18.0],
+        }
+    )
+    return build_food_report(rows, **(kwargs | overrides))
+
+
+def _write(
+    report: FoodReport, path: Path = Path("report.pdf"), charts: ReportCharts | None = None
+) -> None:
+    write_report_pdf(
+        report,
+        charts or ReportCharts(figures=[]),
+        path,
+        client_name="Acme",
+        baseline_pilot="pilot",
+        show_quality_successes=False,
+    )
 
 
 def _title_page(client: str) -> list[_PageText]:
@@ -292,6 +212,44 @@ def test_title_page_replaces_underscores_and_hyphens_in_the_labels() -> None:
     assert [t.text for t in pdf.pages[0]][1:3] == ["acme corp", "Pilot Phase | On Site Serving"]
 
 
+def _text_page_titles(lines: list[str], bold_lines: set[str] | None = None) -> list[str]:
+    pdf = _RecordingPdf()
+    create_text_page(pdf, "Title", lines, bold_lines=bold_lines)  # ty: ignore[invalid-argument-type]
+    return _page_titles(pdf)
+
+
+@pytest.mark.parametrize(
+    ("line_count", "titles"),
+    [
+        (0, ["Title"]),
+        (28, ["Title"]),
+        (29, ["Title", "Title (cont.)"]),
+        (56, ["Title", "Title (cont.)"]),
+        (57, ["Title", "Title (cont.)", "Title (cont.)"]),
+    ],
+)
+def test_text_page_fits_28_lines_per_page(line_count: int, titles: list[str]) -> None:
+    assert _text_page_titles([f"line {i}" for i in range(line_count)]) == titles
+
+
+def test_text_page_bolds_lines_compared_after_stripping() -> None:
+    pdf = _RecordingPdf()
+
+    create_text_page(
+        pdf,  # ty: ignore[invalid-argument-type]
+        "Title",
+        ["  Heading?", "", "body"],
+        bold_lines={"Heading?  "},
+    )
+
+    assert [(t.text, t.bold) for t in pdf.pages[0]] == [
+        ("Title", True),
+        ("  Heading?", True),
+        ("", False),
+        ("body", False),
+    ]
+
+
 def _summary_page(narrative: ExecutiveNarrative) -> list[_PageText]:
     pdf = _RecordingPdf()
     create_executive_summary_page(pdf, narrative)  # ty: ignore[invalid-argument-type]
@@ -311,19 +269,141 @@ def test_executive_summary_page_leads_with_the_headline_and_fits_the_page() -> N
     assert ys == sorted(ys, reverse=True)
 
 
-def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pdf = _RecordingPdf()
-    monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
+# ----------------------------------------------------------------------
+# Tests for write_report_pdf
+# ----------------------------------------------------------------------
 
-    build_pdf_report(
-        output_path=str(tmp_path / "report.pdf"),
-        title_info={"client": "Acme", "baseline_pilot": "baseline", "procurement_serving": ""},
-        plots=[],
-        tables={},
-        summary_stats={"Rows": "100"},
+
+def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _RecordingPdf) -> None:
+    fig = plt.figure()
+
+    _write(_report(), charts=ReportCharts(figures=[("caption", fig)]))
+    plt.close(fig)
+
+    assert _page_titles(recording_pdf) == [
+        "Food Report",
+        "Executive Summary",
+        "How to Read This Report",
+        "",
+        "Category Template",
+        "Animal Emissions Intensity",
+        "Decision KPIs",
+        "Substitution Scenarios",
+        "About This Report",
+        "Data Completeness & Quality",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("animal_product", "procurement_pages"),
+    [
+        (None, []),
+        (("Cheddar", "Cheese"), ["Animal Emissions Intensity", "Decision KPIs"]),
+        (
+            ("Whole Milk", "Milk (Cow's milk)"),
+            ["Animal Emissions Intensity", "Decision KPIs", "Substitution Scenarios"],
+        ),
+    ],
+    ids=["plant-only", "no-swap", "milk-swap"],
+)
+def test_write_report_pdf_includes_each_procurement_page_its_data_supports(
+    recording_pdf: _RecordingPdf,
+    animal_product: tuple[str, str] | None,
+    procurement_pages: list[str],
+) -> None:
+    _write(_report(animal_product))
+
+    titles = _page_titles(recording_pdf)
+    assert titles[titles.index("Category Template") + 1 : -2] == procurement_pages
+
+
+def test_write_report_pdf_summarises_a_serving_report_as_key_values(
+    recording_pdf: _RecordingPdf,
+) -> None:
+    report = _report(mode="serving")
+
+    _write(report)
+
+    assert _page_titles(recording_pdf) == [
+        "Food Report",
+        "Executive Summary",
+        "How to Read This Report",
+        "Category Template",
+        "About This Report",
+        "Data Completeness & Quality",
+    ]
+    assert [t.text for t in recording_pdf.pages[1]] == [
+        "Executive Summary",
+        *(f"{label}:  {value}" for label, value in report.summary_stats.items()),
+        "Data Quality Status:  PASS",
+    ]
+
+
+def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(
+    recording_pdf: _RecordingPdf,
+) -> None:
+    long_finding = _finding(
+        "warning",
+        "Found duplicate line items across the report fields. This explanatory sentence is "
+        "intentionally long so the rendered PDF needs multiple wrapped rows for each finding.",
+        sample_values=["Eggs Medium Av51g on 2024-07-01 appears 149 times."] * 5,
     )
 
-    (about,) = [page for page in pdf.pages if page and page[0].text == "About This Report"]
+    _write(replace(_report(), findings=(long_finding,) * 12))
+
+    titles = _page_titles(recording_pdf)
+    assert (
+        titles[titles.index("Data Completeness & Quality") + 1 :]
+        == ["Data Completeness & Quality (cont.)"] * 3
+    )
+
+
+def test_write_report_pdf_does_not_render_plot_captions(tmp_path: Path) -> None:
+    path = tmp_path / "report.pdf"
+    fig = plt.figure()
+
+    _write(_report(), path, ReportCharts(figures=[("This caption should not appear.", fig)]))
+    plt.close(fig)
+
+    page_text = "".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
+    assert "Thiscaptionshouldnotappear" not in "".join(page_text.split())
+
+
+def test_write_report_pdf_closes_its_own_figures_when_a_page_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = set(plt.get_fignums())
+    fig = plt.figure()
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        plt.figure()
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(pdf_module, "create_executive_summary_page", _boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[("caption", fig)]))
+
+    assert set(plt.get_fignums()) == before | {fig.number}
+    plt.close(fig)
+
+
+def test_write_report_pdf_leaves_the_callers_plots_open(tmp_path: Path) -> None:
+    before = set(plt.get_fignums())
+    fig = plt.figure()
+
+    _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[("caption", fig)]))
+
+    assert set(plt.get_fignums()) == before | {fig.number}
+    plt.close(fig)
+
+
+def test_about_page_bolds_every_heading(recording_pdf: _RecordingPdf) -> None:
+    _write(_report())
+
+    (about,) = [
+        page for page in recording_pdf.pages if page and page[0].text == "About This Report"
+    ]
     assert [t.text for t in about[1:] if t.bold] == [
         "What is procurement data?",
         "How are carbon figures calculated?",
@@ -334,23 +414,13 @@ def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.Monk
 
 @pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
 def test_text_pages_normalise_by_the_counts_basis(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, diner_or_meal: DinerOrMeal
+    recording_pdf: _RecordingPdf, diner_or_meal: DinerOrMeal
 ) -> None:
-    pdf = _RecordingPdf()
-    monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
-
-    build_pdf_report(
-        output_path=str(tmp_path / "report.pdf"),
-        title_info={"client": "Acme", "baseline_pilot": "baseline", "procurement_serving": ""},
-        plots=[],
-        tables={},
-        summary_stats={"Rows": "100"},
-        diner_or_meal=diner_or_meal,
-    )
+    _write(_report(diner_or_meal=diner_or_meal))
 
     words = [
         word
-        for page in pdf.pages
+        for page in recording_pdf.pages
         if page and page[0].text in {"How to Read This Report", "About This Report"}
         for t in page
         for word in t.text.split()
@@ -359,6 +429,27 @@ def test_text_pages_normalise_by_the_counts_basis(
     assert f"how many {diner_or_meal}s were served each month" in text
     assert f"the number of {diner_or_meal}s served" in text
     assert "people" not in text
+
+
+@pytest.mark.parametrize(
+    ("extra_status", "caveat_shown"),
+    [(None, False), ("info", False), ("warning", True)],
+)
+def test_write_report_pdf_caveats_only_a_warning(
+    tmp_path: Path, extra_status: DiagnosticStatus | None, caveat_shown: bool
+) -> None:
+    report = _report()
+    findings = tuple(f for f in report.findings if f["status"] == "success")
+    if extra_status is not None:
+        findings += (_finding(extra_status, "Extra finding"),)
+    path = tmp_path / "report.pdf"
+
+    _write(replace(report, findings=findings), path)
+
+    pages = ["".join((page.extract_text() or "").split()) for page in PdfReader(str(path)).pages]
+    assert ("Somedata-qualitynotesapply" in pages[1]) is caveat_shown
+    assert ("Extrafinding" in pages[-1]) is caveat_shown
+    assert ("Allautomateddatacheckspassed" in pages[-1]) is not caveat_shown
 
 
 def test_quality_lines_explain_an_invalid_status() -> None:
@@ -450,39 +541,6 @@ def test_quality_lines_with_no_findings_say_nothing_was_detected() -> None:
     ]
 
 
-def test_build_pdf_report_renders_table_index_as_a_regular_column(tmp_path: Path) -> None:
-    output_path = tmp_path / "table-report.pdf"
-
-    build_pdf_report(
-        output_path=str(output_path),
-        title_info={
-            "client": "test client",
-            "baseline_pilot": "baseline",
-            "procurement_serving": "procurement",
-        },
-        plots=[],
-        tables={
-            "Category Template": pd.DataFrame(
-                {"2024-01": [1714.378], "total": [5577.653]},
-                index=pd.Index(["Beef and Buffalo Meat"], name="category"),
-            )
-        },
-        summary_stats={"Rows": "100"},
-        missing_data_findings=[],
-    )
-
-    reader = PdfReader(str(output_path))
-    page_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    # PDF text extraction can insert spurious spaces inside words because glyph
-    # spacing differs across platforms (some words come back split on Linux CI
-    # runners), so assert against the text with all whitespace removed.
-    collapsed_text = "".join(page_text.split())
-
-    assert "CategoryTemplate" in collapsed_text
-    assert "category" in collapsed_text.lower()
-    assert "BeefandBuffaloMeat" in collapsed_text
-
-
 class _RecordingTablePdf:
     """Stands in for ``PdfPages``, keeping each table page's heading, column labels, and the
     cells whose text runs past the cell's right edge."""
@@ -491,6 +549,7 @@ class _RecordingTablePdf:
         self.headings: list[str] = []
         self.columns: list[list[str]] = []
         self.overflowing: list[str] = []
+        self.scenario_cells: list[str] = []
 
     def savefig(self, fig: Figure) -> None:
         fig.canvas.draw()  # lays the table out
@@ -502,6 +561,9 @@ class _RecordingTablePdf:
         self.columns.append(
             [cells[0, col].get_text().get_text() for col in range(max(c for _, c in cells) + 1)]
         )
+        self.scenario_cells += [
+            cells[row, 0].get_text().get_text() for row in range(1, max(r for r, _ in cells) + 1)
+        ]
         self.overflowing += [
             cell.get_text().get_text()
             for cell in cells.values()
@@ -512,17 +574,14 @@ class _RecordingTablePdf:
 @pytest.mark.parametrize("months", [3, 6, 12, 24])
 def test_category_template_fits_every_cell_and_splits_months_across_pages(months: int) -> None:
     month_labels = [str(month) for month in pd.period_range("2024-01", periods=months, freq="M")]
-    categories = [*category_names(), "total"]
-    table = _format_category_template_for_pdf(
-        pd.DataFrame(
-            123_456.78,
-            index=pd.Index(categories, name="category"),
-            columns=[*month_labels, "total"],
-        )
+    template = pd.DataFrame(
+        123_456.78,
+        index=pd.Index([*category_names(), "total"], name="category"),
+        columns=[*month_labels, "total"],
     )
 
     pdf = _RecordingTablePdf()
-    create_table_page(pdf, "Category Template", table)  # ty: ignore[invalid-argument-type]
+    create_category_template_pages(pdf, template)  # ty: ignore[invalid-argument-type]
 
     assert pdf.overflowing == []
     assert all(columns[0] == "Category" for columns in pdf.columns)
@@ -545,37 +604,56 @@ def test_pack_columns_fills_a_page_exactly_before_starting_another() -> None:
     assert _pack_columns([1.0, 1.5, 1.0], 2.5) == [[0, 1], [2]]
 
 
-def test_build_pdf_report_handles_long_decision_kpi_text(tmp_path: Path) -> None:
-    output_path = tmp_path / "decision-kpi-report.pdf"
+def _decision_kpis_page(concentration: AnimalEmissionsConcentration) -> list[str]:
+    pdf = _RecordingPdf()
+    create_decision_kpis_page(pdf, concentration)  # ty: ignore[invalid-argument-type]
+    return [t.text for t in pdf.pages[0]]
 
-    build_pdf_report(
-        output_path=str(output_path),
-        title_info={
-            "client": "test client",
-            "baseline_pilot": "baseline",
-            "procurement_serving": "procurement",
-        },
-        plots=[],
-        tables={
-            "Decision KPIs": pd.DataFrame(
-                {
-                    "Focus": ["Top 5 animal products share of animal-product emissions"],
-                    "Share of Animal Emissions (%)": [38.8],
-                    "Top Animal Products": [
-                        "BEEF PATTY, GROUND 80/20, OZ BALL RAW BF SMASH, MEATLOAF, BEEF UNSLICED"
-                    ],
-                    "Top Products Kg CO₂e": [168372],
-                    "Total Animal Kg CO₂e": [433448],
-                }
-            )
-        },
-        summary_stats={"Rows": "100"},
-        missing_data_findings=[],
+
+def test_decision_kpis_page_states_the_share_and_lists_the_products_in_order() -> None:
+    concentration = AnimalEmissionsConcentration(
+        top_products=("Ground Beef | 80/20", "Cheddar"),
+        top_products_kg_co2e=1353.4,
+        total_animal_kg_co2e=3490.0,
     )
 
-    reader = PdfReader(str(output_path))
-    assert output_path.exists()
-    assert len(reader.pages) >= 4
+    assert _decision_kpis_page(concentration) == [
+        "Decision KPIs",
+        "The top 2 animal products share of animal-product emissions was 38.8% amounting",
+        "to 1,353 kg CO₂e.",
+        "",
+        "The top 2 animal products were:",
+        "1. Ground Beef | 80/20",
+        "2. Cheddar",
+    ]
+
+
+def test_decision_kpis_page_words_a_single_product_and_a_whole_share() -> None:
+    concentration = AnimalEmissionsConcentration(
+        top_products=("Ground Beef",), top_products_kg_co2e=50.0, total_animal_kg_co2e=50.0
+    )
+
+    assert _decision_kpis_page(concentration)[1:5] == [
+        "The top 1 animal products share of animal-product emissions was 100% amounting",
+        "to 50 kg CO₂e.",
+        "",
+        "The top 1 animal product was:",
+    ]
+
+
+def test_decision_kpis_page_wraps_a_long_product_name_without_losing_words() -> None:
+    product = "Ground Beef | " + "very long description " * 6
+    concentration = AnimalEmissionsConcentration(
+        top_products=(product.strip(), "Cheddar"),
+        top_products_kg_co2e=10.0,
+        total_animal_kg_co2e=20.0,
+    )
+
+    lines = _decision_kpis_page(concentration)[5:]
+
+    assert lines[0].startswith("1. Ground Beef | very long")
+    assert " ".join(line.strip() for line in lines[:-1]) == "1. " + product.strip()
+    assert lines[-1] == "2. Cheddar"
 
 
 # ----------------------------------------------------------------------
@@ -630,27 +708,6 @@ def test_format_category_template_leaves_an_unnamed_index_unnamed() -> None:
     )
 
 
-def test_format_decision_kpis_rounds_and_lists_the_products() -> None:
-    concentration = AnimalEmissionsConcentration(
-        top_products=("Ground Beef", "Cheddar"),
-        top_products_kg_co2e=353.4,
-        total_animal_kg_co2e=909.7,
-    )
-
-    pd.testing.assert_frame_equal(
-        _format_decision_kpis_for_pdf(concentration),
-        pd.DataFrame(
-            {
-                "Focus": ["Top 2 animal products share of animal-product emissions"],
-                "Share of Animal Emissions (%)": [38.8],
-                "Top Animal Products": ["Ground Beef | Cheddar"],
-                "Top Products Kg CO₂e": pd.array([353], dtype="Int64"),
-                "Total Animal Kg CO₂e": pd.array([910], dtype="Int64"),
-            }
-        ),
-    )
-
-
 def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> None:
     table = pd.DataFrame(
         {
@@ -677,154 +734,36 @@ def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> No
     )
 
 
-# ----------------------------------------------------------------------
-# Tests for write_report_pdf
-# ----------------------------------------------------------------------
+def test_display_table_formats_cells_as_text_and_surfaces_a_named_index() -> None:
+    table = pd.DataFrame(
+        {"n": [1234567.0, 2.5, 0.126, np.nan], "s": ["a", "b", "c", "d"], "flag": [True] * 4},
+        index=pd.Index(["w", "x", "y", "z"], name="Category"),
+    )
+
+    assert _display_table(table).values.tolist() == [
+        ["w", "1,234,567", "a", True],
+        ["x", "2.5", "b", True],
+        ["y", "0.13", "c", True],
+        ["z", "", "d", True],
+    ]
 
 
-def _report(
-    animal_product: tuple[str, str] | None = ("Ground Beef", "Beef and Buffalo Meat"),
-    **overrides: Any,
-) -> FoodReport:
-    """Two months of lentils, alongside ``animal_product`` (its name and category) or, without
-    one, chickpeas."""
-    kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {JAN: 100, FEB: 120},
-        "mode": "procurement",
-        "region": "us",
-        "diner_or_meal": "diner",
-        "top_n_drivers": 5,
-    }
-    product, category = animal_product or ("Chickpeas", "Legumes")
-    metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
-    rows = pd.DataFrame(
+def test_substitution_scenarios_page_wraps_a_long_scenario_inside_its_cell() -> None:
+    scenarios = pd.DataFrame(
         {
-            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
-            "product": [product, "Lentils", product, "Lentils"],
-            "category": [category, "Legumes", category, "Legumes"],
-            metric: [10.0, 20.0, 12.0, 18.0],
+            "scenario": ["50% ruminant-to-legume swap with a long name", "10% swap"],
+            "replaced_weight_kg": [10.0, 2.0],
+            "projected_emissions_kg_co2e": [800.0, 900.0],
+            "avoidable_kg_co2e": [100.0, 10.0],
+            "institution_emissions_avoided_pct": [11.1, 1.1],
         }
     )
-    return build_food_report(rows, **(kwargs | overrides))
+    pdf = _RecordingTablePdf()
 
+    create_substitution_scenarios_page(pdf, scenarios)  # ty: ignore[invalid-argument-type]
 
-def _capture_pdf_kwargs(
-    monkeypatch: pytest.MonkeyPatch,
-    report: FoodReport,
-    charts: ReportCharts | None = None,
-) -> dict[str, Any]:
-    captured: dict[str, Any] = {}
-
-    def fake_build_pdf_report(**kwargs: Any) -> str:
-        captured.update(kwargs)
-        return kwargs["output_path"]
-
-    monkeypatch.setattr(pdf_module, "build_pdf_report", fake_build_pdf_report)
-    write_report_pdf(
-        report,
-        charts or ReportCharts(figures=[]),
-        Path("report.pdf"),
-        client_name="Acme",
-        baseline_pilot="pilot",
-        show_quality_successes=False,
-    )
-    return captured
-
-
-def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    report = _report()
-    fig = plt.figure()
-    charts = ReportCharts(figures=[("caption", fig)])
-
-    kwargs = _capture_pdf_kwargs(monkeypatch, report, charts)
-    plt.close(fig)
-
-    tables = kwargs.pop("tables")
-    narrative = kwargs.pop("narrative")
-    assert kwargs == {
-        "output_path": "report.pdf",
-        "title_info": {
-            "client": "Acme",
-            "baseline_pilot": "pilot",
-            "procurement_serving": "procurement",
-        },
-        "plots": [("caption", fig)],
-        "summary_stats": {**report.summary_stats, "Data Quality Status": "PASS"},
-        "missing_data_findings": report.findings,
-        "show_quality_successes": False,
-        "diner_or_meal": "diner",
-    }
-    assert list(tables) == [
-        "Category Template",
-        "Animal Emissions Intensity",
-        "Decision KPIs",
-        "Substitution Scenarios",
-    ]
-    procurement = report.aggregation.procurement
-    assert procurement is not None
-    assert procurement.animal_emissions_concentration is not None
-    pd.testing.assert_frame_equal(
-        tables["Decision KPIs"],
-        _format_decision_kpis_for_pdf(procurement.animal_emissions_concentration),
-    )
-    assert narrative == _executive_narrative(report, "Acme", "pass")
-
-
-def test_write_report_pdf_serving_has_only_the_template_table_and_no_narrative(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    kwargs = _capture_pdf_kwargs(monkeypatch, _report(mode="serving", diner_or_meal="meal"))
-
-    assert list(kwargs["tables"]) == ["Category Template"]
-    assert kwargs["narrative"] is None
-    assert kwargs["diner_or_meal"] == "meal"
-
-
-@pytest.mark.parametrize(
-    ("extra_status", "caveat_shown"),
-    [(None, False), ("info", False), ("warning", True)],
-)
-def test_write_report_pdf_caveats_only_a_warning(
-    tmp_path: Path, extra_status: DiagnosticStatus | None, caveat_shown: bool
-) -> None:
-    report = _report()
-    findings = tuple(f for f in report.findings if f["status"] == "success")
-    if extra_status is not None:
-        findings += (_finding(extra_status, "Extra finding"),)
-    path = tmp_path / "report.pdf"
-
-    write_report_pdf(
-        replace(report, findings=findings),
-        ReportCharts(figures=[]),
-        path,
-        client_name="Acme",
-        baseline_pilot="pilot",
-        show_quality_successes=False,
-    )
-
-    pages = ["".join((page.extract_text() or "").split()) for page in PdfReader(str(path)).pages]
-    assert ("Somedata-qualitynotesapply" in pages[1]) is caveat_shown
-    assert ("Extrafinding" in pages[-1]) is caveat_shown
-    assert ("Allautomateddatacheckspassed" in pages[-1]) is not caveat_shown
-
-
-def test_write_report_pdf_writes_the_pdf(tmp_path: Path) -> None:
-    fig = plt.figure()
-    path = tmp_path / "report.pdf"
-
-    write_report_pdf(
-        _report(),
-        ReportCharts(figures=[("caption", fig)]),
-        path,
-        client_name="Acme",
-        baseline_pilot="pilot",
-        show_quality_successes=True,
-    )
-
-    assert len(PdfReader(str(path)).pages) > 0
-    plt.close(fig)
+    assert pdf.headings == ["Substitution Scenarios"]
+    assert pdf.scenario_cells == ["50% ruminant-to-legume\nswap with a long name", "10% swap"]
 
 
 # ----------------------------------------------------------------------
