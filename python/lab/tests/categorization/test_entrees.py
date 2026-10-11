@@ -370,7 +370,7 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
         n_products_after=3,
         n_rows_uncategorized=1,
     )
-    df_final, filtered_counts = filter_to_entrees(
+    df_final, filtered_counts, n_rows_non_entree = filter_to_entrees(
         _merged_rows(["steak", "bread roll", "pot roast", "steak"]),
         counts,
         classified_products=pd.DataFrame(
@@ -387,7 +387,8 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
         .set_axis([0, 2, 3])
         .assign(entree_classification="entree"),
     )
-    assert filtered_counts == dataclasses.replace(counts, n_rows_after=3, n_rows_non_entree=1)
+    assert filtered_counts == dataclasses.replace(counts, n_rows_after=3)
+    assert n_rows_non_entree == 1
 
 
 def test_build_entree_human_review_table_excludes_historical():

@@ -532,9 +532,11 @@ def filter_to_entrees(
     merged_df: pd.DataFrame,
     counts: MergeCounts,
     classified_products: pd.DataFrame,
-) -> tuple[pd.DataFrame, MergeCounts]:
+) -> tuple[pd.DataFrame, MergeCounts, int]:
     """
     Keep only the entree rows of `merge_categorizations`' output, and update its counts.
+
+    Also returns how many rows were side/add-ons.
 
     This runs after the merge, not before, so that side/add-ons do not count toward the
     merge's "over 80% of products eliminated" check: a file that is mostly sides is still
@@ -547,11 +549,8 @@ def filter_to_entrees(
         classifications == ENTREE_LABEL_ENTREE
     ]
     logger.info("Entree filter: kept %d/%d rows.", len(entrees), len(merged_df))
-    return entrees, dataclasses.replace(
-        counts,
-        n_rows_after=len(entrees),
-        n_rows_non_entree=int((classifications == ENTREE_LABEL_SIDE_ADDON).sum()),
-    )
+    n_rows_non_entree = int((classifications == ENTREE_LABEL_SIDE_ADDON).sum())
+    return entrees, dataclasses.replace(counts, n_rows_after=len(entrees)), n_rows_non_entree
 
 
 def build_entree_human_review_table(
