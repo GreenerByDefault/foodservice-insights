@@ -46,9 +46,9 @@ plan doesn't do it.
 
 ## The PR
 
-A step in `deploy.yml`'s `deploy-web` job, below the supersession guard and the refusal of a
-commit whose CI never finished, and above `deploy-service`. The job already checks out the SHA; it
-gains [`setup-node`](../../.github/actions/setup-node/action.yml) and `pnpm exec turbo run migrate`.
+A step in `deploy.yml`'s `deploy-web` job, below the supersession guard and above
+`deploy-service`. The job already checks out the SHA; it gains
+[`setup-node`](../../.github/actions/setup-node/action.yml) and `pnpm exec turbo run migrate`.
 Locally `pnpm migrate` is the same command, so it keeps working unchanged.
 
 **In the deploy workflow, not as a pre-deploy command the provider runs inside the web image.** The

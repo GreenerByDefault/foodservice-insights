@@ -1,7 +1,7 @@
 name: Deploy target
 description: >
-  Resolve the commit a deploy job may ship, refusing one that main has not merged, then wait for
-  main's CI on it. Expects a full-history checkout of main's tip.
+  Resolve the commit a deploy job may ship, refusing one that main has not merged. Expects a
+  full-history checkout of main's tip.
 
 inputs:
   sha:
@@ -13,21 +13,13 @@ outputs:
   sha:
     description: The full 40-character commit SHA to deploy
     value: ${{ steps.resolve.outputs.sha }}
-  ci:
-    description: >
-      The conclusion of CI on that commit, success or cancelled — anything else fails this action.
-      A cancelled run was never finished, so the caller decides whether that is because main moved
-      on.
-    value: ${{ steps.ci.outputs.conclusion }}
-  ci_url:
-    description: The CI run's page, for messages
-    value: ${{ steps.ci.outputs.url }}
 
 runs:
   using: composite
   steps:
     # The deploy tooling is this ref's copy, and a blank sha deploys this ref's tip, so a dispatch
-    # from a feature branch would run and ship unmerged code.
+    # from a feature branch would run and ship unmerged code. This catches a mistake, not an
+    # attacker: a branch's own deploy.yml can simply not call it.
     - name: Refuse a dispatch from outside main
       if: github.ref != 'refs/heads/main'
       shell: bash
@@ -47,69 +39,7 @@ runs:
           exit 1
         fi
         if ! git merge-base --is-ancestor "$sha" origin/main; then
-          echo "::error::$(git rev-parse --short "$sha") is not on main, and only merged commits deploy. Merge it first."
+          echo "::error::$(git rev-parse --short "$sha") is not on main, and only merged commits deploy. A squash merge gives main a new commit, so if its PR has merged, deploy the commit it became on main instead."
           exit 1
         fi
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
-
-    # The main ruleset requires CI but not an up-to-date branch, and PR CI runs only what a PR
-    # affects, so two PRs green apart can merge red together. Main's own unfiltered CI is the first
-    # run that tests the merged commit.
-    #
-    # This polls the workflow run rather than CI's aggregate check run: concurrency cancels a
-    # queued run when a newer push queues behind it, before any job — and so any check run — exists.
-    - name: Wait for main's CI on the target commit
-      id: ci
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SHA: ${{ steps.resolve.outputs.sha }}
-      run: |
-        short=$(git rev-parse --short "$SHA")
-
-        # Always a new run, never a re-run: a re-run keeps the commit its first attempt resolved,
-        # so a blank sha would no longer mean main's latest. And a push run is told to leave sha
-        # blank, because naming a commit skips the supersession check and could roll prod back.
-        next_step() {
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            echo "If that was a flake, re-run that CI and, once it passes, run this workflow from main with 'Commit SHA to deploy' blank. Otherwise fix main forward: the next push whose CI passes deploys."
-          else
-            echo "If that was a flake, re-run that CI and, once it passes, run this workflow again with the same inputs. Otherwise fix main forward, or choose a different commit whose CI passed."
-          fi
-        }
-        runs="repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&per_page=1"
-        no_run_deadline=$((SECONDS + 300))
-        last_status=
-        while :; do
-          run=$(gh api "$runs" --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion) \(.html_url)"')
-          read -r status conclusion url <<< "$run"
-          if [ -z "$status" ]; then
-            if [ -z "$last_status" ]; then
-              echo "Waiting for main's CI run on $short to appear…"
-              last_status=missing
-            fi
-            if [ "$SECONDS" -gt "$no_run_deadline" ]; then
-              echo "::error::$short has no CI run on main, so it was never tested as merged — usually because it arrived in the same push as a later commit. Pick a commit that has one: Actions → CI, filtered to the main branch."
-              exit 1
-            fi
-          elif [ "$status" = completed ]; then
-            break
-          elif [ "$status" != "$last_status" ]; then
-            echo "Waiting for main's CI on $short ($status): $url"
-            last_status=$status
-          fi
-          sleep 30
-        done
-
-        case "$conclusion" in
-          success) echo "CI passed on $short: $url" ;;
-          cancelled)
-            echo "::notice::CI on $short was cancelled before it finished, usually because a newer push queued behind it: $url"
-            ;;
-          *)
-            echo "::error::Not deploying $short: its CI on main concluded $conclusion. See $url. $(next_step)"
-            exit 1
-            ;;
-        esac
-        echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
-        echo "url=$url" >> "$GITHUB_OUTPUT"

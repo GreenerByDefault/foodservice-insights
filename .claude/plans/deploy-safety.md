@@ -11,8 +11,8 @@ their poll is answered by another deploy, a web server that refuses to start wit
 `ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
 missing, as the hosted database would, and the gate in
 [`deploy-target`](../../.github/actions/deploy-target/action.yml) that both deploy jobs pass
-first. That gate deploys only a commit on main whose CI on main passed. `deploy-web` moves a `deploy/web` tag on success, and `deploy-worker` refuses a commit
-that is not behind it. Nothing deploys for real yet —
+first. That gate deploys only a commit on main. `deploy-web` moves a `deploy/web` tag on success,
+and `deploy-worker` refuses a commit that is not behind it. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -40,9 +40,9 @@ Findings that went elsewhere rather than into a PR here:
   own) and the image `deploy.yml` pushes can sit on different `:latest` bases, but UBI minimal is
   conservative within a major, and a digest pin plus Dependabot's `docker` ecosystem is a PR per
   base bump for little caught. Revisit if a base update ever breaks a deploy.
-- *Considered: a merge queue instead of deploys waiting for main's CI.* Available to a public org
+- *Considered: a merge queue instead of deploys following main's CI.* Available to a public org
   repo (`ci.yml` would need `merge_group`), and it keeps main green rather than only gating
-  deploys, but costs latency on every merge. Deploys wait instead.
+  deploys, but costs latency on every merge. Deploys follow main's CI instead (PR 2).
 - *Rejected: checking config in `/health`.* The web app validates config at startup instead —
   `assertConfigured` builds every lazy handle (database, blob store, emailer, logger, and the
   Supabase project in `supabase` mode), so a missing variable crashes the server, as the worker's
@@ -50,6 +50,10 @@ Findings that went elsewhere rather than into a PR here:
   of variable names, so a variable added to an existing handle needs no change there; a new
   handle needs one line. And it leaves `/health` free for `observability-vendors.md`'s split into
   liveness and a dependency check.
+- **Open:** whether a rollback should reuse the digest it shipped before. `deploy-service`
+  resolves `:<sha>` again, and tags are mutable — `force_rebuild`, or any same-repo branch's
+  workflow with `packages: write`, can repoint one. Each `deploy/*` tag records the digest it
+  shipped, but nothing reads it back.
 
 ## PR 1 — Production secrets live in a `production` Environment
 
@@ -59,17 +63,57 @@ but not yet configured it.
 `deploy-migrations.md` adds six production secrets; as repo secrets they reach any `pull_request`
 run from a same-repo branch, so any PR — agent-authored included — can edit `ci.yml` and print
 them. Both deploy jobs declare `environment: production`; the Environment limits deployment
-branches to `main` and holds the secrets. That refuses a dispatch from a branch before any step
-runs, so `deploy-target`'s own "Refuse a dispatch from outside main" step becomes a second line;
-keep it, since it is what protects the tooling checkout if the Environment's branch rule is ever
-loosened.
+branches to `main` and holds the secrets. The secrets living only there is the boundary: a
+dispatch runs the chosen branch's own `deploy.yml`, which can drop the declaration and
+`deploy-target`'s branch check alike, but then has no credentials. The branch rule and that check
+stop honest mistakes; keep both.
 
 While these jobs gain prod credentials (on top of `packages: write` and `contents: write`), pin
 their third-party actions by SHA — including those inside the composite actions they call
 (`deploy-service`'s `docker/setup-buildx-action`). Dependabot's `github-actions` ecosystem already
 keeps such pins current.
 
-## PR 2 — The fleet's connections fit the session pooler
+## PR 2 — Web deploys once main's CI passes
+
+The `main branch` ruleset requires `CI` but not an up-to-date branch, auto-merge is on, and PR CI
+runs `--affected` (**verified**). Two PRs green apart can be red together, and `deploy-web` ships
+them — and once `deploy-migrations.md` lands, migrates them — before main's own CI has tested the
+merged commit.
+
+**`deploy-web` runs when CI completes, rather than on push.** `deploy.yml` keeps `push` for the
+builds and adds `workflow_run` on `CI` `completed`; `deploy-web` ships
+`github.event.workflow_run.head_sha` when that run's conclusion is `success` and its event is
+`push`. The event check is the boundary, not `branches: [main]`, which also matches a fork's PR
+from a branch named `main` — and this job will hold prod credentials. Builds finish well inside
+main's CI (**verified** 2026-10-11: under two minutes against four to eight), and `deploy-service`
+already fails clearly on a missing image.
+
+A trigger instead of a wait means a failed or cancelled CI never starts a deploy, re-running a
+flaked CI fires `workflow_run` again so the deploy follows, `deploy-web` holds its concurrency
+slot only while deploying, and tooling from main's tip still holds, since `workflow_run` runs the
+default branch's workflow. *Rejected: polling for CI inside `deploy-web`* (#489's first draft) —
+the job held the `deploy-web` slot for the whole CI run, and a rollback dispatched meanwhile sat
+pending, where the next push cancels it.
+
+**A dispatch checks CI once, without waiting**, in `deploy-target`: refuse unless main's CI on the
+target concluded `success`. A rollback targets a commit whose CI finished long ago; a blank `sha`
+whose CI is still running is refused, since its `workflow_run` deploy will ship it. When the
+target's CI failed or was cancelled, the message leads with picking an older commit whose CI
+passed — re-running an older commit's CI joins `ci.yml`'s concurrency group on main, where it can
+replace a newer commit's pending run.
+
+**A blank-`sha` dispatch gets the supersession check too.** A re-run keeps its first attempt's
+`github.sha`, so re-running a failed blank-`sha` dispatch after a newer push deployed would roll
+prod back. With the check, every re-run is safe, and a message can just say "re-run this job".
+
+**`queue: max` on both deploy jobs' `concurrency`.** By default a newly queued job cancels the one
+already pending, so a rollback waiting behind a push deploy is dropped by the next push.
+
+**Open:** `queue: max` on `ci.yml`'s push concurrency as well, so no run on main is cancelled and
+every commit is a rollback target, at the cost of a serial queue on a busy day. Two of 40 runs on
+main were cancelled as of 2026-10-11.
+
+## PR 3 — The fleet's connections fit the session pooler
 
 A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
 
@@ -95,7 +139,7 @@ down — Σ `maxConnections` across every process alive during a deploy overlap,
 within Pool Size — then set Pool Size or the per-service maxima to fit. Separate roles per
 service would each get their own cap; weigh that against one more credential to manage.
 
-## PR 3 — The worker refuses a production config that would fail silently
+## PR 4 — The worker refuses a production config that would fail silently
 
 - **Drain grace.** `drainGraceMs` defaults to 30s and `PLATFORM_SHUTDOWN_GRACE_MS` is optional
   ([`config.ts`](../../apps/worker/src/config.ts)). Forget `WORKER_DRAIN_GRACE_MS` and every
@@ -111,7 +155,7 @@ service would each get their own cap; weigh that against one more credential to 
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 4 — Smoke-test every deploy
+## PR 5 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -138,6 +182,8 @@ Not PRs here; sequencing checks for whoever flips production on.
 ## Verification
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
-PR 1 by dispatching from a branch and confirming the Environment refuses it before any step
-runs. PR 2 by holding more session-mode connections than Pool
-Size against the dev stack's pooler and confirming the worker keeps ticking.
+PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
+refused before any step runs. PR 2 after it merges: the push run only builds, the `workflow_run`
+run deploys once CI passes, and a dispatch naming a commit whose CI failed is refused. PR 3 by
+holding more session-mode connections than Pool Size against the dev stack's pooler and
+confirming the worker keeps ticking.

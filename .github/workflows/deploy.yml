@@ -13,8 +13,7 @@ name: Deploy
 # Nothing here rolls back: a bad deploy is reverted and deploys forward like any other change, per
 # ARCHITECTURE.md § Bad deploys are fixed forward.
 #
-# Whichever way it starts, a deploy ships only a commit on main whose CI on main passed
-# (.github/actions/deploy-target).
+# Whichever way it starts, a deploy ships only a commit on main (.github/actions/deploy-target).
 on:
   push:
     branches: [main]
@@ -66,13 +65,12 @@ jobs:
     name: Deploy web
     needs: build-web
     runs-on: ubuntu-latest
-    timeout-minutes: 60 # covers waiting out a full unfiltered CI run on main
+    timeout-minutes: 15
     concurrency:
       group: deploy-web
       cancel-in-progress: false
     permissions:
       contents: write # to move the deploy/web tag on success
-      actions: read # to wait for CI
     steps:
       - uses: actions/checkout@v7
         with:
@@ -84,28 +82,18 @@ jobs:
       # Build time varies, so runs can finish out of push order: push A (a slow base-layer change)
       # can finish after push B (a fast cache hit) has already deployed, which would roll prod
       # *backwards*. Skip a run once main has moved past its SHA. The same check makes re-running
-      # an old failed run safe. Asked after the CI wait, which can be long, so the fetch sees where
-      # main is now.
+      # an old failed run safe.
       #
-      # This check, and the refusal after it, must sit above the migrate step deploy-migrations.md
-      # will add, so a superseded or untested run does nothing at all rather than migrating and then
-      # declining to deploy.
+      # This check must sit above the migrate step deploy-migrations.md will add, so a
+      # superseded run does nothing at all rather than migrating and then declining to deploy.
       - name: Skip if main has moved past this commit
         shell: bash
         run: |
-          git fetch --quiet origin main
           current_tip=$(git rev-parse origin/main)
           if [ "${{ steps.target.outputs.sha }}" != "$current_tip" ]; then
             echo "::notice::Skipping: main has moved on to $(git rev-parse --short "$current_tip"), whose own deploy will ship instead."
             echo "superseded=true" >> "$GITHUB_ENV"
           fi
-
-      - name: Refuse a commit whose CI never finished
-        if: steps.target.outputs.ci == 'cancelled' && env.superseded != 'true'
-        shell: bash
-        run: |
-          echo "::error::Not deploying: CI on this commit was cancelled before it finished, so it is untested. Re-run that CI (${{ steps.target.outputs.ci_url }}) and, once it passes, re-run this job."
-          exit 1
 
       - uses: ./.github/actions/deploy-service
         id: deploy
@@ -127,13 +115,12 @@ jobs:
     name: Deploy worker
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 60 # covers waiting out a full unfiltered CI run on main
+    timeout-minutes: 15
     concurrency:
       group: deploy-worker
       cancel-in-progress: false
     permissions:
       contents: write # to move the deploy/worker tag on success
-      actions: read # to wait for CI
     steps:
       - uses: actions/checkout@v7
         with:
@@ -141,12 +128,6 @@ jobs:
 
       - uses: ./.github/actions/deploy-target
         id: target
-
-      - name: Refuse a commit whose CI never finished
-        if: steps.target.outputs.ci == 'cancelled'
-        run: |
-          echo "::error::Not deploying: CI on this commit was cancelled before it finished, so it is untested. Re-run that CI (${{ steps.target.outputs.ci_url }}) and, once it passes, run this workflow again."
-          exit 1
 
       # The worker runs behind the web, which runs the migrations it may need. A dispatch takes
       # main's tip, possibly while that push's deploy-web is still migrating, or after it failed.
