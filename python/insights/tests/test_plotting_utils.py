@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -5,6 +7,7 @@ import pytest
 from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
     TITLE_FONT,
+    GBD_colors,
     close_new_figures_on_error,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -92,6 +95,23 @@ def test_horizontal_percentage_barplot_keeps_labels_that_truncate_alike_as_separ
     assert [label.get_text() for label in ax.get_yticklabels()] == [
         "Chicken Breast Boneless\nSkinless Raw Individually\nQuick Frozen 4 Ounce Portion …"
     ] * 2
+
+
+@pytest.mark.parametrize("bar_count", [2, len(GBD_colors) + 2])
+def test_horizontal_percentage_barplot_cycles_the_palette_without_warning(
+    bar_count: int,
+):
+    data = pd.DataFrame(
+        {"product": [f"Product {i}" for i in range(bar_count)], "percentage": [10] * bar_count}
+    )
+    _, ax = plt.subplots()
+
+    with warnings.catch_warnings(action="error"):
+        create_horizontal_percentage_barplot(ax, data, "product", add_percentage_labels=False)
+
+    colors = [bar.get_facecolor() for bar in ax.patches if isinstance(bar, Rectangle)]
+    assert len(set(colors)) == min(bar_count, len(GBD_colors))
+    assert colors == [colors[i % len(GBD_colors)] for i in range(bar_count)]
 
 
 def test_standardize_title_case_keeps_possessive_s_lowercase():

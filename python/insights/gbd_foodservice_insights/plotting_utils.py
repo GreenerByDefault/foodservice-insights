@@ -7,6 +7,7 @@ aggregate.py and results.py to reduce code duplication and ensure consistent sty
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from itertools import cycle, islice
 from typing import Any, Literal
 
 import matplotlib
@@ -213,7 +214,8 @@ def create_horizontal_percentage_barplot(
         y=y_col,
         x=percentage_col,
         hue=y_col,
-        palette=palette,
+        # Exactly one color per bar: seaborn warns when the list is longer or shorter.
+        palette=list(islice(cycle(palette), data[y_col].nunique())),
         legend=False,
         ax=ax,
     )
