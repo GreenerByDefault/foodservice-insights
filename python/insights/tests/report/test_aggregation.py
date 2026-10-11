@@ -437,8 +437,8 @@ def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():
         "50% ruminant-to-legume swap",
         "100% ruminant-to-legume swap",
     ]
-    assert result["baseline_ruminant_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
-    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [621.6] * 4
+    assert result["baseline_source_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
+    assert result["baseline_source_emissions_kg_co2e"].tolist() == [621.6] * 4
     assert result.loc[0, "replaced_weight_kg"] == pytest.approx(1.5)
     assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(59.76)
     assert result.loc[0, "projected_emissions_kg_co2e"] == pytest.approx(561.84)
@@ -512,7 +512,7 @@ def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
         "100% cow's-milk-to-oat-milk swap",
     ]
     assert result["replacement_category"].tolist() == ["Oat Milk"] * 4
-    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [43.4] * 4
+    assert result["baseline_source_emissions_kg_co2e"].tolist() == [43.4] * 4
     assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(2.56)
     assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(4.28)
     assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(17.8)

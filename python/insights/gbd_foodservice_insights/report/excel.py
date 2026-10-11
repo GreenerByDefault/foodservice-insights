@@ -79,8 +79,8 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
         f"{report.diner_or_meal.title()}s": diner_meals_frame(report),
         "Emissions Summary": report.emissions_summary,
         "Animal Emissions Intensity": report.procurement_table("animal_emissions_intensity"),
-        "Decision_KPIs": report.procurement_table("decision_kpis"),
-        "Substitution_Scenarios": report.procurement_table("substitution_scenarios"),
+        "Decision KPIs": report.procurement_table("decision_kpis"),
+        "Substitution Scenarios": report.procurement_table("substitution_scenarios"),
     }
     saved_path = write_excel_workbook(str(path), sheets)
     logger.info("Client Excel report saved to %s", rel_path(saved_path))

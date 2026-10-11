@@ -283,9 +283,9 @@ def _summary_stats(
     if emissions_summary is not None:
         total_co2e = emissions_summary["total_kg_co2e"].sum(min_count=1)
         if pd.notna(total_co2e):
-            summary_stats["Total CO2e"] = f"{float(total_co2e):,.0f} kg"
+            summary_stats["Total CO₂e"] = f"{float(total_co2e):,.0f} kg"
             if diner_meals_in_data > 0:
-                summary_stats[f"CO2e per {diner_or_meal}"] = (
+                summary_stats[f"CO₂e per {diner_or_meal}"] = (
                     f"{float(total_co2e) / diner_meals_in_data:.3f} kg"
                 )
 

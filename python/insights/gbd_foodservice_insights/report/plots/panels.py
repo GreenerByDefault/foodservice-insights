@@ -262,7 +262,7 @@ def draw_total_emissions(
     *,
     emissions_col: str = "emissions_kg_co2e",
 ) -> None:
-    """Total kg CO2e by month."""
+    """Total kg CO₂e by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
     _draw_metric_over_time_on_axis(
         ax,
@@ -281,14 +281,14 @@ def draw_emissions_per_diner(
     emissions_col: str = "emissions_kg_co2e",
     diner_or_meal: str = "diner",
 ) -> None:
-    """kg CO2e per diner (or meal) by month."""
+    """kg CO₂e per diner (or meal) by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
     per_dm, _, _ = divide_by_diner_meals(totals, diner_meal_mapping, strict=False)
     _draw_metric_over_time_on_axis(
         ax,
         pd.DataFrame({"month_year": per_dm.index, "value": per_dm.values}),
         title=f"Carbon Emissions per {diner_or_meal.title()} Over Time",
-        y_label=f"kg CO2e per {diner_or_meal.title()}",
+        y_label=f"kg CO₂e per {diner_or_meal.title()}",
     )
 
 
