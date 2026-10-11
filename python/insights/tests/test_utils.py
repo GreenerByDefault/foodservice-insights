@@ -1,5 +1,7 @@
 import logging
+import re
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -118,12 +120,30 @@ def test_map_concurrently_lets_calls_in_flight_finish_before_raising():
             failed.set()
             raise ValueError("call 0 failed")
         assert failed.wait(timeout=5)
+        # Outlasts the failure reaching the caller, so raising without waiting would be caught.
+        # The sleep cannot make a correct implementation fail.
+        time.sleep(0.1)
         finished.append(n)
         return n
 
     with pytest.raises(ValueError, match="call 0 failed"):
         map_concurrently(call, [0, 1], max_workers=2, progress_prefix="Test")
     assert finished == [1]
+
+
+def test_map_concurrently_logs_progress_per_completion(caplog):
+    with caplog.at_level(logging.INFO, logger="gbd_foodservice_insights.utils"):
+        results = map_concurrently(
+            lambda n: n * 10, [0, 1, 2], max_workers=2, progress_prefix="Test"
+        )
+
+    assert results == [0, 10, 20]
+    assert [re.sub(r"\d+\.\d s", "<elapsed> s", m) for m in caplog.messages] == [
+        "Test: 33% (1/3)",
+        "Test: 66% (2/3)",
+        "Test: 100% (3/3)",
+        "Test: 3 calls in <elapsed> s, 2 at a time.",
+    ]
 
 
 if __name__ == "__main__":
