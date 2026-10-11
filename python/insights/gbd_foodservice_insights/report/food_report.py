@@ -121,7 +121,6 @@ def build_food_report(
     region: Region,
     diner_or_meal: DinerOrMeal,
     top_n_drivers: int,
-    pdf_extracted: bool | None = None,
     report_progress: Callable[[], None] = _ignore,
 ) -> FoodReport:
     """An error finding raises `QualityCheckError`; rows that weigh nothing, `UnusableDataError`;
@@ -362,7 +361,6 @@ def build_food_report(
             monthly_product_data=agg_results.get("monthly_product_data"),
             monthly_category_data=agg_results.get("monthly_category_data"),
             metric_total=metric_total,
-            pdf_extracted=pdf_extracted,
         )
         quality_findings.extend(diagnostics_list)
     except Exception as exc:

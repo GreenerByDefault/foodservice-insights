@@ -66,5 +66,6 @@ constraints, so its code carries none of the product's guarantees.
   report beats delivering a misleading one.
 - **Every pipeline step asserts its row counts and logs its before/after shape.** A step that
   silently drops or overwrites rows is the failure we fear most.
-- **Plain pandas is fine.** Datasets rarely exceed thousands of rows, so do not vectorize or
-  chunk for performance.
+- **Plain pandas is fine, but nothing per row or per pair of products in Python.** An upload
+  can reach `MAX_DATA_ROWS` (`apps/web/src/lib/reports/limits.ts`) and tens of thousands of
+  distinct products. Short of that, do not optimize without a measurement.

@@ -45,20 +45,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   existed so `warn_continue` could keep going; that policy is gone (#352), and date, month,
   mapping and aggregation failures already raise `from exc` on the spot.
 
-**Noise and cost** (measured 27 September; proportions, not seconds).
-
-- `find_close_product_pairs` is O(n²) in unique products: 0.5 s at 2k products, 3 s at 5k, so
-  roughly 50 s at the 20k a 500,000-row upload could carry. On the product path its finding is
-  `info` on tabular data, which no customer sees; the lab runs it a second time for
-  the QA workbook.
-- `ensure_month_year_column` (`report/utils.py`) re-parses every row through `pd.Period(str(v))`
-  when the column is already `period[M]`, and three checks call it on a copy of the whole frame:
-  about a third of what the diagnostics cost.
-- Thirteen seaborn palette warnings per run from `create_horizontal_percentage_barplot`, and
-  nine "More than 20 figures have been opened" warnings while the PDF's text pages are drawn.
-- `.claude/rules/python.md` says datasets rarely exceed thousands of rows; `apps/web`'s
-  `MAX_DATA_ROWS` is 500,000.
-
 ## Decisions
 
 - **Behavioural changes to ported code are each their own PR**, so a fixture diff reviews one
@@ -151,23 +137,14 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
 - Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
 
-## PR 3 — noise and cost
-
-- `find_close_product_pairs` skips pairs whose lengths differ by more than the cutoff and passes
-  `score_cutoff` to `distance`; `ensure_month_year_column` returns early on a monthly
-  `PeriodDtype`; the barplot palette matches its hue count; `python.md`'s sentence about dataset
-  size names `MAX_DATA_ROWS`.
-- Tests: pair results unchanged on a fixture with near pairs; timings at 30k rows / 2k products
-  and at the cap in the PR body.
-- Worth it only if the timings at the cap say so; otherwise land the warning fix alone.
-
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
 handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab` for PRs 1, 2 and 3, which change what the lab's QA
-  workbook and manifest say; `pnpm test:system` for any PR that changes what `analyze()` writes.
+- Every PR: `just lint && just check && just test`; `just test-lab`, since both change what the
+  lab's QA workbook and manifest say; `pnpm test:system` for any PR that changes what
+  `analyze()` writes.
 
 ## Risks
 
