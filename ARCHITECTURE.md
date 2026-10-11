@@ -38,7 +38,7 @@ keep settled decisions settled — read them before proposing a change.
 
 | Component | Language | Owns |
 | --- | --- | --- |
-| `apps/web` | TypeScript | Frontend, backend routes, upload validation, file links |
+| `apps/web` | TypeScript | Frontend, backend routes, upload validation, file links, invite and GBD-notice email |
 | Worker parent | TypeScript | Queue claiming, child process lifecycle, DB and blob store writes, email |
 | `packages/*` | TypeScript | Shared database, storage, email, and domain code |
 | `python/worker_child` | Python | One analysis run, via `gbd_foodservice_insights` |
