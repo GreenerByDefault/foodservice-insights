@@ -35,7 +35,6 @@ from gbd_foodservice_insights.report.schema import (
     metric_for_mode,
     per_diner_metric_name,
     quality_status_from_findings,
-    validate_region,
 )
 
 from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging
@@ -44,6 +43,7 @@ from gbd_foodservice_insights_lab.food_report import excel as qa_excel
 from gbd_foodservice_insights_lab.food_report.utils import (
     load_diner_meal_mapping_from_json,
     normalize_diner_meal_mapping,
+    validate_region,
 )
 from gbd_foodservice_insights_lab.parsing import (
     clean_weight_column,

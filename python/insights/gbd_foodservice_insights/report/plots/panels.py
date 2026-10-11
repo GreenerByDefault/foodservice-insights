@@ -54,33 +54,8 @@ def filter_monthly_categories_by_type(
     if "category" not in monthly_category_data.columns:
         return monthly_category_data.iloc[0:0].copy()
 
-    food = {c.lower() for c in food_categories()}
-    drink = {c.lower() for c in drink_categories()}
-    known_categories = food | drink
-
-    filtered = monthly_category_data.copy()
-    filtered["_category_lower"] = filtered["category"].astype(str).str.strip().str.lower()
-
-    unknown_categories = sorted(
-        str(category).strip()
-        for category in filtered.loc[
-            filtered["_category_lower"].notna()
-            & ~filtered["_category_lower"].isin(known_categories),
-            "category",
-        ]
-        .dropna()
-        .unique()
-    )
-    if unknown_categories:
-        raise ValueError(
-            "All monthly categories must be tagged as food or drink before plotting. "
-            f"Unknown categories: {unknown_categories}"
-        )
-
-    categories = food | drink if include_drinks else food
-
-    filtered = filtered[filtered["_category_lower"].isin(categories)].copy()
-    return filtered.drop(columns="_category_lower")
+    categories = food_categories() + drink_categories() if include_drinks else food_categories()
+    return monthly_category_data[monthly_category_data["category"].isin(categories)].copy()
 
 
 def _draw_unavailable(ax: plt.Axes, title: str, message: str) -> None:

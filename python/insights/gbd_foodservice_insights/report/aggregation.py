@@ -13,32 +13,17 @@ from gbd_foodservice_insights.categories import (
     protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
-from gbd_foodservice_insights.report.schema import DinerOrMeal, per_diner_metric_name
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, per_diner_metric_name
 
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
-    "beef and buffalo meat",
-    "lamb/mutton & goat meat",
+    "Beef and Buffalo Meat",
+    "Lamb/mutton & goat meat",
 )
 _RUMINANT_SWAP_TARGET_CATEGORY = "Legumes"
 _DEFAULT_RUMINANT_SWAP_LEVELS = (0.10, 0.25, 0.50, 1.00)
-_MILK_SWAP_SOURCE_CATEGORIES = ("milk (cow's milk)",)
+_MILK_SWAP_SOURCE_CATEGORIES = ("Milk (Cow's milk)",)
 _MILK_SWAP_TARGET_CATEGORY = "Oat Milk"
 _DEFAULT_MILK_SWAP_LEVELS = (0.10, 0.20, 0.50, 1.00)
-
-
-def _normalize_categories_to_canonical_labels(
-    category_series: pd.Series,
-) -> pd.Series:
-    """Map known category labels back to canonical GBD capitalization."""
-    canonical_lookup = {category.lower(): category for category in category_names()}
-
-    return category_series.map(
-        lambda value: (
-            canonical_lookup.get(str(value).strip().lower(), str(value).strip())
-            if pd.notna(value)
-            else value
-        )
-    )
 
 
 def aggregate_data(
@@ -78,13 +63,8 @@ def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd
     if metric not in monthly_category_data.columns:
         raise KeyError(metric)
 
-    canonical_categories = category_names()
-
-    normalized = monthly_category_data.copy()
-    normalized["category"] = _normalize_categories_to_canonical_labels(normalized["category"])
-
     tbl = (
-        normalized.pivot_table(
+        monthly_category_data.pivot_table(
             index="category",
             columns="month_year",
             values=metric,
@@ -93,7 +73,7 @@ def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd
             margins_name="total",
             dropna=False,
         )
-        .reindex([*canonical_categories, "total"], fill_value=0)
+        .reindex([*category_names(), "total"], fill_value=0)
         .round(3)
     )
     return tbl
@@ -185,14 +165,10 @@ def calculate_plant_animal_split(
     if metric_col not in df.columns or "category" not in df.columns:
         return None
 
-    animal_cats = set(c.lower() for c in animal_product_categories())
-    plant_cats = set(c.lower() for c in plant_based_categories())
-
     df_copy = df.copy()
-    df_copy["_category_lower"] = df_copy["category"].astype(str).str.lower()
     df_copy["_group"] = "other"
-    df_copy.loc[df_copy["_category_lower"].isin(animal_cats), "_group"] = "animal"
-    df_copy.loc[df_copy["_category_lower"].isin(plant_cats), "_group"] = "plant"
+    df_copy.loc[df_copy["category"].isin(animal_product_categories()), "_group"] = "animal"
+    df_copy.loc[df_copy["category"].isin(plant_based_categories()), "_group"] = "plant"
 
     # Filter to only plant + animal rows for the split calculation
     classified = df_copy[df_copy["_group"].isin(["plant", "animal"])].copy()
@@ -264,16 +240,11 @@ def calculate_plant_protein_share(
     if metric_col not in df.columns or "category" not in df.columns:
         return None
 
-    protein_cats = set(category.lower() for category in protein_categories())
-    plant_protein_cats = set(category.lower() for category in plant_protein_categories())
-
-    classified = df.copy()
-    classified["_category_lower"] = classified["category"].astype(str).str.lower()
-    classified = classified[classified["_category_lower"].isin(protein_cats)].copy()
+    classified = df[df["category"].isin(protein_categories())].copy()
     if classified.empty:
         return None
 
-    classified["_is_plant_protein"] = classified["_category_lower"].isin(plant_protein_cats)
+    classified["_is_plant_protein"] = classified["category"].isin(plant_protein_categories())
     total_protein_metric = float(classified[metric_col].sum(min_count=1) or 0.0)
     if total_protein_metric == 0:
         return None
@@ -339,11 +310,9 @@ def summarize_animal_emissions_intensity(
     if not required_columns.issubset(df.columns):
         return pd.DataFrame(columns=output_columns)
 
-    animal_cats = {category.lower() for category in animal_product_categories()}
-    animal_rows = df[df[category_col].astype(str).str.lower().isin(animal_cats)].copy()
+    animal_rows = df[df[category_col].isin(animal_product_categories())]
     if animal_rows.empty:
         return pd.DataFrame(columns=output_columns)
-    animal_rows[category_col] = _normalize_categories_to_canonical_labels(animal_rows[category_col])
 
     summary = (
         animal_rows.groupby(category_col, dropna=False)[[weight_col, emissions_col]]
@@ -384,8 +353,7 @@ def calculate_animal_emissions_concentration(
     if not required_columns.issubset(df.columns):
         return pd.DataFrame(columns=output_columns)
 
-    animal_categories = {category.lower() for category in animal_product_categories()}
-    animal_rows = df[df[category_col].astype(str).str.lower().isin(animal_categories)].copy()
+    animal_rows = df[df[category_col].isin(animal_product_categories())]
     if animal_rows.empty:
         return pd.DataFrame(columns=output_columns)
 
@@ -446,7 +414,7 @@ def calculate_category_swap_scenarios(
     replacement_category: str,
     weight_col: str = "kilos_total",
     category_col: str = "category",
-    region: str = "us",
+    region: Region = "us",
     substitution_levels: tuple[float, ...],
 ) -> pd.DataFrame:
     """Calculate avoidable emissions from replacing one category group with another."""
@@ -468,7 +436,7 @@ def calculate_category_swap_scenarios(
     if weight_col not in df.columns or category_col not in df.columns:
         return pd.DataFrame(columns=columns)
 
-    ruminant_rows = df.loc[df[category_col].astype(str).str.lower().isin(source_categories)].copy()
+    ruminant_rows = df.loc[df[category_col].isin(source_categories)].copy()
     if ruminant_rows.empty:
         return pd.DataFrame(columns=columns)
 
@@ -546,7 +514,7 @@ def calculate_ruminant_legume_swap_scenarios(
     *,
     weight_col: str = "kilos_total",
     category_col: str = "category",
-    region: str = "us",
+    region: Region = "us",
     substitution_levels: tuple[float, ...] = _DEFAULT_RUMINANT_SWAP_LEVELS,
 ) -> pd.DataFrame:
     """Calculate avoidable emissions from replacing ruminant meat with legumes."""
@@ -567,7 +535,7 @@ def calculate_milk_oat_swap_scenarios(
     *,
     weight_col: str = "kilos_total",
     category_col: str = "category",
-    region: str = "us",
+    region: Region = "us",
     substitution_levels: tuple[float, ...] = _DEFAULT_MILK_SWAP_LEVELS,
 ) -> pd.DataFrame:
     """Calculate avoidable emissions from replacing cow's milk with oat milk."""
@@ -589,7 +557,7 @@ def run_aggregation_pipeline(
     metric_total: str = "kilos_total",
     top_n: int = 5,
     *,
-    region: str = "us",
+    region: Region = "us",
     diner_or_meal: DinerOrMeal,
 ) -> dict[str, Any]:
     """Run the full report aggregation pipeline."""
