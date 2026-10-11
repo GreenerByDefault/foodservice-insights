@@ -38,7 +38,7 @@ from PyPDF2 import PdfReader
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
 
 
-def test_wrap_text_lines_preserves_bullets_and_wraps_long_lines() -> None:
+def test_wrap_text_lines_hangs_wrapped_text_under_its_bullet() -> None:
     wrapped = _wrap_text_lines(
         [
             "  • Warning: Found 1716 rows that are exact duplicates across the key report "
@@ -49,10 +49,18 @@ def test_wrap_text_lines_preserves_bullets_and_wraps_long_lines() -> None:
         width=60,
     )
 
-    assert len(wrapped) > 2
-    assert wrapped[0].startswith("  • ")
-    assert wrapped[1].startswith("    ")
-    assert any(line.startswith("      - ") for line in wrapped)
+    assert wrapped == [
+        "  • Warning: Found 1716 rows that are exact duplicates",
+        "    across the key report fields and the text needs to wrap",
+        "    onto another visual row to avoid collisions.",
+        "      - Eggs Medium Av51g on 2024-07-01 00:00:00 appears 149",
+        "        times and should also wrap cleanly.",
+    ]
+
+
+def test_wrap_text_lines_keeps_indentation_and_collapses_blank_lines() -> None:
+    assert _wrap_text_lines(["  indented", "", "   ", "x"]) == ["  indented", "", "", "x"]
+    assert _wrap_text_lines([]) == [""]
 
 
 def test_wrap_to_width_fits_measured_width_without_losing_words() -> None:
@@ -283,6 +291,13 @@ def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
     assert name_lines[-1].y > subtitle.y > generated.y
 
 
+def test_title_page_replaces_underscores_and_hyphens_in_the_labels() -> None:
+    pdf = _RecordingPdf()
+    create_title_page(pdf, "acme_corp", "pilot_phase", "on-site_serving")  # ty: ignore[invalid-argument-type]
+
+    assert [t.text for t in pdf.pages[0]][1:3] == ["acme corp", "Pilot Phase | On Site Serving"]
+
+
 def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pdf = _RecordingPdf()
     monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
@@ -468,6 +483,10 @@ def test_category_template_fits_every_cell_and_splits_months_across_pages(months
 def test_pack_columns_gives_an_overwide_column_its_own_page() -> None:
     assert _pack_columns([1.0, 1.0, 3.0, 1.0], 2.5) == [[0, 1], [2], [3]]
     assert _pack_columns([], 2.5) == [[]]
+
+
+def test_pack_columns_fills_a_page_exactly_before_starting_another() -> None:
+    assert _pack_columns([1.0, 1.5, 1.0], 2.5) == [[0, 1], [2]]
 
 
 def test_build_pdf_report_handles_long_decision_kpi_text(tmp_path: Path) -> None:

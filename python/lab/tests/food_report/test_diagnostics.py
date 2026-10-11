@@ -730,7 +730,7 @@ def test_category_highest_vs_lowest_months_skips_categories_with_no_values():
 
     result = category_highest_vs_lowest_months(df, metric_col="kilos per diner")
 
-    assert result["category"].tolist() == ["fruit"]
+    assert result.to_dict("records") == [{"category": "fruit", "times_higher": 4.0}]
 
 
 def test_category_highest_vs_lowest_months_returns_empty_frame_when_no_category_hits_threshold():
