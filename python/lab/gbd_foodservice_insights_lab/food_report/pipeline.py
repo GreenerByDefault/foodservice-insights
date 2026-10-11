@@ -265,8 +265,6 @@ def run_food_report(
 
         _log_stage("plot_generation", report_progress)
         with build_report_charts(report) as charts:
-            quality_findings.extend(charts.findings)
-
             _log_stage("plot_export", report_progress)
             graph_paths = plots.export_report_plots(
                 charts.figures,

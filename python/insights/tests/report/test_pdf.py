@@ -684,7 +684,7 @@ def _capture_pdf_kwargs(
     monkeypatch.setattr(pdf_module, "build_pdf_report", fake_build_pdf_report)
     write_report_pdf(
         report,
-        charts or ReportCharts(figures=[], findings=()),
+        charts or ReportCharts(figures=[]),
         Path("report.pdf"),
         client_name="Acme",
         baseline_pilot="pilot",
@@ -698,15 +698,12 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
 ) -> None:
     report = _report()
     fig = plt.figure()
-    chart_finding = make_finding(
-        stage="plots", category="plot_failed", status="error", message="Chart failed."
-    )
-    charts = ReportCharts(figures=[("caption", fig)], findings=(chart_finding,))
+    charts = ReportCharts(figures=[("caption", fig)])
 
     kwargs = _capture_pdf_kwargs(monkeypatch, report, charts)
     plt.close(fig)
 
-    findings = [*report.findings, chart_finding]
+    findings = list(report.findings)
     tables = kwargs.pop("tables")
     narrative = kwargs.pop("narrative")
     assert kwargs == {
@@ -717,9 +714,8 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
             "procurement_serving": "procurement",
         },
         "plots": [("caption", fig)],
-        # A chart finding counts toward the report's quality status.
-        "summary_stats": {**report.summary_stats, "Data Quality Status": "INVALID"},
-        "quality_status": "invalid",
+        "summary_stats": {**report.summary_stats, "Data Quality Status": "PASS"},
+        "quality_status": "pass",
         "quality_summary": summarize_findings(findings),
         "missing_data_findings": findings,
         "show_quality_successes": False,
@@ -748,7 +744,7 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
             ("Beef and Buffalo Meat", pytest.approx(100 * 909.7 / 970.5)),
             ("Legumes", pytest.approx(100 * 60.8 / 970.5)),
         ],
-        "quality_status": "invalid",
+        "quality_status": "pass",
     }
 
 
@@ -777,7 +773,7 @@ def test_write_report_pdf_caveats_only_a_warning(
 
     write_report_pdf(
         replace(report, findings=findings),
-        ReportCharts(figures=[], findings=()),
+        ReportCharts(figures=[]),
         path,
         client_name="Acme",
         baseline_pilot="pilot",
@@ -796,7 +792,7 @@ def test_write_report_pdf_writes_the_pdf(tmp_path: Path) -> None:
 
     write_report_pdf(
         _report(),
-        ReportCharts(figures=[("caption", fig)], findings=()),
+        ReportCharts(figures=[("caption", fig)]),
         path,
         client_name="Acme",
         baseline_pilot="pilot",

@@ -1097,7 +1097,7 @@ def write_report_pdf(
     baseline_pilot: str,
     show_quality_successes: bool,
 ) -> None:
-    findings = [*report.findings, *charts.findings]
+    findings = list(report.findings)
     quality_status = quality_status_from_findings(findings)
 
     tables = {
