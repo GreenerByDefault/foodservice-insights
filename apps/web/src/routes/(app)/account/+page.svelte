@@ -37,11 +37,7 @@ async function nameSaved(name: string) {
     </Field.Field>
   {/if}
 
-  <DisplayNameForm
-    initialName={data.user.displayName ?? ''}
-    submitLabel="Save"
-    onSaved={nameSaved}
-  />
+  <DisplayNameForm initialName={data.user.displayName} submitLabel="Save" onSaved={nameSaved} />
 
   {#if authMode() === 'supabase'}
     <Field.Separator />

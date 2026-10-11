@@ -21,7 +21,9 @@ export const load: LayoutServerLoad = async ({ locals }) => {
     auth,
   );
   return {
-    user: { email: auth.user.email, displayName: auth.user.displayName },
+    // `''` until onboarding requires a name: no visible initial, so the account menu shows its icon,
+    // and `/account`'s field starts empty.
+    user: { email: auth.user.email, displayName: auth.user.displayName ?? '' },
     organizations,
     hasMoreOrganizations,
   };
