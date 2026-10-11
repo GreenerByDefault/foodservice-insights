@@ -15,8 +15,8 @@ function firstVisibleChar(word: string): string {
   return FIRST_VISIBLE_CHAR.exec(word)?.[0] ?? '';
 }
 
-export function initials(displayName: string | null): string | null {
-  const [firstWord, ...rest] = (displayName ?? '').trim().split(/\s+/).filter(Boolean);
+export function initials(displayName: string): string | null {
+  const [firstWord, ...rest] = displayName.trim().split(/\s+/).filter(Boolean);
   if (!firstWord) return null;
 
   const first = firstVisibleChar(firstWord);

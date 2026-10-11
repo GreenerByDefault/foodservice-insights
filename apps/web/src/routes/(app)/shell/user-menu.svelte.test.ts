@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 /** Opens the menu and returns the screen — the content is portalled, so it only exists once open. */
-async function opened(props: { email: string; displayName: string | null; canSignOut?: boolean }) {
+async function opened(props: { email: string; displayName: string; canSignOut?: boolean }) {
   const screen = await render(UserMenu, { canSignOut: true, ...props });
   await screen.getByRole('button', { name: 'Account menu' }).click();
   return screen;
@@ -37,10 +37,11 @@ describe('UserMenu', () => {
       .toHaveTextContent('AR');
   });
 
-  test('the trigger falls back to an icon when there is no display name', async () => {
+  test('the trigger falls back to an icon when the name has no visible character', async () => {
     const screen = await render(UserMenu, {
       email: 'ana@example.test',
-      displayName: null,
+      // A zero-width space: the database's trim leaves it, so it is a name `initials` must refuse.
+      displayName: String.fromCharCode(0x200b),
       canSignOut: true,
     });
 
@@ -52,12 +53,6 @@ describe('UserMenu', () => {
     const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
 
     await expect.element(screen.getByText('Ana Ruiz')).toBeVisible();
-    await expect.element(screen.getByText('ana@example.test')).toBeVisible();
-  });
-
-  test('the open menu shows only the email when there is no display name', async () => {
-    const screen = await opened({ email: 'ana@example.test', displayName: null });
-
     await expect.element(screen.getByText('ana@example.test')).toBeVisible();
   });
 

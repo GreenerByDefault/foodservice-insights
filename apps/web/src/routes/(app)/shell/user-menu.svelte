@@ -13,7 +13,7 @@ import { initials } from './initials.ts';
 
 interface Props {
   email: string;
-  displayName: string | null;
+  displayName: string;
   /** False in `placeholder` mode, which has no session to end. */
   canSignOut: boolean;
 }
@@ -63,9 +63,7 @@ async function signOut() {
 
   <DropdownMenu.Content align="end" class="w-64 p-2">
     <DropdownMenu.Label class="flex flex-col gap-0.5 px-2 py-1.5 text-sm text-foreground">
-      {#if displayName}
-        <span class="truncate font-medium">{displayName}</span>
-      {/if}
+      <span class="truncate font-medium">{displayName}</span>
       <span class="truncate text-muted-foreground">{email}</span>
     </DropdownMenu.Label>
 

@@ -33,7 +33,7 @@ describe('initials', () => {
       expect(initials('Émile Zola')).toBe('ÉZ');
     });
 
-    test.each([null, '', '   '])('returns null when there is nothing usable (%j)', (input) => {
+    test.each(['', '   '])('returns null when there is nothing usable (%j)', (input) => {
       expect(initials(input)).toBeNull();
     });
 
