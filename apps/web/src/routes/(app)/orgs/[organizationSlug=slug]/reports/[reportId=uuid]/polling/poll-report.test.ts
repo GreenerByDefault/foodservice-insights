@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { jsonFromThisDeploy } from '#lib/api/deploy-version.js';
 import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
 import { jsonResponse, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { pollReport } from './poll-report.ts';
@@ -20,7 +21,7 @@ const BASE = {
 describe('pollReport', () => {
   test('revives a pending attempt', async () => {
     stubFetch(
-      jsonResponse({
+      jsonFromThisDeploy({
         ...BASE,
         now: '2026-01-15T10:05:00.000Z',
         attempt: { status: 'pending', createdAt: '2026-01-15T10:00:00.000Z' },
@@ -38,7 +39,7 @@ describe('pollReport', () => {
 
   test('revives a processing attempt', async () => {
     stubFetch(
-      jsonResponse({
+      jsonFromThisDeploy({
         ...BASE,
         now: '2026-01-15T10:05:00.000Z',
         attempt: {
@@ -64,7 +65,7 @@ describe('pollReport', () => {
       xlsx: { href: '/file/result/2' },
     };
     stubFetch(
-      jsonResponse({
+      jsonFromThisDeploy({
         ...BASE,
         now: '2026-01-15T10:05:00.000Z',
         attempt: {
@@ -97,7 +98,7 @@ describe('pollReport', () => {
       contactMailto: 'mailto:support@example.test',
     };
     stubFetch(
-      jsonResponse({
+      jsonFromThisDeploy({
         ...BASE,
         now: '2026-01-15T10:05:00.000Z',
         attempt: {
@@ -121,7 +122,7 @@ describe('pollReport', () => {
 
   test('revives a canceled attempt', async () => {
     stubFetch(
-      jsonResponse({
+      jsonFromThisDeploy({
         ...BASE,
         now: '2026-01-15T10:05:00.000Z',
         attempt: { status: 'canceled', stoppedAt: '2026-01-15T10:03:00.000Z' },
@@ -134,6 +135,22 @@ describe('pollReport', () => {
       status: 'canceled',
       stoppedAt: new Date('2026-01-15T10:03:00.000Z'),
     });
+  });
+
+  test('a response from another deploy reloads the page', async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
+    stubFetch(
+      jsonResponse({
+        ...BASE,
+        now: '2026-01-15T10:05:00.000Z',
+        attempt: { status: 'pending', createdAt: '2026-01-15T10:00:00.000Z' },
+      }),
+    );
+
+    void pollReport(POLL_HREF);
+
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   test('a non-2xx response throws ApiError', async () => {

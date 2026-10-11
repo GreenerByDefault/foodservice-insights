@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonFromThisDeploy } from '#lib/api/deploy-version.js';
 import { BASE_POLL_INTERVAL_MS } from '#lib/polling/schedule.js';
 import { triggerImmediatePoll } from '#lib/polling/testing/trigger-immediate-poll.js';
-import { jsonResponse } from '#lib/testing/fetch.js';
 import type { ReportListRow, ReportsPageData } from '../+page.server.ts';
 import ReportsView from './reports-view.svelte';
 import { aReport } from './testing/fixtures.ts';
+
+vi.mock('$app/env', () => import('#lib/testing/env.js'));
 
 const POLL_HREF = '/orgs/org-1/poll';
 
@@ -49,7 +51,7 @@ describe('ReportsView', () => {
         .fn()
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-        .mockResolvedValueOnce(jsonResponse(aPollResponse([succeeded])));
+        .mockResolvedValueOnce(jsonFromThisDeploy(aPollResponse([succeeded])));
       vi.stubGlobal('fetch', fetchMock);
       const screen = await render(ReportsView, { data: aPageData([pending]) });
 
@@ -81,7 +83,9 @@ describe('ReportsView', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(
-          jsonResponse(aPollResponse([stillPending, { ...justFinished, status: 'succeeded' }])),
+          jsonFromThisDeploy(
+            aPollResponse([stillPending, { ...justFinished, status: 'succeeded' }]),
+          ),
         );
       vi.stubGlobal('fetch', fetchMock);
       const screen = await render(ReportsView, { data: aPageData([stillPending, justFinished]) });
@@ -105,7 +109,7 @@ describe('ReportsView', () => {
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue(
-          jsonResponse(
+          jsonFromThisDeploy(
             aPollResponse([
               { ...failed, status: 'failed' },
               { ...canceled, status: 'canceled' },
@@ -128,7 +132,9 @@ describe('ReportsView', () => {
         id: 'a4f8e2b0-1111-4a11-8111-000000000002' as ReportListRow['id'],
         name: 'Winter deliveries',
       });
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(aPollResponse([first, second])));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonFromThisDeploy(aPollResponse([first, second])));
       vi.stubGlobal('fetch', fetchMock);
       await render(ReportsView, { data: aPageData([first, second]) });
 
@@ -149,7 +155,10 @@ describe('ReportsView', () => {
       });
       // The poll response omits `deleted` — exactly what `_loadReportsByIds` returns for an id
       // that's been soft-deleted since the last poll.
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(aPollResponse([stillHere]))));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(jsonFromThisDeploy(aPollResponse([stillHere]))),
+      );
       const screen = await render(ReportsView, { data: aPageData([deleted, stillHere]) });
 
       await triggerImmediatePoll();

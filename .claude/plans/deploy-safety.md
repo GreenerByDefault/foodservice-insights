@@ -5,7 +5,8 @@
 A review on 2026-10-08 of what can break when deploying web and worker, on top of the mitigations
 already in place: image-per-commit promotion, `deploy-web`'s supersession guard, the
 worker-runs-behind invariant, the drain with its `config.ts` relations, migrations from the
-workspace rather than the image, and rollbacks skipping migrations. Nothing deploys for real yet
+workspace rather than the image, rollbacks skipping migrations, and report pages that reload once
+their poll is answered by another deploy. Nothing deploys for real yet
 — [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -146,19 +147,7 @@ branch can be stale (no strict up-to-date rule), so check 1 is a cheap partial; 
 Kysely's own refusal are the backstops. `README.md` § Add a database migration gains a line on the
 marker.
 
-## PR 5 — A report page left polling reloads after a web deploy
-
-#445 turned the next *navigation* after a deploy into a full load, and left the poll clients out on
-purpose. But web deploys on every merge and a user watches one report for 2–15 minutes, so a tab
-polling across a deploy is routine. `poll-report.ts` and `poll-reports.ts` trust the wire shape as
-"from the same deploy"; a new status variant makes `reviveAttempt` return `undefined`, and a renamed
-field renders as nothing. Polls are plain `fetch`, so they never feed `updated`.
-
-The two poll endpoints send the build's `version` (`$app/environment`) as a response header; the
-poll clients compare it with their own and `location.reload()` on a mismatch. Both pages render
-server state only, so a reload loses nothing. Fix the "same deploy" comments to say what is true.
-
-## PR 6 — Smoke-test every deploy
+## PR 5 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 

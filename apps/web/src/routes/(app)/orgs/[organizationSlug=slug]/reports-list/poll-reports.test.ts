@@ -1,5 +1,6 @@
 import type { ReportId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { jsonFromThisDeploy } from '#lib/api/deploy-version.js';
 import { ApiError, ApiUnreachableError } from '#lib/api/fetch.js';
 import { jsonResponse, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { pollReports } from './poll-reports.ts';
@@ -14,7 +15,7 @@ afterEach(() => {
 describe('pollReports', () => {
   test('revives each row, leaving everything else untouched', async () => {
     stubFetch(
-      jsonResponse({
+      jsonFromThisDeploy({
         reports: [
           {
             id: 'report-1',
@@ -47,7 +48,7 @@ describe('pollReports', () => {
   });
 
   test('posts the given ids as the request body', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ reports: [] }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonFromThisDeploy({ reports: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
     await pollReports(POLL_HREF, IDS);
@@ -59,11 +60,21 @@ describe('pollReports', () => {
   });
 
   test('an empty list revives to an empty list', async () => {
-    stubFetch(jsonResponse({ reports: [] }));
+    stubFetch(jsonFromThisDeploy({ reports: [] }));
 
     const data = await pollReports(POLL_HREF, []);
 
     expect(data.reports).toEqual([]);
+  });
+
+  test('a response from another deploy reloads the page', async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
+    stubFetch(jsonResponse({ reports: [] }));
+
+    void pollReports(POLL_HREF, IDS);
+
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   test('a non-2xx response throws ApiError', async () => {
