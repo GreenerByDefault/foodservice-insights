@@ -84,16 +84,6 @@ Auth is entirely within `apps/web` — Supabase Auth on the client, a `handle()`
 the JWT into `locals` on the server. See [`apps/web/README.md`](apps/web/README.md#auth) for the
 design.
 
-**"Confirm email" stays on in the hosted Supabase project**, though the local stacks leave it off.
-GoTrue's `/signup` is public and takes a password; with confirmations off it hands back a session for
-any address, unverified, and claiming an invite treats the session's address as proof its owner
-controls it. Email OTP works either way: a new address gets the confirmation template, whose code
-`verifyOtp` accepts.
-
-**Open:** whether `PUBLIC_AUTH_MODE=placeholder` survives once production runs `supabase` — kept for
-local dev, where it saves an emailed code per fresh database, or deleted with `pnpm seed:identity`
-and the browser-testing fixtures' `placeholder` branch.
-
 **Open:** a CSP (SvelteKit's `kit.csp`, with nonces). The session cookie cannot be `HttpOnly`, so a
 CSP is what stands between an XSS and a stolen session. `connect-src` must allow the runtime
 Supabase URL.
