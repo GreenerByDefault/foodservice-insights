@@ -9,8 +9,6 @@ import { MIN_NAME_LENGTH } from '#lib/forms/validation.js';
 interface Props {
   initialName: string;
   submitLabel: string;
-  /** Given the name as saved, trimmed. Whatever confirms the save is the caller's, since it differs
-   * between renaming and onboarding. */
   onSaved: (name: string) => Promise<void>;
 }
 
