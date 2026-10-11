@@ -3,6 +3,7 @@
 import logging
 import re
 import textwrap
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,11 @@ from gbd_foodservice_insights.plotting_utils import (
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding, summarize_findings
-from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
+from gbd_foodservice_insights.report.schema import (
+    DinerOrMeal,
+    QualityStatus,
+    quality_status_from_findings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,32 +153,28 @@ def _format_co2e(kg: float) -> str:
     return f"{tonnes:,.0f} tonnes"
 
 
-def create_executive_summary_page(
-    pdf: PdfPages,
-    summary_stats: dict[str, Any],
-    fig_size: tuple[float, float] = LETTER_PORTRAIT,
-    narrative: dict[str, Any] | None = None,
-) -> None:
-    """Render the executive summary page.
+@dataclass(frozen=True)
+class ExecutiveNarrative:
+    """The facts behind the plain-English executive summary."""
 
-    Two modes:
-    - ``narrative`` provided (web app / client-facing runs): a plain-English
-      page written for readers who will never hear the report explained —
-      a headline figure followed by short prose paragraphs.
-    - ``narrative`` omitted (legacy callers): the original ``label: value``
-      listing of ``summary_stats``, unchanged.
+    client: str
+    period: str
+    total_food_kg: float
+    total_co2e_kg: float
+    co2e_kg_per_diner_or_meal: float | None
+    diner_or_meal: DinerOrMeal
+    # Percentages of the categorised food by weight.
+    plant_and_animal_pct: tuple[float, float] | None
+    # The (up to) three largest emitters, as (category, % of the footprint), largest first.
+    top_categories: tuple[tuple[str, float], ...]
+    quality_status: QualityStatus
 
-    ``narrative`` has keys ``client``, ``period``, ``total_food_kg``, ``total_co2e_kg``,
-    ``per_dm_kg``, ``dm_label``, ``plant_pct``, ``animal_pct``, ``top_categories`` (list of
-    ``(name, pct_of_footprint)``) and ``quality_status``.
-    """
+
+def _new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
+    """A page headed "Executive Summary", whose axes coordinates are page coordinates."""
     fig, ax = _new_text_figure(fig_size)
-    # Span the whole page, so axes coordinates are page coordinates: the default subplot
-    # margins are lopsided, pushing left-aligned text off the right edge.
+    # The default subplot margins are lopsided, pushing left-aligned text off the right edge.
     ax.set_position((0, 0, 1, 1))
-    text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
-    left_x = _SUMMARY_MARGIN_IN / fig_size[0]
-
     ax.text(
         0.5,
         0.82,
@@ -185,32 +186,46 @@ def create_executive_summary_page(
         fontweight="bold",
         fontfamily="Montserrat",
     )
+    return fig, ax
 
-    if narrative is None:
-        lines = []
-        for label, value in summary_stats.items():
-            lines.append(f"{label}:  {value}")
 
-        y = 0.74
-        for line in lines:
-            ax.text(
-                left_x,
-                y,
-                line,
-                transform=ax.transAxes,
-                ha="left",
-                va="top",
-                fontsize=12,
-                fontfamily="Lato",
-            )
-            y -= 0.035
+def create_key_value_summary_page(
+    pdf: PdfPages,
+    summary_stats: dict[str, str],
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
+) -> None:
+    """Render the executive summary as a ``label: value`` listing, for a report without
+    emissions to write a narrative about."""
+    fig, ax = _new_summary_figure(fig_size)
+    y = 0.74
+    for label, value in summary_stats.items():
+        ax.text(
+            _SUMMARY_MARGIN_IN / fig_size[0],
+            y,
+            f"{label}:  {value}",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=12,
+            fontfamily="Lato",
+        )
+        y -= 0.035
+    pdf.savefig(fig)
+    plt.close(fig)
 
-        pdf.savefig(fig)
-        plt.close(fig)
-        return
 
-    # --- Plain-English mode -------------------------------------------------
-    headline = _format_co2e(narrative["total_co2e_kg"])
+def create_executive_summary_page(
+    pdf: PdfPages,
+    narrative: ExecutiveNarrative,
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
+) -> None:
+    """Render the executive summary for readers who will never hear the report explained: a
+    headline figure followed by short prose paragraphs."""
+    fig, ax = _new_summary_figure(fig_size)
+    text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
+    left_x = _SUMMARY_MARGIN_IN / fig_size[0]
+
+    headline = _format_co2e(narrative.total_co2e_kg)
     ax.text(
         0.5,
         0.76,
@@ -223,9 +238,7 @@ def create_executive_summary_page(
         fontfamily="Montserrat",
         color="#006a62",
     )
-    subtitle = (
-        f"the climate footprint of food purchased by {narrative['client']}, {narrative['period']}"
-    )
+    subtitle = f"the climate footprint of food purchased by {narrative.client}, {narrative.period}"
     y = 0.70
     for line in _wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily="Lato"):
         ax.text(
@@ -261,22 +274,24 @@ def create_executive_summary_page(
     plt.close(fig)
 
 
-def _narrative_paragraphs(narrative: dict[str, Any]) -> list[str]:
-    headline = _format_co2e(narrative["total_co2e_kg"])
-    dm = narrative.get("dm_label", "diner")
+def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
+    headline = _format_co2e(narrative.total_co2e_kg)
     paragraphs = []
 
     sentence = (
-        f"Over this period the kitchen purchased about {narrative['total_food_kg']:,.0f} kg "
+        f"Over this period the kitchen purchased about {narrative.total_food_kg:,.0f} kg "
         f"of categorised food. Producing that food released an estimated {headline} of carbon "
         "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
         "different foods."
     )
-    if narrative.get("per_dm_kg"):
-        sentence += f" That works out at roughly {narrative['per_dm_kg']:.2f} kg of CO₂e per {dm}."
+    if narrative.co2e_kg_per_diner_or_meal is not None:
+        sentence += (
+            f" That works out at roughly {narrative.co2e_kg_per_diner_or_meal:.2f} kg of CO₂e "
+            f"per {narrative.diner_or_meal}."
+        )
     paragraphs.append(sentence)
 
-    top = narrative.get("top_categories") or []
+    top = narrative.top_categories
     if top:
         if len(top) >= 3:
             top_text = (
@@ -287,19 +302,21 @@ def _narrative_paragraphs(narrative: dict[str, Any]) -> list[str]:
             top_text = " and ".join(f"{n} ({p:.0f}%)" for n, p in top)
         paragraphs.append(f"The biggest contributors were {top_text}.")
 
-    if narrative.get("animal_pct") == 0:
-        paragraphs.append("All of the categorised food was plant-based.")
-    elif narrative.get("plant_pct") is not None:
+    if narrative.plant_and_animal_pct is not None:
+        plant_pct, animal_pct = narrative.plant_and_animal_pct
         paragraphs.append(
-            f"Plant-based items made up {narrative['plant_pct']:.0f}% of the categorised food "
-            f"by weight, and animal products {narrative['animal_pct']:.0f}%. Animal products "
-            "carry far higher emissions per kilogram, so a small number of categories drive "
-            "most of the footprint. Modest, targeted menu changes in those areas deliver the "
-            "largest reductions."
+            "All of the categorised food was plant-based."
+            if animal_pct == 0
+            else (
+                f"Plant-based items made up {plant_pct:.0f}% of the categorised food by weight, "
+                f"and animal products {animal_pct:.0f}%. Animal products carry far higher "
+                "emissions per kilogram, so a small number of categories drive most of the "
+                "footprint. Modest, targeted menu changes in those areas deliver the largest "
+                "reductions."
+            )
         )
 
-    quality = str(narrative.get("quality_status", "")).lower()
-    if quality and quality not in ("pass", "success"):
+    if narrative.quality_status != "pass":
         paragraphs.append(
             "Some data-quality notes apply to this analysis; they are listed in plain "
             "language at the back of this report."
@@ -366,81 +383,82 @@ def create_text_page(
         plt.close(fig)
 
 
-def create_table_page(
+def create_category_template_pages(
     pdf: PdfPages,
-    title: str,
-    dataframe: pd.DataFrame,
+    template: pd.DataFrame,
     fig_size: tuple[float, float] = LETTER_LANDSCAPE,
 ) -> None:
-    """Render a DataFrame as styled table pages in the PDF.
-
-    Certain titles trigger custom layouts. Only the first 40 rows are rendered.
-    """
-    if title == "Decision KPIs":
-        create_decision_kpis_page(pdf, dataframe)
-        return
-
-    # Truncate large tables for display
-    display_df = dataframe.head(40).copy()
-    col_widths = None
-
-    if not isinstance(display_df.index, pd.RangeIndex) or display_df.index.name is not None:
-        index_label = display_df.index.name or "Label"
-        display_df = display_df.reset_index().rename(columns={"index": index_label})
-
-    def _format_pdf_table_value(value: Any) -> Any:
-        if pd.isna(value):
-            return ""
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            numeric_value = float(value)
-            if numeric_value.is_integer():
-                return f"{int(numeric_value):,}"
-            return f"{numeric_value:,.2f}".rstrip("0").rstrip(".")
-        return value
-
-    display_df = display_df.map(_format_pdf_table_value)
-
-    if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
-        display_df = display_df.copy()
-        display_df["Scenario"] = display_df["Scenario"].map(
-            lambda value: (
-                textwrap.fill(str(value), width=24, break_long_words=False, break_on_hyphens=False)
-                if pd.notna(value)
-                else value
-            )
-        )
-        col_widths = [0.30, 0.17, 0.16, 0.16, 0.21]
-
-    font_size = 7.5 if len(display_df.columns) <= 6 else 6.5
-    row_scale = 1.18 if len(display_df.columns) <= 6 else 1.08
-    if title == "Substitution Scenarios":
-        font_size = 10.0
-        row_scale += 0.12
-
-    if title != "Category Template" or display_df.empty:
-        _draw_table_page(pdf, title, title, display_df, col_widths, font_size, row_scale, fig_size)
-        return
-
+    """Render the category x month template, splitting its months across as many pages as
+    they need to render unclipped."""
+    display_df = _display_table(_format_category_template_for_pdf(template))
     # One font size on every page, since the columns are measured at it. Each page repeats the
     # category column at its measured width, and its month columns share the rest of the page.
     font_size = 9.5
+    row_scale = 1.18 if len(display_df.columns) <= 6 else 1.08
     widths = _table_column_widths_in(display_df, font_size)
     month_width = _table_width_in(fig_size) - widths[0]
     pages = _pack_columns(widths[1:], month_width)
     for page_number, page_columns in enumerate(pages, start=1):
-        heading = title if len(pages) == 1 else f"{title} ({page_number} of {len(pages)})"
+        heading = (
+            "Category Template"
+            if len(pages) == 1
+            else f"Category Template ({page_number} of {len(pages)})"
+        )
         columns = [index + 1 for index in page_columns]
         slack = (month_width - sum(widths[index] for index in columns)) / max(len(columns), 1)
         _draw_table_page(
             pdf,
-            title,
             heading,
             display_df.iloc[:, [0, *columns]],
-            [widths[0], *(widths[index] + slack for index in columns)],
-            font_size,
-            row_scale,
-            fig_size,
+            col_widths=[widths[0], *(widths[index] + slack for index in columns)],
+            font_size=font_size,
+            row_scale=row_scale,
+            fig_size=fig_size,
         )
+
+
+def create_animal_intensity_page(pdf: PdfPages, intensity: pd.DataFrame) -> None:
+    _draw_table_page(
+        pdf,
+        "Animal Emissions Intensity",
+        _display_table(_format_animal_emissions_intensity_for_pdf(intensity)),
+        col_widths=None,
+        font_size=7.5,
+        row_scale=1.18,
+    )
+
+
+def create_substitution_scenarios_page(pdf: PdfPages, scenarios: pd.DataFrame) -> None:
+    display_df = _display_table(_format_substitution_scenarios_for_pdf(scenarios))
+    display_df["Scenario"] = display_df["Scenario"].map(
+        lambda value: textwrap.fill(value, width=24, break_long_words=False, break_on_hyphens=False)
+    )
+    _draw_table_page(
+        pdf,
+        "Substitution Scenarios",
+        display_df,
+        col_widths=[0.30, 0.17, 0.16, 0.16, 0.21],
+        font_size=10.0,
+        row_scale=1.30,
+        multiline_column="Scenario",
+    )
+
+
+def _display_table(table: pd.DataFrame) -> pd.DataFrame:
+    """``table`` as the text a PDF table shows, with a named index as its first column."""
+    if table.index.name is not None:
+        table = table.reset_index()
+    return table.map(_format_table_cell)
+
+
+def _format_table_cell(value: object) -> object:
+    if pd.isna(value):
+        return ""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        if float(value).is_integer():
+            return f"{int(value):,}"
+        return f"{value:,.2f}".rstrip("0").rstrip(".")
+    return value
 
 
 def _table_width_in(fig_size: tuple[float, float]) -> float:
@@ -481,15 +499,17 @@ def _pack_columns(widths: list[float], available_width: float) -> list[list[int]
 
 def _draw_table_page(
     pdf: PdfPages,
-    title: str,
     heading: str,
     display_df: pd.DataFrame,
+    *,
     col_widths: list[float] | None,
     font_size: float,
     row_scale: float,
-    fig_size: tuple[float, float],
+    fig_size: tuple[float, float] = LETTER_LANDSCAPE,
+    multiline_column: str | None = None,
 ) -> None:
-    """Draw ``display_df`` on one page under ``heading``, styled for the table ``title``."""
+    """Draw ``display_df`` on one page under ``heading``. Each row grows to fit the lines of
+    its ``multiline_column`` cell, which is drawn larger."""
     fig, ax = _new_text_figure(fig_size)
 
     ax.text(
@@ -503,21 +523,6 @@ def _draw_table_page(
         fontweight="bold",
         fontfamily="Montserrat",
     )
-
-    if display_df.empty:
-        ax.text(
-            0.5,
-            0.5,
-            "No data available.",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="gray",
-        )
-        pdf.savefig(fig)
-        plt.close(fig)
-        return
 
     table = ax.table(
         cellText=display_df.values.tolist(),
@@ -535,15 +540,15 @@ def _draw_table_page(
         cell.set_edgecolor("#D9E1EA")
         cell.set_linewidth(0.6)
 
-    if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
-        scenario_col_idx = display_df.columns.get_loc("Scenario")
-        line_counts = [str(value).count("\n") + 1 for value in display_df["Scenario"].tolist()]
+    if multiline_column is not None:
+        multiline_col_idx = display_df.columns.get_loc(multiline_column)
+        line_counts = [value.count("\n") + 1 for value in display_df[multiline_column]]
         for row_idx, line_count in enumerate(line_counts, start=1):
             row_height = table[row_idx, 0].get_height() * max(1.15, 1 + 0.9 * (line_count - 1))
             for col_idx in range(len(display_df.columns)):
                 table[row_idx, col_idx].set_height(row_height)
                 table[row_idx, col_idx].set_text_props(va="top")
-            table[row_idx, scenario_col_idx].set_text_props(fontsize=11.25, va="top")
+            table[row_idx, multiline_col_idx].set_text_props(fontsize=11.25, va="top")
 
     # Style header
     for col_idx in range(len(display_df.columns)):
@@ -567,13 +572,10 @@ def _draw_table_page(
 
 def create_decision_kpis_page(
     pdf: PdfPages,
-    dataframe: pd.DataFrame,
+    concentration: AnimalEmissionsConcentration,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
-    """Render the decision KPI as a narrative text page.
-
-    ``dataframe`` is one row of decision-KPI fields.
-    """
+    """Render the animal emissions concentration as a narrative text page."""
     fig, ax = _new_text_figure(fig_size)
 
     ax.text(
@@ -588,52 +590,18 @@ def create_decision_kpis_page(
         fontfamily="Montserrat",
     )
 
-    if dataframe.empty:
-        ax.text(
-            0.5,
-            0.5,
-            "No data available.",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="gray",
-        )
-        pdf.savefig(fig)
-        plt.close(fig)
-        return
-
-    row = dataframe.iloc[0].to_dict()
-    focus = str(row.get("Focus", "top animal products")).strip()
-    share = row.get("Share of Animal Emissions (%)", "")
-    top_products_emissions = row.get("Top Products Kg CO₂e", "")
-    top_products = str(row.get("Top Animal Products", "")).strip()
-
-    def _clean_numeric_text(value: Any) -> str:
-        if pd.isna(value):
-            return ""
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            numeric_value = float(value)
-            if numeric_value.is_integer():
-                return f"{int(numeric_value):,}"
-            return f"{numeric_value:,.1f}".rstrip("0").rstrip(".")
-        return str(value).strip()
-
-    share_text = _clean_numeric_text(share)
-    emissions_text = _clean_numeric_text(top_products_emissions)
-
-    product_list = [item.strip() for item in top_products.split(" | ") if item.strip()]
-    if not product_list and top_products:
-        product_list = [top_products]
-
-    product_count = len(product_list)
-    product_label = "product was" if product_count == 1 else "products were"
-
+    products = concentration.top_products
+    share_text = f"{concentration.share_pct:.1f}".removesuffix(".0")
     intro_lines = _wrap_text_lines(
         [
-            (f"The {focus.lower()} was {share_text}% amounting to {emissions_text} kg CO₂e."),
+            (
+                f"The top {len(products)} animal products share of animal-product emissions was "
+                f"{share_text}% amounting to {round(concentration.top_products_kg_co2e):,} kg "
+                "CO₂e."
+            ),
             "",
-            f"The top {product_count} animal {product_label}:",
+            f"The top {len(products)} animal "
+            f"{'product was' if len(products) == 1 else 'products were'}:",
         ],
         width=80,
     )
@@ -652,7 +620,7 @@ def create_decision_kpis_page(
         )
         y -= 0.04
 
-    for idx, product in enumerate(product_list, start=1):
+    for idx, product in enumerate(products, start=1):
         wrapped_product_lines = _wrap_text_lines([f"{idx}. {product}"], width=78)
         for line in wrapped_product_lines:
             ax.text(
@@ -884,185 +852,47 @@ def _methodology_lines(diner_or_meal: DinerOrMeal) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _format_animal_emissions_intensity_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a PDF-friendly copy of the animal emissions table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    display_df = display_df.rename(
-        columns={
-            "category": "Category",
-            "kilos_total": "Kilos of Food",
-            "total_kg_co2e": "Kg CO₂e",
-            "kg_co2e_per_kg_food": "CO₂e Per Kg Food",
+def _format_animal_emissions_intensity_for_pdf(intensity: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Category": intensity["category"],
+            "Kilos of Food": intensity["kilos_total"].round().astype("Int64"),
+            "CO₂e Per Kg Food": intensity["kg_co2e_per_kg_food"].round(2),
+            "Kg CO₂e": intensity["total_kg_co2e"].round().astype("Int64"),
         }
     )
 
-    ordered_columns = [
-        column
-        for column in ["Category", "Kilos of Food", "CO₂e Per Kg Food", "Kg CO₂e"]
-        if column in display_df.columns
-    ]
-    display_df = display_df[ordered_columns]
 
-    for column in ["Kilos of Food", "Kg CO₂e"]:
-        if column in display_df.columns:
-            display_df[column] = display_df[column].round().astype("Int64")
-
-    if "CO₂e Per Kg Food" in display_df.columns:
-        display_df["CO₂e Per Kg Food"] = display_df["CO₂e Per Kg Food"].round(2)
-
-    return display_df
-
-
-def _format_category_template_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a PDF-friendly copy of the category template table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
+def _format_category_template_for_pdf(template: pd.DataFrame) -> pd.DataFrame:
     def _format_label(value: object) -> object:
         if not isinstance(value, str):
             return value
         return value.replace("_", " ").title()
 
-    display_df = dataframe.copy()
+    display_df = template.copy()
     display_df.columns = [_format_label(column) for column in display_df.columns]
-
     if display_df.index.name is not None:
         display_df.index = display_df.index.rename(_format_label(display_df.index.name))
-
     return display_df
 
 
-def _format_decision_kpis_for_pdf(concentration: AnimalEmissionsConcentration) -> pd.DataFrame:
+def _format_substitution_scenarios_for_pdf(scenarios: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(
         {
-            "Focus": [
-                f"Top {len(concentration.top_products)} animal products share of "
-                "animal-product emissions"
-            ],
-            "Share of Animal Emissions (%)": [round(concentration.share_pct, 1)],
-            "Top Animal Products": [" | ".join(concentration.top_products)],
-            "Top Products Kg CO₂e": pd.array(
-                [round(concentration.top_products_kg_co2e)], dtype="Int64"
-            ),
-            "Total Animal Kg CO₂e": pd.array(
-                [round(concentration.total_animal_kg_co2e)], dtype="Int64"
-            ),
+            "Scenario": scenarios["scenario"],
+            "Weight Replaced (kg)": scenarios["replaced_weight_kg"].round().astype("Int64"),
+            "Projected Kg CO₂e": scenarios["projected_emissions_kg_co2e"].round().astype("Int64"),
+            "Avoidable Kg CO₂e": scenarios["avoidable_kg_co2e"].round().astype("Int64"),
+            "Institution Emissions Averted (%)": scenarios[
+                "institution_emissions_avoided_pct"
+            ].round(2),
         }
     )
-
-
-def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a narrower substitution-scenarios table for the PDF."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    keep_columns = [
-        "scenario",
-        "replaced_weight_kg",
-        "projected_emissions_kg_co2e",
-        "avoidable_kg_co2e",
-        "institution_emissions_avoided_pct",
-    ]
-    display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
-    display_df = display_df.rename(
-        columns={
-            "scenario": "Scenario",
-            "replaced_weight_kg": "Weight Replaced (kg)",
-            "projected_emissions_kg_co2e": "Projected Kg CO₂e",
-            "avoidable_kg_co2e": "Avoidable Kg CO₂e",
-            "institution_emissions_avoided_pct": "Institution Emissions Averted (%)",
-        }
-    )
-
-    for column in [
-        "Weight Replaced (kg)",
-        "Projected Kg CO₂e",
-        "Avoidable Kg CO₂e",
-        "Institution Emissions Averted (%)",
-    ]:
-        if column in display_df.columns:
-            numeric = pd.to_numeric(display_df[column], errors="coerce")
-            if column == "Institution Emissions Averted (%)":
-                display_df[column] = numeric.round(2)
-            else:
-                display_df[column] = numeric.round().astype("Int64")
-
-    return display_df
 
 
 # ---------------------------------------------------------------------------
 # PDF builder
 # ---------------------------------------------------------------------------
-
-
-def build_pdf_report(
-    output_path: str,
-    title_info: dict[str, str],
-    plots: list[tuple[str, Figure]],
-    tables: dict[str, pd.DataFrame],
-    summary_stats: dict[str, Any],
-    quality_status: str = "pass",
-    quality_summary: dict[str, Any] | None = None,
-    missing_data_findings: list[Finding] | None = None,
-    show_quality_successes: bool = True,
-    diner_or_meal: DinerOrMeal = "diner",
-    narrative: dict[str, Any] | None = None,
-) -> str:
-    """Assemble the full PDF report and return its absolute path.
-
-    ``title_info`` has keys ``client``, ``baseline_pilot``, ``procurement_serving``. With
-    ``show_quality_successes`` (notebook/data scientist mode), passed checks and notes are shown
-    in the quality section; without it (web app mode), only warnings and issues are shown.
-    """
-    output_path = str(Path(output_path).resolve())
-
-    with close_new_figures_on_error(), PdfPages(output_path) as pdf:
-        # 1. Title page
-        create_title_page(
-            pdf,
-            client=title_info.get("client", ""),
-            baseline_pilot=title_info.get("baseline_pilot", ""),
-            procurement_serving=title_info.get("procurement_serving", ""),
-        )
-
-        # 2. Executive summary (plain-English when a narrative is supplied)
-        create_executive_summary_page(pdf, summary_stats, narrative=narrative)
-
-        # 3. How to read the charts
-        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
-
-        # 4. Plots
-        for _caption, fig in plots:
-            pdf.savefig(fig)
-
-        # 5. Tables
-        for table_title, df in tables.items():
-            create_table_page(pdf, table_title, df)
-
-        # 6. Methodology note
-        methodology = _methodology_lines(diner_or_meal)
-        create_text_page(
-            pdf,
-            "About This Report",
-            methodology,
-            bold_lines={line for line in methodology if line.endswith("?")},
-        )
-
-        # 7. Data quality status
-        quality_lines = _quality_to_lines(
-            quality_status=quality_status,
-            quality_summary=quality_summary,
-            missing_data_findings=missing_data_findings,
-            show_successes=show_quality_successes,
-        )
-        create_text_page(pdf, "Data Completeness & Quality", quality_lines)
-
-    logger.info("PDF report saved to %s", output_path)
-    return output_path
 
 
 def write_report_pdf(
@@ -1074,47 +904,60 @@ def write_report_pdf(
     baseline_pilot: str,
     show_quality_successes: bool,
 ) -> None:
+    """Write the report's PDF. With ``show_quality_successes`` (the data scientist's report),
+    the quality section lists passed checks and notes too; without it (the customer's), only
+    warnings and issues."""
     findings = list(report.findings)
     quality_status = quality_status_from_findings(findings)
+    narrative = _executive_narrative(report, client_name, quality_status)
+    procurement = report.aggregation.procurement
 
-    aggregation = report.aggregation
-    tables = {"Category Template": _format_category_template_for_pdf(aggregation.template)}
-    if (procurement := aggregation.procurement) is not None:
-        if procurement.animal_emissions_intensity is not None:
-            tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
-                procurement.animal_emissions_intensity
+    with close_new_figures_on_error(), PdfPages(path) as pdf:
+        create_title_page(pdf, client_name, baseline_pilot, report.mode)
+        if narrative is None:
+            create_key_value_summary_page(
+                pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
             )
-        if procurement.animal_emissions_concentration is not None:
-            tables["Decision KPIs"] = _format_decision_kpis_for_pdf(
-                procurement.animal_emissions_concentration
-            )
-        if procurement.substitution_scenarios is not None:
-            tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
-                procurement.substitution_scenarios
-            )
+        else:
+            create_executive_summary_page(pdf, narrative)
+        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(report.diner_or_meal))
 
-    build_pdf_report(
-        output_path=str(path),
-        title_info={
-            "client": client_name,
-            "baseline_pilot": baseline_pilot,
-            "procurement_serving": report.mode,
-        },
-        plots=charts.figures,
-        tables=tables,
-        summary_stats={**report.summary_stats, "Data Quality Status": quality_status.upper()},
-        quality_status=quality_status,
-        quality_summary=summarize_findings(findings),
-        missing_data_findings=findings,
-        show_quality_successes=show_quality_successes,
-        diner_or_meal=report.diner_or_meal,
-        narrative=_executive_narrative(report, client_name, quality_status),
-    )
+        for _caption, fig in charts.figures:
+            pdf.savefig(fig)
+
+        create_category_template_pages(pdf, report.aggregation.template)
+        if procurement is not None:
+            if procurement.animal_emissions_intensity is not None:
+                create_animal_intensity_page(pdf, procurement.animal_emissions_intensity)
+            if procurement.animal_emissions_concentration is not None:
+                create_decision_kpis_page(pdf, procurement.animal_emissions_concentration)
+            if procurement.substitution_scenarios is not None:
+                create_substitution_scenarios_page(pdf, procurement.substitution_scenarios)
+
+        methodology = _methodology_lines(report.diner_or_meal)
+        create_text_page(
+            pdf,
+            "About This Report",
+            methodology,
+            bold_lines={line for line in methodology if line.endswith("?")},
+        )
+        create_text_page(
+            pdf,
+            "Data Completeness & Quality",
+            _quality_to_lines(
+                quality_status=quality_status,
+                quality_summary=summarize_findings(findings),
+                missing_data_findings=findings,
+                show_successes=show_quality_successes,
+            ),
+        )
+
+    logger.info("PDF report saved to %s", path)
 
 
 def _executive_narrative(
-    report: FoodReport, client_name: str, quality_status: str
-) -> dict[str, Any] | None:
+    report: FoodReport, client_name: str, quality_status: QualityStatus
+) -> ExecutiveNarrative | None:
     """The plain-English executive summary. Only procurement runs compute emissions; the rest
     keep the key-value summary page."""
     emissions_summary = report.emissions_summary
@@ -1127,20 +970,21 @@ def _executive_narrative(
 
     split = report.plant_animal_split
     top = co2e_by_cat.nlargest(3, "total_kg_co2e")
-    return {
-        "client": client_name,
-        "period": report.summary_stats.get("Date range", ""),
-        "total_food_kg": float(report.rows[report.metric_total].sum()),
-        "total_co2e_kg": total_co2e,
-        "per_dm_kg": (
+    return ExecutiveNarrative(
+        client=client_name,
+        period=report.summary_stats.get("Date range", ""),
+        total_food_kg=float(report.rows[report.metric_total].sum()),
+        total_co2e_kg=total_co2e,
+        co2e_kg_per_diner_or_meal=(
             total_co2e / report.diner_meals_in_data if report.diner_meals_in_data else None
         ),
-        "dm_label": report.diner_or_meal,
-        "plant_pct": split["plant_pct"] if split is not None else None,
-        "animal_pct": split["animal_pct"] if split is not None else None,
-        "top_categories": [
-            (str(row["category"]), 100 * row["total_kg_co2e"] / total_co2e)
-            for _, row in top.iterrows()
-        ],
-        "quality_status": quality_status,
-    }
+        diner_or_meal=report.diner_or_meal,
+        plant_and_animal_pct=(
+            (split["plant_pct"], split["animal_pct"]) if split is not None else None
+        ),
+        top_categories=tuple(
+            (str(category), 100 * kg_co2e / total_co2e)
+            for category, kg_co2e in zip(top["category"], top["total_kg_co2e"], strict=True)
+        ),
+        quality_status=quality_status,
+    )

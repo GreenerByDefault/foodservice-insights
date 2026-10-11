@@ -1,10 +1,10 @@
 {
   "pdf": {
-    "title_info": {
-      "client": "Acme Foodservice",
-      "baseline_pilot": "baseline",
-      "procurement_serving": "procurement"
-    },
+    "title": [
+      "Acme Foodservice",
+      "baseline",
+      "procurement"
+    ],
     "summary_stats": {
       "Total rows": "19",
       "Unique products": "19",
@@ -20,31 +20,19 @@
       "Animal-based total": "49.8 kg",
       "Plant protein share (% of protein categories)": "89.6%",
       "Plant protein total": "127.7 kg",
-      "Protein-category total": "142.5 kg",
-      "Data Quality Status": "WARNING"
-    },
-    "quality_status": "warning",
-    "quality_summary": {
-      "total_findings": 5,
-      "by_status": {
-        "success": 3,
-        "info": 0,
-        "warning": 2,
-        "error": 0
-      },
-      "by_stage": {
-        "diagnostics": 5
-      }
+      "Protein-category total": "142.5 kg"
     },
     "narrative": {
       "client": "Acme Foodservice",
       "period": "Oct 2023 – Dec 2023",
       "total_food_kg": 177.522301,
       "total_co2e_kg": 513.260939,
-      "per_dm_kg": 0.17108698,
-      "dm_label": "diner",
-      "plant_pct": 71.9,
-      "animal_pct": 28.1,
+      "co2e_kg_per_diner_or_meal": 0.17108698,
+      "diner_or_meal": "diner",
+      "plant_and_animal_pct": [
+        71.9,
+        28.1
+      ],
       "top_categories": [
         [
           "Cheese",
@@ -318,25 +306,15 @@
         ]
       },
       "Decision KPIs": {
-        "columns": [
-          "Focus",
-          "Share of Animal Emissions (%)",
-          "Top Animal Products",
-          "Top Products Kg CO₂e",
-          "Total Animal Kg CO₂e"
+        "top_products": [
+          "PUDDING, VNL RTU FRESH",
+          "WATER, LMN TKNED NCOUNTR CONSI SS",
+          "APPLESAUCE, UNSTN SS PKG CUP",
+          "CHIP, TORTLA CORN YLW TRGLE",
+          "PLATE, PAPR 6  SNGL POLY COTED"
         ],
-        "index": [
-          0
-        ],
-        "data": [
-          [
-            "Top 5 animal products share of animal-product emissions",
-            76.5,
-            "PUDDING, VNL RTU FRESH | WATER, LMN TKNED NCOUNTR CONSI SS | APPLESAUCE, UNSTN SS PKG CUP | CHIP, TORTLA CORN YLW TRGLE | PLATE, PAPR 6  SNGL POLY COTED",
-            234,
-            305
-          ]
-        ]
+        "top_products_kg_co2e": 233.513017,
+        "total_animal_kg_co2e": 305.331735
       },
       "Substitution Scenarios": {
         "columns": [
