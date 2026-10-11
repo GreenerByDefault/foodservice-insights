@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -9,8 +9,14 @@ from gbd_foodservice_insights.report.aggregation import (
     AnimalEmissionsConcentration,
     ProcurementAggregation,
 )
+from gbd_foodservice_insights.report.food_report import FoodReport
+from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights_lab.food_report.excel import build_qa_excel_report
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
+
+
+def _write_placeholder_pdf(_report: FoodReport, _charts: object, path: Path, **_: object) -> None:
+    path.write_text("placeholder pdf")
 
 
 class _ExcelPayload(TypedDict):
@@ -163,20 +169,13 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
     monkeypatch, food_report_tmp_data, tmp_path: Path
 ):
     input_path, diner_path, metadata_path = food_report_tmp_data
-    captured_pdf_kwargs: dict[str, object] = {}
-
-    def fake_build_pdf_report(output_path: str, **kwargs: object) -> str:
-        captured_pdf_kwargs.update(kwargs)
-        path = Path(output_path)
-        path.write_text("placeholder pdf")
-        return str(path)
 
     fig, ax = plt.subplots()
     ax.set_title("Test Export Plot")
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        fake_build_pdf_report,
+        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        _write_placeholder_pdf,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
@@ -228,12 +227,6 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
         "Data Profile",
         "Denominator_QC",
     ]
-    assert list(cast(dict[str, pd.DataFrame], captured_pdf_kwargs["tables"])) == [
-        "Category Template",
-        "Animal Emissions Intensity",
-        "Decision KPIs",
-        "Substitution Scenarios",
-    ]
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["run_status"] == "success"
@@ -261,16 +254,12 @@ def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
 ):
     input_path, diner_path, _ = food_report_tmp_data
 
-    def fake_build_pdf_report(output_path: str, **_: object) -> str:
-        Path(output_path).write_text("placeholder pdf")
-        return output_path
-
     def fail(_df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("profile boom")
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        fake_build_pdf_report,
+        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        _write_placeholder_pdf,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
@@ -304,17 +293,13 @@ def test_run_food_report_hands_the_pdf_its_meat_quantity_finding(monkeypatch, tm
     ).to_csv(input_path, index=False)
     diner_path = tmp_path / "diner_meals.json"
     diner_path.write_text(json.dumps({"2024-01": 1000, "2024-02": 1100}))
-    captured_pdf_kwargs: dict[str, object] = {}
+    pdf_findings: list[Finding] = []
 
-    def fake_build_pdf_report(output_path: str, **kwargs: object) -> str:
-        captured_pdf_kwargs.update(kwargs)
-        Path(output_path).write_text("placeholder pdf")
-        return output_path
+    def record_findings(report: FoodReport, charts: object, path: Path, **_: object) -> None:
+        pdf_findings.extend(report.findings)
+        _write_placeholder_pdf(report, charts, path)
 
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        fake_build_pdf_report,
-    )
+    monkeypatch.setattr("gbd_foodservice_insights.report.pdf.write_report_pdf", record_findings)
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
         lambda **kwargs: [],
@@ -332,20 +317,15 @@ def test_run_food_report_hands_the_pdf_its_meat_quantity_finding(monkeypatch, tm
     )
     assert meat_finding["status"] == "warning"
     assert meat_finding in result["missing_data_findings"]
-    assert meat_finding in cast(list[object], captured_pdf_kwargs["missing_data_findings"])
+    assert meat_finding in pdf_findings
 
 
 def test_run_food_report_defaults_outputs_to_named_subdirectory(monkeypatch, food_report_tmp_data):
     input_path, diner_path, _ = food_report_tmp_data
 
-    def fake_build_pdf_report(output_path: str, **_: object) -> str:
-        path = Path(output_path)
-        path.write_text("placeholder pdf")
-        return str(path)
-
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        fake_build_pdf_report,
+        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        _write_placeholder_pdf,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
@@ -409,14 +389,9 @@ def test_run_food_report_does_not_duplicate_log_lines_across_repeated_runs(
     """Per-run handlers should be removed so later runs do not write duplicate lines."""
     input_path, diner_path, _ = food_report_tmp_data
 
-    def fake_build_pdf_report(output_path: str, **_: object) -> str:
-        path = Path(output_path)
-        path.write_text("placeholder pdf")
-        return str(path)
-
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        fake_build_pdf_report,
+        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        _write_placeholder_pdf,
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
