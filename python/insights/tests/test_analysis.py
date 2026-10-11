@@ -181,6 +181,24 @@ def test_a_product_bought_at_zero_weight_still_reports(tmp_path: Path) -> None:
     assert products.loc[products["product"] == "Pork Loin", "kilos_total"].tolist() == [0.0] * 3
 
 
+def test_identical_lines_each_count_toward_the_report(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    rows = [
+        (product, f"{month}-15", 10.0) for month in SAMPLE_MONTHS for product in KEYWORD_PRODUCTS
+    ]
+    rice_in_january = ("Brown Rice", f"{SAMPLE_MONTHS[0]}-15", 10.0)
+    request.input_csv.write_text(input_csv_text([*rows, rice_in_january, rice_in_january]))
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    products = pd.read_excel(outcome.xlsx, sheet_name="Monthly by Product")
+    assert products.loc[products["product"] == "Brown Rice", "kilos_total"].tolist() == [
+        30.0,
+        10.0,
+        10.0,
+    ]
+
+
 def test_every_pdf_page_is_letter_even_with_a_product_name_at_the_webs_cap(
     tmp_path: Path,
 ) -> None:

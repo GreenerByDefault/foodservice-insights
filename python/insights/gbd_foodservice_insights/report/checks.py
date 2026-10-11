@@ -12,7 +12,6 @@ import pandas as pd
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
-    DiagnosticStatus,
     ReportMode,
     required_columns_for_mode,
 )
@@ -23,23 +22,6 @@ from gbd_foodservice_insights.report.thresholds import (
 from gbd_foodservice_insights.report.utils import compute_month_alignment
 
 logger = logging.getLogger(__name__)
-
-
-def _duplicate_row_status(duplicate_share: float) -> DiagnosticStatus:
-    """Map duplicate-row share to a finding severity for row-level QA checks."""
-    error_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "error_share_threshold",
-    )
-    warning_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "warning_share_threshold",
-    )
-    if duplicate_share > error_threshold:
-        return "error"
-    if duplicate_share > warning_threshold:
-        return "warning"
-    return "success"
 
 
 def _dates_appear_month_bucketed(date_series: pd.Series) -> bool:
@@ -81,166 +63,6 @@ def _dates_support_within_month_gap_detection(date_series: pd.Series) -> bool:
         return False
 
     return bool(unique_dates_per_month.gt(1).any())
-
-
-def detect_exact_duplicate_rows(
-    df: pd.DataFrame,
-    metric_total: str,
-    *,
-    sample_limit: int = 5,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Flag exact duplicate line items before duplicated rows inflate report totals.
-
-    This diagnostic exists because duplicated transactions usually come from an
-    export, merge, or pipeline issue rather than real purchasing behaviour. The
-    report needs to surface them clearly before totals, emissions, and category
-    summaries are overstated.
-    """
-    required_key_columns = ["date", "product", "category", metric_total]
-    key_columns = [*required_key_columns]
-    if "quantity" in df.columns:
-        key_columns.append("quantity")
-
-    missing_columns = [column for column in required_key_columns if column not in df.columns]
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="exact_duplicate_rows",
-                    status="info",
-                    message=(
-                        "Could not check for exact duplicate rows because these columns are "
-                        f"missing: {missing_columns}"
-                    ),
-                    metadata={"missing_columns": missing_columns},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    if df.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="exact_duplicate_rows",
-                    status="success",
-                    message="No duplicate rows found.",
-                    count=0,
-                    metadata={
-                        "duplicate_row_share": 0.0,
-                        "duplicate_row_count": 0,
-                        "duplicate_group_count": 0,
-                        "key_columns": key_columns,
-                    },
-                )
-            ],
-            pd.DataFrame(columns=[*key_columns, "duplicate_group_size"]),
-        )
-
-    duplicate_mask = df.duplicated(subset=key_columns, keep=False)
-    duplicate_rows = df.loc[duplicate_mask].copy()
-
-    if duplicate_rows.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="exact_duplicate_rows",
-                    status="success",
-                    message="No duplicate rows found.",
-                    count=0,
-                    metadata={
-                        "duplicate_row_share": 0.0,
-                        "duplicate_row_count": 0,
-                        "duplicate_group_count": 0,
-                        "key_columns": key_columns,
-                    },
-                )
-            ],
-            pd.DataFrame(columns=[*df.columns, "duplicate_group_size"]),
-        )
-
-    duplicate_group_sizes = duplicate_rows.groupby(key_columns, dropna=False).size()
-    duplicate_rows = duplicate_rows.merge(
-        duplicate_group_sizes.rename("duplicate_group_size").reset_index(),
-        on=key_columns,
-        how="left",
-    )
-    duplicate_rows = duplicate_rows.sort_values(
-        ["duplicate_group_size", *key_columns],
-        ascending=[False, *([True] * len(key_columns))],
-    )
-
-    duplicate_row_count = len(duplicate_rows)
-    duplicate_group_count = int(duplicate_group_sizes.shape[0])
-    duplicate_share = duplicate_row_count / len(df)
-    status = _duplicate_row_status(duplicate_share)
-    month_bucketed_dates = "date" in df.columns and _dates_appear_month_bucketed(df["date"])
-    if month_bucketed_dates and status == "error":
-        status = "warning"
-    warning_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "warning_share_threshold",
-    )
-    error_threshold = get_diagnostic_threshold(
-        "exact_duplicate_rows",
-        "error_share_threshold",
-    )
-
-    sample_rows = (
-        duplicate_rows.loc[:, [*key_columns, "duplicate_group_size"]]
-        .head(sample_limit)
-        .replace({pd.NaT: None, pd.NA: None})
-        .to_dict("records")
-    )
-    sample_values = [
-        (
-            f"{row.get('product', 'Unknown product')} on {row.get('date')} appears "
-            f"{row.get('duplicate_group_size')} times."
-        )
-        for row in sample_rows
-    ]
-
-    if month_bucketed_dates:
-        message_tail = (
-            "The input dates appear to be month-level placeholders rather than transaction "
-            "dates, so repeated purchases within a month can look identical. Treat this as a "
-            "warning to review rather than proof of a duplicate-row bug."
-        )
-    else:
-        severity_phrase = (
-            "serious duplicate rows issue" if status == "error" else "duplicate rows issue"
-        )
-        message_tail = (
-            f"This suggests a {severity_phrase} that could overstate totals and emissions."
-        )
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="exact_duplicate_rows",
-            status=status,
-            message=(
-                f"Found {duplicate_row_count} rows that are exact duplicates across the key "
-                f"report fields ({duplicate_share:.1%} of all rows) across "
-                f"{duplicate_group_count} duplicated line item patterns. {message_tail}"
-            ),
-            count=duplicate_row_count,
-            sample_values=sample_values,
-            metadata={
-                "duplicate_row_share": duplicate_share,
-                "duplicate_row_count": duplicate_row_count,
-                "duplicate_group_count": duplicate_group_count,
-                "month_bucketed_dates": month_bucketed_dates,
-                "key_columns": key_columns,
-                "warning_share_threshold": warning_threshold,
-                "error_share_threshold": error_threshold,
-                "sample_rows": sample_rows,
-            },
-        )
-    ]
-    return findings, duplicate_rows
 
 
 def detect_unusual_sales(
@@ -1937,8 +1759,6 @@ def run_all_diagnostics(
         metric_total = "servings total"
 
     findings: list[Finding] = []
-    duplicate_findings, _ = detect_exact_duplicate_rows(df, metric_total)
-    findings.extend(duplicate_findings)
     findings.extend(detect_month_over_month_total_volatility(df, metric_total))
     findings.extend(check_missing_internal_months(df))
     category_discontinuity_findings, _ = detect_category_discontinuity(df, metric_total)

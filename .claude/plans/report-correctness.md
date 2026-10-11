@@ -13,17 +13,12 @@ output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff
 The remaining PRs were re-checked against `main` on 11 October, after the week's moves to the
 lab; every fact below still reproduces unless it says otherwise.
 
-**Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
-because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
+**Aborts.** `check_diner_meal_reasonableness` files an `error` when two or more months' counts
+fall outside 0.5× to 2× the median (`error_if_flagged_months: 2`). Two summer months at 30% of
+term time abort a twelve-month upload over numbers the user typed and the web validated. That
+reaches the user as "not your file, retry", and the retry fails identically, because
+`raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
 `worker_child/failures.py` classifies `unknown`.
-
-- `detect_exact_duplicate_rows` (`checks.py`) files an `error` when rows identical on
-  `(date, product, category, weight)` exceed 2% of the file (`diagnostic_thresholds.yaml`
-  `error_share_threshold`); three identical lines in a 38-row file abort the run. Two cases of
-  one item on one invoice is ordinary procurement data, and `apps/web` does not dedupe.
-- `check_diner_meal_reasonableness` files an `error` when two or more months' counts fall
-  outside 0.5× to 2× the median (`error_if_flagged_months: 2`). Two summer months at 30% of
-  term time abort a twelve-month upload over numbers the user typed and the web validated.
 
 **Wrong numbers.**
 
@@ -49,12 +44,19 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   thing. Each PR below says why it is worth landing on its own.
 - **No data-driven check may abort a product run.** An `error` finding is for our bugs (a
   missing column, row drift, a stage raising, a category we failed to give a factor), which
-  correctly land as `unknown` with a traceback. The two escalations become warnings in
+  correctly land as `unknown` with a traceback. The headcount escalation becomes a warning in
   `diagnostic_thresholds.yaml`, for the lab too; after that, every `error` a diagnostic can file
   is unreachable from customer data on the product path. *Rejected: a product-only threshold
   profile* — two vocabularies for one check. *Rejected: mapping the `ValueError` to
-  `UnusableDataError`* — duplicates and unusual headcounts are not unusable data, and "contact
-  GBD" would be the wrong advice.
+  `UnusableDataError`* — unusual headcounts are not unusable data, and "contact GBD" would be
+  the wrong advice.
+- **Identical lines are data, and nothing checks for them.** The exact-duplicate-rows check is
+  gone, not demoted. It was written for the lab, where several client exports are stitched
+  together and can overlap; the lab's `detect_component_duplicate_risk` checks that where the
+  files are combined. A product report holds one file of `product, date, weight`, so two cases
+  of one item on one day are identical lines, and a warning at 0.5% would have told nearly every
+  customer their correct totals might be overstated. *Rejected: a warning at the upload form* —
+  the form has no warning state, and the user cannot tell us which of their repeats are real.
 - **A zero-weight line is data; a file that weighs nothing is not.** A single 0 is ordinary
   (short-shipped or not-yet-weighed lines) and gets a `per_product_weight_bounds` warning. A file
   whose every weight is 0 is refused at upload (`normalize.ts`, `all-weights-zero`), and
@@ -67,7 +69,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   demoting a finding to `info` is how a later PR takes it off the customer's page. `info`
   findings stay for the lab's QA workbook and its PDF, which shows everything. *Rejected: deleting `info`
   findings* — the lab reads them. **Open:** which warnings a customer should see at all (month
-  volatility, partial first or last month, outlier line items, duplicates) is GBD's call; this
+  volatility, partial first or last month, outlier line items) is GBD's call; this
   plan only stops `info` leaking.
 - **Every category in `GBD_categories.yaml` has a factor in every region**, pinned by
   `test_emissions.py::test_every_category_has_an_emission_factor`. `Unspecified non dairy milk`
@@ -114,28 +116,16 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   other; if we do, it is its own PR, and a serving report, which has no emissions, needs an
   order of its own.
 
-## PR 1 — duplicate lines are a warning
-
-- `exact_duplicate_rows.error_share_threshold` goes from `diagnostic_thresholds.yaml`, and
-  `_duplicate_row_status` loses its `error` branch; with it go `detect_exact_duplicate_rows`'
-  month-bucketed downgrade, its "serious" wording and the threshold in its metadata. The
-  `test_checks.py` cases reading `error_share_threshold` flip.
-- Tests: three identical lines in a 144-row twelve-month upload succeed through `analyze()` with
-  an `exact_duplicate_rows` warning.
-- Worth it: reproduced 11 October, that upload aborts as `unknown`, and a retry fails the same
-  way. Neither `apps/web` nor `read_input_csv` dedupes.
-
-## PR 2 — unusual headcounts are a warning
+## PR 1 — unusual headcounts are a warning
 
 - `diner_meal_count_reasonableness.error_if_flagged_months` goes from the YAML and from
   `check_diner_meal_reasonableness`'s parameters and metadata; a flagged month is a `warning`.
 - Tests: a twelve-month upload with July and August at 30% of the other months succeeds through
   `analyze()` with a warning.
 - Worth it: reproduced 11 October, that upload aborts, over counts the user typed and the
-  contract accepted. Its own PR because it is a separate check, so a reviewer can take one
-  without the other.
+  contract accepted, and the last abort a real upload is likely to hit.
 
-## PR 3 — a category without an emission factor raises
+## PR 2 — a category without an emission factor raises
 
 - `calculate_emissions` raises `ValueError` naming every category without a factor, instead of
   filing `unmatched_emission_factors`; `return_findings` and its three overloads go. Every row
@@ -148,7 +138,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Tests: a factorless category raises from `calculate_emissions` and from `build_food_report`
   in procurement mode; serving mode, which computes no emissions, is unaffected.
 
-## PR 4 — a zero-weight category's driver share is 0%, not NaN
+## PR 3 — a zero-weight category's driver share is 0%, not NaN
 
 - `_safe_percentage` (`report/aggregation.py`) returns 0.0 for a zero denominator, as
   `identify_overall_drivers` already does for the whole file. A category bought only at weight
@@ -156,10 +146,10 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Tests: `build_food_report` with a category whose lines all weigh 0 gives that category's
   drivers a `percentage` of 0.0, and `build_report_charts` files no finding.
 - Worth it: found 11 October; a zero-weight line is ordinary data (see Decisions), and today
-  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 5, which deletes the
+  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 4, which deletes the
   input check that is today the only sign of it.
 
-## PR 5 — a chart or split failure fails the run
+## PR 4 — a chart or split failure fails the run
 
 - `_safe_plot`, `_placeholder_figure`, the input checks and the category-driver `try` in
   `report/plots/report.py` go, and so do the split and share `try` blocks in
@@ -168,7 +158,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   findings. `FoodReport.findings` is then the whole list.
 - This adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
   month, a 200-character product and every category over twelve months: no chart fell back
-  except PR 4's case. The split and share return `None` for every no-data case, so they raise
+  except PR 3's case. The split and share return `None` for every no-data case, so they raise
   only on our bug.
 - Tests: the `_safe_plot` and placeholder tests in `plots/test_report.py` go; a chart
   monkeypatched to raise surfaces from `build_report_charts`. The lab's failure manifest
@@ -189,7 +179,7 @@ handed and what the sheets contain, not that files exist.
 - The golden test pins numbers, so most PRs here regenerate it; review the fixture diff rather
   than accept it.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
-- PRs 1 and 2 are the only aborts a real upload is likely to hit. Land them first.
-- PR 5 turns any chart bug the probe missed into a failed run. That is the intent, but watch
+- PR 1 is the only abort a real upload is likely to hit. Land it first.
+- PR 4 turns any chart bug the probe missed into a failed run. That is the intent, but watch
   `unknown` failures after it deploys.
 - No PR here waits on GBD.
