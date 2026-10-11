@@ -3,8 +3,13 @@ import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
 import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
-import { statusOf } from '#lib/server/testing/http-error.js';
-import { requireAuth, requireOrganizationAccess, requireOrganizationAdmin } from './guards.ts';
+import { redirectOf, statusOf } from '#lib/server/testing/http-error.js';
+import {
+  requireAuth,
+  requireOnboarded,
+  requireOrganizationAccess,
+  requireOrganizationAdmin,
+} from './guards.ts';
 import type { AuthContext } from './types.ts';
 
 const ORGANIZATION_ID = crypto.randomUUID() as OrganizationId;
@@ -25,6 +30,30 @@ describe('requireAuth', () => {
 
   test('401s when there is none', async () => {
     await expect(statusOf(() => requireAuth({ auth: null }))).resolves.toEqual({
+      status: 401,
+      code: 'unauthenticated',
+    });
+  });
+});
+
+describe('requireOnboarded', () => {
+  test('returns the context of a user with a display name', () => {
+    const auth = anAuthContext({ user: { displayName: 'Ana Ruiz' } });
+
+    expect(requireOnboarded({ auth })).toEqual(auth);
+  });
+
+  test('sends a user with no display name to onboarding', async () => {
+    const auth = anAuthContext({ user: { displayName: null } });
+
+    await expect(redirectOf(() => requireOnboarded({ auth }))).resolves.toEqual({
+      status: 303,
+      location: '/onboarding',
+    });
+  });
+
+  test('401s when there is no context, rather than sending anyone to onboarding', async () => {
+    await expect(statusOf(() => requireOnboarded({ auth: null }))).resolves.toEqual({
       status: 401,
       code: 'unauthenticated',
     });

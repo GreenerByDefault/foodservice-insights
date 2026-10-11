@@ -48,8 +48,8 @@ export const GOTRUE_TEST_DOMAIN = 'gotrue.example.test';
 /** The address the pinned identity shows. Only the run database has it; see the file header. */
 export const PINNED_IDENTITY_EMAIL = 'sam.cook@example.test';
 
-/** Every minted user's display name, the pinned identity's included. One fixed name, so a
- * screenshot's monogram is the same whoever the test is. */
+/** Every minted user's display name, the pinned identity's included, unless it is minted with
+ * `onboarded: false`. One fixed name, so a screenshot's monogram is the same whoever the test is. */
 export const MINTED_USER_DISPLAY_NAME = 'Sam Cook';
 
 const TEST_USER_PASSWORD = 'test-user-password';
@@ -107,11 +107,12 @@ export type MintedUser = TestIdentity & {
 /** Mint a GoTrue user and mirror it into `db`, the run database.
  *
  * `signInEmail` defaults to a fresh address at `GOTRUE_TEST_DOMAIN`; `email`, the address the app
- * shows, defaults to the same.
+ * shows, defaults to the same. `onboarded: false` leaves the display name unset, as a sign-up does,
+ * so the app sends the user to `/onboarding`.
  */
 export async function mintUser(
   db: Kysely<Database>,
-  options: { signInEmail?: string; email?: string } = {},
+  options: { signInEmail?: string; email?: string; onboarded?: boolean } = {},
 ): Promise<MintedUser> {
   const { data, error } = await adminClient().auth.admin.createUser({
     email: options.signInEmail ?? `${crypto.randomUUID()}@${GOTRUE_TEST_DOMAIN}`,
@@ -124,7 +125,8 @@ export async function mintUser(
   const signInEmail = data.user.email;
   if (signInEmail === undefined) throw new Error('GoTrue created a user with no email');
   const email = options.email ?? signInEmail;
-  await insertAppUser(db, { id: data.user.id, email, displayName: MINTED_USER_DISPLAY_NAME });
+  const displayName = options.onboarded === false ? undefined : MINTED_USER_DISPLAY_NAME;
+  await insertAppUser(db, { id: data.user.id, email, displayName });
 
   return { id: data.user.id as UserId, email, signInEmail };
 }

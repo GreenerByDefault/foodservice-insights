@@ -1,5 +1,5 @@
 import type { DatabaseExecutor } from '@gbd/db';
-import { requireAuth } from '#lib/server/auth/guards.js';
+import { requireOnboarded } from '#lib/server/auth/guards.js';
 import type { AuthContext } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { listOrganizations, type OrganizationRow } from '#lib/server/orgs/list.js';
@@ -8,22 +8,22 @@ import { SWITCHER_LIMIT } from './shell/switcher-limit';
 
 export type SwitcherOrganization = OrganizationRow;
 
-/** The gate for everything inside `(app)`: a request gets no further without an identity.
+/** The gate for everything inside `(app)`: a request gets no further without an identity, nor
+ * without the display name onboarding asks for.
  *
- * `requireAuth` throws a 401 rather than becoming a redirect to `/sign-in`: `#lib/components/
- * error-page.svelte` renders a message today, and will offer sign-in in place once auth lands, so
- * the page the user actually asked for renders as soon as `refreshAll()` re-runs this load.
+ * Signed out is a 401 rather than a redirect to `/sign-in`: `#lib/components/error-page.svelte`
+ * offers sign-in in place, so the page the user actually asked for renders as soon as
+ * `refreshAll()` re-runs this load. A first-time user signing in there is redirected to
+ * `/onboarding` instead, which has no page of theirs to return to.
  */
 export const load: LayoutServerLoad = async ({ locals }) => {
-  const auth = requireAuth(locals);
+  const auth = requireOnboarded(locals);
   const { organizations, hasMoreOrganizations } = await _loadSwitcherOrganizations(
     database(),
     auth,
   );
   return {
-    // `''` until onboarding requires a name: no visible initial, so the account menu shows its icon,
-    // and `/account`'s field starts empty.
-    user: { email: auth.user.email, displayName: auth.user.displayName ?? '' },
+    user: { email: auth.user.email, displayName: auth.user.displayName },
     organizations,
     hasMoreOrganizations,
   };

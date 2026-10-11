@@ -1,14 +1,23 @@
 /** The checks a route makes before doing anything. */
 
 import type { DatabaseExecutor } from '@gbd/db';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { withDbErrorHandling } from '#lib/server/db.js';
-import type { AuthContext, OrganizationAccess } from './types.ts';
+import type { AuthContext, OnboardedAuthContext, OrganizationAccess } from './types.ts';
 
 /** The signed-in user, or a 401. */
 export function requireAuth(locals: Pick<App.Locals, 'auth'>): AuthContext {
   if (!locals.auth) error(401, 'Not signed in', { code: 'unauthenticated' });
   return locals.auth;
+}
+
+/** The signed-in user, once they have a display name: a 401 without a session, and a redirect to
+ * `/onboarding` without a name. The display name is all onboarding asks. */
+export function requireOnboarded(locals: Pick<App.Locals, 'auth'>): OnboardedAuthContext {
+  const auth = requireAuth(locals);
+  const { displayName } = auth.user;
+  if (displayName === null) redirect(303, '/onboarding');
+  return { ...auth, user: { ...auth.user, displayName } };
 }
 
 /** The user's access to the organization slugged `organizationSlug`, or a 404.

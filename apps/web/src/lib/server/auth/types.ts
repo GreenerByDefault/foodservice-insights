@@ -8,6 +8,11 @@ export type AuthenticatedUser = {
   isSuperadmin: boolean;
 };
 
+/** An `AuthContext` past onboarding, which is what every page inside `(app)` is rendered for. */
+export type OnboardedAuthContext = AuthContext & {
+  user: AuthenticatedUser & { displayName: string };
+};
+
 export type OrganizationAccess = {
   organizationId: OrganizationId;
   organizationSlug: string;

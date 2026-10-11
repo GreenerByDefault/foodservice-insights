@@ -184,9 +184,10 @@ It stores that result in SvelteKit's `locals`, where server files like `+layout.
 `+page.server.ts` can read it, for example to 401 an unauthorized request.
 
 The client gets the user from the `(app)` route group's `+layout.server.ts`, which both guards
-every page inside the group and passes the user down to `.svelte` files. Routes outside the group —
-the marketing page, sign-in, the health probe, and the deliberately public file links — are not
-guarded. When the frontend
+every page inside the group and passes the user down to `.svelte` files. The guard also sends a user
+with no display name — anyone who has just signed up — to `/onboarding`, which asks only for that.
+Routes outside the group — the marketing page, sign-in, onboarding, the health probe, and the
+deliberately public file links — are not guarded. When the frontend
 changes auth state, such as logging out, it calls `refreshAll()` so that SvelteKit re-runs the
 server `load()` functions without a full page refresh.
 
