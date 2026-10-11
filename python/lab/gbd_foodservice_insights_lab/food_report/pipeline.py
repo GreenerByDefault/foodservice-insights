@@ -97,6 +97,7 @@ def _collect_diagnostic_export_sheets(
     diner_or_meal: DinerOrMeal,
     metric_total: str,
     potential_name_splits: pd.DataFrame,
+    category_discontinuity: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
     """Collect export-ready diagnostic tables for the QA workbook.
 
@@ -106,6 +107,8 @@ def _collect_diagnostic_export_sheets(
     diagnostic_export_sheets: dict[str, pd.DataFrame] = {}
     if not potential_name_splits.empty:
         diagnostic_export_sheets["Potential_Name_Splits"] = potential_name_splits
+    if not category_discontinuity.empty:
+        diagnostic_export_sheets["Category_Discontinuity"] = category_discontinuity
 
     try:
         _, outlier_line_items_df = checks.detect_unusual_sales(
@@ -118,16 +121,6 @@ def _collect_diagnostic_export_sheets(
             diagnostic_export_sheets["Outlier_Line_Items"] = outlier_line_items_df
     except Exception as exc:
         logger.warning("Could not build outlier line items export: %s", exc)
-
-    try:
-        _, category_discontinuity_df = checks.detect_category_discontinuity(
-            df,
-            metric_total=metric_total,
-        )
-        if not category_discontinuity_df.empty:
-            diagnostic_export_sheets["Category_Discontinuity"] = category_discontinuity_df
-    except Exception as exc:
-        logger.warning("Could not build category discontinuity export: %s", exc)
 
     try:
         _, denominator_qc_df = checks.check_diner_meal_reasonableness(
@@ -228,8 +221,10 @@ def run_food_report(
             top_n_drivers=top_n_drivers,
             report_progress=report_progress,
         )
-        # The product cannot reach these checks: it has no PDF extracts, so a name split is only
-        # ever an `info` finding, and its CSVs carry no `quantity`.
+        # The product cannot reach these checks, or they would mislead its customer: it has no
+        # PDF extracts, so a name split is only ever an `info` finding; its CSVs carry no
+        # `quantity`; and in one validated export a category skipping a month is purchasing,
+        # not missing data.
         name_split_findings, potential_name_splits = (
             qa_diagnostics.detect_near_duplicate_product_names(
                 report.rows,
@@ -237,9 +232,16 @@ def run_food_report(
                 pdf_extracted=metadata.get("pdf_extracted"),
             )
         )
+        discontinuity_findings, category_discontinuity = (
+            qa_diagnostics.detect_category_discontinuity(report.rows, report.metric_total)
+        )
         lab_findings = (
             *name_split_findings,
             *qa_diagnostics.check_meat_quantities(report.rows),
+            *discontinuity_findings,
+            *qa_diagnostics.check_single_product_dominance(report.rows, report.metric_total),
+            *qa_diagnostics.check_category_concentration(report.rows, report.metric_total),
+            *qa_diagnostics.check_missing_weeks_within_month(report.rows),
         )
         report = dataclasses.replace(report, findings=(*report.findings, *lab_findings))
         quality_findings = list(report.findings)
@@ -275,6 +277,7 @@ def run_food_report(
             artifact_paths["qa_excel_path"],
             quality_findings=quality_findings,
             potential_name_splits=potential_name_splits,
+            category_discontinuity=category_discontinuity,
         )
 
         _log_stage("metadata_update", report_progress)
@@ -355,6 +358,7 @@ def _write_qa_workbook(
     *,
     quality_findings: list[Finding],
     potential_name_splits: pd.DataFrame,
+    category_discontinuity: pd.DataFrame,
 ) -> str:
     df = report.rows
     data_profile_df = None
@@ -384,6 +388,7 @@ def _write_qa_workbook(
             diner_or_meal=report.diner_or_meal,
             metric_total=report.metric_total,
             potential_name_splits=potential_name_splits,
+            category_discontinuity=category_discontinuity,
         ),
         diner_or_meal=report.diner_or_meal,
     )

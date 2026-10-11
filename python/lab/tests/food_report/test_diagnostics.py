@@ -1,10 +1,17 @@
+from collections.abc import Callable
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
 from gbd_foodservice_insights.report import thresholds
 from gbd_foodservice_insights_lab.food_report.diagnostics import (
+    check_category_concentration,
     check_meat_quantities,
+    check_missing_weeks_within_month,
+    check_single_product_dominance,
+    detect_category_discontinuity,
     detect_near_duplicate_product_names,
     find_close_product_pairs,
     identify_potentially_abnormal_weight_meat_items,
@@ -241,3 +248,299 @@ def test_near_duplicate_product_names_read_their_thresholds_from_yaml(tmp_path, 
     assert find_close_product_pairs(pd.DataFrame({"product": ["abcd", "abef"]}), "product").empty
     assert (findings[0]["status"], findings[0]["count"]) == ("info", 0)
     assert findings[0]["metadata"]["warning_share_threshold"] == 0.40
+
+
+def test_check_missing_weeks_within_month_flags_long_internal_date_gap():
+    """Flags long stretches with no transactions when the data really has day-level dates."""
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2025-01-01",
+                    "2025-01-05",
+                    "2025-01-20",
+                    "2025-01-25",
+                ]
+            )
+        }
+    )
+
+    findings = check_missing_weeks_within_month(df)
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+    assert "Jan 2025" in findings[0]["sample_values"][0]
+    assert "2025-01-06 to 2025-01-19" in findings[0]["sample_values"][0]
+
+
+def test_check_missing_weeks_within_month_flags_long_gap_at_start_of_month():
+    """Partial extracts that begin late in the month should be surfaced."""
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2025-01-20",
+                    "2025-01-25",
+                    "2025-02-02",
+                    "2025-02-04",
+                ]
+            )
+        }
+    )
+
+    findings = check_missing_weeks_within_month(df)
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] >= 1
+    assert any("2025-01-01 to 2025-01-19" in sample for sample in findings[0]["sample_values"])
+
+
+def test_check_missing_weeks_within_month_flags_long_gap_at_end_of_month():
+    """Partial extracts that stop early in the month should also be surfaced."""
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2025-01-02",
+                    "2025-01-05",
+                    "2025-02-01",
+                    "2025-02-04",
+                ]
+            )
+        }
+    )
+
+    findings = check_missing_weeks_within_month(df)
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] >= 1
+    assert any("2025-01-06 to 2025-01-31" in sample for sample in findings[0]["sample_values"])
+
+
+def test_check_missing_weeks_within_month_skips_month_only_date_strings():
+    df = pd.DataFrame(
+        {
+            "date": ["01/2025", "02/2025", "03/2025"],
+        }
+    )
+
+    findings = check_missing_weeks_within_month(df)
+
+    assert findings == []
+
+
+def test_check_missing_weeks_within_month_skips_one_date_per_month_series():
+    """A cleaned monthly series with one repeated day-of-month should not trigger A14."""
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2025-01-15",
+                    "2025-01-15",
+                    "2025-02-15",
+                    "2025-03-15",
+                ]
+            )
+        }
+    )
+
+    findings = check_missing_weeks_within_month(df)
+
+    assert findings == []
+
+
+def test_detect_category_discontinuity_warns_when_category_disappears_and_returns():
+    """Flags a missing middle month because that often means a category-level data gap."""
+    df = pd.DataFrame(
+        {
+            "month_year": pd.PeriodIndex(
+                ["2025-01", "2025-03", "2025-01", "2025-02", "2025-03"], freq="M"
+            ),
+            "product": [
+                "Bean Chili",
+                "Bean Chili",
+                "Tofu Curry",
+                "Tofu Curry",
+                "Tofu Curry",
+            ],
+            "category": [
+                "Legumes",
+                "Legumes",
+                "Plant-based meats",
+                "Plant-based meats",
+                "Plant-based meats",
+            ],
+            "kilos_total": [10.0, 9.0, 4.0, 5.0, 6.0],
+        }
+    )
+
+    findings, export_df = detect_category_discontinuity(df, metric_total="kilos_total")
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["count"] == 1
+    assert "Legumes" in findings[0]["sample_values"][0]
+    assert "Feb 2025" in findings[0]["sample_values"][0]
+    assert export_df.iloc[0]["category"] == "Legumes"
+    assert export_df.iloc[0]["gap_months"] == "Feb 2025"
+
+
+def test_detect_category_discontinuity_succeeds_when_categories_are_continuous():
+    df = pd.DataFrame(
+        {
+            "month_year": pd.period_range("2025-01", periods=3, freq="M").repeat(2),
+            "category": [
+                "Legumes",
+                "Plant-based meats",
+                "Legumes",
+                "Plant-based meats",
+                "Legumes",
+                "Plant-based meats",
+            ],
+            "kilos_total": [10.0, 6.0, 11.0, 7.0, 9.0, 5.0],
+        }
+    )
+
+    findings, export_df = detect_category_discontinuity(df, metric_total="kilos_total")
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["count"] == 0
+    assert export_df.empty
+
+
+def test_check_single_product_dominance_does_not_flag_at_exact_thirty_percent():
+    """Exactly-on-threshold product concentration should not create a false positive."""
+    df = pd.DataFrame(
+        {
+            "product": ["Tofu", "Beans", "Tempeh", "Lentils"],
+            "kilos_total": [30.0, 25.0, 25.0, 20.0],
+        }
+    )
+
+    findings = check_single_product_dominance(df, "kilos_total")
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["count"] == 0
+    assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.30)
+
+
+def test_check_single_product_dominance_flags_above_thirty_percent():
+    df = pd.DataFrame(
+        {
+            "product": ["Tofu", "Beans", "Tempeh", "Lentils"],
+            "kilos_total": [30.01, 24.99, 25.0, 20.0],
+        }
+    )
+
+    findings = check_single_product_dominance(df, "kilos_total", threshold_pct=0.30)
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+    assert findings[0]["metadata"]["top_product"] == "Tofu"
+    assert findings[0]["metadata"]["top_product_share"] == pytest.approx(0.3001)
+
+
+def test_check_category_concentration_does_not_flag_at_exact_thirty_percent():
+    df = pd.DataFrame(
+        {
+            "category": ["Legumes", "Plant-based meats", "Poultry", "Eggs"],
+            "kilos_total": [30.0, 25.0, 25.0, 20.0],
+        }
+    )
+
+    findings = check_category_concentration(df, "kilos_total")
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["count"] == 0
+    assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.30)
+
+
+def test_check_category_concentration_flags_above_thirty_percent():
+    df = pd.DataFrame(
+        {
+            "category": ["Legumes", "Plant-based meats", "Poultry", "Eggs"],
+            "kilos_total": [30.01, 24.99, 25.0, 20.0],
+        }
+    )
+
+    findings = check_category_concentration(df, "kilos_total")
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+    assert findings[0]["metadata"]["top_category"] == "Legumes"
+    assert findings[0]["metadata"]["top_category_share"] == pytest.approx(0.3001)
+
+
+def _category_discontinuity_with_a_one_month_gap() -> dict[str, object]:
+    df = pd.DataFrame(
+        {
+            "month_year": pd.PeriodIndex(
+                ["2025-01", "2025-03", "2025-01", "2025-02", "2025-03"], freq="M"
+            ),
+            "category": ["Legumes", "Legumes", "Poultry", "Poultry", "Poultry"],
+            "kilos_total": [10.0, 9.0, 5.0, 6.0, 7.0],
+        }
+    )
+    findings, _ = detect_category_discontinuity(df, metric_total="kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "min_gap_months": findings[0]["metadata"]["min_gap_months"],
+    }
+
+
+def _top_product_at_35_percent() -> dict[str, object]:
+    df = pd.DataFrame({"product": ["Tofu", "Beans", "Tempeh"], "kilos_total": [35.0, 33.0, 32.0]})
+    findings = check_single_product_dominance(df, "kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "threshold_pct": findings[0]["metadata"]["threshold_pct"],
+    }
+
+
+def _top_category_at_35_percent() -> dict[str, object]:
+    df = pd.DataFrame(
+        {"category": ["Legumes", "Poultry", "Eggs"], "kilos_total": [35.0, 33.0, 32.0]}
+    )
+    findings = check_category_concentration(df, "kilos_total")
+    return {
+        "status": findings[0]["status"],
+        "threshold_pct": findings[0]["metadata"]["threshold_pct"],
+    }
+
+
+# Each input lands on the other side of the checked-in threshold from the override, so a case
+# passes only if the check read the override rather than the default.
+@pytest.mark.parametrize(
+    ("overrides", "observe", "expected"),
+    [
+        pytest.param(
+            {"category_discontinuity": {"min_gap_months": 2}},
+            _category_discontinuity_with_a_one_month_gap,
+            {"status": "success", "min_gap_months": 2},
+            id="category_discontinuity",
+        ),
+        pytest.param(
+            {"single_product_dominance": {"threshold_pct": 0.40}},
+            _top_product_at_35_percent,
+            {"status": "success", "threshold_pct": 0.40},
+            id="single_product_dominance",
+        ),
+        pytest.param(
+            {"category_concentration": {"threshold_pct": 0.40}},
+            _top_category_at_35_percent,
+            {"status": "success", "threshold_pct": 0.40},
+            id="category_concentration",
+        ),
+    ],
+)
+def test_checks_read_their_thresholds_from_yaml(
+    overrides: dict[str, dict[str, float]],
+    observe: Callable[[], object],
+    expected: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config_path = tmp_path / "diagnostic_thresholds.yaml"
+    config_path.write_text(yaml.safe_dump(overrides))
+    monkeypatch.setattr(thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+
+    assert observe() == expected
