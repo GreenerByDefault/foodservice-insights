@@ -1,4 +1,5 @@
 <script lang="ts">
+import { toast } from 'svelte-sonner';
 import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
 import { authMode } from '#lib/auth/mode.js';
@@ -11,6 +12,11 @@ import ChangeEmailForm from './change-email-form.svelte';
 import DeleteAccount from './delete-account.svelte';
 
 let { data }: PageProps = $props();
+
+async function nameSaved(name: string) {
+  await refreshAll();
+  toast.success(`Name updated to ${name}`);
+}
 </script>
 
 <svelte:head>
@@ -34,7 +40,7 @@ let { data }: PageProps = $props();
   <DisplayNameForm
     initialName={data.user.displayName ?? ''}
     submitLabel="Save"
-    onSaved={refreshAll}
+    onSaved={nameSaved}
   />
 
   {#if authMode() === 'supabase'}

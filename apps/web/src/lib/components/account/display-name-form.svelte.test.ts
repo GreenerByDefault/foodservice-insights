@@ -6,14 +6,10 @@ import {
   stubPendingFetch,
   stubUnreachableFetch,
 } from '#lib/testing/fetch.js';
-import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import DisplayNameForm from './display-name-form.svelte';
-
-vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  resetToastMocks();
 });
 
 function props(onSaved = vi.fn().mockResolvedValue(undefined)) {
@@ -37,7 +33,7 @@ describe('DisplayNameForm', () => {
     await expect.element(input).toHaveValue('Unsaved Draft');
   });
 
-  test('saves the trimmed name, then calls onSaved and toasts', async () => {
+  test('saves the trimmed name, then hands it to onSaved', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
     const onSaved = vi.fn().mockResolvedValue(undefined);
     const screen = await render(DisplayNameForm, props(onSaved));
@@ -45,17 +41,16 @@ describe('DisplayNameForm', () => {
     await screen.getByLabelText('Your name').fill('  Alex Baker  ');
     await screen.getByRole('button', { name: 'Save' }).click();
 
-    await expect.poll(() => onSaved.mock.calls.length).toBe(1);
+    await expect.poll(() => onSaved.mock.calls).toEqual([['Alex Baker']]);
     expectFetched(fetchMock, {
       url: '/api/account',
       method: 'PATCH',
       body: { displayName: 'Alex Baker' },
     });
     await expect.element(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
-    expect(toast.success).toHaveBeenCalledExactlyOnceWith('Name updated to Alex Baker');
   });
 
-  test('an unknown outcome shows an alert, and neither calls onSaved nor toasts', async () => {
+  test('an unknown outcome shows an alert, and does not call onSaved', async () => {
     stubUnreachableFetch();
     const onSaved = vi.fn();
     const screen = await render(DisplayNameForm, props(onSaved));
@@ -66,7 +61,6 @@ describe('DisplayNameForm', () => {
       .element(screen.getByRole('alert'))
       .toHaveTextContent(/not sure whether your name was saved/);
     expect(onSaved).not.toHaveBeenCalled();
-    expect(toast.success).not.toHaveBeenCalled();
   });
 
   test('the button disables and swaps its label while the request is in flight', async () => {
