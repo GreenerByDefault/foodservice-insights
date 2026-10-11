@@ -9,8 +9,6 @@ into `gbd_foodservice_insights` when the worker needs it. The product has one ca
 symbol to its callers shows what is still in the product only for the lab, or only to tolerate
 inputs the product never sends:
 
-- `aggregation.category_highest_vs_lowest_months` → `aggregation["highest_lowest"]`: computed on
-  every product run, shown nowhere in the PDF or client workbook; only the lab's QA workbook reads it.
 - `report/utils.py` (`normalize_diner_meal_mapping`, `_to_month_period`, `compute_month_alignment`,
   `divide_by_diner_meals`, the string branch of `ensure_month_year_column`) and
   `schema.validate_region`: parse and re-validate month keys, counts and region strings at every
@@ -35,21 +33,14 @@ inputs the product never sends:
   (`_validate_rows`), so nothing below it needs case folding. *Rejected: keeping it for the lab's
   hand-edited CSVs* — the lab now fails at `build_food_report` with the offending names, which
   is the rule ("fail loudly on bad data"), and it already did for emission factors (#492).
-- **What the lab alone reads moves to the lab**, with its tests: the highest-vs-lowest table,
-  the mapping and region parsers. (The merge summary already did: `spreadsheet.merge_summary`,
-  fed by `filter_to_entrees`' non-entree count.) `MergeCounts` keeps its counts (the seam
+- **What the lab alone reads moves to the lab**, with its tests: the mapping and region
+  parsers. (The merge summary already did: `spreadsheet.merge_summary`, fed by
+  `filter_to_entrees`' non-entree count. So did the highest-vs-lowest month table, now
+  `food_report/diagnostics.category_highest_vs_lowest_months`, computed in `_write_qa_workbook`.) `MergeCounts` keeps its counts (the seam
   docstring in `analysis.py` names it as where result metadata would come from).
 - Serving mode stays.
 
-## PR 1 — Move the highest-vs-lowest month table to the lab
-
-- `category_highest_vs_lowest_months` → `gbd_foodservice_insights_lab/food_report/diagnostics.py`,
-  with its two tests. `run_aggregation_pipeline` drops `highest_lowest`; the lab's
-  `_write_qa_workbook` computes it from `report.aggregation["monthly_category_data"]` with
-  `per_diner_metric_name(report.metric_total)`.
-- Golden fixture: unchanged (the table was never in a deliverable).
-
-## PR 2 — `build_food_report` takes typed counts
+## PR 1 — `build_food_report` takes typed counts
 
 - Signature: `diner_meal_mapping: Mapping[pd.Period, float]`. `analyze()` builds it:
   `{pd.Period(month, freq="M"): float(count) for month, count in request.monthly_counts.items()}`.
@@ -68,7 +59,7 @@ inputs the product never sends:
   `test_hands_the_report_the_forms_answers` asserts the Period-keyed mapping.
 - Touches `analyze()`; `caches-to-supabase.md` PRs 4–5 touch its cache lines, not these.
 
-## PR 3 — Compare categories exactly
+## PR 2 — Compare categories exactly
 
 - Delete `_normalize_categories_to_canonical_labels`; `create_template_data`,
   `summarize_animal_emissions_intensity`, `calculate_animal_emissions_concentration`,
@@ -88,7 +79,7 @@ inputs the product never sends:
 ## Verification
 
 `just lint && just check && just test && just test-lab` per PR, golden fixture regenerated and
-diffed. After PR 3, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
+diffed. After PR 2, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
 python/insights/gbd_foodservice_insights/emissions.py` finds no category comparison, and
 `scripts/profile_report.py` (#499) no longer lists
 `_normalize_categories_to_canonical_labels`. `python/insights/README.md` and the lab README's

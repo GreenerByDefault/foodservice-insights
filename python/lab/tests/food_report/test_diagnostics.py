@@ -6,6 +6,7 @@ import pytest
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 from gbd_foodservice_insights_lab.food_report import diagnostics
 from gbd_foodservice_insights_lab.food_report.diagnostics import (
+    category_highest_vs_lowest_months,
     check_category_concentration,
     check_meat_quantities,
     check_missing_weeks_within_month,
@@ -674,3 +675,75 @@ def test_checks_read_their_thresholds_from_yaml(
     monkeypatch.setattr(diagnostics, "get_diagnostic_threshold", get_threshold)
 
     assert observe() == expected
+
+
+def test_category_highest_vs_lowest_months_reports_the_peak_to_trough_ratio():
+    df = pd.DataFrame(
+        {"category": ["fruit"] * 3, "kilos per diner": [0.1, 0.4, 0.05]},
+    )
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner")
+
+    assert result.to_dict("records") == [{"category": "fruit", "times_higher": 8.0}]
+
+
+def test_category_highest_vs_lowest_months_ranks_categories_and_keeps_the_exact_2x_boundary():
+    df = pd.DataFrame(
+        {
+            "category": ["a", "a", "b", "b", "c", "c"],
+            "kilos per diner": [1.0, 2.0, 1.0, 3.04, 1.0, 1.99],
+        }
+    )
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner")
+
+    # "c" is under 2x so it is dropped; the rest sort descending and round to one decimal.
+    assert result.to_dict("records") == [
+        {"category": "b", "times_higher": 3.0},
+        {"category": "a", "times_higher": 2.0},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        pytest.param([0.0, 5.0], float("inf"), id="zero-trough-with-a-peak-is-infinite"),
+        pytest.param([0.0, 0.0], None, id="all-zero-is-flat-and-dropped"),
+    ],
+)
+def test_category_highest_vs_lowest_months_handles_a_zero_trough(values, expected):
+    df = pd.DataFrame({"category": ["fruit"] * 2, "kilos per diner": values})
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner")
+
+    expected_rows = [] if expected is None else [{"category": "fruit", "times_higher": expected}]
+    assert result.to_dict("records") == expected_rows
+
+
+def test_category_highest_vs_lowest_months_skips_categories_with_no_values():
+    df = pd.DataFrame(
+        {
+            "category": ["empty", "empty", "fruit", "fruit"],
+            "kilos per diner": [float("nan"), float("nan"), 1.0, 4.0],
+        }
+    )
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner")
+
+    assert result["category"].tolist() == ["fruit"]
+
+
+def test_category_highest_vs_lowest_months_returns_empty_frame_when_no_category_hits_threshold():
+    df = pd.DataFrame({"category": ["legumes", "legumes"], "kilos per diner": [0.1, 0.12]})
+
+    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner")
+
+    assert result.empty
+    assert result.columns.tolist() == ["category", "times_higher"]
+
+
+def test_category_highest_vs_lowest_months_rejects_a_missing_metric_column():
+    df = pd.DataFrame({"category": ["fruit"], "kilos per diner": [1.0]})
+
+    with pytest.raises(ValueError, match="kilos per meal"):
+        category_highest_vs_lowest_months(df, metric_col="kilos per meal")
