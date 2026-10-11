@@ -118,7 +118,9 @@ def test_match_prompt_lists_the_categories() -> None:
 
     client.match_product_to_category("cheddar", ["Cheese", "Butter"])
 
-    assert "['Cheese', 'Butter']" in fake.requests[0]["messages"][0]["content"]
+    assert "\nCheese\nButter\n" in fake.requests[0]["messages"][0]["content"]
+    assert 'say "None"' not in fake.requests[0]["messages"][0]["content"]
+    assert "No Matches Found" in fake.requests[0]["messages"][0]["content"]
 
 
 def test_match_returns_the_models_text_untouched() -> None:
