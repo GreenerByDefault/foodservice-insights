@@ -133,8 +133,7 @@ def compare_missing_snapshots(
     """Create findings for missingness a stage introduced into columns it was handed."""
     findings: list[Finding] = []
     for column, after_count in after.items():
-        # A column the stage added is its own output, which its own checks report: an unfactored
-        # category's missing emissions are `unmatched_emission_factors`.
+        # A column the stage added is its own output, for the stage itself to check.
         if column not in before:
             continue
         before_count = before[column]

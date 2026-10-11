@@ -25,12 +25,6 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
 - A category whose every line weighs 0 gets a `NaN` driver share (`_safe_percentage`,
   `report/aggregation.py`), so its driver panel prints "nan%", the whole drivers section is
   stamped "[DATA WARNING]", and the customer's quality page lists `plot_input_missing_values`.
-- On the product path, every category now has a factor: the cache admits only GBD categories
-  (#455, #475), the model's answers are snapped to one or to "No Matches Found" (#469), which
-  `merge_categorizations` drops, and #410 restored the one null factor. The lab still reads
-  hand-editable categorized CSVs, where a typo (`Mlik`) yields `NaN` emissions under a
-  `warning`: its kilos count toward weights and the plant share and vanish from every CO2e
-  figure.
 
 **Silent failures.**
 
@@ -43,13 +37,12 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
 - **Behavioural changes to ported code are each their own PR**, so a fixture diff reviews one
   thing. Each PR below says why it is worth landing on its own.
 - **No data-driven check may abort a product run.** An `error` finding is for our bugs (a
-  missing column, row drift, a stage raising, a category we failed to give a factor), which
-  correctly land as `unknown` with a traceback. The headcount escalation becomes a warning in
-  `diagnostic_thresholds.yaml`, for the lab too; after that, every `error` a diagnostic can file
-  is unreachable from customer data on the product path. *Rejected: a product-only threshold
-  profile* — two vocabularies for one check. *Rejected: mapping the `ValueError` to
-  `UnusableDataError`* — unusual headcounts are not unusable data, and "contact GBD" would be
-  the wrong advice.
+  missing column, row drift, a stage raising), which correctly land as `unknown` with a
+  traceback. The headcount escalation becomes a warning in `diagnostic_thresholds.yaml`, for the
+  lab too; after that, every `error` a diagnostic can file is unreachable from customer data on
+  the product path. *Rejected: a product-only threshold profile* — two vocabularies for one
+  check. *Rejected: mapping the `ValueError` to `UnusableDataError`* — unusual headcounts are
+  not unusable data, and "contact GBD" would be the wrong advice.
 - **Identical lines are data, and nothing checks for them.** The exact-duplicate-rows check is
   gone, not demoted. It was written for the lab, where several client exports are stitched
   together and can overlap; the lab's `detect_component_duplicate_risk` checks that where the
@@ -72,12 +65,15 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
   volatility, partial first or last month, outlier line items) is GBD's call; this
   plan only stops `info` leaking.
 - **Every category in `GBD_categories.yaml` has a factor in every region**, pinned by
-  `test_emissions.py::test_every_category_has_an_emission_factor`. `Unspecified non dairy milk`
-  carries the mean of the four named plant milks, the method GBD used from its first commit
-  until the November 2025 move to per-region factors dropped it to `null`. With the cache
-  filtered too, a row without a factor can only mean our bug or a lab typo, and
-  `calculate_emissions` raises naming the category. *Rejected: an `error` finding* — a finding
-  exists to be listed in a report, and this one could only abort. *Rejected: deleting the
+  `test_emissions.py::test_every_category_has_an_emission_factor`, and the product path assigns
+  only GBD categories: the cache admits nothing else (#455, #475), and the model's answers are
+  snapped to one or to "No Matches Found" (#469), which `merge_categorizations` drops.
+  `Unspecified non dairy milk` carries the mean of the four named plant milks, the method GBD
+  used from its first commit until the November 2025 move to per-region factors dropped it to
+  `null`. A row without a factor can therefore only mean our bug or a typo in a lab's
+  hand-edited categorized CSV, and `calculate_emissions` raises `ValueError` naming every such
+  category, so `build_food_report` never sees a `NaN` emission. *Rejected: an `error` finding*
+  — a finding exists to be listed in a report, and this one could only abort. *Rejected: deleting the
   category* — it removes something GBD built on purpose, where restoring the factor undoes an
   accidental regression and needs no one's sign-off. *Rejected: excluding factorless categories
   from the model's list* — a second notion of "valid category". The match prompt's rule sending
@@ -125,20 +121,7 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
 - Worth it: reproduced 11 October, that upload aborts, over counts the user typed and the
   contract accepted, and the last abort a real upload is likely to hit.
 
-## PR 2 — a category without an emission factor raises
-
-- `calculate_emissions` raises `ValueError` naming every category without a factor, instead of
-  filing `unmatched_emission_factors`; `return_findings` and its three overloads go. Every row
-  then has emissions, so `emissions_missing_by_category`, `emissions_missing_by_month` and
-  `monthly_emissions_missing` in `build_food_report` go with their tests, as does the comment
-  in `compare_missing_snapshots` that points at the old finding.
-- Unreachable on the product path (see Context), so it no longer waits on
-  `categorization-cache.md`. In the lab, a typo in a categorized CSV now aborts naming the category;
-  tell the data scientists.
-- Tests: a factorless category raises from `calculate_emissions` and from `build_food_report`
-  in procurement mode; serving mode, which computes no emissions, is unaffected.
-
-## PR 3 — a zero-weight category's driver share is 0%, not NaN
+## PR 2 — a zero-weight category's driver share is 0%, not NaN
 
 - `_safe_percentage` (`report/aggregation.py`) returns 0.0 for a zero denominator, as
   `identify_overall_drivers` already does for the whole file. A category bought only at weight
@@ -146,10 +129,10 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
 - Tests: `build_food_report` with a category whose lines all weigh 0 gives that category's
   drivers a `percentage` of 0.0, and `build_report_charts` files no finding.
 - Worth it: found 11 October; a zero-weight line is ordinary data (see Decisions), and today
-  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 4, which deletes the
+  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 3, which deletes the
   input check that is today the only sign of it.
 
-## PR 4 — a chart or split failure fails the run
+## PR 3 — a chart or split failure fails the run
 
 - `_safe_plot`, `_placeholder_figure`, the input checks and the category-driver `try` in
   `report/plots/report.py` go, and so do the split and share `try` blocks in
@@ -158,7 +141,7 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
   findings. `FoodReport.findings` is then the whole list.
 - This adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
   month, a 200-character product and every category over twelve months: no chart fell back
-  except PR 3's case. The split and share return `None` for every no-data case, so they raise
+  except PR 2's case. The split and share return `None` for every no-data case, so they raise
   only on our bug.
 - Tests: the `_safe_plot` and placeholder tests in `plots/test_report.py` go; a chart
   monkeypatched to raise surfaces from `build_report_charts`. The lab's failure manifest
@@ -180,6 +163,6 @@ handed and what the sheets contain, not that files exist.
   than accept it.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - PR 1 is the only abort a real upload is likely to hit. Land it first.
-- PR 4 turns any chart bug the probe missed into a failed run. That is the intent, but watch
+- PR 3 turns any chart bug the probe missed into a failed run. That is the intent, but watch
   `unknown` failures after it deploys.
 - No PR here waits on GBD.

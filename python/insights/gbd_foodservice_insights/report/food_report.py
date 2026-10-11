@@ -219,58 +219,16 @@ def build_food_report(
     if mode == "procurement" and metric_total in df.columns:
         before = missing_snapshot(df)
         before_rows = len(df)
-        df, emissions_findings = emissions.calculate_emissions(
+        df = emissions.calculate_emissions(
             df,
             weight_col=metric_total,
             category_col="category",
             region=region,
-            return_findings=True,
         )
-        quality_findings.extend(emissions_findings)
         quality_findings.extend(
             compare_missing_snapshots(before, missing_snapshot(df), stage="emissions")
         )
         quality_findings.extend(check_row_count_drift(before_rows, len(df), stage="emissions"))
-        missing_emissions = df[df["emissions_kg_co2e"].isna()].copy()
-        if not missing_emissions.empty:
-            by_category = (
-                missing_emissions.groupby("category", dropna=False)
-                .size()
-                .sort_values(ascending=False)
-            )
-            quality_findings.append(
-                make_finding(
-                    stage="emissions",
-                    category="emissions_missing_by_category",
-                    status="warning",
-                    message=(f"{len(missing_emissions)} rows have missing emissions values."),
-                    column="emissions_kg_co2e",
-                    count=len(missing_emissions),
-                    metadata={"counts_by_category": by_category.head(10).to_dict()},
-                )
-            )
-
-            if "month_year" in missing_emissions.columns:
-                by_month = (
-                    missing_emissions.groupby("month_year", dropna=False)
-                    .size()
-                    .sort_values(ascending=False)
-                )
-                quality_findings.append(
-                    make_finding(
-                        stage="emissions",
-                        category="emissions_missing_by_month",
-                        status="warning",
-                        message=(f"Missing emissions occur in {by_month.shape[0]} months."),
-                        column="emissions_kg_co2e",
-                        count=len(missing_emissions),
-                        metadata={
-                            "counts_by_month": {
-                                str(k): int(v) for k, v in by_month.head(10).items()
-                            }
-                        },
-                    )
-                )
         raise_on_error_findings(quality_findings)
 
     _log_stage("aggregation", report_progress)
@@ -304,23 +262,9 @@ def build_food_report(
         )
 
         if not monthly_cat.empty:
-            merged = _attach_monthly_category_emissions(monthly_cat, df)
-            agg_results["monthly_category_data"] = merged
-            missing_emissions_count = int(merged["emissions_kg_co2e"].isna().sum())
-            if missing_emissions_count > 0:
-                quality_findings.append(
-                    make_finding(
-                        stage="aggregation",
-                        category="monthly_emissions_missing",
-                        status="warning",
-                        message=(
-                            f"Monthly category table has {missing_emissions_count} rows "
-                            "with missing emissions after merge."
-                        ),
-                        column="emissions_kg_co2e",
-                        count=missing_emissions_count,
-                    )
-                )
+            agg_results["monthly_category_data"] = _attach_monthly_category_emissions(
+                monthly_cat, df
+            )
 
     _log_stage("client_metrics_and_diagnostics", report_progress)
     plant_animal_split = None

@@ -48,30 +48,6 @@ def test_attach_monthly_category_emissions_keeps_each_category_share():
     )
 
 
-def test_attach_monthly_category_emissions_leaves_unfactored_category_missing():
-    raw = pd.DataFrame(
-        {
-            "month_year": [JAN, JAN],
-            "category": ["beef", "mystery"],
-            "emissions_kg_co2e": [30.0, np.nan],
-        }
-    )
-    monthly_cat = pd.DataFrame(
-        {
-            "month_year": [JAN, JAN],
-            "category": ["beef", "mystery"],
-            "kilos_total": [4.0, 3.0],
-        }
-    )
-
-    out = _attach_monthly_category_emissions(monthly_cat, raw)
-
-    pd.testing.assert_frame_equal(
-        out,
-        monthly_cat.assign(emissions_kg_co2e=[30.0, np.nan]),
-    )
-
-
 def _rows(metric: str = "kilos_total") -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -199,8 +175,7 @@ def test_emissions_that_drop_a_row_abort_before_any_later_stage_runs(
     calculate_emissions = emissions.calculate_emissions
 
     def drop_last_row(df: pd.DataFrame, **kwargs: Any) -> Any:
-        out, findings = calculate_emissions(df, **kwargs)
-        return out.iloc[:-1], findings
+        return calculate_emissions(df, **kwargs).iloc[:-1]
 
     monkeypatch.setattr(emissions, "calculate_emissions", drop_last_row)
 
@@ -243,37 +218,6 @@ def test_a_stage_that_raises_surfaces_its_own_exception(
 
     with pytest.raises(StageExplodedError, match=stage):
         _build(_rows())
-
-
-def test_unmatched_emission_factors_produce_category_and_month_findings():
-    rows = _rows().assign(
-        category=["Beef and Buffalo Meat", "Mystery", "Beef and Buffalo Meat", "Mystery"]
-    )
-
-    report = _build(rows)
-
-    assert _findings(report, "emissions_missing_by_category") == [
-        {
-            "stage": "emissions",
-            "category": "emissions_missing_by_category",
-            "status": "warning",
-            "message": "2 rows have missing emissions values.",
-            "column": "emissions_kg_co2e",
-            "count": 2,
-            "metadata": {"counts_by_category": {"Mystery": 2}},
-        }
-    ]
-    assert _findings(report, "emissions_missing_by_month") == [
-        {
-            "stage": "emissions",
-            "category": "emissions_missing_by_month",
-            "status": "warning",
-            "message": "Missing emissions occur in 2 months.",
-            "column": "emissions_kg_co2e",
-            "count": 2,
-            "metadata": {"counts_by_month": {"2024-01": 1, "2024-02": 1}},
-        }
-    ]
 
 
 def test_aggregation_failure_raises_from_the_original_exception(
@@ -387,31 +331,22 @@ def test_a_category_bought_in_some_months_only_is_an_info_finding():
     ]
 
 
-def test_an_unfactored_category_files_no_new_missing_values():
-    typo = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2024-01-10"]),
-            "product": ["Oat Milk"],
-            "category": ["Mlik"],
-            "kilos_total": [5.0],
-        }
+def _with_typo_category(rows: pd.DataFrame) -> pd.DataFrame:
+    typo = rows.iloc[[0]].assign(product="Oat Milk", category="Mlik")
+    return pd.concat([rows, typo], ignore_index=True)
+
+
+def test_a_category_without_an_emission_factor_aborts_a_procurement_report():
+    with pytest.raises(ValueError, match="No emission factor for categories: Mlik"):
+        _build(_with_typo_category(_rows()))
+
+
+def test_a_serving_report_needs_no_emission_factors():
+    report = _build(
+        _with_typo_category(_rows("servings total")), mode="serving", diner_or_meal="meal"
     )
 
-    report = _build(pd.concat([_rows(), typo], ignore_index=True))
-
-    assert _findings(report, "unmatched_emission_factors") == [
-        {
-            "stage": "emissions",
-            "category": "unmatched_emission_factors",
-            "status": "warning",
-            "message": (
-                "Some categories have no emission factor and produced missing emissions values."
-            ),
-            "count": 1,
-            "sample_values": ["Mlik"],
-        }
-    ]
-    assert _findings(report, "new_missing_values") == []
+    assert "Mlik" in report.rows["category"].tolist()
 
 
 def test_serving_mode_computes_no_emissions():
