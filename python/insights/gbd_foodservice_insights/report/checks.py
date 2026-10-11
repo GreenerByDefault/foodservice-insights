@@ -12,10 +12,7 @@ from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
     metric_display_label,
 )
-from gbd_foodservice_insights.report.thresholds import (
-    get_diagnostic_threshold,
-    resolve_diagnostic_threshold,
-)
+from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +39,8 @@ def detect_unusual_sales(
     df: pd.DataFrame,
     summary_col: str,
     product_name_col: str,
-    threshold: float | None = None,
     *,
     category_col: str = "category",
-    min_category_rows: int | None = None,
-    warning_share_threshold: float | None = None,
-    extreme_ratio_threshold: float | None = None,
-    zero_mad_ratio_threshold: float | None = None,
-    small_category_ratio_threshold: float | None = None,
     sample_limit: int = 5,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag unusually large line items before bad rows distort totals and trends.
@@ -60,40 +51,21 @@ def detect_unusual_sales(
     robust to skewed data, while ratio-based fallbacks still catch obvious
     extremes in categories with very low spread.
     """
-    threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "mad_threshold",
-        threshold,
-    )
+    threshold = get_diagnostic_threshold("outlier_line_items", "mad_threshold")
     min_category_rows = max(
-        int(
-            resolve_diagnostic_threshold(
-                "outlier_line_items",
-                "min_category_rows",
-                float(min_category_rows) if min_category_rows is not None else None,
-            )
-        ),
-        1,
+        int(get_diagnostic_threshold("outlier_line_items", "min_category_rows")), 1
     )
-    warning_share_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "warning_share_threshold",
-        warning_share_threshold,
+    warning_share_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "warning_share_threshold"
     )
-    extreme_ratio_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "extreme_ratio_threshold",
-        extreme_ratio_threshold,
+    extreme_ratio_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "extreme_ratio_threshold"
     )
-    zero_mad_ratio_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "zero_mad_ratio_threshold",
-        zero_mad_ratio_threshold,
+    zero_mad_ratio_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "zero_mad_ratio_threshold"
     )
-    small_category_ratio_threshold = resolve_diagnostic_threshold(
-        "outlier_line_items",
-        "small_category_ratio_threshold",
-        small_category_ratio_threshold,
+    small_category_ratio_threshold = get_diagnostic_threshold(
+        "outlier_line_items", "small_category_ratio_threshold"
     )
 
     required_columns = (summary_col, product_name_col, category_col)
@@ -296,8 +268,6 @@ def detect_unusual_sales(
 def check_per_product_weight_bounds(
     df: pd.DataFrame,
     metric_col: str,
-    low: float | None = None,
-    high: float | None = None,
     sample_limit: int = 20,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag line items with weights outside the hard bounds used for unit-error QA.
@@ -316,8 +286,8 @@ def check_per_product_weight_bounds(
         line_subject = "serving count"
     unit_label = _unit_label(metric_col)
 
-    low = resolve_diagnostic_threshold(threshold_group, "low", low)
-    high = resolve_diagnostic_threshold(threshold_group, "high", high)
+    low = get_diagnostic_threshold(threshold_group, "low")
+    high = get_diagnostic_threshold(threshold_group, "high")
     if low > high:
         raise ValueError(f"Per-product weight bounds must satisfy low <= high; got {low} > {high}.")
 
@@ -619,21 +589,15 @@ def check_diner_meal_reasonableness(
     metric_total: str,
     *,
     diner_or_meal: DinerOrMeal,
-    low: float | None = None,
-    high: float | None = None,
     sample_limit: int = 6,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag months whose diner or meal count looks mistyped, which would make that month's
     per-diner and per-meal figures wrong. Expects `month_year` as `Period[M]`."""
-    low_threshold = resolve_diagnostic_threshold(
-        "diner_meal_count_reasonableness",
-        "low_ratio_threshold",
-        low,
+    low_threshold = get_diagnostic_threshold(
+        "diner_meal_count_reasonableness", "low_ratio_threshold"
     )
-    high_threshold = resolve_diagnostic_threshold(
-        "diner_meal_count_reasonableness",
-        "high_ratio_threshold",
-        high,
+    high_threshold = get_diagnostic_threshold(
+        "diner_meal_count_reasonableness", "high_ratio_threshold"
     )
     thresholds = {"low_ratio_threshold": low_threshold, "high_ratio_threshold": high_threshold}
 

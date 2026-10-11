@@ -8,10 +8,7 @@ import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.categories import get_meat_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
-from gbd_foodservice_insights.report.thresholds import (
-    get_diagnostic_threshold,
-    resolve_diagnostic_threshold,
-)
+from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 from Levenshtein import distance
 
 
@@ -161,16 +158,11 @@ def find_close_product_pairs(
     if product_column not in df.columns:
         return pd.DataFrame()
 
-    max_levenshtein_distance = max(
-        int(
-            resolve_diagnostic_threshold(
-                "near_duplicate_product_names",
-                "max_levenshtein_distance",
-                float(max_levenshtein_distance) if max_levenshtein_distance is not None else None,
-            )
-        ),
-        0,
-    )
+    if max_levenshtein_distance is None:
+        max_levenshtein_distance = int(
+            get_diagnostic_threshold("near_duplicate_product_names", "max_levenshtein_distance")
+        )
+    max_levenshtein_distance = max(max_levenshtein_distance, 0)
 
     product_counts: pd.Series = df[product_column].value_counts()
     products: list[str] = product_counts.index.tolist()
@@ -418,7 +410,6 @@ def _check_top_share_concentration(
     diagnostic_name: str,
     threshold_key: str,
     subject_label: str,
-    threshold_override: float | None = None,
 ) -> list[Finding]:
     """Check whether one grouped value dominates the report total.
 
@@ -442,12 +433,7 @@ def _check_top_share_concentration(
             )
         ]
 
-    threshold_pct = resolve_diagnostic_threshold(
-        diagnostic_name,
-        threshold_key,
-        threshold_override,
-    )
-    threshold_pct = max(float(threshold_pct), 0.0)
+    threshold_pct = max(get_diagnostic_threshold(diagnostic_name, threshold_key), 0.0)
 
     grouped_totals = (
         df.assign(_metric_value=pd.to_numeric(df[metric_col], errors="coerce"))
@@ -541,7 +527,6 @@ def check_single_product_dominance(
     metric_col: str,
     *,
     product_col: str = "product",
-    threshold_pct: float | None = None,
 ) -> list[Finding]:
     """Flag a single product dominating totals before the report is over-read.
 
@@ -555,7 +540,6 @@ def check_single_product_dominance(
         diagnostic_name="single_product_dominance",
         threshold_key="threshold_pct",
         subject_label="product",
-        threshold_override=threshold_pct,
     )
 
 
@@ -585,7 +569,6 @@ def check_missing_weeks_within_month(
     df: pd.DataFrame,
     *,
     date_col: str = "date",
-    max_gap_days: float | None = None,
     sample_limit: int = 6,
 ) -> list[Finding]:
     """Flag long within-month stretches with no transactions in day-level data.
@@ -610,14 +593,7 @@ def check_missing_weeks_within_month(
         ]
 
     max_gap_days = max(
-        int(
-            resolve_diagnostic_threshold(
-                "missing_weeks_within_month",
-                "max_gap_days",
-                max_gap_days,
-            )
-        ),
-        1,
+        int(get_diagnostic_threshold("missing_weeks_within_month", "max_gap_days")), 1
     )
 
     if not _dates_support_within_month_gap_detection(df[date_col]):

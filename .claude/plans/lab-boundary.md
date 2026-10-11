@@ -37,8 +37,8 @@ inputs the product never sends:
   data has a count above zero happens once, at the top of `build_food_report`, raising
   `ValueError`; the product cannot hit it (the web sends a count ≥ 1 for exactly the file's
   months), the lab can.
-- **Categories are compared exactly.** `report-diagnostics` PR 2 rejects a non-GBD category at
-  the boundary, so nothing below it needs case folding. *Rejected: keeping it for the lab's
+- **Categories are compared exactly.** #501 rejects a non-GBD category at the boundary
+  (`_validate_rows`), so nothing below it needs case folding. *Rejected: keeping it for the lab's
   hand-edited CSVs* — the lab now fails at `build_food_report` with the offending names, which
   is the rule ("fail loudly on bad data"), and it already did for emission factors (#492).
 - **What the lab alone reads moves to the lab**, with its tests: the review table, the merge
@@ -46,7 +46,7 @@ inputs the product never sends:
   `CategorizedProducts` keeps `cleaned_df`, `unique_products_df` and `match_type_counts`;
   `MergeCounts` keeps its counts (the seam docstring in `analysis.py` names it as where result
   metadata would come from).
-- Serving mode stays; see `report-diagnostics.md`.
+- Serving mode stays.
 - The lab-only taxonomy getters in `categories.py` (`get_meat_categories`,
   `clean_GBD_category_name`, `get_dairy_categories`, …) move in `library-types.md` PR 1, where
   they become one-liners; not here.
@@ -94,8 +94,6 @@ inputs the product never sends:
 
 ## PR 4 — Compare categories exactly
 
-Depends on `report-diagnostics` PR 2 (non-GBD categories rejected at the boundary).
-
 - Delete `_normalize_categories_to_canonical_labels`; `create_template_data`,
   `summarize_animal_emissions_intensity`, `calculate_animal_emissions_concentration`,
   `calculate_category_swap_scenarios`, `calculate_plant_animal_split`,
@@ -116,6 +114,6 @@ Depends on `report-diagnostics` PR 2 (non-GBD categories rejected at the boundar
 `just lint && just check && just test && just test-lab` per PR, golden fixture regenerated and
 diffed. After PR 4, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
 python/insights/gbd_foodservice_insights/emissions.py` finds no category comparison, and
-`scripts/profile_report.py` (from `report-diagnostics` PR 1) no longer lists
+`scripts/profile_report.py` (#499) no longer lists
 `_normalize_categories_to_canonical_labels`. `python/insights/README.md` and the lab README's
 description of what the wrapper adds stay accurate; update the sentence on the review CSV.
