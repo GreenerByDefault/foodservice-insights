@@ -12,10 +12,13 @@ from gbd_foodservice_insights.report.checks import (
     detect_unusual_sales,
     run_all_diagnostics,
 )
-from gbd_foodservice_insights.report.quality import Finding
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.quality import Finding, make_finding
+from gbd_foodservice_insights.report.schema import (
+    DiagnosticStatus,
+    DinerOrMeal,
+    quality_status_from_findings,
+)
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
-from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
 
 # ----------------------------------------------------------------------
 # Outliers and weight bounds
@@ -378,7 +381,10 @@ def _check_headcounts(
         }
     )
     return check_diner_meal_reasonableness(
-        df, normalize_diner_meal_mapping(counts), "kilos_total", diner_or_meal=diner_or_meal
+        df,
+        dict(zip(pd.PeriodIndex(list(counts), freq="M"), counts.values(), strict=True)),
+        "kilos_total",
+        diner_or_meal=diner_or_meal,
     )
 
 
@@ -673,3 +679,14 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         ("per_product_weight_bounds", "success"),
         ("date_distribution", "warning"),
     ]
+
+
+def _finding(status: DiagnosticStatus) -> Finding:
+    return make_finding(stage="test", category="test", status=status, message="")
+
+
+def test_quality_status_rolls_up_the_worst_finding():
+    assert quality_status_from_findings([_finding("success")]) == "pass"
+    assert quality_status_from_findings([_finding("success"), _finding("info")]) == "pass"
+    assert quality_status_from_findings([_finding("warning")]) == "warning"
+    assert quality_status_from_findings([_finding("error")]) == "invalid"

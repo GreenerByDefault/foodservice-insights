@@ -9,12 +9,11 @@ into `gbd_foodservice_insights` when the worker needs it. The product has one ca
 symbol to its callers shows what is still in the product only for the lab, or only to tolerate
 inputs the product never sends:
 
-- `report/utils.py` (`normalize_diner_meal_mapping`, `_to_month_period`, `compute_month_alignment`,
-  `divide_by_diner_meals`, the string branch of `ensure_month_year_column`) and
-  `schema.validate_region`: parse and re-validate month keys, counts and region strings at every
-  layer — `build_food_report`, `aggregate_data` (twice, once per grain), and each per-diner chart
-  panel — because the notebooks passed strings. `analyze()` already holds typed values; #462 and
-  #464 made the rows typed, the counts and region are the remainder.
+- `schema.validate_region`, called by `emissions.get_emission_factor` and
+  `calculate_emissions` on every lookup, because the notebooks passed region strings.
+  `analyze()` already holds a typed `Region`; #462 and #464 made the rows typed, and the counts
+  became a `Mapping[pd.Period, float]` checked once in `build_food_report`, so the region is the
+  remainder.
 - `aggregation._normalize_categories_to_canonical_labels` and every `.str.lower()` /
   `{c.lower() for c in …_categories()}` comparison in `aggregation.py`, `emissions.py`, `plots/panels.py` and
   `checks.py`: tolerate hand-edited category names. On the product path every category is a
@@ -23,43 +22,26 @@ inputs the product never sends:
 
 ## Decisions
 
-- **Typed inputs, as #462 did for the rows.** `build_food_report` takes
-  `diner_meal_mapping: Mapping[pd.Period, float]` and `region: Region`; `analyze()` converts
-  its "YYYY-MM" keys with `pd.Period(month, freq="M")`. The one check that every month in the
-  data has a count above zero happens once, at the top of `build_food_report`, raising
-  `ValueError`; the product cannot hit it (the web sends a count ≥ 1 for exactly the file's
-  months), the lab can.
+- **Typed inputs, checked once at the boundary.** `build_food_report` takes
+  `diner_meal_mapping: Mapping[pd.Period, float]` and `region: Region`, and is the one place
+  that refuses a data month without a positive count; the chart panels and
+  `run_aggregation_pipeline` divide by the mapping without re-checking it. `analyze()` builds
+  the keys with `pd.PeriodIndex`, since pandas' stubs type a lone `pd.Period(...)` as possibly
+  `NaT`. The lab parses its own strings at its entry points — `run_food_report` and the pilot
+  `plot_metric_over_time` call `food_report/utils.normalize_diner_meal_mapping` — and the region
+  follows the same pattern.
 - **Categories are compared exactly.** #501 rejects a non-GBD category at the boundary
   (`_validate_rows`), so nothing below it needs case folding. *Rejected: keeping it for the lab's
   hand-edited CSVs* — the lab now fails at `build_food_report` with the offending names, which
   is the rule ("fail loudly on bad data"), and it already did for emission factors (#492).
-- **What the lab alone reads moves to the lab**, with its tests: the mapping and region
-  parsers. (The merge summary already did: `spreadsheet.merge_summary`, fed by
+- **What the lab alone reads moves to the lab**, with its tests: the region parser. (The
+  counts parser already did. So did the merge summary: `spreadsheet.merge_summary`, fed by
   `filter_to_entrees`' non-entree count. So did the highest-vs-lowest month table, now
   `food_report/diagnostics.category_highest_vs_lowest_months`, computed in `_write_qa_workbook`.) `MergeCounts` keeps its counts (the seam
   docstring in `analysis.py` names it as where result metadata would come from).
 - Serving mode stays.
 
-## PR 1 — `build_food_report` takes typed counts
-
-- Signature: `diner_meal_mapping: Mapping[pd.Period, float]`. `analyze()` builds it:
-  `{pd.Period(month, freq="M"): float(count) for month, count in request.monthly_counts.items()}`.
-  `build_food_report` checks once that every `month_year` in the rows has a count > 0 and raises
-  `ValueError` listing the months otherwise; `FoodReport.diner_meal_mapping` stays a plain dict.
-- `aggregate_data` loses `diner_meal_mapping` and `per_diner_meal`; `run_aggregation_pipeline`
-  adds the per-head column by `agg[metric] / agg["month_year"].map(mapping)` for both grains.
-  `plots/panels.py` divides a monthly series the same way instead of `divide_by_diner_meals`.
-- `report/utils.py` keeps `monthly_totals` and a datetime-only `month_year` helper (or
-  `build_food_report` inlines `rows["date"].dt.to_period("M")`); `normalize_diner_meal_mapping`
-  and `_to_month_period` move to the lab's `food_report/utils.py` (its JSON loader is the only
-  caller); `compute_month_alignment`, `divide_by_diner_meals` and the string branch of
-  `ensure_month_year_column` are deleted.
-- `tests/report/test_quality_contract.py` is mostly these helpers' tests: move what survives
-  into `test_food_report.py` / `test_aggregation.py` and delete the file. `test_analysis.py`'s
-  `test_hands_the_report_the_forms_answers` asserts the Period-keyed mapping.
-- Touches `analyze()`; `caches-to-supabase.md` PRs 4–5 touch its cache lines, not these.
-
-## PR 2 — Compare categories exactly
+## PR 1 — Compare categories exactly
 
 - Delete `_normalize_categories_to_canonical_labels`; `create_template_data`,
   `summarize_animal_emissions_intensity`, `calculate_animal_emissions_concentration`,
@@ -78,8 +60,8 @@ inputs the product never sends:
 
 ## Verification
 
-`just lint && just check && just test && just test-lab` per PR, golden fixture regenerated and
-diffed. After PR 2, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
+`just lint && just check && just test && just test-lab`, golden fixture regenerated and
+diffed. Afterwards, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
 python/insights/gbd_foodservice_insights/emissions.py` finds no category comparison, and
 `scripts/profile_report.py` (#499) no longer lists
 `_normalize_categories_to_canonical_labels`. `python/insights/README.md` and the lab README's

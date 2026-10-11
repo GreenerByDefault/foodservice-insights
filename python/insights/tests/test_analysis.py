@@ -430,7 +430,7 @@ def test_hands_the_report_the_forms_answers(
     analyze(request, report_progress=report_progress, llm=KeywordLlmClient())
 
     assert fake_report.kwargs == {
-        "diner_meal_mapping": request.monthly_counts,
+        "diner_meal_mapping": {pd.Period(month, freq="M"): 1000.0 for month in SAMPLE_MONTHS},
         "mode": "procurement",
         "region": "us",
         "diner_or_meal": diner_or_meal,

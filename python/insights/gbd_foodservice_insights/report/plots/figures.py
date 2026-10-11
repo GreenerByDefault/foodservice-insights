@@ -1,5 +1,6 @@
 """Report figures, each a PDF page: single charts, and pages laid out from `panels`."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -31,14 +32,11 @@ from gbd_foodservice_insights.report.schema import metric_display_label
 
 
 def plot_diner_meal_numbers(
-    diner_meal_mapping: dict[Any, Any] | pd.Series,
+    diner_meal_mapping: Mapping[pd.Period, float] | pd.Series,
     diner_or_meal: str = "diner",
 ) -> Figure:
     """Line graph of diner-meal counts per month."""
-    if isinstance(diner_meal_mapping, dict):
-        diner_meal_series = pd.Series(diner_meal_mapping).sort_index()
-    else:
-        diner_meal_series = pd.Series(diner_meal_mapping).sort_index()
+    diner_meal_series = pd.Series(diner_meal_mapping).sort_index()
 
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     x_positions = range(len(diner_meal_series))
@@ -137,7 +135,7 @@ def plot_food_and_drink_comparison_page(
     monthly_category_data: pd.DataFrame,
     *,
     metric: str = "kilos_total",
-    diner_meal_mapping: dict[Any, Any] | None = None,
+    diner_meal_mapping: Mapping[pd.Period, float] | None = None,
     diner_or_meal: str = "diner",
 ) -> Figure:
     """Create one page with total and per-diner trends, each comparing food vs food + drink."""
@@ -190,7 +188,7 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
 
 def plot_emissions_summary_over_time(
     monthly_category_data: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     emissions_col: str = "emissions_kg_co2e",
     diner_or_meal: str = "diner",
 ) -> Figure:

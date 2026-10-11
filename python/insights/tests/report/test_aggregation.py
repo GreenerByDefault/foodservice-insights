@@ -16,6 +16,8 @@ from gbd_foodservice_insights.report.aggregation import (
     summarize_animal_emissions_intensity,
 )
 
+JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
+
 # ----------------------------------------------------------------------
 # Aggregation and drivers
 # ----------------------------------------------------------------------
@@ -42,33 +44,19 @@ def test_aggregate_data_sums_by_month_and_group(fruit_rows):
     ]
 
 
-@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
-def test_aggregate_data_divides_by_the_months_diner_meals(fruit_rows, diner_or_meal):
-    agg_df = aggregate_data(
-        fruit_rows,
-        group_by="product",
-        per_diner_meal=True,
-        diner_meal_mapping={"2023-01": 100, "2023-02": 120},
-        diner_or_meal=diner_or_meal,
+def test_aggregate_data_keeps_rows_with_missing_group_keys():
+    df = pd.DataFrame(
+        {
+            "month_year": [JAN, JAN],
+            "category": ["legumes", pd.NA],
+            "kilos_total": [10.0, 5.0],
+        }
     )
 
-    assert agg_df[f"kilos per {diner_or_meal}"].tolist() == pytest.approx([0.1, 0.2, 0.125])
+    out = aggregate_data(df, group_by="category", metrics=["kilos_total"])
 
-
-@pytest.mark.parametrize(
-    ("diner_meal_mapping", "diner_or_meal"),
-    [(None, "diner"), ({"2023-01": 100, "2023-02": 120}, None)],
-)
-def test_aggregate_data_per_diner_needs_the_mapping_and_the_basis(
-    fruit_rows, diner_meal_mapping, diner_or_meal
-):
-    with pytest.raises(ValueError, match="diner_meal_mapping and diner_or_meal are required"):
-        aggregate_data(
-            fruit_rows,
-            per_diner_meal=True,
-            diner_meal_mapping=diner_meal_mapping,
-            diner_or_meal=diner_or_meal,
-        )
+    assert out["category"].isna().sum() == 1
+    assert out["kilos_total"].sum() == 15.0
 
 
 def test_create_template_data_preserves_values_when_category_case_differs():
@@ -507,7 +495,7 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
     """Ensures procurement aggregation payloads carry the substitution sheet to Excel writers."""
     df = pd.DataFrame(
         {
-            "month_year": ["2024-01", "2024-02", "2024-02"],
+            "month_year": [JAN, FEB, FEB],
             "category": ["Beef and Buffalo Meat", "Lamb/mutton & goat meat", "Milk (Cow's milk)"],
             "product": ["beef mince", "lamb shoulder", "whole milk"],
             "kilos_total": [10.0, 5.0, 20.0],
@@ -517,7 +505,7 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
 
     result = run_aggregation_pipeline(
         df,
-        diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
+        diner_meal_mapping={JAN: 100.0, FEB: 120.0},
         region="us",
         diner_or_meal="diner",
     )
@@ -539,7 +527,7 @@ def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
     # a grouping to drop or double-count weight.
     df = pd.DataFrame(
         {
-            "month_year": ["2024-01", "2024-01", "2024-02", "2024-02", "2024-02"],
+            "month_year": [JAN, JAN, FEB, FEB, FEB],
             "category": ["Legumes", "Nuts & Seeds", "Legumes", "Beef and Buffalo Meat", "Legumes"],
             "product": ["beans", "beans", "beans", "beef mince", "lentils"],
             "kilos_total": [4.0, 2.5, 6.0, 10.0, 0.0],
@@ -549,10 +537,31 @@ def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
 
     result = run_aggregation_pipeline(
         df,
-        diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
+        diner_meal_mapping={JAN: 100.0, FEB: 120.0},
         region="us",
         diner_or_meal="diner",
     )
 
     assert result["monthly_product_data"]["kilos_total"].sum() == 22.5
     assert result["monthly_category_data"]["kilos_total"].sum() == 22.5
+
+
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_run_aggregation_pipeline_divides_each_month_by_its_count(diner_or_meal):
+    df = pd.DataFrame(
+        {
+            "month_year": [JAN, JAN, FEB],
+            "category": ["Legumes", "Legumes", "Legumes"],
+            "product": ["beans", "lentils", "beans"],
+            "kilos_total": [10.0, 20.0, 15.0],
+            "emissions_kg_co2e": [9.0, 18.0, 13.5],
+        }
+    )
+
+    result = run_aggregation_pipeline(
+        df, diner_meal_mapping={JAN: 100.0, FEB: 120.0}, diner_or_meal=diner_or_meal
+    )
+
+    per_head = f"kilos per {diner_or_meal}"
+    assert result["monthly_product_data"][per_head].tolist() == pytest.approx([0.1, 0.2, 0.125])
+    assert result["monthly_category_data"][per_head].tolist() == pytest.approx([0.3, 0.125])

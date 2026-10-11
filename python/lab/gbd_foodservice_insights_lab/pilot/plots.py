@@ -18,6 +18,7 @@ from gbd_foodservice_insights.plotting_utils import (
 from gbd_foodservice_insights.report.plots.panels import prepare_monthly_trend_data
 from gbd_foodservice_insights.report.schema import metric_display_label
 
+from gbd_foodservice_insights_lab.food_report.utils import normalize_diner_meal_mapping
 from gbd_foodservice_insights_lab.plotting_extras import (
     PERIOD_COLORS,
     clean_category_label,
@@ -1179,7 +1180,9 @@ def plot_metric_over_time(
         monthly_category_data,
         metric,
         per_diner_meal=per_diner_meal,
-        diner_meal_mapping=diner_meal_mapping,
+        diner_meal_mapping=(
+            None if diner_meal_mapping is None else normalize_diner_meal_mapping(diner_meal_mapping)
+        ),
     )
     metric_label = (
         f"{metric_display_label(metric)} per diner-meal"

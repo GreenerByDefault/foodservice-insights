@@ -14,8 +14,7 @@ from gbd_foodservice_insights.report.food_report import (
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
 
-JAN = pd.Period("2024-01", freq="M")
-FEB = pd.Period("2024-02", freq="M")
+JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
 
 
 # ----------------------------------------------------------------------
@@ -60,7 +59,7 @@ def _rows(metric: str = "kilos_total") -> pd.DataFrame:
 
 def _build(rows: pd.DataFrame, **overrides: Any) -> FoodReport:
     kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {"2024-01": 100, "2024-02": 120},
+        "diner_meal_mapping": {JAN: 100, FEB: 120},
         "mode": "procurement",
         "region": "us",
         "diner_or_meal": "diner",
@@ -141,15 +140,23 @@ def test_a_category_outside_the_gbd_list_raises_even_if_only_its_case_differs(
         _build(rows, mode=mode, diner_or_meal=diner_or_meal)
 
 
-def test_an_empty_diner_meal_mapping_raises():
-    with pytest.raises(ValueError, match="Diner-meal mapping is empty"):
-        _build(_rows(), diner_meal_mapping={})
+@pytest.mark.parametrize(
+    ("mapping", "months"),
+    [
+        ({}, "2024-01, 2024-02"),
+        ({JAN: 100}, "2024-02"),
+        ({JAN: 100, FEB: 0}, "2024-02"),
+        ({JAN: float("nan"), FEB: 120}, "2024-01"),
+    ],
+)
+def test_a_data_month_without_a_positive_count_aborts(mapping: dict, months: str):
+    with pytest.raises(ValueError, match=f"^No positive diner count for {months}$"):
+        _build(_rows(), diner_meal_mapping=mapping)
 
 
 @pytest.mark.parametrize(
     ("module", "stage"),
     [
-        (food_report, "ensure_month_year_column"),
         (emissions, "calculate_emissions"),
         (aggregation, "run_aggregation_pipeline"),
         (emissions, "calculate_emissions_summary"),
@@ -206,16 +213,9 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
     ]
 
 
-def test_a_data_month_missing_from_the_mapping_aborts():
-    with pytest.raises(
-        ValueError, match=r"missing months in diner_meal_mapping: \[Period\('2024-02'"
-    ):
-        _build(_rows(), diner_meal_mapping={"2024-01": 100})
-
-
 def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     aligned = _build(_rows())
-    report = _build(_rows(), diner_meal_mapping={"2024-01": 100, "2024-02": 120, "2024-03": 90})
+    report = _build(_rows(), diner_meal_mapping={JAN: 100, FEB: 120, MAR: 0})
 
     assert report.diner_meals_in_data == 220.0
     assert report.summary_stats == aligned.summary_stats
@@ -282,7 +282,7 @@ def test_summary_stats_names_the_emissions_factor_region(region, label):
 
 def test_summary_stats_prints_a_single_month_once():
     dates = pd.to_datetime(["2024-01-15", "2024-01-20", "2024-01-25", "2024-01-30"])
-    report = _build(_rows().assign(date=dates), diner_meal_mapping={"2024-01": 100})
+    report = _build(_rows().assign(date=dates), diner_meal_mapping={JAN: 100})
 
     assert report.summary_stats["Date range"] == "Jan 2024"
 

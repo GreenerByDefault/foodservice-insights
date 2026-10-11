@@ -1,5 +1,6 @@
 """Canonical aggregation functions for food-report generation."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
@@ -13,10 +14,6 @@ from gbd_foodservice_insights.categories import (
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
 from gbd_foodservice_insights.report.schema import DinerOrMeal, per_diner_metric_name
-from gbd_foodservice_insights.report.utils import (
-    compute_month_alignment,
-    normalize_diner_meal_mapping,
-)
 
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
     "beef and buffalo meat",
@@ -47,10 +44,7 @@ def _normalize_categories_to_canonical_labels(
 def aggregate_data(
     df: pd.DataFrame,
     group_by: str = "product",
-    diner_meal_mapping: dict[Any, Any] | None = None,
-    per_diner_meal: bool = False,
     metrics: list[str] | str = "kilos_total",
-    diner_or_meal: DinerOrMeal | None = None,
 ) -> pd.DataFrame:
     """Aggregate metrics by month and group.
 
@@ -72,40 +66,11 @@ def aggregate_data(
         if metric_name not in df.columns:
             raise ValueError(f"Metric column '{metric_name}' not found in DataFrame.")
 
-    agg = (
+    return (
         df.groupby(["month_year", group_by], dropna=False)[metric_list]
         .sum(min_count=1)
         .reset_index()
     )
-
-    if not per_diner_meal:
-        return agg
-
-    if diner_meal_mapping is None or diner_or_meal is None:
-        raise ValueError(
-            "diner_meal_mapping and diner_or_meal are required when per_diner_meal=True"
-        )
-
-    dm_mapping = normalize_diner_meal_mapping(diner_meal_mapping)
-    alignment = compute_month_alignment(agg["month_year"].dropna().unique(), dm_mapping.keys())
-    missing_months = alignment["missing_in_mapping"]
-    invalid_counts = [month for month, value in dm_mapping.items() if value <= 0]
-
-    if missing_months or invalid_counts:
-        details: list[str] = []
-        if missing_months:
-            details.append(f"missing months in diner_meal_mapping: {missing_months}")
-        if invalid_counts:
-            details.append(f"non-positive diner-meal counts: {invalid_counts}")
-        raise ValueError("Cannot compute per-diner metrics: " + "; ".join(details))
-
-    denom = agg["month_year"].map(dm_mapping)
-
-    for metric_name in metric_list:
-        per_dm_col = per_diner_metric_name(metric_name, diner_or_meal)
-        agg[per_dm_col] = agg[metric_name] / denom
-
-    return agg
 
 
 def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd.DataFrame:
@@ -620,7 +585,7 @@ def calculate_milk_oat_swap_scenarios(
 
 def run_aggregation_pipeline(
     df: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     metric_total: str = "kilos_total",
     top_n: int = 5,
     *,
@@ -628,25 +593,16 @@ def run_aggregation_pipeline(
     diner_or_meal: DinerOrMeal,
 ) -> dict[str, Any]:
     """Run the full report aggregation pipeline."""
-    metrics = [metric_total]
+    per_head = per_diner_metric_name(metric_total, diner_or_meal)
 
-    monthly_product_data = aggregate_data(
-        df,
-        group_by="product",
-        diner_meal_mapping=diner_meal_mapping,
-        per_diner_meal=True,
-        metrics=metrics,
-        diner_or_meal=diner_or_meal,
-    )
+    def monthly(group_by: str) -> pd.DataFrame:
+        agg = aggregate_data(df, group_by=group_by, metrics=metric_total)
+        return agg.assign(
+            **{per_head: agg[metric_total] / agg["month_year"].map(diner_meal_mapping)}
+        )
 
-    monthly_category_data = aggregate_data(
-        df,
-        group_by="category",
-        diner_meal_mapping=diner_meal_mapping,
-        per_diner_meal=True,
-        metrics=metrics,
-        diner_or_meal=diner_or_meal,
-    )
+    monthly_product_data = monthly("product")
+    monthly_category_data = monthly("category")
 
     template_data = create_template_data(monthly_category_data, metric_total)
     overall_drivers = identify_overall_drivers(df, metric=metric_total, top_n=top_n)

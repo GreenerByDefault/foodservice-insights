@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 import matplotlib
+import pandas as pd
 
 # Before the report modules import pyplot: the child has no display, and on macOS the default
 # backend would try to open a window.
@@ -107,9 +108,16 @@ def analyze(
     rows = df_final.rename(columns={"weight": "kilos_total"})[
         ["date", "product", "category", "kilos_total"]
     ].reset_index(drop=True)
+    # A `PeriodIndex` rather than `pd.Period(month)` per key, which pandas' stubs type as
+    # possibly `NaT`.
+    months = pd.PeriodIndex(list(request.monthly_counts), freq="M")
+    monthly_counts = {
+        month: float(count)
+        for month, count in zip(months, request.monthly_counts.values(), strict=True)
+    }
     report = build_food_report(
         rows,
-        diner_meal_mapping=request.monthly_counts,
+        diner_meal_mapping=monthly_counts,
         mode="procurement",
         region="us",
         diner_or_meal=_DINER_OR_MEAL[request.counts_basis],

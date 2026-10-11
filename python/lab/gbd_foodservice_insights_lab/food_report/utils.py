@@ -1,10 +1,46 @@
 """File-reading helpers for the lab's food-report wrapper."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
-from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
+
+
+def _to_month_period(value: Any, *, context: str) -> pd.Period:
+    """Convert one month-like value to a real monthly Period or fail clearly."""
+    try:
+        period = pd.Period(str(value), freq="M")
+    except Exception as exc:
+        raise ValueError(f"Invalid {context} month {value!r}: {exc}") from exc
+
+    if not isinstance(period, pd.Period):
+        raise ValueError(f"Invalid {context} month {value!r}: value is missing")
+    return period
+
+
+def normalize_diner_meal_mapping(raw_mapping: Mapping[Any, Any]) -> dict[pd.Period, float]:
+    """Normalize a month->count mapping to ``{Period[M]: float}``.
+
+    Raises a ``ValueError`` on invalid keys/values.
+    """
+    if not isinstance(raw_mapping, Mapping):
+        raise ValueError("Diner-meal mapping must be a mapping object.")
+
+    normalized: dict[pd.Period, float] = {}
+    for key, value in raw_mapping.items():
+        period_key = _to_month_period(key, context="diner-meal mapping")
+
+        try:
+            normalized[period_key] = float(value)
+        except Exception as exc:
+            raise ValueError(f"Invalid diner-meal count for month {key!r}: {value!r}") from exc
+
+    if not normalized:
+        raise ValueError("Diner-meal mapping is empty after normalization.")
+
+    return normalized
 
 
 def load_diner_meal_mapping_from_json(

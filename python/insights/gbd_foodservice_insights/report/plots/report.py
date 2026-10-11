@@ -1,5 +1,6 @@
 """The report's full set of figures, in page order."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
@@ -43,7 +44,7 @@ def _remove_duplicate_xlabels(fig: Figure) -> Figure:
 
 def generate_all_report_plots(
     aggregated_data: dict[str, Any],
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     emissions_summary: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
     serving: bool = False,
