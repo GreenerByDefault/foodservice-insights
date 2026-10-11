@@ -219,68 +219,59 @@ def build_food_report(
     if mode == "procurement" and metric_total in df.columns:
         before = missing_snapshot(df)
         before_rows = len(df)
-        try:
-            df, emissions_findings = emissions.calculate_emissions(
-                df,
-                weight_col=metric_total,
-                category_col="category",
-                region=region,
-                return_findings=True,
+        df, emissions_findings = emissions.calculate_emissions(
+            df,
+            weight_col=metric_total,
+            category_col="category",
+            region=region,
+            return_findings=True,
+        )
+        quality_findings.extend(emissions_findings)
+        quality_findings.extend(
+            compare_missing_snapshots(before, missing_snapshot(df), stage="emissions")
+        )
+        quality_findings.extend(check_row_count_drift(before_rows, len(df), stage="emissions"))
+        missing_emissions = df[df["emissions_kg_co2e"].isna()].copy()
+        if not missing_emissions.empty:
+            by_category = (
+                missing_emissions.groupby("category", dropna=False)
+                .size()
+                .sort_values(ascending=False)
             )
-            quality_findings.extend(emissions_findings)
-            quality_findings.extend(
-                compare_missing_snapshots(before, missing_snapshot(df), stage="emissions")
+            quality_findings.append(
+                make_finding(
+                    stage="emissions",
+                    category="emissions_missing_by_category",
+                    status="warning",
+                    message=(f"{len(missing_emissions)} rows have missing emissions values."),
+                    column="emissions_kg_co2e",
+                    count=len(missing_emissions),
+                    metadata={"counts_by_category": by_category.head(10).to_dict()},
+                )
             )
-            quality_findings.extend(check_row_count_drift(before_rows, len(df), stage="emissions"))
-            missing_emissions = df[df["emissions_kg_co2e"].isna()].copy()
-            if not missing_emissions.empty:
-                by_category = (
-                    missing_emissions.groupby("category", dropna=False)
+
+            if "month_year" in missing_emissions.columns:
+                by_month = (
+                    missing_emissions.groupby("month_year", dropna=False)
                     .size()
                     .sort_values(ascending=False)
                 )
                 quality_findings.append(
                     make_finding(
                         stage="emissions",
-                        category="emissions_missing_by_category",
+                        category="emissions_missing_by_month",
                         status="warning",
-                        message=(f"{len(missing_emissions)} rows have missing emissions values."),
+                        message=(f"Missing emissions occur in {by_month.shape[0]} months."),
                         column="emissions_kg_co2e",
                         count=len(missing_emissions),
-                        metadata={"counts_by_category": by_category.head(10).to_dict()},
+                        metadata={
+                            "counts_by_month": {
+                                str(k): int(v) for k, v in by_month.head(10).items()
+                            }
+                        },
                     )
                 )
-
-                if "month_year" in missing_emissions.columns:
-                    by_month = (
-                        missing_emissions.groupby("month_year", dropna=False)
-                        .size()
-                        .sort_values(ascending=False)
-                    )
-                    quality_findings.append(
-                        make_finding(
-                            stage="emissions",
-                            category="emissions_missing_by_month",
-                            status="warning",
-                            message=(f"Missing emissions occur in {by_month.shape[0]} months."),
-                            column="emissions_kg_co2e",
-                            count=len(missing_emissions),
-                            metadata={
-                                "counts_by_month": {
-                                    str(k): int(v) for k, v in by_month.head(10).items()
-                                }
-                            },
-                        )
-                    )
-        except Exception as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="emissions",
-                    category="emissions_calculation_failed",
-                    status="error",
-                    message=str(exc),
-                )
-            )
+        raise_on_error_findings(quality_findings)
 
     _log_stage("aggregation", report_progress)
     try:
@@ -306,40 +297,31 @@ def build_food_report(
 
     _log_stage("emissions_summary", report_progress)
     if mode == "procurement" and "emissions_kg_co2e" in df.columns:
-        try:
-            emissions_summary = emissions.calculate_emissions_summary(df)
-            emissions_summary = emissions.calculate_emissions_per_diner_meal(
-                emissions_summary,
-                diner_meals_in_data,
-            )
+        emissions_summary = emissions.calculate_emissions_summary(df)
+        emissions_summary = emissions.calculate_emissions_per_diner_meal(
+            emissions_summary,
+            diner_meals_in_data,
+        )
 
-            if not monthly_cat.empty:
-                merged = _attach_monthly_category_emissions(monthly_cat, df)
-                agg_results["monthly_category_data"] = merged
-                missing_emissions_count = int(merged["emissions_kg_co2e"].isna().sum())
-                if missing_emissions_count > 0:
-                    quality_findings.append(
-                        make_finding(
-                            stage="aggregation",
-                            category="monthly_emissions_missing",
-                            status="warning",
-                            message=(
-                                f"Monthly category table has {missing_emissions_count} rows "
-                                "with missing emissions after merge."
-                            ),
-                            column="emissions_kg_co2e",
-                            count=missing_emissions_count,
-                        )
+        if not monthly_cat.empty:
+            merged = _attach_monthly_category_emissions(monthly_cat, df)
+            agg_results["monthly_category_data"] = merged
+            missing_emissions_count = int(merged["emissions_kg_co2e"].isna().sum())
+            if missing_emissions_count > 0:
+                quality_findings.append(
+                    make_finding(
+                        stage="aggregation",
+                        category="monthly_emissions_missing",
+                        status="warning",
+                        message=(
+                            f"Monthly category table has {missing_emissions_count} rows "
+                            "with missing emissions after merge."
+                        ),
+                        column="emissions_kg_co2e",
+                        count=missing_emissions_count,
                     )
-        except Exception as exc:
-            quality_findings.append(
-                make_finding(
-                    stage="emissions",
-                    category="emissions_summary_failed",
-                    status="error",
-                    message=str(exc),
                 )
-            )
+
     _log_stage("client_metrics_and_diagnostics", report_progress)
     plant_animal_split = None
     plant_protein_share = None
@@ -352,26 +334,15 @@ def build_food_report(
     except Exception as exc:
         logger.warning("Could not calculate plant protein share: %s", exc)
 
-    diagnostics_list: list[Finding] = []
-    try:
-        diagnostics_list = checks.run_all_diagnostics(
-            df=df,
-            diner_meal_mapping=dm_mapping,
-            serving=(mode == "serving"),
-            monthly_product_data=agg_results.get("monthly_product_data"),
-            monthly_category_data=agg_results.get("monthly_category_data"),
-            metric_total=metric_total,
-        )
-        quality_findings.extend(diagnostics_list)
-    except Exception as exc:
-        quality_findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="diagnostics_failed",
-                status="error",
-                message=str(exc),
-            )
-        )
+    diagnostics_list = checks.run_all_diagnostics(
+        df=df,
+        diner_meal_mapping=dm_mapping,
+        serving=(mode == "serving"),
+        monthly_product_data=agg_results.get("monthly_product_data"),
+        monthly_category_data=agg_results.get("monthly_category_data"),
+        metric_total=metric_total,
+    )
+    quality_findings.extend(diagnostics_list)
 
     raise_on_error_findings(quality_findings)
 
