@@ -10,9 +10,8 @@ again on 27 September against `main`, through `analyze()` with `KeywordLlmClient
 frames. The deliverable aborts on ordinary data, carries wrong numbers, and says things the data
 does not support. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's
 output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff is the review.
-
-Another plan owns a neighbouring problem and is referenced where the sequencing matters:
-`categorization-cache.md` PR 5 (what reaches the report from the cache).
+The remaining PRs were re-checked against `main` on 11 October, after the week's moves to the
+lab; every fact below still reproduces unless it says otherwise.
 
 **Aborts.** Each reaches the user as "not your file, retry", and the retry fails identically,
 because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
@@ -28,10 +27,15 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 
 **Wrong numbers.**
 
-- The cache holds a handful of typo categories (`Plant-Based Butter`, `Mlik`, `Stone Fruit`)
-  that have no factor, so their rows yield `NaN` emissions filed as `warning` findings: the
-  kilos count toward weights and the plant share and vanish from every CO2e figure.
-  `categorization-cache.md` PR 5 drops them before they reach the report.
+- A category whose every line weighs 0 gets a `NaN` driver share (`_safe_percentage`,
+  `report/aggregation.py`), so its driver panel prints "nan%", the whole drivers section is
+  stamped "[DATA WARNING]", and the customer's quality page lists `plot_input_missing_values`.
+- On the product path, every category now has a factor: the cache admits only GBD categories
+  (#455, #475), the model's answers are snapped to one or to "No Matches Found" (#469), which
+  `merge_categorizations` drops, and #410 restored the one null factor. The lab still reads
+  hand-editable categorized CSVs, where a typo (`Mlik`) yields `NaN` emissions under a
+  `warning`: its kilos count toward weights and the plant share and vanish from every CO2e
+  figure.
 
 **Silent failures.**
 
@@ -74,9 +78,10 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - **Every category in `GBD_categories.yaml` has a factor in every region**, pinned by
   `test_emissions.py::test_every_category_has_an_emission_factor`. `Unspecified non dairy milk`
   carries the mean of the four named plant milks, the method GBD used from its first commit
-  until the November 2025 move to per-region factors dropped it to `null`. Once
-  `categorization-cache.md` PR 5 also filters the cache, a row without a factor can only mean
-  our bug, and `unmatched_emission_factors` becomes an `error`. *Rejected: deleting the
+  until the November 2025 move to per-region factors dropped it to `null`. With the cache
+  filtered too, a row without a factor can only mean our bug or a lab typo, and
+  `calculate_emissions` raises naming the category. *Rejected: an `error` finding* — a finding
+  exists to be listed in a report, and this one could only abort. *Rejected: deleting the
   category* — it removes something GBD built on purpose, where restoring the factor undoes an
   accidental regression and needs no one's sign-off. *Rejected: excluding factorless categories
   from the model's list* — a second notion of "valid category". The match prompt's rule sending
@@ -113,36 +118,87 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   other; if we do, it is its own PR, and a serving report, which has no emissions, needs an
   order of its own.
 
-## PR 1 — the two escalations become warnings
+## PR 1 — duplicate lines are a warning
 
-- `diagnostic_thresholds.yaml`: `exact_duplicate_rows.error_share_threshold` and
-  `diner_meal_count_reasonableness.error_if_flagged_months` go; `_duplicate_row_status` and
-  `check_diner_meal_reasonableness` lose their `error` branch. The `test_checks.py` tests
-  that assert `error` or read those two keys flip.
-- Tests: 8% duplicate lines and two outlier months succeed through `analyze()` with a `warning`
-  finding each; a missing required column still raises.
-- Worth it: the only aborts a real upload is likely to hit, and the lab has no override since
-  `warn_continue` went.
+- `exact_duplicate_rows.error_share_threshold` goes from `diagnostic_thresholds.yaml`, and
+  `_duplicate_row_status` loses its `error` branch; with it go `detect_exact_duplicate_rows`'
+  month-bucketed downgrade, its "serious" wording and the threshold in its metadata. The
+  `test_checks.py` cases reading `error_share_threshold` flip.
+- Tests: three identical lines in a 144-row twelve-month upload succeed through `analyze()` with
+  an `exact_duplicate_rows` warning.
+- Worth it: reproduced 11 October, that upload aborts as `unknown`, and a retry fails the same
+  way. Neither `apps/web` nor `read_input_csv` dedupes.
 
-## PR 2 — fail loudly
+## PR 2 — unusual headcounts are a warning
 
-- The emissions, emissions-summary and diagnostics `except` blocks in `build_food_report` go,
-  with `raise_on_error_findings` after each stage's checks so row drift still aborts there;
-  the split and share `try` blocks go; `_safe_plot` and the category-driver `try` go, and
-  `ReportCharts.findings` with them. `unmatched_emission_factors` becomes an `error`, which
-  makes the `emissions_missing_*` and `monthly_emissions_missing` findings and their tests dead.
-- Tests: each stage monkeypatched to raise surfaces that exception, not `QualityCheckError`; a
-  category without a factor aborts at the emissions stage. The lab's failure manifest records
-  no findings for a crash, as today; its log keeps the traceback.
-- Lands after `categorization-cache.md` PR 5, or a cache typo aborts real runs.
-- Worth it: today a stage crash loses its traceback and a chart crash ships a page of Python.
+- `diner_meal_count_reasonableness.error_if_flagged_months` goes from the YAML and from
+  `check_diner_meal_reasonableness`'s parameters and metadata; a flagged month is a `warning`.
+- Tests: a twelve-month upload with July and August at 30% of the other months succeeds through
+  `analyze()` with a warning.
+- Worth it: reproduced 11 October, that upload aborts, over counts the user typed and the
+  contract accepted. Its own PR because it is a separate check, so a reviewer can take one
+  without the other.
+
+## PR 3 — a stage crash keeps its traceback
+
+- The `except` blocks around emissions, the emissions summary and diagnostics in
+  `build_food_report` go. `raise_on_error_findings` follows the emissions stage's drift and
+  missingness checks, as it already follows month normalization, so later stages never run on
+  a broken frame.
+- No run that succeeds today fails: each of those blocks files an `error`, which the final
+  `raise_on_error_findings` already turns into an abort. The abort now carries the original
+  exception, and an emissions crash no longer also files a misleading `aggregation_failed`.
+- Tests: emissions, emissions summary and diagnostics each monkeypatched to raise surface that
+  exception, not `QualityCheckError`; this replaces the `emissions_calculation_failed` test in
+  `test_food_report.py`.
+
+## PR 4 — a category without an emission factor raises
+
+- `calculate_emissions` raises `ValueError` naming every category without a factor, instead of
+  filing `unmatched_emission_factors`; `return_findings` and its three overloads go. Every row
+  then has emissions, so `emissions_missing_by_category`, `emissions_missing_by_month` and
+  `monthly_emissions_missing` in `build_food_report` go with their tests, as does the comment
+  in `compare_missing_snapshots` that points at the old finding.
+- Unreachable on the product path (see Context), so it no longer waits on
+  `categorization-cache.md`. In the lab, a typo in a categorized CSV now aborts naming the category;
+  tell the data scientists.
+- Tests: a factorless category raises from `calculate_emissions` and from `build_food_report`
+  in procurement mode; serving mode, which computes no emissions, is unaffected.
+- Lands after PR 3, which removes the `except` that would turn this raise into a finding.
+
+## PR 5 — a zero-weight category's driver share is 0%, not NaN
+
+- `_safe_percentage` (`report/aggregation.py`) returns 0.0 for a zero denominator, as
+  `identify_overall_drivers` already does for the whole file. A category bought only at weight
+  0 keeps its driver panel, with every bar at 0%.
+- Tests: `build_food_report` with a category whose lines all weigh 0 gives that category's
+  drivers a `percentage` of 0.0, and `build_report_charts` files no finding.
+- Worth it: found 11 October; a zero-weight line is ordinary data (see Decisions), and today
+  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 6, which deletes the
+  input check that is today the only sign of it.
+
+## PR 6 — a chart or split failure fails the run
+
+- `_safe_plot`, `_placeholder_figure`, the input checks and the category-driver `try` in
+  `report/plots/report.py` go, and so do the split and share `try` blocks in
+  `build_food_report`. `generate_all_report_plots` loses `quality_findings`, `ReportCharts`
+  loses `findings`, and `write_report_pdf` and the lab's `run_food_report` stop merging chart
+  findings. `FoodReport.findings` is then the whole list.
+- Unlike PR 3, this adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
+  month, a 200-character product and every category over twelve months: no chart fell back
+  except PR 5's case. The split and share return `None` for every no-data case, so they raise
+  only on our bug.
+- Tests: the `_safe_plot` and placeholder tests in `plots/test_report.py` go; a chart
+  monkeypatched to raise surfaces from `build_report_charts`. The lab's failure manifest
+  records no findings for a crash, as today; its log keeps the traceback.
+- Worth it: today a chart crash ships the customer a page of Python.
 
 Testing, generally: new tests use the product arguments and assert what `build_pdf_report` is
 handed and what the sheets contain, not that files exist.
 
 ## Verification
 
-- Every PR: `just lint && just check && just test`; `just test-lab`, since both change what the
+- Every PR: `just lint && just check && just test`; `just test-lab`, since all change what the
   lab's QA workbook and manifest say; `pnpm test:system` for any PR that changes what
   `analyze()` writes.
 
@@ -151,6 +207,7 @@ handed and what the sheets contain, not that files exist.
 - The golden test pins numbers, so most PRs here regenerate it; review the fixture diff rather
   than accept it.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
-- Until PR 1 lands, the lab has no way past a duplicate-lines or diner-count-outlier false
-  positive. Land it first.
-- No PR here waits on GBD; the null-emission-factor restoration is decided in this plan.
+- PRs 1 and 2 are the only aborts a real upload is likely to hit. Land them first.
+- PR 6 turns any chart bug the probe missed into a failed run. That is the intent, but watch
+  `unknown` failures after it deploys.
+- No PR here waits on GBD.
