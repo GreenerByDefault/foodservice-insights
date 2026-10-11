@@ -4,6 +4,7 @@
 their emissions factors, and which are animal- or plant-based.
 """
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -44,7 +45,9 @@ def _parse_categories(data: object) -> tuple[Category, ...]:
         raise ValueError("GBD categories must be a mapping with a `categories` list.")
 
     result = tuple(_parse_category(entry) for entry in data["categories"])
-    names = [category.name for category in result]
+    # Case-insensitively, because emissions, aggregation and the lab look categories up by
+    # lowercased name, where two spellings of one name would silently collapse into one.
+    names = [category.name.lower() for category in result]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ValueError(f"GBD categories repeat: {duplicates}")
@@ -71,11 +74,18 @@ def _parse_category(entry: object) -> Category:
                 return option
         raise ValueError(f"{entry!r}: `{key}` must be one of {options}, got {value!r}")
 
+    def emission_factor(key: str) -> float:
+        value = field(key, float)
+        # YAML reads `.nan` and `.inf` as floats.
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"{entry!r}: `{key}` must be finite and non-negative, got {value!r}")
+        return value
+
     return Category(
         name=field("cool_food_pledge_name", str),
         short_name=field("name", str),
-        emission_factor_us=field("emission_factor_us", float),
-        emission_factor_europe=field("emission_factor_europe", float),
+        emission_factor_us=emission_factor("emission_factor_us"),
+        emission_factor_europe=emission_factor("emission_factor_europe"),
         is_animal_product=field("is_animal_product", bool),
         product_category=choice("template_product_category", get_args(ProductCategory)),
         kind=choice("type", get_args(Kind)),

@@ -1,3 +1,5 @@
+import math
+
 import pytest
 from gbd_foodservice_insights.categories import (
     Category,
@@ -70,6 +72,26 @@ def test_plant_protein_categories():
     ]
 
 
+def test_animal_product_categories():
+    assert animal_product_categories() == [
+        "Beef and Buffalo Meat",
+        "Lamb/mutton & goat meat",
+        "Pork (pig meat)",
+        "Poultry (Chicken & Turkey)",
+        "Fish & Mollusks",
+        "Shellfish (Shrimp & lobster)",
+        "Liquid Eggs",
+        "Shelled Eggs",
+        "Cheese",
+        "Butter",
+        "Ice Cream",
+        "Cream",
+        "Milk (Cow's milk)",
+        "Yogurt",
+        "Mayo",
+    ]
+
+
 def test_drink_categories():
     assert drink_categories() == [
         "Milk (Cow's milk)",
@@ -92,19 +114,24 @@ def test_partitions_every_category(first, second):
     assert sorted(first() + second()) == sorted(category_names())
 
 
-def test_parse_accepts_an_integer_emission_factor():
-    (category,) = _parse_categories({"categories": [{**BEEF_ENTRY, "emission_factor_us": 41}]})
-    assert category.emission_factor_us == 41.0
+@pytest.mark.parametrize("value", [41, 0])
+def test_parse_accepts_an_integer_emission_factor(value):
+    (category,) = _parse_categories({"categories": [{**BEEF_ENTRY, "emission_factor_us": value}]})
+    assert category.emission_factor_us == float(value)
     assert isinstance(category.emission_factor_us, float)
 
 
 @pytest.mark.parametrize(
     ("key", "value", "match"),
     [
+        ("cool_food_pledge_name", None, r"`cool_food_pledge_name` must be a str"),
         ("protein", None, r"`protein` must be a bool"),
         ("emission_factor_us", None, r"`emission_factor_us` must be a float"),
         ("emission_factor_us", True, r"`emission_factor_us` must be a float"),
         ("emission_factor_europe", "37.44", r"`emission_factor_europe` must be a float"),
+        ("emission_factor_us", -0.5, r"`emission_factor_us` must be finite and non-negative"),
+        ("emission_factor_us", math.nan, r"`emission_factor_us` must be finite and non-negative"),
+        ("emission_factor_europe", math.inf, r"`emission_factor_europe` must be finite"),
         ("meat", 1, r"`meat` must be a bool"),
         ("type", "snack", r"`type` must be one of \('food', 'drink'\)"),
         ("template_product_category", "Fruit", r"`template_product_category` must be one of"),
@@ -115,13 +142,28 @@ def test_parse_rejects_a_malformed_field(key, value, match):
         _parse_categories({"categories": [{**BEEF_ENTRY, key: value}]})
 
 
+def test_parse_rejects_a_missing_field():
+    entry = {key: value for key, value in BEEF_ENTRY.items() if key != "protein"}
+    with pytest.raises(ValueError, match=r"`protein` must be a bool, got None"):
+        _parse_categories({"categories": [entry]})
+
+
 @pytest.mark.parametrize(
     ("data", "match"),
     [
         ([BEEF_ENTRY], r"must be a mapping with a `categories` list"),
         ({"categories": BEEF_ENTRY}, r"must be a mapping with a `categories` list"),
         ({"categories": ["Beef"]}, r"Each category must be a mapping"),
-        ({"categories": [BEEF_ENTRY, BEEF_ENTRY]}, r"repeat: \['Beef and Buffalo Meat'\]"),
+        ({"categories": [BEEF_ENTRY, BEEF_ENTRY]}, r"repeat: \['beef and buffalo meat'\]"),
+        (
+            {
+                "categories": [
+                    BEEF_ENTRY,
+                    {**BEEF_ENTRY, "cool_food_pledge_name": "BEEF AND BUFFALO MEAT"},
+                ]
+            },
+            r"repeat: \['beef and buffalo meat'\]",
+        ),
     ],
 )
 def test_parse_rejects_a_malformed_document(data, match):
