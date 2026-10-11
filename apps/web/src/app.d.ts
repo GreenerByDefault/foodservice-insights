@@ -15,7 +15,12 @@ declare global {
        * the body of every `error()` in the app, so a code one route sets belongs in that route's
        * own response type instead.
        */
-      code?: 'unauthenticated' | 'forbidden' | 'not_found' | 'service_unavailable';
+      code?:
+        | 'unauthenticated'
+        | 'onboarding_required'
+        | 'forbidden'
+        | 'not_found'
+        | 'service_unavailable';
     }
     interface Locals {
       /** Set on every request by `handle` in `hooks.server.ts`. Null when nobody is signed in. */

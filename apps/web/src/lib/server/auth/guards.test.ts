@@ -3,7 +3,7 @@ import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
 import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
-import { redirectOf, statusOf } from '#lib/server/testing/http-error.js';
+import { statusOf } from '#lib/server/testing/http-error.js';
 import {
   requireAuth,
   requireOnboarded,
@@ -43,16 +43,16 @@ describe('requireOnboarded', () => {
     expect(requireOnboarded({ auth })).toEqual(auth);
   });
 
-  test('sends a user with no display name to onboarding', async () => {
+  test('403s a user with no display name as onboarding_required', async () => {
     const auth = anAuthContext({ user: { displayName: null } });
 
-    await expect(redirectOf(() => requireOnboarded({ auth }))).resolves.toEqual({
-      status: 303,
-      location: '/onboarding',
+    await expect(statusOf(() => requireOnboarded({ auth }))).resolves.toEqual({
+      status: 403,
+      code: 'onboarding_required',
     });
   });
 
-  test('401s when there is no context, rather than sending anyone to onboarding', async () => {
+  test('401s when there is no context, rather than asking for a name', async () => {
     await expect(statusOf(() => requireOnboarded({ auth: null }))).resolves.toEqual({
       status: 401,
       code: 'unauthenticated',

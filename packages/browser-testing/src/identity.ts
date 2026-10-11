@@ -108,7 +108,7 @@ export type MintedUser = TestIdentity & {
  *
  * `signInEmail` defaults to a fresh address at `GOTRUE_TEST_DOMAIN`; `email`, the address the app
  * shows, defaults to the same. `onboarded: false` leaves the display name unset, as a sign-up does,
- * so the app sends the user to `/onboarding`.
+ * so the app asks the user for one before rendering any page inside `(app)`.
  */
 export async function mintUser(
   db: Kysely<Database>,

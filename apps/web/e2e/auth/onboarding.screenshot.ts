@@ -5,7 +5,7 @@ import { expectScreenshots } from '../lib/screenshots.ts';
 test.use({ identity: 'new' });
 
 test('onboarding', async ({ page }) => {
-  await page.goto('/onboarding');
+  await page.goto('/account');
   await ensureHydrated(page);
 
   await expectScreenshots(page, 'onboarding.png');

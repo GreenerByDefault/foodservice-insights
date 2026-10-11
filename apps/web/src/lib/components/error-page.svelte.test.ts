@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { fakeBrowserAuth } from '#lib/auth/testing/fake.js';
+import { stubFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { refreshAll } from '$app/navigation';
 import ErrorPage from './error-page.svelte';
@@ -12,6 +13,10 @@ vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 beforeEach(() => {
   auth.current = fakeBrowserAuth();
   resetNavigationMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('ErrorPage', () => {
@@ -47,5 +52,17 @@ describe('ErrorPage', () => {
       token: '123456',
       type: 'email',
     });
+  });
+
+  it('asks a nameless user their name in place, then re-runs the loads rather than navigating', async () => {
+    stubFetch(new Response(null, { status: 204 }));
+    const screen = await render(ErrorPage, { status: 403, code: 'onboarding_required' });
+
+    await expect.element(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome');
+    expect(screen.getByText("You don't have access").elements()).toHaveLength(0);
+    await screen.getByLabelText('Your name').fill('Ada Lovelace');
+    await screen.getByRole('button', { name: 'Continue' }).click();
+
+    await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
   });
 });

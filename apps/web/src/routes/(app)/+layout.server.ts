@@ -11,10 +11,14 @@ export type SwitcherOrganization = OrganizationRow;
 /** The gate for everything inside `(app)`: a request gets no further without an identity, nor
  * without the display name onboarding asks for.
  *
- * Signed out is a 401 rather than a redirect to `/sign-in`: `#lib/components/error-page.svelte`
- * offers sign-in in place, so the page the user actually asked for renders as soon as
- * `refreshAll()` re-runs this load. A first-time user signing in there is redirected to
- * `/onboarding` instead, which has no page of theirs to return to.
+ * Both are errors rather than redirects: `#lib/components/error-page.svelte` signs the user in, or
+ * asks their name, in place, so the page they actually asked for renders as soon as `refreshAll()`
+ * re-runs this load.
+ *
+ * A page's own redirect still goes through on a client-side navigation, since any load's redirect
+ * replaces the whole `__data.json` response. So `/orgs` forwards a nameless invitee to `/invites`,
+ * and this gate asks their name there. Each page load calls `requireAuth` itself, so what loads
+ * beside the gate's error is never more than the user may see.
  */
 export const load: LayoutServerLoad = async ({ locals }) => {
   const auth = requireOnboarded(locals);

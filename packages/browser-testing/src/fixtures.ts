@@ -42,7 +42,7 @@ export type SharedTestOptions = {
    * - `onboarded` (the default): a GoTrue user of this test's own, named
    *   `MINTED_USER_DISPLAY_NAME`. Its address is unique, so a screenshot must not render it.
    * - `new`: the same, but with no display name, as if just signed up, so every page inside
-   *   `(app)` sends it to `/onboarding`.
+   *   `(app)` asks it for one in place.
    * - `pinned`: the run's one shared identity, whose address (`PINNED_IDENTITY_EMAIL`) is fixed,
    *   for a screenshot that renders it. Shared by every test that asks, the way a pinned
    *   `orgName` is, so a spec using it must not mutate it.

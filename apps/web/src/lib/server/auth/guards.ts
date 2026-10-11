@@ -1,7 +1,7 @@
 /** The checks a route makes before doing anything. */
 
 import type { DatabaseExecutor } from '@gbd/db';
-import { error, redirect } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import { withDbErrorHandling } from '#lib/server/db.js';
 import type { AuthContext, OnboardedAuthContext, OrganizationAccess } from './types.ts';
 
@@ -11,12 +11,13 @@ export function requireAuth(locals: Pick<App.Locals, 'auth'>): AuthContext {
   return locals.auth;
 }
 
-/** The signed-in user, once they have a display name: a 401 without a session, and a redirect to
- * `/onboarding` without a name. The display name is all onboarding asks. */
+/** The signed-in user, once they have a display name: a 401 without a session, and a 403 coded
+ * `onboarding_required` without a name, which the error page answers by asking for one in place.
+ * The display name is all onboarding asks. */
 export function requireOnboarded(locals: Pick<App.Locals, 'auth'>): OnboardedAuthContext {
   const auth = requireAuth(locals);
   const { displayName } = auth.user;
-  if (displayName === null) redirect(303, '/onboarding');
+  if (displayName === null) error(403, 'No display name', { code: 'onboarding_required' });
   return { ...auth, user: { ...auth.user, displayName } };
 }
 
