@@ -199,17 +199,22 @@ def test_identical_lines_each_count_toward_the_report(tmp_path: Path) -> None:
     ]
 
 
-def test_a_school_year_with_quiet_summer_months_reports_with_a_warning(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    months = [f"2025-{month:02d}" for month in range(1, 13)]
-    request = dataclasses.replace(
-        _request(tmp_path),
-        monthly_counts=MappingProxyType(
-            {month: 300 if month in ("2025-07", "2025-08") else 1000 for month in months}
-        ),
+def _headcount_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    counts: dict[str, int],
+    weight_by_month: dict[str, float],
+) -> dict[str, Any]:
+    """The headcount finding `analyze()` hands the PDF, buying `weight_by_month[month]` of every
+    product each month."""
+    request = dataclasses.replace(_request(tmp_path), monthly_counts=MappingProxyType(counts))
+    request.input_csv.write_text(
+        input_csv_text(
+            (product, f"{month}-15", weight)
+            for month, weight in weight_by_month.items()
+            for product in KEYWORD_PRODUCTS
+        )
     )
-    request.input_csv.write_text(sample_input_csv(months=months))
     pdf_findings: list[dict[str, Any]] = []
     build_pdf_report = pdf.build_pdf_report
 
@@ -221,13 +226,44 @@ def test_a_school_year_with_quiet_summer_months_reports_with_a_warning(
 
     analyze(request, llm=KeywordLlmClient())
 
-    headcount = next(f for f in pdf_findings if f["category"] == "diner_meal_count_reasonableness")
+    return next(f for f in pdf_findings if f["category"] == "diner_meal_count_reasonableness")
+
+
+SCHOOL_YEAR = [f"2025-{month:02d}" for month in range(1, 13)]
+
+
+def test_a_school_year_whose_purchases_fall_with_its_summer_counts_has_no_headcount_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summer = ("2025-07", "2025-08")
+    headcount = _headcount_finding(
+        tmp_path,
+        monkeypatch,
+        counts={month: 300 if month in summer else 1000 for month in SCHOOL_YEAR},
+        weight_by_month={month: 3.0 if month in summer else 10.0 for month in SCHOOL_YEAR},
+    )
+
+    assert headcount["status"] == "success"
+
+
+def test_a_mistyped_count_reports_with_a_headcount_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headcount = _headcount_finding(
+        tmp_path,
+        monkeypatch,
+        counts={month: 10_000 if month == "2025-03" else 1000 for month in SCHOOL_YEAR},
+        weight_by_month=dict.fromkeys(SCHOOL_YEAR, 10.0),
+    )
+
     assert (headcount["status"], headcount["count"], headcount["sample_values"]) == (
         "warning",
-        2,
+        1,
         [
-            "Jul 2025: 300 versus a median of 1000 (0.30x).",
-            "Aug 2025: 300 versus a median of 1000 (0.30x).",
+            (
+                "Mar 2025: 10,000 diners, against 1,000 in a typical month, with no matching "
+                "rise in food."
+            )
         ],
     )
 

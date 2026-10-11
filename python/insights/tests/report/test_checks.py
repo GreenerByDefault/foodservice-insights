@@ -22,6 +22,7 @@ from gbd_foodservice_insights.report.checks import (
     run_all_diagnostics,
 )
 from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
 
 # ----------------------------------------------------------------------
@@ -478,26 +479,143 @@ def test_check_zero_category_month_combos_names_missing_months_in_plain_english(
 # ----------------------------------------------------------------------
 
 
+def _check_headcounts(
+    counts: dict[str, float], food: dict[str, float], diner_or_meal: DinerOrMeal = "diner"
+) -> tuple[list[Finding], pd.DataFrame]:
+    df = pd.DataFrame(
+        {
+            "month_year": pd.PeriodIndex(list(food), freq="M"),
+            "kilos_total": list(food.values()),
+        }
+    )
+    return check_diner_meal_reasonableness(
+        df, normalize_diner_meal_mapping(counts), "kilos_total", diner_or_meal=diner_or_meal
+    )
+
+
+@pytest.mark.parametrize(
+    ("counts", "food", "flagged"),
+    [
+        pytest.param(
+            {"2025-01": 100, "2025-02": 1000, "2025-03": 100},
+            {"2025-01": 10, "2025-02": 10, "2025-03": 10},
+            [False, True, False],
+            id="extra-digit",
+        ),
+        pytest.param(
+            {"2025-01": 100, "2025-02": 10, "2025-03": 100},
+            {"2025-01": 10, "2025-02": 10, "2025-03": 10},
+            [False, True, False],
+            id="dropped-digit",
+        ),
+        pytest.param(
+            {"2025-01": 100, "2025-02": 30, "2025-03": 100},
+            {"2025-01": 10, "2025-02": 3, "2025-03": 10},
+            [False, False, False],
+            id="quiet-month-with-food-to-match",
+        ),
+        pytest.param(
+            {"2025-01": 100, "2025-02": 100, "2025-03": 100},
+            {"2025-01": 10, "2025-02": 30, "2025-03": 1},
+            [False, False, False],
+            id="food-swings-with-ordinary-counts",
+        ),
+    ],
+)
+def test_check_diner_meal_reasonableness_flags_counts_the_food_does_not_follow(
+    counts, food, flagged
+):
+    _, export_df = _check_headcounts(counts, food)
+
+    assert export_df["is_flagged"].tolist() == flagged
+
+
 def test_check_diner_meal_reasonableness_respects_boundary_ratios():
-    findings, export_df = check_diner_meal_reasonableness(
-        normalize_diner_meal_mapping({"2025-01": 50, "2025-02": 100, "2025-03": 200})
+    findings, export_df = _check_headcounts(
+        {"2025-01": 100, "2025-02": 200, "2025-03": 50, "2025-04": 100, "2025-05": 100},
+        dict.fromkeys(["2025-01", "2025-02", "2025-03", "2025-04", "2025-05"], 10.0),
     )
 
     assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
-    assert export_df["ratio_to_median"].tolist() == pytest.approx([0.5, 1.0, 2.0])
+    assert export_df["count_ratio_to_median"].tolist() == pytest.approx([1, 2, 0.5, 1, 1])
+    assert export_df["food_per_count_ratio_to_median"].tolist() == pytest.approx([1, 0.5, 2, 1, 1])
     assert not export_df["is_flagged"].any()
 
 
-def test_check_diner_meal_reasonableness_flags_outside_boundary_ratios():
-    findings, export_df = check_diner_meal_reasonableness(
-        normalize_diner_meal_mapping({"2025-01": 49, "2025-02": 100, "2025-03": 201})
+def test_check_diner_meal_reasonableness_warns_outside_boundary_ratios():
+    findings, export_df = _check_headcounts(
+        {"2025-01": 100, "2025-02": 201, "2025-03": 49, "2025-04": 100, "2025-05": 100},
+        dict.fromkeys(["2025-01", "2025-02", "2025-03", "2025-04", "2025-05"], 10.0),
+        diner_or_meal="meal",
     )
 
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 2
-    assert export_df["ratio_to_median"].tolist() == pytest.approx([0.49, 1.0, 2.01])
-    assert export_df["is_flagged"].tolist() == [True, False, True]
+    assert export_df["is_flagged"].tolist() == [False, True, True, False, False]
+    assert (
+        findings[0]["status"],
+        findings[0]["count"],
+        findings[0]["message"],
+        findings[0]["sample_values"],
+    ) == (
+        "warning",
+        2,
+        "The meal counts entered for 2 months are far higher or lower than in a typical month, "
+        "but the food in the file did not rise or fall with them. That can mean a typo, which "
+        "would make that month's per-meal figures wrong. If a count is wrong, create a new "
+        "report with the same file and the corrected count.",
+        [
+            "Feb 2025: 201 meals, against 100 in a typical month, with no matching rise in food.",
+            "Mar 2025: 49 meals, against 100 in a typical month, with no matching drop in food.",
+        ],
+    )
+    assert export_df.loc[export_df["is_flagged"], "flag_reason"].tolist() == [
+        "Count far above a typical month with no matching rise in food: per-meal figures look "
+        "too low.",
+        "Count far below a typical month with no matching drop in food: per-meal figures look "
+        "too high.",
+    ]
+
+
+def test_check_diner_meal_reasonableness_words_a_single_month_in_the_singular():
+    findings, _ = _check_headcounts(
+        {"2025-01": 1000, "2025-02": 1, "2025-03": 1000},
+        dict.fromkeys(["2025-01", "2025-02", "2025-03"], 10.0),
+    )
+
+    assert (findings[0]["message"], findings[0]["sample_values"]) == (
+        "The diner count entered for one month is far higher or lower than in a typical month, "
+        "but the food in the file did not rise or fall with it. That can mean a typo, which "
+        "would make that month's per-diner figures wrong. If the count is wrong, create a new "
+        "report with the same file and the corrected count.",
+        ["Feb 2025: 1 diner, against 1,000 in a typical month, with no matching drop in food."],
+    )
+
+
+def test_check_diner_meal_reasonableness_judges_only_months_with_both_count_and_food():
+    findings, export_df = _check_headcounts(
+        {"2025-01": 100, "2025-02": 100, "2025-03": 100, "2025-04": 100_000},
+        {"2025-01": 10, "2025-02": 10, "2025-03": 10, "2025-05": 1_000},
+    )
+
+    assert findings[0]["status"] == "success"
+    assert findings[0]["metadata"]["median_count"] == 100
+    assert export_df["month_year"].tolist() == ["2025-01", "2025-02", "2025-03"]
+
+
+def test_check_diner_meal_reasonableness_notes_when_no_month_has_count_and_food():
+    findings, export_df = _check_headcounts({"2025-01": 100}, {"2025-02": 10})
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 0)]
+    assert export_df.empty
+
+
+def test_check_diner_meal_reasonableness_notes_when_typical_month_has_no_food():
+    findings, export_df = _check_headcounts(
+        {"2025-01": 100, "2025-02": 100, "2025-03": 100},
+        {"2025-01": 0, "2025-02": 0, "2025-03": 10},
+    )
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 0)]
+    assert export_df.empty
 
 
 def test_check_aggregation_reconciliation_passes_at_exact_point_one_percent_threshold():
@@ -648,9 +766,10 @@ def _category_discontinuity_with_a_one_month_gap() -> dict[str, object]:
     }
 
 
-def _diner_meal_counts_about_20_percent_off_the_median() -> dict[str, object]:
-    findings, export_df = check_diner_meal_reasonableness(
-        normalize_diner_meal_mapping({"2025-01": 79, "2025-02": 100, "2025-03": 121})
+def _counts_30_percent_off_the_median_with_flat_food() -> dict[str, object]:
+    findings, export_df = _check_headcounts(
+        {"2025-01": 70, "2025-02": 100, "2025-03": 130},
+        dict.fromkeys(["2025-01", "2025-02", "2025-03"], 10.0),
     )
     return {
         "status": findings[0]["status"],
@@ -727,7 +846,7 @@ def _top_category_at_35_percent() -> dict[str, object]:
                     "high_ratio_threshold": 1.2,
                 }
             },
-            _diner_meal_counts_about_20_percent_off_the_median,
+            _counts_30_percent_off_the_median_with_flat_food,
             {"status": "warning", "count": 2, "is_flagged": [True, False, True]},
             id="diner_meal_count_reasonableness",
         ),
@@ -801,7 +920,9 @@ def test_run_all_diagnostics_excludes_no_matches_from_missing_categories():
         }
     )
 
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
+    findings = run_all_diagnostics(
+        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=False
+    )
     missing_categories_finding = next(
         finding for finding in findings if finding.get("category") == "gbd_categories_absent"
     )
@@ -821,7 +942,9 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
         }
     )
 
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=True)
+    findings = run_all_diagnostics(
+        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=True
+    )
 
     bounds_finding = next(
         finding for finding in findings if finding.get("category") == "per_product_weight_bounds"
@@ -863,6 +986,7 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     findings = run_all_diagnostics(
         df=df,
         diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
+        diner_or_meal="diner",
         serving=False,
         monthly_product_data=df.groupby(["month_year", "product"], as_index=False)[
             "kilos_total"

@@ -95,6 +95,7 @@ def _collect_diagnostic_export_sheets(
     df: pd.DataFrame,
     diner_meal_mapping: dict[Any, Any],
     *,
+    diner_or_meal: DinerOrMeal,
     metric_total: str,
     monthly_product_data: pd.DataFrame | None = None,
     monthly_category_data: pd.DataFrame | None = None,
@@ -132,7 +133,9 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build category discontinuity export: %s", exc)
 
     try:
-        _, denominator_qc_df = checks.check_diner_meal_reasonableness(diner_meal_mapping)
+        _, denominator_qc_df = checks.check_diner_meal_reasonableness(
+            df, diner_meal_mapping, metric_total, diner_or_meal=diner_or_meal
+        )
         if not denominator_qc_df.empty:
             diagnostic_export_sheets["Denominator_QC"] = denominator_qc_df
     except Exception as exc:
@@ -402,6 +405,7 @@ def _write_qa_workbook(
         diagnostic_sheets=_collect_diagnostic_export_sheets(
             df,
             report.diner_meal_mapping,
+            diner_or_meal=report.diner_or_meal,
             metric_total=report.metric_total,
             monthly_product_data=report.aggregation.get("monthly_product_data"),
             monthly_category_data=report.aggregation.get("monthly_category_data"),

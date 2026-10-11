@@ -443,13 +443,14 @@
         "stage": "diagnostics",
         "category": "diner_meal_count_reasonableness",
         "status": "success",
-        "message": "Monthly diner or meal counts looked broadly consistent across the reporting period.",
+        "message": "No month's diner count looks out of line with the food in the file.",
         "count": 0,
         "metadata": {
+          "metric_col": "kilos_total",
           "median_count": 1000.0,
+          "median_food_per_count": 0.00964790184,
           "low_ratio_threshold": 0.5,
-          "high_ratio_threshold": 2.0,
-          "missing_month_count": 0
+          "high_ratio_threshold": 2.0
         }
       },
       {
