@@ -319,9 +319,10 @@ start shipping the wrong config with it. Read configuration at runtime instead.
 
 ### Web deploys on every push
 
-Web deploys automatically on every push to `main`, database migrations included, because it's the side
-that owns the schema. **`deploy.yml` runs the database migrations itself, before it deploys to the
-hosting provider.** There is no way to unapply a database migration; a bad one is fixed forward.
+Web deploys automatically on every push to `main`, once `main`'s own CI passes on that commit.
+Migrations go with it, because web is the side that owns the schema. **`deploy.yml` runs the
+database migrations itself, before it deploys to the hosting provider.** There is no way to
+unapply a database migration; a bad one is fixed forward.
 
 ### Worker deploys only on demand
 
@@ -330,8 +331,9 @@ kills the old container outright. Two mitigations, both required:
 
 - **The worker deploys independently of web, and only when someone dispatches it** — never on
   push. One consequence follows from that asymmetry: the deployed worker is always the side running
-  behind schema and web app, never ahead, so the web ↔ worker and app ↔ schema contracts must stay
-  backwards compatible for as long as an old worker might still be running.
+  behind schema and web app, never ahead, and `deploy.yml` enforces it. So the web ↔ worker and
+  app ↔ schema contracts must stay backwards compatible for as long as an old worker might still
+  be running.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
