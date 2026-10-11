@@ -234,7 +234,7 @@ def test_aggregation_failure_raises_from_the_original_exception(
     assert str(excinfo.value.__cause__) == "aggregation exploded"
 
 
-def test_a_category_bought_at_zero_weight_has_no_share_or_intensity():
+def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity():
     zero_pork = pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-10"]),
@@ -253,7 +253,7 @@ def test_a_category_bought_at_zero_weight_has_no_share_or_intensity():
             "product": "Pork Chop",
             "kilos_total": 0.0,
             "kilos_total_in_category": 0.0,
-            "percentage": pytest.approx(np.nan, nan_ok=True),
+            "percentage": 0.0,
         }
     ]
     intensity = report.aggregation["animal_emissions_intensity"]
@@ -265,6 +265,8 @@ def test_a_category_bought_at_zero_weight_has_no_share_or_intensity():
             "kg_co2e_per_kg_food": pytest.approx(np.nan, nan_ok=True),
         }
     ]
+    with build_report_charts(report) as charts:
+        assert charts.findings == ()
 
 
 def test_a_data_month_missing_from_the_mapping_aborts():

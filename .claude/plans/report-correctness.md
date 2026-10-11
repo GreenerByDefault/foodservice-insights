@@ -7,16 +7,11 @@ The product's report is `analyze()` → `build_food_report` → `build_report_ch
 the same core. An audit in September 2026 ran that path with `analyze()`'s arguments on inputs
 `apps/web` accepts and read every PDF page and workbook sheet; every fact below was reproduced
 again on 27 September against `main`, through `analyze()` with `KeywordLlmClient` on inline
-frames. The deliverable carries wrong numbers and hides its own failures. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's
-output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff is the review.
+frames. The deliverable hides its own failures.
+`tests/test_analysis.py::test_analyze_golden_deliverables` pins today's output: a PR that
+changes it regenerates it with `UPDATE_GOLDEN=1`, and the fixture diff is the review.
 The remaining PRs were re-checked against `main` on 11 October, after the week's moves to the
 lab; every fact below still reproduces unless it says otherwise.
-
-**Wrong numbers.**
-
-- A category whose every line weighs 0 gets a `NaN` driver share (`_safe_percentage`,
-  `report/aggregation.py`), so its driver panel prints "nan%", the whole drivers section is
-  stamped "[DATA WARNING]", and the customer's quality page lists `plot_input_missing_values`.
 
 **Silent failures.**
 
@@ -45,10 +40,13 @@ lab; every fact below still reproduces unless it says otherwise.
   customer their correct totals might be overstated. *Rejected: a warning at the upload form* —
   the form has no warning state, and the user cannot tell us which of their repeats are real.
 - **A zero-weight line is data; a file that weighs nothing is not.** A single 0 is ordinary
-  (short-shipped or not-yet-weighed lines) and gets a `per_product_weight_bounds` warning. A file
-  whose every weight is 0 is refused at upload (`normalize.ts`, `all-weights-zero`), and
-  `build_food_report` raises `UnusableDataError` when every row it receives is 0, which also
-  catches an upload whose only weight was on uncategorized products. That is the one data-driven
+  (short-shipped or not-yet-weighed lines) and gets a `per_product_weight_bounds` warning. A
+  category bought only at weight 0 keeps its driver panel with every bar at 0%:
+  `_safe_percentage` (`report/aggregation.py`) makes any part of a total of 0 be 0% of it, for
+  category and overall drivers alike. A file whose every weight is 0 is refused at upload
+  (`normalize.ts`, `all-weights-zero`), and `build_food_report` raises `UnusableDataError` when
+  every row it receives is 0, which also catches an upload whose only weight was on
+  uncategorized products. That is the one data-driven
   abort, and it is an `UnusableDataError`, not an `error` finding: there is no report to write.
 - **`info` never changes a report's status or wording, and the customer PDF lists warnings and
   errors only.** `quality_status_from_findings` ignores `info`, and with
@@ -106,18 +104,7 @@ lab; every fact below still reproduces unless it says otherwise.
   other; if we do, it is its own PR, and a serving report, which has no emissions, needs an
   order of its own.
 
-## PR 1 — a zero-weight category's driver share is 0%, not NaN
-
-- `_safe_percentage` (`report/aggregation.py`) returns 0.0 for a zero denominator, as
-  `identify_overall_drivers` already does for the whole file. A category bought only at weight
-  0 keeps its driver panel, with every bar at 0%.
-- Tests: `build_food_report` with a category whose lines all weigh 0 gives that category's
-  drivers a `percentage` of 0.0, and `build_report_charts` files no finding.
-- Worth it: found 11 October; a zero-weight line is ordinary data (see Decisions), and today
-  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 2, which deletes the
-  input check that is today the only sign of it.
-
-## PR 2 — a chart or split failure fails the run
+## PR 1 — a chart or split failure fails the run
 
 - `_safe_plot`, `_placeholder_figure`, the input checks and the category-driver `try` in
   `report/plots/report.py` go, and so do the split and share `try` blocks in
@@ -126,8 +113,8 @@ lab; every fact below still reproduces unless it says otherwise.
   findings. `FoodReport.findings` is then the whole list.
 - This adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
   month, a 200-character product and every category over twelve months: no chart fell back
-  except PR 1's case. The split and share return `None` for every no-data case, so they raise
-  only on our bug.
+  except a category bought only at weight 0, whose driver share is now 0% rather than `NaN`.
+  The split and share return `None` for every no-data case, so they raise only on our bug.
 - Tests: the `_safe_plot` and placeholder tests in `plots/test_report.py` go; a chart
   monkeypatched to raise surfaces from `build_report_charts`. The lab's failure manifest
   records no findings for a crash, as today; its log keeps the traceback.
@@ -144,9 +131,9 @@ handed and what the sheets contain, not that files exist.
 
 ## Risks
 
-- The golden test pins numbers, so most PRs here regenerate it; review the fixture diff rather
-  than accept it.
+- The golden test pins numbers; if a PR regenerates it, review the fixture diff rather than
+  accept it.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
-- PR 2 turns any chart bug the probe missed into a failed run. That is the intent, but watch
+- PR 1 turns any chart bug the probe missed into a failed run. That is the intent, but watch
   `unknown` failures after it deploys.
 - No PR here waits on GBD.
