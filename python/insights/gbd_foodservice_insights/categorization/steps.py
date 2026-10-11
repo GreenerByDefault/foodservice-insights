@@ -19,9 +19,9 @@ from gbd_foodservice_insights.categorization.cache import (
     CategorizationCache,
     normalize_product_name,
 )
-from gbd_foodservice_insights.categorization.llm import LlmClient
+from gbd_foodservice_insights.categorization.llm import LLM_CONCURRENCY, LlmClient
 from gbd_foodservice_insights.errors import UnusableDataError
-from gbd_foodservice_insights.utils import print_progress
+from gbd_foodservice_insights.utils import map_concurrently
 
 MATCH_TYPE_RAW = "raw_product_history"
 MATCH_TYPE_CLEANED = "cleaned_name_history"
@@ -93,10 +93,12 @@ def clean_product_names(
 
     if mask_needs_cleaning.any():
         items_to_clean = products_df.loc[mask_needs_cleaning, "product"]
-        cleaned_names = []
-        for idx, item in enumerate(items_to_clean, 1):
-            cleaned_names.append(llm.clean_product_name(str(item)))
-            print_progress("Name cleaning", idx, num_to_clean)
+        cleaned_names = map_concurrently(
+            llm.clean_product_name,
+            [str(item) for item in items_to_clean],
+            max_workers=LLM_CONCURRENCY,
+            progress_prefix="Name cleaning",
+        )
         products_df.loc[mask_needs_cleaning, "cleaned_item_names"] = cleaned_names
 
     # Previously-categorized items keep their original name as cleaned name
@@ -204,16 +206,20 @@ def categorize_with_llm(
         # Categorize each unique cleaned name once, then fan the result back out
         # to every row that shares it — duplicate cleaned names cost one call.
         unique_names = pd.unique(items_to_categorize.dropna())
+        answers = map_concurrently(
+            lambda name: llm.match_product_to_category(name, gbd_categories),
+            [str(name) for name in unique_names],
+            max_workers=LLM_CONCURRENCY,
+            progress_prefix="Categorization",
+        )
         name_to_category: dict[Any, str] = {}
         unrecognized: Counter[str] = Counter()
-        for idx, name in enumerate(unique_names, 1):
-            answer = llm.match_product_to_category(str(name), gbd_categories)
+        for name, answer in zip(unique_names, answers, strict=True):
             category = canonical_by_normalized.get(normalize_product_name(answer))
             if category is None:
                 unrecognized[answer] += 1
                 category = NO_MATCHES_FOUND
             name_to_category[name] = category
-            print_progress("Categorization", idx, len(unique_names))
 
         # One bounded line, not one per item: the worker keeps only the last 8 KB of the child's
         # stderr. It names no items, though an answer can echo one.

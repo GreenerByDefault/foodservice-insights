@@ -7,7 +7,8 @@ Two properties keep this seam agnostic and are worth preserving:
    handed a CSV, an output directory, and the form's answers.
 2. **`report_progress` is a plain no-argument callable with a no-op default**, so notebooks and
    the lab are unaffected. It carries no payload; the child's only use of it is to bump
-   `sequence`.
+   `sequence`. It is called after every LLM call, from whichever thread made it, so it must be
+   thread-safe.
 
 **Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
 materializes it into the run directory per run, and the child reports new values back through the
