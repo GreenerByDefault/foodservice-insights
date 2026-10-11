@@ -10,9 +10,11 @@ symbol to its callers shows what is still in the product only for the lab, or on
 inputs the product never sends:
 
 - `categorization/reviews.py` and `CategorizedProducts.ai_review_df`: read only by the lab's
-  `categorization/spreadsheet.py`, which writes the human-review CSV. `analyze()` discards it,
-  and `categorization-cache.md` PR 5 builds the harvested rows from `unique_products_df`, not
-  from it.
+  `categorization/spreadsheet.py`, which writes `_for_human_review.csv` for step 0.5's promotion
+  cell. `analyze()` discards it, and `caches-to-supabase.md` PR 5 harvests from
+  `unique_products_df` (`match_type == "llm"`, the same products) because the table carries no
+  cleaned name. Its columns are `category, product, occurrence_count`, so the rows the lab
+  promotes from it never feed the cleaned-name index either.
 - `MergeCounts.to_summary` and `n_rows_non_entree`: only the lab's `spreadsheet.py` and
   `entrees.filter_to_entrees` (the entree filter moved to the lab in #354 and #376).
 - `aggregation.category_highest_vs_lowest_months` → `aggregation["highest_lowest"]`: computed on
@@ -41,28 +43,59 @@ inputs the product never sends:
   (`_validate_rows`), so nothing below it needs case folding. *Rejected: keeping it for the lab's
   hand-edited CSVs* — the lab now fails at `build_food_report` with the offending names, which
   is the rule ("fail loudly on bad data"), and it already did for emission factors (#492).
-- **What the lab alone reads moves to the lab**, with its tests: the review table, the merge
-  summary, the highest-vs-lowest table, the mapping and region parsers. The product's
+- **The review table is deleted, not moved.** Once `caches-to-supabase.md` lands, Studio is the
+  one place review happens and everything the lab pushes lands unverified, so a CSV review is a
+  second review in front of the real one. Its replacement in the product is the harvest,
+  `CategorizedProducts.new_categorizations` (`caches-to-supabase.md` PR 5), which the lab pushes
+  as is (its PR 8). *Rejected: moving it to the lab* (this plan's earlier PR 1). A data
+  scientist's corrections in the CSV would be pushed as `ON CONFLICT DO NOTHING` suggestions, so
+  they are silently dropped whenever the product is already in the table — from a worker
+  harvest, or from their own earlier push of the same file — and they would carry no cleaned
+  name. What is lost is `occurrence_count` for ordering the review; add it back as a column if
+  reviewers in Studio ask for it.
+- **What else the lab alone reads moves to the lab**, with its tests: the merge summary, the
+  highest-vs-lowest table, the mapping and region parsers. The product's
   `CategorizedProducts` keeps `cleaned_df`, `unique_products_df` and `match_type_counts`;
   `MergeCounts` keeps its counts (the seam docstring in `analysis.py` names it as where result
   metadata would come from).
 - Serving mode stays.
 
-## PR 1 — Move the review table and the merge summary to the lab
+## PR 1 — Delete the human-review table
 
-- `categorization/reviews.py` → `gbd_foodservice_insights_lab/categorization/reviews.py`;
-  `tests/categorization/test_reviews.py` → `lab/tests/categorization/`. `CategorizedProducts`
-  drops `ai_review_df`; `categorize_unique_products` no longer builds it. The lab's
-  `categorize_spreadsheet_to_csvs` calls `build_ai_review_table(categorized.cleaned_df,
-  categorized.unique_products_df)` itself.
+Almost all deletions. Until `caches-to-supabase.md` PR 8, the lab cannot add to its local
+product cache; accepted, since that migration is days away.
+
+- Product: delete `categorization/reviews.py` and `tests/categorization/test_reviews.py`;
+  `CategorizedProducts` drops `ai_review_df` and `categorize_unique_products` no longer builds
+  it; `pipeline.py`'s module docstring drops `reviews.py`. In `test_pipeline.py`, the
+  cleaned-name test's `ai_review_df.empty` assertion goes (its `match_type_counts` assertion
+  already says nothing reached the LLM), and so does the full-pipeline test's `ai_review_df`
+  frame (the `unique_products_df` frame above it already pins every `match_type`). `cache.py`'s
+  module docstring stops pointing at `product_cache`.
+- Lab: `spreadsheet.py` stops writing `_for_human_review.csv` and its summary loses
+  `human_review_file` and `human_review_n_unique_products`; its docstring loses the promotion
+  pointer. `notebook_runscript_setup.update_metadata_with_categorization_stats` loses
+  `categorization_human_review_file`; step 1's runscript loses its log line. The entree review
+  CSV stays for now (`caches-to-supabase.md` PR 8 deletes it).
+- Lab: delete `categorization/product_cache.py` and its test —
+  `promote_local_review_file_to_reviewed_cache`, `_validate_categories_for_promotion` and
+  `save_historical_categorizations` have no input left. `caches-to-supabase.md` PR 4 recreates
+  the module with the loader. Step 0.5's promotion cell goes.
+- `test_spreadsheet.py`, `test_serving.py`, `test_notebook_runscript_setup.py` and
+  `test_runscript.py` follow. `python/lab/README.md`'s "Nothing adds to the categorization cache
+  automatically…" paragraph goes; `caches-to-supabase.md` PR 8 writes its replacement.
+
+## PR 2 — Move the merge summary to the lab
+
 - `MergeCounts` drops `to_summary` and `n_rows_non_entree`. The lab's `spreadsheet.py` gets a
   `merge_summary(counts, *, n_rows_non_entree=None)` returning the same dict;
   `filter_to_entrees` returns the non-entree row count alongside the counts instead of
   `dataclasses.replace`-ing it in.
-- `tests/categorization/test_pipeline.py`, `test_steps.py` and the lab's `test_spreadsheet.py`,
-  `test_entrees.py` follow. `categorization/pipeline.py`'s module docstring drops `reviews.py`.
+- `tests/categorization/test_steps.py`'s two `to_summary` tests move to the lab's
+  `test_spreadsheet.py`; `test_entrees.py` follows the new return shape.
+- Lands before `caches-to-supabase.md` PRs 7–8, which edit `spreadsheet.py`, if convenient.
 
-## PR 2 — Move the highest-vs-lowest month table to the lab
+## PR 3 — Move the highest-vs-lowest month table to the lab
 
 - `category_highest_vs_lowest_months` → `gbd_foodservice_insights_lab/food_report/diagnostics.py`,
   with its two tests. `run_aggregation_pipeline` drops `highest_lowest`; the lab's
@@ -70,7 +103,7 @@ inputs the product never sends:
   `per_diner_metric_name(report.metric_total)`.
 - Golden fixture: unchanged (the table was never in a deliverable).
 
-## PR 3 — `build_food_report` takes typed counts
+## PR 4 — `build_food_report` takes typed counts
 
 - Signature: `diner_meal_mapping: Mapping[pd.Period, float]`. `analyze()` builds it:
   `{pd.Period(month, freq="M"): float(count) for month, count in request.monthly_counts.items()}`.
@@ -87,9 +120,9 @@ inputs the product never sends:
 - `tests/report/test_quality_contract.py` is mostly these helpers' tests: move what survives
   into `test_food_report.py` / `test_aggregation.py` and delete the file. `test_analysis.py`'s
   `test_hands_the_report_the_forms_answers` asserts the Period-keyed mapping.
-- Touches `analyze()`; `categorization-cache.md` PR 5 touches its cache lines, not these.
+- Touches `analyze()`; `caches-to-supabase.md` PRs 4–5 touch its cache lines, not these.
 
-## PR 4 — Compare categories exactly
+## PR 5 — Compare categories exactly
 
 - Delete `_normalize_categories_to_canonical_labels`; `create_template_data`,
   `summarize_animal_emissions_intensity`, `calculate_animal_emissions_concentration`,
@@ -109,8 +142,8 @@ inputs the product never sends:
 ## Verification
 
 `just lint && just check && just test && just test-lab` per PR, golden fixture regenerated and
-diffed. After PR 4, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
+diffed. After PR 5, `grep -rn "lower()" python/insights/gbd_foodservice_insights/report
 python/insights/gbd_foodservice_insights/emissions.py` finds no category comparison, and
 `scripts/profile_report.py` (#499) no longer lists
 `_normalize_categories_to_canonical_labels`. `python/insights/README.md` and the lab README's
-description of what the wrapper adds stay accurate; update the sentence on the review CSV.
+description of what the wrapper adds stay accurate.

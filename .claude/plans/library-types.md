@@ -30,7 +30,7 @@ remain, each read by key or by name in several places:
   `write_report_pdf`; the title-string dispatch in `create_table_page` goes. The golden test
   records the typed inputs (`report` fields, the narrative, chart titles) instead of
   `build_pdf_report`'s kwargs.
-- Order after `lab-boundary` PR 2, which drops `highest_lowest` from the aggregation dict, so
+- Order after `lab-boundary` PR 3, which drops `highest_lowest` from the aggregation dict, so
   `Aggregation` never needs the field.
 
 ## PR 1 — `Aggregation` and `AnimalEmissionsConcentration`

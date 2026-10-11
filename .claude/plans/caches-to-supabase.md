@@ -6,7 +6,7 @@ Three caches today, all gitignored CSVs handed around by hand:
 
 | Cache | File | Rows | Read by | Written by |
 | --- | --- | ---: | --- | --- |
-| Product categorization | `python/insights/.../data_files/previously_categorized_items.csv` | 38,692 | the product (`analyze()`) and the lab (step 1, `LLM_testing.py`, the entree backfill) | the lab, by hand, after a person reviews a `_for_human_review.csv` (`product_cache.py`) |
+| Product categorization | `python/insights/.../data_files/previously_categorized_items.csv` | 38,692 | the product (`analyze()`) and the lab (step 1, `LLM_testing.py`, the entree backfill) | the lab, by hand, after a person reviews a `_for_human_review.csv` (`product_cache.py`; `lab-boundary.md` PR 1 deletes this path) |
 | Entree classification | `python/lab/.../data_files/previously_classified_entrees.csv` | 1,989 | the lab, serving mode only | the lab, **automatically**, with Gemini's unreviewed labels (`spreadsheet.py` → `save_historical_entree_classifications`) |
 | Unit weight | `python/lab/.../data_files/previously_classified_weights.csv` | 893 | the lab, step 1.5 | the lab, by hand (`expand_historical_weight_classifications`) |
 
@@ -119,8 +119,8 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   never sees a contract document, and a bad one is a `contract_violation` the child classifies.
 - **The child writes `output/new-categorizations.json` before `result.json`**: the products the
   LLM categorized this run, with the LLM's cleaned name and its answer, `No Matches Found`
-  included — negative results are most of the cache. That is exactly the set of the existing
-  human-review table (`match_type == "llm"`). *Rejected: harvesting cleaned-name-history hits
+  included — negative results are most of the cache: the `match_type == "llm"` products, which
+  the lab pushes too (PR 8). *Rejected: harvesting cleaned-name-history hits
   too.* The pipeline already trusts those without review; suggesting them would fill the queue
   with rows nobody needs to look at, at the price of one name-cleaning call per run.
   *Rejected: carrying the rows inside `result.json`.* A table does not belong in a document the
@@ -207,13 +207,17 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   query the database directly.* Every step-1 run would need the network and a credential, the
   gitignored notebooks that call `load_categorization_cache()` would change behaviour, and it
   makes the lab harder to test for no gain over "pull first".
-- **`push` inserts new rows unverified, and the lab's local cache writes go away.** The
-  "promote a reviewed file" step pushes the reviewed rows as `lab:<reviewer>` suggestions; the
-  serving step pushes the Gemini-labelled products instead of appending them to the entree file;
-  the weights step pushes instead of rewriting the weights file. Verification for all three
-  happens in Studio, one place, by whoever holds dashboard access. A data scientist's own
-  verification of a `_for_human_review.csv` is then a better suggestion, not a trusted row —
-  which is what `REQUIREMENTS.md` asks for, and what their AI-assisted workflow needs.
+- **`push` inserts new rows unverified, and the lab's local cache writes go away.** Step 1
+  pushes the products its LLM categorized — `CategorizedProducts.new_categorizations`, the rows
+  the worker harvests, cleaned names included — and, for serving data, the Gemini-labelled
+  products instead of appending them to the entree file; the weights step pushes instead of
+  rewriting the weights file. Verification for all three happens in Studio, one place, by
+  whoever holds dashboard access, which is what `REQUIREMENTS.md` asks for and what the data
+  scientists' AI-assisted workflow needs. *Rejected: pushing a hand-reviewed
+  `_for_human_review.csv`* (this plan's earlier draft; `lab-boundary.md` PR 1 deletes the
+  file). First suggestion wins, so a correction made in the file is silently dropped whenever
+  the product is already in the table — from a worker harvest, or from an earlier push of the
+  same file — and the file carries no cleaned name. Corrections happen in Studio.
   **Open:** who verifies. On Free and Pro plans every dashboard role that can see data can also
   run any SQL, so dashboard access is full database access, and the reviewer is a human
   decision, not a role this plan can create. The data scientists' scripted path is `cache_client`
@@ -355,7 +359,8 @@ cache and the worker image needs no file.
   place the seam's `cleaned_name` meets the library's `cleaned_item_names`; it drops an unknown
   category with the same WARNING, since a reviewer's typo must not fail every run.
   `categorization_cache_path`, `read_categorization_cache_csv` and `load_categorization_cache`
-  move to the lab's `categorization/product_cache.py`, with their tests; `entree_cache.py` and
+  move to a new lab `categorization/product_cache.py` (`lab-boundary.md` PR 1 deleted the old
+  one), with their tests; `entree_cache.py` and
   `experiments/LLM_testing.py` import from there.
 - `analyze()`: `CategorizationCache.from_rows(request.categorization_cache)`, and no file read.
   `test_analysis.py`'s `cache_path` fixture and its cache-hit test pass rows on the request.
@@ -375,11 +380,14 @@ cache and the worker image needs no file.
   blank, product stripped and within the byte bound. Invalid fixtures: `unknown-field`,
   `duplicate-product`, `blank-category`, `missing-rows`, `analysis-attempt-id-not-a-uuid`,
   `product-over-max-bytes`, `product-not-stripped`.
-- Library: `NewCategorization(product, cleaned_name, category)` and
-  `AnalysisOutcome.new_categorizations: tuple[NewCategorization, ...] = ()`. `analyze()` fills
-  it from `unique_products_df` where `match_type == "llm"`, with that frame's `cleaned_item_names`
-  — not from `ai_review_df`, which carries no cleaned name. `stub_analysis`'s default keeps every
-  existing caller writing `rows: []`.
+- Library: `categorization/pipeline.py` gains `NewCategorization(product, cleaned_name,
+  category)` and `CategorizedProducts.new_categorizations: tuple[NewCategorization, ...]`, which
+  `categorize_unique_products` fills from `unique_products_df` where `match_type == "llm"`, with
+  that frame's `cleaned_item_names` — one definition of "new" for the worker and the lab's push
+  (PR 8). It lives under `categorization/`, not `analysis.py`, because `analysis.py` imports the
+  pipeline. `AnalysisOutcome.new_categorizations: tuple[NewCategorization, ...] = ()`, which
+  `analyze()` passes through; `stub_analysis`'s default keeps every existing caller writing
+  `rows: []`.
 - Python: `layout.py`, `names.py` (`MAX_PRODUCT_BYTES`), `messages.py`
   (`new_categorizations_payload`, validating before anything touches disk), `run.py`: build the
   payload → `place_result_files` → write the document → write `result.json`, extending the
@@ -402,7 +410,9 @@ cache and the worker image needs no file.
   rows landed, `withoutNewCategorizations` → `contract_violation` with no `result_file` and no
   cache rows, and the lost-race test asserts zero cache rows. Python: `test_run.py` (the stub
   writes `rows: []`; scenario rows appear verbatim; a duplicate product → `contract_violation`),
-  `test_fixtures.py`, `test_contract.py`, `test_analysis.py` (the golden run harvests nothing;
+  `test_fixtures.py`, `test_contract.py`, `test_pipeline.py` (the full-pipeline test asserts
+  `new_categorizations`: the LLM rows only, cleaned names included), `test_analysis.py` (the
+  golden run harvests nothing;
   a keyword run harvests exactly the LLM-categorized products with the keyword client's cleaned
   names, `No Matches Found` included). Optionally one assertion in
   `tests/e2e/specs/report-lifecycle.e2e.ts` that `beef` reached the run database unverified —
@@ -464,20 +474,22 @@ cache and the worker image needs no file.
   chunks, columns mapped back, the review columns never named (the role would refuse them). Each
   validates the way the parent's parser does: stripped non-blank keys, non-blank values, unit
   weights numeric or null.
-- `product_cache.py`: `promote_local_review_file_to_reviewed_cache` becomes
-  `push_reviewed_categorizations(review_file, reviewed_by)`, keeping its category validation
-  against the YAML and requiring a reviewer name for `suggested_by`; `save_historical_categorizations`
-  goes. Step 0.5's promotion cell calls it. `entree_cache.py`: `save_historical_entree_classifications`
-  goes; `spreadsheet.py`'s `update_historical_entree_classifications` becomes
-  `push_entree_classifications`, defaulting on when the connection is configured and skipped with
-  a WARNING when not; the backfill script and `build_entree_cleaned_name_reuse_index` are
-  unchanged. `clean_product_weights.py`: `expand_historical_weight_classifications` pushes
+- `spreadsheet.py`: step 1 pushes `categorized.new_categorizations` through
+  `push_product_categorizations` and, for serving data, the Gemini-labelled products through
+  `push_entree_classifications`, both as `lab:<getpass.getuser()>`. One `push_suggestions` flag
+  replaces `update_historical_entree_classifications`: on by default when the connection is
+  configured, skipped with a WARNING when not. Turning it off is how a prompt experiment keeps
+  its answers out of the table, where the first suggestion would block the real one.
+  `entree_cache.py`: `save_historical_entree_classifications` goes. `entrees.py`:
+  `build_entree_human_review_table` and the `_entree_for_human_review.csv` it feeds go, for the
+  reason `lab-boundary.md` PR 1 deleted the product one; the backfill script and
+  `build_entree_cleaned_name_reuse_index` are unchanged. `clean_product_weights.py`: `expand_historical_weight_classifications` pushes
   instead of rewriting the file; the 1.5 runscript's commented call is renamed to match.
 - Tests: the row mappers and validators; a `db`-marked round trip that a push lands unverified
   and a second push of the same keys writes nothing; `test_spreadsheet.py`'s serving test asserts
-  the push, not a file write; `test_product_cache.py` follows the rename.
-- `python/lab/README.md` § Working on a client: categorize, review the `_for_human_review.csv`,
-  push, then someone verifies in Studio; the next pull brings the verified rows down.
+  the push, not a file write, and a test with `push_suggestions=False` asserts no push.
+- `python/lab/README.md` § Working on a client: step 1 suggests its new answers, someone
+  verifies them in Studio, and the next pull brings the verified rows down.
   `REQUIREMENTS.md` § Product categorization cache names the lab's two caches under the same
   rule. This PR deletes this plan.
 
@@ -544,4 +556,5 @@ with `CACHE_DB_CONNECTION_STRING` at the hosted project: a local upload's new pr
 production's Studio unverified, with the laptop's worker id in `suggested_by`, and the same
 variable under `mock-llm` stops the worker at startup. On the lab:
 `just pull-caches` writes three files whose row counts match the verified counts in Studio; a
-push of a reviewed file appears in Studio unverified; a second push of it adds nothing.
+step 1 run's new categorizations appear in Studio unverified as `lab:<user>`; a second run of
+the same file adds nothing.
