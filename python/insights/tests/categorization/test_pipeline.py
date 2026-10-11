@@ -95,8 +95,6 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
     assert categorized.match_type_counts.get("cleaned_name_history") == 2
     assert set(categorized.unique_products_df["category"]) == {"Milk (Cow's milk)"}
-    # Trusted reuse -> nothing queued for human review.
-    assert categorized.ai_review_df.empty
 
 
 def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFixture) -> None:
@@ -175,22 +173,6 @@ def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFi
                     "Whole Milk Gallon",
                     "cheesecake slice",
                 ],
-            }
-        ),
-    )
-    assert_frame_equal(
-        categorized.ai_review_df,
-        pd.DataFrame(
-            {
-                "category": ["Butter", "Cheese", "Cheese", no_match, no_match],
-                "product": [
-                    "Salted Butter",
-                    "Cheddar Shred",
-                    "Mozzarella Block",
-                    "Cheesecake Slice",
-                    "Pork Loin",
-                ],
-                "occurrence_count": [1] * 5,
             }
         ),
     )

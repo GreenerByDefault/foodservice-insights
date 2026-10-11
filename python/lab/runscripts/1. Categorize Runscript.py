@@ -87,7 +87,6 @@ def main() -> None:
         summary["pct_remaining"] * 100,
     )
     logger.info("Output written to %s", summary.get("output_file", args.output))
-    logger.info("Human review output written to %s", summary.get("human_review_file", "(not set)"))
 
 
 if __name__ == "__main__":

@@ -15,46 +15,6 @@ def absent_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(cache, "categorization_cache_path", lambda: tmp_path / "absent.csv")
 
 
-def test_categorize_spreadsheet_to_csvs_writes_human_review_csv(tmp_path):
-    input_path = tmp_path / "input.csv"
-    output_path = tmp_path / "output_categorized.csv"
-    input_df = pd.DataFrame(
-        {
-            "product": ["apple"],
-            "date": ["2025-01-01"],
-            "weight": [1.0],
-        }
-    )
-    input_df.to_csv(input_path, index=False)
-
-    human_review_df = pd.DataFrame(
-        {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
-    )
-    categorized = CategorizedProducts(
-        cleaned_df=input_df,
-        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        ai_review_df=human_review_df,
-        match_type_counts={"llm": 1},
-    )
-
-    with patch.object(spreadsheet, "categorize_unique_products", return_value=categorized):
-        _, result_summary = categorize_spreadsheet_to_csvs(
-            input_filepath=input_path,
-            output_filepath=output_path,
-            llm=KeywordLlmClient(),
-        )
-
-    expected_review_path = tmp_path / "output_categorized_for_human_review.csv"
-
-    assert output_path.exists()
-    assert expected_review_path.exists()
-    assert result_summary["human_review_file"] == str(expected_review_path)
-    assert result_summary["human_review_n_unique_products"] == 1
-
-    written_review_df = pd.read_csv(expected_review_path)
-    pd.testing.assert_frame_equal(written_review_df, human_review_df)
-
-
 def test_categorize_spreadsheet_to_csvs_raises_for_an_unsupported_file_type(tmp_path):
     input_path = tmp_path / "input.txt"
     input_path.write_text("not real data")
@@ -95,13 +55,9 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
     input_df = pd.DataFrame({"product": ["apple"], "date": ["2025-01-01"], "weight": [1.5]})
     input_df.to_excel(input_path, index=False)
 
-    human_review_df = pd.DataFrame(
-        {"category": ["Fruit"], "product": ["apple"], "occurrence_count": [1]}
-    )
     categorized = CategorizedProducts(
         cleaned_df=input_df,
         unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        ai_review_df=human_review_df,
         match_type_counts={"llm": 1},
     )
 
@@ -147,7 +103,6 @@ def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_p
     categorized = CategorizedProducts(
         cleaned_df=input_df,
         unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        ai_review_df=pd.DataFrame(),
         match_type_counts={"llm": 1},
     )
 

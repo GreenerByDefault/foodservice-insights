@@ -6,7 +6,7 @@ Three caches today, all gitignored CSVs handed around by hand:
 
 | Cache | File | Rows | Read by | Written by |
 | --- | --- | ---: | --- | --- |
-| Product categorization | `python/insights/.../data_files/previously_categorized_items.csv` | 38,692 | the product (`analyze()`) and the lab (step 1, `LLM_testing.py`, the entree backfill) | the lab, by hand, after a person reviews a `_for_human_review.csv` (`product_cache.py`; `lab-boundary.md` PR 1 deletes this path) |
+| Product categorization | `python/insights/.../data_files/previously_categorized_items.csv` | 38,692 | the product (`analyze()`) and the lab (step 1, `LLM_testing.py`, the entree backfill) | nothing in the repo since the lab's review-and-promote path was deleted; copies are handed out by hand |
 | Entree classification | `python/lab/.../data_files/previously_classified_entrees.csv` | 1,989 | the lab, serving mode only | the lab, **automatically**, with Gemini's unreviewed labels (`spreadsheet.py` → `save_historical_entree_classifications`) |
 | Unit weight | `python/lab/.../data_files/previously_classified_weights.csv` | 893 | the lab, step 1.5 | the lab, by hand (`expand_historical_weight_classifications`) |
 
@@ -214,8 +214,8 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   rewriting the weights file. Verification for all three happens in Studio, one place, by
   whoever holds dashboard access, which is what `REQUIREMENTS.md` asks for and what the data
   scientists' AI-assisted workflow needs. *Rejected: pushing a hand-reviewed
-  `_for_human_review.csv`* (this plan's earlier draft; `lab-boundary.md` PR 1 deletes the
-  file). First suggestion wins, so a correction made in the file is silently dropped whenever
+  `_for_human_review.csv`* (this plan's earlier draft; the file and its promotion step are
+  gone). First suggestion wins, so a correction made in the file is silently dropped whenever
   the product is already in the table — from a worker harvest, or from an earlier push of the
   same file — and the file carries no cleaned name. Corrections happen in Studio.
   **Open:** who verifies. On Free and Pro plans every dashboard role that can see data can also
@@ -359,8 +359,7 @@ cache and the worker image needs no file.
   place the seam's `cleaned_name` meets the library's `cleaned_item_names`; it drops an unknown
   category with the same WARNING, since a reviewer's typo must not fail every run.
   `categorization_cache_path`, `read_categorization_cache_csv` and `load_categorization_cache`
-  move to a new lab `categorization/product_cache.py` (`lab-boundary.md` PR 1 deleted the old
-  one), with their tests; `entree_cache.py` and
+  move to a new lab module, `categorization/product_cache.py`, with their tests; `entree_cache.py` and
   `experiments/LLM_testing.py` import from there.
 - `analyze()`: `CategorizationCache.from_rows(request.categorization_cache)`, and no file read.
   `test_analysis.py`'s `cache_path` fixture and its cache-hit test pass rows on the request.
@@ -482,7 +481,7 @@ cache and the worker image needs no file.
   its answers out of the table, where the first suggestion would block the real one.
   `entree_cache.py`: `save_historical_entree_classifications` goes. `entrees.py`:
   `build_entree_human_review_table` and the `_entree_for_human_review.csv` it feeds go, for the
-  reason `lab-boundary.md` PR 1 deleted the product one; the backfill script and
+  reason the product one is gone; the backfill script and
   `build_entree_cleaned_name_reuse_index` are unchanged. `clean_product_weights.py`: `expand_historical_weight_classifications` pushes
   instead of rewriting the file; the 1.5 runscript's commented call is renamed to match.
 - Tests: the row mappers and validators; a `db`-marked round trip that a push lands unverified
