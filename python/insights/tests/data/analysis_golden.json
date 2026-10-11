@@ -505,7 +505,7 @@
         "month_year",
         "product",
         "kilos_total",
-        "kilos per diner-meal"
+        "kilos per diner"
       ],
       "index": [
         0,
@@ -650,7 +650,7 @@
         "month_year",
         "category",
         "kilos_total",
-        "kilos per diner-meal",
+        "kilos per diner",
         "emissions_kg_co2e"
       ],
       "index": [
@@ -997,7 +997,7 @@
         "category",
         "total_kg_co2e",
         "pct_of_total",
-        "kg_co2e_per_diner_meal"
+        "kg_co2e_per_diner"
       ],
       "index": [
         0,

@@ -223,6 +223,16 @@ def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
 
 
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
+    report = _build(_rows(), diner_or_meal=diner_or_meal)
+
+    for table in ("monthly_product_data", "monthly_category_data"):
+        assert f"kilos per {diner_or_meal}" in report.aggregation[table].columns
+    assert report.emissions_summary is not None
+    assert f"kg_co2e_per_{diner_or_meal}" in report.emissions_summary.columns
+
+
 def test_serving_mode_computes_no_emissions():
     report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
 

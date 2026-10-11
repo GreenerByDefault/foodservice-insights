@@ -43,15 +43,33 @@ def test_aggregate_data_sums_by_month_and_group(fruit_rows):
     ]
 
 
-def test_aggregate_data_divides_by_the_months_diner_meals(fruit_rows):
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_aggregate_data_divides_by_the_months_diner_meals(fruit_rows, diner_or_meal):
     agg_df = aggregate_data(
         fruit_rows,
         group_by="product",
         per_diner_meal=True,
         diner_meal_mapping={"2023-01": 100, "2023-02": 120},
+        diner_or_meal=diner_or_meal,
     )
 
-    assert agg_df["kilos per diner-meal"].tolist() == pytest.approx([0.1, 0.2, 0.125])
+    assert agg_df[f"kilos per {diner_or_meal}"].tolist() == pytest.approx([0.1, 0.2, 0.125])
+
+
+@pytest.mark.parametrize(
+    ("diner_meal_mapping", "diner_or_meal"),
+    [(None, "diner"), ({"2023-01": 100, "2023-02": 120}, None)],
+)
+def test_aggregate_data_per_diner_needs_the_mapping_and_the_basis(
+    fruit_rows, diner_meal_mapping, diner_or_meal
+):
+    with pytest.raises(ValueError, match="diner_meal_mapping and diner_or_meal are required"):
+        aggregate_data(
+            fruit_rows,
+            per_diner_meal=True,
+            diner_meal_mapping=diner_meal_mapping,
+            diner_or_meal=diner_or_meal,
+        )
 
 
 def test_create_template_data_preserves_values_when_category_case_differs():
@@ -533,6 +551,7 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
         df,
         diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
         region="us",
+        diner_or_meal="diner",
     )
 
     assert result["substitution_scenarios"]["scenario"].tolist() == [
@@ -561,7 +580,10 @@ def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
     )
 
     result = run_aggregation_pipeline(
-        df, diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0}, region="us"
+        df,
+        diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
+        region="us",
+        diner_or_meal="diner",
     )
 
     assert result["monthly_product_data"]["kilos_total"].sum() == 22.5
