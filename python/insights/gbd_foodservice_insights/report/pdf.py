@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -396,81 +396,82 @@ def create_text_page(
         plt.close(fig)
 
 
-def create_table_page(
+def create_category_template_pages(
     pdf: PdfPages,
-    title: str,
-    dataframe: pd.DataFrame,
+    template: pd.DataFrame,
     fig_size: tuple[float, float] = LETTER_LANDSCAPE,
 ) -> None:
-    """Render a DataFrame as styled table pages in the PDF.
-
-    Certain titles trigger custom layouts. Only the first 40 rows are rendered.
-    """
-    if title == "Decision KPIs":
-        create_decision_kpis_page(pdf, dataframe)
-        return
-
-    # Truncate large tables for display
-    display_df = dataframe.head(40).copy()
-    col_widths = None
-
-    if not isinstance(display_df.index, pd.RangeIndex) or display_df.index.name is not None:
-        index_label = display_df.index.name or "Label"
-        display_df = display_df.reset_index().rename(columns={"index": index_label})
-
-    def _format_pdf_table_value(value: Any) -> Any:
-        if pd.isna(value):
-            return ""
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            numeric_value = float(value)
-            if numeric_value.is_integer():
-                return f"{int(numeric_value):,}"
-            return f"{numeric_value:,.2f}".rstrip("0").rstrip(".")
-        return value
-
-    display_df = display_df.map(_format_pdf_table_value)
-
-    if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
-        display_df = display_df.copy()
-        display_df["Scenario"] = display_df["Scenario"].map(
-            lambda value: (
-                textwrap.fill(str(value), width=24, break_long_words=False, break_on_hyphens=False)
-                if pd.notna(value)
-                else value
-            )
-        )
-        col_widths = [0.30, 0.17, 0.16, 0.16, 0.21]
-
-    font_size = 7.5 if len(display_df.columns) <= 6 else 6.5
-    row_scale = 1.18 if len(display_df.columns) <= 6 else 1.08
-    if title == "Substitution Scenarios":
-        font_size = 10.0
-        row_scale += 0.12
-
-    if title != "Category Template" or display_df.empty:
-        _draw_table_page(pdf, title, title, display_df, col_widths, font_size, row_scale, fig_size)
-        return
-
+    """Render the category x month template, splitting its months across as many pages as
+    they need to render unclipped."""
+    display_df = _display_table(_format_category_template_for_pdf(template))
     # One font size on every page, since the columns are measured at it. Each page repeats the
     # category column at its measured width, and its month columns share the rest of the page.
     font_size = 9.5
+    row_scale = 1.18 if len(display_df.columns) <= 6 else 1.08
     widths = _table_column_widths_in(display_df, font_size)
     month_width = _table_width_in(fig_size) - widths[0]
     pages = _pack_columns(widths[1:], month_width)
     for page_number, page_columns in enumerate(pages, start=1):
-        heading = title if len(pages) == 1 else f"{title} ({page_number} of {len(pages)})"
+        heading = (
+            "Category Template"
+            if len(pages) == 1
+            else f"Category Template ({page_number} of {len(pages)})"
+        )
         columns = [index + 1 for index in page_columns]
         slack = (month_width - sum(widths[index] for index in columns)) / max(len(columns), 1)
         _draw_table_page(
             pdf,
-            title,
             heading,
             display_df.iloc[:, [0, *columns]],
-            [widths[0], *(widths[index] + slack for index in columns)],
-            font_size,
-            row_scale,
-            fig_size,
+            col_widths=[widths[0], *(widths[index] + slack for index in columns)],
+            font_size=font_size,
+            row_scale=row_scale,
+            fig_size=fig_size,
         )
+
+
+def create_animal_intensity_page(pdf: PdfPages, intensity: pd.DataFrame) -> None:
+    _draw_table_page(
+        pdf,
+        "Animal Emissions Intensity",
+        _display_table(_format_animal_emissions_intensity_for_pdf(intensity)),
+        col_widths=None,
+        font_size=7.5,
+        row_scale=1.18,
+    )
+
+
+def create_substitution_scenarios_page(pdf: PdfPages, scenarios: pd.DataFrame) -> None:
+    display_df = _display_table(_format_substitution_scenarios_for_pdf(scenarios))
+    display_df["Scenario"] = display_df["Scenario"].map(
+        lambda value: textwrap.fill(value, width=24, break_long_words=False, break_on_hyphens=False)
+    )
+    _draw_table_page(
+        pdf,
+        "Substitution Scenarios",
+        display_df,
+        col_widths=[0.30, 0.17, 0.16, 0.16, 0.21],
+        font_size=10.0,
+        row_scale=1.30,
+        multiline_column="Scenario",
+    )
+
+
+def _display_table(table: pd.DataFrame) -> pd.DataFrame:
+    """``table`` as the text a PDF table shows, with a named index as its first column."""
+    if table.index.name is not None:
+        table = table.reset_index()
+    return table.map(_format_table_cell)
+
+
+def _format_table_cell(value: object) -> object:
+    if pd.isna(value):
+        return ""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        if float(value).is_integer():
+            return f"{int(value):,}"
+        return f"{value:,.2f}".rstrip("0").rstrip(".")
+    return value
 
 
 def _table_width_in(fig_size: tuple[float, float]) -> float:
@@ -511,15 +512,17 @@ def _pack_columns(widths: list[float], available_width: float) -> list[list[int]
 
 def _draw_table_page(
     pdf: PdfPages,
-    title: str,
     heading: str,
     display_df: pd.DataFrame,
+    *,
     col_widths: list[float] | None,
     font_size: float,
     row_scale: float,
-    fig_size: tuple[float, float],
+    fig_size: tuple[float, float] = LETTER_LANDSCAPE,
+    multiline_column: str | None = None,
 ) -> None:
-    """Draw ``display_df`` on one page under ``heading``, styled for the table ``title``."""
+    """Draw ``display_df`` on one page under ``heading``. Each row grows to fit the lines of
+    its ``multiline_column`` cell, which is drawn larger."""
     fig, ax = _new_text_figure(fig_size)
 
     ax.text(
@@ -533,21 +536,6 @@ def _draw_table_page(
         fontweight="bold",
         fontfamily="Montserrat",
     )
-
-    if display_df.empty:
-        ax.text(
-            0.5,
-            0.5,
-            "No data available.",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="gray",
-        )
-        pdf.savefig(fig)
-        plt.close(fig)
-        return
 
     table = ax.table(
         cellText=display_df.values.tolist(),
@@ -565,15 +553,15 @@ def _draw_table_page(
         cell.set_edgecolor("#D9E1EA")
         cell.set_linewidth(0.6)
 
-    if title == "Substitution Scenarios" and "Scenario" in display_df.columns:
-        scenario_col_idx = display_df.columns.get_loc("Scenario")
-        line_counts = [str(value).count("\n") + 1 for value in display_df["Scenario"].tolist()]
+    if multiline_column is not None:
+        multiline_col_idx = display_df.columns.get_loc(multiline_column)
+        line_counts = [value.count("\n") + 1 for value in display_df[multiline_column]]
         for row_idx, line_count in enumerate(line_counts, start=1):
             row_height = table[row_idx, 0].get_height() * max(1.15, 1 + 0.9 * (line_count - 1))
             for col_idx in range(len(display_df.columns)):
                 table[row_idx, col_idx].set_height(row_height)
                 table[row_idx, col_idx].set_text_props(va="top")
-            table[row_idx, scenario_col_idx].set_text_props(fontsize=11.25, va="top")
+            table[row_idx, multiline_col_idx].set_text_props(fontsize=11.25, va="top")
 
     # Style header
     for col_idx in range(len(display_df.columns)):
@@ -597,13 +585,10 @@ def _draw_table_page(
 
 def create_decision_kpis_page(
     pdf: PdfPages,
-    dataframe: pd.DataFrame,
+    concentration: AnimalEmissionsConcentration,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
-    """Render the decision KPI as a narrative text page.
-
-    ``dataframe`` is one row of decision-KPI fields.
-    """
+    """Render the animal emissions concentration as a narrative text page."""
     fig, ax = _new_text_figure(fig_size)
 
     ax.text(
@@ -618,52 +603,18 @@ def create_decision_kpis_page(
         fontfamily="Montserrat",
     )
 
-    if dataframe.empty:
-        ax.text(
-            0.5,
-            0.5,
-            "No data available.",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="gray",
-        )
-        pdf.savefig(fig)
-        plt.close(fig)
-        return
-
-    row = dataframe.iloc[0].to_dict()
-    focus = str(row.get("Focus", "top animal products")).strip()
-    share = row.get("Share of Animal Emissions (%)", "")
-    top_products_emissions = row.get("Top Products Kg CO₂e", "")
-    top_products = str(row.get("Top Animal Products", "")).strip()
-
-    def _clean_numeric_text(value: Any) -> str:
-        if pd.isna(value):
-            return ""
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            numeric_value = float(value)
-            if numeric_value.is_integer():
-                return f"{int(numeric_value):,}"
-            return f"{numeric_value:,.1f}".rstrip("0").rstrip(".")
-        return str(value).strip()
-
-    share_text = _clean_numeric_text(share)
-    emissions_text = _clean_numeric_text(top_products_emissions)
-
-    product_list = [item.strip() for item in top_products.split(" | ") if item.strip()]
-    if not product_list and top_products:
-        product_list = [top_products]
-
-    product_count = len(product_list)
-    product_label = "product was" if product_count == 1 else "products were"
-
+    products = concentration.top_products
+    share_text = f"{concentration.share_pct:.1f}".removesuffix(".0")
     intro_lines = _wrap_text_lines(
         [
-            (f"The {focus.lower()} was {share_text}% amounting to {emissions_text} kg CO₂e."),
+            (
+                f"The top {len(products)} animal products share of animal-product emissions was "
+                f"{share_text}% amounting to {round(concentration.top_products_kg_co2e):,} kg "
+                "CO₂e."
+            ),
             "",
-            f"The top {product_count} animal {product_label}:",
+            f"The top {len(products)} animal "
+            f"{'product was' if len(products) == 1 else 'products were'}:",
         ],
         width=80,
     )
@@ -682,7 +633,7 @@ def create_decision_kpis_page(
         )
         y -= 0.04
 
-    for idx, product in enumerate(product_list, start=1):
+    for idx, product in enumerate(products, start=1):
         wrapped_product_lines = _wrap_text_lines([f"{idx}. {product}"], width=78)
         for line in wrapped_product_lines:
             ax.text(
@@ -914,25 +865,6 @@ def _format_category_template_for_pdf(template: pd.DataFrame) -> pd.DataFrame:
     return display_df
 
 
-def _format_decision_kpis_for_pdf(concentration: AnimalEmissionsConcentration) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "Focus": [
-                f"Top {len(concentration.top_products)} animal products share of "
-                "animal-product emissions"
-            ],
-            "Share of Animal Emissions (%)": [round(concentration.share_pct, 1)],
-            "Top Animal Products": [" | ".join(concentration.top_products)],
-            "Top Products Kg CO₂e": pd.array(
-                [round(concentration.top_products_kg_co2e)], dtype="Int64"
-            ),
-            "Total Animal Kg CO₂e": pd.array(
-                [round(concentration.total_animal_kg_co2e)], dtype="Int64"
-            ),
-        }
-    )
-
-
 def _format_substitution_scenarios_for_pdf(scenarios: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -952,71 +884,6 @@ def _format_substitution_scenarios_for_pdf(scenarios: pd.DataFrame) -> pd.DataFr
 # ---------------------------------------------------------------------------
 
 
-def build_pdf_report(
-    output_path: str,
-    title_info: dict[str, str],
-    plots: list[tuple[str, Figure]],
-    tables: dict[str, pd.DataFrame],
-    summary_stats: dict[str, str],
-    missing_data_findings: Sequence[Finding] = (),
-    show_quality_successes: bool = True,
-    diner_or_meal: DinerOrMeal = "diner",
-    narrative: ExecutiveNarrative | None = None,
-) -> str:
-    """Assemble the full PDF report and return its absolute path.
-
-    ``title_info`` has keys ``client``, ``baseline_pilot``, ``procurement_serving``. With
-    ``show_quality_successes`` (notebook/data scientist mode), passed checks and notes are shown
-    in the quality section; without it (web app mode), only warnings and issues are shown.
-    """
-    output_path = str(Path(output_path).resolve())
-
-    with close_new_figures_on_error(), PdfPages(output_path) as pdf:
-        # 1. Title page
-        create_title_page(
-            pdf,
-            client=title_info.get("client", ""),
-            baseline_pilot=title_info.get("baseline_pilot", ""),
-            procurement_serving=title_info.get("procurement_serving", ""),
-        )
-
-        # 2. Executive summary (plain-English when a narrative is supplied)
-        if narrative is None:
-            create_key_value_summary_page(pdf, summary_stats)
-        else:
-            create_executive_summary_page(pdf, narrative)
-
-        # 3. How to read the charts
-        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
-
-        # 4. Plots
-        for _caption, fig in plots:
-            pdf.savefig(fig)
-
-        # 5. Tables
-        for table_title, df in tables.items():
-            create_table_page(pdf, table_title, df)
-
-        # 6. Methodology note
-        methodology = _methodology_lines(diner_or_meal)
-        create_text_page(
-            pdf,
-            "About This Report",
-            methodology,
-            bold_lines={line for line in methodology if line.endswith("?")},
-        )
-
-        # 7. Data quality status
-        create_text_page(
-            pdf,
-            "Data Completeness & Quality",
-            _quality_to_lines(missing_data_findings, show_successes=show_quality_successes),
-        )
-
-    logger.info("PDF report saved to %s", output_path)
-    return output_path
-
-
 def write_report_pdf(
     report: FoodReport,
     charts: ReportCharts,
@@ -1026,39 +893,49 @@ def write_report_pdf(
     baseline_pilot: str,
     show_quality_successes: bool,
 ) -> None:
+    """Write the report's PDF. With ``show_quality_successes`` (the data scientist's report),
+    the quality section lists passed checks and notes too; without it (the customer's), only
+    warnings and issues."""
     quality_status = quality_status_from_findings(report.findings)
+    narrative = _executive_narrative(report, client_name, quality_status)
+    procurement = report.aggregation.procurement
 
-    aggregation = report.aggregation
-    tables = {"Category Template": _format_category_template_for_pdf(aggregation.template)}
-    if (procurement := aggregation.procurement) is not None:
-        if procurement.animal_emissions_intensity is not None:
-            tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
-                procurement.animal_emissions_intensity
+    with close_new_figures_on_error(), PdfPages(path) as pdf:
+        create_title_page(pdf, client_name, baseline_pilot, report.mode)
+        if narrative is None:
+            create_key_value_summary_page(
+                pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
             )
-        if procurement.animal_emissions_concentration is not None:
-            tables["Decision KPIs"] = _format_decision_kpis_for_pdf(
-                procurement.animal_emissions_concentration
-            )
-        if procurement.substitution_scenarios is not None:
-            tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
-                procurement.substitution_scenarios
-            )
+        else:
+            create_executive_summary_page(pdf, narrative)
+        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(report.diner_or_meal))
 
-    build_pdf_report(
-        output_path=str(path),
-        title_info={
-            "client": client_name,
-            "baseline_pilot": baseline_pilot,
-            "procurement_serving": report.mode,
-        },
-        plots=charts.figures,
-        tables=tables,
-        summary_stats={**report.summary_stats, "Data Quality Status": quality_status.upper()},
-        missing_data_findings=report.findings,
-        show_quality_successes=show_quality_successes,
-        diner_or_meal=report.diner_or_meal,
-        narrative=_executive_narrative(report, client_name, quality_status),
-    )
+        for _caption, fig in charts.figures:
+            pdf.savefig(fig)
+
+        create_category_template_pages(pdf, report.aggregation.template)
+        if procurement is not None:
+            if procurement.animal_emissions_intensity is not None:
+                create_animal_intensity_page(pdf, procurement.animal_emissions_intensity)
+            if procurement.animal_emissions_concentration is not None:
+                create_decision_kpis_page(pdf, procurement.animal_emissions_concentration)
+            if procurement.substitution_scenarios is not None:
+                create_substitution_scenarios_page(pdf, procurement.substitution_scenarios)
+
+        methodology = _methodology_lines(report.diner_or_meal)
+        create_text_page(
+            pdf,
+            "About This Report",
+            methodology,
+            bold_lines={line for line in methodology if line.endswith("?")},
+        )
+        create_text_page(
+            pdf,
+            "Data Completeness & Quality",
+            _quality_to_lines(report.findings, show_successes=show_quality_successes),
+        )
+
+    logger.info("PDF report saved to %s", path)
 
 
 def _executive_narrative(
