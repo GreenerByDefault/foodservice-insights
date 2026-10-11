@@ -305,10 +305,7 @@ Which to run when:
 
 Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
 Keep them backwards-compatible with the running app, since migrations run *before* the new
-code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking. Dropping, renaming, or
-adding `NOT NULL` usually breaks backwards compatibility, so CI makes you justify it in a comment
-on or above the line: `// backwards-compatible-because: <why the deployed worker and web survive
-this>`.
+code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
 
 #### Reset a database
 

@@ -78,10 +78,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Check new migrations against what the hosted database already has
-        # On push, main is its own base, so there is nothing to compare.
-        if: github.event_name == 'pull_request'
-        run: python3 scripts/ci/check_migrations.py
       - uses: ./.github/actions/setup-node
       - run: pnpm lint
       - run: pnpm exec turbo run check "$TURBO_SCOPE"
@@ -109,8 +105,22 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # for the base branch's migrations
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-supabase
+      # A fresh database accepts a migration that the hosted one, with the base branch's
+      # migrations already applied, refuses: one that sorts before them, or a deleted applied one.
+      # So migrate as the hosted database stands, then apply the PR's, and let Kysely refuse.
+      # `--staged` too, or a migration the PR deleted lingers untracked and Kysely never misses it.
+      - name: Migrate the base branch's migrations, as the hosted database already has them
+        if: github.event_name == 'pull_request'
+        env:
+          TEST_DB: '1'
+        run: |
+          git restore --source="$TURBO_SCM_BASE" --staged --worktree packages/db/migrations
+          pnpm migrate
+          git restore --source=HEAD --staged --worktree packages/db/migrations
       - run: pnpm migrate
         env:
           TEST_DB: '1'

@@ -6,10 +6,9 @@ A review on 2026-10-08 of what can break when deploying web and worker, on top o
 already in place: image-per-commit promotion, `deploy-web`'s supersession guard, the
 worker-runs-behind invariant, the drain with its `config.ts` relations, migrations from the
 workspace rather than the image, rollbacks skipping migrations, report pages that reload once
-their poll is answered by another deploy, and a CI check that fails a migration the hosted database
-would refuse or the deployed worker and web would not survive
-([`check_migrations.py`](../../scripts/ci/check_migrations.py)). Nothing deploys for real yet
-— [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
+their poll is answered by another deploy, and `ts-db-types` migrating the base branch first so that
+Kysely refuses a migration out of order or missing, as the hosted database would. Nothing deploys
+for real yet — [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
 Facts marked **verified** were checked on 2026-10-08.
