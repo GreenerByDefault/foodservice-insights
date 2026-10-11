@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from gbd_foodservice_insights.categories import (
-    get_drink_categories,
-    get_food_categories,
+    drink_categories,
+    food_categories,
 )
 from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
@@ -62,7 +62,7 @@ def plot_kilos_per_diner_meal_pilot_changes_by_category(
     """Plot a horizontal barplot of kilos per diner-meal by category, grouped by period.
 
     `period_category_data` needs 'category', 'kilos per diner-meal', and 'period' columns.
-    Category labels are cleaned with clean_GBD_category_name() if available, otherwise shown
+    Category labels are cleaned with short_name() if available, otherwise shown
     as-is. `categories` sets which to include, in display order (top to bottom); None includes
     all, sorted by kilos per diner-meal.
     """
@@ -900,13 +900,13 @@ def print_baseline_pilot_percent_changes(
     monthly_category_data = monthly_category_data.copy()
     monthly_category_data["category"] = monthly_category_data["category"].str.lower()
 
-    food_categories = set(get_food_categories(lowercase=True))
-    drink_categories = set(get_drink_categories(lowercase=True))
+    food = {c.lower() for c in food_categories()}
+    drink = {c.lower() for c in drink_categories()}
 
-    food_data = monthly_category_data[monthly_category_data["category"].isin(food_categories)]
-    drink_data = monthly_category_data[monthly_category_data["category"].isin(drink_categories)]
+    food_data = monthly_category_data[monthly_category_data["category"].isin(food)]
+    drink_data = monthly_category_data[monthly_category_data["category"].isin(drink)]
     food_plus_drink_data = monthly_category_data[
-        monthly_category_data["category"].isin(food_categories | drink_categories)
+        monthly_category_data["category"].isin(food | drink)
     ]
 
     food_totals = _aggregate_totals(food_data)

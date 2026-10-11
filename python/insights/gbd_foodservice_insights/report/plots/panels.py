@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
-from gbd_foodservice_insights.categories import get_drink_categories, get_food_categories
+from gbd_foodservice_insights.categories import drink_categories, food_categories
 from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
@@ -52,9 +52,9 @@ def filter_monthly_categories_by_type(
     if "category" not in monthly_category_data.columns:
         return monthly_category_data.iloc[0:0].copy()
 
-    food_categories = set(get_food_categories(lowercase=True))
-    drink_categories = set(get_drink_categories(lowercase=True))
-    known_categories = food_categories | drink_categories
+    food = {c.lower() for c in food_categories()}
+    drink = {c.lower() for c in drink_categories()}
+    known_categories = food | drink
 
     filtered = monthly_category_data.copy()
     filtered["_category_lower"] = filtered["category"].astype(str).str.strip().str.lower()
@@ -75,9 +75,7 @@ def filter_monthly_categories_by_type(
             f"Unknown categories: {unknown_categories}"
         )
 
-    categories = set(food_categories)
-    if include_drinks:
-        categories.update(drink_categories)
+    categories = food | drink if include_drinks else food
 
     filtered = filtered[filtered["_category_lower"].isin(categories)].copy()
     return filtered.drop(columns="_category_lower")

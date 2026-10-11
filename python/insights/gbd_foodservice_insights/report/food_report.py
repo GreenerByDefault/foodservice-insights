@@ -17,7 +17,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
 from gbd_foodservice_insights.report import aggregation, checks
@@ -227,7 +227,7 @@ def _validate_rows(rows: pd.DataFrame, mode: ReportMode) -> None:
         raise ValueError(f"{metric_total} is negative in {negative_count:,} of {len(rows):,} rows")
     # Exact names: downstream, some steps match categories case-insensitively and others do
     # not, so `beef` would count toward emissions but split from "Beef" in the tables.
-    gbd_categories = set(get_GBD_categories())
+    gbd_categories = set(category_names())
     unknown = sorted({str(c) for c in rows["category"].unique() if c not in gbd_categories})
     if unknown:
         raise ValueError(f"Not GBD categories: {', '.join(unknown)}")

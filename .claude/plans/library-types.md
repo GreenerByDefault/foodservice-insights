@@ -3,14 +3,10 @@
 ## Context
 
 The recent typed-rows and `Finding` TypedDict work (#459, #462, #464) paid for itself in bugs
-found (#465). Three stringly-typed shapes remain, each read by key or by name in several places:
+found (#465), and `categories.py` now loads `GBD_categories.yaml` once into frozen `Category`
+records, with the lab-only groupings in the lab's own `categories.py`. Two stringly-typed shapes
+remain, each read by key or by name in several places:
 
-- **`categories.py`** (212 lines): eleven `get_*_categories(lowercase=False)` getters over the
-  raw YAML `dict[str, Any]`; `get_egg_categories` and `get_protein_categories` decide membership
-  by `"egg" in name`; `emissions.load_emission_factors` rebuilds a second dict from the same
-  YAML. Five getters have no product caller (`get_meat_categories`, `clean_GBD_category_name`,
-  `get_dairy_categories`, `get_egg_categories`, `get_plant_based_dairy_categories`); the lab's
-  `pilot/` and `diagnostics.py` use three of them.
 - **`run_aggregation_pipeline` → `dict[str, Any]`**, read by string key in `food_report.py`,
   `excel.py`, `pdf.py`, `plots/report.py` and the lab's `pipeline.py`;
   `FoodReport.procurement_table(name)` re-derives "is this one present" from the dict.
@@ -26,18 +22,10 @@ found (#465). Three stringly-typed shapes remain, each read by key or by name in
   `plt.yticks`) while every other figure uses its `ax`; `format_month_labels` handles Periods,
   datetimes and three string formats for callers that only ever pass Periods;
   `plotting_utils`'s header names `aggregate.py` and `results.py`, which no longer exist;
-  `GBD_colors` and `get_GBD_categories` are the last non-PEP 8 names.
+  `GBD_colors` is the last non-PEP 8 name.
 
 ## Decisions
 
-- **One `Category` record per YAML entry**, loaded once: `name` (the `cool_food_pledge_name`
-  the report shows), `short_name`, `emission_factor_us`, `emission_factor_europe`,
-  `is_animal_product`, `product_category`, `kind: Literal["food", "drink"]`, `meat`,
-  `protein`. `protein: true` is added to the YAML for the six meats, two eggs, four plant
-  proteins and plant-based egg, replacing the "egg in name" rule with data. Every getter is a
-  comprehension over `categories()`; the lab-only ones move to a lab `categories.py` as the
-  same one-liners. *Rejected: deriving `protein` from `product_category`* — "Animal Based
-  Proteins" includes dairy-adjacent eggs and excludes plant egg; the flag says what it means.
 - **An `Aggregation` frozen dataclass** with the procurement-only tables typed `| None`, and
   `AnimalEmissionsConcentration(top_products, top_products_kg_co2e, total_animal_kg_co2e,
   share_pct)` in place of the prose-column DataFrame; `excel.py` builds its one-row sheet from
@@ -47,29 +35,10 @@ found (#465). Three stringly-typed shapes remain, each read by key or by name in
   `write_report_pdf`; the title-string dispatch in `create_table_page` goes. The golden test
   records the typed inputs (`report` fields, the narrative, chart titles) instead of
   `build_pdf_report`'s kwargs.
-- Order after `lab-boundary` PR 4 (exact category matching), so the `lowercase` flags are
-  already unused when they are removed.
+- Order after `lab-boundary` PR 2, which drops `highest_lowest` from the aggregation dict, so
+  `Aggregation` never needs the field.
 
-## PR 1 — `Category` records and a `protein` flag
-
-- `data_files/GBD_categories.yaml`: `protein: true|false` on every entry (13 true).
-- `categories.py`: `Category` frozen dataclass, `@cache def categories() -> tuple[Category, ...]`
-  validating the YAML's shape once, `category_names()` (renamed from `get_GBD_categories`),
-  `animal_product_categories()`, `plant_based_categories()`, `plant_protein_categories()`,
-  `protein_categories()`, `food_categories()`, `drink_categories()`. Drop the `lowercase` flags
-  and `get_gbd_categories_metadata`.
-- `emissions.load_emission_factors` becomes `{c.name: c.emission_factor_us | …_europe}` from
-  `categories()`; `test_every_category_has_an_emission_factor` becomes a type (`float`, not
-  `float | None`).
-- Lab: `gbd_foodservice_insights_lab/categories.py` with `meat_categories()`,
-  `dairy_categories()`, `egg_categories()`, `plant_based_dairy_categories()`,
-  `short_name(category)` (was `clean_GBD_category_name`); `pilot/`, `plotting_extras.py`,
-  `food_report/diagnostics.py` import from there.
-- `tests/test_categories.py` (298 lines) rewritten around `categories()`: the YAML parses to
-  the expected count, every name is unique, `protein` matches meat ∪ eggs ∪ plant proteins ∪
-  plant egg, the lowercase cases go.
-
-## PR 2 — `Aggregation` and `AnimalEmissionsConcentration`
+## PR 1 — `Aggregation` and `AnimalEmissionsConcentration`
 
 - `aggregation.py`: `Aggregation(monthly_product, monthly_category, template, overall_drivers,
   category_drivers, animal_emissions_intensity: DataFrame | None, animal_emissions_concentration:
@@ -80,7 +49,7 @@ found (#465). Three stringly-typed shapes remain, each read by key or by name in
   and the lab's `pipeline.py` / `excel.py` read attributes.
 - Tests: `test_aggregation.py`, `test_food_report.py`, `test_outputs.py`, lab `test_pipeline.py`.
 
-## PR 3 — Typed PDF assembly
+## PR 2 — Typed PDF assembly
 
 - `pdf.py`: `ExecutiveNarrative` dataclass built by `_executive_narrative`; `write_report_pdf`
   assembles the pages itself — title, executive summary (narrative, or the key-value page for a
@@ -95,7 +64,7 @@ found (#465). Three stringly-typed shapes remain, each read by key or by name in
   narrative, the formatted tables and chart titles from `write_report_pdf`'s arguments.
 - Golden fixture regenerated (its structure changes; values should not).
 
-## PR 4 — Plotting leftovers
+## PR 3 — Plotting leftovers
 
 - `plot_category_totals` styles its `ax`; `format_month_labels(months: Iterable[pd.Period])`;
   `GBD_colors` → `GBD_COLORS` (lab callers too); `plotting_utils` header rewritten; `rel_path`
@@ -106,6 +75,6 @@ found (#465). Three stringly-typed shapes remain, each read by key or by name in
 ## Verification
 
 `just lint && just check && just test && just test-lab` per PR; golden fixture regenerated and
-diffed, with values unchanged in PRs 1–2 and only the recording's shape changed in PR 3.
+diffed, with values unchanged in PR 1 and only the recording's shape changed in PR 2.
 `uv run ty check python` reports no new `Any` in `report/`. The chart screenshot baselines
 (`chart-screenshots.md`) are unaffected: no figure's content changes.

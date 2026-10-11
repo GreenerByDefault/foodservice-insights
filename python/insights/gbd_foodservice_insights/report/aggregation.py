@@ -5,11 +5,11 @@ from typing import Any
 import pandas as pd
 
 from gbd_foodservice_insights.categories import (
-    get_animal_product_categories,
-    get_GBD_categories,
-    get_plant_based_categories,
-    get_plant_protein_categories,
-    get_protein_categories,
+    animal_product_categories,
+    category_names,
+    plant_based_categories,
+    plant_protein_categories,
+    protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
 from gbd_foodservice_insights.report.schema import DinerOrMeal, per_diner_metric_name
@@ -33,7 +33,7 @@ def _normalize_categories_to_canonical_labels(
     category_series: pd.Series,
 ) -> pd.Series:
     """Map known category labels back to canonical GBD capitalization."""
-    canonical_lookup = {category.lower(): category for category in get_GBD_categories()}
+    canonical_lookup = {category.lower(): category for category in category_names()}
 
     return category_series.map(
         lambda value: (
@@ -113,7 +113,7 @@ def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd
     if metric not in monthly_category_data.columns:
         raise KeyError(metric)
 
-    canonical_categories = get_GBD_categories()
+    canonical_categories = category_names()
 
     normalized = monthly_category_data.copy()
     normalized["category"] = _normalize_categories_to_canonical_labels(normalized["category"])
@@ -249,8 +249,8 @@ def calculate_plant_animal_split(
     if metric_col not in df.columns or "category" not in df.columns:
         return None
 
-    animal_cats = set(c.lower() for c in get_animal_product_categories())
-    plant_cats = set(c.lower() for c in get_plant_based_categories())
+    animal_cats = set(c.lower() for c in animal_product_categories())
+    plant_cats = set(c.lower() for c in plant_based_categories())
 
     df_copy = df.copy()
     df_copy["_category_lower"] = df_copy["category"].astype(str).str.lower()
@@ -328,8 +328,8 @@ def calculate_plant_protein_share(
     if metric_col not in df.columns or "category" not in df.columns:
         return None
 
-    protein_cats = set(category.lower() for category in get_protein_categories())
-    plant_protein_cats = set(category.lower() for category in get_plant_protein_categories())
+    protein_cats = set(category.lower() for category in protein_categories())
+    plant_protein_cats = set(category.lower() for category in plant_protein_categories())
 
     classified = df.copy()
     classified["_category_lower"] = classified["category"].astype(str).str.lower()
@@ -403,7 +403,7 @@ def summarize_animal_emissions_intensity(
     if not required_columns.issubset(df.columns):
         return pd.DataFrame(columns=output_columns)
 
-    animal_cats = {category.lower() for category in get_animal_product_categories()}
+    animal_cats = {category.lower() for category in animal_product_categories()}
     animal_rows = df[df[category_col].astype(str).str.lower().isin(animal_cats)].copy()
     if animal_rows.empty:
         return pd.DataFrame(columns=output_columns)
@@ -448,7 +448,7 @@ def calculate_animal_emissions_concentration(
     if not required_columns.issubset(df.columns):
         return pd.DataFrame(columns=output_columns)
 
-    animal_categories = {category.lower() for category in get_animal_product_categories()}
+    animal_categories = {category.lower() for category in animal_product_categories()}
     animal_rows = df[df[category_col].astype(str).str.lower().isin(animal_categories)].copy()
     if animal_rows.empty:
         return pd.DataFrame(columns=output_columns)

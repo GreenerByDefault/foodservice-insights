@@ -1,298 +1,171 @@
-"""
-Tests for gbd_foodservice_insights/categories.py
-
-This module tests all functions for working with GBD food categories,
-including category retrieval, validation, and data cleaning.
-"""
+import math
 
 import pytest
 from gbd_foodservice_insights.categories import (
-    clean_GBD_category_name,
-    get_animal_product_categories,
-    get_categories_by_product_category,
-    get_dairy_categories,
-    get_drink_categories,
-    get_egg_categories,
-    get_food_categories,
-    get_GBD_categories,
-    get_meat_categories,
-    get_plant_based_categories,
-    get_plant_based_dairy_categories,
-    get_plant_protein_categories,
-    get_protein_categories,
+    Category,
+    _parse_categories,
+    animal_product_categories,
+    categories,
+    category_names,
+    drink_categories,
+    food_categories,
+    plant_based_categories,
+    plant_protein_categories,
+    protein_categories,
 )
 
-# ----------------------------------------------------------------------
-# Tests for category getter functions
-# ----------------------------------------------------------------------
-
-
-class TestGetGBDCategories:
-    """Tests for get_GBD_categories function."""
-
-    def test_returns_list(self):
-        result = get_GBD_categories()
-        assert isinstance(result, list)
-
-    def test_returns_non_empty_list(self):
-        result = get_GBD_categories()
-        assert len(result) > 0
-
-    def test_returns_strings(self):
-        result = get_GBD_categories()
-        assert all(isinstance(item, str) for item in result)
-
-    def test_lowercase_option(self):
-        normal = get_GBD_categories(lowercase=False)
-        lower = get_GBD_categories(lowercase=True)
-
-        assert len(normal) == len(lower)
-        assert all(item.lower() == item for item in lower)
-
-    def test_contains_expected_categories(self):
-        result = get_GBD_categories(lowercase=True)
-        # These should be present in any GBD category system
-        # Note: Actual category names are like 'beef and buffalo meat', not just 'beef'
-        expected_substrings = ["beef", "chicken", "milk"]
-        for substring in expected_substrings:
-            assert any(substring in cat for cat in result), (
-                f"Expected category containing '{substring}' not found"
-            )
-
-
-class TestGetCategoriesByProductCategory:
-    """Tests for get_categories_by_product_category function."""
-
-    def test_animal_based_proteins(self):
-        result = get_categories_by_product_category("Animal Based Proteins")
-        assert isinstance(result, list)
-        # Should include meat categories
-        result_lower = [r.lower() for r in result]
-        assert any("beef" in r or "chicken" in r or "pork" in r for r in result_lower)
-
-    def test_plant_based_proteins(self):
-        result = get_categories_by_product_category("Plant-Based Proteins")
-        assert isinstance(result, list)
-
-    def test_lowercase_option(self):
-        normal = get_categories_by_product_category("Dairy", lowercase=False)
-        lower = get_categories_by_product_category("Dairy", lowercase=True)
-
-        if len(normal) > 0:
-            assert len(normal) == len(lower)
-            assert all(item.lower() == item for item in lower)
-
-    def test_nonexistent_category_returns_empty(self):
-        result = get_categories_by_product_category("NonExistent Category")
-        assert result == []
-
-
-class TestGetMeatCategories:
-    """Tests for get_meat_categories function."""
-
-    def test_returns_list(self):
-        result = get_meat_categories()
-        assert isinstance(result, list)
-
-    def test_contains_meat_items(self):
-        result = get_meat_categories(lowercase=True)
-        # These substrings should be in meat category names
-        expected_substrings = ["beef", "pork", "chicken"]
-        for item in expected_substrings:
-            assert any(item in cat for cat in result), f"Expected '{item}' in meat categories"
-
-    def test_excludes_non_meat(self):
-        result = get_meat_categories(lowercase=True)
-        # Dairy and plant items should not be in meat categories
-        assert "dairy milk" not in result
-        assert "tofu" not in result
-
-    def test_lowercase_option(self):
-        lower = get_meat_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetPlantProteinCategories:
-    """Tests for get_plant_protein_categories function."""
-
-    def test_returns_list(self):
-        result = get_plant_protein_categories()
-        assert isinstance(result, list)
-
-    def test_lowercase_option(self):
-        lower = get_plant_protein_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetDairyCategories:
-    """Tests for get_dairy_categories function."""
-
-    def test_returns_list(self):
-        result = get_dairy_categories()
-        assert isinstance(result, list)
-
-    def test_lowercase_option(self):
-        lower = get_dairy_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetPlantBasedDairyCategories:
-    """Tests for get_plant_based_dairy_categories function."""
-
-    # An exact list, because a product-category name that drifts from the YAML's returns [].
-    def test_returns_the_plant_based_dairy_and_egg_categories(self):
-        assert get_plant_based_dairy_categories() == [
-            "Almond/Coconut Milk",
-            "Oat Milk",
-            "Rice Milk",
-            "Soy Milk",
-            "Plant-Based Cheese",
-            "Plant-Based Yogurt",
-            "Plant-Based Egg",
-            "Unspecified non dairy milk",
-        ]
-
-    def test_lowercase_option(self):
-        lower = get_plant_based_dairy_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetEggCategories:
-    """Tests for get_egg_categories function."""
-
-    def test_returns_list(self):
-        result = get_egg_categories()
-        assert isinstance(result, list)
-
-    def test_contains_egg_related_items(self):
-        result = get_egg_categories(lowercase=True)
-        # All items should contain 'egg'
-        assert all("egg" in item for item in result)
-
-    def test_lowercase_option(self):
-        lower = get_egg_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetProteinCategories:
-    """Tests for get_protein_categories function."""
-
-    def test_returns_list(self):
-        result = get_protein_categories()
-        assert isinstance(result, list)
-
-    def test_includes_meat(self):
-        proteins = set(get_protein_categories(lowercase=True))
-        meats = set(get_meat_categories(lowercase=True))
-        # All meat should be in protein
-        assert meats.issubset(proteins)
-
-    def test_includes_plant_proteins(self):
-        proteins = set(get_protein_categories(lowercase=True))
-        plant_proteins = set(get_plant_protein_categories(lowercase=True))
-        # All plant protein should be in protein
-        assert plant_proteins.issubset(proteins)
-
-    def test_lowercase_option(self):
-        lower = get_protein_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetAnimalProductCategories:
-    """Tests for get_animal_product_categories function."""
-
-    def test_returns_list(self):
-        result = get_animal_product_categories()
-        assert isinstance(result, list)
-
-    def test_includes_meat(self):
-        animal = set(get_animal_product_categories(lowercase=True))
-        meats = set(get_meat_categories(lowercase=True))
-        assert meats.issubset(animal)
-
-    def test_excludes_plant_based(self):
-        animal = set(get_animal_product_categories(lowercase=True))
-        plant = set(get_plant_based_categories(lowercase=True))
-        # No overlap between animal and plant
-        assert animal.isdisjoint(plant)
-
-    def test_lowercase_option(self):
-        lower = get_animal_product_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetPlantBasedCategories:
-    """Tests for get_plant_based_categories function."""
-
-    def test_returns_list(self):
-        result = get_plant_based_categories()
-        assert isinstance(result, list)
-
-    def test_excludes_animal_products(self):
-        plant = set(get_plant_based_categories(lowercase=True))
-        animal = set(get_animal_product_categories(lowercase=True))
-        # No overlap
-        assert plant.isdisjoint(animal)
-
-    def test_lowercase_option(self):
-        lower = get_plant_based_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetFoodCategories:
-    """Tests for get_food_categories function."""
-
-    def test_returns_list(self):
-        result = get_food_categories()
-        assert isinstance(result, list)
-
-    def test_lowercase_option(self):
-        lower = get_food_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-class TestGetDrinkCategories:
-    """Tests for get_drink_categories function."""
-
-    def test_returns_list(self):
-        result = get_drink_categories()
-        assert isinstance(result, list)
-
-    def test_lowercase_option(self):
-        lower = get_drink_categories(lowercase=True)
-        assert all(item.lower() == item for item in lower)
-
-
-# ----------------------------------------------------------------------
-# Tests for category cleaning functions
-# ----------------------------------------------------------------------
-
-
-class TestCleanGBDCategoryName:
-    """Tests for clean_GBD_category_name function."""
-
-    def test_cleans_valid_category(self):
-        # Get a known category
-        gbd_cats = get_GBD_categories()
-        if gbd_cats:
-            test_cat = gbd_cats[0]
-            result = clean_GBD_category_name(test_cat)
-            assert isinstance(result, str)
-            assert len(result) > 0
-
-    def test_raises_on_invalid_category(self):
-        with pytest.raises(KeyError):
-            clean_GBD_category_name("This Is Not A Real Category")
-
-    def test_case_insensitive(self):
-        gbd_cats = get_GBD_categories()
-        if gbd_cats:
-            test_cat = gbd_cats[0]
-            result_normal = clean_GBD_category_name(test_cat)
-            result_lower = clean_GBD_category_name(test_cat.lower())
-            result_upper = clean_GBD_category_name(test_cat.upper())
-            assert result_normal == result_lower == result_upper
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+BEEF_ENTRY = {
+    "name": "Beef",
+    "cool_food_pledge_name": "Beef and Buffalo Meat",
+    "emission_factor_us": 41.35,
+    "emission_factor_europe": 37.44,
+    "is_animal_product": True,
+    "template_product_category": "Animal Based Proteins",
+    "type": "food",
+    "meat": True,
+    "protein": True,
+    "serving_weight_oz": 3,
+}
+
+BEEF = Category(
+    name="Beef and Buffalo Meat",
+    short_name="Beef",
+    emission_factor_us=41.35,
+    emission_factor_europe=37.44,
+    is_animal_product=True,
+    product_category="Animal Based Proteins",
+    kind="food",
+    meat=True,
+    protein=True,
+)
+
+
+def test_packaged_yaml_parses():
+    assert len(categories()) == 27
+    assert categories()[0] == BEEF
+
+
+def test_protein_is_meat_eggs_plant_proteins_and_plant_egg():
+    assert protein_categories() == [
+        "Beef and Buffalo Meat",
+        "Lamb/mutton & goat meat",
+        "Pork (pig meat)",
+        "Poultry (Chicken & Turkey)",
+        "Fish & Mollusks",
+        "Shellfish (Shrimp & lobster)",
+        "Liquid Eggs",
+        "Shelled Eggs",
+        "Whole Grains",
+        "Plant-based Meats",
+        "Legumes",
+        "Nuts & Seeds",
+        "Plant-Based Egg",
+    ]
+
+
+def test_plant_protein_categories():
+    assert plant_protein_categories() == [
+        "Whole Grains",
+        "Plant-based Meats",
+        "Legumes",
+        "Nuts & Seeds",
+    ]
+
+
+def test_animal_product_categories():
+    assert animal_product_categories() == [
+        "Beef and Buffalo Meat",
+        "Lamb/mutton & goat meat",
+        "Pork (pig meat)",
+        "Poultry (Chicken & Turkey)",
+        "Fish & Mollusks",
+        "Shellfish (Shrimp & lobster)",
+        "Liquid Eggs",
+        "Shelled Eggs",
+        "Cheese",
+        "Butter",
+        "Ice Cream",
+        "Cream",
+        "Milk (Cow's milk)",
+        "Yogurt",
+        "Mayo",
+    ]
+
+
+def test_drink_categories():
+    assert drink_categories() == [
+        "Milk (Cow's milk)",
+        "Almond/Coconut Milk",
+        "Oat Milk",
+        "Rice Milk",
+        "Soy Milk",
+        "Unspecified non dairy milk",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (food_categories, drink_categories),
+        (animal_product_categories, plant_based_categories),
+    ],
+)
+def test_partitions_every_category(first, second):
+    assert sorted(first() + second()) == sorted(category_names())
+
+
+@pytest.mark.parametrize("value", [41, 0])
+def test_parse_accepts_an_integer_emission_factor(value):
+    (category,) = _parse_categories({"categories": [{**BEEF_ENTRY, "emission_factor_us": value}]})
+    assert category.emission_factor_us == float(value)
+    assert isinstance(category.emission_factor_us, float)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "match"),
+    [
+        ("cool_food_pledge_name", None, r"`cool_food_pledge_name` must be a str"),
+        ("protein", None, r"`protein` must be a bool"),
+        ("emission_factor_us", None, r"`emission_factor_us` must be a float"),
+        ("emission_factor_us", True, r"`emission_factor_us` must be a float"),
+        ("emission_factor_europe", "37.44", r"`emission_factor_europe` must be a float"),
+        ("emission_factor_us", -0.5, r"`emission_factor_us` must be finite and non-negative"),
+        ("emission_factor_us", math.nan, r"`emission_factor_us` must be finite and non-negative"),
+        ("emission_factor_europe", math.inf, r"`emission_factor_europe` must be finite"),
+        ("meat", 1, r"`meat` must be a bool"),
+        ("type", "snack", r"`type` must be one of \('food', 'drink'\)"),
+        ("template_product_category", "Fruit", r"`template_product_category` must be one of"),
+    ],
+)
+def test_parse_rejects_a_malformed_field(key, value, match):
+    with pytest.raises(ValueError, match=match):
+        _parse_categories({"categories": [{**BEEF_ENTRY, key: value}]})
+
+
+def test_parse_rejects_a_missing_field():
+    entry = {key: value for key, value in BEEF_ENTRY.items() if key != "protein"}
+    with pytest.raises(ValueError, match=r"`protein` must be a bool, got None"):
+        _parse_categories({"categories": [entry]})
+
+
+@pytest.mark.parametrize(
+    ("data", "match"),
+    [
+        ([BEEF_ENTRY], r"must be a mapping with a `categories` list"),
+        ({"categories": BEEF_ENTRY}, r"must be a mapping with a `categories` list"),
+        ({"categories": ["Beef"]}, r"Each category must be a mapping"),
+        ({"categories": [BEEF_ENTRY, BEEF_ENTRY]}, r"repeat: \['beef and buffalo meat'\]"),
+        (
+            {
+                "categories": [
+                    BEEF_ENTRY,
+                    {**BEEF_ENTRY, "cool_food_pledge_name": "BEEF AND BUFFALO MEAT"},
+                ]
+            },
+            r"repeat: \['beef and buffalo meat'\]",
+        ),
+    ],
+)
+def test_parse_rejects_a_malformed_document(data, match):
+    with pytest.raises(ValueError, match=match):
+        _parse_categories(data)

@@ -1,212 +1,123 @@
-"""Functions for working with GBD food categories.
+"""The GBD food categories.
 
 `data_files/GBD_categories.yaml`, loaded here, is the single source of truth for the categories,
 their emissions factors, and which are animal- or plant-based.
 """
 
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import cache
-from typing import Any
+from typing import Literal, get_args
 
 import yaml
 
 from gbd_foodservice_insights import PACKAGE_DIR
 
+Kind = Literal["food", "drink"]
+ProductCategory = Literal[
+    "Animal Based Proteins", "Dairy", "Plant-Based Proteins", "Plant-Based Dairy & Egg"
+]
+
+
+@dataclass(frozen=True)
+class Category:
+    name: str
+    """The `cool_food_pledge_name`, which is what rows carry and the report shows."""
+    short_name: str
+    emission_factor_us: float
+    emission_factor_europe: float
+    is_animal_product: bool
+    product_category: ProductCategory
+    kind: Kind
+    meat: bool
+    protein: bool
+
 
 @cache
-def _load_gbd_categories_data() -> dict[str, Any]:
-    """Private helper to load GBD categories YAML data."""
-    yaml_path = PACKAGE_DIR / "data_files" / "GBD_categories.yaml"
-    with open(yaml_path) as f:
-        loaded_data = yaml.safe_load(f)
-
-    if not isinstance(loaded_data, dict):
-        raise ValueError(f"{yaml_path.name} must contain a top-level mapping of category data.")
-
-    return loaded_data
+def categories() -> tuple[Category, ...]:
+    with open(PACKAGE_DIR / "data_files" / "GBD_categories.yaml") as f:
+        return _parse_categories(yaml.safe_load(f))
 
 
-def get_gbd_categories_metadata() -> dict[str, Any]:
-    """Return cached category metadata loaded from GBD_categories.yaml."""
-    return _load_gbd_categories_data()
+def _parse_categories(data: object) -> tuple[Category, ...]:
+    if not isinstance(data, Mapping) or not isinstance(data.get("categories"), list):
+        raise ValueError("GBD categories must be a mapping with a `categories` list.")
+
+    result = tuple(_parse_category(entry) for entry in data["categories"])
+    # Case-insensitively, because emissions, aggregation and the lab look categories up by
+    # lowercased name, where two spellings of one name would silently collapse into one.
+    names = [category.name.lower() for category in result]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"GBD categories repeat: {duplicates}")
+    return result
 
 
-def get_GBD_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of GBD categories by reading from the GBD_categories.yaml file."""
-    data = _load_gbd_categories_data()
-    categories = [item["cool_food_pledge_name"] for item in data["categories"]]
+def _parse_category(entry: object) -> Category:
+    if not isinstance(entry, Mapping):
+        raise ValueError(f"Each category must be a mapping, got {entry!r}")
 
-    if lowercase:
-        return [category.lower() for category in categories]
+    def field[T](key: str, expected: type[T]) -> T:
+        value = entry.get(key)
+        if expected is float and type(value) is int:
+            value = float(value)
+        # `bool` subclasses `int`, so check it both ways: `true` is not a number.
+        if not isinstance(value, expected) or isinstance(value, bool) != (expected is bool):
+            raise ValueError(f"{entry!r}: `{key}` must be a {expected.__name__}, got {value!r}")
+        return value
 
-    return categories
+    def choice[T: str](key: str, options: tuple[T, ...]) -> T:
+        value = field(key, str)
+        for option in options:
+            if value == option:
+                return option
+        raise ValueError(f"{entry!r}: `{key}` must be one of {options}, got {value!r}")
 
+    def emission_factor(key: str) -> float:
+        value = field(key, float)
+        # YAML reads `.nan` and `.inf` as floats.
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"{entry!r}: `{key}` must be finite and non-negative, got {value!r}")
+        return value
 
-def get_categories_by_product_category(product_category: str, lowercase: bool = False) -> list[str]:
-    """Returns a list of GBD categories filtered by template_product_category field.
-
-    `product_category` is e.g. "Animal Based Proteins", "Plant-Based Proteins", "Dairy", or
-    "Plant-Based Dairy & Egg".
-    """
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"]
-        for item in data["categories"]
-        if item.get("template_product_category") == product_category
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
-
-
-def get_meat_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of meat categories (beef, pork, poultry, lamb, fish, shellfish).
-
-    Excludes eggs and other animal proteins.
-    """
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"] for item in data["categories"] if item.get("meat", False)
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
-
-
-def get_plant_protein_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of plant-based protein categories (whole grains, legumes, nuts & seeds,
-    plant-based meats)."""
-    return get_categories_by_product_category("Plant-Based Proteins", lowercase=lowercase)
-
-
-def get_dairy_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of dairy categories (milk, cheese, yogurt, butter, cream, ice cream, mayo)."""
-    return get_categories_by_product_category("Dairy", lowercase=lowercase)
-
-
-def get_plant_based_dairy_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of plant-based dairy alternative categories (plant milks, plant cheese,
-    plant yogurt, plant egg)."""
-    return get_categories_by_product_category("Plant-Based Dairy & Egg", lowercase=lowercase)
-
-
-def get_egg_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of egg categories (liquid eggs, shelled eggs)."""
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"]
-        for item in data["categories"]
-        if "egg" in item["cool_food_pledge_name"].lower() and item.get("is_animal_product", False)
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
-
-
-def get_protein_categories(lowercase: bool = False) -> list[str]:
-    """Returns a sorted list of all protein categories (meat, eggs, plant-based proteins).
-
-    This includes:
-    - All meat categories (beef, pork, poultry, lamb, fish, shellfish)
-    - Egg categories (liquid eggs, shelled eggs)
-    - Plant-based protein categories (legumes, whole grains, nuts & seeds, plant-based meats)
-    - Plant-based egg alternatives
-    """
-    # Filter to only include plant-based egg from plant-based dairy categories
-    data = _load_gbd_categories_data()
-    plant_egg = [
-        item["cool_food_pledge_name"] if not lowercase else item["cool_food_pledge_name"].lower()
-        for item in data["categories"]
-        if "egg" in item["cool_food_pledge_name"].lower()
-        and not item.get("is_animal_product", True)
-    ]
-
-    # Remove duplicate plant-based egg entries and non-protein dairy alternatives
-    protein_only = set(
-        get_meat_categories(lowercase=lowercase)
-        + get_egg_categories(lowercase=lowercase)
-        + get_plant_protein_categories(lowercase=lowercase)
-        + plant_egg
+    return Category(
+        name=field("cool_food_pledge_name", str),
+        short_name=field("name", str),
+        emission_factor_us=emission_factor("emission_factor_us"),
+        emission_factor_europe=emission_factor("emission_factor_europe"),
+        is_animal_product=field("is_animal_product", bool),
+        product_category=choice("template_product_category", get_args(ProductCategory)),
+        kind=choice("type", get_args(Kind)),
+        meat=field("meat", bool),
+        protein=field("protein", bool),
     )
 
-    return sorted(list(protein_only))
+
+def category_names() -> list[str]:
+    return [c.name for c in categories()]
 
 
-def get_animal_product_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of all animal product categories (meat, dairy, eggs)."""
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"]
-        for item in data["categories"]
-        if item.get("is_animal_product", False)
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
+def animal_product_categories() -> list[str]:
+    return [c.name for c in categories() if c.is_animal_product]
 
 
-def get_plant_based_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of all plant-based categories."""
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"]
-        for item in data["categories"]
-        if not item.get("is_animal_product", True)
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
+def plant_based_categories() -> list[str]:
+    return [c.name for c in categories() if not c.is_animal_product]
 
 
-def get_food_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of all food categories (excludes drinks)."""
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"] for item in data["categories"] if item.get("type") == "food"
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
+def plant_protein_categories() -> list[str]:
+    return [c.name for c in categories() if c.product_category == "Plant-Based Proteins"]
 
 
-def get_drink_categories(lowercase: bool = False) -> list[str]:
-    """Returns a list of all drink categories."""
-    data = _load_gbd_categories_data()
-    categories = [
-        item["cool_food_pledge_name"] for item in data["categories"] if item.get("type") == "drink"
-    ]
-
-    if lowercase:
-        return [category.lower() for category in categories]
-
-    return categories
+def protein_categories() -> list[str]:
+    """Meat, eggs, plant proteins and plant-based egg."""
+    return [c.name for c in categories() if c.protein]
 
 
-def clean_GBD_category_name(category: str) -> str:
-    """Maps a GBD category string (case-insensitive) to a cleaner, standardized version.
+def food_categories() -> list[str]:
+    return [c.name for c in categories() if c.kind == "food"]
 
-    Raises KeyError if the category is not in GBD_categories.yaml.
-    """
-    data = _load_gbd_categories_data()
 
-    # Build the mapping from cool_food_pledge_name (lowercase) to name
-    category_name_map = {
-        item["cool_food_pledge_name"].lower(): item["name"] for item in data["categories"]
-    }
-
-    category_lower = category.lower()
-    if category_lower not in category_name_map:
-        raise KeyError(f"Category '{category}' not found in food dictionary")
-
-    return category_name_map[category_lower]
+def drink_categories() -> list[str]:
+    return [c.name for c in categories() if c.kind == "drink"]

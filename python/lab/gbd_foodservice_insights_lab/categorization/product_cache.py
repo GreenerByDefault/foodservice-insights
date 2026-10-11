@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization import cache
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def save_historical_categorizations(new_df: pd.DataFrame) -> None:
 
 
 def _validate_categories_for_promotion(df: pd.DataFrame) -> None:
-    valid_categories = set(get_GBD_categories())
+    valid_categories = set(category_names())
     invalid_mask = ~df["category"].isin(valid_categories)
     if invalid_mask.any():
         invalid_values = sorted(df.loc[invalid_mask, "category"].astype(str).unique())

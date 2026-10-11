@@ -14,8 +14,8 @@ def cleanup_plt():
 
 @pytest.fixture
 def fruit_and_juice(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(panels, "get_food_categories", lambda **_: ["fruit"])
-    monkeypatch.setattr(panels, "get_drink_categories", lambda **_: ["juice"])
+    monkeypatch.setattr(panels, "food_categories", lambda: ["fruit"])
+    monkeypatch.setattr(panels, "drink_categories", lambda: ["juice"])
 
 
 @pytest.fixture

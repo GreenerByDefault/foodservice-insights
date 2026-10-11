@@ -12,7 +12,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
@@ -111,7 +111,7 @@ def _load_workbook_sheets(workbook_path: str | Path) -> dict[str, pd.DataFrame]:
 
 def _official_gbd_category_lookup() -> tuple[list[str], dict[str, str]]:
     """Return the official GBD category list and lowercase lookup."""
-    official_gbd_category_list = list(get_GBD_categories())
+    official_gbd_category_list = list(category_names())
     lookup = {category.strip().lower(): category for category in official_gbd_category_list}
     return official_gbd_category_list, lookup
 

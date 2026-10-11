@@ -5,13 +5,14 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from gbd_foodservice_insights.categories import clean_GBD_category_name
 from gbd_foodservice_insights.plotting_utils import (
     GBD_colors,
     add_grid,
     format_month_labels,
     set_title_font,
 )
+
+from gbd_foodservice_insights_lab.categories import short_name
 
 GBD_cmap = mcolors.ListedColormap(GBD_colors)
 
@@ -48,10 +49,9 @@ def hide_unused_subplots(axes: list[plt.Axes], n_used: int) -> None:
 
 
 def clean_category_label(label: str) -> str:
-    """Clean a category label with clean_GBD_category_name, or return it as-is if that fails."""
+    """Clean a category label with short_name, or return it as-is if that fails."""
     try:
-        cleaned = clean_GBD_category_name(label)
-        return cleaned if cleaned is not None else label
+        return short_name(label)
     except KeyError, ValueError, AttributeError:
         return label
 

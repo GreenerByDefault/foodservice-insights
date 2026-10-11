@@ -6,10 +6,11 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from gbd_foodservice_insights.categories import get_meat_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 from Levenshtein import distance
+
+from gbd_foodservice_insights_lab.categories import meat_categories
 
 
 def summarise_numeric_columns(
@@ -60,13 +61,13 @@ def identify_potentially_abnormal_weight_meat_items(
     """Identify meat rows with suspicious quantities or fractional counts."""
     out = df.copy()
     out[quantity_col] = pd.to_numeric(out[quantity_col], errors="coerce")
-    meat_categories = get_meat_categories(lowercase=True)
+    meats = {c.lower() for c in meat_categories()}
     large_quantity_threshold = get_diagnostic_threshold(
         "meat_quantity_reasonableness",
         "large_quantity_threshold",
     )
 
-    if not out[category_col].fillna("").astype(str).str.lower().isin(meat_categories).any():
+    if not out[category_col].fillna("").astype(str).str.lower().isin(meats).any():
         raise AssertionError("No rows found where category is in meat categories.")
 
     out["has_decimal"] = (~(out[quantity_col] % 1 == 0)).astype("boolean")
@@ -78,7 +79,7 @@ def identify_potentially_abnormal_weight_meat_items(
     ).astype("boolean")
 
     out["large_quantity_threshold"] = large_quantity_threshold
-    mask_meat = out[category_col].fillna("").astype(str).str.lower().isin(meat_categories)
+    mask_meat = out[category_col].fillna("").astype(str).str.lower().isin(meats)
     out.loc[
         ~mask_meat,
         ["has_decimal", "over_large_quantity_threshold", "quantity_may_indicate_total_weight"],
@@ -98,7 +99,7 @@ def check_meat_quantities(df: pd.DataFrame) -> list[Finding]:
     """
     findings: list[Finding] = []
     if "quantity" in df.columns and "category" in df.columns:
-        meat_cats = get_meat_categories(lowercase=True)
+        meat_cats = [c.lower() for c in meat_categories()]
         has_meat = df["category"].fillna("").astype(str).str.lower().isin(meat_cats).any()
         if has_meat:
             try:

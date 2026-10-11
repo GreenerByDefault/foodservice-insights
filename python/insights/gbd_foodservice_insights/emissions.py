@@ -5,23 +5,16 @@ from functools import cache
 import numpy as np
 import pandas as pd
 
-from gbd_foodservice_insights.categories import get_gbd_categories_metadata
-from gbd_foodservice_insights.report.schema import DinerOrMeal, validate_region
+from gbd_foodservice_insights.categories import categories
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, validate_region
 
 
 @cache
-def load_emission_factors() -> dict[str, dict[str, float | None]]:
-    """Load emission factors from category metadata and cache results."""
-    data = get_gbd_categories_metadata()
-    factors: dict[str, dict[str, float | None]] = {}
-    for item in data["categories"]:
-        name = item["cool_food_pledge_name"]
-        factors[name] = {
-            "us": item.get("emission_factor_us"),
-            "europe": item.get("emission_factor_europe"),
-        }
-
-    return factors
+def load_emission_factors() -> dict[str, dict[Region, float]]:
+    return {
+        c.name: {"us": c.emission_factor_us, "europe": c.emission_factor_europe}
+        for c in categories()
+    }
 
 
 def get_emission_factor(category: str, region: str = "us") -> float | None:
@@ -62,13 +55,13 @@ def calculate_emissions(
     out = df.copy()
     ef_dict = load_emission_factors()
 
-    lower_lookup: dict[str, float | None] = {
+    lower_lookup: dict[str, float] = {
         name.lower(): factors[normalized_region] for name, factors in ef_dict.items()
     }
 
     out["emission_factor_used"] = out[category_col].astype(str).str.lower().map(lower_lookup)
 
-    # Every GBD category has a factor (`test_every_category_has_an_emission_factor`) and the
+    # Every GBD category has a factor (`categories()` requires one) and the
     # product path only assigns GBD categories, so this is our bug or a typo in a lab's
     # hand-edited categorized CSV. Either way, a row without emissions would drop its kilos
     # from every CO2e figure while still counting them toward weights.

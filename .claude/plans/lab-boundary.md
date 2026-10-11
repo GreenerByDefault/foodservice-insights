@@ -24,7 +24,7 @@ inputs the product never sends:
   panel — because the notebooks passed strings. `analyze()` already holds typed values; #462 and
   #464 made the rows typed, the counts and region are the remainder.
 - `aggregation._normalize_categories_to_canonical_labels` and every `.str.lower()` /
-  `lowercase=True` comparison in `aggregation.py`, `emissions.py`, `plots/panels.py` and
+  `{c.lower() for c in …_categories()}` comparison in `aggregation.py`, `emissions.py`, `plots/panels.py` and
   `checks.py`: tolerate hand-edited category names. On the product path every category is a
   canonical GBD name (cache validated, LLM answers snapped, #469 and #475), and the per-row
   `map(lambda)` ran 278,953 times in the cap profile for nothing.
@@ -47,9 +47,6 @@ inputs the product never sends:
   `MergeCounts` keeps its counts (the seam docstring in `analysis.py` names it as where result
   metadata would come from).
 - Serving mode stays.
-- The lab-only taxonomy getters in `categories.py` (`get_meat_categories`,
-  `clean_GBD_category_name`, `get_dairy_categories`, …) move in `library-types.md` PR 1, where
-  they become one-liners; not here.
 
 ## PR 1 — Move the review table and the merge summary to the lab
 
@@ -98,7 +95,7 @@ inputs the product never sends:
   `summarize_animal_emissions_intensity`, `calculate_animal_emissions_concentration`,
   `calculate_category_swap_scenarios`, `calculate_plant_animal_split`,
   `calculate_plant_protein_share` and `filter_monthly_categories_by_type` use the names as
-  given, with `isin` against `get_*_categories()`. `_RUMINANT_SWAP_SOURCE_CATEGORIES` and
+  given, with `isin` against the `categories.py` getters (`animal_product_categories()`, …). `_RUMINANT_SWAP_SOURCE_CATEGORIES` and
   `_MILK_SWAP_SOURCE_CATEGORIES` become the canonical names.
 - `emissions.get_emission_factor` and `calculate_emissions` look factors up by exact name and
   take `region: Region`; `schema.validate_region` moves to the lab's `run_food_report`, its only

@@ -90,7 +90,7 @@ def test_create_template_data_preserves_values_when_category_case_differs():
     assert template.loc["total", "total"] == pytest.approx(50.5)
 
 
-@patch("gbd_foodservice_insights.report.aggregation.get_GBD_categories")
+@patch("gbd_foodservice_insights.report.aggregation.category_names")
 def test_create_template_data_zero_fills_absent_categories(mock_get_gbd_categories, fruit_rows):
     """Report templates include every category so chart tables keep a stable shape."""
     mock_get_gbd_categories.return_value = ["fruit", "vegetable"]
@@ -167,11 +167,11 @@ def test_calculate_plant_animal_split_is_case_insensitive_and_keeps_one_sided_mo
 
     with (
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_animal_product_categories",
+            "gbd_foodservice_insights.report.aggregation.animal_product_categories",
             return_value=["Beef"],
         ),
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_plant_based_categories",
+            "gbd_foodservice_insights.report.aggregation.plant_based_categories",
             return_value=["Legumes"],
         ),
     ):
@@ -202,11 +202,11 @@ def test_calculate_plant_animal_split_returns_none_when_no_relevant_rows():
 
     with (
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_animal_product_categories",
+            "gbd_foodservice_insights.report.aggregation.animal_product_categories",
             return_value=["Beef"],
         ),
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_plant_based_categories",
+            "gbd_foodservice_insights.report.aggregation.plant_based_categories",
             return_value=["Legumes"],
         ),
     ):
@@ -227,11 +227,11 @@ def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months
 
     with (
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_protein_categories",
+            "gbd_foodservice_insights.report.aggregation.protein_categories",
             return_value=["Legumes", "Beef"],
         ),
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_plant_protein_categories",
+            "gbd_foodservice_insights.report.aggregation.plant_protein_categories",
             return_value=["Legumes"],
         ),
     ):
@@ -261,11 +261,11 @@ def test_calculate_plant_protein_share_returns_none_when_total_protein_metric_is
 
     with (
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_protein_categories",
+            "gbd_foodservice_insights.report.aggregation.protein_categories",
             return_value=["Legumes", "Beef"],
         ),
         patch(
-            "gbd_foodservice_insights.report.aggregation.get_plant_protein_categories",
+            "gbd_foodservice_insights.report.aggregation.plant_protein_categories",
             return_value=["Legumes"],
         ),
     ):
@@ -290,7 +290,7 @@ def test_calculate_animal_emissions_concentration_only_uses_animal_rows():
     )
 
     with patch(
-        "gbd_foodservice_insights.report.aggregation.get_animal_product_categories",
+        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
         return_value=["Beef", "Cheese"],
     ):
         result = calculate_animal_emissions_concentration(df, top_n=1)
@@ -313,7 +313,7 @@ def test_calculate_animal_emissions_concentration_uses_actual_count_when_top_n_t
     )
 
     with patch(
-        "gbd_foodservice_insights.report.aggregation.get_animal_product_categories",
+        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
         return_value=["Beef", "Cheese"],
     ):
         result = calculate_animal_emissions_concentration(df, top_n=5)
@@ -333,7 +333,7 @@ def test_calculate_animal_emissions_concentration_returns_empty_when_animal_emis
     )
 
     with patch(
-        "gbd_foodservice_insights.report.aggregation.get_animal_product_categories",
+        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
         return_value=["Beef", "Cheese"],
     ):
         result = calculate_animal_emissions_concentration(df, top_n=2)
@@ -352,7 +352,7 @@ def test_calculate_animal_emissions_concentration_uses_missing_product_name_fall
     )
 
     with patch(
-        "gbd_foodservice_insights.report.aggregation.get_animal_product_categories",
+        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
         return_value=["Beef", "Cheese"],
     ):
         result = calculate_animal_emissions_concentration(df, top_n=2)
