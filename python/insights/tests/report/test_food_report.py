@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights import emissions
-from gbd_foodservice_insights.report import aggregation
+from gbd_foodservice_insights.report import aggregation, checks
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     _attach_monthly_category_emissions,
@@ -193,7 +193,7 @@ def test_unusable_diner_meal_mapping_aborts_immediately():
     ]
 
 
-def test_emissions_that_drop_a_row_abort_with_a_row_count_drift_finding(
+def test_emissions_that_drop_a_row_abort_before_any_later_stage_runs(
     monkeypatch: pytest.MonkeyPatch,
 ):
     calculate_emissions = emissions.calculate_emissions
@@ -207,8 +207,7 @@ def test_emissions_that_drop_a_row_abort_with_a_row_count_drift_finding(
     with pytest.raises(QualityCheckError) as excinfo:
         _build(_rows())
 
-    findings = excinfo.value.findings
-    assert [f for f in findings if f["category"] == "row_count_drift"] == [
+    assert excinfo.value.findings == [
         {
             "stage": "emissions",
             "category": "row_count_drift",
@@ -223,15 +222,26 @@ def test_emissions_that_drop_a_row_abort_with_a_row_count_drift_finding(
     ]
 
 
-def test_emissions_calculation_exception_aborts(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize(
+    ("module", "stage"),
+    [
+        (emissions, "calculate_emissions"),
+        (emissions, "calculate_emissions_summary"),
+        (checks, "run_all_diagnostics"),
+    ],
+)
+def test_a_stage_that_raises_surfaces_its_own_exception(
+    monkeypatch: pytest.MonkeyPatch, module: Any, stage: str
+):
+    class StageExplodedError(Exception):
+        pass
+
     def boom(*args: Any, **kwargs: Any) -> Any:
-        raise ValueError("emissions exploded")
+        raise StageExplodedError(stage)
 
-    monkeypatch.setattr(emissions, "calculate_emissions", boom)
+    monkeypatch.setattr(module, stage, boom)
 
-    with pytest.raises(
-        QualityCheckError, match=r"\[emissions::emissions_calculation_failed\] emissions exploded"
-    ):
+    with pytest.raises(StageExplodedError, match=stage):
         _build(_rows())
 
 

@@ -42,12 +42,6 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - A plant/animal split or plant-protein share failure is logged and the page and narrative
   sentence are dropped; a chart failure prints the Python exception on a placeholder page and
   files a `warning` (`_safe_plot`, `report/plots/report.py`). Neither can fail a run.
-- `build_food_report` catches an exception from emissions, the emissions summary or diagnostics,
-  files it as an `error` finding and keeps going; the final `raise_on_error_findings` then raises
-  without the cause, so the traceback is lost, and later stages run on the broken frame: an
-  emissions crash also files a misleading `aggregation_failed: 'emissions_kg_co2e'`. These blocks
-  existed so `warn_continue` could keep going; that policy is gone (#352), and date, month,
-  mapping and aggregation failures already raise `from exc` on the spot.
 
 ## Decisions
 
@@ -92,9 +86,11 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   GBD: the Animal Emissions Intensity table lists animal categories with poultry and fish at the
   bottom by CO2e per kg, which reads as the beef-to-chicken nudge REQUIREMENTS.md § Processing
   forbids.
-- **A split, share, chart or stage failure fails the run, with its own traceback.** `_safe_plot`
-  goes, placeholder page and input checks alike, and so do the emissions, emissions-summary and
-  diagnostics `except` blocks. `ReportCharts` then carries no findings.
+- **A split, share or chart failure fails the run, with its own traceback,** as a stage failure
+  in `build_food_report` already does: a stage that raises surfaces its own exception, and
+  `raise_on_error_findings` follows each stage's drift and missingness checks, so no later stage
+  runs on a broken frame. `_safe_plot` goes, placeholder page and input checks alike, and
+  `ReportCharts` then carries no findings.
 - **Fixed page sizes.** Every page is US Letter: `LETTER_PORTRAIT` for text and
   `LETTER_LANDSCAPE` for charts and tables (the Category Template needs the width), both in
   `plotting_utils.py`, and `test_analysis.py` reads every page's size out of an `analyze()` PDF
@@ -139,20 +135,7 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   contract accepted. Its own PR because it is a separate check, so a reviewer can take one
   without the other.
 
-## PR 3 — a stage crash keeps its traceback
-
-- The `except` blocks around emissions, the emissions summary and diagnostics in
-  `build_food_report` go. `raise_on_error_findings` follows the emissions stage's drift and
-  missingness checks, as it already follows month normalization, so later stages never run on
-  a broken frame.
-- No run that succeeds today fails: each of those blocks files an `error`, which the final
-  `raise_on_error_findings` already turns into an abort. The abort now carries the original
-  exception, and an emissions crash no longer also files a misleading `aggregation_failed`.
-- Tests: emissions, emissions summary and diagnostics each monkeypatched to raise surface that
-  exception, not `QualityCheckError`; this replaces the `emissions_calculation_failed` test in
-  `test_food_report.py`.
-
-## PR 4 — a category without an emission factor raises
+## PR 3 — a category without an emission factor raises
 
 - `calculate_emissions` raises `ValueError` naming every category without a factor, instead of
   filing `unmatched_emission_factors`; `return_findings` and its three overloads go. Every row
@@ -164,9 +147,8 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
   tell the data scientists.
 - Tests: a factorless category raises from `calculate_emissions` and from `build_food_report`
   in procurement mode; serving mode, which computes no emissions, is unaffected.
-- Lands after PR 3, which removes the `except` that would turn this raise into a finding.
 
-## PR 5 — a zero-weight category's driver share is 0%, not NaN
+## PR 4 — a zero-weight category's driver share is 0%, not NaN
 
 - `_safe_percentage` (`report/aggregation.py`) returns 0.0 for a zero denominator, as
   `identify_overall_drivers` already does for the whole file. A category bought only at weight
@@ -174,19 +156,19 @@ because `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError
 - Tests: `build_food_report` with a category whose lines all weigh 0 gives that category's
   drivers a `percentage` of 0.0, and `build_report_charts` files no finding.
 - Worth it: found 11 October; a zero-weight line is ordinary data (see Decisions), and today
-  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 6, which deletes the
+  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 5, which deletes the
   input check that is today the only sign of it.
 
-## PR 6 — a chart or split failure fails the run
+## PR 5 — a chart or split failure fails the run
 
 - `_safe_plot`, `_placeholder_figure`, the input checks and the category-driver `try` in
   `report/plots/report.py` go, and so do the split and share `try` blocks in
   `build_food_report`. `generate_all_report_plots` loses `quality_findings`, `ReportCharts`
   loses `findings`, and `write_report_pdf` and the lab's `run_food_report` stop merging chart
   findings. `FoodReport.findings` is then the whole list.
-- Unlike PR 3, this adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
+- This adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
   month, a 200-character product and every category over twelve months: no chart fell back
-  except PR 5's case. The split and share return `None` for every no-data case, so they raise
+  except PR 4's case. The split and share return `None` for every no-data case, so they raise
   only on our bug.
 - Tests: the `_safe_plot` and placeholder tests in `plots/test_report.py` go; a chart
   monkeypatched to raise surfaces from `build_report_charts`. The lab's failure manifest
@@ -208,6 +190,6 @@ handed and what the sheets contain, not that files exist.
   than accept it.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
 - PRs 1 and 2 are the only aborts a real upload is likely to hit. Land them first.
-- PR 6 turns any chart bug the probe missed into a failed run. That is the intent, but watch
+- PR 5 turns any chart bug the probe missed into a failed run. That is the intent, but watch
   `unknown` failures after it deploys.
 - No PR here waits on GBD.
