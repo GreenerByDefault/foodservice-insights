@@ -1,6 +1,6 @@
 # Sample reports
 
-Files to upload by hand at `/orgs/<id>/reports/new` while running `pnpm dev` — not read by any
+Files to upload by hand at `/orgs/<slug>/reports/new` while running `pnpm dev` — not read by any
 test. `valid.csv` stays on one month so the form's month-count field only asks for one number.
 
 | File | What happens |

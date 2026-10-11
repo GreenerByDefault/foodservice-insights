@@ -1,5 +1,5 @@
 /** This file is plain JS with no imports because `start.js` reads it directly under Node to
- * size `BODY_SIZE_LIMIT` under Node. That is before the SvelteKit build exists, so it cannot resolve `$lib` or
+ * size `BODY_SIZE_LIMIT`. That is before the SvelteKit build exists, so it cannot resolve `$lib` or
  * anything Vite-only. `limits.ts` re-exports `MAX_UPLOAD_FIELD_BYTES` for the rest of the app;
  * `TRANSPORT_MARGIN_BYTES` is only ever read here, by `start.js`.
  */

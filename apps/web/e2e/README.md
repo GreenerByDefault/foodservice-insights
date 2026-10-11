@@ -57,8 +57,6 @@ Keep the set curated. The unit to weigh is a *screen*, not an image — adding o
 per viewport, and every one of them is CI minutes and a file a reviewer has to look at on any
 visual change. Capture screens that carry real visual risk, not every route.
 
-**Stubs don't get a screenshot until they're implemented.**
-
 ## Database state
 
 `e2e/fixtures/reports.ts` is the source of truth for what each report state contains.
@@ -72,9 +70,10 @@ shared with `tests/e2e`.
 
 This suite runs in `PUBLIC_AUTH_MODE=supabase`: every test's browser is signed in with a real
 session as a GoTrue user of its own, so what one test's user belongs to never shows up in
-another's. A screenshot whose image renders the signed-in address uses
-`test.use({ identity: 'pinned' })`, the run's one identity with a fixed address, and a signed-out
-test uses `identity: 'anonymous'`. A spec that needs a second person asks the `users` fixture:
+another's. `test.use({ identity })` picks someone else: `'new'` for a user who has not yet
+chosen a display name, `'pinned'` for a screenshot that renders the signed-in address, or
+`'anonymous'` for a signed-out test. `IdentityOption` in
+[`fixtures.ts`](../../../packages/browser-testing/src/fixtures.ts) defines each. A spec that needs a second person asks the `users` fixture:
 `users.create()` mints one, and `users.contextFor(user)` is a browser context signed in as them.
 [`packages/browser-testing/src/identity.ts`](../../../packages/browser-testing/src/identity.ts)
 owns all of it, including why GoTrue's users have to be mirrored into the run's database.
@@ -94,8 +93,5 @@ collide — so the spec's tests stay parallel instead of serializing behind it. 
 spec that reads the organization; one that renames it, deletes it, or asserts on the whole of its
 reports list wants `organizations.create` instead.
 
-One screen still has no fixture that can reach it: an empty `/orgs`. A minted user with no
-organization is redirected to `/orgs/new`, so only a superadmin reaches the list at all — and a
-superadmin's branch reads the whole `organization` table, which the run database is never empty
-of. `lib/stub-page-data.ts` rewrites the page-data response instead; see its header for why no
-fixture can produce this page.
+One screen has no fixture that can reach it: an empty `/orgs`. `lib/stub-page-data.ts` rewrites
+the page-data response instead; see its header for why.

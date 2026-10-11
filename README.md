@@ -31,7 +31,7 @@ pnpm seed:identity
 `pnpm seed:identity` creates the placeholder user that every request runs as in the default
 `PUBLIC_AUTH_MODE=placeholder`. The app will not serve a request without it.
 
-Optionally, you can also get the `previously_categorized_items.csv` cache from Geener By Default and place it in
+Optionally, you can also get the `previously_categorized_items.csv` cache from Greener by Default and place it in
 [`python/insights/gbd_foodservice_insights/data_files/`](python/insights/gbd_foodservice_insights/data_files/).
 
 ### Start it
@@ -100,32 +100,21 @@ Everything above the TypeScript heading applies to both.
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the system fits together, and why |
 | [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
-| [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`apps/web/README.md`](apps/web/README.md) | The web app's design |
+| [`apps/web/e2e/README.md`](apps/web/e2e/README.md) | The web app's e2e and screenshot suites |
+| [`apps/web/sample-reports/README.md`](apps/web/sample-reports/README.md) | CSVs to upload by hand |
+| [`apps/web/src/lib/reports/csv/README.md`](apps/web/src/lib/reports/csv/README.md) | How an uploaded CSV is validated |
 | [`apps/worker/README.md`](apps/worker/README.md) | Running the worker parent, and where its pieces live |
+| [`packages/browser-testing/README.md`](packages/browser-testing/README.md) | Playwright helpers both e2e suites share |
+| [`packages/core/README.md`](packages/core/README.md) | Values and helpers the web app and worker share |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
 | [`packages/storage/README.md`](packages/storage/README.md) | The blob store, and its key layout |
 | [`packages/email/README.md`](packages/email/README.md) | The emails we send, and reading them locally |
+| [`tests/e2e/README.md`](tests/e2e/README.md) | Whole-system e2e, against both services' real images |
 | [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract |
-
-## Repo layout
-
-```
-apps/web/                               SvelteKit app
-apps/worker/                            Worker parent: queue, child processes, DB and blob writes
-packages/browser-testing/               Playwright helpers shared by the e2e test suites
-packages/core/                          Shared TypeScript values and helpers
-packages/db/                            Kysely client, migrations, and generated types
-packages/email/                         The emails we send, and the transport under them
-packages/storage/                       Blob store client and object operations
-python/insights/                        The AI analysis library
-python/worker_child/                    One analysis run, spawned by the worker parent
-python/lab/                             Data-science experiments; ships nothing
-contract/                               The worker parent ↔ child contract, parsed by both stacks
-supabase-dev/                           Local Supabase stack for development
-supabase-test/                          Local Supabase stack for tests
-tests/e2e/                              Whole-system e2e tests
-```
+| [`python/README.md`](python/README.md) | Running and testing the Python stack |
+| [`python/insights/README.md`](python/insights/README.md) | The analysis library, and where a report change goes |
+| [`python/lab/README.md`](python/lab/README.md) | Data-science experiments; ships nothing |
 
 ## What CI runs
 
@@ -179,7 +168,8 @@ scripts/supabase stop
 TEST_DB=1 scripts/supabase stop
 ```
 
-The test stack migrates and seeds itself whenever you run the tests.
+The test stack migrates itself whenever you run the tests. Only Playwright seeds, into a database
+cloned for that run.
 
 ### Everyday commands
 
@@ -251,7 +241,7 @@ freeing the memory it holds.
 
 **The test stack must be running** for any vitest Node test by running `TEST_DB=1 scripts/supabase start`.
 A fair number of tests query Postgres or the blob store. The test scripts apply migrations and create
-the bucket created before tests run.
+the bucket before tests run.
 
 **Every test that touches the database must wrap its queries in `withRollback`**, from
 `@gbd/db/testing` — see [`packages/db/README.md`](packages/db/README.md#using-it) for the one

@@ -123,8 +123,9 @@ Applies to `packages/storage` and every app or package that imports it.
 - **Quote parentheses in shell commands.** Route groups mean paths like
   `'src/routes/(app)'` need quoting or the shell mangles them.
 - **`lint` and `fmt` exist only at the root** — Biome runs repo-wide, so there is no per-package
-  lint. Every package has `test`, `check`, and `build`; scope one with
-  `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
+  lint. Every package has `check`, and every one but `tests/e2e` has `build`; every one has `test`
+  except `@gbd/browser-testing`, which has no tests, and `tests/e2e`, whose suite is
+  `test:system`. Scope one with `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
 
 ## Svelte and SvelteKit (`apps/web` only)
 

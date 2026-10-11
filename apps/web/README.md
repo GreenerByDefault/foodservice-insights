@@ -18,32 +18,28 @@ itself.
 `+server.ts` rather than `invalidate()`. Every refresh goes through that one endpoint — the timed
 poll, and any write like cancel or retry — so a flaky connection can never undo what the user just
 did. *Rejected: `invalidate()`, because its request falls back to a full-page navigation when the
-network is what failed.* The reasoning is in `reports/[reportId]/poll/+server.ts`.
+network is what failed.* The reasoning is in `reports/[reportId=uuid]/poll/+server.ts`.
 
 **A URL that carries an id comes from `src/lib/hrefs.ts`**, never spelled out a second time. A page
 URL is handed out by the loader that renders it; an API URL is built by the API client that calls
 it, from the ids the loader already gave the page. One with no id in it stays a literal where it
 is used.
 
-**A 401 is not a redirect.** `src/lib/components/error-page.svelte` renders a message; it will
-offer sign-in in place once auth lands, which is why there is no `?next=` to carry anywhere.
+**A 401 is not a redirect.** `src/lib/components/error-page.svelte` offers sign-in in place, and
+signing in re-runs the loads, so the page that was asked for renders at its own URL — which is why
+there is no `?next=` to carry anywhere.
 
 **When a page's data has multiple meaningfully different shapes, its `load` narrows them into a
 discriminated union rather than leaving the view to branch on nullable columns.** See
-`reports/[reportId]/+page.server.ts` for an example.
+`reports/[reportId=uuid]/+page.server.ts` for an example.
 
 **A write is a `+server.ts` handler.** *Rejected: SvelteKit form actions, because they add a
 layer of indirection over a `fetch()` without a strong enough payoff; and remote functions, for
 now — see [Remote functions](#remote-functions).* See
 [Calling the API from the browser](#calling-the-api-from-the-browser) for how the client calls it.
 
-A few routes are still scaffolding. Each one says so with a `**Stub:**` marker naming what
-belongs there, so `grep -r '\*\*Stub:\*\*' src/routes` is the list of what is left to build.
-
-**`/orgs` redirects rather than always showing the picker**: to `/invites` if one is waiting, to
-the user's one organization if they belong to exactly one, or to `/orgs/new` if they belong to
-none. A superadmin always sees the full picker, since it doubles as their view of every
-organization.
+**`/orgs` redirects rather than always showing the picker** — `_organizationsPageRedirect` in
+`orgs/+page.server.ts` decides where to.
 
 ### Remote functions
 
@@ -97,8 +93,8 @@ rather than depending on a component library.
 route needs it.
 
 **A page's shape comes from a component, not a class string copied between pages** — the heading a
-page opens with, the chrome a page outside the `(app)` gate carries, and the placeholder an unbuilt
-page shows are each one component in `src/lib/components/`.
+page opens with and the chrome a page outside the `(app)` gate carries are each one component in
+`src/lib/components/`.
 
 **A view within a route gets its own subfolder once it's more than one file** — a single-file
 view stays flat, and a component two views share sits beside them at the route root.
@@ -150,7 +146,8 @@ own view cannot lose typed work.
 
 **What a route passes to `error()` is for callers reading the JSON body, not for the screen.** Page
 copy comes from the status alone, in `src/lib/errors/messages.ts` — so a new message is written
-there, not at the call site. The cause of an unexpected failure never leaves the server: `handleError`
+there, not at the call site. The one exception is the `(app)` gate's `onboarding_required` code,
+which `error-page.svelte` answers with a form rather than a message. The cause of an unexpected failure never leaves the server: `handleError`
 in `hooks.server.ts` logs it and hands the client a generic message.
 
 **An outcome the caller expects is returned, not thrown.** `error()`'s body is typed by the app-wide
@@ -165,9 +162,9 @@ file in its own view, an unknown outcome at the action that caused it.
 **A short message gets `role="alert"`. A long one does not** — announcing a whole document on
 render is hostile; move focus to its heading instead.
 
-**A failure inside a form is shown inline and stays until it is fixed.** A toast is for a transient
-confirmation of an action on a page that stays put; no page needs one yet, and adding one is a
-fine reason to add the dependency then.
+**A failure inside a form is shown inline and stays until it is fixed.** A toast confirms a write
+that succeeded, on the page that stays or the one it lands on. A failure gets one only when the
+control that caused it is already gone, like signing out from the user menu.
 
 **One component renders both a client-side and a server-side rejection**: both narrow to
 `UploadRejection` in `src/lib/reports/rejection.ts`.
@@ -193,25 +190,18 @@ server `load()` functions without a full page refresh.
 
 **`PUBLIC_AUTH_MODE` decides who a request is**, and is required ([`src/lib/auth/mode.ts`](src/lib/auth/mode.ts)).
 In `placeholder`, every request is the seeded user from `pnpm seed:identity`, with no sign-in and
-no Supabase Auth; that is how `pnpm dev` and any hosted environment run until there is an email
-provider. In `supabase`, `identifyUser` in `src/lib/server/auth/identify.ts` validates the session
+no Supabase Auth. It is `.env.example`'s default, so `pnpm dev` needs no sign-in, and how a hosted
+environment runs until there is an email provider; locally, `supabase` works too, against Mailpit.
+In `supabase`, `identifyUser` in `src/lib/server/auth/identify.ts` validates the session
 cookie with `getUser()` on every request — never `getSession()`, which trusts the cookie unverified.
 Everything downstream of `identifyUser` is the same in both.
 
-`getUser()` fails four ways, and each has its own answer:
+**An unreachable Supabase Auth is a 503, not a sign-out** — a sign-in form would ask someone
+already signed in to sign in again. `classifyAuthResult` in `identify.ts` maps every other
+`getUser()` answer.
 
-| Failure | Response |
-| --- | --- |
-| No cookie | Signed out |
-| Deleted user's token | Signed out, cookie cleared |
-| Any other refusal | Signed out, plus a log |
-| Supabase Auth unreachable | 503, not "signed out" |
-
-`classifyAuthResult` in `identify.ts` is the source of truth.
-
-**The session cookie is not `HttpOnly`**: the browser client has to read it. So an XSS could steal
-a session; a CSP is the compensating control, and is not in place yet (see `ARCHITECTURE.md`
-§ Auth).
+**The session cookie is not `HttpOnly`**, because the browser client has to read it; see
+[`ARCHITECTURE.md` § Auth](../../ARCHITECTURE.md#auth) for the CSP that compensates.
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
