@@ -193,7 +193,7 @@ def test_unusable_diner_meal_mapping_aborts_immediately():
     ]
 
 
-def test_emissions_that_drop_a_row_abort_with_a_row_count_drift_finding(
+def test_emissions_that_drop_a_row_abort_before_any_later_stage_runs(
     monkeypatch: pytest.MonkeyPatch,
 ):
     calculate_emissions = emissions.calculate_emissions
@@ -207,8 +207,7 @@ def test_emissions_that_drop_a_row_abort_with_a_row_count_drift_finding(
     with pytest.raises(QualityCheckError) as excinfo:
         _build(_rows())
 
-    findings = excinfo.value.findings
-    assert [f for f in findings if f["category"] == "row_count_drift"] == [
+    assert excinfo.value.findings == [
         {
             "stage": "emissions",
             "category": "row_count_drift",
