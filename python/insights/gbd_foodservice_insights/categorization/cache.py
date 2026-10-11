@@ -93,10 +93,13 @@ class CategorizationCache:
         unknown = sorted(set(self.products["category"]) - {*gbd_categories, NO_MATCHES_FOUND})
         if unknown:
             raise ValueError(f"Categorization cache has categories outside the GBD list: {unknown}")
-        # Reusing "No Matches Found" would skip the LLM and the review table for good.
-        unreusable = sorted(set(self.cleaned_name_index.values()) - gbd_categories)
-        if unreusable:
-            raise ValueError(f"Cleaned-name index has non-GBD categories: {unreusable}")
+        # A cleaned-name hit is trusted like a cache hit: it skips the LLM and the review table.
+        # So it may only hand out a real category, never "No Matches Found".
+        not_reusable = sorted(set(self.cleaned_name_index.values()) - gbd_categories)
+        if not_reusable:
+            raise ValueError(
+                f"Cleaned-name index may only reuse GBD categories, not {not_reusable}"
+            )
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> CategorizationCache:

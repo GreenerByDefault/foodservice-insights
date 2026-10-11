@@ -89,7 +89,7 @@ def test_constructor_rejects_a_category_outside_the_gbd_list():
 
 
 def test_constructor_rejects_no_matches_found_in_the_cleaned_name_index():
-    with pytest.raises(ValueError, match=r"non-GBD categories: \['No Matches Found'\]"):
+    with pytest.raises(ValueError, match=r"only reuse GBD categories, not \['No Matches Found'\]"):
         CategorizationCache(
             products=_frame([("Plate", "No Matches Found", "plate")]),
             cleaned_name_index={"plate": "No Matches Found"},
