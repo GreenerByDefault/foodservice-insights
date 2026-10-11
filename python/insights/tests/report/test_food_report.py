@@ -95,8 +95,8 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
         "Total diners": "220",
         "Data type": "Procurement",
         "Region used for climate emissions factors": "US/Canada",
-        "Total CO2e": "970 kg",
-        "CO2e per diner": "4.411 kg",
+        "Total CO₂e": "970 kg",
+        "CO₂e per diner": "4.411 kg",
         "Plant-based (% of classified food)": "63.3%",
         "Animal-based (% of classified food)": "36.7%",
         "Plant-based total": "38.0 kg",
@@ -270,7 +270,7 @@ def test_serving_mode_computes_no_emissions():
     assert report.procurement_table("animal_emissions_intensity") is None
     assert report.summary_stats["Data type"] == "Serving"
     assert report.summary_stats["Total meals"] == "220"
-    assert "Total CO2e" not in report.summary_stats
+    assert "Total CO₂e" not in report.summary_stats
 
 
 @pytest.mark.parametrize(("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK")])

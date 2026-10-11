@@ -128,7 +128,7 @@ def test_food_report_end_to_end_produces_valid_artifacts(staged_report_inputs, t
         "Monthly by Product",
         "Monthly by Category",
         "Emissions Summary",
-        "Substitution_Scenarios",
+        "Substitution Scenarios",
     }
     assert expected_client_sheets <= client_sheets, (
         f"Client workbook missing sheets: {expected_client_sheets - client_sheets}"

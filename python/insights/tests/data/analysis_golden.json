@@ -12,8 +12,8 @@
       "Total diners": "3,000",
       "Data type": "Procurement",
       "Region used for climate emissions factors": "US/Canada",
-      "Total CO2e": "513 kg",
-      "CO2e per diner": "0.171 kg",
+      "Total CO₂e": "513 kg",
+      "CO₂e per diner": "0.171 kg",
       "Plant-based (% of classified food)": "71.9%",
       "Animal-based (% of classified food)": "28.1%",
       "Plant-based total": "127.7 kg",
@@ -274,8 +274,8 @@
         "columns": [
           "Category",
           "Kilos of Food",
-          "CO2e Per Kg Food",
-          "Kg CO2e"
+          "CO₂e Per Kg Food",
+          "Kg CO₂e"
         ],
         "index": [
           0,
@@ -322,8 +322,8 @@
           "Focus",
           "Share of Animal Emissions (%)",
           "Top Animal Products",
-          "Top Products Kg CO2e",
-          "Total Animal Kg CO2e"
+          "Top Products Kg CO₂e",
+          "Total Animal Kg CO₂e"
         ],
         "index": [
           0
@@ -342,8 +342,8 @@
         "columns": [
           "Scenario",
           "Weight Replaced (kg)",
-          "Projected Kg CO2e",
-          "Avoidable Kg CO2e",
+          "Projected Kg CO₂e",
+          "Avoidable Kg CO₂e",
           "Institution Emissions Averted (%)"
         ],
         "index": [
@@ -1100,7 +1100,7 @@
         ]
       ]
     },
-    "Decision_KPIs": {
+    "Decision KPIs": {
       "columns": [
         "KPI",
         "Value",
@@ -1125,16 +1125,16 @@
         ]
       ]
     },
-    "Substitution_Scenarios": {
+    "Substitution Scenarios": {
       "columns": [
         "scenario",
         "substitution_pct",
         "source_categories",
         "replacement_category",
-        "baseline_ruminant_weight_kg",
-        "baseline_ruminant_emissions_kg_co2e",
+        "baseline_source_weight_kg",
+        "baseline_source_emissions_kg_co2e",
         "replaced_weight_kg",
-        "remaining_ruminant_weight_kg",
+        "remaining_source_weight_kg",
         "replacement_weight_kg",
         "replacement_emission_factor_kg_co2e_per_kg",
         "projected_emissions_kg_co2e",

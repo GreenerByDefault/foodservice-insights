@@ -138,8 +138,8 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
         "Diners",
         "Emissions Summary",
         "Animal Emissions Intensity",
-        "Decision_KPIs",
-        "Substitution_Scenarios",
+        "Decision KPIs",
+        "Substitution Scenarios",
     ]
     assert workbook["Diners"].to_dict("records") == [
         {"month_year": month, "diners": 1000} for month in SAMPLE_MONTHS

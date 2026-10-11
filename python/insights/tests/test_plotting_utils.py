@@ -4,8 +4,10 @@ import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
+from gbd_foodservice_insights import PACKAGE_DIR
 from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
+    FONT_FILES,
     TITLE_FONT,
     GBD_colors,
     close_new_figures_on_error,
@@ -18,6 +20,7 @@ from gbd_foodservice_insights.plotting_utils import (
     standardize_title_case,
     wrap_labels,
 )
+from matplotlib.ft2font import FT2Font
 from matplotlib.patches import Rectangle
 
 
@@ -32,6 +35,13 @@ def test_setup_gbd_fonts_registers_title_and_body_fonts():
     registered_names = {f.name for f in font_manager.fontManager.ttflist}
     assert TITLE_FONT in registered_names
     assert BODY_FONT in registered_names
+
+
+@pytest.mark.parametrize("font_file", FONT_FILES)
+def test_packaged_fonts_have_the_co2e_subscript_two(font_file: str):
+    """The report writes "CO₂e"; a font without U+2082 would render it as a missing-glyph box."""
+    font = FT2Font(str(PACKAGE_DIR / "data_files" / "fonts" / font_file))
+    assert font.get_char_index(0x2082) != 0
 
 
 def test_titles_use_the_title_font():
