@@ -6,16 +6,13 @@ import pandas as pd
 import pytest
 import yaml
 from gbd_foodservice_insights.report.checks import (
-    check_aggregation_reconciliation,
     check_category_concentration,
     check_date_distribution,
     check_diner_meal_reasonableness,
     check_missing_internal_months,
     check_missing_weeks_within_month,
     check_per_product_weight_bounds,
-    check_required_columns,
     check_single_product_dominance,
-    check_zero_category_month_combos,
     detect_category_discontinuity,
     detect_month_over_month_total_volatility,
     detect_unusual_sales,
@@ -24,25 +21,6 @@ from gbd_foodservice_insights.report.checks import (
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
-
-# ----------------------------------------------------------------------
-# Required columns and numeric parsing
-# ----------------------------------------------------------------------
-
-
-def test_check_required_columns_requires_the_metric_column():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2023-01-01"]),
-            "product": ["apple"],
-            "category": ["fruit"],
-            "kilos_total": [10.0],
-        }
-    )
-
-    assert check_required_columns(df) is True
-    assert check_required_columns(df.drop(columns=["kilos_total"])) is False
-
 
 # ----------------------------------------------------------------------
 # Outliers and weight bounds
@@ -550,23 +528,8 @@ def test_detect_category_discontinuity_succeeds_when_categories_are_continuous()
     assert export_df.empty
 
 
-def test_check_zero_category_month_combos_names_missing_months_in_plain_english():
-    df = pd.DataFrame(
-        {
-            "month_year": ["2024-01", "2024-02", "2024-01"],
-            "category": ["Lamb/mutton & goat meat", "Legumes", "Legumes"],
-            "kilos_total": [10, 5, 7],
-        }
-    )
-
-    findings = check_zero_category_month_combos(df, "kilos_total")
-    missing_finding = next(f for f in findings if f["category"] == "missing_category_month_combos")
-
-    assert "Lamb/mutton and goat meat missing during Feb 2024" in missing_finding["sample_values"]
-
-
 # ----------------------------------------------------------------------
-# Diner meals, reconciliation and concentration
+# Diner meals and concentration
 # ----------------------------------------------------------------------
 
 
@@ -709,46 +672,6 @@ def test_check_diner_meal_reasonableness_notes_when_typical_month_has_no_food():
     assert export_df.empty
 
 
-def test_check_aggregation_reconciliation_passes_at_exact_point_one_percent_threshold():
-    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
-    monthly_product_df = pd.DataFrame({"kilos_total": [999.0]})
-    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
-
-    findings, export_df = check_aggregation_reconciliation(
-        raw_df,
-        monthly_product_df,
-        monthly_category_df,
-        "kilos_total",
-    )
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["metadata"]["relative_difference"] == pytest.approx(0.001)
-    assert findings[0]["metadata"]["rel_error_threshold"] == pytest.approx(0.001)
-    assert export_df["is_flagged"].tolist() == [False]
-
-
-def test_check_aggregation_reconciliation_errors_above_point_one_percent_threshold():
-    raw_df = pd.DataFrame({"kilos_total": [1000.0]})
-    monthly_product_df = pd.DataFrame({"kilos_total": [998.999]})
-    monthly_category_df = pd.DataFrame({"kilos_total": [1000.0]})
-
-    findings, export_df = check_aggregation_reconciliation(
-        raw_df,
-        monthly_product_df,
-        monthly_category_df,
-        "kilos_total",
-    )
-
-    assert findings[0]["status"] == "error"
-    assert findings[0]["count"] == 1
-    assert findings[0]["metadata"]["relative_difference"] == pytest.approx(0.001001)
-    assert (
-        findings[0]["metadata"]["relative_difference"]
-        > findings[0]["metadata"]["rel_error_threshold"]
-    )
-    assert export_df["is_flagged"].tolist() == [True]
-
-
 def test_check_single_product_dominance_does_not_flag_at_exact_thirty_percent():
     """Exactly-on-threshold product concentration should not create a false positive."""
     df = pd.DataFrame(
@@ -886,19 +809,6 @@ def _first_month_at_40_percent_of_the_median() -> list[Finding]:
     return check_date_distribution(df)
 
 
-def _aggregates_0_15_percent_off_the_raw_total() -> dict[str, object]:
-    findings, _ = check_aggregation_reconciliation(
-        pd.DataFrame({"kilos_total": [1000.0]}),
-        pd.DataFrame({"kilos_total": [1001.5]}),
-        pd.DataFrame({"kilos_total": [1000.0]}),
-        "kilos_total",
-    )
-    return {
-        "status": findings[0]["status"],
-        "rel_error_threshold": findings[0]["metadata"]["rel_error_threshold"],
-    }
-
-
 def _top_product_at_35_percent() -> dict[str, object]:
     df = pd.DataFrame({"product": ["Tofu", "Beans", "Tempeh"], "kilos_total": [35.0, 33.0, 32.0]})
     findings = check_single_product_dominance(df, "kilos_total")
@@ -960,12 +870,6 @@ def _top_category_at_35_percent() -> dict[str, object]:
             id="date_distribution",
         ),
         pytest.param(
-            {"aggregation_reconciliation": {"rel_error_threshold": 0.002}},
-            _aggregates_0_15_percent_off_the_raw_total,
-            {"status": "success", "rel_error_threshold": 0.002},
-            id="aggregation_reconciliation",
-        ),
-        pytest.param(
             {"single_product_dominance": {"threshold_pct": 0.40}},
             _top_product_at_35_percent,
             {"status": "success", "threshold_pct": 0.40},
@@ -996,31 +900,6 @@ def test_checks_read_their_thresholds_from_yaml(
 # ----------------------------------------------------------------------
 
 
-def test_run_all_diagnostics_excludes_no_matches_from_missing_categories():
-    """
-    `No Matches Found` is valid when present but should never appear in missing GBD category
-    diagnostics.
-    """
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")],
-            "month_year": pd.PeriodIndex(["2025-01"], freq="M"),
-            "product": ["example product"],
-            "category": ["No Matches Found"],
-            "kilos_total": [1.0],
-        }
-    )
-
-    findings = run_all_diagnostics(
-        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=False
-    )
-    missing_categories_finding = next(
-        finding for finding in findings if finding.get("category") == "gbd_categories_absent"
-    )
-
-    assert "No Matches Found" not in missing_categories_finding["message"]
-
-
 def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
     """Serving reports should not describe serving counts as kilograms."""
     df = pd.DataFrame(
@@ -1049,8 +928,8 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
 
 def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     # Shaped like what `build_food_report` hands over: parsed dates, Period months, and a
-    # Period-keyed mapping. March is short and has no poultry, so the date distribution and
-    # category-month checks, which stay silent on clean data, report too.
+    # Period-keyed mapping. March is short, so the date distribution check, which stays silent
+    # on clean data, reports too.
     jan, feb, mar = pd.period_range("2025-01", periods=3, freq="M")
     df = pd.DataFrame(
         {
@@ -1079,12 +958,6 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
         diner_or_meal="diner",
         serving=False,
-        monthly_product_data=df.groupby(["month_year", "product"], as_index=False)[
-            "kilos_total"
-        ].sum(),
-        monthly_category_data=df.groupby(["month_year", "category"], as_index=False)[
-            "kilos_total"
-        ].sum(),
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
@@ -1097,12 +970,5 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         ("outlier_line_items", "success"),
         ("per_product_weight_bounds", "success"),
         ("missing_weeks_within_month", "info"),
-        ("required_columns", "success"),
-        ("date_alignment", "success"),
         ("date_distribution", "warning"),
-        ("negative_values", "success"),
-        ("aggregation_reconciliation", "success"),
-        ("gbd_categories", "success"),
-        ("gbd_categories_absent", "info"),
-        ("missing_category_month_combos", "info"),
     ]

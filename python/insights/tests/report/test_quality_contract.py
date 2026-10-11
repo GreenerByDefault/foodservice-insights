@@ -1,14 +1,7 @@
-import warnings
-
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import aggregate_data
-from gbd_foodservice_insights.report.quality import (
-    Finding,
-    check_required_columns,
-    check_required_non_null,
-    make_finding,
-)
+from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
     quality_status_from_findings,
@@ -92,20 +85,6 @@ def test_ensure_month_year_column_accepts_string_period_and_datetime_inputs():
     assert [str(value) for value in out["month_year"]] == ["2024-01", "2024-02", "2024-03"]
 
 
-def test_quality_helpers_detect_missing_columns_and_non_null_violations():
-    """Confirms quality checks emit structured findings for both absent columns and null
-    violations. This matters because report pipeline schema must remain stable across ingestion,
-    quality checks, and outputs."""
-    df = pd.DataFrame({"a": [1, None], "b": ["x", "y"]})
-    missing = check_required_columns(df, ["a", "c"], stage="ingestion")
-    assert len(missing) == 1
-    assert missing[0]["status"] == "error"
-
-    non_null = check_required_non_null(df, ["a"], stage="ingestion")
-    assert len(non_null) == 1
-    assert non_null[0]["column"] == "a"
-
-
 @pytest.mark.parametrize(
     ("mapping", "detail"),
     [
@@ -177,29 +156,3 @@ def test_quality_status_rolls_up_the_worst_finding():
     assert quality_status_from_findings([_finding("success"), _finding("info")]) == "pass"
     assert quality_status_from_findings([_finding("warning")]) == "warning"
     assert quality_status_from_findings([_finding("error")]) == "invalid"
-
-
-def test_check_required_non_null_handles_context_column_as_required_column():
-    """A required column that is also a sample-context column must not be listed twice.
-
-    Listing it twice made pandas drop a column from the sample rows and warn that the
-    columns were not unique.
-    """
-    df = pd.DataFrame(
-        {
-            "date": ["2024-01-01", "2024-01-02"],
-            "month_year": ["Jan 2024", "Jan 2024"],
-            "product": ["Tofu", "Beans"],
-            "category": ["Plant-based Meats", None],
-        }
-    )
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        findings = check_required_non_null(df, ["category"], stage="ingestion")
-
-    assert len(findings) == 1
-    sample_rows = findings[0]["metadata"]["sample_rows"]
-    assert sample_rows == [
-        {"date": "2024-01-02", "month_year": "Jan 2024", "product": "Beans", "category": None}
-    ]

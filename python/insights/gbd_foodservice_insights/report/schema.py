@@ -41,11 +41,6 @@ def required_columns_for_mode(mode: ReportMode) -> tuple[str, ...]:
     return REQUIRED_COLUMNS_BY_MODE[mode]
 
 
-def required_non_null_columns_for_mode(mode: ReportMode) -> tuple[str, ...]:
-    """Return columns that must not contain missing values for mode."""
-    return REQUIRED_COLUMNS_BY_MODE[mode]
-
-
 def metric_display_label(metric: str) -> str:
     """Return a human-readable display label from an internal metric column name.
 

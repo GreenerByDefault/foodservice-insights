@@ -33,9 +33,6 @@ diner_meal_count_reasonableness:
   low_ratio_threshold: 0.5
   high_ratio_threshold: 2.0
 
-aggregation_reconciliation:
-  rel_error_threshold: 0.001
-
 single_product_dominance:
   threshold_pct: 0.30
 
