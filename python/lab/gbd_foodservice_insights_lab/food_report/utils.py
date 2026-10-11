@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from gbd_foodservice_insights.report.schema import VALID_REGIONS, Region
 
 
 def _to_month_period(value: Any, *, context: str) -> pd.Period:
@@ -58,3 +59,11 @@ def load_diner_meal_mapping_from_json(
         raw = json.load(f)
 
     return normalize_diner_meal_mapping(raw)
+
+
+def validate_region(region: str) -> Region:
+    """Validate and normalize region identifier."""
+    normalized = str(region).strip().lower()
+    if normalized not in VALID_REGIONS:
+        raise ValueError(f"region must be one of {list(VALID_REGIONS)}, got '{region}'")
+    return normalized

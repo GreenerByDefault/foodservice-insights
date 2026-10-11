@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from gbd_foodservice_insights.categories import categories
-from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, validate_region
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region
 
 
 @cache
@@ -17,27 +17,17 @@ def load_emission_factors() -> dict[str, dict[Region, float]]:
     }
 
 
-def get_emission_factor(category: str, region: str = "us") -> float | None:
+def get_emission_factor(category: str, region: Region = "us") -> float | None:
     """Look up the emission factor for a single category."""
-    normalized_region = validate_region(region)
-    ef_dict = load_emission_factors()
-
-    if category in ef_dict:
-        return ef_dict[category][normalized_region]
-
-    category_lower = str(category).lower()
-    for name, factors in ef_dict.items():
-        if name.lower() == category_lower:
-            return factors[normalized_region]
-
-    return None
+    factors = load_emission_factors().get(category)
+    return None if factors is None else factors[region]
 
 
 def calculate_emissions(
     df: pd.DataFrame,
     weight_col: str,
     category_col: str = "category",
-    region: str = "us",
+    region: Region = "us",
 ) -> pd.DataFrame:
     """Multiply each row's weight by category emission factor.
 
@@ -45,32 +35,14 @@ def calculate_emissions(
     - ``emission_factor_used``
     - ``emissions_kg_co2e``
     """
-    normalized_region = validate_region(region)
-
     if weight_col not in df.columns:
         raise ValueError(f"Weight column '{weight_col}' not found in DataFrame.")
     if category_col not in df.columns:
         raise ValueError(f"Category column '{category_col}' not found in DataFrame.")
 
     out = df.copy()
-    ef_dict = load_emission_factors()
-
-    lower_lookup: dict[str, float] = {
-        name.lower(): factors[normalized_region] for name, factors in ef_dict.items()
-    }
-
-    out["emission_factor_used"] = out[category_col].astype(str).str.lower().map(lower_lookup)
-
-    # Every GBD category has a factor (`categories()` requires one) and the
-    # product path only assigns GBD categories, so this is our bug or a typo in a lab's
-    # hand-edited categorized CSV. Either way, a row without emissions would drop its kilos
-    # from every CO2e figure while still counting them toward weights.
-    unmatched = sorted(
-        out.loc[out["emission_factor_used"].isna(), category_col].astype(str).unique()
-    )
-    if unmatched:
-        raise ValueError(f"No emission factor for categories: {', '.join(unmatched)}")
-
+    factors = {name: by_region[region] for name, by_region in load_emission_factors().items()}
+    out["emission_factor_used"] = out[category_col].map(factors)
     out["emissions_kg_co2e"] = out[weight_col] * out["emission_factor_used"]
     return out
 

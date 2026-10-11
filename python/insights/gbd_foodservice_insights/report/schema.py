@@ -64,14 +64,6 @@ def per_diner_metric_name(total_metric: str, diner_or_meal: DinerOrMeal) -> str:
     raise ValueError(f"Expected metric name to end with '_total' or ' total', got '{total_metric}'")
 
 
-def validate_region(region: str) -> Region:
-    """Validate and normalize region identifier."""
-    normalized = str(region).strip().lower()
-    if normalized not in VALID_REGIONS:
-        raise ValueError(f"region must be one of {list(VALID_REGIONS)}, got '{region}'")
-    return normalized
-
-
 def quality_status_from_findings(findings: Iterable[Finding]) -> QualityStatus:
     """Compute overall quality status from finding severities; ``info`` never counts."""
     statuses = {str(item.get("status", "info")) for item in findings}

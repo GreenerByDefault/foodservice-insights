@@ -45,8 +45,8 @@ def _parse_categories(data: object) -> tuple[Category, ...]:
         raise ValueError("GBD categories must be a mapping with a `categories` list.")
 
     result = tuple(_parse_category(entry) for entry in data["categories"])
-    # Case-insensitively, because emissions, aggregation and the lab look categories up by
-    # lowercased name, where two spellings of one name would silently collapse into one.
+    # Case-insensitively, because the lab looks categories up by lowercased name, where two
+    # spellings of one name would silently collapse into one.
     names = [category.name.lower() for category in result]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:

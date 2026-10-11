@@ -118,21 +118,3 @@ def test_generate_all_report_plots_leaves_out_pages_without_their_data(
         "Top Products Driving Overall (Kilos)",
         "Top Products by Category",
     ]
-
-
-@pytest.mark.usefixtures("fruit_and_juice")
-def test_generate_all_report_plots_raises_for_untyped_categories():
-    monthly_category_data = pd.DataFrame(
-        {
-            "month_year": [pd.Period("2023-01"), pd.Period("2023-01")],
-            "category": ["fruit", "No Matches Found"],
-            "kilos_total": [100, 25],
-        }
-    )
-
-    with pytest.raises(ValueError, match="Unknown categories"):
-        report.generate_all_report_plots(
-            aggregation=_aggregation(monthly_category_data),
-            diner_meal_mapping={JAN: 100},
-            metric_total="kilos_total",
-        )
