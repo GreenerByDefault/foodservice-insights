@@ -78,3 +78,9 @@ class TestPlotMetricOverTime:
         )
         assert np.asarray(fig.axes[0].lines[0].get_ydata()).tolist() == pytest.approx([1.0, 1.25])
         plt.close(fig)
+
+    def test_rejects_an_unknown_metric(self):
+        df = pd.DataFrame({"month_year": [pd.Period("2023-01")], "category": ["fruit"], "x": [1]})
+
+        with pytest.raises(ValueError, match="metric must be"):
+            plot_metric_over_time(df, metric="x")

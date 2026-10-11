@@ -61,11 +61,28 @@ def test_detect_unusual_sales_flags_category_outliers_with_export_table(unusual_
         product_name_col="product_name",
     )
 
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 2
-    assert set(outlier_rows["product_name"]) == {"Bean Chili", "Lentil Soup"}
-    assert "ratio_to_category_median" in outlier_rows.columns
-    assert outlier_rows["flag_reason"].str.len().gt(0).all()
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("warning", 2)]
+    assert list(outlier_rows.columns) == [
+        "row_index",
+        "date",
+        "product_name",
+        "category",
+        "quantity_sold",
+        "category_row_count",
+        "category_median",
+        "category_mad",
+        "ratio_to_category_median",
+        "modified_z_score",
+        "flag_reason",
+        "flagged_by_mad",
+        "flagged_by_zero_mad_ratio",
+        "flagged_by_small_category_ratio",
+        "flagged_by_extreme_ratio",
+    ]
+    # Most extreme ratio first. Lentil Soup's MAD is 0, so only the ratio fallback can catch it.
+    assert outlier_rows["product_name"].tolist() == ["Lentil Soup", "Bean Chili"]
+    assert outlier_rows["row_index"].tolist() == [9, 4]
+    assert outlier_rows["flag_reason"].tolist() == ["zero-MAD ratio fallback", "MAD threshold"]
 
 
 def test_detect_unusual_sales_returns_nothing_within_normal_range():
@@ -81,7 +98,7 @@ def test_detect_unusual_sales_returns_nothing_within_normal_range():
         summary_col="quantity_sold",
         product_name_col="product_name",
     )
-    assert [finding["status"] for finding in findings] == ["success"]
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert outlier_rows.empty
 
 
@@ -161,23 +178,81 @@ def test_detect_unusual_sales_flags_severe_small_category_outlier():
         product_name_col="product_name",
     )
 
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 1
-    assert set(outlier_rows["product_name"]) == {"Bean Chili"}
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("warning", 1)]
+    assert outlier_rows["product_name"].tolist() == ["Bean Chili"]
     assert outlier_rows["flagged_by_small_category_ratio"].tolist() == [True]
-    assert "small-category severe ratio fallback" in outlier_rows["flag_reason"].iloc[0]
+    assert outlier_rows["flag_reason"].tolist() == ["small-category severe ratio fallback"]
+
+
+@pytest.mark.parametrize(("spike", "flagged"), [(50, 1), (49, 0)])
+def test_detect_unusual_sales_small_category_needs_five_times_the_median(spike, flagged):
+    df = pd.DataFrame(
+        {
+            "product_name": ["Bean Chili"] * 4,
+            "category": ["Legumes"] * 4,
+            "quantity_sold": [10, 10, 10, spike],
+        }
+    )
+
+    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+
+    assert (findings[0]["count"], len(outlier_rows)) == (flagged, flagged)
+
+
+def test_detect_unusual_sales_is_only_info_when_few_lines_are_flagged_and_none_severe():
+    # One mild outlier among 502 lines is 0.2% of them, under the 0.25% warning share.
+    df = pd.DataFrame(
+        {
+            "product_name": "Beans",
+            "category": "Legumes",
+            "quantity_sold": [9, 10, 11] * 167 + [30],
+        }
+    )
+
+    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 1)]
+    assert outlier_rows["flag_reason"].tolist() == ["MAD threshold"]
+
+
+def test_detect_unusual_sales_ignores_lines_without_a_positive_numeric_weight_or_category():
+    df = pd.DataFrame(
+        {
+            "product_name": list("abcdefgh"),
+            "category": ["Legumes"] * 5 + [None, "Legumes", "Legumes"],
+            "quantity_sold": [10, 10, 10, 10, 100, 500, 0, -3],
+        }
+    )
+
+    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+
+    # The 500 has no category, the 0 and -3 are not purchases: none joins the baseline or is
+    # flagged, but they still count as lines in the share.
+    assert outlier_rows["product_name"].tolist() == ["e"]
+    assert findings[0]["metadata"]["outlier_row_share"] == 1 / 8
+
+
+def test_detect_unusual_sales_succeeds_when_no_line_has_a_positive_weight():
+    df = pd.DataFrame(
+        {"product_name": ["a", "b"], "category": ["Legumes"] * 2, "quantity_sold": [0, -1]}
+    )
+
+    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
+    assert outlier_rows.empty
 
 
 def test_detect_unusual_sales_returns_success_for_no_rows():
     df = pd.DataFrame({"product_name": [], "category": [], "quantity_sold": []})
     findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
-    assert [finding["status"] for finding in findings] == ["success"]
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert outlier_rows.empty
 
 
 def test_detect_unusual_sales_raises_for_missing_columns():
     df = pd.DataFrame({"p": ["A"], "q": [1]})
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match=r"Missing required columns.*quantity_sold"):
         detect_unusual_sales(df, "quantity_sold", "product_name")
 
 
@@ -197,10 +272,13 @@ def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
 
     findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
 
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 4
-    assert findings[0]["metadata"]["low"] == pytest.approx(0.001)
-    assert findings[0]["metadata"]["high"] == pytest.approx(500.0)
+    assert (findings[0]["status"], findings[0]["count"]) == ("warning", 4)
+    assert findings[0]["metadata"] == {
+        "low": 0.001,
+        "high": 500.0,
+        "unit_label": "kg",
+        "flagged_row_count": 4,
+    }
     assert findings[0]["message"] == (
         "Found 4 lines with a weight above zero but under 0.001 kg, or over 500 kg, which "
         "usually means a unit mistake. For example, Lentils at 0.0005 kg, below the lower "
@@ -212,9 +290,20 @@ def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
         "Tempeh at 900 kg, above the upper bound of 500 kg.",
         "Beans at 700 kg, above the upper bound of 500 kg.",
     ]
+    assert list(flagged_rows.columns) == [
+        "row_index",
+        "date",
+        "product",
+        "category",
+        "kilos_total",
+        "metric_value",
+        "breached_bound",
+        "breached_threshold",
+    ]
     assert list(flagged_rows["row_index"]) == [14, 10, 13, 12]
     assert list(flagged_rows["breached_bound"]) == ["lower", "lower", "upper", "upper"]
-    assert list(flagged_rows["metric_value"]) == pytest.approx([0.0005, 0.0008, 900.0, 700.0])
+    assert list(flagged_rows["breached_threshold"]) == [0.001, 0.001, 500.0, 500.0]
+    assert list(flagged_rows["metric_value"]) == [0.0005, 0.0008, 900.0, 700.0]
 
 
 def test_check_per_product_weight_bounds_treats_zero_and_the_bounds_as_in_range():
@@ -227,9 +316,69 @@ def test_check_per_product_weight_bounds_treats_zero_and_the_bounds_as_in_range(
 
     findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
 
-    assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
+    assert list(flagged_rows.columns) == ["row_index", "product", "kilos_total", "breached_bound"]
     assert flagged_rows.empty
+
+
+def test_check_per_product_weight_bounds_flags_values_just_outside_the_bounds():
+    df = pd.DataFrame({"product": ["Beans", "Tofu"], "kilos_total": [0.00099, 500.01]})
+
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+
+    assert findings[0]["count"] == 2
+    assert flagged_rows["breached_bound"].tolist() == ["lower", "upper"]
+
+
+def test_check_per_product_weight_bounds_ignores_negative_blank_and_non_numeric_values():
+    df = pd.DataFrame({"product": ["Beans", "Tofu", "Rice"], "kilos_total": [-5, None, "lots"]})
+
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
+    assert flagged_rows.empty
+
+
+def test_check_per_product_weight_bounds_samples_only_sample_limit_lines():
+    df = pd.DataFrame({"product": ["A", "B", "C"], "kilos_total": [600.0, 700.0, 800.0]})
+
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total", sample_limit=2)
+
+    assert findings[0]["count"] == 3
+    assert findings[0]["sample_values"] == [
+        "C at 800 kg, above the upper bound of 500 kg.",
+        "B at 700 kg, above the upper bound of 500 kg.",
+    ]
+    assert len(flagged_rows) == 3
+
+
+@pytest.mark.parametrize("columns", [{"product": ["A"]}, {"kilos_total": [1.0]}])
+def test_check_per_product_weight_bounds_notes_when_a_column_is_missing(columns):
+    findings, flagged_rows = check_per_product_weight_bounds(pd.DataFrame(columns), "kilos_total")
+
+    assert [finding["status"] for finding in findings] == ["info"]
+    assert findings[0]["metadata"]["missing_columns"] == [
+        column for column in ("kilos_total", "product") if column not in columns
+    ]
+    assert flagged_rows.empty
+
+
+def test_check_per_product_weight_bounds_succeeds_for_no_rows():
+    df = pd.DataFrame({"product": [], "kilos_total": []})
+
+    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
+    assert flagged_rows.empty
+
+
+def test_check_per_product_weight_bounds_rejects_inverted_bounds(monkeypatch):
+    _override_thresholds(monkeypatch, {"per_product_weight_bounds": {"low": 10, "high": 1}})
+
+    with pytest.raises(ValueError, match="low <= high"):
+        check_per_product_weight_bounds(
+            pd.DataFrame({"product": ["Beans"], "kilos_total": [5.0]}), "kilos_total"
+        )
 
 
 def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_metric():
@@ -244,9 +393,12 @@ def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_met
     findings, flagged_rows = check_per_product_weight_bounds(df, "servings total")
 
     assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"]["low"] == pytest.approx(1.0)
-    assert findings[0]["metadata"]["high"] == pytest.approx(1000.0)
-    assert findings[0]["metadata"]["unit_label"] == "servings"
+    assert findings[0]["metadata"] == {
+        "low": 1.0,
+        "high": 1000.0,
+        "unit_label": "servings",
+        "flagged_row_count": 2,
+    }
     assert findings[0]["sample_values"] == [
         "Beans at 0.5 servings, below the lower bound of 1 serving.",
         "Salad at 1,200 servings, above the upper bound of 1,000 servings.",
@@ -306,8 +458,91 @@ def test_detect_month_over_month_total_volatility_succeeds_when_changes_are_smal
 
     findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
 
-    assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
+    assert findings[0]["message"] == "No months changed by more than 30% versus the previous month."
+
+
+@pytest.mark.parametrize(
+    ("totals", "volatile"),
+    [
+        pytest.param([100.0, 130.0], 0, id="exactly-the-threshold"),
+        pytest.param([100.0, 131.0], 1, id="just-over"),
+        pytest.param([100.0, 70.0], 0, id="exactly-the-threshold-down"),
+        pytest.param([100.0, 0.0], 1, id="drop-to-zero"),
+        pytest.param([0.0, 0.0], 0, id="zero-to-zero"),
+    ],
+)
+def test_detect_month_over_month_total_volatility_thresholds_the_change(totals, volatile):
+    df = pd.DataFrame(
+        {"month_year": pd.period_range("2025-01", periods=2, freq="M"), "kilos_total": totals}
+    )
+
+    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+
+    assert findings[0]["count"] == volatile
+
+
+def test_detect_month_over_month_total_volatility_sums_each_month_before_comparing():
+    jan, feb = pd.period_range("2025-01", periods=2, freq="M")
+    df = pd.DataFrame({"month_year": [feb, jan, feb, jan], "kilos_total": [70.0, 50.0, 70.0, 50.0]})
+
+    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+
+    assert findings[0]["sample_values"] == ["Feb 2025: 140 kg against 100 kg in Jan 2025 (+40%)."]
+
+
+def test_detect_month_over_month_total_volatility_samples_only_sample_limit_months():
+    df = pd.DataFrame(
+        {
+            "month_year": pd.period_range("2025-01", periods=5, freq="M"),
+            "kilos_total": [100.0, 200.0, 100.0, 200.0, 100.0],
+        }
+    )
+
+    findings = detect_month_over_month_total_volatility(
+        df, metric_total="kilos_total", sample_limit=2
+    )
+
+    assert findings[0]["count"] == 4
+    assert findings[0]["sample_values"] == [
+        "Feb 2025: 200 kg against 100 kg in Jan 2025 (+100%).",
+        "Mar 2025: 100 kg against 200 kg in Feb 2025 (-50%).",
+    ]
+
+
+def test_detect_month_over_month_total_volatility_speaks_of_servings_for_serving_reports():
+    df = pd.DataFrame(
+        {
+            "month_year": pd.period_range("2025-01", periods=2, freq="M"),
+            "servings total": [100.0, 140.0],
+        }
+    )
+
+    findings = detect_month_over_month_total_volatility(df, metric_total="servings total")
+
+    assert findings[0]["message"].startswith("Found 1 month where the total servings changed")
+    assert findings[0]["sample_values"] == [
+        "Feb 2025: 140 servings against 100 servings in Jan 2025 (+40%)."
+    ]
+
+
+def test_detect_month_over_month_total_volatility_notes_a_single_month():
+    df = pd.DataFrame(
+        {"month_year": pd.period_range("2025-01", periods=1, freq="M"), "kilos_total": [1.0]}
+    )
+
+    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 0)]
+
+
+def test_detect_month_over_month_total_volatility_notes_a_missing_metric_column():
+    df = pd.DataFrame({"month_year": pd.period_range("2025-01", periods=2, freq="M")})
+
+    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+
+    assert [finding["status"] for finding in findings] == ["info"]
+    assert findings[0]["metadata"] == {"missing_columns": ["kilos_total"]}
 
 
 def test_check_date_distribution_warns_for_a_short_first_or_last_month():
@@ -335,6 +570,27 @@ def test_check_date_distribution_warns_for_a_short_first_or_last_month():
     ]
 
 
+@pytest.mark.parametrize(("first_month_lines", "warned"), [(20, False), (19, True)])
+def test_check_date_distribution_warns_only_below_half_the_typical_month(first_month_lines, warned):
+    months = (
+        ["2025-01"] * first_month_lines + ["2025-02"] * 40 + ["2025-03"] * 40 + ["2025-04"] * 40
+    )
+
+    findings = check_date_distribution(
+        pd.DataFrame({"month_year": pd.PeriodIndex(months, freq="M")})
+    )
+
+    assert [finding["count"] for finding in findings] == ([first_month_lines] if warned else [])
+
+
+def test_check_date_distribution_stays_silent_without_a_typical_month_to_compare():
+    two_months = pd.DataFrame({"month_year": pd.PeriodIndex(["2025-01", "2025-02"], freq="M")})
+    no_months = pd.DataFrame({"kilos_total": [1.0]})
+
+    assert check_date_distribution(two_months) == []
+    assert check_date_distribution(no_months) == []
+
+
 def test_check_missing_internal_months_warns_for_missing_middle_month():
     """Flags missing middle months because one gap can change the story in a short report window."""
     df = pd.DataFrame(
@@ -346,10 +602,57 @@ def test_check_missing_internal_months_warns_for_missing_middle_month():
 
     findings = check_missing_internal_months(df)
 
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 1
-    assert findings[0]["sample_values"] == ["Feb 2025"]
-    assert "one-third of the expected period is missing" in findings[0]["message"]
+    assert findings == [
+        make_finding(
+            stage="diagnostics",
+            category="missing_internal_months",
+            status="warning",
+            message=(
+                "Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025. In a "
+                "three-month report window, that means one-third of the expected period is "
+                "missing."
+            ),
+            count=1,
+            sample_values=["Feb 2025"],
+            metadata={
+                "missing_months": ["2025-02"],
+                "expected_month_count": 3,
+                "missing_month_share": 1 / 3,
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("observed", "message"),
+    [
+        pytest.param(
+            ["2024-11", "2025-02"],
+            "Found 2 missing internal months between Nov 2024 and Feb 2025: Dec 2024, Jan 2025. "
+            "That means about 50% of the expected months in this period are missing.",
+            id="across-a-year-boundary",
+        ),
+        pytest.param(
+            ["2025-01", "2025-03", "2025-05", "2025-06"],
+            "Found 2 missing internal months between Jan 2025 and Jun 2025: Feb 2025, Apr 2025. "
+            "That means about 33% of the expected months in this period are missing.",
+            id="exactly-a-third",
+        ),
+        pytest.param(
+            ["2025-01", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07"],
+            "Found 1 missing internal month between Jan 2025 and Jul 2025: Feb 2025.",
+            id="under-a-third-adds-no-share",
+        ),
+    ],
+)
+def test_check_missing_internal_months_words_the_share_of_the_period_missing(observed, message):
+    df = pd.DataFrame({"month_year": pd.PeriodIndex(observed, freq="M")})
+
+    findings = check_missing_internal_months(df)
+
+    assert [(finding["status"], finding["message"]) for finding in findings] == [
+        ("warning", message)
+    ]
 
 
 def test_check_missing_internal_months_does_not_flag_boundary_months():
@@ -362,8 +665,16 @@ def test_check_missing_internal_months_does_not_flag_boundary_months():
 
     findings = check_missing_internal_months(df)
 
-    assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
+
+
+@pytest.mark.parametrize("observed", [[], ["2025-01", "2025-01"]])
+def test_check_missing_internal_months_succeeds_below_two_distinct_months(observed):
+    df = pd.DataFrame({"month_year": pd.PeriodIndex(observed, freq="M")})
+
+    findings = check_missing_internal_months(df)
+
+    assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
 
 
 # ----------------------------------------------------------------------
@@ -372,7 +683,10 @@ def test_check_missing_internal_months_does_not_flag_boundary_months():
 
 
 def _check_headcounts(
-    counts: dict[str, float], food: dict[str, float], diner_or_meal: DinerOrMeal = "diner"
+    counts: dict[str, float],
+    food: dict[str, float],
+    diner_or_meal: DinerOrMeal = "diner",
+    **kwargs: int,
 ) -> tuple[list[Finding], pd.DataFrame]:
     df = pd.DataFrame(
         {
@@ -385,6 +699,7 @@ def _check_headcounts(
         dict(zip(pd.PeriodIndex(list(counts), freq="M"), counts.values(), strict=True)),
         "kilos_total",
         diner_or_meal=diner_or_meal,
+        **kwargs,
     )
 
 
@@ -492,22 +807,58 @@ def test_check_diner_meal_reasonableness_judges_only_months_with_both_count_and_
     )
 
     assert findings[0]["status"] == "success"
-    assert findings[0]["metadata"]["median_count"] == 100
+    assert findings[0]["metadata"] == {
+        "metric_col": "kilos_total",
+        "median_count": 100.0,
+        "median_food_per_count": 0.1,
+        "low_ratio_threshold": 0.5,
+        "high_ratio_threshold": 2.0,
+    }
     assert export_df["month_year"].tolist() == ["2025-01", "2025-02", "2025-03"]
 
 
-def test_check_diner_meal_reasonableness_notes_when_no_month_has_count_and_food():
-    findings, export_df = _check_headcounts({"2025-01": 100}, {"2025-02": 10})
-
-    assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 0)]
-    assert export_df.empty
-
-
-def test_check_diner_meal_reasonableness_notes_when_typical_month_has_no_food():
+def test_check_diner_meal_reasonableness_ignores_a_zero_count():
     findings, export_df = _check_headcounts(
-        {"2025-01": 100, "2025-02": 100, "2025-03": 100},
-        {"2025-01": 0, "2025-02": 0, "2025-03": 10},
+        {"2025-01": 100, "2025-02": 0, "2025-03": 100},
+        {"2025-01": 10, "2025-02": 10, "2025-03": 10},
     )
+
+    assert findings[0]["status"] == "success"
+    assert export_df["month_year"].tolist() == ["2025-01", "2025-03"]
+
+
+def test_check_diner_meal_reasonableness_samples_only_sample_limit_months():
+    counts: dict[str, float] = {
+        "2025-01": 100,
+        "2025-02": 1000,
+        "2025-03": 1000,
+        "2025-04": 100,
+        "2025-05": 100,
+    }
+
+    findings, export_df = _check_headcounts(counts, dict.fromkeys(counts, 10.0), sample_limit=1)
+
+    assert findings[0]["count"] == 2
+    assert findings[0]["sample_values"] == [
+        "Feb 2025: 1,000 diners, against 100 in a typical month, with no matching rise in food."
+    ]
+    assert export_df["is_flagged"].sum() == 2
+
+
+@pytest.mark.parametrize(
+    ("counts", "food"),
+    [
+        pytest.param({"2025-01": 100}, {"2025-02": 10}, id="no-month-has-both"),
+        pytest.param({"2025-01": 0}, {"2025-01": 10}, id="the-only-count-is-zero"),
+        pytest.param(
+            {"2025-01": 100, "2025-02": 100, "2025-03": 100},
+            {"2025-01": 0, "2025-02": 0, "2025-03": 10},
+            id="typical-month-has-no-food",
+        ),
+    ],
+)
+def test_check_diner_meal_reasonableness_notes_when_it_has_nothing_to_judge(counts, food):
+    findings, export_df = _check_headcounts(counts, food)
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 0)]
     assert export_df.empty
@@ -554,6 +905,28 @@ def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
     }
 
 
+def _a_40_percent_swing() -> list[Finding]:
+    df = pd.DataFrame(
+        {
+            "month_year": pd.period_range("2025-01", periods=2, freq="M"),
+            "kilos_total": [100.0, 140.0],
+        }
+    )
+    return detect_month_over_month_total_volatility(df, "kilos_total")
+
+
+def _one_mild_outlier_in_five_lines() -> list[Finding]:
+    df = pd.DataFrame(
+        {
+            "product_name": "Beans",
+            "category": "Legumes",
+            "kilos_total": [10, 10, 10, 10, 100],
+        }
+    )
+    findings, _ = detect_unusual_sales(df, "kilos_total", "product_name")
+    return findings
+
+
 def _first_month_at_40_percent_of_the_median() -> list[Finding]:
     df = pd.DataFrame({"month_year": ["2025-01"] * 4 + ["2025-02"] * 10 + ["2025-03"] * 10})
     return check_date_distribution(df)
@@ -586,6 +959,40 @@ def _first_month_at_40_percent_of_the_median() -> list[Finding]:
                 "flagged": ["Beans", "Tempeh"],
             },
             id="per_product_weight_bounds",
+        ),
+        pytest.param(
+            {"month_over_month_total_volatility": {"warning_pct_change_threshold": 0.5}},
+            _a_40_percent_swing,
+            [
+                make_finding(
+                    stage="diagnostics",
+                    category="month_over_month_total_volatility",
+                    status="success",
+                    message="No months changed by more than 50% versus the previous month.",
+                    count=0,
+                    metadata={"warning_pct_change_threshold": 0.5},
+                )
+            ],
+            id="month_over_month_total_volatility",
+        ),
+        pytest.param(
+            {"outlier_line_items": {"zero_mad_ratio_threshold": 20}},
+            _one_mild_outlier_in_five_lines,
+            [
+                make_finding(
+                    stage="diagnostics",
+                    category="outlier_line_items",
+                    status="success",
+                    message="No unusually large line items found.",
+                    count=0,
+                    metadata={
+                        "outlier_row_share": 0.0,
+                        "warning_share_threshold": 0.0025,
+                        "extreme_ratio_threshold": 100.0,
+                    },
+                )
+            ],
+            id="outlier_line_items",
         ),
         pytest.param(
             {"date_distribution": {"partial_month_ratio_threshold": 0.2}},
@@ -630,11 +1037,17 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
     bounds_finding = next(
         finding for finding in findings if finding.get("category") == "per_product_weight_bounds"
     )
-    assert bounds_finding["metadata"]["low"] == pytest.approx(1.0)
-    assert bounds_finding["metadata"]["high"] == pytest.approx(1000.0)
-    assert bounds_finding["metadata"]["unit_label"] == "servings"
-    assert "servings" in bounds_finding["message"]
-    assert "kg" not in bounds_finding["message"]
+    assert bounds_finding["metadata"] == {
+        "low": 1.0,
+        "high": 1000.0,
+        "unit_label": "servings",
+        "flagged_row_count": 2,
+    }
+    assert bounds_finding["message"] == (
+        "Found 2 lines with a serving count above zero but under 1 serving, or over 1,000 "
+        "servings, which usually means a unit mistake. For example, Beans at 0.5 servings, "
+        "below the lower bound of 1 serving."
+    )
 
 
 def test_run_all_diagnostics_returns_every_checks_findings_in_order():
@@ -681,12 +1094,44 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     ]
 
 
+def test_run_all_diagnostics_skips_row_level_checks_without_their_columns():
+    jan, feb = pd.period_range("2025-01", periods=2, freq="M")
+    df = pd.DataFrame({"month_year": [jan, feb], "kilos_total": [100.0, 100.0]})
+
+    findings = run_all_diagnostics(
+        df=df, diner_meal_mapping={jan: 100.0, feb: 100.0}, diner_or_meal="meal"
+    )
+
+    assert [finding["category"] for finding in findings] == [
+        "month_over_month_total_volatility",
+        "missing_internal_months",
+        "diner_meal_count_reasonableness",
+    ]
+
+
+def test_run_all_diagnostics_falls_back_to_kilos_when_a_serving_report_has_no_servings():
+    jan, feb = pd.period_range("2025-01", periods=2, freq="M")
+    df = pd.DataFrame({"month_year": [jan, feb], "kilos_total": [100.0, 200.0]})
+
+    findings = run_all_diagnostics(
+        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=True
+    )
+
+    assert findings[0]["column"] == "kilos_total"
+
+
 def _finding(status: DiagnosticStatus) -> Finding:
     return make_finding(stage="test", category="test", status=status, message="")
 
 
-def test_quality_status_rolls_up_the_worst_finding():
-    assert quality_status_from_findings([_finding("success")]) == "pass"
-    assert quality_status_from_findings([_finding("success"), _finding("info")]) == "pass"
-    assert quality_status_from_findings([_finding("warning")]) == "warning"
-    assert quality_status_from_findings([_finding("error")]) == "invalid"
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        ([], "pass"),
+        (["success", "info"], "pass"),
+        (["info", "warning", "success"], "warning"),
+        (["warning", "error"], "invalid"),
+    ],
+)
+def test_quality_status_rolls_up_the_worst_finding(statuses, expected):
+    assert quality_status_from_findings([_finding(status) for status in statuses]) == expected

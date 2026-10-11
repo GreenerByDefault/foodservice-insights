@@ -68,6 +68,45 @@ def test_aggregate_data_keeps_rows_with_missing_group_keys():
     )
 
 
+def test_aggregate_data_leaves_an_all_missing_group_missing_rather_than_zero():
+    df = pd.DataFrame(
+        {
+            "month_year": [JAN, JAN, FEB],
+            "product": ["apple", "apple", "apple"],
+            "kilos_total": [None, None, 3.0],
+        }
+    )
+
+    out = aggregate_data(df, group_by="product")
+
+    assert out["kilos_total"].isna().tolist() == [True, False]
+
+
+def test_aggregate_data_sums_several_metrics_per_group():
+    df = pd.DataFrame(
+        {
+            "month_year": [JAN, JAN],
+            "category": ["Legumes", "Legumes"],
+            "kilos_total": [1.0, 2.0],
+            "servings total": [10.0, 20.0],
+        }
+    )
+
+    out = aggregate_data(df, group_by="category", metrics=["kilos_total", "servings total"])
+
+    pd.testing.assert_frame_equal(
+        out,
+        pd.DataFrame(
+            {
+                "month_year": [JAN],
+                "category": ["Legumes"],
+                "kilos_total": [3.0],
+                "servings total": [30.0],
+            }
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
@@ -95,33 +134,36 @@ def test_create_template_data_requires_the_metric_column():
         create_template_data(pd.DataFrame({"month_year": [], "category": []}), "kilos_total")
 
 
-def test_create_template_data_places_each_value_under_its_category():
+@pytest.fixture
+def three_categories(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        aggregation, "category_names", lambda: ["Cheese", "Legumes", "Milk (Cow's milk)"]
+    )
+
+
+@pytest.mark.usefixtures("three_categories")
+def test_create_template_data_pivots_months_into_columns_with_totals_and_zero_filled_categories():
     monthly_category_data = pd.DataFrame(
         {
-            "month_year": ["2024-01", "2024-01", "2024-02"],
-            "category": ["Legumes", "Cheese", "Milk (Cow's milk)"],
-            "kilos_total": [12.5, 8.0, 30.0],
+            "month_year": ["2024-01", "2024-01", "2024-01", "2024-02"],
+            "category": ["Legumes", "Cheese", "Legumes", "Legumes"],
+            "kilos_total": [12.1234, 8.0, 1.0, 30.0],
         }
     )
 
     template = create_template_data(monthly_category_data, "kilos_total")
 
-    assert template.loc["Legumes", "2024-01"] == pytest.approx(12.5)
-    assert template.loc["Cheese", "2024-01"] == pytest.approx(8.0)
-    assert template.loc["Milk (Cow's milk)", "2024-02"] == pytest.approx(30.0)
-    assert template.loc["total", "total"] == pytest.approx(50.5)
-
-
-@patch("gbd_foodservice_insights.report.aggregation.category_names")
-def test_create_template_data_zero_fills_absent_categories(mock_get_gbd_categories, fruit_rows):
-    """Report templates include every category so chart tables keep a stable shape."""
-    mock_get_gbd_categories.return_value = ["fruit", "vegetable"]
-    agg_df = aggregate_data(fruit_rows, group_by="category")
-    template_df = create_template_data(agg_df, metric="kilos_total")
-    assert "total" in template_df.columns
-    assert "fruit" in template_df.index
-    assert "vegetable" in template_df.index
-    assert template_df.loc["vegetable", "total"] == 0
+    # Cheese has no February line, so its cell is blank; Milk has none at all, so its row is 0.
+    expected = pd.DataFrame(
+        {
+            "2024-01": [8.0, 13.123, 0.0, 21.123],
+            "2024-02": [float("nan"), 30.0, 0.0, 30.0],
+            "total": [8.0, 43.123, 0.0, 51.123],
+        },
+        index=pd.Index(["Cheese", "Legumes", "Milk (Cow's milk)", "total"], name="category"),
+    )
+    expected.columns.name = "month_year"
+    pd.testing.assert_frame_equal(template, expected)
 
 
 def test_identify_category_drivers_ranks_products_within_each_category(fruit_rows):
@@ -146,17 +188,104 @@ def test_identify_overall_drivers_ranks_products_across_categories(fruit_rows):
     ]
 
 
+def test_identify_category_drivers_ranks_the_top_products_within_each_category():
+    rows = pd.DataFrame(
+        {
+            "category": ["A", "A", "A", "B", "B", "B"],
+            "product": ["x", "y", "z", "u", "v", "w"],
+            "kilos_total": [1.0, 5.0, 3.0, 2.0, 2.0, 7.0],
+        }
+    )
+
+    drivers_df = identify_category_drivers(rows, metric="kilos_total", top_n=2)
+
+    assert drivers_df.to_dict("records") == [
+        {
+            "category": "A",
+            "product": "y",
+            "kilos_total": 5.0,
+            "kilos_total_in_category": 9.0,
+            "percentage": 55.6,
+        },
+        {
+            "category": "A",
+            "product": "z",
+            "kilos_total": 3.0,
+            "kilos_total_in_category": 9.0,
+            "percentage": 33.3,
+        },
+        {
+            "category": "B",
+            "product": "w",
+            "kilos_total": 7.0,
+            "kilos_total_in_category": 11.0,
+            "percentage": 63.6,
+        },
+        {
+            "category": "B",
+            "product": "u",
+            "kilos_total": 2.0,
+            "kilos_total_in_category": 11.0,
+            "percentage": 18.2,
+        },
+    ]
+
+
+def test_identify_category_drivers_sums_a_products_lines_across_months():
+    rows = pd.DataFrame(
+        {
+            "category": ["A", "A", "A"],
+            "product": ["x", "x", "y"],
+            "kilos_total": [2.0, 3.0, 4.0],
+        }
+    )
+
+    drivers_df = identify_category_drivers(rows, top_n=5)
+
+    assert drivers_df[["product", "kilos_total"]].to_dict("records") == [
+        {"product": "x", "kilos_total": 5.0},
+        {"product": "y", "kilos_total": 4.0},
+    ]
+
+
+def test_identify_overall_drivers_sums_a_product_across_categories_and_ranks_the_top_n():
+    rows = pd.DataFrame(
+        {
+            "category": ["A", "A", "A", "B", "B", "B"],
+            "product": ["x", "y", "z", "u", "v", "x"],
+            "kilos_total": [1.0, 5.0, 3.0, 2.0, 2.0, 7.0],
+        }
+    )
+
+    drivers_df = identify_overall_drivers(rows, metric="kilos_total", top_n=2)
+
+    assert drivers_df.to_dict("records") == [
+        {"product": "x", "kilos_total": 8.0, "percentage": 40.0},
+        {"product": "y", "kilos_total": 5.0, "percentage": 25.0},
+    ]
+
+
 @pytest.mark.parametrize("identify", [identify_category_drivers, identify_overall_drivers])
 def test_identify_drivers_requires_the_metric_column(fruit_rows, identify):
     with pytest.raises(ValueError, match="Metric column 'servings total' not found"):
         identify(fruit_rows, metric="servings total")
 
 
-@pytest.mark.parametrize("identify", [identify_category_drivers, identify_overall_drivers])
-def test_identify_drivers_report_zero_percent_when_the_total_is_zero(identify):
+def test_identify_drivers_report_zero_percent_when_the_total_is_zero():
     zero_rows = pd.DataFrame({"category": ["fruit"], "product": ["apple"], "kilos_total": [0.0]})
 
-    assert identify(zero_rows)["percentage"].tolist() == [0.0]
+    assert identify_category_drivers(zero_rows).to_dict("records") == [
+        {
+            "category": "fruit",
+            "product": "apple",
+            "kilos_total": 0.0,
+            "kilos_total_in_category": 0.0,
+            "percentage": 0.0,
+        }
+    ]
+    assert identify_overall_drivers(zero_rows).to_dict("records") == [
+        {"product": "apple", "kilos_total": 0.0, "percentage": 0.0}
+    ]
 
 
 # ----------------------------------------------------------------------
@@ -164,9 +293,16 @@ def test_identify_drivers_report_zero_percent_when_the_total_is_zero(identify):
 # ----------------------------------------------------------------------
 
 
+@pytest.fixture
+def plant_and_animal_categories(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(aggregation, "animal_product_categories", lambda: ["Beef"])
+    monkeypatch.setattr(aggregation, "plant_based_categories", lambda: ["Legumes"])
+    monkeypatch.setattr(aggregation, "protein_categories", lambda: ["Legumes", "Beef"])
+    monkeypatch.setattr(aggregation, "plant_protein_categories", lambda: ["Legumes"])
+
+
+@pytest.mark.usefixtures("plant_and_animal_categories")
 def test_calculate_plant_animal_split_keeps_one_sided_months():
-    """Plant-vs-animal summaries should keep months where one side is absent instead of dropping
-    them."""
     df = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-02", "2024-02"],
@@ -175,58 +311,71 @@ def test_calculate_plant_animal_split_keeps_one_sided_months():
         }
     )
 
-    with (
-        patch(
-            "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-            return_value=["Beef"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.plant_based_categories",
-            return_value=["Legumes"],
-        ),
-    ):
-        result = calculate_plant_animal_split(df)
+    result = calculate_plant_animal_split(df)
 
     assert result is not None
-    monthly = result["monthly"]
-    assert monthly is not None
-    assert result["plant_kg"] == pytest.approx(4.0)
-    assert result["animal_kg"] == pytest.approx(3.0)
-    assert result["plant_pct"] == pytest.approx(57.1)
-    assert result["animal_pct"] == pytest.approx(42.9)
-    assert monthly["month_year"].tolist() == ["2024-01", "2024-02"]
-    assert monthly["plant"].tolist() == [4.0, 0.0]
-    assert monthly["animal"].tolist() == [0.0, 3.0]
-    assert monthly["plant_pct"].tolist() == [100.0, 0.0]
+    monthly = result.pop("monthly")
+    assert result == {"plant_pct": 57.1, "animal_pct": 42.9, "plant_kg": 4.0, "animal_kg": 3.0}
+    pd.testing.assert_frame_equal(
+        monthly,
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02"],
+                "plant": [4.0, 0.0],
+                "animal": [0.0, 3.0],
+                "plant_pct": [100.0, 0.0],
+            }
+        ).rename_axis(columns="_group"),
+    )
 
 
-def test_calculate_plant_animal_split_returns_none_when_no_relevant_rows():
-    """Rows outside the plant and animal groups should not create a misleading split."""
+@pytest.mark.usefixtures("plant_and_animal_categories")
+def test_calculate_plant_animal_split_adds_the_missing_side_to_the_monthly_table():
+    df = pd.DataFrame(
+        {"month_year": ["2024-01", "2024-02"], "category": ["Legumes"] * 2, "kilos_total": [3, 1]}
+    )
+
+    result = calculate_plant_animal_split(df)
+
+    assert result is not None
+    assert (result["plant_pct"], result["animal_pct"]) == (100.0, 0.0)
+    assert result["monthly"]["animal"].tolist() == [0.0, 0.0]
+
+
+@pytest.mark.usefixtures("plant_and_animal_categories")
+def test_calculate_plant_animal_split_gives_a_zero_month_no_percentage():
     df = pd.DataFrame(
         {
-            "month_year": ["2024-01"],
-            "category": ["Other"],
-            "kilos_total": [5.0],
+            "month_year": ["2024-01", "2024-01", "2024-02", "2024-02"],
+            "category": ["Legumes", "Beef"] * 2,
+            "kilos_total": [3.0, 1.0, 0.0, 0.0],
         }
     )
 
-    with (
-        patch(
-            "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-            return_value=["Beef"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.plant_based_categories",
-            return_value=["Legumes"],
-        ),
-    ):
-        result = calculate_plant_animal_split(df)
+    result = calculate_plant_animal_split(df)
 
-    assert result is None
+    assert result is not None
+    assert result["monthly"]["plant_pct"].isna().tolist() == [False, True]
 
 
+@pytest.mark.usefixtures("plant_and_animal_categories")
+@pytest.mark.parametrize(
+    ("categories", "kilos"),
+    [
+        pytest.param(["Other"], [5.0], id="only-unclassified-rows"),
+        pytest.param(["Legumes", "Beef"], [0.0, 0.0], id="zero-total"),
+    ],
+)
+def test_calculate_plant_animal_split_returns_none_without_a_total_to_split(categories, kilos):
+    df = pd.DataFrame(
+        {"month_year": ["2024-01"] * len(kilos), "category": categories, "kilos_total": kilos}
+    )
+
+    assert calculate_plant_animal_split(df) is None
+
+
+@pytest.mark.usefixtures("plant_and_animal_categories")
 def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months():
-    """Protein-share summaries should ignore non-protein rows but still keep one-sided months."""
     df = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-02", "2024-02"],
@@ -235,53 +384,84 @@ def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months
         }
     )
 
-    with (
-        patch(
-            "gbd_foodservice_insights.report.aggregation.protein_categories",
-            return_value=["Legumes", "Beef"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.plant_protein_categories",
-            return_value=["Legumes"],
-        ),
-    ):
-        result = calculate_plant_protein_share(df)
+    result = calculate_plant_protein_share(df)
 
     assert result is not None
-    monthly = result["monthly"]
-    assert monthly is not None
-    assert result["plant_protein_total"] == pytest.approx(4.0)
-    assert result["total_protein_metric"] == pytest.approx(10.0)
-    assert result["plant_protein_pct"] == pytest.approx(40.0)
-    assert monthly["month_year"].tolist() == ["2024-01", "2024-02"]
-    assert monthly["plant_protein_metric"].tolist() == [4.0, 0.0]
-    assert monthly["total_protein_metric"].tolist() == [4.0, 6.0]
-    assert monthly["plant_protein_pct"].tolist() == [100.0, 0.0]
+    monthly = result.pop("monthly")
+    assert result == {
+        "plant_protein_pct": 40.0,
+        "plant_protein_total": 4.0,
+        "total_protein_metric": 10.0,
+    }
+    pd.testing.assert_frame_equal(
+        monthly,
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02"],
+                "plant_protein_metric": [4.0, 0.0],
+                "total_protein_metric": [4.0, 6.0],
+                "plant_protein_pct": [100.0, 0.0],
+            }
+        ).rename_axis(columns="_is_plant_protein"),
+    )
 
 
-def test_calculate_plant_protein_share_returns_none_when_total_protein_metric_is_zero():
-    """Zero protein totals should not produce a headline percentage."""
+@pytest.mark.usefixtures("plant_and_animal_categories")
+def test_calculate_plant_protein_share_is_zero_percent_when_all_protein_is_animal():
+    df = pd.DataFrame(
+        {"month_year": ["2024-01", "2024-02"], "category": ["Beef"] * 2, "kilos_total": [3, 1]}
+    )
+
+    result = calculate_plant_protein_share(df)
+
+    assert result is not None
+    assert (result["plant_protein_pct"], result["plant_protein_total"]) == (0.0, 0.0)
+    assert result["monthly"]["plant_protein_metric"].tolist() == [0.0, 0.0]
+
+
+@pytest.mark.usefixtures("plant_and_animal_categories")
+def test_calculate_plant_protein_share_is_100_percent_when_all_protein_is_plant():
+    df = pd.DataFrame(
+        {"month_year": ["2024-01", "2024-02"], "category": ["Legumes"] * 2, "kilos_total": [3, 1]}
+    )
+
+    result = calculate_plant_protein_share(df)
+
+    assert result is not None
+    assert result["plant_protein_pct"] == 100.0
+    assert result["monthly"]["total_protein_metric"].tolist() == [3.0, 1.0]
+
+
+@pytest.mark.usefixtures("plant_and_animal_categories")
+def test_calculate_plant_protein_share_gives_a_zero_month_no_percentage():
     df = pd.DataFrame(
         {
-            "month_year": ["2024-01", "2024-02"],
-            "category": ["Legumes", "Beef"],
-            "kilos_total": [0.0, 0.0],
+            "month_year": ["2024-01", "2024-01", "2024-02", "2024-02"],
+            "category": ["Legumes", "Beef"] * 2,
+            "kilos_total": [3.0, 0.0, 0.0, 0.0],
         }
     )
 
-    with (
-        patch(
-            "gbd_foodservice_insights.report.aggregation.protein_categories",
-            return_value=["Legumes", "Beef"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.plant_protein_categories",
-            return_value=["Legumes"],
-        ),
-    ):
-        result = calculate_plant_protein_share(df)
+    result = calculate_plant_protein_share(df)
 
-    assert result is None
+    assert result is not None
+    assert result["monthly"]["plant_protein_pct"].isna().tolist() == [False, True]
+
+
+@pytest.mark.usefixtures("plant_and_animal_categories")
+@pytest.mark.parametrize(
+    ("categories", "kilos"),
+    [
+        pytest.param(["Vegetables"], [5.0], id="no-protein-rows"),
+        pytest.param(["Legumes", "Beef"], [0.0, 0.0], id="zero-protein"),
+    ],
+)
+def test_calculate_plant_protein_share_returns_none_without_protein_volume(categories, kilos):
+    df = pd.DataFrame(
+        {"month_year": ["2024-01"] * len(kilos), "category": categories, "kilos_total": kilos}
+    )
+
+    assert calculate_plant_protein_share(df) is None
 
 
 @pytest.mark.parametrize("calculate", [calculate_plant_animal_split, calculate_plant_protein_share])
@@ -292,32 +472,26 @@ def test_plant_shares_are_none_when_a_required_column_is_missing(calculate, miss
     assert calculate(df) is None
 
 
+@pytest.mark.usefixtures("plant_and_animal_categories")
 def test_plant_shares_have_no_monthly_table_without_month_year():
     df = pd.DataFrame({"category": ["Legumes", "Beef"], "kilos_total": [1.0, 1.0]})
 
-    with (
-        patch(
-            "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-            return_value=["Beef"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.plant_based_categories",
-            return_value=["Legumes"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.protein_categories",
-            return_value=["Legumes", "Beef"],
-        ),
-        patch(
-            "gbd_foodservice_insights.report.aggregation.plant_protein_categories",
-            return_value=["Legumes"],
-        ),
-    ):
-        split = calculate_plant_animal_split(df)
-        protein = calculate_plant_protein_share(df)
+    split = calculate_plant_animal_split(df)
+    protein = calculate_plant_protein_share(df)
 
-    assert split is not None and split["monthly"] is None
-    assert protein is not None and protein["monthly"] is None
+    assert split == {
+        "plant_pct": 50.0,
+        "animal_pct": 50.0,
+        "plant_kg": 1.0,
+        "animal_kg": 1.0,
+        "monthly": None,
+    }
+    assert protein == {
+        "plant_protein_pct": 50.0,
+        "plant_protein_total": 1.0,
+        "total_protein_metric": 2.0,
+        "monthly": None,
+    }
 
 
 # ----------------------------------------------------------------------
@@ -325,8 +499,13 @@ def test_plant_shares_have_no_monthly_table_without_month_year():
 # ----------------------------------------------------------------------
 
 
+@pytest.fixture
+def beef_and_cheese(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(aggregation, "animal_product_categories", lambda: ["Beef", "Cheese"])
+
+
+@pytest.mark.usefixtures("beef_and_cheese")
 def test_calculate_animal_emissions_concentration_only_uses_animal_rows():
-    """The animal-emissions KPI should ignore non-animal rows in its denominator and ranking."""
     df = pd.DataFrame(
         {
             "product": ["burger", "cheddar", "lentils"],
@@ -335,59 +514,56 @@ def test_calculate_animal_emissions_concentration_only_uses_animal_rows():
         }
     )
 
-    with patch(
-        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-        return_value=["Beef", "Cheese"],
-    ):
-        result = calculate_animal_emissions_concentration(df, top_n=1)
+    result = calculate_animal_emissions_concentration(df, top_n=1)
 
     assert result == AnimalEmissionsConcentration(
         top_products=("burger",), top_products_kg_co2e=8.0, total_animal_kg_co2e=10.0
     )
-    assert result.share_pct == pytest.approx(80.0)
+    assert result.share_pct == 80.0
 
 
-def test_calculate_animal_emissions_concentration_ranks_every_product_when_top_n_too_large():
+@pytest.mark.usefixtures("beef_and_cheese")
+def test_calculate_animal_emissions_concentration_sums_a_product_across_lines_and_ranks_it():
     df = pd.DataFrame(
         {
-            "product": ["burger", "cheddar"],
-            "category": ["Beef", "Cheese"],
-            "emissions_kg_co2e": [8.0, 2.0],
+            "product": ["cheddar", "burger", "cheddar", "brie"],
+            "category": ["Cheese", "Beef", "Cheese", "Cheese"],
+            "emissions_kg_co2e": [4.0, 6.0, 4.0, 1.0],
         }
     )
 
-    with patch(
-        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-        return_value=["Beef", "Cheese"],
-    ):
-        result = calculate_animal_emissions_concentration(df, top_n=5)
+    result = calculate_animal_emissions_concentration(df, top_n=5)
 
     assert result == AnimalEmissionsConcentration(
-        top_products=("burger", "cheddar"), top_products_kg_co2e=10.0, total_animal_kg_co2e=10.0
+        top_products=("cheddar", "burger", "brie"),
+        top_products_kg_co2e=15.0,
+        total_animal_kg_co2e=15.0,
     )
 
 
-def test_calculate_animal_emissions_concentration_is_none_when_animal_emissions_total_zero():
-    """Zero animal emissions should not produce a misleading concentration KPI."""
+@pytest.mark.usefixtures("beef_and_cheese")
+@pytest.mark.parametrize("emissions", [[0.0, 0.0], [None, None]], ids=["zero", "all-missing"])
+def test_calculate_animal_emissions_concentration_is_none_without_animal_emissions(emissions):
     df = pd.DataFrame(
         {
             "product": ["burger", "cheddar"],
             "category": ["Beef", "Cheese"],
-            "emissions_kg_co2e": [0.0, 0.0],
+            "emissions_kg_co2e": emissions,
         }
     )
 
-    with patch(
-        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-        return_value=["Beef", "Cheese"],
-    ):
-        result = calculate_animal_emissions_concentration(df, top_n=2)
-
-    assert result is None
+    assert calculate_animal_emissions_concentration(df, top_n=2) is None
 
 
+@pytest.mark.usefixtures("beef_and_cheese")
+def test_calculate_animal_emissions_concentration_is_none_without_animal_rows():
+    df = pd.DataFrame({"product": ["a"], "category": ["Legumes"], "emissions_kg_co2e": [5.0]})
+
+    assert calculate_animal_emissions_concentration(df) is None
+
+
+@pytest.mark.usefixtures("beef_and_cheese")
 def test_calculate_animal_emissions_concentration_uses_missing_product_name_fallback():
-    """Missing product names should stay visible in the KPI output instead of being dropped."""
     df = pd.DataFrame(
         {
             "product": [pd.NA, "cheddar"],
@@ -396,14 +572,19 @@ def test_calculate_animal_emissions_concentration_uses_missing_product_name_fall
         }
     )
 
-    with patch(
-        "gbd_foodservice_insights.report.aggregation.animal_product_categories",
-        return_value=["Beef", "Cheese"],
-    ):
-        result = calculate_animal_emissions_concentration(df, top_n=2)
+    result = calculate_animal_emissions_concentration(df, top_n=2)
 
-    assert result is not None
-    assert result.top_products == ("Missing product name", "cheddar")
+    assert result == AnimalEmissionsConcentration(
+        top_products=("Missing product name", "cheddar"),
+        top_products_kg_co2e=8.0,
+        total_animal_kg_co2e=8.0,
+    )
+
+
+def test_calculate_animal_emissions_concentration_is_none_without_the_required_columns():
+    df = pd.DataFrame({"product": ["burger"], "category": ["Beef"]})
+
+    assert calculate_animal_emissions_concentration(df) is None
 
 
 def test_summarize_animal_emissions_intensity_covers_only_animal_categories():
@@ -422,18 +603,28 @@ def test_summarize_animal_emissions_intensity_covers_only_animal_categories():
 
     summary = summarize_animal_emissions_intensity(df)
 
-    assert summary["category"].tolist() == [
-        "Beef and Buffalo Meat",
-        "Poultry (Chicken & Turkey)",
-    ]
-    assert summary["kilos_total"].tolist() == [5.0, 4.0]
-    assert summary["total_kg_co2e"].tolist() == [206.75, 17.6]
-    assert summary["kg_co2e_per_kg_food"].tolist() == [41.35, 4.4]
+    pd.testing.assert_frame_equal(
+        summary,
+        pd.DataFrame(
+            {
+                "category": ["Beef and Buffalo Meat", "Poultry (Chicken & Turkey)"],
+                "kilos_total": [5.0, 4.0],
+                "total_kg_co2e": [206.75, 17.6],
+                "kg_co2e_per_kg_food": [41.35, 4.4],
+            }
+        ),
+    )
 
 
-def test_summarize_animal_emissions_intensity_is_empty_without_the_required_columns():
-    df = pd.DataFrame({"category": ["Beef and Buffalo Meat"], "kilos_total": [1.0]})
-
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame({"category": ["Beef and Buffalo Meat"], "kilos_total": [1.0]}),
+        pd.DataFrame({"category": ["Legumes"], "kilos_total": [1.0], "emissions_kg_co2e": [1.0]}),
+    ],
+    ids=["missing-emissions-column", "no-animal-rows"],
+)
+def test_summarize_animal_emissions_intensity_is_an_empty_table_with_its_columns(df):
     summary = summarize_animal_emissions_intensity(df)
 
     assert summary.empty
@@ -445,28 +636,20 @@ def test_summarize_animal_emissions_intensity_is_empty_without_the_required_colu
     ]
 
 
-def test_summarize_animal_emissions_intensity_is_empty_without_animal_rows():
-    df = pd.DataFrame({"category": ["Legumes"], "kilos_total": [1.0], "emissions_kg_co2e": [1.0]})
-
-    assert summarize_animal_emissions_intensity(df).empty
-
-
 def test_summarize_animal_emissions_intensity_leaves_a_zero_weight_category_without_intensity():
     df = pd.DataFrame(
         {
-            "category": ["Beef and Buffalo Meat"],
-            "kilos_total": [0.0],
-            "emissions_kg_co2e": [0.0],
+            "category": ["Beef and Buffalo Meat", "Poultry (Chicken & Turkey)"],
+            "kilos_total": [0.0, 2.0],
+            "emissions_kg_co2e": [0.0, 8.0],
         }
     )
 
-    assert summarize_animal_emissions_intensity(df)["kg_co2e_per_kg_food"].isna().tolist() == [True]
+    summary = summarize_animal_emissions_intensity(df)
 
-
-def test_calculate_animal_emissions_concentration_is_none_without_the_required_columns():
-    df = pd.DataFrame({"product": ["burger"], "category": ["Beef"]})
-
-    assert calculate_animal_emissions_concentration(df) is None
+    assert summary["category"].tolist() == ["Poultry (Chicken & Turkey)", "Beef and Buffalo Meat"]
+    assert summary["kg_co2e_per_kg_food"].tolist()[0] == 4.0
+    assert summary["kg_co2e_per_kg_food"].isna().tolist() == [False, True]
 
 
 # ----------------------------------------------------------------------
@@ -488,54 +671,100 @@ def test_swap_categories_are_gbd_names(name: str):
     assert name in category_names()
 
 
+_SWAP_COLUMNS = [
+    "scenario",
+    "substitution_pct",
+    "source_categories",
+    "replacement_category",
+    "baseline_source_weight_kg",
+    "baseline_source_emissions_kg_co2e",
+    "replaced_weight_kg",
+    "remaining_source_weight_kg",
+    "replacement_weight_kg",
+    "replacement_emission_factor_kg_co2e_per_kg",
+    "projected_emissions_kg_co2e",
+    "avoidable_kg_co2e",
+    "institution_emissions_avoided_pct",
+]
+
+_RUMINANT_ROWS = pd.DataFrame(
+    {
+        "month_year": ["2024-01", "2024-01", "2024-02"],
+        "category": ["Beef and Buffalo Meat", "Lamb/mutton & goat meat", "Legumes"],
+        "product": ["beef mince", "lamb shoulder", "lentils"],
+        "kilos_total": [10.0, 5.0, 8.0],
+        "emissions_kg_co2e": [413.5, 208.1, 12.8],
+    }
+)
+
+
 def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():
-    """Ensures the swap table quantifies avoided emissions for ruminant-to-legume swaps only."""
-    df = pd.DataFrame(
+    result = calculate_ruminant_legume_swap_scenarios(_RUMINANT_ROWS, region="us")
+
+    # 15 kg of ruminant meat at 41.44 kg CO2e/kg on average, replaced by legumes at 1.6, against
+    # 634.4 kg CO2e institution-wide.
+    expected = pd.DataFrame(
         {
-            "month_year": ["2024-01", "2024-01", "2024-02"],
-            "category": [
-                "Beef and Buffalo Meat",
-                "Lamb/mutton & goat meat",
-                "Legumes",
+            "scenario": [
+                "10% ruminant-to-legume swap",
+                "25% ruminant-to-legume swap",
+                "50% ruminant-to-legume swap",
+                "100% ruminant-to-legume swap",
             ],
-            "product": ["beef mince", "lamb shoulder", "lentils"],
-            "kilos_total": [10.0, 5.0, 8.0],
-            "emissions_kg_co2e": [413.5, 208.1, 12.8],
+            "substitution_pct": [10.0, 25.0, 50.0, 100.0],
+            "source_categories": ["Beef and Buffalo Meat, Lamb/mutton & goat meat"] * 4,
+            "replacement_category": ["Legumes"] * 4,
+            "baseline_source_weight_kg": [15.0] * 4,
+            "baseline_source_emissions_kg_co2e": [621.6] * 4,
+            "replaced_weight_kg": [1.5, 3.75, 7.5, 15.0],
+            "remaining_source_weight_kg": [13.5, 11.25, 7.5, 0.0],
+            "replacement_weight_kg": [1.5, 3.75, 7.5, 15.0],
+            "replacement_emission_factor_kg_co2e_per_kg": [1.6] * 4,
+            "projected_emissions_kg_co2e": [561.84, 472.2, 322.8, 24.0],
+            "avoidable_kg_co2e": [59.76, 149.4, 298.8, 597.6],
+            "institution_emissions_avoided_pct": [9.42, 23.55, 47.1, 94.2],
         }
     )
-
-    result = calculate_ruminant_legume_swap_scenarios(df, region="us")
-
-    assert result["scenario"].tolist() == [
-        "10% ruminant-to-legume swap",
-        "25% ruminant-to-legume swap",
-        "50% ruminant-to-legume swap",
-        "100% ruminant-to-legume swap",
-    ]
-    assert result["baseline_source_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
-    assert result["baseline_source_emissions_kg_co2e"].tolist() == [621.6] * 4
-    assert result.loc[0, "replaced_weight_kg"] == pytest.approx(1.5)
-    assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(59.76)
-    assert result.loc[0, "projected_emissions_kg_co2e"] == pytest.approx(561.84)
-    assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(9.42)
-    assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(24.0)
-    assert result.loc[3, "replacement_category"] == "Legumes"
+    pd.testing.assert_frame_equal(result, expected)
 
 
-def test_calculate_ruminant_legume_swap_scenarios_returns_empty_when_no_source_rows_exist():
-    """If no ruminant rows are present, the swap table should be empty rather than erroring."""
-    df = pd.DataFrame(
-        {
-            "category": ["Legumes", "Vegetables"],
-            "kilos_total": [10.0, 5.0],
-            "emissions_kg_co2e": [16.0, 3.0],
-        }
+def test_calculate_ruminant_legume_swap_scenarios_follows_the_region_and_levels():
+    result = calculate_ruminant_legume_swap_scenarios(
+        _RUMINANT_ROWS, region="europe", substitution_levels=(0.5,)
     )
 
-    result = calculate_ruminant_legume_swap_scenarios(df, region="us")
+    assert result["scenario"].tolist() == ["50% ruminant-to-legume swap"]
+    assert result["replacement_emission_factor_kg_co2e_per_kg"].tolist() == [1.94]
+    assert result["avoidable_kg_co2e"].tolist() == [271.7]
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                "category": ["Legumes", "Vegetables"],
+                "kilos_total": [10.0, 5.0],
+                "emissions_kg_co2e": [16.0, 3.0],
+            }
+        ),
+        pd.DataFrame({"category": ["Beef and Buffalo Meat"], "emissions_kg_co2e": [1.0]}),
+        pd.DataFrame({"kilos_total": [1.0], "emissions_kg_co2e": [1.0]}),
+        pd.DataFrame(
+            {
+                "category": ["Beef and Buffalo Meat"],
+                "kilos_total": [0.0],
+                "emissions_kg_co2e": [0.0],
+            }
+        ),
+    ],
+    ids=["no-source-rows", "no-weight-column", "no-category-column", "source-weighs-nothing"],
+)
+def test_calculate_category_swap_scenarios_is_an_empty_table_when_there_is_nothing_to_swap(df):
+    result = calculate_ruminant_legume_swap_scenarios(df)
 
     assert result.empty
-    assert "scenario" in result.columns
+    assert list(result.columns) == _SWAP_COLUMNS
 
 
 def test_calculate_ruminant_legume_swap_scenarios_raises_for_missing_source_emission_factors():
@@ -550,38 +779,16 @@ def test_calculate_ruminant_legume_swap_scenarios_raises_for_missing_source_emis
     )
 
     def fake_emission_factor(category: str, region: str = "us"):
-        if category == "Legumes":
-            return 1.6
-        if category == "Beef and Buffalo Meat":
-            return None
-        return 1.0
+        return None if category == "Beef and Buffalo Meat" else 1.6
 
     with (
         patch(
             "gbd_foodservice_insights.report.aggregation.get_emission_factor",
             side_effect=fake_emission_factor,
         ),
-        pytest.raises(ValueError, match="Missing ruminant emission factors"),
+        pytest.raises(ValueError, match=r"Missing ruminant emission factors.*Beef and Buffalo"),
     ):
         calculate_ruminant_legume_swap_scenarios(df, region="us")
-
-
-def test_calculate_category_swap_scenarios_is_empty_without_the_weight_or_category_column():
-    df = pd.DataFrame({"category": ["Beef and Buffalo Meat"], "emissions_kg_co2e": [1.0]})
-
-    assert calculate_ruminant_legume_swap_scenarios(df).empty
-
-
-def test_calculate_category_swap_scenarios_is_empty_when_the_source_weighs_nothing():
-    df = pd.DataFrame(
-        {
-            "category": ["Beef and Buffalo Meat"],
-            "kilos_total": [0.0],
-            "emissions_kg_co2e": [0.0],
-        }
-    )
-
-    assert calculate_ruminant_legume_swap_scenarios(df, region="us").empty
 
 
 def test_calculate_category_swap_scenarios_raises_for_a_missing_replacement_factor():
@@ -601,7 +808,6 @@ def test_calculate_category_swap_scenarios_raises_for_a_missing_replacement_fact
 
 
 def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
-    """Milk substitutions should quantify avoided emissions against total institution emissions."""
     df = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-02", "2024-02"],
@@ -614,22 +820,34 @@ def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
 
     result = calculate_milk_oat_swap_scenarios(df, region="us")
 
-    assert result["scenario"].tolist() == [
-        "10% cow's-milk-to-oat-milk swap",
-        "20% cow's-milk-to-oat-milk swap",
-        "50% cow's-milk-to-oat-milk swap",
-        "100% cow's-milk-to-oat-milk swap",
-    ]
-    assert result["replacement_category"].tolist() == ["Oat Milk"] * 4
-    assert result["baseline_source_emissions_kg_co2e"].tolist() == [43.4] * 4
-    assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(2.56)
-    assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(4.28)
-    assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(17.8)
+    # 20 kg of cow's milk at 2.17 kg CO2e/kg, replaced by oat milk at 0.89, against 59.76 kg CO2e
+    # institution-wide.
+    expected = pd.DataFrame(
+        {
+            "scenario": [
+                "10% cow's-milk-to-oat-milk swap",
+                "20% cow's-milk-to-oat-milk swap",
+                "50% cow's-milk-to-oat-milk swap",
+                "100% cow's-milk-to-oat-milk swap",
+            ],
+            "substitution_pct": [10.0, 20.0, 50.0, 100.0],
+            "source_categories": ["Milk (Cow's milk)"] * 4,
+            "replacement_category": ["Oat Milk"] * 4,
+            "baseline_source_weight_kg": [20.0] * 4,
+            "baseline_source_emissions_kg_co2e": [43.4] * 4,
+            "replaced_weight_kg": [2.0, 4.0, 10.0, 20.0],
+            "remaining_source_weight_kg": [18.0, 16.0, 10.0, 0.0],
+            "replacement_weight_kg": [2.0, 4.0, 10.0, 20.0],
+            "replacement_emission_factor_kg_co2e_per_kg": [0.89] * 4,
+            "projected_emissions_kg_co2e": [40.84, 38.28, 30.6, 17.8],
+            "avoidable_kg_co2e": [2.56, 5.12, 12.8, 25.6],
+            "institution_emissions_avoided_pct": [4.28, 8.57, 21.42, 42.84],
+        }
+    )
+    pd.testing.assert_frame_equal(result, expected)
 
 
 def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emissions_zero():
-    """Swap tables should avoid divide-by-zero when the institution emissions column sums to
-    zero."""
     df = pd.DataFrame(
         {
             "category": ["Milk (Cow's milk)"],
@@ -640,12 +858,10 @@ def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emis
 
     result = calculate_milk_oat_swap_scenarios(df, region="us")
 
-    assert not result.empty
     assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0, 0.0]
 
 
-def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement():
-    """Ensures procurement aggregation payloads carry the substitution sheet to Excel writers."""
+def test_run_aggregation_pipeline_fills_the_procurement_aggregation_from_the_rows():
     df = pd.DataFrame(
         {
             "month_year": [JAN, FEB, FEB],
@@ -659,14 +875,25 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
     result = run_aggregation_pipeline(
         df,
         diner_meal_mapping={JAN: 100.0, FEB: 120.0},
+        top_n=1,
         mode="procurement",
         region="us",
         diner_or_meal="diner",
     )
 
-    assert result.procurement is not None
-    assert result.procurement.substitution_scenarios is not None
-    assert result.procurement.substitution_scenarios["scenario"].tolist() == [
+    procurement = result.procurement
+    assert procurement is not None
+    assert procurement.animal_emissions_concentration == AnimalEmissionsConcentration(
+        top_products=("beef mince",), top_products_kg_co2e=413.5, total_animal_kg_co2e=687.2
+    )
+    assert procurement.animal_emissions_intensity is not None
+    assert procurement.animal_emissions_intensity["category"].tolist() == [
+        "Beef and Buffalo Meat",
+        "Lamb/mutton & goat meat",
+        "Milk (Cow's milk)",
+    ]
+    assert procurement.substitution_scenarios is not None
+    assert procurement.substitution_scenarios["scenario"].tolist() == [
         "10% ruminant-to-legume swap",
         "25% ruminant-to-legume swap",
         "50% ruminant-to-legume swap",
@@ -675,6 +902,13 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
         "20% cow's-milk-to-oat-milk swap",
         "50% cow's-milk-to-oat-milk swap",
         "100% cow's-milk-to-oat-milk swap",
+    ]
+    # Ranked by weight, so the 20 kg of milk leads.
+    assert result.overall_drivers["product"].tolist() == ["whole milk"]
+    assert result.category_drivers["product"].tolist() == [
+        "beef mince",
+        "lamb shoulder",
+        "whole milk",
     ]
 
 
@@ -725,6 +959,7 @@ def test_run_aggregation_pipeline_divides_each_month_by_its_count(diner_or_meal)
     per_head = f"kilos per {diner_or_meal}"
     assert result.monthly_product[per_head].tolist() == pytest.approx([0.1, 0.2, 0.125])
     assert result.monthly_category[per_head].tolist() == pytest.approx([0.3, 0.125])
+    assert result.monthly_category["emissions_kg_co2e"].tolist() == pytest.approx([27.0, 13.5])
 
 
 def test_run_aggregation_pipeline_leaves_out_procurement_tables_with_nothing_to_show():

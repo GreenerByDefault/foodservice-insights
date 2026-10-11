@@ -291,9 +291,7 @@ def calculate_plant_protein_share(
     if total_protein_metric == 0:
         return None
 
-    plant_protein_total = float(
-        classified.loc[classified["_is_plant_protein"], metric_col].sum(min_count=1) or 0.0
-    )
+    plant_protein_total = float(classified.loc[classified["_is_plant_protein"], metric_col].sum())
     plant_protein_pct = round(plant_protein_total / total_protein_metric * 100, 1)
 
     monthly: pd.DataFrame | None = None

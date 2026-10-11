@@ -1,6 +1,10 @@
+import json
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from gbd_foodservice_insights_lab.food_report.utils import (
+    load_diner_meal_mapping_from_json,
     normalize_diner_meal_mapping,
     validate_region,
 )
@@ -34,3 +38,15 @@ def test_validate_region_normalizes_case_and_whitespace():
 def test_validate_region_rejects_an_unknown_region():
     with pytest.raises(ValueError, match="region must be one of"):
         validate_region("mars")
+
+
+def test_load_diner_meal_mapping_from_json_normalizes_the_file(tmp_path: Path):
+    path = tmp_path / "diner_meals.json"
+    path.write_text(json.dumps({"2024-01": 100}))
+
+    assert load_diner_meal_mapping_from_json(path) == {pd.Period("2024-01", freq="M"): 100.0}
+
+
+def test_load_diner_meal_mapping_from_json_requires_a_file():
+    with pytest.raises(ValueError, match="diner_meal_file is required"):
+        load_diner_meal_mapping_from_json(None)

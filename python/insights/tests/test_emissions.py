@@ -27,6 +27,22 @@ def test_calculate_emissions_multiplies_weight_by_factor():
     assert out.at[0, "emissions_kg_co2e"] == pytest.approx(2.5 * factor)
 
 
+def test_calculate_emissions_leaves_an_unknown_category_without_a_factor_or_emissions():
+    df = pd.DataFrame({"category": ["Mlik"], "kilos_total": [1.0]})
+
+    out = emissions.calculate_emissions(df, weight_col="kilos_total", category_col="category")
+
+    assert out[["emission_factor_used", "emissions_kg_co2e"]].isna().all(axis=None)
+
+
+@pytest.mark.parametrize("missing", ["kilos_total", "category"])
+def test_calculate_emissions_rejects_a_missing_column(missing: str):
+    df = pd.DataFrame({"category": ["x"], "kilos_total": [1.0]}).drop(columns=[missing])
+
+    with pytest.raises(ValueError, match=f"'{missing}' not found"):
+        emissions.calculate_emissions(df, weight_col="kilos_total", category_col="category")
+
+
 def test_calculate_emissions_summary_sorts_and_computes_percentages():
     """Ensures summary output is sorted and percent-of-total math is correct."""
     df = pd.DataFrame(
