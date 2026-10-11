@@ -177,3 +177,15 @@ Four things, whichever provider wins:
 
 The deployed commit needs no provider-injected variable: every image carries
 `org.opencontainers.image.revision`, and the deploy run logs the digest.
+
+Two provider-config traps, from [`deploy-safety.md`](deploy-safety.md):
+
+- **On DigitalOcean, web and worker must be separate apps.** DO's community answers say App
+  Platform cannot deploy one component of an app alone — every deployment redeploys all of them.
+  In one app, every push to main would restart the worker and fail its in-flight attempts as
+  `shut_down`, defeating § Worker deploys only on demand. Billing is per component, so two apps
+  cost the same, and neither `PUT` of a whole spec can carry a stale digest for the other service.
+  Verify empirically before trusting either way.
+- **`/health` is the readiness/deploy check, not a liveness check.** It queries the database and
+  the bucket, so as a liveness probe a Supabase blip would restart every web container at once.
+  Leave liveness unset or point it at something dependency-free.
