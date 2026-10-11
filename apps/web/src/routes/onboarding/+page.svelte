@@ -15,7 +15,6 @@ import { pageTitle } from '#lib/page-title.js';
 <PublicShell>
   <div class="flex w-full max-w-sm flex-col gap-4 self-center">
     <PageHeading>Welcome</PageHeading>
-    <p class="text-muted-foreground">One question before you start.</p>
 
     <DisplayNameForm initialName="" submitLabel="Continue" onSaved={() => goto('/orgs')} />
   </div>

@@ -50,7 +50,7 @@ async function handleSubmit(event: SubmitEvent) {
       autocomplete="name"
       bind:value={name}
     />
-    <Field.Description>How the other members of your organizations see you.</Field.Description>
+    <Field.Description>Shown to your teammates.</Field.Description>
   </Field.Field>
 
   {#if formState === 'outcome-unknown'}
