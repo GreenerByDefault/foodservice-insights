@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 from matplotlib.figure import Figure
 
+from gbd_foodservice_insights.report.aggregation import Aggregation
 from gbd_foodservice_insights.report.plots.figures import (
     plot_category_drivers_pages,
     plot_category_totals,
@@ -43,7 +44,7 @@ def _remove_duplicate_xlabels(fig: Figure) -> Figure:
 
 
 def generate_all_report_plots(
-    aggregated_data: dict[str, Any],
+    aggregation: Aggregation,
     diner_meal_mapping: Mapping[pd.Period, float],
     emissions_summary: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
@@ -53,32 +54,28 @@ def generate_all_report_plots(
     diner_or_meal: str = "diner",
 ) -> list[tuple[str, Figure]]:
     """Generate all report plots and return ``(caption, figure)`` tuples."""
-    monthly_cat = aggregated_data["monthly_category_data"]
-    overall_drivers = aggregated_data["overall_drivers"]
-    category_drivers = aggregated_data["category_drivers"]
-
-    if not monthly_cat.empty:
-        filter_monthly_categories_by_type(monthly_cat, include_drinks=True)
+    if not aggregation.monthly_category.empty:
+        filter_monthly_categories_by_type(aggregation.monthly_category, include_drinks=True)
 
     metric_label = metric_display_label(metric_total)
 
     figures = [
         plot_diner_meal_numbers(diner_meal_mapping, diner_or_meal),
         plot_food_and_drink_comparison_page(
-            monthly_cat,
+            aggregation.monthly_category,
             metric=metric_total,
             diner_meal_mapping=diner_meal_mapping,
             diner_or_meal=diner_or_meal,
         ),
-        plot_category_totals(monthly_cat, metric_total),
+        plot_category_totals(aggregation.monthly_category, metric_total),
     ]
 
     if emissions_summary is not None and not serving:
         figures.append(plot_emissions_by_category(emissions_summary))
-        if "emissions_kg_co2e" in monthly_cat.columns:
+        if "emissions_kg_co2e" in aggregation.monthly_category.columns:
             figures.append(
                 plot_emissions_summary_over_time(
-                    monthly_cat,
+                    aggregation.monthly_category,
                     diner_meal_mapping,
                     diner_or_meal=diner_or_meal,
                 )
@@ -93,11 +90,11 @@ def generate_all_report_plots(
             )
         )
 
-    figures.append(plot_overall_drivers(overall_drivers, metric_total))
+    figures.append(plot_overall_drivers(aggregation.overall_drivers, metric_total))
     figures.extend(
         plot_category_drivers_pages(
-            category_drivers,
-            category_drivers["category"].dropna().unique().tolist(),
+            aggregation.category_drivers,
+            aggregation.category_drivers["category"].dropna().unique().tolist(),
             metric_label=metric_label,
         )
     )

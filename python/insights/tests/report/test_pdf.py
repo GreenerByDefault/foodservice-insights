@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report import pdf as pdf_module
-from gbd_foodservice_insights.report.aggregation import category_names
+from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration, category_names
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
 from gbd_foodservice_insights.report.pdf import (
     _executive_narrative,
@@ -557,28 +557,21 @@ def test_format_category_template_leaves_an_unnamed_index_unnamed() -> None:
     )
 
 
-def test_format_decision_kpis_drops_internal_columns_and_rounds() -> None:
-    table = pd.DataFrame(
-        {
-            "KPI": ["Top 1 animal products share of animal-product emissions"],
-            "Value": [38.84],
-            "Unit": ["%"],
-            "Denominator": ["Animal-product emissions only"],
-            "Top products": ["Ground Beef"],
-            "Top product emissions (kg CO2e)": ["n/a"],
-            "Total animal emissions (kg CO2e)": [909.7],
-        }
+def test_format_decision_kpis_rounds_and_lists_the_products() -> None:
+    concentration = AnimalEmissionsConcentration(
+        top_products=("Ground Beef", "Cheddar"),
+        top_products_kg_co2e=353.4,
+        total_animal_kg_co2e=909.7,
     )
 
     pd.testing.assert_frame_equal(
-        _format_decision_kpis_for_pdf(table),
+        _format_decision_kpis_for_pdf(concentration),
         pd.DataFrame(
             {
-                "Focus": ["Top 1 animal products share of animal-product emissions"],
+                "Focus": ["Top 2 animal products share of animal-product emissions"],
                 "Share of Animal Emissions (%)": [38.8],
-                "Top Animal Products": ["Ground Beef"],
-                # A value that is not a number renders blank rather than failing the report.
-                "Top Products Kg CO₂e": pd.array([pd.NA], dtype="Int64"),
+                "Top Animal Products": ["Ground Beef | Cheddar"],
+                "Top Products Kg CO₂e": pd.array([353], dtype="Int64"),
                 "Total Animal Kg CO₂e": pd.array([910], dtype="Int64"),
             }
         ),
@@ -616,7 +609,6 @@ def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> No
     [
         _format_animal_emissions_intensity_for_pdf,
         _format_category_template_for_pdf,
-        _format_decision_kpis_for_pdf,
         _format_substitution_scenarios_for_pdf,
     ],
 )
@@ -635,7 +627,6 @@ def test_pdf_table_formatters_pass_an_empty_table_through(
     ("format_table", "column", "expected"),
     [
         (_format_animal_emissions_intensity_for_pdf, "category", "Category"),
-        (_format_decision_kpis_for_pdf, "KPI", "Focus"),
         (_format_substitution_scenarios_for_pdf, "scenario", "Scenario"),
     ],
 )
@@ -729,9 +720,12 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
         "Decision KPIs",
         "Substitution Scenarios",
     ]
+    procurement = report.aggregation.procurement
+    assert procurement is not None
+    assert procurement.animal_emissions_concentration is not None
     pd.testing.assert_frame_equal(
         tables["Decision KPIs"],
-        _format_decision_kpis_for_pdf(report.aggregation["decision_kpis"]),
+        _format_decision_kpis_for_pdf(procurement.animal_emissions_concentration),
     )
     assert narrative == {
         "client": "Acme",

@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -22,6 +22,7 @@ from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
 from gbd_foodservice_insights.report import aggregation, checks
 from gbd_foodservice_insights.report.aggregation import (
+    Aggregation,
     calculate_plant_animal_split,
     calculate_plant_protein_share,
 )
@@ -48,9 +49,6 @@ _STAGE_MESSAGES = {
     "client_metrics_and_diagnostics": "Running report checks and summary metrics.",
 }
 
-# Shown only for procurement, and only when non-empty.
-ProcurementTable = Literal["animal_emissions_intensity", "decision_kpis", "substitution_scenarios"]
-
 
 @dataclass(frozen=True)
 class FoodReport:
@@ -60,7 +58,7 @@ class FoodReport:
     diner_or_meal: DinerOrMeal
     diner_meal_mapping: dict[pd.Period, float]
     diner_meals_in_data: float
-    aggregation: dict[str, pd.DataFrame]
+    aggregation: Aggregation
     emissions_summary: pd.DataFrame | None
     plant_animal_split: dict[str, Any] | None
     plant_protein_share: dict[str, Any] | None
@@ -72,12 +70,6 @@ class FoodReport:
     @property
     def metric_total(self) -> str:
         return metric_for_mode(self.mode)
-
-    def procurement_table(self, name: ProcurementTable) -> pd.DataFrame | None:
-        if self.mode != "procurement":
-            return None
-        table = self.aggregation.get(name)
-        return table if isinstance(table, pd.DataFrame) and not table.empty else None
 
 
 @dataclass(frozen=True)
@@ -148,13 +140,11 @@ def build_food_report(
     agg_results = aggregation.run_aggregation_pipeline(
         df,
         dm_mapping,
-        metric_total=metric_total,
         top_n=top_n_drivers,
+        mode=mode,
         region=region,
         diner_or_meal=diner_or_meal,
     )
-
-    monthly_cat = agg_results["monthly_category_data"]
 
     _log_stage("emissions_summary", report_progress)
     if mode == "procurement" and "emissions_kg_co2e" in df.columns:
@@ -164,11 +154,6 @@ def build_food_report(
             diner_meals_in_data,
             diner_or_meal,
         )
-
-        if not monthly_cat.empty:
-            agg_results["monthly_category_data"] = _attach_monthly_category_emissions(
-                monthly_cat, df
-            )
 
     _log_stage("client_metrics_and_diagnostics", report_progress)
     plant_animal_split = calculate_plant_animal_split(df, metric_col=metric_total)
@@ -238,7 +223,7 @@ def _validate_rows(rows: pd.DataFrame, mode: ReportMode) -> None:
 def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
     with close_new_figures_on_error():
         figures = report_plots.generate_all_report_plots(
-            aggregated_data=report.aggregation,
+            aggregation=report.aggregation,
             diner_meal_mapping=report.diner_meal_mapping,
             emissions_summary=report.emissions_summary,
             metric_total=report.metric_total,
@@ -315,17 +300,6 @@ def _summary_stats(
         )
 
     return summary_stats
-
-
-def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    """Add each (month, category) row's own ``emissions_kg_co2e`` total."""
-    # Charts sum this column per month. Joining on month alone would copy the month's total onto
-    # every category row, multiplying the charted total by the number of categories.
-    keys = ["month_year", "category"]
-    category_emissions = (
-        df.groupby(keys, dropna=False)["emissions_kg_co2e"].sum(min_count=1).reset_index()
-    )
-    return monthly_cat.merge(category_emissions, on=keys, how="left", validate="one_to_one")
 
 
 def _date_range(df: pd.DataFrame) -> str:

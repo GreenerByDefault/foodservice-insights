@@ -8,42 +8,12 @@ from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.report import aggregation, checks, food_report
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
-    _attach_monthly_category_emissions,
     build_food_report,
     build_report_charts,
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
 
 JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
-
-
-# ----------------------------------------------------------------------
-# Tests for _attach_monthly_category_emissions
-# ----------------------------------------------------------------------
-
-
-def test_attach_monthly_category_emissions_keeps_each_category_share():
-    raw = pd.DataFrame(
-        {
-            "month_year": [JAN, JAN, JAN, JAN, FEB],
-            "category": ["beef", "beef", "legumes", None, "beef"],
-            "emissions_kg_co2e": [30.0, 10.0, 2.0, 1.0, 50.0],
-        }
-    )
-    monthly_cat = pd.DataFrame(
-        {
-            "month_year": [JAN, JAN, JAN, FEB],
-            "category": ["beef", "legumes", None, "beef"],
-            "kilos_total": [4.0, 3.0, 1.0, 5.0],
-        }
-    )
-
-    out = _attach_monthly_category_emissions(monthly_cat, raw)
-
-    pd.testing.assert_frame_equal(
-        out,
-        monthly_cat.assign(emissions_kg_co2e=[40.0, 2.0, 1.0, 50.0]),
-    )
 
 
 def _rows(metric: str = "kilos_total") -> pd.DataFrame:
@@ -105,7 +75,8 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
         "Protein-category total": "60.0 kg",
     }
     assert report.emissions_summary is not None
-    assert report.procurement_table("animal_emissions_intensity") is not None
+    assert report.aggregation.procurement is not None
+    assert report.aggregation.procurement.animal_emissions_intensity is not None
 
 
 def test_a_missing_required_column_raises():
@@ -192,7 +163,7 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
 
     report = _build(pd.concat([_rows(), zero_pork], ignore_index=True))
 
-    drivers = report.aggregation["category_drivers"]
+    drivers = report.aggregation.category_drivers
     assert drivers[drivers["category"] == "Pork (pig meat)"].to_dict("records") == [
         {
             "category": "Pork (pig meat)",
@@ -202,7 +173,9 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
             "percentage": 0.0,
         }
     ]
-    intensity = report.aggregation["animal_emissions_intensity"]
+    assert report.aggregation.procurement is not None
+    intensity = report.aggregation.procurement.animal_emissions_intensity
+    assert intensity is not None
     assert intensity[intensity["category"] == "Pork (pig meat)"].to_dict("records") == [
         {
             "category": "Pork (pig meat)",
@@ -234,13 +207,13 @@ def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
     report = _build(_rows(), diner_or_meal=diner_or_meal)
 
     per_head = f"kilos per {diner_or_meal}"
-    assert list(report.aggregation["monthly_product_data"].columns) == [
+    assert list(report.aggregation.monthly_product.columns) == [
         "month_year",
         "product",
         "kilos_total",
         per_head,
     ]
-    assert list(report.aggregation["monthly_category_data"].columns) == [
+    assert list(report.aggregation.monthly_category.columns) == [
         "month_year",
         "category",
         "kilos_total",
@@ -259,7 +232,7 @@ def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
 def test_serving_per_head_columns_drop_the_servings_total_suffix():
     report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
 
-    assert list(report.aggregation["monthly_product_data"].columns) == [
+    assert list(report.aggregation.monthly_product.columns) == [
         "month_year",
         "product",
         "servings total",
@@ -273,7 +246,7 @@ def test_serving_mode_computes_no_emissions():
     assert report.metric_total == "servings total"
     assert report.emissions_summary is None
     assert "emissions_kg_co2e" not in report.rows.columns
-    assert report.procurement_table("animal_emissions_intensity") is None
+    assert report.aggregation.procurement is None
     assert report.summary_stats["Data type"] == "Serving"
     assert report.summary_stats["Total meals"] == "220"
     assert "Total CO₂e" not in report.summary_stats

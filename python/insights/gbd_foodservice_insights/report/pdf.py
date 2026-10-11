@@ -21,6 +21,7 @@ from gbd_foodservice_insights.plotting_utils import (
     LETTER_PORTRAIT,
     close_new_figures_on_error,
 )
+from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding, summarize_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
@@ -934,44 +935,23 @@ def _format_category_template_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
     return display_df
 
 
-def _format_decision_kpis_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a compact, client-facing version of the decision KPI table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    display_df = display_df.rename(
-        columns={
-            "KPI": "Focus",
-            "Value": "Share of Animal Emissions (%)",
-            "Top products": "Top Animal Products",
-            "Top product emissions (kg CO2e)": "Top Products Kg CO₂e",
-            "Total animal emissions (kg CO2e)": "Total Animal Kg CO₂e",
+def _format_decision_kpis_for_pdf(concentration: AnimalEmissionsConcentration) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Focus": [
+                f"Top {len(concentration.top_products)} animal products share of "
+                "animal-product emissions"
+            ],
+            "Share of Animal Emissions (%)": [round(concentration.share_pct, 1)],
+            "Top Animal Products": [" | ".join(concentration.top_products)],
+            "Top Products Kg CO₂e": pd.array(
+                [round(concentration.top_products_kg_co2e)], dtype="Int64"
+            ),
+            "Total Animal Kg CO₂e": pd.array(
+                [round(concentration.total_animal_kg_co2e)], dtype="Int64"
+            ),
         }
     )
-
-    keep_columns = [
-        "Focus",
-        "Share of Animal Emissions (%)",
-        "Top Animal Products",
-        "Top Products Kg CO₂e",
-        "Total Animal Kg CO₂e",
-    ]
-    display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
-
-    for column in [
-        "Share of Animal Emissions (%)",
-        "Top Products Kg CO₂e",
-        "Total Animal Kg CO₂e",
-    ]:
-        if column in display_df.columns:
-            rounded = pd.to_numeric(display_df[column], errors="coerce")
-            if column == "Share of Animal Emissions (%)":
-                display_df[column] = rounded.round(1)
-            else:
-                display_df[column] = rounded.round().astype("Int64")
-
-    return display_df
 
 
 def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -1097,22 +1077,21 @@ def write_report_pdf(
     findings = list(report.findings)
     quality_status = quality_status_from_findings(findings)
 
-    tables = {
-        "Category Template": _format_category_template_for_pdf(report.aggregation["template_data"])
-    }
-    animal_emissions_intensity = report.procurement_table("animal_emissions_intensity")
-    if animal_emissions_intensity is not None:
-        tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
-            animal_emissions_intensity
-        )
-    decision_kpis = report.procurement_table("decision_kpis")
-    if decision_kpis is not None:
-        tables["Decision KPIs"] = _format_decision_kpis_for_pdf(decision_kpis)
-    substitution_scenarios = report.procurement_table("substitution_scenarios")
-    if substitution_scenarios is not None:
-        tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
-            substitution_scenarios
-        )
+    aggregation = report.aggregation
+    tables = {"Category Template": _format_category_template_for_pdf(aggregation.template)}
+    if (procurement := aggregation.procurement) is not None:
+        if procurement.animal_emissions_intensity is not None:
+            tables["Animal Emissions Intensity"] = _format_animal_emissions_intensity_for_pdf(
+                procurement.animal_emissions_intensity
+            )
+        if procurement.animal_emissions_concentration is not None:
+            tables["Decision KPIs"] = _format_decision_kpis_for_pdf(
+                procurement.animal_emissions_concentration
+            )
+        if procurement.substitution_scenarios is not None:
+            tables["Substitution Scenarios"] = _format_substitution_scenarios_for_pdf(
+                procurement.substitution_scenarios
+            )
 
     build_pdf_report(
         output_path=str(path),
