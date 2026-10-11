@@ -19,115 +19,15 @@ from gbd_foodservice_insights.report.checks import (
     detect_category_discontinuity,
     detect_exact_duplicate_rows,
     detect_month_over_month_total_volatility,
-    detect_near_duplicate_product_names,
     detect_unusual_sales,
-    find_close_product_pairs,
     run_all_diagnostics,
 )
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
 
 # ----------------------------------------------------------------------
-# Product names and duplicate rows
+# Duplicate rows
 # ----------------------------------------------------------------------
-
-
-def test_find_close_product_pairs_pairs_names_within_two_edits():
-    products = ["testing", "testin", "test", "tesing", "producta", "productb"]  # codespell:ignore
-
-    close_pairs = find_close_product_pairs(pd.DataFrame({"product": products}), "product")
-
-    assert close_pairs[["Product 1", "Product 2", "Levenshtein Distance"]].values.tolist() == [
-        ["testin", "testing", 1],  # codespell:ignore
-        ["tesing", "testing", 1],  # codespell:ignore
-        ["test", "testin", 2],  # codespell:ignore
-        ["tesing", "testin", 2],  # codespell:ignore
-        ["producta", "productb", 1],
-    ]
-
-
-def test_find_close_product_pairs_sorts_by_row_count_gap_descending():
-    # Pairs are found in row-count order, so the sort has to move grape/grope ahead.
-    df = pd.DataFrame({"product": ["apple"] * 10 + ["apply"] * 9 + ["grape"] * 8 + ["grope"]})
-
-    close_pairs = find_close_product_pairs(df, "product")
-
-    assert close_pairs[["Product 1", "Product 2", "distance_between_counts"]].values.tolist() == [
-        ["grape", "grope", 7],
-        ["apple", "apply", 1],
-    ]
-
-
-def test_find_close_product_pairs_includes_combined_metric_share_when_requested():
-    """Adds weighted materiality so likely name splits can be prioritised sensibly."""
-    df = pd.DataFrame(
-        {
-            "product": ["apple", "apple", "apply", "apricot"],
-            "kilos_total": [4.0, 6.0, 5.0, 5.0],
-        }
-    )
-
-    close_pairs = find_close_product_pairs(df, "product", metric_column="kilos_total")
-
-    assert "Combined Metric Share" in close_pairs.columns
-    apple_pair = close_pairs.iloc[0]
-    assert apple_pair["Product 1"] == "apple"
-    assert apple_pair["Product 2"] == "apply"
-    assert apple_pair["Combined Metric Total"] == pytest.approx(15.0)
-    assert apple_pair["Combined Metric Share"] == pytest.approx(0.75)
-
-
-def test_find_close_product_pairs_returns_empty_for_no_products():
-    df = pd.DataFrame({"product": pd.Series(dtype="str")})
-    result_df = find_close_product_pairs(df, "product")
-    assert result_df.empty
-
-
-def test_find_close_product_pairs_returns_empty_for_one_distinct_product():
-    df = pd.DataFrame({"product": ["apple", "apple"]})
-    result_df = find_close_product_pairs(df, "product")
-    assert result_df.empty
-
-
-def _curry_split_across_two_names() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
-            "kilos_total": [20.0, 15.0, 65.0],
-        }
-    )
-
-
-def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
-    """PDF/OCR extracts should warn when likely name splits affect a meaningful share of volume."""
-    df = _curry_split_across_two_names()
-
-    findings, export_df = detect_near_duplicate_product_names(
-        df,
-        metric_total="kilos_total",
-        pdf_extracted=True,
-    )
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["count"] == 1
-    assert "Chicken Curry" in findings[0]["sample_values"][0]
-    assert "Ch1cken Curry" in findings[0]["sample_values"][0]
-    assert not export_df.empty
-    assert export_df.iloc[0]["Combined Metric Share"] == pytest.approx(0.35)
-
-
-def test_detect_near_duplicate_product_names_keeps_tabular_pairs_as_info():
-    """The same likely split is lower-severity in tabular data because OCR risk is lower."""
-    df = _curry_split_across_two_names()
-
-    findings, _ = detect_near_duplicate_product_names(
-        df,
-        metric_total="kilos_total",
-        pdf_extracted=False,
-    )
-
-    assert findings[0]["status"] == "info"
-    assert findings[0]["count"] == 1
 
 
 def _three_duplicates_in_100_rows(duplicate_date: object, other_date: object) -> pd.DataFrame:
@@ -923,17 +823,6 @@ def _three_duplicates_in_100_rows_on_distinct_days() -> dict[str, object]:
     }
 
 
-def _curry_split_in_a_pdf_extract() -> dict[str, object]:
-    findings, _ = detect_near_duplicate_product_names(
-        _curry_split_across_two_names(), metric_total="kilos_total", pdf_extracted=True
-    )
-    return {
-        "status": findings[0]["status"],
-        "count": findings[0]["count"],
-        "warning_share_threshold": findings[0]["metadata"]["warning_share_threshold"],
-    }
-
-
 def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
     df = pd.DataFrame({"product": ["Beans", "Tofu", "Tempeh"], "kilos_total": [1.5, 10.0, 11.0]})
     findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
@@ -944,10 +833,6 @@ def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
         "high": findings[0]["metadata"]["high"],
         "flagged": flagged_rows["product"].tolist(),
     }
-
-
-def _names_two_edits_apart() -> int:
-    return len(find_close_product_pairs(pd.DataFrame({"product": ["abcd", "abef"]}), "product"))
 
 
 def _first_month_at_40_percent_of_the_median() -> list[Finding]:
@@ -1021,18 +906,6 @@ def _top_category_at_35_percent() -> dict[str, object]:
             _three_duplicates_in_100_rows_on_distinct_days,
             {"status": "success", "warning_share_threshold": 0.05, "error_share_threshold": 0.10},
             id="exact_duplicate_rows",
-        ),
-        pytest.param(
-            {"near_duplicate_product_names": {"warning_share_threshold": 0.40}},
-            _curry_split_in_a_pdf_extract,
-            {"status": "info", "count": 0, "warning_share_threshold": 0.40},
-            id="near_duplicate_product_names",
-        ),
-        pytest.param(
-            {"near_duplicate_product_names": {"max_levenshtein_distance": 1}},
-            _names_two_edits_apart,
-            0,
-            id="max_levenshtein_distance",
         ),
         pytest.param(
             {"per_product_weight_bounds": {"low": 2, "high": 10}},
@@ -1171,12 +1044,10 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         monthly_category_data=df.groupby(["month_year", "category"], as_index=False)[
             "kilos_total"
         ].sum(),
-        pdf_extracted=False,
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
         ("exact_duplicate_rows", "success"),
-        ("near_duplicate_product_names", "success"),
         ("month_over_month_total_volatility", "warning"),
         ("missing_internal_months", "success"),
         ("category_discontinuity", "success"),

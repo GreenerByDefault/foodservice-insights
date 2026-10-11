@@ -3,12 +3,11 @@
 import logging
 from collections.abc import Mapping
 from datetime import timedelta
-from itertools import combinations, pairwise
+from itertools import pairwise
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from Levenshtein import distance
 
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
@@ -667,226 +666,6 @@ def check_per_product_weight_bounds(
         }
     )
     return findings, export_df
-
-
-def find_close_product_pairs(
-    df: pd.DataFrame,
-    product_column: str,
-    *,
-    metric_column: str | None = None,
-    max_levenshtein_distance: int | None = None,
-) -> pd.DataFrame:
-    """Identify close product-name pairs so likely name splits can be reviewed.
-
-    This exists because OCR mistakes and minor typing differences can split one
-    real product into multiple names, fragmenting totals and weakening the
-    report's category and trend summaries.
-    """
-    if product_column not in df.columns:
-        return pd.DataFrame()
-
-    max_levenshtein_distance = max(
-        int(
-            resolve_diagnostic_threshold(
-                "near_duplicate_product_names",
-                "max_levenshtein_distance",
-                float(max_levenshtein_distance) if max_levenshtein_distance is not None else None,
-            )
-        ),
-        0,
-    )
-
-    product_counts: pd.Series = df[product_column].value_counts()
-    products: list[str] = product_counts.index.tolist()
-    metric_by_product: pd.Series | None = None
-    total_metric = 0.0
-    if metric_column is not None and metric_column in df.columns:
-        metric_values = pd.to_numeric(df[metric_column], errors="coerce").fillna(0.0)
-        metric_by_product = metric_values.groupby(df[product_column]).sum(min_count=1)
-        total_metric = float(metric_values.sum())
-
-    close_pairs: list[dict[str, Any]] = []
-    for prod1, prod2 in combinations(products, 2):
-        pair_distance = distance(str(prod1), str(prod2))
-        if pair_distance <= max_levenshtein_distance:
-            sorted_pair = sorted([str(prod1), str(prod2)])
-            pair_record: dict[str, Any] = {
-                "Product 1": sorted_pair[0],
-                "Product 2": sorted_pair[1],
-                "Product 1 Row Count": int(product_counts[sorted_pair[0]]),
-                "Product 2 Row Count": int(product_counts[sorted_pair[1]]),
-                "Levenshtein Distance": int(pair_distance),
-            }
-            if metric_by_product is not None:
-                product_1_metric = float(metric_by_product.get(sorted_pair[0], 0.0))
-                product_2_metric = float(metric_by_product.get(sorted_pair[1], 0.0))
-                combined_metric = product_1_metric + product_2_metric
-                pair_record.update(
-                    {
-                        "Product 1 Metric Total": product_1_metric,
-                        "Product 2 Metric Total": product_2_metric,
-                        "Combined Metric Total": combined_metric,
-                        "Combined Metric Share": (
-                            combined_metric / total_metric if total_metric > 0 else 0.0
-                        ),
-                    }
-                )
-            close_pairs.append(pair_record)
-
-    close_pairs_df = pd.DataFrame(close_pairs)
-    if close_pairs_df.empty:
-        return close_pairs_df
-
-    close_pairs_df["distance_between_counts"] = np.abs(
-        close_pairs_df["Product 1 Row Count"] - close_pairs_df["Product 2 Row Count"]
-    )
-    sort_columns = ["distance_between_counts"]
-    ascending = [False]
-    if "Combined Metric Share" in close_pairs_df.columns:
-        sort_columns = ["Combined Metric Share", "distance_between_counts"]
-        ascending = [False, False]
-    return close_pairs_df.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
-
-
-def detect_near_duplicate_product_names(
-    df: pd.DataFrame,
-    metric_total: str,
-    *,
-    product_column: str = "product",
-    pdf_extracted: bool | None = None,
-    sample_limit: int = 5,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Surface materially important near-duplicate product names before totals fragment.
-
-    This exists because OCR and small typing mistakes can split one product into
-    multiple names. Weighting candidate pairs by their share of the main report
-    metric keeps the diagnostic focused on issues that could meaningfully change
-    the story a catering manager sees in the report.
-    """
-    if product_column not in df.columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="near_duplicate_product_names",
-                    status="info",
-                    message=(
-                        "Could not check for near-duplicate product names because the "
-                        "product column is missing."
-                    ),
-                    metadata={"missing_columns": [product_column]},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    if metric_total not in df.columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="near_duplicate_product_names",
-                    status="info",
-                    message=(
-                        "Could not check for near-duplicate product names because "
-                        f"'{metric_total}' is missing."
-                    ),
-                    metadata={"missing_columns": [metric_total]},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    warning_share_threshold = get_diagnostic_threshold(
-        "near_duplicate_product_names",
-        "warning_share_threshold",
-    )
-    max_levenshtein_distance = int(
-        get_diagnostic_threshold(
-            "near_duplicate_product_names",
-            "max_levenshtein_distance",
-        )
-    )
-
-    close_pairs = find_close_product_pairs(
-        df,
-        product_column,
-        metric_column=metric_total,
-        max_levenshtein_distance=max_levenshtein_distance,
-    )
-    if close_pairs.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="near_duplicate_product_names",
-                    status="success",
-                    message="No near-duplicate product names found.",
-                    count=0,
-                    metadata={
-                        "pdf_extracted": pdf_extracted,
-                        "material_pair_count": 0,
-                        "max_levenshtein_distance": max_levenshtein_distance,
-                        "warning_share_threshold": warning_share_threshold,
-                    },
-                )
-            ],
-            close_pairs,
-        )
-
-    material_pairs = close_pairs[
-        close_pairs["Combined Metric Share"] >= warning_share_threshold
-    ].copy()
-    material_pair_count = len(material_pairs)
-
-    if material_pair_count == 0:
-        status = "info"
-        message = (
-            f"Found {len(close_pairs)} near-duplicate product-name pairs, but none account "
-            f"for {warning_share_threshold:.0%} or more of the total report volume."
-        )
-        surfaced_pairs = close_pairs.head(sample_limit)
-    else:
-        status = "warning" if pdf_extracted else "info"
-        source_phrase = "PDF-extracted data" if pdf_extracted else "tabular data"
-        message = (
-            f"Found {material_pair_count} near-duplicate product-name pairs in "
-            f"{source_phrase} that each account for at least "
-            f"{warning_share_threshold:.0%} of the total report volume. These names may "
-            "need to be combined so the same product is not split across multiple labels."
-        )
-        surfaced_pairs = material_pairs.head(sample_limit)
-
-    sample_values = [
-        (
-            f"{row['Product 1']} / {row['Product 2']} together make up "
-            f"{row['Combined Metric Total']:.2f} "
-            f"({row['Combined Metric Share']:.1%}) of the total."
-        )
-        for _, row in surfaced_pairs.iterrows()
-    ]
-
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="near_duplicate_product_names",
-            status=status,
-            message=message,
-            count=material_pair_count,
-            sample_values=sample_values,
-            metadata={
-                "pdf_extracted": pdf_extracted,
-                "max_levenshtein_distance": max_levenshtein_distance,
-                "warning_share_threshold": warning_share_threshold,
-                "candidate_pair_count": len(close_pairs),
-                "material_pair_count": material_pair_count,
-                "sample_pairs": surfaced_pairs.replace({pd.NaT: None, pd.NA: None}).to_dict(
-                    "records"
-                ),
-            },
-        )
-    ]
-    return findings, close_pairs
 
 
 def detect_month_over_month_total_volatility(
@@ -2213,7 +1992,6 @@ def run_all_diagnostics(
     monthly_product_data: pd.DataFrame | None = None,
     monthly_category_data: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
-    pdf_extracted: bool | None = None,
 ) -> list[Finding]:
     """Run report diagnostics and return structured findings only."""
     if serving and metric_total == "kilos_total" and "servings total" in df.columns:
@@ -2222,12 +2000,6 @@ def run_all_diagnostics(
     findings: list[Finding] = []
     duplicate_findings, _ = detect_exact_duplicate_rows(df, metric_total)
     findings.extend(duplicate_findings)
-    near_duplicate_findings, _ = detect_near_duplicate_product_names(
-        df,
-        metric_total,
-        pdf_extracted=pdf_extracted,
-    )
-    findings.extend(near_duplicate_findings)
     findings.extend(detect_month_over_month_total_volatility(df, metric_total))
     findings.extend(check_missing_internal_months(df))
     category_discontinuity_findings, _ = detect_category_discontinuity(df, metric_total)

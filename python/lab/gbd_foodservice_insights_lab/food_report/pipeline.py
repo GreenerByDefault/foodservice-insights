@@ -98,7 +98,7 @@ def _collect_diagnostic_export_sheets(
     metric_total: str,
     monthly_product_data: pd.DataFrame | None = None,
     monthly_category_data: pd.DataFrame | None = None,
-    pdf_extracted: bool | None = None,
+    potential_name_splits: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
     """Collect export-ready diagnostic tables for the QA workbook.
 
@@ -106,17 +106,8 @@ def _collect_diagnostic_export_sheets(
     orchestration function does not have to manage that bookkeeping inline.
     """
     diagnostic_export_sheets: dict[str, pd.DataFrame] = {}
-
-    try:
-        _, potential_name_splits_df = checks.detect_near_duplicate_product_names(
-            df,
-            metric_total=metric_total,
-            pdf_extracted=pdf_extracted,
-        )
-        if not potential_name_splits_df.empty:
-            diagnostic_export_sheets["Potential_Name_Splits"] = potential_name_splits_df
-    except Exception as exc:
-        logger.warning("Could not build potential name splits export: %s", exc)
+    if not potential_name_splits.empty:
+        diagnostic_export_sheets["Potential_Name_Splits"] = potential_name_splits
 
     try:
         _, outlier_line_items_df = checks.detect_unusual_sales(
@@ -250,15 +241,25 @@ def run_food_report(
             region=region,
             diner_or_meal=diner_or_meal,
             top_n_drivers=top_n_drivers,
-            pdf_extracted=metadata.get("pdf_extracted"),
             report_progress=report_progress,
         )
-        # Last, where `run_all_diagnostics` used to put it before the check moved to the lab.
-        meat_findings = qa_diagnostics.check_meat_quantities(report.rows)
+        # The product cannot reach these checks: it has no PDF extracts, so a name split is only
+        # ever an `info` finding, and its CSVs carry no `quantity`.
+        name_split_findings, potential_name_splits = (
+            qa_diagnostics.detect_near_duplicate_product_names(
+                report.rows,
+                report.metric_total,
+                pdf_extracted=metadata.get("pdf_extracted"),
+            )
+        )
+        lab_findings = (
+            *name_split_findings,
+            *qa_diagnostics.check_meat_quantities(report.rows),
+        )
         report = dataclasses.replace(
             report,
-            diagnostics=(*report.diagnostics, *meat_findings),
-            findings=(*report.findings, *meat_findings),
+            diagnostics=(*report.diagnostics, *lab_findings),
+            findings=(*report.findings, *lab_findings),
         )
         quality_findings = list(report.findings)
 
@@ -294,7 +295,7 @@ def run_food_report(
             report,
             artifact_paths["qa_excel_path"],
             quality_findings=quality_findings,
-            pdf_extracted=metadata.get("pdf_extracted"),
+            potential_name_splits=potential_name_splits,
         )
 
         _log_stage("metadata_update", report_progress)
@@ -376,7 +377,7 @@ def _write_qa_workbook(
     path: str,
     *,
     quality_findings: list[Finding],
-    pdf_extracted: bool | None,
+    potential_name_splits: pd.DataFrame,
 ) -> str:
     df = report.rows
     data_profile_df = None
@@ -406,7 +407,7 @@ def _write_qa_workbook(
             metric_total=report.metric_total,
             monthly_product_data=report.aggregation.get("monthly_product_data"),
             monthly_category_data=report.aggregation.get("monthly_category_data"),
-            pdf_extracted=pdf_extracted,
+            potential_name_splits=potential_name_splits,
         ),
         diner_or_meal=report.diner_or_meal,
     )

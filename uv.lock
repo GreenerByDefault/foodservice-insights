@@ -450,7 +450,6 @@ name = "gbd-foodservice-insights"
 version = "0.0.0"
 source = { editable = "python/insights" }
 dependencies = [
-    { name = "levenshtein" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "openai" },
@@ -467,7 +466,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "levenshtein", specifier = ">=0.27,<1" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "numpy", specifier = ">=2.2,<3" },
     { name = "openai", specifier = ">=2.15,<3" },
@@ -489,6 +487,7 @@ dependencies = [
     { name = "gbd-foodservice-insights" },
     { name = "google-genai" },
     { name = "ipython" },
+    { name = "levenshtein" },
     { name = "llmwhisperer-client" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -509,6 +508,7 @@ requires-dist = [
     { name = "gbd-foodservice-insights", editable = "python/insights" },
     { name = "google-genai", specifier = ">=1.62,<2" },
     { name = "ipython", specifier = ">=8,<10" },
+    { name = "levenshtein", specifier = ">=0.27,<1" },
     { name = "llmwhisperer-client", specifier = ">=2.4,<3" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "numpy", specifier = ">=2.2,<3" },

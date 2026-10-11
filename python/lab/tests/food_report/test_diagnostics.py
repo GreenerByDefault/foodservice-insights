@@ -5,6 +5,8 @@ import yaml
 from gbd_foodservice_insights.report import thresholds
 from gbd_foodservice_insights_lab.food_report.diagnostics import (
     check_meat_quantities,
+    detect_near_duplicate_product_names,
+    find_close_product_pairs,
     identify_potentially_abnormal_weight_meat_items,
     summarise_numeric_columns,
 )
@@ -118,3 +120,124 @@ def test_check_meat_quantities_skips_rows_without_a_quantity():
     df = pd.DataFrame({"category": ["beef and buffalo meat"], "kilos_total": [5.0]})
 
     assert check_meat_quantities(df) == []
+
+
+def test_find_close_product_pairs_pairs_names_within_two_edits():
+    products = ["testing", "testin", "test", "tesing", "producta", "productb"]  # codespell:ignore
+
+    close_pairs = find_close_product_pairs(pd.DataFrame({"product": products}), "product")
+
+    assert close_pairs[["Product 1", "Product 2", "Levenshtein Distance"]].values.tolist() == [
+        ["testin", "testing", 1],  # codespell:ignore
+        ["tesing", "testing", 1],  # codespell:ignore
+        ["test", "testin", 2],  # codespell:ignore
+        ["tesing", "testin", 2],  # codespell:ignore
+        ["producta", "productb", 1],
+    ]
+
+
+def test_find_close_product_pairs_sorts_by_row_count_gap_descending():
+    # Pairs are found in row-count order, so the sort has to move grape/grope ahead.
+    df = pd.DataFrame({"product": ["apple"] * 10 + ["apply"] * 9 + ["grape"] * 8 + ["grope"]})
+
+    close_pairs = find_close_product_pairs(df, "product")
+
+    assert close_pairs[["Product 1", "Product 2", "distance_between_counts"]].values.tolist() == [
+        ["grape", "grope", 7],
+        ["apple", "apply", 1],
+    ]
+
+
+def test_find_close_product_pairs_includes_combined_metric_share_when_requested():
+    """Adds weighted materiality so likely name splits can be prioritised sensibly."""
+    df = pd.DataFrame(
+        {
+            "product": ["apple", "apple", "apply", "apricot"],
+            "kilos_total": [4.0, 6.0, 5.0, 5.0],
+        }
+    )
+
+    close_pairs = find_close_product_pairs(df, "product", metric_column="kilos_total")
+
+    assert "Combined Metric Share" in close_pairs.columns
+    apple_pair = close_pairs.iloc[0]
+    assert apple_pair["Product 1"] == "apple"
+    assert apple_pair["Product 2"] == "apply"
+    assert apple_pair["Combined Metric Total"] == pytest.approx(15.0)
+    assert apple_pair["Combined Metric Share"] == pytest.approx(0.75)
+
+
+def test_find_close_product_pairs_returns_empty_for_no_products():
+    df = pd.DataFrame({"product": pd.Series(dtype="str")})
+    result_df = find_close_product_pairs(df, "product")
+    assert result_df.empty
+
+
+def test_find_close_product_pairs_returns_empty_for_one_distinct_product():
+    df = pd.DataFrame({"product": ["apple", "apple"]})
+    result_df = find_close_product_pairs(df, "product")
+    assert result_df.empty
+
+
+def _curry_split_across_two_names() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "product": ["Chicken Curry", "Ch1cken Curry", "Tofu Stir Fry"],
+            "kilos_total": [20.0, 15.0, 65.0],
+        }
+    )
+
+
+def test_detect_near_duplicate_product_names_warns_for_material_pdf_pairs():
+    """PDF/OCR extracts should warn when likely name splits affect a meaningful share of volume."""
+    df = _curry_split_across_two_names()
+
+    findings, export_df = detect_near_duplicate_product_names(
+        df,
+        metric_total="kilos_total",
+        pdf_extracted=True,
+    )
+
+    assert findings[0]["status"] == "warning"
+    assert findings[0]["count"] == 1
+    assert "Chicken Curry" in findings[0]["sample_values"][0]
+    assert "Ch1cken Curry" in findings[0]["sample_values"][0]
+    assert not export_df.empty
+    assert export_df.iloc[0]["Combined Metric Share"] == pytest.approx(0.35)
+
+
+def test_detect_near_duplicate_product_names_keeps_tabular_pairs_as_info():
+    """The same likely split is lower-severity in tabular data because OCR risk is lower."""
+    df = _curry_split_across_two_names()
+
+    findings, _ = detect_near_duplicate_product_names(
+        df,
+        metric_total="kilos_total",
+        pdf_extracted=False,
+    )
+
+    assert findings[0]["status"] == "info"
+    assert findings[0]["count"] == 1
+
+
+def test_near_duplicate_product_names_read_their_thresholds_from_yaml(tmp_path, monkeypatch):
+    config_path = tmp_path / "diagnostic_thresholds.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "near_duplicate_product_names": {
+                    "max_levenshtein_distance": 1,
+                    "warning_share_threshold": 0.40,
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+
+    findings, _ = detect_near_duplicate_product_names(
+        _curry_split_across_two_names(), metric_total="kilos_total", pdf_extracted=True
+    )
+
+    assert find_close_product_pairs(pd.DataFrame({"product": ["abcd", "abef"]}), "product").empty
+    assert (findings[0]["status"], findings[0]["count"]) == ("info", 0)
+    assert findings[0]["metadata"]["warning_share_threshold"] == 0.40
