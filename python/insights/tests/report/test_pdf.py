@@ -487,8 +487,8 @@ def test_build_pdf_report_handles_long_decision_kpi_text(tmp_path: Path) -> None
                     "Top Animal Products": [
                         "BEEF PATTY, GROUND 80/20, OZ BALL RAW BF SMASH, MEATLOAF, BEEF UNSLICED"
                     ],
-                    "Top Products Kg CO2e": [168372],
-                    "Total Animal Kg CO2e": [433448],
+                    "Top Products Kg CO₂e": [168372],
+                    "Total Animal Kg CO₂e": [433448],
                 }
             )
         },
@@ -524,8 +524,8 @@ def test_format_animal_emissions_intensity_renames_orders_and_rounds() -> None:
             {
                 "Category": ["Beef and Buffalo Meat"],
                 "Kilos of Food": pd.array([22], dtype="Int64"),
-                "CO2e Per Kg Food": [41.35],
-                "Kg CO2e": pd.array([910], dtype="Int64"),
+                "CO₂e Per Kg Food": [41.35],
+                "Kg CO₂e": pd.array([910], dtype="Int64"),
             }
         ),
     )
@@ -576,8 +576,8 @@ def test_format_decision_kpis_drops_internal_columns_and_rounds() -> None:
                 "Share of Animal Emissions (%)": [38.8],
                 "Top Animal Products": ["Ground Beef"],
                 # A value that is not a number renders blank rather than failing the report.
-                "Top Products Kg CO2e": pd.array([pd.NA], dtype="Int64"),
-                "Total Animal Kg CO2e": pd.array([910], dtype="Int64"),
+                "Top Products Kg CO₂e": pd.array([pd.NA], dtype="Int64"),
+                "Total Animal Kg CO₂e": pd.array([910], dtype="Int64"),
             }
         ),
     )
@@ -601,8 +601,8 @@ def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> No
             {
                 "Scenario": ["10% ruminant-to-legume swap"],
                 "Weight Replaced (kg)": pd.array([2], dtype="Int64"),
-                "Projected Kg CO2e": pd.array([822], dtype="Int64"),
-                "Avoidable Kg CO2e": pd.array([87], dtype="Int64"),
+                "Projected Kg CO₂e": pd.array([822], dtype="Int64"),
+                "Avoidable Kg CO₂e": pd.array([87], dtype="Int64"),
                 "Institution Emissions Averted (%)": [9.01],
             }
         ),
@@ -909,3 +909,13 @@ def test_narrative_paragraphs_describe_a_mixed_split() -> None:
         )
         for p in paragraphs
     )
+
+
+def test_narrative_paragraphs_spell_co2e_with_the_subscript_throughout() -> None:
+    narrative = _executive_narrative(_report(), "Acme", "pass")
+    assert narrative is not None
+
+    text = " ".join(_narrative_paragraphs(narrative))
+
+    assert "CO₂e" in text
+    assert "CO2e" not in text

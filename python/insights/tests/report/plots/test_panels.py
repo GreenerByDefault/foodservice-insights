@@ -20,25 +20,23 @@ def _texts(ax: plt.Axes) -> list[str]:
 def test_prepare_monthly_trend_data_totals_by_month(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
-    plot_data, label = panels.prepare_monthly_trend_data(
+    plot_data = panels.prepare_monthly_trend_data(
         fruit_and_juice_months(), "kilos_total", per_diner_meal=False, diner_meal_mapping=None
     )
 
-    assert label == "Total Kilos"
     assert plot_data.to_dict("list") == {"month_year": ["2023-01", "2023-02"], "value": [125, 190]}
 
 
 def test_prepare_monthly_trend_data_divides_by_diner_meals(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
-    plot_data, label = panels.prepare_monthly_trend_data(
+    plot_data = panels.prepare_monthly_trend_data(
         fruit_and_juice_months(),
         "kilos_total",
         per_diner_meal=True,
         diner_meal_mapping={"2023-01": 100, "2023-02": 50},
     )
 
-    assert label == "kilos per diner-meal"
     assert plot_data.to_dict("list") == {"month_year": ["2023-01", "2023-02"], "value": [1.25, 3.8]}
 
 

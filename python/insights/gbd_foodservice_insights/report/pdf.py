@@ -139,7 +139,7 @@ def create_title_page(
 
 
 def _format_co2e(kg: float) -> str:
-    """Human-scale CO2e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
+    """Human-scale CO₂e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
     if kg < 2000:
         return f"{kg:,.0f} kg"
     tonnes = kg / 1000
@@ -210,13 +210,11 @@ def create_executive_summary_page(
         return
 
     # --- Plain-English mode -------------------------------------------------
-    # Plain "CO2e" throughout: the report fonts (Montserrat/Lato) lack the
-    # subscript-two glyph, which renders as a missing-character box.
     headline = _format_co2e(narrative["total_co2e_kg"])
     ax.text(
         0.5,
         0.76,
-        f"{headline} CO2e",
+        f"{headline} CO₂e",
         transform=ax.transAxes,
         ha="center",
         va="top",
@@ -271,11 +269,11 @@ def _narrative_paragraphs(narrative: dict[str, Any]) -> list[str]:
     sentence = (
         f"Over this period the kitchen purchased about {narrative['total_food_kg']:,.0f} kg "
         f"of categorised food. Producing that food released an estimated {headline} of carbon "
-        "dioxide equivalent (CO2e), the standard measure for comparing the climate impact of "
+        "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
         "different foods."
     )
     if narrative.get("per_dm_kg"):
-        sentence += f" That works out at roughly {narrative['per_dm_kg']:.2f} kg of CO2e per {dm}."
+        sentence += f" That works out at roughly {narrative['per_dm_kg']:.2f} kg of CO₂e per {dm}."
     paragraphs.append(sentence)
 
     top = narrative.get("top_categories") or []
@@ -608,7 +606,7 @@ def create_decision_kpis_page(
     row = dataframe.iloc[0].to_dict()
     focus = str(row.get("Focus", "top animal products")).strip()
     share = row.get("Share of Animal Emissions (%)", "")
-    top_products_emissions = row.get("Top Products Kg CO2e", "")
+    top_products_emissions = row.get("Top Products Kg CO₂e", "")
     top_products = str(row.get("Top Animal Products", "")).strip()
 
     def _clean_numeric_text(value: Any) -> str:
@@ -633,7 +631,7 @@ def create_decision_kpis_page(
 
     intro_lines = _wrap_text_lines(
         [
-            (f"The {focus.lower()} was {share_text}% amounting to {emissions_text} kg CO2e."),
+            (f"The {focus.lower()} was {share_text}% amounting to {emissions_text} kg CO₂e."),
             "",
             f"The top {product_count} animal {product_label}:",
         ],
@@ -896,24 +894,24 @@ def _format_animal_emissions_intensity_for_pdf(dataframe: pd.DataFrame) -> pd.Da
         columns={
             "category": "Category",
             "kilos_total": "Kilos of Food",
-            "total_kg_co2e": "Kg CO2e",
-            "kg_co2e_per_kg_food": "CO2e Per Kg Food",
+            "total_kg_co2e": "Kg CO₂e",
+            "kg_co2e_per_kg_food": "CO₂e Per Kg Food",
         }
     )
 
     ordered_columns = [
         column
-        for column in ["Category", "Kilos of Food", "CO2e Per Kg Food", "Kg CO2e"]
+        for column in ["Category", "Kilos of Food", "CO₂e Per Kg Food", "Kg CO₂e"]
         if column in display_df.columns
     ]
     display_df = display_df[ordered_columns]
 
-    for column in ["Kilos of Food", "Kg CO2e"]:
+    for column in ["Kilos of Food", "Kg CO₂e"]:
         if column in display_df.columns:
             display_df[column] = display_df[column].round().astype("Int64")
 
-    if "CO2e Per Kg Food" in display_df.columns:
-        display_df["CO2e Per Kg Food"] = display_df["CO2e Per Kg Food"].round(2)
+    if "CO₂e Per Kg Food" in display_df.columns:
+        display_df["CO₂e Per Kg Food"] = display_df["CO₂e Per Kg Food"].round(2)
 
     return display_df
 
@@ -948,8 +946,8 @@ def _format_decision_kpis_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
             "KPI": "Focus",
             "Value": "Share of Animal Emissions (%)",
             "Top products": "Top Animal Products",
-            "Top product emissions (kg CO2e)": "Top Products Kg CO2e",
-            "Total animal emissions (kg CO2e)": "Total Animal Kg CO2e",
+            "Top product emissions (kg CO2e)": "Top Products Kg CO₂e",
+            "Total animal emissions (kg CO2e)": "Total Animal Kg CO₂e",
         }
     )
 
@@ -957,15 +955,15 @@ def _format_decision_kpis_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
         "Focus",
         "Share of Animal Emissions (%)",
         "Top Animal Products",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
+        "Top Products Kg CO₂e",
+        "Total Animal Kg CO₂e",
     ]
     display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
 
     for column in [
         "Share of Animal Emissions (%)",
-        "Top Products Kg CO2e",
-        "Total Animal Kg CO2e",
+        "Top Products Kg CO₂e",
+        "Total Animal Kg CO₂e",
     ]:
         if column in display_df.columns:
             rounded = pd.to_numeric(display_df[column], errors="coerce")
@@ -995,16 +993,16 @@ def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFr
         columns={
             "scenario": "Scenario",
             "replaced_weight_kg": "Weight Replaced (kg)",
-            "projected_emissions_kg_co2e": "Projected Kg CO2e",
-            "avoidable_kg_co2e": "Avoidable Kg CO2e",
+            "projected_emissions_kg_co2e": "Projected Kg CO₂e",
+            "avoidable_kg_co2e": "Avoidable Kg CO₂e",
             "institution_emissions_avoided_pct": "Institution Emissions Averted (%)",
         }
     )
 
     for column in [
         "Weight Replaced (kg)",
-        "Projected Kg CO2e",
-        "Avoidable Kg CO2e",
+        "Projected Kg CO₂e",
+        "Avoidable Kg CO₂e",
         "Institution Emissions Averted (%)",
     ]:
         if column in display_df.columns:

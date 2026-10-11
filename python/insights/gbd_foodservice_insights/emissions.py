@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from gbd_foodservice_insights.categories import categories
-from gbd_foodservice_insights.report.schema import Region, validate_region
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, validate_region
 
 
 @cache
@@ -118,12 +118,14 @@ def _round_to_significant_figures(values: pd.Series, significant_figures: int) -
 def calculate_emissions_per_diner_meal(
     emissions_summary: pd.DataFrame,
     total_diner_meals: float | None,
+    diner_or_meal: DinerOrMeal,
 ) -> pd.DataFrame:
-    """Add ``kg_co2e_per_diner_meal`` column to an emissions summary."""
+    """Add a ``kg_co2e_per_diner`` (or ``kg_co2e_per_meal``) column to an emissions summary."""
     out = emissions_summary.copy()
+    column = f"kg_co2e_per_{diner_or_meal}"
     if total_diner_meals and total_diner_meals > 0:
         per_diner_meal = out["total_kg_co2e"] / float(total_diner_meals)
-        out["kg_co2e_per_diner_meal"] = _round_to_significant_figures(per_diner_meal, 3)
+        out[column] = _round_to_significant_figures(per_diner_meal, 3)
     else:
-        out["kg_co2e_per_diner_meal"] = float("nan")
+        out[column] = float("nan")
     return out

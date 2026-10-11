@@ -40,8 +40,8 @@ def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
         "Diners",
         "Emissions Summary",
         "Animal Emissions Intensity",
-        "Decision_KPIs",
-        "Substitution_Scenarios",
+        "Decision KPIs",
+        "Substitution Scenarios",
     ]
     assert sheets["Template"].columns.tolist() == ["category", "2024-01", "2024-02", "total"]
     pd.testing.assert_frame_equal(

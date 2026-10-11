@@ -163,12 +163,12 @@ def plot_food_and_drink_comparison_page(
 
 
 def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
-    """Horizontal bar chart of total CO2e by category, with % of total labels."""
+    """Horizontal bar chart of total CO₂e by category, with % of total labels."""
     data = emissions_summary.sort_values("total_kg_co2e", ascending=True).copy()
 
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_colors[0])
-    ax.set_xlabel("Total kg CO2e")
+    ax.set_xlabel("Total kg CO₂e")
     set_title_font(ax, "Carbon Emissions by Category")
     add_grid(ax, axis="x")
 

@@ -12,7 +12,7 @@ from gbd_foodservice_insights.categories import (
     protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
-from gbd_foodservice_insights.report.schema import per_diner_metric_name
+from gbd_foodservice_insights.report.schema import DinerOrMeal, per_diner_metric_name
 from gbd_foodservice_insights.report.utils import (
     compute_month_alignment,
     normalize_diner_meal_mapping,
@@ -50,6 +50,7 @@ def aggregate_data(
     diner_meal_mapping: dict[Any, Any] | None = None,
     per_diner_meal: bool = False,
     metrics: list[str] | str = "kilos_total",
+    diner_or_meal: DinerOrMeal | None = None,
 ) -> pd.DataFrame:
     """Aggregate metrics by month and group.
 
@@ -80,8 +81,10 @@ def aggregate_data(
     if not per_diner_meal:
         return agg
 
-    if diner_meal_mapping is None:
-        raise ValueError("diner_meal_mapping is required when per_diner_meal=True")
+    if diner_meal_mapping is None or diner_or_meal is None:
+        raise ValueError(
+            "diner_meal_mapping and diner_or_meal are required when per_diner_meal=True"
+        )
 
     dm_mapping = normalize_diner_meal_mapping(diner_meal_mapping)
     alignment = compute_month_alignment(agg["month_year"].dropna().unique(), dm_mapping.keys())
@@ -99,7 +102,7 @@ def aggregate_data(
     denom = agg["month_year"].map(dm_mapping)
 
     for metric_name in metric_list:
-        per_dm_col = per_diner_metric_name(metric_name)
+        per_dm_col = per_diner_metric_name(metric_name, diner_or_meal)
         agg[per_dm_col] = agg[metric_name] / denom
 
     return agg
@@ -195,7 +198,7 @@ def identify_overall_drivers(
 
 def category_highest_vs_lowest_months(
     monthly_category_data: pd.DataFrame,
-    metric_col: str = "kilos per diner-meal",
+    metric_col: str,
 ) -> pd.DataFrame:
     """Calculate highest-to-lowest month ratio per category."""
     if metric_col not in monthly_category_data.columns:
@@ -516,10 +519,10 @@ def calculate_category_swap_scenarios(
         "substitution_pct",
         "source_categories",
         "replacement_category",
-        "baseline_ruminant_weight_kg",
-        "baseline_ruminant_emissions_kg_co2e",
+        "baseline_source_weight_kg",
+        "baseline_source_emissions_kg_co2e",
         "replaced_weight_kg",
-        "remaining_ruminant_weight_kg",
+        "remaining_source_weight_kg",
         "replacement_weight_kg",
         "replacement_emission_factor_kg_co2e_per_kg",
         "projected_emissions_kg_co2e",
@@ -582,10 +585,10 @@ def calculate_category_swap_scenarios(
                 "substitution_pct": round(substitution_level * 100, 1),
                 "source_categories": source_categories,
                 "replacement_category": replacement_category,
-                "baseline_ruminant_weight_kg": round(baseline_weight, 3),
-                "baseline_ruminant_emissions_kg_co2e": round(baseline_emissions, 3),
+                "baseline_source_weight_kg": round(baseline_weight, 3),
+                "baseline_source_emissions_kg_co2e": round(baseline_emissions, 3),
                 "replaced_weight_kg": round(replaced_weight, 3),
-                "remaining_ruminant_weight_kg": round(baseline_weight - replaced_weight, 3),
+                "remaining_source_weight_kg": round(baseline_weight - replaced_weight, 3),
                 "replacement_weight_kg": round(replaced_weight, 3),
                 "replacement_emission_factor_kg_co2e_per_kg": round(float(replacement_factor), 3),
                 "projected_emissions_kg_co2e": round(projected_emissions, 3),
@@ -651,6 +654,7 @@ def run_aggregation_pipeline(
     top_n: int = 5,
     *,
     region: str = "us",
+    diner_or_meal: DinerOrMeal,
 ) -> dict[str, Any]:
     """Run the full report aggregation pipeline."""
     metrics = [metric_total]
@@ -661,6 +665,7 @@ def run_aggregation_pipeline(
         diner_meal_mapping=diner_meal_mapping,
         per_diner_meal=True,
         metrics=metrics,
+        diner_or_meal=diner_or_meal,
     )
 
     monthly_category_data = aggregate_data(
@@ -669,13 +674,14 @@ def run_aggregation_pipeline(
         diner_meal_mapping=diner_meal_mapping,
         per_diner_meal=True,
         metrics=metrics,
+        diner_or_meal=diner_or_meal,
     )
 
     template_data = create_template_data(monthly_category_data, metric_total)
     overall_drivers = identify_overall_drivers(df, metric=metric_total, top_n=top_n)
     category_drivers = identify_category_drivers(df, metric=metric_total, top_n=top_n)
 
-    per_dm_col = per_diner_metric_name(metric_total)
+    per_dm_col = per_diner_metric_name(metric_total, diner_or_meal)
     highest_lowest = category_highest_vs_lowest_months(monthly_category_data, metric_col=per_dm_col)
     animal_emissions_intensity = summarize_animal_emissions_intensity(
         df,

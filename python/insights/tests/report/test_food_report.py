@@ -95,8 +95,8 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
         "Total diners": "220",
         "Data type": "Procurement",
         "Region used for climate emissions factors": "US/Canada",
-        "Total CO2e": "970 kg",
-        "CO2e per diner": "4.411 kg",
+        "Total CO₂e": "970 kg",
+        "CO₂e per diner": "4.411 kg",
         "Plant-based (% of classified food)": "63.3%",
         "Animal-based (% of classified food)": "36.7%",
         "Plant-based total": "38.0 kg",
@@ -223,6 +223,44 @@ def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
 
 
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
+    report = _build(_rows(), diner_or_meal=diner_or_meal)
+
+    per_head = f"kilos per {diner_or_meal}"
+    assert list(report.aggregation["monthly_product_data"].columns) == [
+        "month_year",
+        "product",
+        "kilos_total",
+        per_head,
+    ]
+    assert list(report.aggregation["monthly_category_data"].columns) == [
+        "month_year",
+        "category",
+        "kilos_total",
+        per_head,
+        "emissions_kg_co2e",
+    ]
+    assert report.emissions_summary is not None
+    assert list(report.emissions_summary.columns) == [
+        "category",
+        "total_kg_co2e",
+        "pct_of_total",
+        f"kg_co2e_per_{diner_or_meal}",
+    ]
+
+
+def test_serving_per_head_columns_drop_the_servings_total_suffix():
+    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
+
+    assert list(report.aggregation["monthly_product_data"].columns) == [
+        "month_year",
+        "product",
+        "servings total",
+        "servings per meal",
+    ]
+
+
 def test_serving_mode_computes_no_emissions():
     report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
 
@@ -232,7 +270,7 @@ def test_serving_mode_computes_no_emissions():
     assert report.procurement_table("animal_emissions_intensity") is None
     assert report.summary_stats["Data type"] == "Serving"
     assert report.summary_stats["Total meals"] == "220"
-    assert "Total CO2e" not in report.summary_stats
+    assert "Total CO₂e" not in report.summary_stats
 
 
 @pytest.mark.parametrize(("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK")])

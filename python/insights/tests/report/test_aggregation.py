@@ -43,15 +43,33 @@ def test_aggregate_data_sums_by_month_and_group(fruit_rows):
     ]
 
 
-def test_aggregate_data_divides_by_the_months_diner_meals(fruit_rows):
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_aggregate_data_divides_by_the_months_diner_meals(fruit_rows, diner_or_meal):
     agg_df = aggregate_data(
         fruit_rows,
         group_by="product",
         per_diner_meal=True,
         diner_meal_mapping={"2023-01": 100, "2023-02": 120},
+        diner_or_meal=diner_or_meal,
     )
 
-    assert agg_df["kilos per diner-meal"].tolist() == pytest.approx([0.1, 0.2, 0.125])
+    assert agg_df[f"kilos per {diner_or_meal}"].tolist() == pytest.approx([0.1, 0.2, 0.125])
+
+
+@pytest.mark.parametrize(
+    ("diner_meal_mapping", "diner_or_meal"),
+    [(None, "diner"), ({"2023-01": 100, "2023-02": 120}, None)],
+)
+def test_aggregate_data_per_diner_needs_the_mapping_and_the_basis(
+    fruit_rows, diner_meal_mapping, diner_or_meal
+):
+    with pytest.raises(ValueError, match="diner_meal_mapping and diner_or_meal are required"):
+        aggregate_data(
+            fruit_rows,
+            per_diner_meal=True,
+            diner_meal_mapping=diner_meal_mapping,
+            diner_or_meal=diner_or_meal,
+        )
 
 
 def test_create_template_data_preserves_values_when_category_case_differs():
@@ -419,8 +437,8 @@ def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():
         "50% ruminant-to-legume swap",
         "100% ruminant-to-legume swap",
     ]
-    assert result["baseline_ruminant_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
-    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [621.6] * 4
+    assert result["baseline_source_weight_kg"].tolist() == [15.0, 15.0, 15.0, 15.0]
+    assert result["baseline_source_emissions_kg_co2e"].tolist() == [621.6] * 4
     assert result.loc[0, "replaced_weight_kg"] == pytest.approx(1.5)
     assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(59.76)
     assert result.loc[0, "projected_emissions_kg_co2e"] == pytest.approx(561.84)
@@ -494,7 +512,7 @@ def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
         "100% cow's-milk-to-oat-milk swap",
     ]
     assert result["replacement_category"].tolist() == ["Oat Milk"] * 4
-    assert result["baseline_ruminant_emissions_kg_co2e"].tolist() == [43.4] * 4
+    assert result["baseline_source_emissions_kg_co2e"].tolist() == [43.4] * 4
     assert result.loc[0, "avoidable_kg_co2e"] == pytest.approx(2.56)
     assert result.loc[0, "institution_emissions_avoided_pct"] == pytest.approx(4.28)
     assert result.loc[3, "projected_emissions_kg_co2e"] == pytest.approx(17.8)
@@ -533,6 +551,7 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
         df,
         diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
         region="us",
+        diner_or_meal="diner",
     )
 
     assert result["substitution_scenarios"]["scenario"].tolist() == [
@@ -561,7 +580,10 @@ def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
     )
 
     result = run_aggregation_pipeline(
-        df, diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0}, region="us"
+        df,
+        diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0},
+        region="us",
+        diner_or_meal="diner",
     )
 
     assert result["monthly_product_data"]["kilos_total"].sum() == 22.5

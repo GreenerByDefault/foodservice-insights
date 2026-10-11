@@ -15,7 +15,7 @@ from gbd_foodservice_insights.plotting_utils import (
     set_title_font,
     standardize_title_case,
 )
-from gbd_foodservice_insights.report.schema import metric_display_label, per_diner_metric_name
+from gbd_foodservice_insights.report.schema import metric_display_label
 from gbd_foodservice_insights.report.utils import divide_by_diner_meals, monthly_totals
 
 
@@ -25,7 +25,7 @@ def prepare_monthly_trend_data(
     *,
     per_diner_meal: bool,
     diner_meal_mapping: dict[Any, Any] | None,
-) -> tuple[pd.DataFrame, str]:
+) -> pd.DataFrame:
     """Prepare canonical monthly trend table for plotting."""
     totals = monthly_totals(monthly_category_data, metric, month_col="month_year")
 
@@ -37,13 +37,10 @@ def prepare_monthly_trend_data(
             diner_meal_mapping,
             strict=False,
         )
-        metric_label = per_diner_metric_name(metric)
     else:
         values = totals
-        metric_label = "Total " + metric_display_label(metric)
 
-    plot_data = pd.DataFrame({"month_year": values.index, "value": values.values})
-    return plot_data, metric_label
+    return pd.DataFrame({"month_year": values.index, "value": values.values})
 
 
 def filter_monthly_categories_by_type(
@@ -205,13 +202,12 @@ def _food_and_drink_trends(
         )
         if subset.empty:
             return pd.DataFrame(columns=["month_year", "value"])
-        plot_data, _ = prepare_monthly_trend_data(
+        return prepare_monthly_trend_data(
             subset,
             metric,
             per_diner_meal=per_diner_meal,
             diner_meal_mapping=diner_meal_mapping,
         )
-        return plot_data
 
     return [
         ("Food Only", trend(include_drinks=False)),
@@ -264,7 +260,7 @@ def draw_total_emissions(
     *,
     emissions_col: str = "emissions_kg_co2e",
 ) -> None:
-    """Total kg CO2e by month."""
+    """Total kg CO₂e by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
     _draw_metric_over_time_on_axis(
         ax,
@@ -283,14 +279,14 @@ def draw_emissions_per_diner(
     emissions_col: str = "emissions_kg_co2e",
     diner_or_meal: str = "diner",
 ) -> None:
-    """kg CO2e per diner (or meal) by month."""
+    """kg CO₂e per diner (or meal) by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
     per_dm, _, _ = divide_by_diner_meals(totals, diner_meal_mapping, strict=False)
     _draw_metric_over_time_on_axis(
         ax,
         pd.DataFrame({"month_year": per_dm.index, "value": per_dm.values}),
         title=f"Carbon Emissions per {diner_or_meal.title()} Over Time",
-        y_label=f"kg CO2e per {diner_or_meal.title()}",
+        y_label=f"kg CO₂e per {diner_or_meal.title()}",
     )
 
 
