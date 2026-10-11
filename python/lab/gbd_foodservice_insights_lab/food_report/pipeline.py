@@ -132,7 +132,9 @@ def _collect_diagnostic_export_sheets(
         logger.warning("Could not build category discontinuity export: %s", exc)
 
     try:
-        _, denominator_qc_df = checks.check_diner_meal_reasonableness(diner_meal_mapping)
+        _, denominator_qc_df = checks.check_diner_meal_reasonableness(
+            df, diner_meal_mapping, metric_total
+        )
         if not denominator_qc_df.empty:
             diagnostic_export_sheets["Denominator_QC"] = denominator_qc_df
     except Exception as exc:

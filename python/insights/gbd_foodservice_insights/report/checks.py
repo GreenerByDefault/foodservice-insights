@@ -1088,35 +1088,16 @@ def _format_category_month_missing_sample(category: Any, month: Any) -> str:
 
 
 def check_diner_meal_reasonableness(
+    df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
+    metric_total: str,
     *,
     low: float | None = None,
     high: float | None = None,
     sample_limit: int = 6,
 ) -> tuple[list[Finding], pd.DataFrame]:
-    """Flag unusual denominator months before intensity KPIs become misleading.
-
-    This exists because diner or meal counts are denominator data for
-    per-diner and per-meal metrics. A few unusual denominator months can make
-    those KPIs look better or worse than they really are.
-    """
-    if not diner_meal_mapping:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="diner_meal_count_reasonableness",
-                    status="info",
-                    message=(
-                        "Could not check diner or meal count reasonableness because no "
-                        "monthly diner-meal mapping was provided."
-                    ),
-                    count=0,
-                )
-            ],
-            pd.DataFrame(),
-        )
-
+    """Flag months whose diner or meal count looks mistyped, which would make that month's
+    per-diner and per-meal figures wrong. Expects `month_year` as `Period[M]`."""
     low_threshold = resolve_diagnostic_threshold(
         "diner_meal_count_reasonableness",
         "low_ratio_threshold",
@@ -1127,16 +1108,24 @@ def check_diner_meal_reasonableness(
         "high_ratio_threshold",
         high,
     )
+    thresholds = {"low_ratio_threshold": low_threshold, "high_ratio_threshold": high_threshold}
 
-    monthly_counts = pd.Series(diner_meal_mapping, dtype="object").rename("diner_meal_count")
-    monthly_counts.index = [
-        pd.Period(str(month), freq="M") if pd.notna(month) else pd.NA
-        for month in monthly_counts.index
-    ]
-    monthly_counts = pd.to_numeric(monthly_counts, errors="coerce").sort_index()
-    monthly_counts = monthly_counts[monthly_counts.index.notna()]
+    counts = pd.Series(diner_meal_mapping, dtype="float64")
+    # Only months with both a count and rows have a per-diner figure; a month with only one of
+    # them is `date_alignment`'s finding.
+    monthly = pd.concat(
+        [
+            counts[counts > 0].rename("diner_meal_count"),
+            df.groupby("month_year")[metric_total].sum().rename("food_total"),
+        ],
+        axis=1,
+        join="inner",
+    ).sort_index()
+    monthly["food_per_count"] = monthly["food_total"] / monthly["diner_meal_count"]
+    median_count = float(monthly["diner_meal_count"].median())
+    median_food_per_count = float(monthly["food_per_count"].median())
 
-    if monthly_counts.empty:
+    if monthly.empty or not median_food_per_count > 0:
         return (
             [
                 make_finding(
@@ -1144,88 +1133,55 @@ def check_diner_meal_reasonableness(
                     category="diner_meal_count_reasonableness",
                     status="info",
                     message=(
-                        "Could not check diner or meal count reasonableness because the "
-                        "monthly counts could not be read as numbers."
+                        "Could not check diner or meal counts because no month had both a "
+                        "count and food in the data."
                     ),
                     count=0,
+                    metadata=thresholds,
                 )
             ],
             pd.DataFrame(),
         )
 
-    valid_counts = monthly_counts.dropna()
-    if valid_counts.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="diner_meal_count_reasonableness",
-                    status="info",
-                    message=(
-                        "Could not check diner or meal count reasonableness because every "
-                        "monthly count was missing."
-                    ),
-                    count=0,
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    median_count = float(valid_counts.median())
-    if median_count <= 0:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="diner_meal_count_reasonableness",
-                    status="info",
-                    message=(
-                        "Could not check diner or meal count reasonableness because the "
-                        "typical monthly count was zero or below."
-                    ),
-                    count=0,
-                    metadata={"median_count": median_count},
-                )
-            ],
-            pd.DataFrame(),
-        )
+    count_ratio = monthly["diner_meal_count"] / median_count
+    food_per_count_ratio = monthly["food_per_count"] / median_food_per_count
+    # A count far from the usual is not enough: a school's summer counts can fall to 30% of term
+    # time, and its purchases with them. A mistyped count moves alone, so food per head swings
+    # the other way. Food that swings with an ordinary count is month volatility, not this.
+    count_too_high = count_ratio.gt(high_threshold) & food_per_count_ratio.lt(low_threshold)
+    count_too_low = count_ratio.lt(low_threshold) & food_per_count_ratio.gt(high_threshold)
 
     qc_df = pd.DataFrame(
         {
-            "month_year": monthly_counts.index.astype(str),
-            "month_label": [_format_month_label(month) for month in monthly_counts.index],
-            "diner_meal_count": monthly_counts.to_numpy(),
+            "month_year": monthly.index.astype(str),
+            "month_label": [_format_month_label(month) for month in monthly.index],
+            "diner_meal_count": monthly["diner_meal_count"].to_numpy(),
+            "food_total": monthly["food_total"].to_numpy(),
+            "food_per_count": monthly["food_per_count"].to_numpy(),
+            "count_ratio_to_median": count_ratio.to_numpy(),
+            "food_per_count_ratio_to_median": food_per_count_ratio.to_numpy(),
+            "is_flagged": (count_too_high | count_too_low).to_numpy(),
+            "flag_reason": np.select(
+                [count_too_high.to_numpy(), count_too_low.to_numpy()],
+                [
+                    "Count is far above usual but the food is not, so per-diner figures may "
+                    "look too low.",
+                    "Count is far below usual but the food is not, so per-diner figures may "
+                    "look too high.",
+                ],
+                default="",
+            ),
         }
     )
-    qc_df["median_count"] = median_count
-    qc_df["ratio_to_median"] = qc_df["diner_meal_count"] / median_count
-    qc_df["is_flagged"] = (
-        qc_df["ratio_to_median"].lt(low_threshold) | qc_df["ratio_to_median"].gt(high_threshold)
-    ) & qc_df["ratio_to_median"].notna()
-    qc_df["flag_reason"] = np.where(
-        qc_df["ratio_to_median"].isna(),
-        "Count is missing, so this month could not be compared with the typical month.",
-        np.where(
-            qc_df["ratio_to_median"] < low_threshold,
-            (
-                "Count is lower than expected for this dataset and may make per-diner "
-                "metrics look too high."
-            ),
-            np.where(
-                qc_df["ratio_to_median"] > high_threshold,
-                (
-                    "Count is higher than expected for this dataset and may make "
-                    "per-diner metrics look too low."
-                ),
-                "",
-            ),
-        ),
-    )
+    metadata = {
+        "metric_col": metric_total,
+        "median_count": median_count,
+        "median_food_per_count": median_food_per_count,
+        **thresholds,
+    }
 
-    flagged_df = qc_df[qc_df["is_flagged"]].copy()
+    flagged_df = qc_df[qc_df["is_flagged"]]
     flagged_count = len(flagged_df)
-    missing_count = int(qc_df["diner_meal_count"].isna().sum())
-
     if flagged_count == 0:
         return (
             [
@@ -1234,16 +1190,11 @@ def check_diner_meal_reasonableness(
                     category="diner_meal_count_reasonableness",
                     status="success",
                     message=(
-                        "Monthly diner or meal counts looked broadly consistent across "
-                        "the reporting period."
+                        "Monthly diner or meal counts looked consistent with the food in the "
+                        "data across the reporting period."
                     ),
                     count=0,
-                    metadata={
-                        "median_count": median_count,
-                        "low_ratio_threshold": low_threshold,
-                        "high_ratio_threshold": high_threshold,
-                        "missing_month_count": missing_count,
-                    },
+                    metadata=metadata,
                 )
             ],
             qc_df,
@@ -1251,8 +1202,9 @@ def check_diner_meal_reasonableness(
 
     sample_values = [
         (
-            f"{row['month_label']}: {row['diner_meal_count']:.0f} versus a median of "
-            f"{row['median_count']:.0f} ({row['ratio_to_median']:.2f}x)."
+            f"{row['month_label']}: a count of {row['diner_meal_count']:,.0f} is "
+            f"{row['count_ratio_to_median']:.2f}x the median of {median_count:,.0f}, but food "
+            f"per count is {row['food_per_count_ratio_to_median']:.2f}x the median."
         )
         for _, row in flagged_df.head(sample_limit).iterrows()
     ]
@@ -1261,27 +1213,19 @@ def check_diner_meal_reasonableness(
         make_finding(
             stage="diagnostics",
             category="diner_meal_count_reasonableness",
-            # Never an error, however many months are flagged: these are counts the user typed,
-            # and a school whose summer counts and purchases both fall to 30% has correct
-            # per-diner figures. The count alone cannot tell that school from a typo:
-            # https://github.com/GreenerByDefault/foodservice-insights/issues/493
+            # Never an error: a flagged count is still one the user typed, and may be right.
             status="warning",
             message=(
                 f"Found {flagged_count} month{'' if flagged_count == 1 else 's'} where the "
-                "diner or meal count was much lower or higher than usual for this dataset. "
-                "This can make per-diner and per-meal figures look misleading even when the "
-                "food data is correct."
+                "diner or meal count was far from usual for this dataset but the food was "
+                "not, which can mean a mistyped count. Per-diner and per-meal figures for "
+                f"{'that month' if flagged_count == 1 else 'those months'} may be misleading."
             ),
             count=flagged_count,
             sample_values=sample_values,
             metadata={
-                "median_count": median_count,
-                "low_ratio_threshold": low_threshold,
-                "high_ratio_threshold": high_threshold,
-                "missing_month_count": missing_count,
-                "sample_rows": flagged_df.head(sample_limit)
-                .replace({pd.NaT: None, pd.NA: None, np.nan: None})
-                .to_dict("records"),
+                **metadata,
+                "sample_rows": flagged_df.head(sample_limit).to_dict("records"),
             },
         )
     ]
@@ -1753,7 +1697,9 @@ def run_all_diagnostics(
     findings.extend(check_missing_internal_months(df))
     category_discontinuity_findings, _ = detect_category_discontinuity(df, metric_total)
     findings.extend(category_discontinuity_findings)
-    denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(diner_meal_mapping)
+    denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
+        df, diner_meal_mapping, metric_total
+    )
     findings.extend(denominator_reasonableness_findings)
     findings.extend(check_single_product_dominance(df, metric_total))
     findings.extend(check_category_concentration(df, metric_total))
