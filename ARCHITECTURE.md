@@ -280,7 +280,7 @@ Three independent levers:
 
 | Lever | Effect |
 | --- | --- |
-| `ThreadPoolExecutor` inside `gbd_foodservice_insights` | Speeds up an *individual* attempt |
+| `ThreadPoolExecutor` inside `gbd_foodservice_insights` (`LLM_CONCURRENCY` in [`categorization/llm.py`](python/insights/gbd_foodservice_insights/categorization/llm.py)) | Speeds up an *individual* attempt |
 | More child processes per worker (vertical) | More concurrent attempts; limited by CPU and memory contention |
 | More workers (horizontal) | More concurrent attempts |
 

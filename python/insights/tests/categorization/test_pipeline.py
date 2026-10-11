@@ -1,11 +1,12 @@
+import string
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization import steps
 from gbd_foodservice_insights.categorization.cache import CategorizationCache
+from gbd_foodservice_insights.categorization.llm import LLM_CONCURRENCY
 from gbd_foodservice_insights.categorization.pipeline import (
     categorize_unique_products,
 )
@@ -88,8 +89,7 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
 
     llm = EverythingIsWholeMilk()
 
-    with patch.object(steps, "print_progress", return_value=None):
-        categorized = categorize_unique_products(df=df, llm=llm, cache=cache)
+    categorized = categorize_unique_products(df=df, llm=llm, cache=cache)
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
     assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
@@ -198,3 +198,35 @@ def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFi
         "2 of 5 LLM answers were not recognized; most common: [('pork', 1), ('None', 1)]",
     ]
     assert categorized.match_type_counts == {"llm": 5, "raw_product_history": 2}
+
+
+def test_categorize_unique_products_makes_llm_calls_concurrently() -> None:
+    # Each call waits until LLM_CONCURRENCY calls are waiting, so a step that makes its calls
+    # one at a time breaks the barrier instead of hanging.
+    barrier = threading.Barrier(LLM_CONCURRENCY, timeout=5)
+
+    class BarrierLlmClient(KeywordLlmClient):
+        def clean_product_name(self, item: str) -> str:
+            barrier.wait()
+            return super().clean_product_name(item)
+
+        def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+            barrier.wait()
+            return super().match_product_to_category(item, categories)
+
+    products = [f"Product {letter}" for letter in string.ascii_uppercase[:LLM_CONCURRENCY]]
+    df = pd.DataFrame(
+        {
+            "product": products,
+            "date": pd.to_datetime(["2025-01-15"] * len(products)),
+            "weight": [1.0] * len(products),
+        }
+    )
+    llm = BarrierLlmClient()
+
+    categorize_unique_products(df=df, llm=llm, cache=EMPTY_CACHE)
+
+    assert sorted(llm.calls) == [
+        *[("clean", product) for product in products],
+        *[("match", product.lower()) for product in products],
+    ]
