@@ -368,6 +368,7 @@ def _write_qa_workbook(
     category_discontinuity: pd.DataFrame,
 ) -> str:
     df = report.rows
+    aggregation = report.aggregation
     data_profile_df = None
     try:
         data_profile_df = qa_diagnostics.summarise_numeric_columns(df)
@@ -377,18 +378,16 @@ def _write_qa_workbook(
     return qa_excel.build_qa_excel_report(
         output_path=path,
         raw_df=df,
-        monthly_product_data=report.aggregation["monthly_product_data"],
-        monthly_category_data=report.aggregation["monthly_category_data"],
-        template_data=report.aggregation["template_data"],
+        monthly_product_data=aggregation.monthly_product,
+        monthly_category_data=aggregation.monthly_category,
+        template_data=aggregation.template,
         highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
-            report.aggregation["monthly_category_data"],
+            aggregation.monthly_category,
             metric_col=per_diner_metric_name(report.metric_total, report.diner_or_meal),
         ),
         diner_meals_df=excel.diner_meals_frame(report),
         emissions_summary=report.emissions_summary,
-        animal_emissions_intensity=report.procurement_table("animal_emissions_intensity"),
-        decision_kpis=report.procurement_table("decision_kpis"),
-        substitution_scenarios=report.procurement_table("substitution_scenarios"),
+        procurement=aggregation.procurement,
         quality_findings_df=findings_to_frame(quality_findings),
         missingness_summary_df=missingness_summary_frame(df),
         data_profile_df=data_profile_df,

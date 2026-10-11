@@ -1,6 +1,7 @@
 """Canonical aggregation functions for food-report generation."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -13,7 +14,13 @@ from gbd_foodservice_insights.categories import (
     protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
-from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, per_diner_metric_name
+from gbd_foodservice_insights.report.schema import (
+    DinerOrMeal,
+    Region,
+    ReportMode,
+    metric_for_mode,
+    per_diner_metric_name,
+)
 
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
     "Beef and Buffalo Meat",
@@ -24,6 +31,41 @@ _DEFAULT_RUMINANT_SWAP_LEVELS = (0.10, 0.25, 0.50, 1.00)
 _MILK_SWAP_SOURCE_CATEGORIES = ("Milk (Cow's milk)",)
 _MILK_SWAP_TARGET_CATEGORY = "Oat Milk"
 _DEFAULT_MILK_SWAP_LEVELS = (0.10, 0.20, 0.50, 1.00)
+
+
+@dataclass(frozen=True)
+class AnimalEmissionsConcentration:
+    """How much of the animal-product emissions its biggest emitters account for."""
+
+    # Largest emitter first.
+    top_products: tuple[str, ...]
+    top_products_kg_co2e: float
+    total_animal_kg_co2e: float
+
+    @property
+    def share_pct(self) -> float:
+        return self.top_products_kg_co2e / self.total_animal_kg_co2e * 100
+
+
+@dataclass(frozen=True)
+class ProcurementAggregation:
+    # Each is `None` when the data has nothing to show: no animal rows, or no ruminant or cow's
+    # milk rows to swap.
+    animal_emissions_intensity: pd.DataFrame | None
+    animal_emissions_concentration: AnimalEmissionsConcentration | None
+    substitution_scenarios: pd.DataFrame | None
+
+
+@dataclass(frozen=True)
+class Aggregation:
+    monthly_product: pd.DataFrame
+    # In procurement, also each (month, category)'s `emissions_kg_co2e`.
+    monthly_category: pd.DataFrame
+    template: pd.DataFrame
+    overall_drivers: pd.DataFrame
+    category_drivers: pd.DataFrame
+    # `None` exactly when the report is a serving report.
+    procurement: ProcurementAggregation | None
 
 
 def aggregate_data(
@@ -334,75 +376,38 @@ def calculate_animal_emissions_concentration(
     category_col: str = "category",
     emissions_col: str = "emissions_kg_co2e",
     top_n: int = 5,
-) -> pd.DataFrame:
+) -> AnimalEmissionsConcentration | None:
     """Summarize how concentrated animal-product emissions are in a few products.
 
     This exists to help clients focus effort on the small number of animal
     products that drive the largest share of their animal-product emissions.
     """
-    output_columns = [
-        "KPI",
-        "Value",
-        "Unit",
-        "Denominator",
-        "Top products",
-        "Top product emissions (kg CO2e)",
-        "Total animal emissions (kg CO2e)",
-    ]
     required_columns = {product_col, category_col, emissions_col}
     if not required_columns.issubset(df.columns):
-        return pd.DataFrame(columns=output_columns)
+        return None
 
     animal_rows = df[df[category_col].isin(animal_product_categories())]
     if animal_rows.empty:
-        return pd.DataFrame(columns=output_columns)
+        return None
 
     product_emissions = (
         animal_rows.groupby(product_col, dropna=False)[emissions_col]
         .sum(min_count=1)
-        .reset_index()
-        .rename(columns={emissions_col: "animal_product_emissions_kg_co2e"})
+        .dropna()
+        .sort_values(ascending=False, kind="stable")
     )
-    product_emissions = product_emissions[
-        product_emissions["animal_product_emissions_kg_co2e"].notna()
-    ].copy()
-    if product_emissions.empty:
-        return pd.DataFrame(columns=output_columns)
-
-    product_emissions = product_emissions.sort_values(
-        "animal_product_emissions_kg_co2e",
-        ascending=False,
-        kind="stable",
-    ).reset_index(drop=True)
-
-    total_animal_emissions = float(
-        product_emissions["animal_product_emissions_kg_co2e"].sum(min_count=1) or 0.0
-    )
+    total_animal_emissions = float(product_emissions.sum())
     if total_animal_emissions <= 0:
-        return pd.DataFrame(columns=output_columns)
+        return None
 
-    top_products = product_emissions.head(top_n).copy()
-    top_products_emissions = float(
-        top_products["animal_product_emissions_kg_co2e"].sum(min_count=1) or 0.0
-    )
-    n_products_used = len(top_products)
-    top_products_list = " | ".join(
-        str(product) for product in top_products[product_col].fillna("Missing product name")
-    )
-
-    return pd.DataFrame(
-        [
-            {
-                "KPI": f"Top {n_products_used} animal products share of animal-product emissions",
-                "Value": round(top_products_emissions / total_animal_emissions * 100, 1),
-                "Unit": "%",
-                "Denominator": "Animal-product emissions only",
-                "Top products": top_products_list,
-                "Top product emissions (kg CO2e)": round(top_products_emissions, 1),
-                "Total animal emissions (kg CO2e)": round(total_animal_emissions, 1),
-            }
-        ],
-        columns=output_columns,
+    top_products = product_emissions.head(top_n)
+    return AnimalEmissionsConcentration(
+        top_products=tuple(
+            "Missing product name" if pd.isna(product) else str(product)
+            for product in top_products.index
+        ),
+        top_products_kg_co2e=float(top_products.sum()),
+        total_animal_kg_co2e=total_animal_emissions,
     )
 
 
@@ -554,13 +559,17 @@ def calculate_milk_oat_swap_scenarios(
 def run_aggregation_pipeline(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
-    metric_total: str = "kilos_total",
     top_n: int = 5,
     *,
+    mode: ReportMode,
     region: Region = "us",
     diner_or_meal: DinerOrMeal,
-) -> dict[str, Any]:
-    """Run the full report aggregation pipeline."""
+) -> Aggregation:
+    """Run the full report aggregation pipeline.
+
+    A procurement ``df`` must already carry ``emissions_kg_co2e``.
+    """
+    metric_total = metric_for_mode(mode)
     per_head = per_diner_metric_name(metric_total, diner_or_meal)
 
     def monthly(group_by: str) -> pd.DataFrame:
@@ -572,39 +581,53 @@ def run_aggregation_pipeline(
     monthly_product_data = monthly("product")
     monthly_category_data = monthly("category")
 
-    template_data = create_template_data(monthly_category_data, metric_total)
-    overall_drivers = identify_overall_drivers(df, metric=metric_total, top_n=top_n)
-    category_drivers = identify_category_drivers(df, metric=metric_total, top_n=top_n)
-
-    animal_emissions_intensity = summarize_animal_emissions_intensity(
-        df,
-        weight_col=metric_total,
+    procurement = mode == "procurement"
+    return Aggregation(
+        monthly_product=monthly_product_data,
+        monthly_category=(
+            _attach_monthly_category_emissions(monthly_category_data, df)
+            if procurement
+            else monthly_category_data
+        ),
+        template=create_template_data(monthly_category_data, metric_total),
+        overall_drivers=identify_overall_drivers(df, metric=metric_total, top_n=top_n),
+        category_drivers=identify_category_drivers(df, metric=metric_total, top_n=top_n),
+        procurement=(
+            _procurement_aggregation(df, top_n=top_n, region=region) if procurement else None
+        ),
     )
-    decision_kpis = calculate_animal_emissions_concentration(df, top_n=top_n)
-    substitution_scenarios = pd.DataFrame()
-    if metric_total == "kilos_total":
-        ruminant_swap_scenarios = calculate_ruminant_legume_swap_scenarios(
-            df,
-            weight_col=metric_total,
-            region=region,
-        )
-        milk_swap_scenarios = calculate_milk_oat_swap_scenarios(
-            df,
-            weight_col=metric_total,
-            region=region,
-        )
-        substitution_scenarios = pd.concat(
-            [ruminant_swap_scenarios, milk_swap_scenarios],
-            ignore_index=True,
-        )
 
-    return {
-        "monthly_product_data": monthly_product_data,
-        "monthly_category_data": monthly_category_data,
-        "template_data": template_data,
-        "overall_drivers": overall_drivers,
-        "category_drivers": category_drivers,
-        "animal_emissions_intensity": animal_emissions_intensity,
-        "decision_kpis": decision_kpis,
-        "substitution_scenarios": substitution_scenarios,
-    }
+
+def _procurement_aggregation(
+    df: pd.DataFrame, *, top_n: int, region: Region
+) -> ProcurementAggregation:
+    return ProcurementAggregation(
+        animal_emissions_intensity=_none_if_empty(summarize_animal_emissions_intensity(df)),
+        animal_emissions_concentration=calculate_animal_emissions_concentration(df, top_n=top_n),
+        substitution_scenarios=_none_if_empty(_substitution_scenarios(df, region=region)),
+    )
+
+
+def _substitution_scenarios(df: pd.DataFrame, *, region: Region) -> pd.DataFrame:
+    return pd.concat(
+        [
+            calculate_ruminant_legume_swap_scenarios(df, region=region),
+            calculate_milk_oat_swap_scenarios(df, region=region),
+        ],
+        ignore_index=True,
+    )
+
+
+def _attach_monthly_category_emissions(monthly_cat: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
+    """Add each (month, category) row's own ``emissions_kg_co2e`` total."""
+    # Charts sum this column per month. Joining on month alone would copy the month's total onto
+    # every category row, multiplying the charted total by the number of categories.
+    keys = ["month_year", "category"]
+    category_emissions = (
+        df.groupby(keys, dropna=False)["emissions_kg_co2e"].sum(min_count=1).reset_index()
+    )
+    return monthly_cat.merge(category_emissions, on=keys, how="left", validate="one_to_one")
+
+
+def _none_if_empty(table: pd.DataFrame) -> pd.DataFrame | None:
+    return None if table.empty else table

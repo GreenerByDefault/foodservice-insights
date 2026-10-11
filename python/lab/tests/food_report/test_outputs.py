@@ -5,6 +5,10 @@ from typing import TypedDict, cast
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.aggregation import (
+    AnimalEmissionsConcentration,
+    ProcurementAggregation,
+)
 from gbd_foodservice_insights_lab.food_report.excel import build_qa_excel_report
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
@@ -17,9 +21,7 @@ class _ExcelPayload(TypedDict):
     highest_lowest: pd.DataFrame
     diner_meals_df: pd.DataFrame
     emissions_summary: pd.DataFrame
-    animal_emissions_intensity: pd.DataFrame
-    decision_kpis: pd.DataFrame
-    substitution_scenarios: pd.DataFrame
+    procurement: ProcurementAggregation
     quality_findings_df: pd.DataFrame
     missingness_summary_df: pd.DataFrame
     data_profile_df: pd.DataFrame
@@ -40,47 +42,43 @@ def _sample_excel_payload() -> _ExcelPayload:
         "highest_lowest": pd.DataFrame({"category": ["Legumes"], "times_higher": [1.2]}),
         "diner_meals_df": pd.DataFrame({"month_year": ["2024-01"], "Diners": [100]}),
         "emissions_summary": pd.DataFrame({"category": ["Legumes"], "total_kg_co2e": [3.4]}),
-        "animal_emissions_intensity": pd.DataFrame(
-            {
-                "category": ["Beef and Buffalo Meat"],
-                "kilos_total": [5.0],
-                "total_kg_co2e": [206.75],
-                "kg_co2e_per_kg_food": [41.35],
-            }
-        ),
-        "decision_kpis": pd.DataFrame(
-            {
-                "KPI": ["Top 2 animal products share of animal-product emissions"],
-                "Value": [91.2],
-                "Unit": ["%"],
-                "Denominator": ["Animal-product emissions only"],
-                "Top products": ["beef mince, cheddar"],
-                "Top product emissions (kg CO2e)": [342.5],
-                "Total animal emissions (kg CO2e)": [375.5],
-            }
-        ),
-        "substitution_scenarios": pd.DataFrame(
-            {
-                "scenario": [
-                    "10% ruminant-to-legume swap",
-                    "10% cow's-milk-to-oat-milk swap",
-                ],
-                "substitution_pct": [10.0, 10.0],
-                "source_categories": [
-                    "Beef and Buffalo Meat, Lamb/mutton & goat meat",
-                    "Milk (Cow's milk)",
-                ],
-                "replacement_category": ["Legumes", "Oat Milk"],
-                "baseline_ruminant_weight_kg": [20.0, 15.0],
-                "baseline_ruminant_emissions_kg_co2e": [829.95, 49.2],
-                "replaced_weight_kg": [2.0, 1.5],
-                "remaining_ruminant_weight_kg": [18.0, 13.5],
-                "replacement_weight_kg": [2.0, 1.5],
-                "replacement_emission_factor_kg_co2e_per_kg": [1.6, 1.2],
-                "projected_emissions_kg_co2e": [748.3, 44.64],
-                "avoidable_kg_co2e": [81.65, 4.56],
-                "institution_emissions_avoided_pct": [9.82, 0.55],
-            }
+        "procurement": ProcurementAggregation(
+            animal_emissions_intensity=pd.DataFrame(
+                {
+                    "category": ["Beef and Buffalo Meat"],
+                    "kilos_total": [5.0],
+                    "total_kg_co2e": [206.75],
+                    "kg_co2e_per_kg_food": [41.35],
+                }
+            ),
+            animal_emissions_concentration=AnimalEmissionsConcentration(
+                top_products=("beef mince", "cheddar"),
+                top_products_kg_co2e=342.5,
+                total_animal_kg_co2e=375.5,
+            ),
+            substitution_scenarios=pd.DataFrame(
+                {
+                    "scenario": [
+                        "10% ruminant-to-legume swap",
+                        "10% cow's-milk-to-oat-milk swap",
+                    ],
+                    "substitution_pct": [10.0, 10.0],
+                    "source_categories": [
+                        "Beef and Buffalo Meat, Lamb/mutton & goat meat",
+                        "Milk (Cow's milk)",
+                    ],
+                    "replacement_category": ["Legumes", "Oat Milk"],
+                    "baseline_ruminant_weight_kg": [20.0, 15.0],
+                    "baseline_ruminant_emissions_kg_co2e": [829.95, 49.2],
+                    "replaced_weight_kg": [2.0, 1.5],
+                    "remaining_ruminant_weight_kg": [18.0, 13.5],
+                    "replacement_weight_kg": [2.0, 1.5],
+                    "replacement_emission_factor_kg_co2e_per_kg": [1.6, 1.2],
+                    "projected_emissions_kg_co2e": [748.3, 44.64],
+                    "avoidable_kg_co2e": [81.65, 4.56],
+                    "institution_emissions_avoided_pct": [9.82, 0.55],
+                }
+            ),
         ),
         "quality_findings_df": pd.DataFrame(
             {"status": ["warning"], "message": ["Example quality finding"]}
@@ -136,9 +134,7 @@ def test_build_qa_excel_report_includes_debug_tabs(tmp_path: Path):
         highest_lowest=payload["highest_lowest"],
         diner_meals_df=payload["diner_meals_df"],
         emissions_summary=payload["emissions_summary"],
-        animal_emissions_intensity=payload["animal_emissions_intensity"],
-        decision_kpis=payload["decision_kpis"],
-        substitution_scenarios=payload["substitution_scenarios"],
+        procurement=payload["procurement"],
         quality_findings_df=payload["quality_findings_df"],
         missingness_summary_df=payload["missingness_summary_df"],
         data_profile_df=payload["data_profile_df"],

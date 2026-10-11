@@ -4,6 +4,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.aggregation import Aggregation
 from gbd_foodservice_insights.report.plots import report
 from matplotlib.figure import Figure
 
@@ -17,21 +18,25 @@ def _figure_title(fig: Figure) -> str:
     return fig.get_suptitle() or fig.axes[0].get_title()
 
 
-def _aggregated_data(
-    monthly_category_data: pd.DataFrame,
+def _aggregation(
+    monthly_category: pd.DataFrame,
     *,
     category_drivers: pd.DataFrame | None = None,
-) -> dict[str, pd.DataFrame]:
+) -> Aggregation:
     """Aggregates where apple drives everything, for tests that only vary the months."""
-    return {
-        "monthly_category_data": monthly_category_data,
-        "overall_drivers": pd.DataFrame({"product": ["apple"], "percentage": [100.0]}),
-        "category_drivers": (
+    return Aggregation(
+        # The plots never read these two.
+        monthly_product=pd.DataFrame(),
+        monthly_category=monthly_category,
+        template=pd.DataFrame(),
+        overall_drivers=pd.DataFrame({"product": ["apple"], "percentage": [100.0]}),
+        category_drivers=(
             category_drivers
             if category_drivers is not None
             else pd.DataFrame({"category": ["fruit"], "product": ["apple"], "percentage": [100.0]})
         ),
-    }
+        procurement=None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -58,7 +63,7 @@ def test_generate_all_report_plots_orders_every_page(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
     plots_output = report.generate_all_report_plots(
-        aggregated_data=_aggregated_data(fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])),
+        aggregation=_aggregation(fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])),
         diner_meal_mapping=DINER_MEALS,
         emissions_summary=EMISSIONS_SUMMARY,
         metric_total="kilos_total",
@@ -98,7 +103,7 @@ def test_generate_all_report_plots_leaves_out_pages_without_their_data(
         months = months.drop(columns="emissions_kg_co2e")
 
     plots_output = report.generate_all_report_plots(
-        aggregated_data=_aggregated_data(months),
+        aggregation=_aggregation(months),
         diner_meal_mapping=DINER_MEALS,
         metric_total="kilos_total",
         **options,
