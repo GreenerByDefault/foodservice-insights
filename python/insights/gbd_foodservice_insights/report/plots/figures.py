@@ -8,14 +8,13 @@ import seaborn as sns
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights.plotting_utils import (
+    GBD_COLORS,
     LETTER_LANDSCAPE,
-    GBD_colors,
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
     set_suptitle_font,
     set_title_font,
-    set_ylim_with_padding,
 )
 from gbd_foodservice_insights.report.plots.panels import (
     draw_category_drivers,
@@ -46,7 +45,8 @@ def plot_diner_meal_numbers(
     ax.plot(x_positions, diner_meal_series.values, marker="o")
     set_title_font(ax, f"Number of {diner_or_meal.title()}s by Month")
     ax.set_xlabel("Month")
-    set_ylim_with_padding(ax, diner_meal_series, padding=0.2)
+    # Padding is relative to each limit's value, not the range, so it assumes positive counts.
+    ax.set_ylim(diner_meal_series.min() * 0.8, diner_meal_series.max() * 1.2)
     ax.set_ylabel(f"Number of {diner_or_meal.title()}s")
     add_grid(ax)
 
@@ -125,15 +125,11 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: str) -> Fi
         order=category_totals.sort_values(metric, ascending=False)["category"],
         ax=ax,
     )
-    plt.yticks(fontsize=10)
-    plt.title(
-        f"{metric_label} by Category Across All Months",
-        fontsize=14,
-        fontfamily="Montserrat",
-    )
-    plt.xlabel(metric_label)
-    plt.ylabel("")
-    plt.tight_layout()
+    ax.tick_params(axis="y", labelsize=10)
+    set_title_font(ax, f"{metric_label} by Category Across All Months")
+    ax.set_xlabel(metric_label)
+    ax.set_ylabel("")
+    fig.tight_layout()
     return fig
 
 
@@ -167,7 +163,7 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
     data = emissions_summary.sort_values("total_kg_co2e", ascending=True).copy()
 
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
-    bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_colors[0])
+    bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_COLORS[0])
     ax.set_xlabel("Total kg CO₂e")
     set_title_font(ax, "Carbon Emissions by Category")
     add_grid(ax, axis="x")

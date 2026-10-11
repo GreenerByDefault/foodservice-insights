@@ -8,7 +8,7 @@ import pandas as pd
 
 from gbd_foodservice_insights.categories import drink_categories, food_categories
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_colors,
+    GBD_COLORS,
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -120,7 +120,7 @@ def _draw_metric_over_time_on_axis(
         data_sorted["value"].values,
         marker="o",
         linewidth=2,
-        color=GBD_colors[0] if GBD_colors else None,
+        color=GBD_COLORS[0] if GBD_COLORS else None,
     )
     ax.set_xticks(x_positions)
     ax.set_xticklabels(format_month_labels(data_sorted["month_year"]), rotation=45)
@@ -165,7 +165,7 @@ def _draw_multi_series_metric_over_time_on_axis(
     month_to_x = {month: idx for idx, month in enumerate(month_order)}
 
     for idx, (label, plot_data) in enumerate(non_empty_payloads):
-        color = GBD_colors[idx % len(GBD_colors)] if GBD_colors else None
+        color = GBD_COLORS[idx % len(GBD_COLORS)] if GBD_COLORS else None
         x_values = [month_to_x[month] for month in plot_data["month_year"]]
         ax.plot(
             x_values,
@@ -290,8 +290,8 @@ def draw_emissions_per_diner(
     )
 
 
-_PLANT_COLOR = GBD_colors[2]
-_NON_PLANT_COLOR = GBD_colors[0]
+_PLANT_COLOR = GBD_COLORS[2]
+_NON_PLANT_COLOR = GBD_COLORS[0]
 
 
 def _draw_share_bar_axis(

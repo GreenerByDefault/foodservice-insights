@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from gbd_foodservice_insights.plotting_utils import GBD_colors
+from gbd_foodservice_insights.plotting_utils import GBD_COLORS
 from matplotlib.figure import Figure
 
 
@@ -69,7 +69,7 @@ def plot_metric_by_date(
     for idx, (grouped, stat) in enumerate(
         [(grouped_mean, "Mean"), (grouped_median, "Median"), (grouped_sum, "Sum")]
     ):
-        color = GBD_colors[idx]
+        color = GBD_COLORS[idx]
         sns.lineplot(
             data=grouped,
             x="date",
@@ -118,7 +118,7 @@ def plot_metric_by_month(
 
     fig, axes = plt.subplots(1, 3, figsize=fig_size)
     for idx, (stat, color) in enumerate(
-        [("mean", GBD_colors[0]), ("median", GBD_colors[1]), ("sum", GBD_colors[2])]
+        [("mean", GBD_COLORS[0]), ("median", GBD_COLORS[1]), ("sum", GBD_COLORS[2])]
     ):
         grouped.plot(x="date", y=stat, kind="line", ax=axes[idx], color=color, legend=False)
         axes[idx].set_title(f"{stat.title()} {metric_column} by month")
@@ -143,7 +143,7 @@ def plot_metrics_by_month(
         unique_counts = _df.groupby("month", dropna=False)[product_name_col].nunique().reset_index()
         fig, ax = plt.subplots(figsize=(12, 4))
         ax.plot(
-            unique_counts["month"], unique_counts[product_name_col], marker="o", color=GBD_colors[0]
+            unique_counts["month"], unique_counts[product_name_col], marker="o", color=GBD_COLORS[0]
         )
         ax.set_title("Number of Unique Products by Month")
         ax.set_xlabel("Month")

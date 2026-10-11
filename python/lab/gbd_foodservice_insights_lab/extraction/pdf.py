@@ -39,7 +39,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from gbd_foodservice_insights.plotting_utils import GBD_colors
+from gbd_foodservice_insights.plotting_utils import GBD_COLORS
 from matplotlib.ticker import MaxNLocator
 from PyPDF2 import PdfReader
 from thefuzz import fuzz
@@ -2824,7 +2824,7 @@ def plot_total_rows_by_page_across_pdfs(page_counts: pd.Series) -> None:
         marker="o",
         linewidth=2,
         markersize=4,
-        color=GBD_colors[4],
+        color=GBD_COLORS[4],
     )
     ax.set_xlabel("Page Number", fontsize=12)
     ax.set_ylabel("Total Rows Across All PDFs", fontsize=12)

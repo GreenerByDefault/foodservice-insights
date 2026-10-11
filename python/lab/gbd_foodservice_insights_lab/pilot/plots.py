@@ -9,7 +9,7 @@ from gbd_foodservice_insights.categories import (
     food_categories,
 )
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_colors,
+    GBD_COLORS,
     add_grid,
     format_month_labels,
     set_suptitle_font,
@@ -306,7 +306,7 @@ def _plot_baseline_pilot_split(
             y_positions[i],
             row[plant_label],
             height=bar_height,
-            color=GBD_colors[1],  # Green
+            color=GBD_COLORS[1],  # Green
             label=plant_label if i == 0 else "",
         )
 
@@ -316,7 +316,7 @@ def _plot_baseline_pilot_split(
             row[animal_label],
             height=bar_height,
             left=row[plant_label],
-            color=GBD_colors[0],  # Blue
+            color=GBD_COLORS[0],  # Blue
             label=animal_label if i == 0 else "",
         )
 
@@ -628,7 +628,7 @@ def plot_unique_products_over_time(
             marker="o",
             markersize=8,
             linewidth=2,
-            color=GBD_colors[0] if isinstance(GBD_colors, list) and GBD_colors else None,
+            color=GBD_COLORS[0] if isinstance(GBD_COLORS, list) and GBD_COLORS else None,
             ax=ax,
         )
 

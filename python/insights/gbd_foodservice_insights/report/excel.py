@@ -14,7 +14,6 @@ from pathlib import Path
 import pandas as pd
 
 from gbd_foodservice_insights.report.food_report import FoodReport
-from gbd_foodservice_insights.utils import rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,7 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
         "Substitution Scenarios": report.procurement_table("substitution_scenarios"),
     }
     saved_path = write_excel_workbook(str(path), sheets)
-    logger.info("Client Excel report saved to %s", rel_path(saved_path))
+    logger.info("Client Excel report saved to %s", saved_path)
 
 
 def diner_meals_frame(report: FoodReport) -> pd.DataFrame:

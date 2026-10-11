@@ -45,7 +45,7 @@ def test_print_baseline_pilot_percent_changes_returns_calculated_metrics(capsys)
 class TestPlotMetricOverTime:
     def test_returns_figure(self):
         data = {
-            "month_year": ["2023-01", "2023-02", "2023-03"],
+            "month_year": [pd.Period("2023-01"), pd.Period("2023-02"), pd.Period("2023-03")],
             "category": ["fruit", "fruit", "fruit"],
             "kilos_total": [100, 150, 120],
         }
@@ -56,12 +56,12 @@ class TestPlotMetricOverTime:
 
     def test_per_diner_meal(self):
         data = {
-            "month_year": ["2023-01", "2023-02"],
+            "month_year": [pd.Period("2023-01"), pd.Period("2023-02")],
             "category": ["fruit", "fruit"],
             "kilos_total": [100, 150],
         }
         df = pd.DataFrame(data)
-        diner_meal_mapping = {"2023-01": 100, "2023-02": 120}
+        diner_meal_mapping = {pd.Period("2023-01"): 100, pd.Period("2023-02"): 120}
         fig = plot_metric_over_time(
             df, metric="kilos_total", per_diner_meal=True, diner_meal_mapping=diner_meal_mapping
         )

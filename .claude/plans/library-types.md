@@ -18,11 +18,6 @@ remain, each read by key or by name in several places:
   with nine documented keys, and `tables: dict[str, DataFrame]` that `create_table_page`
   dispatches on title strings ("Decision KPIs", "Substitution Scenarios", "Category Template").
   `write_report_pdf` is its only product caller; the golden test records its kwargs.
-- Plotting leftovers: `plot_category_totals` styles through pyplot state (`plt.title`,
-  `plt.yticks`) while every other figure uses its `ax`; `format_month_labels` handles Periods,
-  datetimes and three string formats for callers that only ever pass Periods;
-  `plotting_utils`'s header names `aggregate.py` and `results.py`, which no longer exist;
-  `GBD_colors` is the last non-PEP 8 name.
 
 ## Decisions
 
@@ -63,14 +58,6 @@ remain, each read by key or by name in several places:
   harness in `test_analysis.py` records `report.findings`, `report.summary_stats`, the
   narrative, the formatted tables and chart titles from `write_report_pdf`'s arguments.
 - Golden fixture regenerated (its structure changes; values should not).
-
-## PR 3 — Plotting leftovers
-
-- `plot_category_totals` styles its `ax`; `format_month_labels(months: Iterable[pd.Period])`;
-  `GBD_colors` → `GBD_COLORS` (lab callers too); `plotting_utils` header rewritten; `rel_path`
-  dropped from the product's two log lines (log the path); `set_ylim_with_padding` inlined into
-  `plot_diner_meal_numbers`, its only caller.
-- `tests/test_plotting_utils.py`, `tests/report/plots/` follow.
 
 ## Verification
 
