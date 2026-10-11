@@ -1,13 +1,11 @@
 """Emission factor lookup and carbon metric calculations."""
 
 from functools import cache
-from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
 
 from gbd_foodservice_insights.categories import get_gbd_categories_metadata
-from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import validate_region
 
 
@@ -42,54 +40,17 @@ def get_emission_factor(category: str, region: str = "us") -> float | None:
     return None
 
 
-@overload
 def calculate_emissions(
     df: pd.DataFrame,
     weight_col: str,
     category_col: str = "category",
     region: str = "us",
-    *,
-    return_findings: Literal[False] = False,
-) -> pd.DataFrame: ...
-
-
-@overload
-def calculate_emissions(
-    df: pd.DataFrame,
-    weight_col: str,
-    category_col: str = "category",
-    region: str = "us",
-    *,
-    return_findings: Literal[True],
-) -> tuple[pd.DataFrame, list[Finding]]: ...
-
-
-@overload
-def calculate_emissions(
-    df: pd.DataFrame,
-    weight_col: str,
-    category_col: str = "category",
-    region: str = "us",
-    *,
-    return_findings: bool,
-) -> pd.DataFrame | tuple[pd.DataFrame, list[Finding]]: ...
-
-
-def calculate_emissions(
-    df: pd.DataFrame,
-    weight_col: str,
-    category_col: str = "category",
-    region: str = "us",
-    *,
-    return_findings: bool = False,
-) -> pd.DataFrame | tuple[pd.DataFrame, list[Finding]]:
+) -> pd.DataFrame:
     """Multiply each row's weight by category emission factor.
 
     Returns DataFrame with columns:
     - ``emission_factor_used``
     - ``emissions_kg_co2e``
-
-    When ``return_findings=True`` returns ``(df, findings)``.
     """
     normalized_region = validate_region(region)
 
@@ -107,27 +68,17 @@ def calculate_emissions(
 
     out["emission_factor_used"] = out[category_col].astype(str).str.lower().map(lower_lookup)
 
+    # Every GBD category has a factor (`test_every_category_has_an_emission_factor`) and the
+    # product path only assigns GBD categories, so this is our bug or a typo in a lab's
+    # hand-edited categorized CSV. Either way, a row without emissions would drop its kilos
+    # from every CO2e figure while still counting them toward weights.
+    unmatched = sorted(
+        out.loc[out["emission_factor_used"].isna(), category_col].astype(str).unique()
+    )
+    if unmatched:
+        raise ValueError(f"No emission factor for categories: {', '.join(unmatched)}")
+
     out["emissions_kg_co2e"] = out[weight_col] * out["emission_factor_used"]
-
-    findings: list[Finding] = []
-    unmatched_series = out.loc[out["emission_factor_used"].isna(), category_col]
-    if len(unmatched_series) > 0:
-        unmatched = sorted(str(value) for value in unmatched_series.dropna().unique())
-        findings.append(
-            make_finding(
-                stage="emissions",
-                category="unmatched_emission_factors",
-                status="warning",
-                message=(
-                    "Some categories have no emission factor and produced missing emissions values."
-                ),
-                count=len(unmatched),
-                sample_values=unmatched[:10],
-            )
-        )
-
-    if return_findings:
-        return out, findings
     return out
 
 

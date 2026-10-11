@@ -2,7 +2,6 @@ import warnings
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.report.aggregation import aggregate_data
 from gbd_foodservice_insights.report.quality import (
     Finding,
@@ -105,26 +104,6 @@ def test_quality_helpers_detect_missing_columns_and_non_null_violations():
     non_null = check_required_non_null(df, ["a"], stage="ingestion")
     assert len(non_null) == 1
     assert non_null[0]["column"] == "a"
-
-
-def test_emissions_returns_structured_findings_for_unmatched_category():
-    """Ensures unmatched categories are surfaced as findings so emission gaps are auditable."""
-    df = pd.DataFrame(
-        {
-            "category": ["legumes", "definitely_not_a_real_category"],
-            "kilos_total": [10.0, 5.0],
-        }
-    )
-
-    out, findings = emissions.calculate_emissions(
-        df,
-        weight_col="kilos_total",
-        category_col="category",
-        return_findings=True,
-    )
-
-    assert "emission_factor_used" in out.columns
-    assert any(f["category"] == "unmatched_emission_factors" for f in findings)
 
 
 @pytest.mark.parametrize(

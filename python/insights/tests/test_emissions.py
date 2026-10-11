@@ -43,6 +43,14 @@ def test_calculate_emissions_multiplies_weight_by_factor():
     assert out.at[0, "emissions_kg_co2e"] == pytest.approx(2.5 * factor)
 
 
+def test_calculate_emissions_raises_naming_every_category_without_a_factor():
+    category, _ = _known_category_with_us_factor()
+    df = pd.DataFrame({"category": ["Mlik", category, "Beaf", "Mlik"], "kilos_total": 1.0})
+
+    with pytest.raises(ValueError, match=r"^No emission factor for categories: Beaf, Mlik$"):
+        emissions.calculate_emissions(df, weight_col="kilos_total", category_col="category")
+
+
 def test_calculate_emissions_summary_sorts_and_computes_percentages():
     """Ensures summary output is sorted and percent-of-total math is correct."""
     df = pd.DataFrame(
