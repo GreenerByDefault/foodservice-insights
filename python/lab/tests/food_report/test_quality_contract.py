@@ -4,7 +4,6 @@ from typing import NoReturn
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.quality import QualityCheckError
 from gbd_foodservice_insights_lab.food_report import pipeline
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
@@ -102,39 +101,35 @@ def test_run_food_report_fails_on_a_missing_diner_meal_file(food_report_tmp_data
         )
 
 
-def test_run_food_report_raises_on_a_missing_required_column(monkeypatch, tmp_path):
-    bad_df = pd.DataFrame(
-        {
-            "date": ["2024-01-01"],
-            "category": ["legumes"],
-            "kilos_total": [1.0],
-        }
-    )
+# `clean_weight_column` turns a weight it cannot parse into NaN rather than raising.
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    [
+        (
+            {"date": ["2024-01-01"], "category": ["Legumes"], "kilos_total": [1.0]},
+            "Missing required columns: product",
+        ),
+        (
+            {
+                "date": ["2024-01-01", "2024-01-02"],
+                "product": ["tofu", "lentils"],
+                "category": ["Legumes", "Legumes"],
+                "kilos_total": ["1.5", "n/a"],
+            },
+            "kilos_total is missing in 1 of 2 rows",
+        ),
+    ],
+)
+def test_run_food_report_names_the_problem_with_unusable_rows(
+    rows: dict[str, list[object]], message: str, tmp_path: Path
+):
     input_path = tmp_path / "categorized_bad.csv"
-    bad_df.to_csv(input_path, index=False)
+    pd.DataFrame(rows).to_csv(input_path, index=False)
 
-    diner_path = tmp_path / "diner_meals.json"
-    diner_path.write_text(json.dumps({"2024-01": 1000}))
-
-    (tmp_path / "client_metadata.json").write_text("{}")
-
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.build_pdf_report",
-        lambda **kwargs: str(tmp_path / "out.pdf"),
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.excel.write_client_workbook",
-        lambda report, path: None,
-    )
-    monkeypatch.setattr(
-        "gbd_foodservice_insights_lab.food_report.excel.build_qa_excel_report",
-        lambda **kwargs: str(tmp_path / "out_qa.xlsx"),
-    )
-
-    with pytest.raises(QualityCheckError, match=r"\[ingestion::required_columns\]"):
+    with pytest.raises(ValueError, match=message):
         run_food_report(
             input_file=input_path,
-            diner_meal_file=diner_path,
+            diner_meal_mapping={"2024-01": 1000},
             output_dir=tmp_path,
             procurement_serving="procurement",
         )

@@ -99,7 +99,7 @@ def food_report_tmp_data(tmp_path: Path):
         {
             "date": ["2024-01-05", "2024-02-05"],
             "product": ["tofu", "beef"],
-            "category": ["legumes", "beef and buffalo meat"],
+            "category": ["Legumes", "Beef and Buffalo Meat"],
             "kilos_total": [10.0, 5.0],
         }
     )
@@ -231,7 +231,6 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
         "Missingness_Summary",
         "Data Profile",
         "Denominator_QC",
-        "Aggregation_Reconciliation",
     ]
     assert list(cast(dict[str, pd.DataFrame], captured_pdf_kwargs["tables"])) == [
         "Category Template",
@@ -302,7 +301,7 @@ def test_run_food_report_reports_meat_quantities_last(monkeypatch, tmp_path: Pat
         {
             "date": ["2024-01-05", "2024-02-05"],
             "product": ["tofu", "beef stew"],
-            "category": ["legumes", "beef and buffalo meat"],
+            "category": ["Legumes", "Beef and Buffalo Meat"],
             "servings total": [10.0, 5.0],
             "quantity": [10, 2.5],
         }

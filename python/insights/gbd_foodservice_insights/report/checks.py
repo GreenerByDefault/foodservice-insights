@@ -9,19 +9,15 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
-    ReportMode,
     metric_display_label,
-    required_columns_for_mode,
 )
 from gbd_foodservice_insights.report.thresholds import (
     get_diagnostic_threshold,
     resolve_diagnostic_threshold,
 )
-from gbd_foodservice_insights.report.utils import compute_month_alignment
 
 logger = logging.getLogger(__name__)
 
@@ -310,9 +306,6 @@ def detect_unusual_sales(
                 "small_category_ratio_threshold": small_category_ratio_threshold,
                 "mad_threshold": threshold,
                 "min_category_rows": min_category_rows,
-                "sample_rows": flagged_rows.head(sample_limit)
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
             },
         )
     ]
@@ -481,9 +474,6 @@ def check_per_product_weight_bounds(
                 "high": high,
                 "unit_label": unit_label,
                 "flagged_row_count": len(flagged_rows),
-                "sample_rows": flagged_rows.head(sample_limit)
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
             },
         )
     ]
@@ -640,134 +630,10 @@ def detect_month_over_month_total_volatility(
             column=metric_total,
             count=len(volatile_months),
             sample_values=sample_values,
-            metadata={
-                "warning_pct_change_threshold": change_threshold,
-                "sample_rows": volatile_months.head(sample_limit)
-                .assign(
-                    month_label=lambda x: x[month_col].map(_format_month_label),
-                    previous_month_label=lambda x: x["previous_month"].map(_format_month_label),
-                )
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
-            },
+            metadata={"warning_pct_change_threshold": change_threshold},
         )
     ]
     return findings
-
-
-def check_aggregation_reconciliation(
-    raw_df: pd.DataFrame,
-    monthly_product_df: pd.DataFrame,
-    monthly_category_df: pd.DataFrame,
-    metric_col: str,
-    *,
-    rel_error_threshold: float | None = None,
-) -> tuple[list[Finding], pd.DataFrame]:
-    """Reconcile totals across raw rows and both report aggregation grains.
-
-    This exists to catch filtering, grouping, or join mistakes that let summary
-    tables drift away from the raw metric total without causing a hard crash.
-    """
-    required_sources = {
-        "raw_df": raw_df,
-        "monthly_product_df": monthly_product_df,
-        "monthly_category_df": monthly_category_df,
-    }
-    missing_columns = {
-        source_name: [column for column in [metric_col] if column not in frame.columns]
-        for source_name, frame in required_sources.items()
-        if metric_col not in frame.columns
-    }
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="aggregation_reconciliation",
-                    status="info",
-                    message=(
-                        "Could not check aggregation reconciliation because the metric "
-                        f"column '{metric_col}' is missing in: {sorted(missing_columns)}"
-                    ),
-                    metadata={"missing_columns": missing_columns, "metric_col": metric_col},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    rel_error_threshold = resolve_diagnostic_threshold(
-        "aggregation_reconciliation",
-        "rel_error_threshold",
-        rel_error_threshold,
-    )
-    rel_error_threshold = max(float(rel_error_threshold), 0.0)
-
-    raw_total = float(pd.to_numeric(raw_df[metric_col], errors="coerce").sum(min_count=1) or 0.0)
-    monthly_product_total = float(
-        pd.to_numeric(monthly_product_df[metric_col], errors="coerce").sum(min_count=1) or 0.0
-    )
-    monthly_category_total = float(
-        pd.to_numeric(monthly_category_df[metric_col], errors="coerce").sum(min_count=1) or 0.0
-    )
-
-    totals = {
-        "raw_total": raw_total,
-        "monthly_product_total": monthly_product_total,
-        "monthly_category_total": monthly_category_total,
-    }
-    baseline = max((abs(total) for total in totals.values()), default=0.0)
-    max_abs_difference = max(totals.values()) - min(totals.values()) if totals else 0.0
-    relative_difference = 0.0 if baseline == 0.0 else max_abs_difference / baseline
-
-    export_df = pd.DataFrame(
-        [
-            {
-                "metric_col": metric_col,
-                "raw_total": raw_total,
-                "monthly_product_total": monthly_product_total,
-                "monthly_category_total": monthly_category_total,
-                "max_abs_difference": max_abs_difference,
-                "relative_difference": relative_difference,
-                "rel_error_threshold": rel_error_threshold,
-                "is_flagged": relative_difference > rel_error_threshold,
-            }
-        ]
-    )
-
-    status = "error" if relative_difference > rel_error_threshold else "success"
-    message = (
-        f"Raw total {raw_total:,.3f}, monthly-by-product total {monthly_product_total:,.3f}, "
-        f"and monthly-by-category total {monthly_category_total:,.3f} reconcile within the "
-        f"{rel_error_threshold:.1%} tolerance."
-    )
-    if status == "error":
-        message = (
-            f"Aggregation totals differ by {relative_difference:.4%}, above the "
-            f"{rel_error_threshold:.1%} reconciliation tolerance. Raw total: "
-            f"{raw_total:,.3f}; monthly-by-product total: {monthly_product_total:,.3f}; "
-            f"monthly-by-category total: {monthly_category_total:,.3f}."
-        )
-
-    findings = [
-        make_finding(
-            stage="diagnostics",
-            category="aggregation_reconciliation",
-            status=status,
-            message=message,
-            column=metric_col,
-            count=int(relative_difference > rel_error_threshold),
-            metadata={
-                "metric_col": metric_col,
-                "raw_total": raw_total,
-                "monthly_product_total": monthly_product_total,
-                "monthly_category_total": monthly_category_total,
-                "max_abs_difference": max_abs_difference,
-                "relative_difference": relative_difference,
-                "rel_error_threshold": rel_error_threshold,
-            },
-        )
-    ]
-    return findings, export_df
 
 
 def _check_top_share_concentration(
@@ -1085,10 +951,7 @@ def check_missing_weeks_within_month(
             ),
             count=len(gap_df),
             sample_values=sample_values,
-            metadata={
-                "max_gap_days": max_gap_days,
-                "sample_rows": gap_df.head(sample_limit).to_dict("records"),
-            },
+            metadata={"max_gap_days": max_gap_days},
         )
     ]
 
@@ -1096,12 +959,6 @@ def check_missing_weeks_within_month(
 def _format_month_label(value: Any) -> str:
     """Format month-like values consistently across month-based diagnostics."""
     return pd.Period(str(value), freq="M").strftime("%b %Y")
-
-
-def _format_category_month_missing_sample(category: Any, month: Any) -> str:
-    """Turn a missing category-month combo into a plain-English sample line."""
-    category_text = str(category).replace("&", "and").strip()
-    return f"{category_text} missing during {_format_month_label(month)}"
 
 
 def _describe_unmatched_count(
@@ -1144,8 +1001,8 @@ def check_diner_meal_reasonableness(
     thresholds = {"low_ratio_threshold": low_threshold, "high_ratio_threshold": high_threshold}
 
     counts = pd.Series(diner_meal_mapping, dtype="float64")
-    # Only months with both a count and rows have a per-diner figure; a month with only one of
-    # them is `date_alignment`'s finding.
+    # Only months with both a count and rows have a per-diner figure. Rows without a count already
+    # failed aggregation; a count without rows is a month the customer bought nothing in.
     monthly = pd.concat(
         [
             counts[counts > 0].rename("diner_meal_count"),
@@ -1274,10 +1131,7 @@ def check_diner_meal_reasonableness(
             message=message,
             count=flagged_count,
             sample_values=sample_values,
-            metadata={
-                **metadata,
-                "sample_rows": flagged_df.head(sample_limit).to_dict("records"),
-            },
+            metadata=metadata,
         )
     ]
     return findings, qc_df
@@ -1561,20 +1415,7 @@ def detect_category_discontinuity(
             column=metric_total,
             count=len(discontinuity_df),
             sample_values=sample_values,
-            metadata={
-                "min_gap_months": min_gap_months,
-                "sample_rows": discontinuity_df.head(sample_limit)
-                .assign(
-                    last_month_with_data_label=lambda x: x["last_month_with_data"].map(
-                        _format_month_label
-                    ),
-                    first_month_back_with_data_label=lambda x: x["first_month_back_with_data"].map(
-                        _format_month_label
-                    ),
-                )
-                .replace({pd.NaT: None, pd.NA: None})
-                .to_dict("records"),
-            },
+            metadata={"min_gap_months": min_gap_months},
         )
     ]
 
@@ -1583,79 +1424,6 @@ def detect_category_discontinuity(
         first_month_back_with_data=lambda x: x["first_month_back_with_data"].astype(str),
     )
     return findings, export_df
-
-
-def check_required_columns(df: pd.DataFrame, serving: bool = False) -> bool:
-    """Verify that DataFrame includes required report columns."""
-    mode: ReportMode = "serving" if serving else "procurement"
-    required = required_columns_for_mode(mode)
-    missing = [column for column in required if column not in df.columns]
-    return len(missing) == 0
-
-
-def ensure_date_alignment(
-    df: pd.DataFrame,
-    diner_meal_mapping: Mapping[pd.Period, float],
-) -> dict[str, list[pd.Period]]:
-    """Return month alignment diff between data and diner-meal mapping."""
-    if "month_year" not in df.columns:
-        return {"missing_in_mapping": [], "missing_in_data": []}
-    return compute_month_alignment(df["month_year"].dropna().unique(), diner_meal_mapping.keys())
-
-
-def check_zero_category_month_combos(
-    monthly_data: pd.DataFrame,
-    metric_col: str,
-) -> list[Finding]:
-    """Return structured findings for missing/zero category x month combos."""
-    findings: list[Finding] = []
-    if "month_year" not in monthly_data.columns or "category" not in monthly_data.columns:
-        return findings
-    if metric_col not in monthly_data.columns:
-        return findings
-
-    all_months = monthly_data["month_year"].dropna().unique()
-    all_categories = monthly_data["category"].dropna().unique()
-
-    expected = {(cat, month) for month in all_months for cat in all_categories}
-    actual = set(zip(monthly_data["category"], monthly_data["month_year"], strict=True))
-    missing = sorted(expected - actual)
-
-    if missing:
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="missing_category_month_combos",
-                status="info",
-                message=f"Missing {len(missing)} category×month combinations.",
-                count=len(missing),
-                sample_values=[
-                    _format_category_month_missing_sample(cat, month) for cat, month in missing[:10]
-                ],
-            )
-        )
-
-    zero_rows = monthly_data[monthly_data[metric_col] == 0]
-    if not zero_rows.empty:
-        combos = [
-            f"{row['category']} / {row['month_year']}"
-            for _, row in zero_rows[["category", "month_year"]].head(10).iterrows()
-        ]
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="zero_category_month_combos",
-                status="warning",
-                message=(
-                    f"Found {len(zero_rows)} category×month rows with zero values for "
-                    f"'{metric_col}'."
-                ),
-                count=len(zero_rows),
-                sample_values=combos,
-            )
-        )
-
-    return findings
 
 
 def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
@@ -1699,45 +1467,11 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     return findings
 
 
-def check_negative_values(df: pd.DataFrame, metric_col: str) -> list[Finding]:
-    """Return finding if negative values are present."""
-    findings: list[Finding] = []
-    if metric_col not in df.columns:
-        return findings
-
-    numeric_metric = pd.to_numeric(df[metric_col], errors="coerce")
-    neg_count = int((numeric_metric < 0).sum())
-    if neg_count > 0:
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="negative_values",
-                status="error",
-                message=f"Found {neg_count} negative values in '{metric_col}'.",
-                column=metric_col,
-                count=neg_count,
-            )
-        )
-    else:
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="negative_values",
-                status="success",
-                message="No product has weights that are below 0.",
-                column=metric_col,
-            )
-        )
-    return findings
-
-
 def run_all_diagnostics(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
     diner_or_meal: DinerOrMeal,
     serving: bool = False,
-    monthly_product_data: pd.DataFrame | None = None,
-    monthly_category_data: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
 ) -> list[Finding]:
     """Run report diagnostics on rows whose `month_year` is already `Period[M]`."""
@@ -1767,122 +1501,5 @@ def run_all_diagnostics(
         per_product_weight_bound_findings, _ = check_per_product_weight_bounds(df, metric_total)
         findings.extend(per_product_weight_bound_findings)
     findings.extend(check_missing_weeks_within_month(df))
-
-    # Required columns
-    if check_required_columns(df, serving=serving):
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="required_columns",
-                status="success",
-                message="All required columns present.",
-            )
-        )
-    else:
-        mode: ReportMode = "serving" if serving else "procurement"
-        missing = [column for column in required_columns_for_mode(mode) if column not in df.columns]
-        findings.append(
-            make_finding(
-                stage="diagnostics",
-                category="required_columns",
-                status="error",
-                message=f"Missing required columns: {missing}",
-                metadata={"missing_columns": missing},
-            )
-        )
-
-    # Month alignment
-    if "month_year" in df.columns:
-        alignment = ensure_date_alignment(df, diner_meal_mapping)
-        if alignment["missing_in_mapping"]:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="date_alignment",
-                    status="warning",
-                    message=(
-                        f"Months in data but not in diner-meals: {alignment['missing_in_mapping']}"
-                    ),
-                    count=len(alignment["missing_in_mapping"]),
-                )
-            )
-        if alignment["missing_in_data"]:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="date_alignment",
-                    status="info",
-                    message=(
-                        f"Months in diner-meals but not in data: {alignment['missing_in_data']}"
-                    ),
-                    count=len(alignment["missing_in_data"]),
-                )
-            )
-        if not alignment["missing_in_mapping"] and not alignment["missing_in_data"]:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="date_alignment",
-                    status="success",
-                    message="All months aligned between data and diner-meals.",
-                )
-            )
-
     findings.extend(check_date_distribution(df))
-    findings.extend(check_negative_values(df, metric_total))
-
-    if monthly_product_data is not None and monthly_category_data is not None:
-        aggregation_reconciliation_findings, _ = check_aggregation_reconciliation(
-            df,
-            monthly_product_data,
-            monthly_category_data,
-            metric_total,
-        )
-        findings.extend(aggregation_reconciliation_findings)
-
-    # GBD category validity
-    if "category" in df.columns:
-        gbd_cats = set(get_GBD_categories())
-        gbd_plus = gbd_cats | {"No Matches Found"}
-        df_cats = set(df["category"].dropna().astype(str).unique())
-        non_gbd = sorted(df_cats - gbd_plus)
-        # "No Matches Found" is allowed as a placeholder category, but should not be
-        # reported as an expected GBD category if absent from final report data.
-        missing_gbd = sorted(gbd_cats - df_cats)
-
-        if non_gbd:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="gbd_categories",
-                    status="warning",
-                    message=f"Non-GBD categories found: {non_gbd}",
-                    count=len(non_gbd),
-                    sample_values=non_gbd[:10],
-                )
-            )
-        else:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="gbd_categories",
-                    status="success",
-                    message="All categories are valid GBD categories.",
-                )
-            )
-
-        if missing_gbd:
-            findings.append(
-                make_finding(
-                    stage="diagnostics",
-                    category="gbd_categories_absent",
-                    status="info",
-                    message=f"GBD categories absent from data: {missing_gbd}",
-                    count=len(missing_gbd),
-                )
-            )
-
-    if monthly_category_data is not None:
-        findings.extend(check_zero_category_month_combos(monthly_category_data, metric_total))
-
     return findings

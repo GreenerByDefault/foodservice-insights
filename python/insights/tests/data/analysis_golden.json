@@ -25,15 +25,15 @@
     },
     "quality_status": "warning",
     "quality_summary": {
-      "total_findings": 15,
+      "total_findings": 8,
       "by_status": {
-        "success": 9,
-        "info": 4,
+        "success": 4,
+        "info": 2,
         "warning": 2,
         "error": 0
       },
       "by_stage": {
-        "diagnostics": 15
+        "diagnostics": 8
       }
     },
     "narrative": {
@@ -397,29 +397,7 @@
           "Dec 2023: 4.94 kg against 9.65 kg in Nov 2023 (-49%)."
         ],
         "metadata": {
-          "warning_pct_change_threshold": 0.3,
-          "sample_rows": [
-            {
-              "month_year": "2023-11",
-              "current_total": 9.64790184,
-              "previous_month": "2023-10",
-              "previous_total": 162.934782,
-              "pct_change": -0.940786726,
-              "abs_pct_change": 0.940786726,
-              "month_label": "Nov 2023",
-              "previous_month_label": "Oct 2023"
-            },
-            {
-              "month_year": "2023-12",
-              "current_total": 4.93961688,
-              "previous_month": "2023-11",
-              "previous_total": 9.64790184,
-              "pct_change": -0.488011283,
-              "abs_pct_change": 0.488011283,
-              "month_label": "Dec 2023",
-              "previous_month_label": "Nov 2023"
-            }
-          ]
+          "warning_pct_change_threshold": 0.3
         }
       },
       {
@@ -504,31 +482,7 @@
           "zero_mad_ratio_threshold": 10.0,
           "small_category_ratio_threshold": 5.0,
           "mad_threshold": 5.0,
-          "min_category_rows": 5,
-          "sample_rows": [
-            {
-              "date": "2023-11-02 00:00:00",
-              "product": "PLATE, PAPR 6  SNGL POLY COTED",
-              "category": "Mayo",
-              "kilos_total": 7.63395336,
-              "month_year": "2023-11",
-              "emission_factor_used": 3.36,
-              "emissions_kg_co2e": 25.6500833,
-              "_row_index": 14,
-              "_metric_value": 7.63395336,
-              "category_row_count": 4,
-              "category_median": 1.26552168,
-              "category_mad": 0.5783298,
-              "ratio_to_category_median": 6.03225806,
-              "modified_z_score": 7.42743529,
-              "flagged_by_mad": false,
-              "flagged_by_zero_mad_ratio": false,
-              "flagged_by_small_category_ratio": true,
-              "flagged_by_extreme_ratio": false,
-              "is_outlier": true,
-              "flag_reason": "small-category severe ratio fallback"
-            }
-          ]
+          "min_category_rows": 5
         }
       },
       {
@@ -542,74 +496,6 @@
           "high": 500.0,
           "flagged_row_count": 0
         }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "required_columns",
-        "status": "success",
-        "message": "All required columns present."
-      },
-      {
-        "stage": "diagnostics",
-        "category": "date_alignment",
-        "status": "success",
-        "message": "All months aligned between data and diner-meals."
-      },
-      {
-        "stage": "diagnostics",
-        "category": "negative_values",
-        "status": "success",
-        "message": "No product has weights that are below 0.",
-        "column": "kilos_total"
-      },
-      {
-        "stage": "diagnostics",
-        "category": "aggregation_reconciliation",
-        "status": "success",
-        "message": "Raw total 177.522, monthly-by-product total 177.522, and monthly-by-category total 177.522 reconcile within the 0.1% tolerance.",
-        "column": "kilos_total",
-        "count": 0,
-        "metadata": {
-          "metric_col": "kilos_total",
-          "raw_total": 177.522301,
-          "monthly_product_total": 177.522301,
-          "monthly_category_total": 177.522301,
-          "max_abs_difference": 0.0,
-          "relative_difference": 0.0,
-          "rel_error_threshold": 0.001
-        }
-      },
-      {
-        "stage": "diagnostics",
-        "category": "gbd_categories",
-        "status": "success",
-        "message": "All categories are valid GBD categories."
-      },
-      {
-        "stage": "diagnostics",
-        "category": "gbd_categories_absent",
-        "status": "info",
-        "message": "GBD categories absent from data: ['Almond/Coconut Milk', 'Beef and Buffalo Meat', 'Butter', 'Cream', 'Ice Cream', 'Lamb/mutton & goat meat', 'Liquid Eggs', 'Nuts & Seeds', 'Oat Milk', 'Plant-Based Cheese', 'Plant-Based Egg', 'Plant-Based Yogurt', 'Plant-based Meats', 'Pork (pig meat)', 'Rice Milk', 'Shelled Eggs', 'Shellfish (Shrimp & lobster)', 'Soy Milk', 'Unspecified non dairy milk', 'Yogurt']",
-        "count": 20
-      },
-      {
-        "stage": "diagnostics",
-        "category": "missing_category_month_combos",
-        "status": "info",
-        "message": "Missing 12 category×month combinations.",
-        "count": 12,
-        "sample_values": [
-          "Cheese missing during Nov 2023",
-          "Cheese missing during Dec 2023",
-          "Fish and Mollusks missing during Nov 2023",
-          "Fish and Mollusks missing during Dec 2023",
-          "Legumes missing during Nov 2023",
-          "Legumes missing during Dec 2023",
-          "Mayo missing during Oct 2023",
-          "Milk (Cow's milk) missing during Oct 2023",
-          "Milk (Cow's milk) missing during Nov 2023",
-          "Poultry (Chicken and Turkey) missing during Dec 2023"
-        ]
       }
     ],
     "chart_titles": [

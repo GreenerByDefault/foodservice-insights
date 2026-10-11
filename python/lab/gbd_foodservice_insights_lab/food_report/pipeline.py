@@ -24,7 +24,6 @@ from gbd_foodservice_insights.report.food_report import (
 )
 from gbd_foodservice_insights.report.quality import (
     Finding,
-    QualityCheckError,
     findings_to_frame,
     missingness_summary_frame,
     summarize_findings,
@@ -97,8 +96,6 @@ def _collect_diagnostic_export_sheets(
     *,
     diner_or_meal: DinerOrMeal,
     metric_total: str,
-    monthly_product_data: pd.DataFrame | None = None,
-    monthly_category_data: pd.DataFrame | None = None,
     potential_name_splits: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
     """Collect export-ready diagnostic tables for the QA workbook.
@@ -140,21 +137,6 @@ def _collect_diagnostic_export_sheets(
             diagnostic_export_sheets["Denominator_QC"] = denominator_qc_df
     except Exception as exc:
         logger.warning("Could not build denominator QC export: %s", exc)
-
-    if monthly_product_data is not None and monthly_category_data is not None:
-        try:
-            _, aggregation_reconciliation_df = checks.check_aggregation_reconciliation(
-                df,
-                monthly_product_data,
-                monthly_category_data,
-                metric_total,
-            )
-            if not aggregation_reconciliation_df.empty:
-                diagnostic_export_sheets["Aggregation_Reconciliation"] = (
-                    aggregation_reconciliation_df
-                )
-        except Exception as exc:
-            logger.warning("Could not build aggregation reconciliation export: %s", exc)
 
     return diagnostic_export_sheets
 
@@ -259,11 +241,7 @@ def run_food_report(
             *name_split_findings,
             *qa_diagnostics.check_meat_quantities(report.rows),
         )
-        report = dataclasses.replace(
-            report,
-            diagnostics=(*report.diagnostics, *lab_findings),
-            findings=(*report.findings, *lab_findings),
-        )
+        report = dataclasses.replace(report, findings=(*report.findings, *lab_findings))
         quality_findings = list(report.findings)
 
         _log_stage("plot_generation", report_progress)
@@ -332,7 +310,7 @@ def run_food_report(
             artifact_paths=artifact_paths,
             run_id=run_id,
             run_status="success",
-            diagnostics=list(report.diagnostics),
+            diagnostics=list(report.findings),
             summary=summary_stats,
             quality_status=quality_status,
             missing_data_findings=quality_findings,
@@ -341,8 +319,6 @@ def run_food_report(
         )
     except Exception as exc:
         logger.exception("Food report run failed.")
-        if isinstance(exc, QualityCheckError):
-            quality_findings = exc.findings
         failure_quality_summary = summarize_findings(quality_findings) if quality_findings else None
         failure_quality_status = (
             quality_status_from_findings(quality_findings) if quality_findings else None
@@ -407,8 +383,6 @@ def _write_qa_workbook(
             report.diner_meal_mapping,
             diner_or_meal=report.diner_or_meal,
             metric_total=report.metric_total,
-            monthly_product_data=report.aggregation.get("monthly_product_data"),
-            monthly_category_data=report.aggregation.get("monthly_category_data"),
             potential_name_splits=potential_name_splits,
         ),
         diner_or_meal=report.diner_or_meal,

@@ -13,7 +13,6 @@ from gbd_foodservice_insights.report.food_report import (
     build_report_charts,
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
-from gbd_foodservice_insights.report.quality import Finding, QualityCheckError
 
 JAN = pd.Period("2024-01", freq="M")
 FEB = pd.Period("2024-02", freq="M")
@@ -70,10 +69,6 @@ def _build(rows: pd.DataFrame, **overrides: Any) -> FoodReport:
     return build_food_report(rows, **(kwargs | overrides))
 
 
-def _findings(report: FoodReport, category: str) -> list[Finding]:
-    return [finding for finding in report.findings if finding["category"] == category]
-
-
 # ----------------------------------------------------------------------
 # Tests for build_food_report
 # ----------------------------------------------------------------------
@@ -114,93 +109,49 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
     assert report.procurement_table("animal_emissions_intensity") is not None
 
 
-def test_an_error_finding_raises_with_every_finding_so_far():
-    rows = _rows().assign(category=["Legumes", None, "Legumes", "Legumes"])
-
-    with pytest.raises(QualityCheckError, match=r"\[ingestion::required_non_null\]") as excinfo:
-        _build(rows)
-
-    assert excinfo.value.findings == [
-        {
-            "stage": "ingestion",
-            "category": "required_non_null",
-            "status": "error",
-            "message": "Column 'category' has 1 missing values in a required non-null field.",
-            "column": "category",
-            "count": 1,
-            "metadata": {
-                "sample_rows": [
-                    {"date": pd.Timestamp("2024-01-20"), "product": "Lentils", "category": None}
-                ]
-            },
-        }
-    ]
-
-
-def test_missing_date_column_aborts_at_ingestion():
-    with pytest.raises(QualityCheckError, match=r"\[ingestion::required_columns\]") as excinfo:
+def test_a_missing_required_column_raises():
+    with pytest.raises(ValueError, match="Missing required columns: date"):
         _build(_rows().drop(columns=["date"]))
 
-    assert excinfo.value.findings == [
-        {
-            "stage": "ingestion",
-            "category": "required_columns",
-            "status": "error",
-            "message": "Missing required columns: ['date']",
-            "metadata": {"missing_columns": ["date"]},
-        }
-    ]
+
+def test_a_null_product_raises():
+    rows = _rows().assign(product=["Ground Beef", None, "Ground Beef", "Lentils"])
+
+    with pytest.raises(ValueError, match="product is missing in 1 of 4 rows"):
+        _build(rows)
 
 
-def test_unusable_diner_meal_mapping_aborts_immediately():
-    with pytest.raises(QualityCheckError, match=r"\[ingestion::diner_meal_mapping\]") as excinfo:
-        _build(_rows(), diner_meal_mapping={})
+def test_a_negative_metric_raises():
+    rows = _rows().assign(kilos_total=[10.0, -1.0, 12.0, 18.0])
 
-    assert excinfo.value.findings == [
-        {
-            "stage": "ingestion",
-            "category": "diner_meal_mapping",
-            "status": "error",
-            "message": (
-                "Could not load diner-meal mapping: Diner-meal mapping is empty after "
-                "normalization."
-            ),
-        }
-    ]
+    with pytest.raises(ValueError, match="kilos_total is negative in 1 of 4 rows"):
+        _build(rows)
 
 
-def test_emissions_that_drop_a_row_abort_before_any_later_stage_runs(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("mode", "metric", "diner_or_meal"),
+    [("procurement", "kilos_total", "diner"), ("serving", "servings total", "meal")],
+)
+def test_a_category_outside_the_gbd_list_raises_even_if_only_its_case_differs(
+    mode: str, metric: str, diner_or_meal: str
 ):
-    calculate_emissions = emissions.calculate_emissions
+    rows = _rows(metric).assign(category=["Beef and Buffalo Meat", "legumes", "Mlik", "Legumes"])
 
-    def drop_last_row(df: pd.DataFrame, **kwargs: Any) -> Any:
-        return calculate_emissions(df, **kwargs).iloc[:-1]
+    with pytest.raises(ValueError, match="Not GBD categories: Mlik, legumes"):
+        _build(rows, mode=mode, diner_or_meal=diner_or_meal)
 
-    monkeypatch.setattr(emissions, "calculate_emissions", drop_last_row)
 
-    with pytest.raises(QualityCheckError) as excinfo:
-        _build(_rows())
-
-    assert excinfo.value.findings == [
-        {
-            "stage": "emissions",
-            "category": "row_count_drift",
-            "status": "error",
-            "message": (
-                "Row count changed unexpectedly from 4 to 3 (delta: -1). This stage should "
-                "preserve rows, so rows may have been lost silently."
-            ),
-            "count": 1,
-            "metadata": {"before_rows": 4, "after_rows": 3, "delta": -1},
-        }
-    ]
+def test_an_empty_diner_meal_mapping_raises():
+    with pytest.raises(ValueError, match="Diner-meal mapping is empty"):
+        _build(_rows(), diner_meal_mapping={})
 
 
 @pytest.mark.parametrize(
     ("module", "stage"),
     [
+        (food_report, "ensure_month_year_column"),
         (emissions, "calculate_emissions"),
+        (aggregation, "run_aggregation_pipeline"),
         (emissions, "calculate_emissions_summary"),
         (food_report, "calculate_plant_animal_split"),
         (food_report, "calculate_plant_protein_share"),
@@ -220,20 +171,6 @@ def test_a_stage_that_raises_surfaces_its_own_exception(
 
     with pytest.raises(StageExplodedError, match=stage):
         _build(_rows())
-
-
-def test_aggregation_failure_raises_from_the_original_exception(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    def boom(*args: Any, **kwargs: Any) -> Any:
-        raise ValueError("aggregation exploded")
-
-    monkeypatch.setattr(aggregation, "run_aggregation_pipeline", boom)
-
-    with pytest.raises(QualityCheckError, match=r"\[aggregation::aggregation_failed\]") as excinfo:
-        _build(_rows())
-
-    assert str(excinfo.value.__cause__) == "aggregation exploded"
 
 
 def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity():
@@ -270,33 +207,10 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
 
 
 def test_a_data_month_missing_from_the_mapping_aborts():
-    with pytest.raises(QualityCheckError) as excinfo:
+    with pytest.raises(
+        ValueError, match=r"missing months in diner_meal_mapping: \[Period\('2024-02'"
+    ):
         _build(_rows(), diner_meal_mapping={"2024-01": 100})
-
-    assert excinfo.value.findings[-1] == {
-        "stage": "aggregation",
-        "category": "aggregation_failed",
-        "status": "error",
-        "message": (
-            "Cannot compute per-diner metrics: missing months in diner_meal_mapping: "
-            "[Period('2024-02', 'M')]"
-        ),
-    }
-
-
-def test_a_mapping_month_absent_from_the_data_is_one_info_finding():
-    report = _build(_rows(), diner_meal_mapping={"2024-01": 100, "2024-02": 120, "2024-03": 90})
-
-    assert _findings(report, "date_alignment") == [
-        {
-            "stage": "diagnostics",
-            "category": "date_alignment",
-            "status": "info",
-            "message": "Months in diner-meals but not in data: [Period('2024-03', 'M')]",
-            "count": 1,
-        }
-    ]
-    assert _findings(report, "diner_meal_alignment") == []
 
 
 def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
@@ -307,48 +221,6 @@ def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     assert report.summary_stats == aligned.summary_stats
     assert report.emissions_summary is not None and aligned.emissions_summary is not None
     pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
-
-
-def test_a_category_bought_in_some_months_only_is_an_info_finding():
-    lamb = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2024-01-10"]),
-            "product": ["Lamb Shoulder"],
-            "category": ["Lamb/mutton & goat meat"],
-            "kilos_total": [5.0],
-        }
-    )
-
-    report = _build(pd.concat([_rows(), lamb], ignore_index=True))
-
-    assert _findings(report, "missing_category_month_combos") == [
-        {
-            "stage": "diagnostics",
-            "category": "missing_category_month_combos",
-            "status": "info",
-            "message": "Missing 1 category×month combinations.",
-            "count": 1,
-            "sample_values": ["Lamb/mutton and goat meat missing during Feb 2024"],
-        }
-    ]
-
-
-def _with_typo_category(rows: pd.DataFrame) -> pd.DataFrame:
-    typo = rows.iloc[[0]].assign(product="Oat Milk", category="Mlik")
-    return pd.concat([rows, typo], ignore_index=True)
-
-
-def test_a_category_without_an_emission_factor_aborts_a_procurement_report():
-    with pytest.raises(ValueError, match="No emission factor for categories: Mlik"):
-        _build(_with_typo_category(_rows()))
-
-
-def test_a_serving_report_needs_no_emission_factors():
-    report = _build(
-        _with_typo_category(_rows("servings total")), mode="serving", diner_or_meal="meal"
-    )
-
-    assert "Mlik" in report.rows["category"].tolist()
 
 
 def test_serving_mode_computes_no_emissions():

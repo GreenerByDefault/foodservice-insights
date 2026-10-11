@@ -545,3 +545,24 @@ def test_run_aggregation_pipeline_returns_substitution_scenarios_for_procurement
         "50% cow's-milk-to-oat-milk swap",
         "100% cow's-milk-to-oat-milk swap",
     ]
+
+
+def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
+    # A product in two categories, one bought in two months, and a 0 kg line: each is a way for
+    # a grouping to drop or double-count weight.
+    df = pd.DataFrame(
+        {
+            "month_year": ["2024-01", "2024-01", "2024-02", "2024-02", "2024-02"],
+            "category": ["Legumes", "Nuts & Seeds", "Legumes", "Beef and Buffalo Meat", "Legumes"],
+            "product": ["beans", "beans", "beans", "beef mince", "lentils"],
+            "kilos_total": [4.0, 2.5, 6.0, 10.0, 0.0],
+            "emissions_kg_co2e": [3.6, 1.0, 5.4, 413.5, 0.0],
+        }
+    )
+
+    result = run_aggregation_pipeline(
+        df, diner_meal_mapping={"2024-01": 100.0, "2024-02": 120.0}, region="us"
+    )
+
+    assert result["monthly_product_data"]["kilos_total"].sum() == 22.5
+    assert result["monthly_category_data"]["kilos_total"].sum() == 22.5
