@@ -489,12 +489,12 @@ def test_check_diner_meal_reasonableness_respects_boundary_ratios():
     assert not export_df["is_flagged"].any()
 
 
-def test_check_diner_meal_reasonableness_flags_outside_boundary_ratios_and_escalates():
+def test_check_diner_meal_reasonableness_flags_outside_boundary_ratios():
     findings, export_df = check_diner_meal_reasonableness(
         normalize_diner_meal_mapping({"2025-01": 49, "2025-02": 100, "2025-03": 201})
     )
 
-    assert findings[0]["status"] == "error"
+    assert findings[0]["status"] == "warning"
     assert findings[0]["count"] == 2
     assert export_df["ratio_to_median"].tolist() == pytest.approx([0.49, 1.0, 2.01])
     assert export_df["is_flagged"].tolist() == [True, False, True]
@@ -725,7 +725,6 @@ def _top_category_at_35_percent() -> dict[str, object]:
                 "diner_meal_count_reasonableness": {
                     "low_ratio_threshold": 0.8,
                     "high_ratio_threshold": 1.2,
-                    "error_if_flagged_months": 3,
                 }
             },
             _diner_meal_counts_about_20_percent_off_the_median,

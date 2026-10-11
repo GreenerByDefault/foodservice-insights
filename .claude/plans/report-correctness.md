@@ -7,18 +7,10 @@ The product's report is `analyze()` → `build_food_report` → `build_report_ch
 the same core. An audit in September 2026 ran that path with `analyze()`'s arguments on inputs
 `apps/web` accepts and read every PDF page and workbook sheet; every fact below was reproduced
 again on 27 September against `main`, through `analyze()` with `KeywordLlmClient` on inline
-frames. The deliverable aborts on ordinary data, carries wrong numbers, and says things the data
-does not support. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's
+frames. The deliverable carries wrong numbers and hides its own failures. `tests/test_analysis.py::test_analyze_golden_deliverables` pins today's
 output: most PRs here regenerate it with `UPDATE_GOLDEN=1`, and the fixture diff is the review.
 The remaining PRs were re-checked against `main` on 11 October, after the week's moves to the
 lab; every fact below still reproduces unless it says otherwise.
-
-**Aborts.** `check_diner_meal_reasonableness` files an `error` when two or more months' counts
-fall outside 0.5× to 2× the median (`error_if_flagged_months: 2`). Two summer months at 30% of
-term time abort a twelve-month upload over numbers the user typed and the web validated. That
-reaches the user as "not your file, retry", and the retry fails identically, because
-`raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`, which
-`worker_child/failures.py` classifies `unknown`.
 
 **Wrong numbers.**
 
@@ -38,11 +30,13 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
   thing. Each PR below says why it is worth landing on its own.
 - **No data-driven check may abort a product run.** An `error` finding is for our bugs (a
   missing column, row drift, a stage raising), which correctly land as `unknown` with a
-  traceback. The headcount escalation becomes a warning in `diagnostic_thresholds.yaml`, for the
-  lab too; after that, every `error` a diagnostic can file is unreachable from customer data on
-  the product path. *Rejected: a product-only threshold profile* — two vocabularies for one
-  check. *Rejected: mapping the `ValueError` to `UnusableDataError`* — unusual headcounts are
-  not unusable data, and "contact GBD" would be the wrong advice.
+  traceback, since `raise_on_error_findings` raises `QualityCheckError`, a bare `ValueError`.
+  Every `error` a diagnostic can file is unreachable from customer data on the product path:
+  `check_diner_meal_reasonableness`, the last that was reachable, files a `warning` however many
+  months fall outside 0.5× to 2× the median, in the lab too. *Rejected: a product-only
+  threshold profile* — two vocabularies for one check. *Rejected: mapping the `ValueError` to
+  `UnusableDataError`* — unusual headcounts are not unusable data, and "contact GBD" would be
+  the wrong advice.
 - **Identical lines are data, and nothing checks for them.** The exact-duplicate-rows check is
   gone, not demoted. It was written for the lab, where several client exports are stitched
   together and can overlap; the lab's `detect_component_duplicate_risk` checks that where the
@@ -112,16 +106,7 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
   other; if we do, it is its own PR, and a serving report, which has no emissions, needs an
   order of its own.
 
-## PR 1 — unusual headcounts are a warning
-
-- `diner_meal_count_reasonableness.error_if_flagged_months` goes from the YAML and from
-  `check_diner_meal_reasonableness`'s parameters and metadata; a flagged month is a `warning`.
-- Tests: a twelve-month upload with July and August at 30% of the other months succeeds through
-  `analyze()` with a warning.
-- Worth it: reproduced 11 October, that upload aborts, over counts the user typed and the
-  contract accepted, and the last abort a real upload is likely to hit.
-
-## PR 2 — a zero-weight category's driver share is 0%, not NaN
+## PR 1 — a zero-weight category's driver share is 0%, not NaN
 
 - `_safe_percentage` (`report/aggregation.py`) returns 0.0 for a zero denominator, as
   `identify_overall_drivers` already does for the whole file. A category bought only at weight
@@ -129,10 +114,10 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
 - Tests: `build_food_report` with a category whose lines all weigh 0 gives that category's
   drivers a `percentage` of 0.0, and `build_report_charts` files no finding.
 - Worth it: found 11 October; a zero-weight line is ordinary data (see Decisions), and today
-  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 3, which deletes the
+  this stamps a "[DATA WARNING]" on every driver page. Lands before PR 2, which deletes the
   input check that is today the only sign of it.
 
-## PR 3 — a chart or split failure fails the run
+## PR 2 — a chart or split failure fails the run
 
 - `_safe_plot`, `_placeholder_figure`, the input checks and the category-driver `try` in
   `report/plots/report.py` go, and so do the split and share `try` blocks in
@@ -141,7 +126,7 @@ reaches the user as "not your file, retry", and the retry fails identically, bec
   findings. `FoodReport.findings` is then the whole list.
 - This adds aborts. Probed 11 October on one row, one month, plant milks only, a gap
   month, a 200-character product and every category over twelve months: no chart fell back
-  except PR 2's case. The split and share return `None` for every no-data case, so they raise
+  except PR 1's case. The split and share return `None` for every no-data case, so they raise
   only on our bug.
 - Tests: the `_safe_plot` and placeholder tests in `plots/test_report.py` go; a chart
   monkeypatched to raise surfaces from `build_report_charts`. The lab's failure manifest
@@ -162,7 +147,6 @@ handed and what the sheets contain, not that files exist.
 - The golden test pins numbers, so most PRs here regenerate it; review the fixture diff rather
   than accept it.
 - Threshold, status and `info` changes alter the lab's QA output; tell the data scientists.
-- PR 1 is the only abort a real upload is likely to hit. Land it first.
-- PR 3 turns any chart bug the probe missed into a failed run. That is the intent, but watch
+- PR 2 turns any chart bug the probe missed into a failed run. That is the intent, but watch
   `unknown` failures after it deploys.
 - No PR here waits on GBD.

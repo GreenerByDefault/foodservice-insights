@@ -199,6 +199,39 @@ def test_identical_lines_each_count_toward_the_report(tmp_path: Path) -> None:
     ]
 
 
+def test_a_school_year_with_quiet_summer_months_reports_with_a_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    months = [f"2025-{month:02d}" for month in range(1, 13)]
+    request = dataclasses.replace(
+        _request(tmp_path),
+        monthly_counts=MappingProxyType(
+            {month: 300 if month in ("2025-07", "2025-08") else 1000 for month in months}
+        ),
+    )
+    request.input_csv.write_text(sample_input_csv(months=months))
+    pdf_findings: list[dict[str, Any]] = []
+    build_pdf_report = pdf.build_pdf_report
+
+    def record_findings(**kwargs: Any) -> str:
+        pdf_findings.extend(kwargs["missing_data_findings"])
+        return build_pdf_report(**kwargs)
+
+    monkeypatch.setattr(pdf, "build_pdf_report", record_findings)
+
+    analyze(request, llm=KeywordLlmClient())
+
+    headcount = next(f for f in pdf_findings if f["category"] == "diner_meal_count_reasonableness")
+    assert (headcount["status"], headcount["count"], headcount["sample_values"]) == (
+        "warning",
+        2,
+        [
+            "Jul 2025: 300 versus a median of 1000 (0.30x).",
+            "Aug 2025: 300 versus a median of 1000 (0.30x).",
+        ],
+    )
+
+
 def test_every_pdf_page_is_letter_even_with_a_product_name_at_the_webs_cap(
     tmp_path: Path,
 ) -> None:
