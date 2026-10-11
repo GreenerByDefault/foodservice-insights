@@ -3,9 +3,11 @@
 import logging
 import re
 import textwrap
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -23,8 +25,14 @@ from gbd_foodservice_insights.plotting_utils import (
 )
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
-from gbd_foodservice_insights.report.quality import Finding, summarize_findings
-from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
+from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.schema import (
+    DiagnosticStatus,
+    DinerOrMeal,
+    QualityStatus,
+    quality_status_from_findings,
+    summarize_status_counts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,32 +156,37 @@ def _format_co2e(kg: float) -> str:
     return f"{tonnes:,.0f} tonnes"
 
 
-def create_executive_summary_page(
-    pdf: PdfPages,
-    summary_stats: dict[str, Any],
-    fig_size: tuple[float, float] = LETTER_PORTRAIT,
-    narrative: dict[str, Any] | None = None,
-) -> None:
-    """Render the executive summary page.
+class CategoryShare(NamedTuple):
+    category: str
+    pct_of_footprint: float
 
-    Two modes:
-    - ``narrative`` provided (web app / client-facing runs): a plain-English
-      page written for readers who will never hear the report explained —
-      a headline figure followed by short prose paragraphs.
-    - ``narrative`` omitted (legacy callers): the original ``label: value``
-      listing of ``summary_stats``, unchanged.
 
-    ``narrative`` has keys ``client``, ``period``, ``total_food_kg``, ``total_co2e_kg``,
-    ``per_dm_kg``, ``dm_label``, ``plant_pct``, ``animal_pct``, ``top_categories`` (list of
-    ``(name, pct_of_footprint)``) and ``quality_status``.
-    """
+@dataclass(frozen=True)
+class ExecutiveNarrative:
+    """The facts behind the plain-English executive summary."""
+
+    client: str
+    period: str
+    total_food_kg: float
+    total_co2e_kg: float
+    co2e_kg_per_diner_or_meal: float | None
+    diner_or_meal: DinerOrMeal
+    # Percentages of the categorised food by weight.
+    plant_and_animal_pct: tuple[float, float] | None
+    # The largest emitters, largest first.
+    top_categories: tuple[CategoryShare, ...]
+    quality_status: QualityStatus
+
+    def __post_init__(self) -> None:
+        if not 1 <= len(self.top_categories) <= 3:
+            raise ValueError(f"Expected 1 to 3 top categories, got {len(self.top_categories)}")
+
+
+def _new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
+    """A page headed "Executive Summary", whose axes coordinates are page coordinates."""
     fig, ax = _new_text_figure(fig_size)
-    # Span the whole page, so axes coordinates are page coordinates: the default subplot
-    # margins are lopsided, pushing left-aligned text off the right edge.
+    # The default subplot margins are lopsided, pushing left-aligned text off the right edge.
     ax.set_position((0, 0, 1, 1))
-    text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
-    left_x = _SUMMARY_MARGIN_IN / fig_size[0]
-
     ax.text(
         0.5,
         0.82,
@@ -185,32 +198,46 @@ def create_executive_summary_page(
         fontweight="bold",
         fontfamily="Montserrat",
     )
+    return fig, ax
 
-    if narrative is None:
-        lines = []
-        for label, value in summary_stats.items():
-            lines.append(f"{label}:  {value}")
 
-        y = 0.74
-        for line in lines:
-            ax.text(
-                left_x,
-                y,
-                line,
-                transform=ax.transAxes,
-                ha="left",
-                va="top",
-                fontsize=12,
-                fontfamily="Lato",
-            )
-            y -= 0.035
+def create_key_value_summary_page(
+    pdf: PdfPages,
+    summary_stats: dict[str, str],
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
+) -> None:
+    """Render the executive summary as a ``label: value`` listing, for a report without
+    emissions to write a narrative about."""
+    fig, ax = _new_summary_figure(fig_size)
+    y = 0.74
+    for label, value in summary_stats.items():
+        ax.text(
+            _SUMMARY_MARGIN_IN / fig_size[0],
+            y,
+            f"{label}:  {value}",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=12,
+            fontfamily="Lato",
+        )
+        y -= 0.035
+    pdf.savefig(fig)
+    plt.close(fig)
 
-        pdf.savefig(fig)
-        plt.close(fig)
-        return
 
-    # --- Plain-English mode -------------------------------------------------
-    headline = _format_co2e(narrative["total_co2e_kg"])
+def create_executive_summary_page(
+    pdf: PdfPages,
+    narrative: ExecutiveNarrative,
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
+) -> None:
+    """Render the executive summary for readers who will never hear the report explained: a
+    headline figure followed by short prose paragraphs."""
+    fig, ax = _new_summary_figure(fig_size)
+    text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
+    left_x = _SUMMARY_MARGIN_IN / fig_size[0]
+
+    headline = _format_co2e(narrative.total_co2e_kg)
     ax.text(
         0.5,
         0.76,
@@ -223,9 +250,7 @@ def create_executive_summary_page(
         fontfamily="Montserrat",
         color="#006a62",
     )
-    subtitle = (
-        f"the climate footprint of food purchased by {narrative['client']}, {narrative['period']}"
-    )
+    subtitle = f"the climate footprint of food purchased by {narrative.client}, {narrative.period}"
     y = 0.70
     for line in _wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily="Lato"):
         ax.text(
@@ -261,45 +286,50 @@ def create_executive_summary_page(
     plt.close(fig)
 
 
-def _narrative_paragraphs(narrative: dict[str, Any]) -> list[str]:
-    headline = _format_co2e(narrative["total_co2e_kg"])
-    dm = narrative.get("dm_label", "diner")
+def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
+    headline = _format_co2e(narrative.total_co2e_kg)
     paragraphs = []
 
     sentence = (
-        f"Over this period the kitchen purchased about {narrative['total_food_kg']:,.0f} kg "
+        f"Over this period the kitchen purchased about {narrative.total_food_kg:,.0f} kg "
         f"of categorised food. Producing that food released an estimated {headline} of carbon "
         "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
         "different foods."
     )
-    if narrative.get("per_dm_kg"):
-        sentence += f" That works out at roughly {narrative['per_dm_kg']:.2f} kg of CO₂e per {dm}."
+    if narrative.co2e_kg_per_diner_or_meal is not None:
+        sentence += (
+            f" That works out at roughly {narrative.co2e_kg_per_diner_or_meal:.2f} kg of CO₂e "
+            f"per {narrative.diner_or_meal}."
+        )
     paragraphs.append(sentence)
 
-    top = narrative.get("top_categories") or []
-    if top:
-        if len(top) >= 3:
-            top_text = (
-                f"{top[0][0]} ({top[0][1]:.0f}% of the food footprint), {top[1][0]} "
-                f"({top[1][1]:.0f}%) and {top[2][0]} ({top[2][1]:.0f}%)"
-            )
-        else:
-            top_text = " and ".join(f"{n} ({p:.0f}%)" for n, p in top)
-        paragraphs.append(f"The biggest contributors were {top_text}.")
+    top = narrative.top_categories
+    if len(top) == 3:
+        first, second, third = top
+        top_text = (
+            f"{first.category} ({first.pct_of_footprint:.0f}% of the food footprint), "
+            f"{second.category} ({second.pct_of_footprint:.0f}%) and {third.category} "
+            f"({third.pct_of_footprint:.0f}%)"
+        )
+    else:
+        top_text = " and ".join(f"{c.category} ({c.pct_of_footprint:.0f}%)" for c in top)
+    paragraphs.append(f"The biggest contributors were {top_text}.")
 
-    if narrative.get("animal_pct") == 0:
-        paragraphs.append("All of the categorised food was plant-based.")
-    elif narrative.get("plant_pct") is not None:
+    if narrative.plant_and_animal_pct is not None:
+        plant_pct, animal_pct = narrative.plant_and_animal_pct
         paragraphs.append(
-            f"Plant-based items made up {narrative['plant_pct']:.0f}% of the categorised food "
-            f"by weight, and animal products {narrative['animal_pct']:.0f}%. Animal products "
-            "carry far higher emissions per kilogram, so a small number of categories drive "
-            "most of the footprint. Modest, targeted menu changes in those areas deliver the "
-            "largest reductions."
+            "All of the categorised food was plant-based."
+            if animal_pct == 0
+            else (
+                f"Plant-based items made up {plant_pct:.0f}% of the categorised food by weight, "
+                f"and animal products {animal_pct:.0f}%. Animal products carry far higher "
+                "emissions per kilogram, so a small number of categories drive most of the "
+                "footprint. Modest, targeted menu changes in those areas deliver the largest "
+                "reductions."
+            )
         )
 
-    quality = str(narrative.get("quality_status", "")).lower()
-    if quality and quality not in ("pass", "success"):
+    if narrative.quality_status != "pass":
         paragraphs.append(
             "Some data-quality notes apply to this analysis; they are listed in plain "
             "language at the back of this report."
@@ -676,7 +706,7 @@ def create_decision_kpis_page(
 # Status label maps
 # ---------------------------------------------------------------------------
 
-_QUALITY_STATUS_SENTENCES = {
+_QUALITY_STATUS_SENTENCES: dict[QualityStatus, str] = {
     "pass": "All automated data checks passed — your data looks complete and consistent.",
     "warning": (
         "Your data passed most checks, but a few things are worth noting. See the details below."
@@ -687,7 +717,7 @@ _QUALITY_STATUS_SENTENCES = {
     ),
 }
 
-_STATUS_LABELS = {
+_STATUS_LABELS: dict[DiagnosticStatus, str] = {
     "success": "\u2022 Passed",
     "info": "\u2022 Note",
     "warning": "\u2022 Warning",
@@ -695,64 +725,40 @@ _STATUS_LABELS = {
 }
 
 
-def _quality_to_lines(
-    quality_status: str,
-    quality_summary: dict[str, Any] | None,
-    missing_data_findings: list[Finding] | None,
-    show_successes: bool = True,
-) -> list[str]:
-    """Turn quality-check results into plain lines for the PDF report.
-
-    ``quality_status`` is ``"pass"``, ``"warning"``, or ``"invalid"``; ``quality_summary`` has
-    a ``"by_status"`` count breakdown; each finding has ``status``/``message`` keys. Without
-    ``show_successes`` (the customer's report), only warnings and issues are listed or counted.
-    """
-    status_sentence = _QUALITY_STATUS_SENTENCES.get(
-        quality_status.lower(),
-        f"Data check result: {quality_status}.",
-    )
-    lines: list[str] = [
+def _quality_to_lines(findings: Sequence[Finding], *, show_successes: bool) -> list[str]:
+    """Turn the quality findings into plain lines for the PDF report. Without
+    ``show_successes`` (the customer's report), only warnings and issues are listed, and notes
+    are not counted."""
+    counts = summarize_status_counts(findings)
+    count_parts = [
+        f"{count} {noun if count == 1 else plural}"
+        for count, noun, plural in (
+            (counts["success"], "passed", "passed"),
+            (counts["info"] if show_successes else 0, "note", "notes"),
+            (counts["warning"], "warning", "warnings"),
+            (counts["error"], "issue", "issues"),
+        )
+        if count
+    ]
+    lines = [
         (
             "This section summarises the automated checks run on your data before this report "
             "was produced."
         ),
         "",
-        status_sentence,
+        _QUALITY_STATUS_SENTENCES[quality_status_from_findings(findings)],
     ]
+    if count_parts:
+        lines.append("  " + "  ·  ".join(count_parts))
 
-    if quality_summary:
-        by_status = quality_summary.get("by_status", {})
-        n_pass = by_status.get("success", 0)
-        n_info = by_status.get("info", 0) if show_successes else 0
-        n_warn = by_status.get("warning", 0)
-        n_err = by_status.get("error", 0)
-        parts = []
-        if n_pass:
-            parts.append(f"{n_pass} passed")
-        if n_info:
-            parts.append(f"{n_info} note{'s' if n_info != 1 else ''}")
-        if n_warn:
-            parts.append(f"{n_warn} warning{'s' if n_warn != 1 else ''}")
-        if n_err:
-            parts.append(f"{n_err} issue{'s' if n_err != 1 else ''}")
-        if parts:
-            lines.append("  " + "  ·  ".join(parts))
+    visible = [f for f in findings if show_successes or f["status"] in {"warning", "error"}]
+    if not visible:
+        return [*lines, "", "No issues were detected."]
 
-    findings = missing_data_findings or []
-    visible = [f for f in findings if show_successes or f.get("status") in {"warning", "error"}]
-
-    if visible:
-        lines.append("")
-        lines.append("Check details:")
-        for finding in visible[:20]:
-            label = _STATUS_LABELS.get(finding.get("status", "info"), "•")
-            lines.append(f"  {label}:  {finding.get('message', '')}")
-            for sample_value in finding.get("sample_values", [])[:5]:
-                lines.append(f"      - {sample_value}")
-    else:
-        lines.append("")
-        lines.append("No issues were detected.")
-
+    lines += ["", "Check details:"]
+    for finding in visible[:20]:
+        lines.append(f"  {_STATUS_LABELS[finding['status']]}:  {finding['message']}")
+        lines += [f"      - {value}" for value in finding.get("sample_values", [])[:5]]
     return lines
 
 
@@ -884,54 +890,27 @@ def _methodology_lines(diner_or_meal: DinerOrMeal) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _format_animal_emissions_intensity_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a PDF-friendly copy of the animal emissions table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    display_df = display_df.rename(
-        columns={
-            "category": "Category",
-            "kilos_total": "Kilos of Food",
-            "total_kg_co2e": "Kg CO₂e",
-            "kg_co2e_per_kg_food": "CO₂e Per Kg Food",
+def _format_animal_emissions_intensity_for_pdf(intensity: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Category": intensity["category"],
+            "Kilos of Food": intensity["kilos_total"].round().astype("Int64"),
+            "CO₂e Per Kg Food": intensity["kg_co2e_per_kg_food"].round(2),
+            "Kg CO₂e": intensity["total_kg_co2e"].round().astype("Int64"),
         }
     )
 
-    ordered_columns = [
-        column
-        for column in ["Category", "Kilos of Food", "CO₂e Per Kg Food", "Kg CO₂e"]
-        if column in display_df.columns
-    ]
-    display_df = display_df[ordered_columns]
 
-    for column in ["Kilos of Food", "Kg CO₂e"]:
-        if column in display_df.columns:
-            display_df[column] = display_df[column].round().astype("Int64")
-
-    if "CO₂e Per Kg Food" in display_df.columns:
-        display_df["CO₂e Per Kg Food"] = display_df["CO₂e Per Kg Food"].round(2)
-
-    return display_df
-
-
-def _format_category_template_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a PDF-friendly copy of the category template table."""
-    if dataframe.empty:
-        return dataframe.copy()
-
+def _format_category_template_for_pdf(template: pd.DataFrame) -> pd.DataFrame:
     def _format_label(value: object) -> object:
         if not isinstance(value, str):
             return value
         return value.replace("_", " ").title()
 
-    display_df = dataframe.copy()
+    display_df = template.copy()
     display_df.columns = [_format_label(column) for column in display_df.columns]
-
     if display_df.index.name is not None:
         display_df.index = display_df.index.rename(_format_label(display_df.index.name))
-
     return display_df
 
 
@@ -954,44 +933,18 @@ def _format_decision_kpis_for_pdf(concentration: AnimalEmissionsConcentration) -
     )
 
 
-def _format_substitution_scenarios_for_pdf(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Return a narrower substitution-scenarios table for the PDF."""
-    if dataframe.empty:
-        return dataframe.copy()
-
-    display_df = dataframe.copy()
-    keep_columns = [
-        "scenario",
-        "replaced_weight_kg",
-        "projected_emissions_kg_co2e",
-        "avoidable_kg_co2e",
-        "institution_emissions_avoided_pct",
-    ]
-    display_df = display_df[[column for column in keep_columns if column in display_df.columns]]
-    display_df = display_df.rename(
-        columns={
-            "scenario": "Scenario",
-            "replaced_weight_kg": "Weight Replaced (kg)",
-            "projected_emissions_kg_co2e": "Projected Kg CO₂e",
-            "avoidable_kg_co2e": "Avoidable Kg CO₂e",
-            "institution_emissions_avoided_pct": "Institution Emissions Averted (%)",
+def _format_substitution_scenarios_for_pdf(scenarios: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Scenario": scenarios["scenario"],
+            "Weight Replaced (kg)": scenarios["replaced_weight_kg"].round().astype("Int64"),
+            "Projected Kg CO₂e": scenarios["projected_emissions_kg_co2e"].round().astype("Int64"),
+            "Avoidable Kg CO₂e": scenarios["avoidable_kg_co2e"].round().astype("Int64"),
+            "Institution Emissions Averted (%)": scenarios[
+                "institution_emissions_avoided_pct"
+            ].round(2),
         }
     )
-
-    for column in [
-        "Weight Replaced (kg)",
-        "Projected Kg CO₂e",
-        "Avoidable Kg CO₂e",
-        "Institution Emissions Averted (%)",
-    ]:
-        if column in display_df.columns:
-            numeric = pd.to_numeric(display_df[column], errors="coerce")
-            if column == "Institution Emissions Averted (%)":
-                display_df[column] = numeric.round(2)
-            else:
-                display_df[column] = numeric.round().astype("Int64")
-
-    return display_df
 
 
 # ---------------------------------------------------------------------------
@@ -1004,13 +957,11 @@ def build_pdf_report(
     title_info: dict[str, str],
     plots: list[tuple[str, Figure]],
     tables: dict[str, pd.DataFrame],
-    summary_stats: dict[str, Any],
-    quality_status: str = "pass",
-    quality_summary: dict[str, Any] | None = None,
-    missing_data_findings: list[Finding] | None = None,
+    summary_stats: dict[str, str],
+    missing_data_findings: Sequence[Finding] = (),
     show_quality_successes: bool = True,
     diner_or_meal: DinerOrMeal = "diner",
-    narrative: dict[str, Any] | None = None,
+    narrative: ExecutiveNarrative | None = None,
 ) -> str:
     """Assemble the full PDF report and return its absolute path.
 
@@ -1030,7 +981,10 @@ def build_pdf_report(
         )
 
         # 2. Executive summary (plain-English when a narrative is supplied)
-        create_executive_summary_page(pdf, summary_stats, narrative=narrative)
+        if narrative is None:
+            create_key_value_summary_page(pdf, summary_stats)
+        else:
+            create_executive_summary_page(pdf, narrative)
 
         # 3. How to read the charts
         create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
@@ -1053,13 +1007,11 @@ def build_pdf_report(
         )
 
         # 7. Data quality status
-        quality_lines = _quality_to_lines(
-            quality_status=quality_status,
-            quality_summary=quality_summary,
-            missing_data_findings=missing_data_findings,
-            show_successes=show_quality_successes,
+        create_text_page(
+            pdf,
+            "Data Completeness & Quality",
+            _quality_to_lines(missing_data_findings, show_successes=show_quality_successes),
         )
-        create_text_page(pdf, "Data Completeness & Quality", quality_lines)
 
     logger.info("PDF report saved to %s", output_path)
     return output_path
@@ -1074,8 +1026,7 @@ def write_report_pdf(
     baseline_pilot: str,
     show_quality_successes: bool,
 ) -> None:
-    findings = list(report.findings)
-    quality_status = quality_status_from_findings(findings)
+    quality_status = quality_status_from_findings(report.findings)
 
     aggregation = report.aggregation
     tables = {"Category Template": _format_category_template_for_pdf(aggregation.template)}
@@ -1103,9 +1054,7 @@ def write_report_pdf(
         plots=charts.figures,
         tables=tables,
         summary_stats={**report.summary_stats, "Data Quality Status": quality_status.upper()},
-        quality_status=quality_status,
-        quality_summary=summarize_findings(findings),
-        missing_data_findings=findings,
+        missing_data_findings=report.findings,
         show_quality_successes=show_quality_successes,
         diner_or_meal=report.diner_or_meal,
         narrative=_executive_narrative(report, client_name, quality_status),
@@ -1113,8 +1062,8 @@ def write_report_pdf(
 
 
 def _executive_narrative(
-    report: FoodReport, client_name: str, quality_status: str
-) -> dict[str, Any] | None:
+    report: FoodReport, client_name: str, quality_status: QualityStatus
+) -> ExecutiveNarrative | None:
     """The plain-English executive summary. Only procurement runs compute emissions; the rest
     keep the key-value summary page."""
     emissions_summary = report.emissions_summary
@@ -1127,20 +1076,21 @@ def _executive_narrative(
 
     split = report.plant_animal_split
     top = co2e_by_cat.nlargest(3, "total_kg_co2e")
-    return {
-        "client": client_name,
-        "period": report.summary_stats.get("Date range", ""),
-        "total_food_kg": float(report.rows[report.metric_total].sum()),
-        "total_co2e_kg": total_co2e,
-        "per_dm_kg": (
+    return ExecutiveNarrative(
+        client=client_name,
+        period=report.summary_stats["Date range"],
+        total_food_kg=float(report.rows[report.metric_total].sum()),
+        total_co2e_kg=total_co2e,
+        co2e_kg_per_diner_or_meal=(
             total_co2e / report.diner_meals_in_data if report.diner_meals_in_data else None
         ),
-        "dm_label": report.diner_or_meal,
-        "plant_pct": split["plant_pct"] if split is not None else None,
-        "animal_pct": split["animal_pct"] if split is not None else None,
-        "top_categories": [
-            (str(row["category"]), 100 * row["total_kg_co2e"] / total_co2e)
-            for _, row in top.iterrows()
-        ],
-        "quality_status": quality_status,
-    }
+        diner_or_meal=report.diner_or_meal,
+        plant_and_animal_pct=(
+            (split["plant_pct"], split["animal_pct"]) if split is not None else None
+        ),
+        top_categories=tuple(
+            CategoryShare(str(category), 100 * kg_co2e / total_co2e)
+            for category, kg_co2e in zip(top["category"], top["total_kg_co2e"], strict=True)
+        ),
+        quality_status=quality_status,
+    )

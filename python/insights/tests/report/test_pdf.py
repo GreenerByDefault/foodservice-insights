@@ -1,6 +1,5 @@
-from collections.abc import Callable
 from contextlib import nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,8 @@ from gbd_foodservice_insights.report import pdf as pdf_module
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration, category_names
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
 from gbd_foodservice_insights.report.pdf import (
+    CategoryShare,
+    ExecutiveNarrative,
     _executive_narrative,
     _format_animal_emissions_intensity_for_pdf,
     _format_category_template_for_pdf,
@@ -24,11 +25,12 @@ from gbd_foodservice_insights.report.pdf import (
     _wrap_text_lines,
     _wrap_to_width,
     build_pdf_report,
+    create_executive_summary_page,
     create_table_page,
     create_title_page,
     write_report_pdf,
 )
-from gbd_foodservice_insights.report.quality import Finding, make_finding, summarize_findings
+from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
@@ -122,9 +124,7 @@ def test_build_pdf_report_splits_long_quality_pages(tmp_path: Path) -> None:
         },
         plots=[],
         tables={},
-        summary_stats={"Rows": 100},
-        quality_status="warning",
-        quality_summary={"by_status": {"warning": len(long_findings)}},
+        summary_stats={"Rows": "100"},
         missing_data_findings=long_findings,
     )
 
@@ -146,9 +146,7 @@ def test_build_pdf_report_does_not_render_plot_captions(tmp_path: Path) -> None:
         },
         plots=[("This chart caption should not appear in the PDF output.", fig)],
         tables={},
-        summary_stats={"Rows": 100},
-        quality_status="pass",
-        quality_summary={"by_status": {"success": 1}},
+        summary_stats={"Rows": "100"},
         missing_data_findings=[],
     )
 
@@ -170,7 +168,7 @@ def test_build_pdf_report_closes_its_own_figures_when_a_page_raises(
         plt.figure()
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(pdf_module, "create_executive_summary_page", _boom)
+    monkeypatch.setattr(pdf_module, "create_key_value_summary_page", _boom)
 
     with pytest.raises(RuntimeError, match="boom"):
         build_pdf_report(
@@ -182,9 +180,7 @@ def test_build_pdf_report_closes_its_own_figures_when_a_page_raises(
             },
             plots=[("caption", fig)],
             tables={},
-            summary_stats={"Rows": 100},
-            quality_status="pass",
-            quality_summary={"by_status": {"success": 1}},
+            summary_stats={"Rows": "100"},
             missing_data_findings=[],
         )
 
@@ -205,7 +201,7 @@ def test_build_pdf_report_leaves_the_callers_plots_open(tmp_path: Path) -> None:
         },
         plots=[("caption", fig)],
         tables={},
-        summary_stats={"Rows": 100},
+        summary_stats={"Rows": "100"},
     )
 
     assert set(plt.get_fignums()) == before | {fig.number}
@@ -224,9 +220,7 @@ def test_build_pdf_report_places_quality_section_at_end(tmp_path: Path) -> None:
         },
         plots=[],
         tables={},
-        summary_stats={"Rows": 100},
-        quality_status="warning",
-        quality_summary={"by_status": {"warning": 1}},
+        summary_stats={"Rows": "100"},
         missing_data_findings=[_finding("warning", "Example quality finding")],
     )
 
@@ -298,6 +292,25 @@ def test_title_page_replaces_underscores_and_hyphens_in_the_labels() -> None:
     assert [t.text for t in pdf.pages[0]][1:3] == ["acme corp", "Pilot Phase | On Site Serving"]
 
 
+def _summary_page(narrative: ExecutiveNarrative) -> list[_PageText]:
+    pdf = _RecordingPdf()
+    create_executive_summary_page(pdf, narrative)  # ty: ignore[invalid-argument-type]
+    return pdf.pages[0]
+
+
+def test_executive_summary_page_leads_with_the_headline_and_fits_the_page() -> None:
+    narrative = _narrative(client="The University of Somewhere Hospitality and Conference Services")
+
+    texts = _summary_page(narrative)
+
+    assert [t.text for t in texts[:2]] == ["Executive Summary", "2.5 tonnes CO₂e"]
+    assert texts[2].text.startswith("the climate footprint of food purchased by The University")
+    assert " ".join(t.text for t in texts).endswith("The methodology is explained at the back.")
+    assert all(t.y > 0 for t in texts)
+    ys = [t.y for t in texts[2:]]
+    assert ys == sorted(ys, reverse=True)
+
+
 def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pdf = _RecordingPdf()
     monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
@@ -307,7 +320,7 @@ def test_about_page_bolds_every_heading(tmp_path: Path, monkeypatch: pytest.Monk
         title_info={"client": "Acme", "baseline_pilot": "baseline", "procurement_serving": ""},
         plots=[],
         tables={},
-        summary_stats={"Rows": 100},
+        summary_stats={"Rows": "100"},
     )
 
     (about,) = [page for page in pdf.pages if page and page[0].text == "About This Report"]
@@ -331,7 +344,7 @@ def test_text_pages_normalise_by_the_counts_basis(
         title_info={"client": "Acme", "baseline_pilot": "baseline", "procurement_serving": ""},
         plots=[],
         tables={},
-        summary_stats={"Rows": 100},
+        summary_stats={"Rows": "100"},
         diner_or_meal=diner_or_meal,
     )
 
@@ -350,12 +363,11 @@ def test_text_pages_normalise_by_the_counts_basis(
 
 def test_quality_lines_explain_an_invalid_status() -> None:
     assert _quality_to_lines(
-        "invalid",
-        {"by_status": {"success": 1, "error": 1}},
         [
             _finding("success", "All required columns present."),
             _finding("error", "Found 2 negative values in 'kilos_total'."),
         ],
+        show_successes=True,
     ) == [
         "This section summarises the automated checks run on your data before this report "
         "was produced.",
@@ -372,8 +384,6 @@ def test_quality_lines_explain_an_invalid_status() -> None:
 
 def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
     assert _quality_to_lines(
-        "warning",
-        {"by_status": {"success": 1, "info": 1, "warning": 1}},
         [
             _finding("success", "All required columns present."),
             _finding("info", "GBD categories absent from data: ['Butter']"),
@@ -389,6 +399,54 @@ def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
         "",
         "Check details:",
         "  • Warning:  Found 1 month with a large swing.",
+    ]
+
+
+def test_quality_lines_for_the_customer_say_so_when_every_check_passed() -> None:
+    assert _quality_to_lines(
+        [_finding("success", "All required columns present."), _finding("info", "A note.")],
+        show_successes=False,
+    ) == [
+        "This section summarises the automated checks run on your data before this report "
+        "was produced.",
+        "",
+        "All automated data checks passed — your data looks complete and consistent.",
+        "  1 passed",
+        "",
+        "No issues were detected.",
+    ]
+
+
+def test_quality_lines_list_at_most_20_findings_with_5_samples_each() -> None:
+    findings = [
+        _finding("warning", f"Warning {i}", sample_values=[f"sample {j}" for j in range(7)])
+        for i in range(25)
+    ]
+
+    lines = _quality_to_lines(findings, show_successes=True)
+
+    assert lines[3] == "  25 warnings"
+    details = lines[lines.index("Check details:") + 1 :]
+    assert details[:6] == [
+        "  • Warning:  Warning 0",
+        *(f"      - sample {j}" for j in range(5)),
+    ]
+    assert len(details) == 20 * 6
+
+
+def test_quality_lines_count_notes_for_the_data_scientist_with_singular_and_plural() -> None:
+    def counts(*findings: Finding) -> str:
+        return _quality_to_lines(list(findings), show_successes=True)[3]
+
+    assert counts(_finding("info", "a")) == "  1 note"
+    assert counts(_finding("info", "a"), _finding("info", "b")) == "  2 notes"
+
+
+def test_quality_lines_with_no_findings_say_nothing_was_detected() -> None:
+    assert _quality_to_lines([], show_successes=True)[2:] == [
+        "All automated data checks passed — your data looks complete and consistent.",
+        "",
+        "No issues were detected.",
     ]
 
 
@@ -409,9 +467,7 @@ def test_build_pdf_report_renders_table_index_as_a_regular_column(tmp_path: Path
                 index=pd.Index(["Beef and Buffalo Meat"], name="category"),
             )
         },
-        summary_stats={"Rows": 100},
-        quality_status="pass",
-        quality_summary={"by_status": {"success": 1}},
+        summary_stats={"Rows": "100"},
         missing_data_findings=[],
     )
 
@@ -513,9 +569,7 @@ def test_build_pdf_report_handles_long_decision_kpi_text(tmp_path: Path) -> None
                 }
             )
         },
-        summary_stats={"Rows": 100},
-        quality_status="pass",
-        quality_summary={"by_status": {"success": 1}},
+        summary_stats={"Rows": "100"},
         missing_data_findings=[],
     )
 
@@ -623,46 +677,17 @@ def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> No
     )
 
 
-@pytest.mark.parametrize(
-    "format_table",
-    [
-        _format_animal_emissions_intensity_for_pdf,
-        _format_category_template_for_pdf,
-        _format_substitution_scenarios_for_pdf,
-    ],
-)
-def test_pdf_table_formatters_pass_an_empty_table_through(
-    format_table: Callable[[pd.DataFrame], pd.DataFrame],
-) -> None:
-    table = pd.DataFrame(columns=["category", "kilos_total"])
-
-    formatted = format_table(table)
-
-    pd.testing.assert_frame_equal(formatted, table)
-    assert formatted is not table
-
-
-@pytest.mark.parametrize(
-    ("format_table", "column", "expected"),
-    [
-        (_format_animal_emissions_intensity_for_pdf, "category", "Category"),
-        (_format_substitution_scenarios_for_pdf, "scenario", "Scenario"),
-    ],
-)
-def test_pdf_table_formatters_skip_absent_columns(
-    format_table: Callable[[pd.DataFrame], pd.DataFrame], column: str, expected: str
-) -> None:
-    formatted = format_table(pd.DataFrame({column: ["x"], "unlisted": [1]}))
-
-    pd.testing.assert_frame_equal(formatted, pd.DataFrame({expected: ["x"]}))
-
-
 # ----------------------------------------------------------------------
 # Tests for write_report_pdf
 # ----------------------------------------------------------------------
 
 
-def _report(**overrides: Any) -> FoodReport:
+def _report(
+    animal_product: tuple[str, str] | None = ("Ground Beef", "Beef and Buffalo Meat"),
+    **overrides: Any,
+) -> FoodReport:
+    """Two months of lentils, alongside ``animal_product`` (its name and category) or, without
+    one, chickpeas."""
     kwargs: dict[str, Any] = {
         "diner_meal_mapping": {JAN: 100, FEB: 120},
         "mode": "procurement",
@@ -670,12 +695,13 @@ def _report(**overrides: Any) -> FoodReport:
         "diner_or_meal": "diner",
         "top_n_drivers": 5,
     }
+    product, category = animal_product or ("Chickpeas", "Legumes")
     metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
     rows = pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
-            "product": ["Ground Beef", "Lentils", "Ground Beef", "Lentils"],
-            "category": ["Beef and Buffalo Meat", "Legumes", "Beef and Buffalo Meat", "Legumes"],
+            "product": [product, "Lentils", product, "Lentils"],
+            "category": [category, "Legumes", category, "Legumes"],
             metric: [10.0, 20.0, 12.0, 18.0],
         }
     )
@@ -715,7 +741,6 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
     kwargs = _capture_pdf_kwargs(monkeypatch, report, charts)
     plt.close(fig)
 
-    findings = list(report.findings)
     tables = kwargs.pop("tables")
     narrative = kwargs.pop("narrative")
     assert kwargs == {
@@ -727,9 +752,7 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
         },
         "plots": [("caption", fig)],
         "summary_stats": {**report.summary_stats, "Data Quality Status": "PASS"},
-        "quality_status": "pass",
-        "quality_summary": summarize_findings(findings),
-        "missing_data_findings": findings,
+        "missing_data_findings": report.findings,
         "show_quality_successes": False,
         "diner_or_meal": "diner",
     }
@@ -746,21 +769,7 @@ def test_write_report_pdf_passes_the_report_to_the_pdf_builder(
         tables["Decision KPIs"],
         _format_decision_kpis_for_pdf(procurement.animal_emissions_concentration),
     )
-    assert narrative == {
-        "client": "Acme",
-        "period": "Jan 2024 – Feb 2024",
-        "total_food_kg": 60.0,
-        "total_co2e_kg": pytest.approx(970.5),
-        "per_dm_kg": pytest.approx(970.5 / 220),
-        "dm_label": "diner",
-        "plant_pct": 63.3,
-        "animal_pct": 36.7,
-        "top_categories": [
-            ("Beef and Buffalo Meat", pytest.approx(100 * 909.7 / 970.5)),
-            ("Legumes", pytest.approx(100 * 60.8 / 970.5)),
-        ],
-        "quality_status": "pass",
-    }
+    assert narrative == _executive_narrative(report, "Acme", "pass")
 
 
 def test_write_report_pdf_serving_has_only_the_template_table_and_no_narrative(
@@ -823,6 +832,26 @@ def test_write_report_pdf_writes_the_pdf(tmp_path: Path) -> None:
 # ----------------------------------------------------------------------
 
 
+def test_executive_narrative_summarises_the_report() -> None:
+    narrative = _executive_narrative(_report(), "Acme", "pass")
+
+    assert narrative is not None
+    assert asdict(narrative) == {
+        "client": "Acme",
+        "period": "Jan 2024 – Feb 2024",
+        "total_food_kg": 60.0,
+        "total_co2e_kg": pytest.approx(970.5),
+        "co2e_kg_per_diner_or_meal": pytest.approx(970.5 / 220),
+        "diner_or_meal": "diner",
+        "plant_and_animal_pct": (63.3, 36.7),
+        "top_categories": (
+            ("Beef and Buffalo Meat", pytest.approx(100 * 909.7 / 970.5)),
+            ("Legumes", pytest.approx(100 * 60.8 / 970.5)),
+        ),
+        "quality_status": "pass",
+    }
+
+
 def test_executive_narrative_lists_only_the_top_three_categories() -> None:
     report = replace(
         _report(),
@@ -834,8 +863,8 @@ def test_executive_narrative_lists_only_the_top_three_categories() -> None:
     narrative = _executive_narrative(report, "Acme", "pass")
 
     assert narrative is not None
-    assert narrative["total_co2e_kg"] == 10.0
-    assert narrative["top_categories"] == [("b", 40.0), ("d", 30.0), ("e", 20.0)]
+    assert narrative.total_co2e_kg == 10.0
+    assert narrative.top_categories == (("b", 40.0), ("d", 30.0), ("e", 20.0))
 
 
 def test_executive_narrative_leaves_per_unit_and_split_blank_when_unknown() -> None:
@@ -844,11 +873,7 @@ def test_executive_narrative_leaves_per_unit_and_split_blank_when_unknown() -> N
     narrative = _executive_narrative(report, "Acme", "pass")
 
     assert narrative is not None
-    assert (narrative["per_dm_kg"], narrative["plant_pct"], narrative["animal_pct"]) == (
-        None,
-        None,
-        None,
-    )
+    assert (narrative.co2e_kg_per_diner_or_meal, narrative.plant_and_animal_pct) == (None, None)
 
 
 @pytest.mark.parametrize(
@@ -885,52 +910,75 @@ def test_format_co2e(kg: float, expected: str) -> None:
     assert _format_co2e(kg) == expected
 
 
-def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
-    rows = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2024-01-15", "2024-02-15"]),
-            "product": ["Lentils", "Chickpeas"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": [20.0, 18.0],
-        }
-    )
-    report = build_food_report(
-        rows,
-        diner_meal_mapping={JAN: 100, FEB: 120},
-        mode="procurement",
-        region="us",
-        diner_or_meal="diner",
-        top_n_drivers=5,
-    )
-    narrative = _executive_narrative(report, "Acme", "pass")
-    assert narrative is not None
-
-    paragraphs = _narrative_paragraphs(narrative)
-
-    assert "All of the categorised food was plant-based." in paragraphs
-    assert not any("nimal" in paragraph for paragraph in paragraphs)
+def _narrative(**overrides: Any) -> ExecutiveNarrative:
+    kwargs: dict[str, Any] = {
+        "client": "Acme",
+        "period": "Jan 2024 – Feb 2024",
+        "total_food_kg": 1234.5,
+        "total_co2e_kg": 2501.0,
+        "co2e_kg_per_diner_or_meal": 1.2345,
+        "diner_or_meal": "meal",
+        "plant_and_animal_pct": (63.3, 36.7),
+        "top_categories": (
+            CategoryShare("Beef and Buffalo Meat", 60.2),
+            CategoryShare("Cheese", 20.4),
+            CategoryShare("Legumes", 9.6),
+        ),
+        "quality_status": "pass",
+    }
+    return ExecutiveNarrative(**(kwargs | overrides))
 
 
-def test_narrative_paragraphs_describe_a_mixed_split() -> None:
-    narrative = _executive_narrative(_report(), "Acme", "pass")
-    assert narrative is not None
+def test_narrative_paragraphs_describe_the_footprint() -> None:
+    assert _narrative_paragraphs(_narrative()) == [
+        "Over this period the kitchen purchased about 1,234 kg of categorised food. Producing "
+        "that food released an estimated 2.5 tonnes of carbon dioxide equivalent (CO₂e), the "
+        "standard measure for comparing the climate impact of different foods. That works out "
+        "at roughly 1.23 kg of CO₂e per meal.",
+        "The biggest contributors were Beef and Buffalo Meat (60% of the food footprint), "
+        "Cheese (20%) and Legumes (10%).",
+        "Plant-based items made up 63% of the categorised food by weight, and animal products "
+        "37%. Animal products carry far higher emissions per kilogram, so a small number of "
+        "categories drive most of the footprint. Modest, targeted menu changes in those areas "
+        "deliver the largest reductions.",
+        "The pages that follow show how the footprint breaks down by month, category and "
+        "product. The methodology is explained at the back.",
+    ]
 
-    paragraphs = _narrative_paragraphs(narrative)
 
-    assert any(
-        p.startswith(
-            "Plant-based items made up 63% of the categorised food by weight, and animal "
-            "products 37%."
+def test_narrative_paragraphs_skip_what_is_unknown_and_caveat_the_quality() -> None:
+    paragraphs = _narrative_paragraphs(
+        _narrative(
+            co2e_kg_per_diner_or_meal=None,
+            plant_and_animal_pct=None,
+            top_categories=(CategoryShare("Legumes", 70.0), CategoryShare("Cheese", 30.0)),
+            quality_status="warning",
         )
-        for p in paragraphs
     )
 
+    assert paragraphs[0].endswith("the climate impact of different foods.")
+    assert paragraphs[1:] == [
+        "The biggest contributors were Legumes (70%) and Cheese (30%).",
+        "Some data-quality notes apply to this analysis; they are listed in plain language at "
+        "the back of this report.",
+        "The pages that follow show how the footprint breaks down by month, category and "
+        "product. The methodology is explained at the back.",
+    ]
 
-def test_narrative_paragraphs_spell_co2e_with_the_subscript_throughout() -> None:
-    narrative = _executive_narrative(_report(), "Acme", "pass")
+
+@pytest.mark.parametrize("count", [0, 4])
+def test_executive_narrative_rejects_a_count_of_top_categories_it_cannot_word(count: int) -> None:
+    with pytest.raises(ValueError, match=f"got {count}"):
+        _narrative(top_categories=(CategoryShare("Legumes", 10.0),) * count)
+
+
+def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
+    narrative = _executive_narrative(_report(animal_product=None), "Acme", "pass")
     assert narrative is not None
 
-    text = " ".join(_narrative_paragraphs(narrative))
-
-    assert "CO₂e" in text
-    assert "CO2e" not in text
+    assert _narrative_paragraphs(narrative)[1:] == [
+        "The biggest contributors were Legumes (100%).",
+        "All of the categorised food was plant-based.",
+        "The pages that follow show how the footprint breaks down by month, category and "
+        "product. The methodology is explained at the back.",
+    ]
