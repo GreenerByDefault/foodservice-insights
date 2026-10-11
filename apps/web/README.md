@@ -162,8 +162,9 @@ file in its own view, an unknown outcome at the action that caused it.
 **A short message gets `role="alert"`. A long one does not** — announcing a whole document on
 render is hostile; move focus to its heading instead.
 
-**A failure inside a form is shown inline and stays until it is fixed.** A toast only confirms an
-action on a page that stays put.
+**A failure inside a form is shown inline and stays until it is fixed.** A toast confirms a write
+that succeeded, on the page that stays or the one it lands on. A failure gets one only when the
+control that caused it is already gone, like signing out from the user menu.
 
 **One component renders both a client-side and a server-side rejection**: both narrow to
 `UploadRejection` in `src/lib/reports/rejection.ts`.
