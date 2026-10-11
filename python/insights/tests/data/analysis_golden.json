@@ -443,7 +443,7 @@
         "stage": "diagnostics",
         "category": "diner_meal_count_reasonableness",
         "status": "success",
-        "message": "Monthly diner or meal counts looked consistent with the food in the data across the reporting period.",
+        "message": "No month's diner count looks out of line with the food in the file.",
         "count": 0,
         "metadata": {
           "metric_col": "kilos_total",

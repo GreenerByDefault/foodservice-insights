@@ -12,6 +12,7 @@ import pandas as pd
 from gbd_foodservice_insights.categories import get_GBD_categories
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
+    DinerOrMeal,
     ReportMode,
     required_columns_for_mode,
 )
@@ -1087,11 +1088,27 @@ def _format_category_month_missing_sample(category: Any, month: Any) -> str:
     return f"{category_text} missing during {_format_month_label(month)}"
 
 
+def _describe_unmatched_count(
+    month_label: str,
+    count: float,
+    count_ratio: float,
+    median_count: float,
+    diner_or_meal: DinerOrMeal,
+) -> str:
+    noun = diner_or_meal if count == 1 else f"{diner_or_meal}s"
+    change = "rise" if count_ratio > 1 else "drop"
+    return (
+        f"{month_label}: {count:,.0f} {noun}, against {median_count:,.0f} in a typical month, "
+        f"with no matching {change} in food."
+    )
+
+
 def check_diner_meal_reasonableness(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
     metric_total: str,
     *,
+    diner_or_meal: DinerOrMeal,
     low: float | None = None,
     high: float | None = None,
     sample_limit: int = 6,
@@ -1133,8 +1150,8 @@ def check_diner_meal_reasonableness(
                     category="diner_meal_count_reasonableness",
                     status="info",
                     message=(
-                        "Could not check diner or meal counts because no month had both a "
-                        "count and food in the data."
+                        f"Could not check the {diner_or_meal} counts for typos, because no "
+                        "month has both a count and food in the file."
                     ),
                     count=0,
                     metadata=thresholds,
@@ -1165,12 +1182,12 @@ def check_diner_meal_reasonableness(
                 [count_too_high.to_numpy(), count_too_low.to_numpy()],
                 [
                     (
-                        "Count is far above usual but the food is not, so per-diner figures "
-                        "may look too low."
+                        "Count far above a typical month with no matching rise in food: "
+                        f"per-{diner_or_meal} figures look too low."
                     ),
                     (
-                        "Count is far below usual but the food is not, so per-diner figures "
-                        "may look too high."
+                        "Count far below a typical month with no matching drop in food: "
+                        f"per-{diner_or_meal} figures look too high."
                     ),
                 ],
                 default="",
@@ -1194,8 +1211,8 @@ def check_diner_meal_reasonableness(
                     category="diner_meal_count_reasonableness",
                     status="success",
                     message=(
-                        "Monthly diner or meal counts looked consistent with the food in the "
-                        "data across the reporting period."
+                        f"No month's {diner_or_meal} count looks out of line with the food in "
+                        "the file."
                     ),
                     count=0,
                     metadata=metadata,
@@ -1205,13 +1222,32 @@ def check_diner_meal_reasonableness(
         )
 
     sample_values = [
-        (
-            f"{row['month_label']}: a count of {row['diner_meal_count']:,.0f} is "
-            f"{row['count_ratio_to_median']:.2f}x the median of {median_count:,.0f}, but food "
-            f"per count is {row['food_per_count_ratio_to_median']:.2f}x the median."
+        _describe_unmatched_count(
+            row["month_label"],
+            row["diner_meal_count"],
+            row["count_ratio_to_median"],
+            median_count,
+            diner_or_meal,
         )
         for _, row in flagged_df.head(sample_limit).iterrows()
     ]
+
+    # A finished report's counts cannot be edited in the web app; the fix is a new report.
+    if flagged_count == 1:
+        message = (
+            f"The {diner_or_meal} count entered for one month is far higher or lower than in a "
+            "typical month, but the food in the file did not rise or fall with it. That can "
+            f"mean a typo, which would make that month's per-{diner_or_meal} figures wrong. If "
+            "the count is wrong, create a new report with the same file and the corrected count."
+        )
+    else:
+        message = (
+            f"The {diner_or_meal} counts entered for {flagged_count} months are far higher or "
+            "lower than in a typical month, but the food in the file did not rise or fall with "
+            "them. That can mean a typo, which would make that month's "
+            f"per-{diner_or_meal} figures wrong. If a count is wrong, create a new report with "
+            "the same file and the corrected count."
+        )
 
     findings = [
         make_finding(
@@ -1219,12 +1255,7 @@ def check_diner_meal_reasonableness(
             category="diner_meal_count_reasonableness",
             # Never an error: a flagged count is still one the user typed, and may be right.
             status="warning",
-            message=(
-                f"Found {flagged_count} month{'' if flagged_count == 1 else 's'} where the "
-                "diner or meal count was far from usual for this dataset but the food was "
-                "not, which can mean a mistyped count. Per-diner and per-meal figures for "
-                f"{'that month' if flagged_count == 1 else 'those months'} may be misleading."
-            ),
+            message=message,
             count=flagged_count,
             sample_values=sample_values,
             metadata={
@@ -1687,6 +1718,7 @@ def check_negative_values(df: pd.DataFrame, metric_col: str) -> list[Finding]:
 def run_all_diagnostics(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
+    diner_or_meal: DinerOrMeal,
     serving: bool = False,
     monthly_product_data: pd.DataFrame | None = None,
     monthly_category_data: pd.DataFrame | None = None,
@@ -1702,7 +1734,7 @@ def run_all_diagnostics(
     category_discontinuity_findings, _ = detect_category_discontinuity(df, metric_total)
     findings.extend(category_discontinuity_findings)
     denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
-        df, diner_meal_mapping, metric_total
+        df, diner_meal_mapping, metric_total, diner_or_meal=diner_or_meal
     )
     findings.extend(denominator_reasonableness_findings)
     findings.extend(check_single_product_dominance(df, metric_total))

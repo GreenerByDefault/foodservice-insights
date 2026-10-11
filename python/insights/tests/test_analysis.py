@@ -261,8 +261,8 @@ def test_a_mistyped_count_reports_with_a_headcount_warning(
         1,
         [
             (
-                "Mar 2025: a count of 10,000 is 10.00x the median of 1,000, but food per count "
-                "is 0.10x the median."
+                "Mar 2025: 10,000 diners, against 1,000 in a typical month, with no matching "
+                "rise in food."
             )
         ],
     )

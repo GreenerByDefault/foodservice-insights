@@ -271,6 +271,7 @@ def build_food_report(
     diagnostics_list = checks.run_all_diagnostics(
         df=df,
         diner_meal_mapping=dm_mapping,
+        diner_or_meal=diner_or_meal,
         serving=(mode == "serving"),
         monthly_product_data=agg_results.get("monthly_product_data"),
         monthly_category_data=agg_results.get("monthly_category_data"),

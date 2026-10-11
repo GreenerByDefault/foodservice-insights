@@ -22,6 +22,7 @@ from gbd_foodservice_insights.report.checks import (
     run_all_diagnostics,
 )
 from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
 
 # ----------------------------------------------------------------------
@@ -479,7 +480,7 @@ def test_check_zero_category_month_combos_names_missing_months_in_plain_english(
 
 
 def _check_headcounts(
-    counts: dict[str, float], food: dict[str, float]
+    counts: dict[str, float], food: dict[str, float], diner_or_meal: DinerOrMeal = "diner"
 ) -> tuple[list[Finding], pd.DataFrame]:
     df = pd.DataFrame(
         {
@@ -487,7 +488,9 @@ def _check_headcounts(
             "kilos_total": list(food.values()),
         }
     )
-    return check_diner_meal_reasonableness(df, normalize_diner_meal_mapping(counts), "kilos_total")
+    return check_diner_meal_reasonableness(
+        df, normalize_diner_meal_mapping(counts), "kilos_total", diner_or_meal=diner_or_meal
+    )
 
 
 @pytest.mark.parametrize(
@@ -543,6 +546,7 @@ def test_check_diner_meal_reasonableness_warns_outside_boundary_ratios():
     findings, export_df = _check_headcounts(
         {"2025-01": 100, "2025-02": 201, "2025-03": 49, "2025-04": 100, "2025-05": 100},
         dict.fromkeys(["2025-01", "2025-02", "2025-03", "2025-04", "2025-05"], 10.0),
+        diner_or_meal="meal",
     )
 
     assert export_df["is_flagged"].tolist() == [False, True, True, False, False]
@@ -554,26 +558,36 @@ def test_check_diner_meal_reasonableness_warns_outside_boundary_ratios():
     ) == (
         "warning",
         2,
-        (
-            "Found 2 months where the diner or meal count was far from usual for this dataset "
-            "but the food was not, which can mean a mistyped count. Per-diner and per-meal "
-            "figures for those months may be misleading."
-        ),
+        "The meal counts entered for 2 months are far higher or lower than in a typical month, "
+        "but the food in the file did not rise or fall with them. That can mean a typo, which "
+        "would make that month's per-meal figures wrong. If a count is wrong, create a new "
+        "report with the same file and the corrected count.",
         [
-            (
-                "Feb 2025: a count of 201 is 2.01x the median of 100, but food per count is "
-                "0.50x the median."
-            ),
-            (
-                "Mar 2025: a count of 49 is 0.49x the median of 100, but food per count is "
-                "2.04x the median."
-            ),
+            "Feb 2025: 201 meals, against 100 in a typical month, with no matching rise in food.",
+            "Mar 2025: 49 meals, against 100 in a typical month, with no matching drop in food.",
         ],
     )
     assert export_df.loc[export_df["is_flagged"], "flag_reason"].tolist() == [
-        "Count is far above usual but the food is not, so per-diner figures may look too low.",
-        "Count is far below usual but the food is not, so per-diner figures may look too high.",
+        "Count far above a typical month with no matching rise in food: per-meal figures look "
+        "too low.",
+        "Count far below a typical month with no matching drop in food: per-meal figures look "
+        "too high.",
     ]
+
+
+def test_check_diner_meal_reasonableness_words_a_single_month_in_the_singular():
+    findings, _ = _check_headcounts(
+        {"2025-01": 1000, "2025-02": 1, "2025-03": 1000},
+        dict.fromkeys(["2025-01", "2025-02", "2025-03"], 10.0),
+    )
+
+    assert (findings[0]["message"], findings[0]["sample_values"]) == (
+        "The diner count entered for one month is far higher or lower than in a typical month, "
+        "but the food in the file did not rise or fall with it. That can mean a typo, which "
+        "would make that month's per-diner figures wrong. If the count is wrong, create a new "
+        "report with the same file and the corrected count.",
+        ["Feb 2025: 1 diner, against 1,000 in a typical month, with no matching drop in food."],
+    )
 
 
 def test_check_diner_meal_reasonableness_judges_only_months_with_both_count_and_food():
@@ -906,7 +920,9 @@ def test_run_all_diagnostics_excludes_no_matches_from_missing_categories():
         }
     )
 
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=False)
+    findings = run_all_diagnostics(
+        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=False
+    )
     missing_categories_finding = next(
         finding for finding in findings if finding.get("category") == "gbd_categories_absent"
     )
@@ -926,7 +942,9 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
         }
     )
 
-    findings = run_all_diagnostics(df=df, diner_meal_mapping={}, serving=True)
+    findings = run_all_diagnostics(
+        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=True
+    )
 
     bounds_finding = next(
         finding for finding in findings if finding.get("category") == "per_product_weight_bounds"
@@ -968,6 +986,7 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     findings = run_all_diagnostics(
         df=df,
         diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
+        diner_or_meal="diner",
         serving=False,
         monthly_product_data=df.groupby(["month_year", "product"], as_index=False)[
             "kilos_total"
