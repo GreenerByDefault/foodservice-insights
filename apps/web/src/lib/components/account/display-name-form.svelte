@@ -1,5 +1,4 @@
 <script lang="ts">
-import { toast } from 'svelte-sonner';
 import { FIELD, MAX_DISPLAY_NAME_LENGTH } from '#lib/account/display-name.js';
 import { renameSelf } from '#lib/account/api/rename-self.js';
 import { Button } from '#lib/components/ui/button/index.js';
@@ -10,7 +9,7 @@ import { MIN_NAME_LENGTH } from '#lib/forms/validation.js';
 interface Props {
   initialName: string;
   submitLabel: string;
-  onSaved: () => Promise<void>;
+  onSaved: (name: string) => Promise<void>;
 }
 
 let { initialName, submitLabel, onSaved }: Props = $props();
@@ -34,8 +33,7 @@ async function handleSubmit(event: SubmitEvent) {
     return;
   }
 
-  await onSaved();
-  toast.success(`Name updated to ${trimmedName}`);
+  await onSaved(trimmedName);
   formState = 'idle';
 }
 </script>
