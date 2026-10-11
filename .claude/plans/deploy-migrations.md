@@ -83,6 +83,21 @@ too — a slow one aborts mid-deploy. `scripts/migrate.ts` should build its own 
 `initializeDatabase` with a generous `statementTimeoutMs` instead of importing `DATABASE` from
 `@gbd/db/env`.
 
+**Open: lock contention against live traffic.** Most DDL takes an `ACCESS EXCLUSIVE` lock, and
+Postgres queues every later query on that table behind a waiting lock request. `analysis_attempt`
+is the hot table: each worker claims every ~2s, renews leases every 30s, and every open report tab
+polls it. A migration whose `ALTER` waits behind one open transaction therefore stalls all of that
+traffic for as long as it waits — and a generous `statementTimeoutMs` lengthens the possible wait
+rather than bounding it. `migrateToLatest` also runs every pending migration in one transaction,
+so a lock taken by the first is held until the last commits. Decide how the migrate step bounds
+this (the time it may wait for a lock, what happens when that runs out, and whether long
+migrations need splitting) before it first runs against the hosted database. Raised in
+[`deploy-safety.md`](deploy-safety.md).
+
+**The secrets go in the `production` GitHub Environment**, not repo secrets, once
+`deploy-safety.md` PR 1 creates it — repo secrets reach any `pull_request` run from a same-repo
+branch.
+
 **A rollback must skip the migrate step, and skipping is the safe direction.** Kysely errors —
 `corrupted migrations: previously executed migration X is missing` (**verified**) — when the
 database has applied a migration the checkout does not contain, which is precisely a
