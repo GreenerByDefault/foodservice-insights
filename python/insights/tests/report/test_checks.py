@@ -1,10 +1,8 @@
 from collections.abc import Callable
-from pathlib import Path
 
-import gbd_foodservice_insights.report.thresholds as report_thresholds
+import gbd_foodservice_insights.report.checks as report_checks
 import pandas as pd
 import pytest
-import yaml
 from gbd_foodservice_insights.report.checks import (
     check_date_distribution,
     check_diner_meal_reasonableness,
@@ -16,6 +14,7 @@ from gbd_foodservice_insights.report.checks import (
 )
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
 
 # ----------------------------------------------------------------------
@@ -57,7 +56,6 @@ def test_detect_unusual_sales_flags_category_outliers_with_export_table(unusual_
         unusual_sales_df,
         summary_col="quantity_sold",
         product_name_col="product_name",
-        threshold=5,
     )
 
     assert findings[0]["status"] == "warning"
@@ -79,7 +77,6 @@ def test_detect_unusual_sales_returns_nothing_within_normal_range():
         df,
         summary_col="quantity_sold",
         product_name_col="product_name",
-        threshold=5,
     )
     assert [finding["status"] for finding in findings] == ["success"]
     assert outlier_rows.empty
@@ -102,7 +99,6 @@ def test_detect_unusual_sales_handles_string_metric_values_when_returning_detail
         df,
         summary_col="kilos_total",
         product_name_col="product_name",
-        threshold=5,
     )
 
     assert findings[0]["status"] == "warning"
@@ -517,26 +513,15 @@ def test_check_diner_meal_reasonableness_notes_when_typical_month_has_no_food():
 
 
 def _override_thresholds(
-    monkeypatch: pytest.MonkeyPatch,
-    config_path: Path,
-    overrides: dict[str, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch, overrides: dict[str, dict[str, float]]
 ) -> None:
-    config_path.write_text(yaml.safe_dump(overrides))
-    monkeypatch.setattr(report_thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+    def get_threshold(diagnostic_name: str, threshold_name: str) -> float:
+        override = overrides.get(diagnostic_name, {}).get(threshold_name)
+        if override is None:
+            return get_diagnostic_threshold(diagnostic_name, threshold_name)
+        return override
 
-
-def test_load_diagnostic_thresholds_refreshes_when_the_path_changes(tmp_path, monkeypatch):
-    for mad_threshold in (5, 99):
-        _override_thresholds(
-            monkeypatch,
-            tmp_path / f"thresholds_{mad_threshold}.yaml",
-            {"outlier_line_items": {"mad_threshold": mad_threshold}},
-        )
-
-        assert (
-            report_thresholds.get_diagnostic_threshold("outlier_line_items", "mad_threshold")
-            == mad_threshold
-        )
+    monkeypatch.setattr(report_checks, "get_diagnostic_threshold", get_threshold)
 
 
 def _counts_30_percent_off_the_median_with_flat_food() -> dict[str, object]:
@@ -608,10 +593,9 @@ def test_checks_read_their_thresholds_from_yaml(
     overrides: dict[str, dict[str, float]],
     observe: Callable[[], object],
     expected: object,
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    _override_thresholds(monkeypatch, tmp_path / "diagnostic_thresholds.yaml", overrides)
+    _override_thresholds(monkeypatch, overrides)
 
     assert observe() == expected
 

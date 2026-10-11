@@ -1,11 +1,10 @@
 from collections.abc import Callable
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
-from gbd_foodservice_insights.report import thresholds
+from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
+from gbd_foodservice_insights_lab.food_report import diagnostics
 from gbd_foodservice_insights_lab.food_report.diagnostics import (
     check_category_concentration,
     check_meat_quantities,
@@ -100,14 +99,8 @@ def test_identify_potentially_abnormal_weight_meat_items_flags_large_or_fraction
     assert sorted(result["product"].tolist()) == ["beef stew", "pork chop"]
 
 
-def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(
-    tmp_path, monkeypatch
-):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        yaml.safe_dump({"meat_quantity_reasonableness": {"large_quantity_threshold": 50}})
-    )
-    monkeypatch.setattr(thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+def test_identify_potentially_abnormal_weight_meat_items_reads_threshold_from_yaml(monkeypatch):
+    monkeypatch.setattr(diagnostics, "get_diagnostic_threshold", lambda *_: 50.0)
     df = pd.DataFrame({"category": ["Poultry (Chicken & Turkey)"] * 2, "quantity": [40, 2]})
 
     assert identify_potentially_abnormal_weight_meat_items(df) is True
@@ -227,19 +220,11 @@ def test_detect_near_duplicate_product_names_keeps_tabular_pairs_as_info():
     assert findings[0]["count"] == 1
 
 
-def test_near_duplicate_product_names_read_their_thresholds_from_yaml(tmp_path, monkeypatch):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                "near_duplicate_product_names": {
-                    "max_levenshtein_distance": 1,
-                    "warning_share_threshold": 0.40,
-                }
-            }
-        )
+def test_near_duplicate_product_names_read_their_thresholds_from_yaml(monkeypatch):
+    overrides = {"max_levenshtein_distance": 1.0, "warning_share_threshold": 0.40}
+    monkeypatch.setattr(
+        diagnostics, "get_diagnostic_threshold", lambda _, threshold_name: overrides[threshold_name]
     )
-    monkeypatch.setattr(thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
 
     findings, _ = detect_near_duplicate_product_names(
         _curry_split_across_two_names(), metric_total="kilos_total", pdf_extracted=True
@@ -546,7 +531,7 @@ def test_check_single_product_dominance_flags_above_thirty_percent():
         }
     )
 
-    assert check_single_product_dominance(df, "kilos_total", threshold_pct=0.30) == [
+    assert check_single_product_dominance(df, "kilos_total") == [
         {
             "stage": "diagnostics",
             "category": "single_product_dominance",
@@ -678,11 +663,14 @@ def test_checks_read_their_thresholds_from_yaml(
     overrides: dict[str, dict[str, float]],
     observe: Callable[[], object],
     expected: object,
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    config_path = tmp_path / "diagnostic_thresholds.yaml"
-    config_path.write_text(yaml.safe_dump(overrides))
-    monkeypatch.setattr(thresholds, "DIAGNOSTIC_THRESHOLDS_PATH", config_path)
+    def get_threshold(diagnostic_name: str, threshold_name: str) -> float:
+        override = overrides.get(diagnostic_name, {}).get(threshold_name)
+        if override is None:
+            return get_diagnostic_threshold(diagnostic_name, threshold_name)
+        return override
+
+    monkeypatch.setattr(diagnostics, "get_diagnostic_threshold", get_threshold)
 
     assert observe() == expected
