@@ -6,9 +6,11 @@ A review on 2026-10-08 of what can break when deploying web and worker, on top o
 already in place: image-per-commit promotion, `deploy-web`'s supersession guard, the
 worker-runs-behind invariant, the drain with its `config.ts` relations, migrations from the
 workspace rather than the image, rollbacks skipping migrations, report pages that reload once
-their poll is answered by another deploy, and `ts-db-types` migrating the base branch first so that
-Kysely refuses a migration out of order or missing, as the hosted database would. Nothing deploys
-for real yet — [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
+their poll is answered by another deploy, a web server that refuses to start without its config
+(`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)), and
+`ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
+missing, as the hosted database would. Nothing deploys for real yet —
+[`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
 Facts marked **verified** were checked on 2026-10-08.
@@ -32,6 +34,13 @@ Findings that went elsewhere rather than into a PR here:
   own) and the image `deploy.yml` pushes can sit on different `:latest` bases, but UBI minimal is
   conservative within a major, and a digest pin plus Dependabot's `docker` ecosystem is a PR per
   base bump for little caught. Revisit if a base update ever breaks a deploy.
+- *Rejected: checking config in `/health`.* The web app validates config at startup instead —
+  `assertConfigured` builds every lazy handle (database, blob store, emailer, logger, and the
+  Supabase project in `supabase` mode), so a missing variable crashes the server, as the worker's
+  config does, and the deploy's health check never passes. It checks handles rather than a list
+  of variable names, so a variable added to an existing handle needs no change there; a new
+  handle needs one line. And it leaves `/health` free for `observability-vendors.md`'s split into
+  liveness and a dependency check.
 
 ## PR 1 — `deploy.yml` deploys only merged, tested commits, with today's tooling
 
@@ -129,12 +138,6 @@ After `deploy-service` in both jobs' web path: request `/health` through Cloudfl
 mutating request. `HOST_HEADER` misconfiguration fails SvelteKit's CSRF check only on non-GET
 requests (`hosting-provider.md` § After the decision, item 3), so a GET-only smoke passes a deploy
 where every form is broken. Fail the job on either.
-
-Also widen `/health` to the variables a deployed web cannot run without — `SITE_URL`, `EMAIL_*`,
-`PUBLIC_SUPABASE_*` in `supabase` mode. Every variable is read lazily by design
-([`env.ts`](../../apps/web/src/env.ts)), so today a misnamed one passes the deploy gate and fails
-on first use. `/health` is already the deploy gate, so checking presence there keeps the lazy
-design and still stops the deploy.
 
 ## Before launch
 
