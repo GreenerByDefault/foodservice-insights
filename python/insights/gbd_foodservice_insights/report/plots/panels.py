@@ -1,7 +1,6 @@
 """Chart panels: each `draw_*` fills an `Axes` it is handed, empty state included."""
 
 from collections.abc import Mapping
-from typing import Any
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -16,6 +15,7 @@ from gbd_foodservice_insights.plotting_utils import (
     set_title_font,
     standardize_title_case,
 )
+from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
 from gbd_foodservice_insights.report.schema import metric_display_label
 from gbd_foodservice_insights.report.utils import monthly_totals
 
@@ -305,23 +305,13 @@ def _draw_share_bar_axis(
 
 def _draw_monthly_share_axis(
     ax: plt.Axes,
-    monthly: pd.DataFrame | None,
+    monthly: pd.DataFrame,
     *,
     value_column: str,
     title: str,
     y_label: str,
-    empty_message: str,
 ) -> None:
-    """Draw a monthly plant share trend, or the unavailable state without one."""
-    if (
-        monthly is None
-        or monthly.empty
-        or "month_year" not in monthly.columns
-        or value_column not in monthly.columns
-    ):
-        _draw_unavailable(ax, title, empty_message)
-        return
-
+    """Draw a monthly plant share trend."""
     monthly_sorted = monthly.sort_values("month_year").copy()
     x_pos = range(len(monthly_sorted))
     ax.plot(x_pos, monthly_sorted[value_column].values, marker="o", color=_PLANT_COLOR)
@@ -336,40 +326,35 @@ def _draw_monthly_share_axis(
 
 def draw_plant_animal_split(
     ax: plt.Axes,
-    plant_animal_split: dict[str, Any] | None,
+    plant_animal_split: PlantAnimalSplit,
     *,
     metric_label: str = "Kilos",
 ) -> None:
     """Plant-based against animal-based share of the whole period, as one stacked bar."""
-    title = "Plant vs. Animal Split"
-    if plant_animal_split is None:
-        _draw_unavailable(ax, title, "Plant/animal data was not available.")
-        return
     _draw_share_bar_axis(
         ax,
-        float(plant_animal_split["plant_pct"]),
-        title=title,
+        plant_animal_split.plant_pct,
+        title="Plant vs. Animal Split",
         primary_label="Plant-based",
         secondary_label="Animal-based",
         xlabel=f"% of total {metric_label.lower()} (plant + animal categories only)",
     )
 
 
-def draw_plant_share_by_month(ax: plt.Axes, plant_animal_split: dict[str, Any] | None) -> None:
+def draw_plant_share_by_month(ax: plt.Axes, plant_animal_split: PlantAnimalSplit) -> None:
     """Plant-based share of plant + animal by month."""
     _draw_monthly_share_axis(
         ax,
-        plant_animal_split.get("monthly") if plant_animal_split else None,
+        plant_animal_split.monthly,
         value_column="plant_pct",
         title="Plant-Based % by Month",
         y_label="% plant-based",
-        empty_message="Monthly plant/animal data was not available.",
     )
 
 
 def draw_plant_protein_share(
     ax: plt.Axes,
-    plant_protein_share: dict[str, Any] | None,
+    plant_protein_share: PlantProteinShare | None,
     *,
     metric_label: str = "Kilos",
 ) -> None:
@@ -380,7 +365,7 @@ def draw_plant_protein_share(
         return
     _draw_share_bar_axis(
         ax,
-        float(plant_protein_share["plant_protein_pct"]),
+        plant_protein_share.plant_protein_pct,
         title=title,
         primary_label="Plant protein",
         secondary_label="Other protein",
@@ -389,16 +374,19 @@ def draw_plant_protein_share(
 
 
 def draw_plant_protein_share_by_month(
-    ax: plt.Axes, plant_protein_share: dict[str, Any] | None
+    ax: plt.Axes, plant_protein_share: PlantProteinShare | None
 ) -> None:
     """Plant protein's share of all protein by month."""
+    title = "Plant Protein % by Month"
+    if plant_protein_share is None:
+        _draw_unavailable(ax, title, "Monthly plant protein data was not available.")
+        return
     _draw_monthly_share_axis(
         ax,
-        plant_protein_share.get("monthly") if plant_protein_share else None,
+        plant_protein_share.monthly,
         value_column="plant_protein_pct",
-        title="Plant Protein % by Month",
+        title=title,
         y_label="% plant protein",
-        empty_message="Monthly plant protein data was not available.",
     )
 
 

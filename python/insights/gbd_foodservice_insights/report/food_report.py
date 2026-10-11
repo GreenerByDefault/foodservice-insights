@@ -10,7 +10,6 @@ import logging
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -23,6 +22,8 @@ from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
 from gbd_foodservice_insights.report import aggregation, checks
 from gbd_foodservice_insights.report.aggregation import (
     Aggregation,
+    PlantAnimalSplit,
+    PlantProteinShare,
     calculate_plant_animal_split,
     calculate_plant_protein_share,
 )
@@ -60,8 +61,9 @@ class FoodReport:
     diner_meals_in_data: float
     aggregation: Aggregation
     emissions_summary: pd.DataFrame | None
-    plant_animal_split: dict[str, Any] | None
-    plant_protein_share: dict[str, Any] | None
+    plant_animal_split: PlantAnimalSplit
+    # `None` when the rows have no protein.
+    plant_protein_share: PlantProteinShare | None
     # In the order they were collected, which is the order the PDF lists them in.
     findings: tuple[Finding, ...]
     # Without "Data Quality Status", which the lab's own findings can still change.
@@ -247,8 +249,8 @@ def _summary_stats(
     diner_or_meal: DinerOrMeal,
     diner_meals_in_data: float,
     emissions_summary: pd.DataFrame | None,
-    plant_animal_split: dict[str, Any] | None,
-    plant_protein_share: dict[str, Any] | None,
+    plant_animal_split: PlantAnimalSplit,
+    plant_protein_share: PlantProteinShare | None,
 ) -> dict[str, str]:
     metric_label_lower = metric_display_label(metric_for_mode(mode)).lower()
     metric_value_unit = "kg" if metric_label_lower == "kilos" else metric_label_lower
@@ -275,28 +277,23 @@ def _summary_stats(
                     f"{float(total_co2e) / diner_meals_in_data:.3f} kg"
                 )
 
-    if plant_animal_split is not None:
-        summary_stats["Plant-based (% of classified food)"] = (
-            f"{plant_animal_split['plant_pct']:.1f}%"
-        )
-        summary_stats["Animal-based (% of classified food)"] = (
-            f"{plant_animal_split['animal_pct']:.1f}%"
-        )
-        summary_stats["Plant-based total"] = (
-            f"{plant_animal_split['plant_kg']:,.1f} {metric_value_unit}"
-        )
-        summary_stats["Animal-based total"] = (
-            f"{plant_animal_split['animal_kg']:,.1f} {metric_value_unit}"
-        )
+    summary_stats["Plant-based (% of classified food)"] = f"{plant_animal_split.plant_pct:.1f}%"
+    summary_stats["Animal-based (% of classified food)"] = f"{plant_animal_split.animal_pct:.1f}%"
+    summary_stats["Plant-based total"] = (
+        f"{plant_animal_split.plant_total:,.1f} {metric_value_unit}"
+    )
+    summary_stats["Animal-based total"] = (
+        f"{plant_animal_split.animal_total:,.1f} {metric_value_unit}"
+    )
     if plant_protein_share is not None:
         summary_stats["Plant protein share (% of protein categories)"] = (
-            f"{plant_protein_share['plant_protein_pct']:.1f}%"
+            f"{plant_protein_share.plant_protein_pct:.1f}%"
         )
         summary_stats["Plant protein total"] = (
-            f"{plant_protein_share['plant_protein_total']:,.1f} {metric_value_unit}"
+            f"{plant_protein_share.plant_protein_total:,.1f} {metric_value_unit}"
         )
         summary_stats["Protein-category total"] = (
-            f"{plant_protein_share['total_protein_metric']:,.1f} {metric_value_unit}"
+            f"{plant_protein_share.protein_total:,.1f} {metric_value_unit}"
         )
 
     return summary_stats

@@ -782,7 +782,8 @@ def test_executive_narrative_summarises_the_report() -> None:
         "total_co2e_kg": pytest.approx(970.5),
         "co2e_kg_per_diner_or_meal": pytest.approx(970.5 / 220),
         "diner_or_meal": "diner",
-        "plant_and_animal_pct": (63.3, 36.7),
+        "plant_pct": 63.3,
+        "animal_pct": 36.7,
         "top_categories": (
             ("Beef and Buffalo Meat", pytest.approx(100 * 909.7 / 970.5)),
             ("Legumes", pytest.approx(100 * 60.8 / 970.5)),
@@ -806,13 +807,13 @@ def test_executive_narrative_lists_only_the_top_three_categories() -> None:
     assert narrative.top_categories == (("b", 40.0), ("d", 30.0), ("e", 20.0))
 
 
-def test_executive_narrative_leaves_per_unit_and_split_blank_when_unknown() -> None:
-    report = replace(_report(), diner_meals_in_data=0.0, plant_animal_split=None)
+def test_executive_narrative_leaves_per_unit_blank_without_diners() -> None:
+    report = replace(_report(), diner_meals_in_data=0.0)
 
     narrative = _executive_narrative(report, "Acme", "pass")
 
     assert narrative is not None
-    assert (narrative.co2e_kg_per_diner_or_meal, narrative.plant_and_animal_pct) == (None, None)
+    assert narrative.co2e_kg_per_diner_or_meal is None
 
 
 @pytest.mark.parametrize(
@@ -857,7 +858,8 @@ def _narrative(**overrides: Any) -> ExecutiveNarrative:
         "total_co2e_kg": 2501.0,
         "co2e_kg_per_diner_or_meal": 1.2345,
         "diner_or_meal": "meal",
-        "plant_and_animal_pct": (63.3, 36.7),
+        "plant_pct": 63.3,
+        "animal_pct": 36.7,
         "top_categories": (
             CategoryShare("Beef and Buffalo Meat", 60.2),
             CategoryShare("Cheese", 20.4),
@@ -885,11 +887,12 @@ def test_narrative_paragraphs_describe_the_footprint() -> None:
     ]
 
 
-def test_narrative_paragraphs_skip_what_is_unknown_and_caveat_the_quality() -> None:
+def test_narrative_paragraphs_skip_the_per_unit_figure_and_caveat_the_quality() -> None:
     paragraphs = _narrative_paragraphs(
         _narrative(
             co2e_kg_per_diner_or_meal=None,
-            plant_and_animal_pct=None,
+            plant_pct=100.0,
+            animal_pct=0.0,
             top_categories=(CategoryShare("Legumes", 70.0), CategoryShare("Cheese", 30.0)),
             quality_status="warning",
         )
@@ -898,6 +901,7 @@ def test_narrative_paragraphs_skip_what_is_unknown_and_caveat_the_quality() -> N
     assert paragraphs[0].endswith("the climate impact of different foods.")
     assert paragraphs[1:] == [
         "The biggest contributors were Legumes (70%) and Cheese (30%).",
+        "All of the categorised food was plant-based.",
         "Some data-quality notes apply to this analysis; they are listed in plain language at "
         "the back of this report.",
         "The pages that follow show how the footprint breaks down by month, category and "

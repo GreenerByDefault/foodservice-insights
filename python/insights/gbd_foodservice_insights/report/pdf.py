@@ -172,7 +172,8 @@ class ExecutiveNarrative:
     co2e_kg_per_diner_or_meal: float | None
     diner_or_meal: DinerOrMeal
     # Percentages of the categorised food by weight.
-    plant_and_animal_pct: tuple[float, float] | None
+    plant_pct: float
+    animal_pct: float
     # The largest emitters, largest first.
     top_categories: tuple[CategoryShare, ...]
     quality_status: QualityStatus
@@ -315,19 +316,17 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
         top_text = " and ".join(f"{c.category} ({c.pct_of_footprint:.0f}%)" for c in top)
     paragraphs.append(f"The biggest contributors were {top_text}.")
 
-    if narrative.plant_and_animal_pct is not None:
-        plant_pct, animal_pct = narrative.plant_and_animal_pct
-        paragraphs.append(
-            "All of the categorised food was plant-based."
-            if animal_pct == 0
-            else (
-                f"Plant-based items made up {plant_pct:.0f}% of the categorised food by weight, "
-                f"and animal products {animal_pct:.0f}%. Animal products carry far higher "
-                "emissions per kilogram, so a small number of categories drive most of the "
-                "footprint. Modest, targeted menu changes in those areas deliver the largest "
-                "reductions."
-            )
+    paragraphs.append(
+        "All of the categorised food was plant-based."
+        if narrative.animal_pct == 0
+        else (
+            f"Plant-based items made up {narrative.plant_pct:.0f}% of the categorised food by "
+            f"weight, and animal products {narrative.animal_pct:.0f}%. Animal products carry far "
+            "higher emissions per kilogram, so a small number of categories drive most of the "
+            "footprint. Modest, targeted menu changes in those areas deliver the largest "
+            "reductions."
         )
+    )
 
     if narrative.quality_status != "pass":
         paragraphs.append(
@@ -951,7 +950,6 @@ def _executive_narrative(
     if not total_co2e > 0:  # NaN too
         return None
 
-    split = report.plant_animal_split
     top = co2e_by_cat.nlargest(3, "total_kg_co2e")
     return ExecutiveNarrative(
         client=client_name,
@@ -962,9 +960,8 @@ def _executive_narrative(
             total_co2e / report.diner_meals_in_data if report.diner_meals_in_data else None
         ),
         diner_or_meal=report.diner_or_meal,
-        plant_and_animal_pct=(
-            (split["plant_pct"], split["animal_pct"]) if split is not None else None
-        ),
+        plant_pct=report.plant_animal_split.plant_pct,
+        animal_pct=report.plant_animal_split.animal_pct,
         top_categories=tuple(
             CategoryShare(str(category), 100 * kg_co2e / total_co2e)
             for category, kg_co2e in zip(top["category"], top["total_kg_co2e"], strict=True)

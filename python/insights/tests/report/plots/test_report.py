@@ -4,13 +4,20 @@ from typing import Any
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.aggregation import Aggregation
+from gbd_foodservice_insights.report.aggregation import Aggregation, PlantAnimalSplit
 from gbd_foodservice_insights.report.plots import report
 from matplotlib.figure import Figure
 
 JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
 DINER_MEALS = {JAN: 100, FEB: 100}
 EMISSIONS_SUMMARY = pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]})
+PLANT_SPLIT = PlantAnimalSplit(
+    plant_pct=100.0,
+    animal_pct=0.0,
+    plant_total=88.0,
+    animal_total=0.0,
+    monthly=pd.DataFrame({"month_year": [JAN, FEB], "plant_pct": [100.0, 100.0]}),
+)
 
 
 def _figure_title(fig: Figure) -> str:
@@ -67,7 +74,8 @@ def test_generate_all_report_plots_orders_every_page(
         diner_meal_mapping=DINER_MEALS,
         emissions_summary=EMISSIONS_SUMMARY,
         metric_total="kilos_total",
-        plant_animal_split={"plant_pct": 52.0},
+        plant_animal_split=PLANT_SPLIT,
+        plant_protein_share=None,
     )
 
     assert [caption for caption, _ in plots_output] == [""] * len(plots_output)
@@ -105,16 +113,18 @@ def test_generate_all_report_plots_leaves_out_pages_without_their_data(
     plots_output = report.generate_all_report_plots(
         aggregation=_aggregation(months),
         diner_meal_mapping=DINER_MEALS,
+        plant_animal_split=PLANT_SPLIT,
+        plant_protein_share=None,
         metric_total="kilos_total",
         **options,
     )
 
-    # No plant inputs either, so every case also leaves out the plant page.
     assert [_figure_title(fig) for _, fig in plots_output] == [
         "Number of Diners by Month",
         "Kilos Over Time",
         "Kilos by Category Across All Months",
         *expected_carbon_pages,
+        "Plant and Protein Breakdown",
         "Top Products Driving Overall (Kilos)",
         "Top Products by Category",
     ]

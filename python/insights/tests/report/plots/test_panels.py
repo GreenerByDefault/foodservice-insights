@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
 from gbd_foodservice_insights.report.plots import panels
 from matplotlib.patches import Rectangle
 
@@ -196,10 +197,26 @@ def test_draw_emissions_per_diner_divides_by_diner_meals(
     assert ax.get_ylim()[0] == 0
 
 
+# Feb first, so a test sees the drawers sort by month.
+PLANT_SPLIT = PlantAnimalSplit(
+    plant_pct=52.0,
+    animal_pct=48.0,
+    plant_total=52.0,
+    animal_total=48.0,
+    monthly=pd.DataFrame({"month_year": [FEB, JAN], "plant_pct": [55.3, 48.0]}),
+)
+PLANT_PROTEIN_SHARE = PlantProteinShare(
+    plant_protein_pct=55.0,
+    plant_protein_total=55.0,
+    protein_total=100.0,
+    monthly=pd.DataFrame({"month_year": [FEB, JAN], "plant_protein_pct": [55.3, 48.0]}),
+)
+
+
 def test_draw_plant_animal_split_labels_both_shares():
     _fig, ax = plt.subplots()
 
-    panels.draw_plant_animal_split(ax, {"plant_pct": 52.0}, metric_label="Servings")
+    panels.draw_plant_animal_split(ax, PLANT_SPLIT, metric_label="Servings")
 
     assert ax.get_title() == "Plant vs. Animal Split"
     assert ax.get_xlabel() == "% of total servings (plant + animal categories only)"
@@ -212,7 +229,7 @@ def test_draw_plant_animal_split_labels_both_shares():
 def test_draw_plant_protein_share_labels_both_shares():
     _fig, ax = plt.subplots()
 
-    panels.draw_plant_protein_share(ax, {"plant_protein_pct": 55.0})
+    panels.draw_plant_protein_share(ax, PLANT_PROTEIN_SHARE)
 
     assert ax.get_title() == "Plant Protein Share"
     assert ax.get_xlabel() == "% of total kilos in protein categories"
@@ -225,34 +242,16 @@ def test_draw_plant_protein_share_labels_both_shares():
 @pytest.mark.parametrize(
     ("draw", "share", "expected"),
     [
-        (
-            panels.draw_plant_share_by_month,
-            {
-                "monthly": pd.DataFrame(
-                    {
-                        "month_year": [pd.Period("2023-02"), pd.Period("2023-01")],
-                        "plant_pct": [55.3, 48.0],
-                    }
-                )
-            },
-            "Plant-Based % by Month",
-        ),
+        (panels.draw_plant_share_by_month, PLANT_SPLIT, "Plant-Based % by Month"),
         (
             panels.draw_plant_protein_share_by_month,
-            {
-                "monthly": pd.DataFrame(
-                    {
-                        "month_year": [pd.Period("2023-02"), pd.Period("2023-01")],
-                        "plant_protein_pct": [55.3, 48.0],
-                    }
-                )
-            },
+            PLANT_PROTEIN_SHARE,
             "Plant Protein % by Month",
         ),
     ],
 )
 def test_monthly_plant_drawers_plot_the_share_in_month_order(
-    draw: Callable[[plt.Axes, dict[str, Any]], None], share: dict[str, Any], expected: str
+    draw: Callable[[plt.Axes, Any], None], share: Any, expected: str
 ):
     _fig, ax = plt.subplots()
 
@@ -263,51 +262,24 @@ def test_monthly_plant_drawers_plot_the_share_in_month_order(
 
 
 @pytest.mark.parametrize(
-    ("draw", "share", "expected"),
+    ("draw", "expected"),
     [
         (
-            panels.draw_plant_animal_split,
-            None,
-            ["Plant vs. Animal Split", "Plant/animal data was not available."],
-        ),
-        (
             panels.draw_plant_protein_share,
-            None,
             ["Plant Protein Share", "Plant protein data was not available."],
         ),
         (
-            panels.draw_plant_share_by_month,
-            None,
-            ["Plant-Based % by Month", "Monthly plant/animal data was not available."],
-        ),
-        (
-            panels.draw_plant_share_by_month,
-            {"plant_pct": 52.0},
-            ["Plant-Based % by Month", "Monthly plant/animal data was not available."],
-        ),
-        (
             panels.draw_plant_protein_share_by_month,
-            {
-                "plant_protein_pct": 55.0,
-                "monthly": pd.DataFrame({"month_year": [pd.Period("2023-01")]}),
-            },
-            ["Plant Protein % by Month", "Monthly plant protein data was not available."],
-        ),
-        (
-            panels.draw_plant_protein_share_by_month,
-            {"plant_protein_pct": 55.0, "monthly": pd.DataFrame()},
             ["Plant Protein % by Month", "Monthly plant protein data was not available."],
         ),
     ],
 )
-def test_plant_drawers_keep_their_title_when_data_is_unavailable(
-    draw: Callable[[plt.Axes, dict[str, Any] | None], None],
-    share: dict[str, Any] | None,
-    expected: list[str],
+def test_plant_protein_drawers_keep_their_title_without_protein(
+    draw: Callable[[plt.Axes, PlantProteinShare | None], None], expected: list[str]
 ):
     _fig, ax = plt.subplots()
 
-    draw(ax, share)
+    draw(ax, None)
 
     assert not ax.axison
     assert _texts(ax) == expected

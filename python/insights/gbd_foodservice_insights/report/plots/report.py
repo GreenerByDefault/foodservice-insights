@@ -1,12 +1,15 @@
 """The report's full set of figures, in page order."""
 
 from collections.abc import Mapping
-from typing import Any
 
 import pandas as pd
 from matplotlib.figure import Figure
 
-from gbd_foodservice_insights.report.aggregation import Aggregation
+from gbd_foodservice_insights.report.aggregation import (
+    Aggregation,
+    PlantAnimalSplit,
+    PlantProteinShare,
+)
 from gbd_foodservice_insights.report.plots.figures import (
     plot_category_drivers_pages,
     plot_category_totals,
@@ -46,11 +49,11 @@ def _remove_duplicate_xlabels(fig: Figure) -> Figure:
 def generate_all_report_plots(
     aggregation: Aggregation,
     diner_meal_mapping: Mapping[pd.Period, float],
+    plant_animal_split: PlantAnimalSplit,
+    plant_protein_share: PlantProteinShare | None,
     emissions_summary: pd.DataFrame | None = None,
     metric_total: str = "kilos_total",
     serving: bool = False,
-    plant_animal_split: dict[str, Any] | None = None,
-    plant_protein_share: dict[str, Any] | None = None,
     diner_or_meal: str = "diner",
 ) -> list[tuple[str, Figure]]:
     """Generate all report plots and return ``(caption, figure)`` tuples."""
@@ -81,14 +84,13 @@ def generate_all_report_plots(
                 )
             )
 
-    if plant_animal_split is not None or plant_protein_share is not None:
-        figures.append(
-            plot_plant_breakdown_overview(
-                plant_animal_split,
-                plant_protein_share,
-                metric_label=metric_label,
-            )
+    figures.append(
+        plot_plant_breakdown_overview(
+            plant_animal_split,
+            plant_protein_share,
+            metric_label=metric_label,
         )
+    )
 
     figures.append(plot_overall_drivers(aggregation.overall_drivers, metric_total))
     figures.extend(

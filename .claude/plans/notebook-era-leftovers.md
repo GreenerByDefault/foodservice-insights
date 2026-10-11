@@ -45,7 +45,6 @@ every step and no lab code reads it. And one correctness nit: `_executive_narrat
 three largest categories by CO₂e with `nlargest`, so a category bought only at zero weight can
 appear as "and Pork (0%)" when fewer than three categories carry emissions.
 
-`plant-share-types.md` owns `calculate_plant_animal_split` and `calculate_plant_protein_share`;
 `procurement-only-report.md` owns the metric parameters and `summary_stats`; `caches-to-supabase.md`
 PR 5 adds `new_categorizations` to `CategorizedProducts`. Nothing below touches those, and the
 PRs here land in either order relative to them — whichever lands second rebases.

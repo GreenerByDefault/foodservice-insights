@@ -9,7 +9,6 @@ import pandas as pd
 from gbd_foodservice_insights.categories import (
     animal_product_categories,
     category_names,
-    plant_based_categories,
     plant_protein_categories,
     protein_categories,
 )
@@ -45,6 +44,30 @@ class AnimalEmissionsConcentration:
     @property
     def share_pct(self) -> float:
         return self.top_products_kg_co2e / self.total_animal_kg_co2e * 100
+
+
+@dataclass(frozen=True)
+class PlantAnimalSplit:
+    # Percentages are rounded to one decimal, the precision every consumer shows.
+    plant_pct: float
+    animal_pct: float
+    # In the report's metric: kilos or servings.
+    plant_total: float
+    animal_total: float
+    # `month_year`, `plant`, `animal`, and `plant_pct`, which is NaN in a month totalling 0.
+    monthly: pd.DataFrame
+
+
+@dataclass(frozen=True)
+class PlantProteinShare:
+    # Rounded to one decimal, the precision every consumer shows.
+    plant_protein_pct: float
+    # In the report's metric: kilos or servings.
+    plant_protein_total: float
+    protein_total: float
+    # `month_year`, `plant_protein_metric`, `total_protein_metric`, and `plant_protein_pct`,
+    # which is NaN in a month whose protein totals 0.
+    monthly: pd.DataFrame
 
 
 @dataclass(frozen=True)
@@ -186,150 +209,97 @@ def identify_overall_drivers(
 def calculate_plant_animal_split(
     df: pd.DataFrame,
     metric_col: str = "kilos_total",
-) -> dict[str, Any] | None:
-    """Calculate the plant vs. animal split of a food metric.
-
-    Uses GBD category metadata to classify each row as plant-based or
-    animal-based, then sums the metric column for each group.
-
-    Returns a dict with::
-
-        {
-            "plant_pct": float,   # % of total that is plant-based
-            "animal_pct": float,  # % of total that is animal-based
-            "plant_kg": float,
-            "animal_kg": float,
-            "monthly": pd.DataFrame,   # columns: month_year, plant, animal
-        }
-
-    Returns ``None`` if the required columns are missing or the total is zero.
-    """
-    if metric_col not in df.columns or "category" not in df.columns:
-        return None
-
-    df_copy = df.copy()
-    df_copy["_group"] = "other"
-    df_copy.loc[df_copy["category"].isin(animal_product_categories()), "_group"] = "animal"
-    df_copy.loc[df_copy["category"].isin(plant_based_categories()), "_group"] = "plant"
-
-    # Filter to only plant + animal rows for the split calculation
-    classified = df_copy[df_copy["_group"].isin(["plant", "animal"])].copy()
-    if classified.empty:
-        return None
-
-    totals = classified.groupby("_group")[metric_col].sum(min_count=1)
-    plant_kg = float(totals.get("plant", 0.0) or 0.0)
-    animal_kg = float(totals.get("animal", 0.0) or 0.0)
-    grand_total = plant_kg + animal_kg
-
+) -> PlantAnimalSplit:
+    """Every GBD category is either plant or animal, so this splits every row."""
+    classified = df.assign(
+        _group=df["category"]
+        .isin(animal_product_categories())
+        .map({True: "animal", False: "plant"})
+    )
+    totals = classified.groupby("_group")[metric_col].sum()
+    plant_total = float(totals.get("plant", 0.0))
+    animal_total = float(totals.get("animal", 0.0))
+    grand_total = plant_total + animal_total
     if grand_total == 0:
-        return None
+        raise ValueError(f"Every row has a {metric_col} of 0, so there is nothing to split.")
 
-    plant_pct = round(plant_kg / grand_total * 100, 1)
-    animal_pct = round(animal_kg / grand_total * 100, 1)
+    monthly = (
+        classified.groupby(["month_year", "_group"], dropna=False)[metric_col]
+        .sum(min_count=1)
+        .unstack(fill_value=0)
+        .reset_index()
+    )
+    # Ensure both columns exist even if one group has no data
+    for col in ("plant", "animal"):
+        if col not in monthly.columns:
+            monthly[col] = 0.0
+    monthly["total"] = monthly["plant"] + monthly["animal"]
+    monthly["plant_pct"] = (
+        monthly["plant"] / monthly["total"].replace({0: float("nan")}) * 100
+    ).round(1)
 
-    # Monthly breakdown (for trend chart)
-    monthly: pd.DataFrame | None = None
-    if "month_year" in df_copy.columns:
-        monthly_raw = (
-            classified.groupby(["month_year", "_group"], dropna=False)[metric_col]
-            .sum(min_count=1)
-            .unstack(fill_value=0)
-            .reset_index()
-        )
-        # Ensure both columns exist even if one group has no data
-        for col in ("plant", "animal"):
-            if col not in monthly_raw.columns:
-                monthly_raw[col] = 0.0
-        monthly_raw["total"] = monthly_raw["plant"] + monthly_raw["animal"]
-        monthly_raw["plant_pct"] = (
-            monthly_raw["plant"] / monthly_raw["total"].replace({0: float("nan")}) * 100
-        ).round(1)
-        monthly = monthly_raw[["month_year", "plant", "animal", "plant_pct"]]
-
-    return {
-        "plant_pct": plant_pct,
-        "animal_pct": animal_pct,
-        "plant_kg": plant_kg,
-        "animal_kg": animal_kg,
-        "monthly": monthly,
-    }
+    return PlantAnimalSplit(
+        plant_pct=round(plant_total / grand_total * 100, 1),
+        animal_pct=round(animal_total / grand_total * 100, 1),
+        plant_total=plant_total,
+        animal_total=animal_total,
+        monthly=monthly[["month_year", "plant", "animal", "plant_pct"]],
+    )
 
 
 def calculate_plant_protein_share(
     df: pd.DataFrame,
     metric_col: str = "kilos_total",
-) -> dict[str, Any] | None:
+) -> PlantProteinShare | None:
     """Calculate the plant-protein share within protein categories only.
 
     This exists to give the report a cleaner protein-transition headline than
     the broader plant-vs-animal split by restricting both the numerator and
     denominator to categories that meaningfully contribute protein.
 
-    Returns a dict with::
-
-        {
-            "plant_protein_pct": float,
-            "plant_protein_total": float,
-            "total_protein_metric": float,
-            "monthly": pd.DataFrame,  # month_year, plant_protein_metric, total_protein_metric,
-            # plant_protein_pct
-        }
-
-    Returns ``None`` if required columns are missing or there is no protein
-    volume in the selected metric.
+    Returns ``None`` if there is no protein volume in the selected metric.
     """
-    if metric_col not in df.columns or "category" not in df.columns:
-        return None
-
     classified = df[df["category"].isin(protein_categories())].copy()
-    if classified.empty:
-        return None
-
     classified["_is_plant_protein"] = classified["category"].isin(plant_protein_categories())
-    total_protein_metric = float(classified[metric_col].sum(min_count=1) or 0.0)
-    if total_protein_metric == 0:
+    protein_total = float(classified[metric_col].sum())
+    if protein_total == 0:
         return None
 
     plant_protein_total = float(classified.loc[classified["_is_plant_protein"], metric_col].sum())
-    plant_protein_pct = round(plant_protein_total / total_protein_metric * 100, 1)
 
-    monthly: pd.DataFrame | None = None
-    if "month_year" in classified.columns:
-        monthly = (
-            classified.groupby(["month_year", "_is_plant_protein"], dropna=False)[metric_col]
-            .sum(min_count=1)
-            .unstack(fill_value=0)
-            .reset_index()
-            .rename(
-                columns={
-                    False: "animal_or_other_protein_metric",
-                    True: "plant_protein_metric",
-                }
-            )
+    monthly = (
+        classified.groupby(["month_year", "_is_plant_protein"], dropna=False)[metric_col]
+        .sum(min_count=1)
+        .unstack(fill_value=0)
+        .reset_index()
+        .rename(
+            columns={
+                False: "animal_or_other_protein_metric",
+                True: "plant_protein_metric",
+            }
         )
-        if "plant_protein_metric" not in monthly.columns:
-            monthly["plant_protein_metric"] = 0.0
-        if "animal_or_other_protein_metric" not in monthly.columns:
-            monthly["animal_or_other_protein_metric"] = 0.0
-        monthly["total_protein_metric"] = (
-            monthly["plant_protein_metric"] + monthly["animal_or_other_protein_metric"]
-        )
-        monthly["plant_protein_pct"] = (
-            monthly["plant_protein_metric"]
-            / monthly["total_protein_metric"].replace({0: float("nan")})
-            * 100
-        ).round(1)
-        monthly = monthly[
+    )
+    if "plant_protein_metric" not in monthly.columns:
+        monthly["plant_protein_metric"] = 0.0
+    if "animal_or_other_protein_metric" not in monthly.columns:
+        monthly["animal_or_other_protein_metric"] = 0.0
+    monthly["total_protein_metric"] = (
+        monthly["plant_protein_metric"] + monthly["animal_or_other_protein_metric"]
+    )
+    monthly["plant_protein_pct"] = (
+        monthly["plant_protein_metric"]
+        / monthly["total_protein_metric"].replace({0: float("nan")})
+        * 100
+    ).round(1)
+
+    return PlantProteinShare(
+        plant_protein_pct=round(plant_protein_total / protein_total * 100, 1),
+        plant_protein_total=plant_protein_total,
+        protein_total=protein_total,
+        monthly=monthly[
             ["month_year", "plant_protein_metric", "total_protein_metric", "plant_protein_pct"]
-        ]
-
-    return {
-        "plant_protein_pct": plant_protein_pct,
-        "plant_protein_total": plant_protein_total,
-        "total_protein_metric": total_protein_metric,
-        "monthly": monthly,
-    }
+        ],
+    )
 
 
 def summarize_animal_emissions_intensity(
