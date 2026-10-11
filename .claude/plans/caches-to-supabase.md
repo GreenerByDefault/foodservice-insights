@@ -1,4 +1,4 @@
-# Categorization caches
+# Caches to Supabase
 
 ## Context
 
@@ -32,10 +32,21 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   blocker. Local images hide it because the file is on the developer's disk.
 - **No client-side database access and no RLS** (`ARCHITECTURE.md` § Supabase). Both local
   stacks also run with `[api] enabled = false`, so PostgREST is not a path for the lab either.
-- **One connection string serves everything, as `postgres`.** `metrics-dashboards.md` § Access
-  settles how a migration creates a restricted role idempotently under the test stack's
-  concurrent migrations, and that Supavisor expects `<role>.<project-ref>` as the username for a
-  custom role. This plan reuses that pattern rather than inventing a second one.
+- **One connection string serves everything, as `postgres`**, and it is the string the Supabase
+  dashboard hands out: full access. Nothing in this repo has yet connected to the hosted project
+  as anything else. `metrics-dashboards.md` plans a `metrics_reader` role for Grafana Cloud to
+  read production, but it has not landed, so its role has never been exercised on hosted
+  Supabase; its race-safe `CREATE ROLE` block exists for the local test stack's concurrent
+  migrations, which is a separate problem from production access.
+- **Hosted Supabase facts, from its docs on 2026-10-11.** A custom role is an ordinary
+  `CREATE ROLE … LOGIN PASSWORD` that the SQL editor, running as `postgres`, may issue —
+  Supabase's own roles post creates one that way; `postgres` is not a superuser but has the
+  admin privileges that covers. The shared pooler accepts a custom role as
+  `[ROLE].[PROJECT-REF]`, session mode on port 5432, IPv4 on every plan; supplying the bare role
+  name gives `Tenant or user not found`. The direct connection is IPv6 unless the IPv4 add-on
+  is bought. Dashboard roles: Owner, Administrator and Developer can all run arbitrary SQL;
+  Read-Only, which runs SELECT only as `supabase_read_only_user`, exists on Team and Enterprise
+  plans only. So on a Free or Pro plan, anyone who can open Studio can drop a table.
 - **No prod migration pipeline yet** (`deploy-migrations.md` is unlanded), so prod steps below are
   hand-run against the session-mode pooler URL.
 - **GBD's product CSV** (copy dated 2026-09-27): 23,505 of 38,692 rows are `No Matches Found`,
@@ -129,15 +140,31 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   except `is_verified` and `verified_at` — column-level `INSERT` privileges are a Postgres
   feature, so an insert naming `is_verified` is a permission error and every row the lab writes
   lands unverified. No `UPDATE`, no `DELETE`, nothing on any other table, `CONNECTION LIMIT` and
-  a `statement_timeout` as role settings. Created idempotently by the migration the way
-  `metrics-dashboards.md` § Access creates `metrics_reader`; its password is set once by hand in
-  the hosted SQL editor and never appears in a migration. The grants are tested from
-  `packages/db` with `SET ROLE lab_cache` inside `withRollback`, which needs no password.
+  a `statement_timeout` as role settings. It is plain Postgres, which hosted Supabase is: the
+  migration creates it as `postgres`, and a human sets its password once in the hosted SQL
+  editor (`ALTER ROLE lab_cache PASSWORD '…'`), so no secret is ever in a migration. The grants
+  are tested from `packages/db` with `SET ROLE lab_cache` inside `withRollback`, which needs no
+  password. The data scientists' credential is composed, not copied: the session-pooler string
+  from the dashboard's Connect dialog with `postgres.<ref>` replaced by `lab_cache.<ref>` and the
+  password by the role's. They never see the `postgres` password, and the string they hold can
+  read three tables and insert unverified rows into them, nothing else.
   *Rejected: giving the data scientists `DB_CONNECTION_STRING`.* It is `postgres`, and an agent
   with it can drop a table. *Rejected: read-only.* Then every new row the lab produces would
   reach the database by hand, which is the sync problem this plan exists to end.
   *Rejected: letting the role verify rows in the lab-only tables.* One rule for three tables is
   easier to hold; revisit if ticking entree rows in Studio turns out to be the bottleneck.
+  *Considered: Supabase's temporary access*, where a dashboard member assumes a Postgres role
+  with their own token as the password, with an expiry and IP allowlist. It needs the person to
+  be a dashboard member, which on Free and Pro means Developer and so the SQL editor anyway, and
+  its plan availability is undocumented. Worth revisiting if GBD is ever on Team.
+- **The hosted path is unproven, so prove it before PR 6 is written**, in ten minutes against
+  the real project with a throwaway role: `CREATE ROLE smoke LOGIN PASSWORD …` in the SQL
+  editor, the grants PR 6 specifies on an existing table, then from a laptop `psql` to the
+  session pooler as `smoke.<ref>`; confirm a `SELECT` works, an `UPDATE` and a `SELECT` from
+  `report` fail with `42501`, and whether `GRANT USAGE ON SCHEMA public` is accepted from
+  `postgres` or unnecessary because `PUBLIC` still holds it; then `DROP ROLE`. If the pooler
+  refuses a custom role after all, the fallbacks are the direct connection (IPv6, or the IPv4
+  add-on) with the same role; the `postgres` string is the last resort, not the first.
 - **The lab reads `LAB_DB_CONNECTION_STRING`, never `DB_CONNECTION_STRING`.** For the data
   scientists it is `lab_cache.<project-ref>` on the session-mode pooler; a developer points it at
   the local dev stack as `postgres`. Unset, every lab command works exactly as today, on whatever
@@ -157,9 +184,11 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   happens in Studio, one place, by whoever holds dashboard access. A data scientist's own
   verification of a `_for_human_review.csv` is then a better suggestion, not a trusted row —
   which is what `REQUIREMENTS.md` asks for, and what their AI-assisted workflow needs.
-  **Open:** who verifies. Supabase dashboard access to the project is effectively full database
-  access, so the reviewer is a human decision, not a role this plan can create. Studio edits one
-  cell at a time; bulk verification is an `UPDATE` in the SQL editor.
+  **Open:** who verifies. On Free and Pro plans every dashboard role that can see data can also
+  run any SQL, so dashboard access is full database access, and the reviewer is a human
+  decision, not a role this plan can create. The data scientists' scripted path is `lab_cache`
+  either way; whether one of them is also the reviewer is the call. Studio edits one cell at a
+  time; bulk verification is an `UPDATE` in the SQL editor.
 - **The analysis library stays free of any database client.** `psycopg` is a lab dependency
   only; the lab is where the sync code lives.
 
@@ -343,13 +372,16 @@ cache and the worker image needs no file.
   `cleaned_unit text NOT NULL`, `extracted_weight double precision` (null for an extraction the
   reviewer is still deciding), `example_products text`, the review columns. Both reuse
   `verifiedAtTrigger` and `updatedAtTrigger`, both get the Studio comment.
-- The `lab_cache` role: the race-safe `DO $$ … EXCEPTION WHEN duplicate_object OR
-  unique_violation` block from `metrics-dashboards.md`, `LOGIN NOINHERIT CONNECTION LIMIT 3`,
-  `statement_timeout` as a role setting; outside the block, `GRANT USAGE ON SCHEMA public`,
-  `GRANT SELECT` on the three tables, and column-level `GRANT INSERT (…)` naming every column
-  but `is_verified` and `verified_at`. If `metrics-dashboards.md` has landed first, reuse its
-  helper. The password is set by hand on the hosted project (§ Go-live); the local stacks need
-  none because developers connect as `postgres`.
+- The `lab_cache` role: `CREATE ROLE lab_cache LOGIN NOINHERIT CONNECTION LIMIT 3` with
+  `statement_timeout` as a role setting, wrapped in a `DO $$ … EXCEPTION WHEN duplicate_object
+  OR unique_violation` block — not for production, where the migration runs once, but because
+  roles are cluster-wide and the local test stack runs this migration concurrently from several
+  packages (`metrics-dashboards.md` § Context describes the race; reuse its helper if that plan
+  lands first). Outside the block, per database: `GRANT SELECT` on the three tables and
+  column-level `GRANT INSERT (…)` naming every column but `is_verified` and `verified_at`, plus
+  `GRANT USAGE ON SCHEMA public` only if the hosted smoke test showed it is needed and accepted.
+  The password is set by hand on the hosted project (§ Go-live); the local stacks need none
+  because developers connect as `postgres`.
 - `pnpm import:cache -- entrees <csv>` and `-- units <csv>` extend PR 2's script; the entree
   import normalizes labels the way `_normalize_entree_classification` does (the two spellings in
   the file are already canonical).
@@ -429,7 +461,11 @@ can 7 and 8.
 ## Go-live
 
 Hand-run until `deploy-migrations.md` lands, against the session-mode pooler URL with
-`DB_CONNECTION_STRING` set for the one command.
+`DB_CONNECTION_STRING` set for the one command. If that plan lands first, merging PR 1 is the
+first incremental migration to reach the hosted database through the pipeline — the rehearsal
+that plan asks for — and step 1 below is just the merge. Either way, the hand-run migrate and
+the import both connect through `buildPoolConfig`, so the pooler's acceptance of its startup
+`options` (`deploy-migrations.md` § Connectivity) is checked once, by whichever runs first.
 
 1. Merge PR 1; `pnpm --filter @gbd/db migrate` against prod (additive; the running worker is
    unaffected).
@@ -441,8 +477,11 @@ Hand-run until `deploy-migrations.md` lands, against the session-mode pooler URL
    writes `{"rows": []}` and the run costs LLM calls, nothing more; if 5 lands before the import,
    the import's `DO UPDATE … WHERE NOT is_verified` later promotes any harvested rows the CSV
    knows.
-4. Merge PR 6; migrate prod; set `lab_cache`'s password in the SQL editor; import the entree and
-   unit CSVs; hand each data scientist the pooler URL with `lab_cache.<project-ref>`.
+4. Merge PR 6; migrate prod; `ALTER ROLE lab_cache PASSWORD '…'` in the SQL editor; import the
+   entree and unit CSVs; compose each data scientist's string from the Connect dialog's
+   session-pooler string with `lab_cache.<project-ref>` and that password, and check it from a
+   laptop with `psql` before handing it over. If the project ever turns on network
+   restrictions, their addresses need allowing.
 5. Merge PRs 7–8; the data scientists set `LAB_DB_CONNECTION_STRING`, pull once, and delete
    their hand-copied files. `.worktreeinclude` keeps copying the pulled files into new
    worktrees, now a convenience rather than the only way to get them.
