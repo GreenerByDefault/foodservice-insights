@@ -223,6 +223,44 @@ def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
 
 
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
+    report = _build(_rows(), diner_or_meal=diner_or_meal)
+
+    per_head = f"kilos per {diner_or_meal}"
+    assert list(report.aggregation["monthly_product_data"].columns) == [
+        "month_year",
+        "product",
+        "kilos_total",
+        per_head,
+    ]
+    assert list(report.aggregation["monthly_category_data"].columns) == [
+        "month_year",
+        "category",
+        "kilos_total",
+        per_head,
+        "emissions_kg_co2e",
+    ]
+    assert report.emissions_summary is not None
+    assert list(report.emissions_summary.columns) == [
+        "category",
+        "total_kg_co2e",
+        "pct_of_total",
+        f"kg_co2e_per_{diner_or_meal}",
+    ]
+
+
+def test_serving_per_head_columns_drop_the_servings_total_suffix():
+    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
+
+    assert list(report.aggregation["monthly_product_data"].columns) == [
+        "month_year",
+        "product",
+        "servings total",
+        "servings per meal",
+    ]
+
+
 def test_serving_mode_computes_no_emissions():
     report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
 

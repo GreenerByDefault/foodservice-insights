@@ -55,17 +55,12 @@ def metric_display_label(metric: str) -> str:
     return metric.replace("_total", "").replace(" total", "").replace("_", " ").strip().title()
 
 
-def per_diner_metric_name(total_metric: str) -> str:
-    """Return per-diner metric column name from a total metric name.
-
-    Handles both underscore-style ('kilos_total' → 'kilos per diner-meal')
-    and space-style ('kilos total' → 'kilos per diner-meal') conventions.
-    """
+def per_diner_metric_name(total_metric: str, diner_or_meal: DinerOrMeal) -> str:
+    """'kilos_total' or 'kilos total' → 'kilos per diner' (or 'kilos per meal')."""
     if total_metric.endswith("_total"):
-        base = total_metric[: -len("_total")]
-        return f"{base} per diner-meal"
+        return f"{total_metric.removesuffix('_total')} per {diner_or_meal}"
     if " total" in total_metric:
-        return total_metric.replace(" total", "") + " per diner-meal"
+        return f"{total_metric.replace(' total', '')} per {diner_or_meal}"
     raise ValueError(f"Expected metric name to end with '_total' or ' total', got '{total_metric}'")
 
 

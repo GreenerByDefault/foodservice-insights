@@ -113,6 +113,7 @@ def test_aggregate_data_refuses_per_diner_metrics_without_a_positive_count_per_m
             diner_meal_mapping=mapping,
             per_diner_meal=True,
             metrics=["kilos_total"],
+            diner_or_meal="diner",
         )
 
 

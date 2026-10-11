@@ -16,6 +16,7 @@ from gbd_foodservice_insights.plotting_utils import (
     set_title_font,
 )
 from gbd_foodservice_insights.report.plots.panels import prepare_monthly_trend_data
+from gbd_foodservice_insights.report.schema import metric_display_label
 
 from gbd_foodservice_insights_lab.plotting_extras import (
     PERIOD_COLORS,
@@ -1174,11 +1175,16 @@ def plot_metric_over_time(
     if metric not in {"kilos_total", "servings total"}:
         raise ValueError("metric must be 'kilos_total' or 'servings total'")
 
-    plot_data, metric_label = prepare_monthly_trend_data(
+    plot_data = prepare_monthly_trend_data(
         monthly_category_data,
         metric,
         per_diner_meal=per_diner_meal,
         diner_meal_mapping=diner_meal_mapping,
+    )
+    metric_label = (
+        f"{metric_display_label(metric)} per diner-meal"
+        if per_diner_meal
+        else f"Total {metric_display_label(metric)}"
     )
 
     plot_title = custom_title or f"{metric_label.title()} Over Time"
