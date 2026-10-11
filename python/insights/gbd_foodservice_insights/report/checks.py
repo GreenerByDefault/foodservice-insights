@@ -1092,7 +1092,6 @@ def check_diner_meal_reasonableness(
     *,
     low: float | None = None,
     high: float | None = None,
-    error_if_flagged_months: int | None = None,
     sample_limit: int = 6,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag unusual denominator months before intensity KPIs become misleading.
@@ -1127,16 +1126,6 @@ def check_diner_meal_reasonableness(
         "diner_meal_count_reasonableness",
         "high_ratio_threshold",
         high,
-    )
-    escalation_threshold = max(
-        1,
-        int(
-            resolve_diagnostic_threshold(
-                "diner_meal_count_reasonableness",
-                "error_if_flagged_months",
-                float(error_if_flagged_months) if error_if_flagged_months is not None else None,
-            )
-        ),
     )
 
     monthly_counts = pd.Series(diner_meal_mapping, dtype="object").rename("diner_meal_count")
@@ -1253,7 +1242,6 @@ def check_diner_meal_reasonableness(
                         "median_count": median_count,
                         "low_ratio_threshold": low_threshold,
                         "high_ratio_threshold": high_threshold,
-                        "error_if_flagged_months": escalation_threshold,
                         "missing_month_count": missing_count,
                     },
                 )
@@ -1261,7 +1249,6 @@ def check_diner_meal_reasonableness(
             qc_df,
         )
 
-    status = "error" if flagged_count >= escalation_threshold else "warning"
     sample_values = [
         (
             f"{row['month_label']}: {row['diner_meal_count']:.0f} versus a median of "
@@ -1274,7 +1261,11 @@ def check_diner_meal_reasonableness(
         make_finding(
             stage="diagnostics",
             category="diner_meal_count_reasonableness",
-            status=status,
+            # Never an error, however many months are flagged: these are counts the user typed,
+            # and a school whose summer counts and purchases both fall to 30% has correct
+            # per-diner figures. The count alone cannot tell that school from a typo:
+            # https://github.com/GreenerByDefault/foodservice-insights/issues/493
+            status="warning",
             message=(
                 f"Found {flagged_count} month{'' if flagged_count == 1 else 's'} where the "
                 "diner or meal count was much lower or higher than usual for this dataset. "
@@ -1287,7 +1278,6 @@ def check_diner_meal_reasonableness(
                 "median_count": median_count,
                 "low_ratio_threshold": low_threshold,
                 "high_ratio_threshold": high_threshold,
-                "error_if_flagged_months": escalation_threshold,
                 "missing_month_count": missing_count,
                 "sample_rows": flagged_df.head(sample_limit)
                 .replace({pd.NaT: None, pd.NA: None, np.nan: None})
