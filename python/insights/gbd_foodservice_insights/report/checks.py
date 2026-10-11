@@ -14,6 +14,7 @@ from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
     ReportMode,
+    metric_display_label,
     required_columns_for_mode,
 )
 from gbd_foodservice_insights.report.thresholds import (
@@ -23,6 +24,24 @@ from gbd_foodservice_insights.report.thresholds import (
 from gbd_foodservice_insights.report.utils import compute_month_alignment
 
 logger = logging.getLogger(__name__)
+
+
+def _unit_label(metric_col: str) -> str:
+    return "servings" if metric_col == "servings total" else "kg"
+
+
+def _format_quantity(value: float, unit: str) -> str:
+    # Below 0.01, two significant figures: a fixed two decimals would print the tiny weights
+    # the bounds check exists to catch as 0.
+    if 0 < abs(value) < 0.01:
+        number = np.format_float_positional(value, precision=2, fractional=False)
+    else:
+        number = f"{value:,.2f}".rstrip("0").rstrip(".")
+    return f"{number} {unit.removesuffix('s') if number == '1' else unit}"
+
+
+def _format_line_count(count: int) -> str:
+    return f"{count:,} line{'' if count == 1 else 's'}"
 
 
 def _dates_appear_month_bucketed(date_series: pd.Series) -> bool:
@@ -241,9 +260,6 @@ def detect_unusual_sales(
         ascending=[False, False],
     )
 
-    abnormal_products = sorted(
-        flagged_rows[product_name_col].dropna().astype(str).unique().tolist()
-    )
     outlier_row_count = len(flagged_rows)
     outlier_row_share = outlier_row_count / len(df)
     has_severe_ratio_flag = bool(
@@ -256,19 +272,17 @@ def detect_unusual_sales(
         else "info"
     )
 
+    unit = _unit_label(summary_col)
     top_row = flagged_rows.iloc[0]
-    sample_values = ["Affected products: " + ", ".join(abnormal_products)]
-    sample_values.extend(
-        [
-            (
-                f"{row[product_name_col]} in {row[category_col]} has "
-                f"{row['_metric_value']:.2f}, which is "
-                f"{row['ratio_to_category_median']:.1f}x the category median of "
-                f"{row['category_median']:.2f}."
-            )
-            for _, row in flagged_rows.head(sample_limit).iterrows()
-        ]
-    )
+    sample_values = [
+        (
+            f"{row[product_name_col]} in {row[category_col]}: "
+            f"{_format_quantity(row['_metric_value'], unit)}, "
+            f"{row['ratio_to_category_median']:.1f}x the category's typical line of "
+            f"{_format_quantity(row['category_median'], unit)}."
+        )
+        for _, row in flagged_rows.head(sample_limit).iterrows()
+    ]
 
     findings = [
         make_finding(
@@ -276,13 +290,14 @@ def detect_unusual_sales(
             category="outlier_line_items",
             status=status,
             message=(
-                f"Found {outlier_row_count} unusually large line items "
-                f"({outlier_row_share:.2%} of all rows). The largest was "
+                f"Found {_format_line_count(outlier_row_count)} far larger than is typical for "
+                f"{'its' if outlier_row_count == 1 else 'their'} category "
+                f"({outlier_row_share:.2%} of all lines). The largest is "
                 f"{top_row[product_name_col]} in {top_row[category_col]} at "
-                f"{top_row['_metric_value']:.2f}, which is "
-                f"{top_row['ratio_to_category_median']:.1f}x that category's median of "
-                f"{top_row['category_median']:.2f}. These rows may need review for unit, "
-                "entry, or OCR mistakes."
+                f"{_format_quantity(top_row['_metric_value'], unit)}, "
+                f"{top_row['ratio_to_category_median']:.1f}x that category's typical line of "
+                f"{_format_quantity(top_row['category_median'], unit)}. Lines like these are "
+                "often a unit or entry mistake."
             ),
             column=summary_col,
             count=outlier_row_count,
@@ -344,11 +359,12 @@ def check_per_product_weight_bounds(
     """
     threshold_group = "per_product_weight_bounds"
     subject_label = "per-product weights"
-    unit_label = "kg"
+    line_subject = "weight"
     if metric_col == "servings total":
         threshold_group = "per_product_serving_bounds"
         subject_label = "per-product serving counts"
-        unit_label = "servings"
+        line_subject = "serving count"
+    unit_label = _unit_label(metric_col)
 
     low = resolve_diagnostic_threshold(threshold_group, "low", low)
     high = resolve_diagnostic_threshold(threshold_group, "high", high)
@@ -393,9 +409,10 @@ def check_per_product_weight_bounds(
     working["_row_index"] = working.index
     working["_metric_value"] = pd.to_numeric(working[metric_col], errors="coerce")
 
+    # A zero line is ordinary data, not a unit mistake: the report counts it like any other.
     flagged_rows = working.loc[
-        working["_metric_value"].notna()
-        & ((working["_metric_value"] < low) | (working["_metric_value"] > high))
+        ((working["_metric_value"] > 0) & (working["_metric_value"] < low))
+        | (working["_metric_value"] > high)
     ].copy()
 
     if flagged_rows.empty:
@@ -423,24 +440,27 @@ def check_per_product_weight_bounds(
         low,
         high,
     )
-    flagged_rows = flagged_rows.sort_values(
-        ["breached_bound", "_metric_value", "_row_index"],
-        ascending=[True, True, True],
+    # Most extreme first on each side, so the examples are the lines least likely to be real.
+    flagged_rows = (
+        flagged_rows.assign(
+            _extremity=np.where(
+                flagged_rows["breached_bound"] == "lower",
+                flagged_rows["_metric_value"],
+                -flagged_rows["_metric_value"],
+            )
+        )
+        .sort_values(["breached_bound", "_extremity", "_row_index"])
+        .drop(columns="_extremity")
     )
 
-    sample_values = [
-        (
-            f"Row {int(row['_row_index'])}: {row['product']} has "
-            f"{row['_metric_value']:.4f} {unit_label}, which is "
-            f"{'below' if row['breached_bound'] == 'lower' else 'above'} the "
-            f"{row['breached_threshold']:.3f} {unit_label} "
-            f"{'lower' if row['breached_bound'] == 'lower' else 'upper'} bound."
+    def describe(row: pd.Series) -> str:
+        side = "below the lower" if row["breached_bound"] == "lower" else "above the upper"
+        return (
+            f"{row['product']} at {_format_quantity(row['_metric_value'], unit_label)}, "
+            f"{side} bound of {_format_quantity(row['breached_threshold'], unit_label)}."
         )
-        for _, row in flagged_rows.head(sample_limit).iterrows()
-    ]
-    top_row = flagged_rows.iloc[0]
-    direction = "below" if top_row["breached_bound"] == "lower" else "above"
-    bound_label = "lower" if top_row["breached_bound"] == "lower" else "upper"
+
+    sample_values = [describe(row) for _, row in flagged_rows.head(sample_limit).iterrows()]
 
     findings = [
         make_finding(
@@ -448,11 +468,10 @@ def check_per_product_weight_bounds(
             category="per_product_weight_bounds",
             status="warning",
             message=(
-                f"Found {len(flagged_rows)} rows with {subject_label} outside the hard review "
-                f"bounds of {low:.3f} to {high:.3f} {unit_label}. The first flagged row was "
-                f"{top_row['product']} at row {int(top_row['_row_index'])} with "
-                f"{top_row['_metric_value']:.4f} {unit_label}, which is {direction} the "
-                f"{bound_label} bound."
+                f"Found {_format_line_count(len(flagged_rows))} with a {line_subject} above "
+                f"zero but under {_format_quantity(low, unit_label)}, or over "
+                f"{_format_quantity(high, unit_label)}, which usually means a unit mistake. "
+                f"For example, {describe(flagged_rows.iloc[0])}"
             ),
             column=metric_col,
             count=len(flagged_rows),
@@ -594,21 +613,18 @@ def detect_month_over_month_total_volatility(
             )
         ]
 
-    def _format_pct_change(value: float) -> str:
-        if np.isinf(value):
-            return "an undefined percentage jump from 0"
-        sign = "+" if value > 0 else ""
-        return f"{sign}{value:.0%}"
-
-    sample_values = [
-        (
-            f"{_format_month_label(row[month_col])}: {row['current_total']:.2f} versus "
-            f"{row['previous_total']:.2f} in "
-            f"{_format_month_label(row['previous_month'])} "
-            f"({_format_pct_change(row['pct_change'])})."
+    def describe(row: pd.Series) -> str:
+        # A rise from zero has no percentage; the two totals already say what happened.
+        change = "" if np.isinf(row["pct_change"]) else f" ({row['pct_change']:+.0%})"
+        return (
+            f"{_format_month_label(row[month_col])}: "
+            f"{_format_quantity(row['current_total'], unit)} against "
+            f"{_format_quantity(row['previous_total'], unit)} in "
+            f"{_format_month_label(row['previous_month'])}{change}."
         )
-        for _, row in volatile_months.head(sample_limit).iterrows()
-    ]
+
+    unit = _unit_label(metric_total)
+    sample_values = [describe(row) for _, row in volatile_months.head(sample_limit).iterrows()]
 
     findings = [
         make_finding(
@@ -616,9 +632,9 @@ def detect_month_over_month_total_volatility(
             category="month_over_month_total_volatility",
             status="warning",
             message=(
-                f"Found {len(volatile_months)} months where the total "
-                f"{metric_total.replace('_', ' ')} changed by more than "
-                f"{change_threshold:.0%} versus the previous month. Large swings like this "
+                f"Found {len(volatile_months)} month{'' if len(volatile_months) == 1 else 's'} "
+                f"where the total {metric_display_label(metric_total).lower()} changed by more "
+                f"than {change_threshold:.0%} from the month before. Large swings like this "
                 "often mean a month is missing, partial, or counted twice."
             ),
             column=metric_total,
@@ -1661,9 +1677,8 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     if median_count == 0:
         return findings
 
-    for label, idx in [("First", 0), ("Last", -1)]:
+    for label, idx in [("first", 0), ("last", -1)]:
         count = month_counts.iloc[idx]
-        month_name = month_counts.index[idx]
         ratio = count / median_count
         if ratio < partial_month_ratio_threshold:
             findings.append(
@@ -1672,8 +1687,9 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
                     category="date_distribution",
                     status="warning",
                     message=(
-                        f"{label} month ({month_name}) has {count} rows, only {ratio:.0%} "
-                        f"of median ({median_count:.0f})."
+                        f"{_format_month_label(month_counts.index[idx])}, the {label} month in "
+                        f"the file, has {_format_line_count(int(count))} against about "
+                        f"{median_count:,.0f} in a typical month, so it may be a partial month."
                     ),
                     count=int(count),
                     metadata={"partial_month_ratio_threshold": partial_month_ratio_threshold},

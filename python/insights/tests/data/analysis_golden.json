@@ -389,12 +389,12 @@
         "stage": "diagnostics",
         "category": "month_over_month_total_volatility",
         "status": "warning",
-        "message": "Found 2 months where the total kilos total changed by more than 30% versus the previous month. Large swings like this often mean a month is missing, partial, or counted twice.",
+        "message": "Found 2 months where the total kilos changed by more than 30% from the month before. Large swings like this often mean a month is missing, partial, or counted twice.",
         "column": "kilos_total",
         "count": 2,
         "sample_values": [
-          "Nov 2023: 9.65 versus 162.93 in Oct 2023 (-94%).",
-          "Dec 2023: 4.94 versus 9.65 in Nov 2023 (-49%)."
+          "Nov 2023: 9.65 kg against 162.93 kg in Oct 2023 (-94%).",
+          "Dec 2023: 4.94 kg against 9.65 kg in Nov 2023 (-49%)."
         ],
         "metadata": {
           "warning_pct_change_threshold": 0.3,
@@ -491,12 +491,11 @@
         "stage": "diagnostics",
         "category": "outlier_line_items",
         "status": "warning",
-        "message": "Found 1 unusually large line items (5.26% of all rows). The largest was PLATE, PAPR 6  SNGL POLY COTED in Mayo at 7.63, which is 6.0x that category's median of 1.27. These rows may need review for unit, entry, or OCR mistakes.",
+        "message": "Found 1 line far larger than is typical for its category (5.26% of all lines). The largest is PLATE, PAPR 6  SNGL POLY COTED in Mayo at 7.63 kg, 6.0x that category's typical line of 1.27 kg. Lines like these are often a unit or entry mistake.",
         "column": "kilos_total",
         "count": 1,
         "sample_values": [
-          "Affected products: PLATE, PAPR 6  SNGL POLY COTED",
-          "PLATE, PAPR 6  SNGL POLY COTED in Mayo has 7.63, which is 6.0x the category median of 1.27."
+          "PLATE, PAPR 6  SNGL POLY COTED in Mayo: 7.63 kg, 6.0x the category's typical line of 1.27 kg."
         ],
         "metadata": {
           "outlier_row_share": 0.0526315789,

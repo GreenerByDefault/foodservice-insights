@@ -10,7 +10,7 @@ count ≥ 1 for exactly the file's months — `apps/web/src/lib/reports/csv/rule
 customer only `warning` and `error` findings (`show_quality_successes=False`, #392), and since
 #494 no `error` is reachable from customer data.
 
-Against that, `report/checks.py` (1,872 lines) and `build_food_report` still carry the notebook
+Against that, `report/checks.py` (about 1,900 lines) and `build_food_report` still carry the notebook
 era's checks. Of the 15 findings `run_all_diagnostics` files:
 
 | Finding | Reaches a customer? | Why not |
@@ -28,15 +28,9 @@ non-null, missingness-snapshot and row-count-drift findings that cannot fire on 
 three stages still catch `Exception` to file an `error` finding and raise a bare
 `QualityCheckError` — the pattern #490 removed from the other three because it loses the cause.
 
-Two of the surviving checks misfire, verified by running them: a 0 kg line trips
-`per_product_weight_bounds` as "0.0000 kg, which is below the 0.001 kg lower bound", a unit-mistake
-warning for data the report treats as ordinary; and `outlier_line_items` puts every flagged
-product into one "Affected products: …" sample line, so at the upload cap (500k rows; 22,558
-flagged in the synthetic profile) the customer PDF ran to 173 pages, about 150 of them that
-list, and writing it took 15 s. The messages the customer does see read as internals: "the total
-kilos total changed", "First month (2025-01) has 12 rows, only 30% of median (40)", "Found 1 rows
-with per-product weights … at row 0" (a dataframe index that `analyze()` renumbers after dropping
-uncategorized rows, so it maps to nothing in their file).
+`scripts/profile_report.py` builds a report from a synthetic upload at the row cap under
+`cProfile` and prints each stage's time and the PDF's page count; use it before claiming any
+change here is faster.
 
 `report/thresholds.py` merges an override YAML over the packaged one, keyed on both files' mtimes
 through an `lru_cache`; no caller sets `DIAGNOSTIC_THRESHOLDS_PATH` except one lab test, and the
@@ -64,11 +58,6 @@ per-call `override` parameters on every check are used only by tests.
   `QualityCheckError` with the cause lost. With that, `QualityCheckError`,
   `raise_on_error_findings` and the `quality.py` check helpers go, and `FoodReport.diagnostics`
   and `.findings` collapse into one `findings` (they were equal once nothing else contributed).
-- **A zero-weight line is in range.** The lower bound applies to positive weights only.
-- **Samples are bounded.** The "Affected products" line goes; the `sample_limit` row samples
-  that follow it are the examples.
-- **Messages name the customer's things**: months as "Jan 2025", units as "kg" or "servings",
-  "lines" not "rows", the product and value rather than a row index.
 - **Thresholds stay in the packaged YAML** so the data scientists tune them in one place, loaded
   once with `functools.cache`. The override-file path and the per-call overrides go;
   `resolve_diagnostic_threshold` moves to the lab, its only remaining caller. *Rejected: constants
@@ -76,27 +65,7 @@ per-call `override` parameters on every check are used only by tests.
   thresholds (`near_duplicate_product_names`, `meat_quantity_reasonableness`) live there too.
 - Serving mode and its thresholds (`per_product_serving_bounds`) are untouched.
 
-## PR 1 — Bound and reword the surviving checks' findings
-
-Customer-visible, and the one performance fix worth making. `report/checks.py` and
-`tests/report/test_checks.py`; the golden fixture (`UPDATE_GOLDEN=1`) diff is the review.
-
-- `check_per_product_weight_bounds`: flag `0 < value < low` and `value > high`; message and
-  samples name the product, the value with its unit, and the bound — no `row N`.
-- `detect_unusual_sales`: drop the "Affected products: …" entry from `sample_values`; keep the
-  `sample_limit` row samples and add the unit to them and to the message.
-- `detect_month_over_month_total_volatility`: "the total kilos changed" via
-  `metric_display_label(metric_total).lower()`; samples carry the unit.
-- `check_date_distribution`: "Jan 2025, the first month in the file, has 12 lines against about
-  40 in a typical month, so it may be a partial month." via `_format_month_label`.
-- Add `scripts/profile_report.py`: builds the synthetic cap-sized frame, runs
-  `build_food_report` → charts → `write_report_pdf` → `write_client_workbook` under `cProfile`,
-  prints stage timings and the PDF's page count. `just check` already typechecks `scripts/`.
-  Record in the PR body the before/after at the cap (before: 173 pages, 14.7 s PDF write).
-- Tests: a 0 kg line files `success`; a 0.0005 kg line files the warning; the outlier finding's
-  `sample_values` has at most `sample_limit` entries; each reworded message.
-
-## PR 2 — Delete the findings that cannot fire, and validate the rows up front
+## PR 1 — Delete the findings that cannot fire, and validate the rows up front
 
 - `report/food_report.py`: `_validate_rows(rows, mode)` at the top of `build_food_report`, raising
   `ValueError` for a missing or null required column, a non-`datetime64` date, a non-numeric or
@@ -131,7 +100,7 @@ Customer-visible, and the one performance fix worth making. `report/checks.py` a
   `Aggregation_Reconciliation`; `lab/tests/food_report/test_quality_contract.py` and
   `test_outputs.py` follow. `python/insights/README.md`'s table row for checks is still right.
 
-## PR 3 — Move the lab-only checks to the lab
+## PR 2 — Move the lab-only checks to the lab
 
 - `check_single_product_dominance`, `check_category_concentration`
   (`_check_top_share_concentration`), `check_missing_weeks_within_month`
@@ -146,7 +115,7 @@ Customer-visible, and the one performance fix worth making. `report/checks.py` a
 - Thresholds stay where they are in the YAML (lab-only thresholds already live there).
 - Golden fixture diff: four findings disappear.
 
-## PR 4 — Load thresholds once
+## PR 3 — Load thresholds once
 
 - `report/thresholds.py` becomes a `functools.cache`d read of the packaged YAML and
   `get_diagnostic_threshold(diagnostic, name) -> float`; `DIAGNOSTIC_THRESHOLDS_PATH`,
@@ -160,7 +129,5 @@ Customer-visible, and the one performance fix worth making. `report/checks.py` a
 ## Verification
 
 `just lint && just check && just test && just test-lab` after each PR; regenerate the golden
-fixture per PR and review its diff. After PR 1, `uv run python scripts/profile_report.py` shows
-the cap-sized PDF at roughly 25 pages and a PDF write under 3 s. After PR 3,
-`run_all_diagnostics` files exactly six findings and `checks.py` is under 900 lines. An upload on
-`WORKER_MODE=mock-llm` with one 0-weight line shows no weight-bounds warning on the quality page.
+fixture per PR and review its diff. After PR 2, `run_all_diagnostics` files exactly six findings
+and `checks.py` is under 900 lines.
