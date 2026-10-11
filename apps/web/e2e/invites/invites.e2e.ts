@@ -32,14 +32,15 @@ test('an invitee is forwarded to /invites, accepts, and lands in the organizatio
   );
 });
 
-test('the invite email signs the invitee in with their address filled in, and lands on the offer', async ({
+// The invitee is new, as most are: they are asked their name before the offer renders.
+test('the invite email signs a new invitee in with their address filled in, asks their name, and lands on the offer', async ({
   page,
   browser,
   baseURL,
   organizations,
   users,
 }) => {
-  const invitee = await users.create();
+  const invitee = await users.create({ onboarded: false });
   const name = `Invitee Signs In ${crypto.randomUUID()}`;
   const { slug } = await organizations.create({ name });
 
@@ -64,7 +65,11 @@ test('the invite email signs the invitee in with their address filled in, and la
     await inviteePage.getByRole('button', { name: 'Send code' }).click();
     await inviteePage.getByLabel('Sign-in code').fill(await waitForSignInCode(invitee.signInEmail));
 
+    // `/orgs` forwards to the offer, and the `(app)` gate asks their name there.
     await expect(inviteePage).toHaveURL('/invites');
+    await inviteePage.getByLabel('Your name').fill('Alex Baker');
+    await inviteePage.getByRole('button', { name: 'Continue' }).click();
+
     await expect(
       inviteePage.getByRole('button', { name: `Accept invitation to ${name}` }),
     ).toBeVisible();
