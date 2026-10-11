@@ -132,8 +132,8 @@ def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd
 
 
 def _safe_percentage(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-    """Compute percentage with zero/NaN-safe behavior."""
-    pct = (numerator / denominator.mask(denominator == 0)) * 100
+    """Every part of a total of 0 is 0% of it, since a zero-weight line is ordinary data."""
+    pct = (numerator / denominator * 100).where(denominator != 0, 0.0)
     return pct.round(1)
 
 
@@ -185,13 +185,9 @@ def identify_overall_drivers(
         one_big_table.groupby("product", dropna=False)[metric].sum(min_count=1).reset_index()
     )
     overall = one_big_table[metric].sum(min_count=1)
-
-    if pd.isna(overall) or overall == 0:
-        product_totals["percentage"] = 0.0
-    else:
-        product_totals["percentage"] = _safe_percentage(
-            product_totals[metric], pd.Series(overall, index=product_totals.index)
-        )
+    product_totals["percentage"] = _safe_percentage(
+        product_totals[metric], pd.Series(overall, index=product_totals.index)
+    )
 
     top_overall = product_totals.sort_values(metric, ascending=False).head(top_n)
     return top_overall
