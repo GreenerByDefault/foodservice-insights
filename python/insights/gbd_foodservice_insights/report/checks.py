@@ -21,7 +21,7 @@ from gbd_foodservice_insights.report.thresholds import (
     get_diagnostic_threshold,
     resolve_diagnostic_threshold,
 )
-from gbd_foodservice_insights.report.utils import compute_month_alignment, ensure_month_year_column
+from gbd_foodservice_insights.report.utils import compute_month_alignment
 
 logger = logging.getLogger(__name__)
 
@@ -894,7 +894,6 @@ def detect_month_over_month_total_volatility(
     metric_total: str,
     *,
     month_col: str = "month_year",
-    date_col: str = "date",
     sample_limit: int = 6,
 ) -> list[Finding]:
     """Flag sudden monthly total swings before users trust a misleading trend.
@@ -918,23 +917,8 @@ def detect_month_over_month_total_volatility(
             )
         ]
 
-    try:
-        monthly_df = ensure_month_year_column(
-            df[[*df.columns]].copy(), date_col=date_col, month_col=month_col
-        )
-    except ValueError as exc:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="month_over_month_total_volatility",
-                status="info",
-                message=f"Could not check month-to-month total volatility: {exc}",
-                metadata={"missing_columns": [date_col, month_col]},
-            )
-        ]
-
     monthly_totals = (
-        monthly_df.dropna(subset=[month_col])
+        df.dropna(subset=[month_col])
         .groupby(month_col, dropna=False)[metric_total]
         .sum(min_count=1)
         .sort_index()
@@ -1717,7 +1701,6 @@ def check_missing_internal_months(
     df: pd.DataFrame,
     *,
     month_col: str = "month_year",
-    date_col: str = "date",
 ) -> list[Finding]:
     """Flag fully missing months before short report windows are misread as complete.
 
@@ -1726,30 +1709,7 @@ def check_missing_internal_months(
     reporting window where one absent month means a third of the expected period
     is missing.
     """
-    try:
-        monthly_df = ensure_month_year_column(
-            df[[*df.columns]].copy(),
-            date_col=date_col,
-            month_col=month_col,
-        )
-    except ValueError as exc:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="missing_internal_months",
-                status="info",
-                message=f"Could not check for missing internal months: {exc}",
-                metadata={"missing_columns": [date_col, month_col]},
-            )
-        ]
-
-    observed_months = (
-        monthly_df[month_col]
-        .dropna()
-        .map(lambda value: pd.Period(str(value), freq="M"))
-        .sort_values()
-        .unique()
-    )
+    observed_months = df[month_col].dropna().sort_values().unique()
 
     if len(observed_months) < 2:
         return [
@@ -1820,7 +1780,6 @@ def detect_category_discontinuity(
     *,
     category_col: str = "category",
     month_col: str = "month_year",
-    date_col: str = "date",
     sample_limit: int = 6,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag categories that disappear mid-period and then return.
@@ -1850,27 +1809,7 @@ def detect_category_discontinuity(
             pd.DataFrame(),
         )
 
-    try:
-        monthly_df = ensure_month_year_column(
-            df[[*df.columns]].copy(),
-            date_col=date_col,
-            month_col=month_col,
-        )
-    except ValueError as exc:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="category_discontinuity",
-                    status="info",
-                    message=f"Could not check category continuity: {exc}",
-                    metadata={"missing_columns": [date_col, month_col]},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    working = monthly_df.copy()
+    working = df.copy()
     working[metric_total] = pd.to_numeric(working[metric_total], errors="coerce")
     valid_rows = working[
         working[category_col].notna() & working[month_col].notna() & working[metric_total].notna()
@@ -2215,7 +2154,7 @@ def run_all_diagnostics(
     metric_total: str = "kilos_total",
     pdf_extracted: bool | None = None,
 ) -> list[Finding]:
-    """Run report diagnostics and return structured findings only."""
+    """Run report diagnostics on rows whose `month_year` is already `Period[M]`."""
     if serving and metric_total == "kilos_total" and "servings total" in df.columns:
         metric_total = "servings total"
 
