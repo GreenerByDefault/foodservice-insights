@@ -17,110 +17,12 @@ from gbd_foodservice_insights.report.checks import (
     check_single_product_dominance,
     check_zero_category_month_combos,
     detect_category_discontinuity,
-    detect_exact_duplicate_rows,
     detect_month_over_month_total_volatility,
     detect_unusual_sales,
     run_all_diagnostics,
 )
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.utils import normalize_diner_meal_mapping
-
-# ----------------------------------------------------------------------
-# Duplicate rows
-# ----------------------------------------------------------------------
-
-
-def _three_duplicates_in_100_rows(duplicate_date: object, other_date: object) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "date": [duplicate_date] * 3 + [other_date] * 97,
-            "product": ["Beans"] * 3 + [f"Item {i}" for i in range(97)],
-            "category": ["Legumes"] * 100,
-            "kilos_total": [2.0] * 3 + [float(i + 1) for i in range(97)],
-        }
-    )
-
-
-def test_detect_exact_duplicate_rows_warns_and_returns_export_table():
-    """
-    Flags duplicate line items because duplicate transactions can overstate totals and emissions.
-    """
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01")] * 3 + [pd.Timestamp("2025-01-02")] * 197,
-            "product": ["Tofu"] * 3 + [f"Item {i}" for i in range(197)],
-            "category": ["Legumes"] * 3 + ["Legumes"] * 197,
-            "kilos_total": [5.0] * 3 + [float(i + 1) for i in range(197)],
-            "quantity": [2] * 3 + [1] * 197,
-        }
-    )
-    df.loc[1:2, ["product", "kilos_total", "quantity"]] = ["Tofu", 5.0, 2]
-
-    findings, duplicate_rows = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert len(findings) == 1
-    finding = findings[0]
-    assert finding["status"] == "warning"
-    assert finding["count"] == 3
-    assert finding["metadata"]["duplicate_group_count"] == 1
-    assert not duplicate_rows.empty
-    assert "duplicate_group_size" in duplicate_rows.columns
-    assert duplicate_rows["duplicate_group_size"].eq(3).all()
-
-
-def test_detect_exact_duplicate_rows_errors_above_threshold():
-    """Escalates when duplicate rows are common enough to suggest a serious data issue."""
-    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"))
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "error"
-    assert findings[0]["metadata"]["duplicate_row_share"] == pytest.approx(0.03)
-
-
-def test_detect_exact_duplicate_rows_caps_month_bucketed_dates_at_warning():
-    """
-    Month/year-only client data should not hard-fail because transaction-level duplicate detection
-    is ambiguous.
-    """
-    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"]["month_bucketed_dates"] is True
-    assert "month-level placeholders" in findings[0]["message"]
-
-
-def test_detect_exact_duplicate_rows_treats_month_only_string_dates_as_month_bucketed():
-    """
-    Month-only strings should be recognized as month-bucketed so duplicate severity is not
-    overstated.
-    """
-    df = _three_duplicates_in_100_rows("04/2025", "05/2025")
-
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"]["month_bucketed_dates"] is True
-
-
-def test_detect_exact_duplicate_rows_success_when_none_found():
-    df = pd.DataFrame(
-        {
-            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")],
-            "product": ["Beans", "Tofu"],
-            "category": ["Legumes", "Legumes"],
-            "kilos_total": [2.0, 3.0],
-        }
-    )
-
-    findings, duplicate_rows = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-
-    assert findings[0]["status"] == "success"
-    assert findings[0]["count"] == 0
-    assert duplicate_rows.empty
-
 
 # ----------------------------------------------------------------------
 # Required columns and numeric parsing
@@ -757,17 +659,6 @@ def _diner_meal_counts_about_20_percent_off_the_median() -> dict[str, object]:
     }
 
 
-def _three_duplicates_in_100_rows_on_distinct_days() -> dict[str, object]:
-    df = _three_duplicates_in_100_rows(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"))
-    findings, _ = detect_exact_duplicate_rows(df, metric_total="kilos_total")
-    metadata = findings[0]["metadata"]
-    return {
-        "status": findings[0]["status"],
-        "warning_share_threshold": metadata["warning_share_threshold"],
-        "error_share_threshold": metadata["error_share_threshold"],
-    }
-
-
 def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
     df = pd.DataFrame({"product": ["Beans", "Tofu", "Tempeh"], "kilos_total": [1.5, 10.0, 11.0]})
     findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
@@ -840,17 +731,6 @@ def _top_category_at_35_percent() -> dict[str, object]:
             _diner_meal_counts_about_20_percent_off_the_median,
             {"status": "warning", "count": 2, "is_flagged": [True, False, True]},
             id="diner_meal_count_reasonableness",
-        ),
-        pytest.param(
-            {
-                "exact_duplicate_rows": {
-                    "warning_share_threshold": 0.05,
-                    "error_share_threshold": 0.10,
-                }
-            },
-            _three_duplicates_in_100_rows_on_distinct_days,
-            {"status": "success", "warning_share_threshold": 0.05, "error_share_threshold": 0.10},
-            id="exact_duplicate_rows",
         ),
         pytest.param(
             {"per_product_weight_bounds": {"low": 2, "high": 10}},
@@ -994,7 +874,6 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
-        ("exact_duplicate_rows", "success"),
         ("month_over_month_total_volatility", "warning"),
         ("missing_internal_months", "success"),
         ("category_discontinuity", "success"),

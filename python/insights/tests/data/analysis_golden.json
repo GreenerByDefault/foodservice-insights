@@ -25,15 +25,15 @@
     },
     "quality_status": "warning",
     "quality_summary": {
-      "total_findings": 16,
+      "total_findings": 15,
       "by_status": {
-        "success": 10,
+        "success": 9,
         "info": 4,
         "warning": 2,
         "error": 0
       },
       "by_stage": {
-        "diagnostics": 16
+        "diagnostics": 15
       }
     },
     "narrative": {
@@ -385,24 +385,6 @@
       }
     },
     "findings": [
-      {
-        "stage": "diagnostics",
-        "category": "exact_duplicate_rows",
-        "status": "success",
-        "message": "No duplicate rows found.",
-        "count": 0,
-        "metadata": {
-          "duplicate_row_share": 0.0,
-          "duplicate_row_count": 0,
-          "duplicate_group_count": 0,
-          "key_columns": [
-            "date",
-            "product",
-            "category",
-            "kilos_total"
-          ]
-        }
-      },
       {
         "stage": "diagnostics",
         "category": "month_over_month_total_volatility",
