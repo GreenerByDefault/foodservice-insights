@@ -554,14 +554,20 @@ def test_check_diner_meal_reasonableness_warns_outside_boundary_ratios():
     ) == (
         "warning",
         2,
-        "Found 2 months where the diner or meal count was far from usual for this dataset but "
-        "the food was not, which can mean a mistyped count. Per-diner and per-meal figures for "
-        "those months may be misleading.",
+        (
+            "Found 2 months where the diner or meal count was far from usual for this dataset "
+            "but the food was not, which can mean a mistyped count. Per-diner and per-meal "
+            "figures for those months may be misleading."
+        ),
         [
-            "Feb 2025: a count of 201 is 2.01x the median of 100, but food per count is 0.50x "
-            "the median.",
-            "Mar 2025: a count of 49 is 0.49x the median of 100, but food per count is 2.04x "
-            "the median.",
+            (
+                "Feb 2025: a count of 201 is 2.01x the median of 100, but food per count is "
+                "0.50x the median."
+            ),
+            (
+                "Mar 2025: a count of 49 is 0.49x the median of 100, but food per count is "
+                "2.04x the median."
+            ),
         ],
     )
     assert export_df.loc[export_df["is_flagged"], "flag_reason"].tolist() == [

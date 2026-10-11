@@ -1164,10 +1164,14 @@ def check_diner_meal_reasonableness(
             "flag_reason": np.select(
                 [count_too_high.to_numpy(), count_too_low.to_numpy()],
                 [
-                    "Count is far above usual but the food is not, so per-diner figures may "
-                    "look too low.",
-                    "Count is far below usual but the food is not, so per-diner figures may "
-                    "look too high.",
+                    (
+                        "Count is far above usual but the food is not, so per-diner figures "
+                        "may look too low."
+                    ),
+                    (
+                        "Count is far below usual but the food is not, so per-diner figures "
+                        "may look too high."
+                    ),
                 ],
                 default="",
             ),
