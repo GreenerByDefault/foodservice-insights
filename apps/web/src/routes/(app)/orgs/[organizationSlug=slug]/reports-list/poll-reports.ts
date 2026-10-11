@@ -5,6 +5,7 @@
  */
 
 import type { ReportId } from '@gbd/db';
+import { reloadIfOtherDeploy } from '#lib/api/deploy-version.js';
 import { apiCall } from '#lib/api/fetch.js';
 import type { ReportListRow, ReportsPollData } from '../+page.server.ts';
 
@@ -19,6 +20,7 @@ type WireReportsPollData = Omit<ReportsPollData, 'reports'> & { reports: WireRep
  * `#lib/api/fetch.ts`. */
 export async function pollReports(pollHref: string, ids: ReportId[]): Promise<ReportsPollData> {
   const response = await apiCall(pollHref, { method: 'POST', body: JSON.stringify({ ids }) });
+  await reloadIfOtherDeploy(response);
   const wire: WireReportsPollData = await response.json();
   return { reports: wire.reports.map(reviveRow) };
 }

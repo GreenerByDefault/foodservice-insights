@@ -3,9 +3,11 @@
  *
  * Dates travel as ISO strings over the wire — `JSON.stringify` does that to a `Date` for free —
  * so this is the one place that puts them back. Trusting the shape rather than validating it at
- * runtime is deliberate: this is our own endpoint, from the same deploy, not third-party input.
+ * runtime is deliberate: this is our own endpoint, not third-party input, and a response from
+ * another deploy reloads the page before its shape is read — see `#lib/api/deploy-version.ts`.
  */
 
+import { reloadIfOtherDeploy } from '#lib/api/deploy-version.js';
 import { apiCall } from '#lib/api/fetch.js';
 import type { Attempt, ReportPageData, ResultFiles } from '../+page.server.ts';
 import type { FailureCopy } from '../failure/failure-copy.ts';
@@ -32,6 +34,7 @@ type WireReportPageData = Omit<ReportPageData, 'now' | 'attempt'> & {
  * `#lib/api/fetch.ts`. */
 export async function pollReport(pollHref: string): Promise<ReportPageData> {
   const response = await apiCall(pollHref);
+  await reloadIfOtherDeploy(response);
   const wire: WireReportPageData = await response.json();
   return { ...wire, now: new Date(wire.now), attempt: reviveAttempt(wire.attempt) };
 }
