@@ -1,10 +1,12 @@
 import dataclasses
+import logging
 from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization.cache import CategorizationCache
+from gbd_foodservice_insights.categories import get_GBD_categories
+from gbd_foodservice_insights.categorization.cache import NO_MATCHES_FOUND, CategorizationCache
 from gbd_foodservice_insights.categorization.steps import (
     MergeCounts,
     categorize_using_cleaned_name_history,
@@ -182,7 +184,9 @@ def test_categorize_using_cleaned_name_history_leaves_products_unchanged(
 # ----------------------------------------------------------------------
 # LLM categorization
 # ----------------------------------------------------------------------
-def test_categorize_with_llm_dedupes_identical_cleaned_names():
+def test_categorize_with_llm_dedupes_identical_cleaned_names(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     products_df = pd.DataFrame(
         {
             "product": ["RAW_A", "RAW_B"],
@@ -203,6 +207,7 @@ def test_categorize_with_llm_dedupes_identical_cleaned_names():
             match_type=pd.Series(["llm"] * 2, dtype="object"),
         ),
     )
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 def test_categorize_with_llm_skips_the_llm_when_everything_is_already_categorized():
@@ -241,32 +246,66 @@ def test_categorize_with_llm_tolerates_a_missing_match_type_column():
     )
 
 
-def test_categorize_with_llm_discards_an_answer_outside_the_gbd_categories():
-    class AnswersOffList(KeywordLlmClient):
+def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    answers = {
+        "oat drink": "Unspecified non-dairy milk.",
+        "fried chicken": "Chicken",
+        "chicken wings": "Chicken",
+        "cheesecake": '"No Matches Found".',
+    }
+
+    class Scripted(KeywordLlmClient):
         def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
             super().match_product_to_category(item, categories)
-            return "Chicken"
+            return answers[item]
 
     products_df = pd.DataFrame(
         {
-            "product": ["RAW_A", "RAW_B"],
-            "category": [pd.NA, "Cheese"],
-            "cleaned_item_names": ["chicken breast", "cheese"],
-            "match_type": [pd.NA, "raw_product_history"],
+            "product": ["RAW_A", "RAW_B", "RAW_C", "RAW_D", "RAW_E"],
+            "category": [pd.NA, pd.NA, pd.NA, pd.NA, "Cheese"],
+            "cleaned_item_names": [*answers, "cheese"],
+            "match_type": [pd.NA, pd.NA, pd.NA, pd.NA, "raw_product_history"],
         }
     )
-    llm = AnswersOffList()
 
-    result = categorize_with_llm(products_df, llm)
+    result = categorize_with_llm(products_df, Scripted())
 
-    assert llm.calls == [("match", "chicken breast")]
     pd.testing.assert_frame_equal(
         result,
         products_df.assign(
-            category=["No Matches Found", "Cheese"],
-            match_type=["llm", "raw_product_history"],
+            category=[
+                "Unspecified non dairy milk",
+                "No Matches Found",
+                "No Matches Found",
+                "No Matches Found",
+                "Cheese",
+            ],
+            match_type=["llm"] * 4 + ["raw_product_history"],
         ),
     )
+    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING] == [
+        "2 of 4 LLM answers were not recognized; most common: [('Chicken', 2)]"
+    ]
+
+
+def test_categorize_with_llm_resolves_every_category_named_in_lower_case() -> None:
+    # Also fails if a YAML edit gives two categories the same normalized name, which would
+    # silently make one of them unreachable.
+    categories = [*get_GBD_categories(), NO_MATCHES_FOUND]
+
+    class LowerCase(KeywordLlmClient):
+        def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+            return item.lower()
+
+    products_df = pd.DataFrame(
+        {"category": [pd.NA] * len(categories), "cleaned_item_names": categories}
+    )
+
+    result = categorize_with_llm(products_df, LowerCase())
+
+    assert result["category"].tolist() == categories
 
 
 # ----------------------------------------------------------------------
