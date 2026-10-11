@@ -1261,6 +1261,10 @@ def check_diner_meal_reasonableness(
         make_finding(
             stage="diagnostics",
             category="diner_meal_count_reasonableness",
+            # Never an error, however many months are flagged: these are counts the user typed,
+            # and a school whose summer counts and purchases both fall to 30% has correct
+            # per-diner figures. The count alone cannot tell that school from a typo:
+            # https://github.com/GreenerByDefault/foodservice-insights/issues/493
             status="warning",
             message=(
                 f"Found {flagged_count} month{'' if flagged_count == 1 else 's'} where the "
