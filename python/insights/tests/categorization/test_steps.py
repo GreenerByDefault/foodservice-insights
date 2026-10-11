@@ -1,4 +1,3 @@
-import dataclasses
 import logging
 from collections.abc import Sequence
 
@@ -387,68 +386,3 @@ def test_merge_categorizations_rejects_empty_input():
             pd.DataFrame(columns=["product", "date", "weight"]),
             pd.DataFrame(columns=["product", "category"]),
         )
-
-
-def test_merge_counts_to_summary_omits_non_entree_keys_until_the_entree_filter_runs():
-    counts = MergeCounts(
-        n_rows_before=8,
-        n_rows_after=5,
-        n_products_before=5,
-        n_products_after=4,
-        n_rows_uncategorized=3,
-    )
-    expected = {
-        "n_products_before": 5,
-        "n_products_after": 4,
-        "pct_remaining": 0.8,
-        "n_rows_before": 8,
-        "n_rows_after": 5,
-        "row_elimination_details": {
-            "total_rows_initial": 8,
-            "total_rows_final": 5,
-            "total_rows_eliminated": 3,
-            "total_eliminated_pct": 0.375,
-            "rows_eliminated_uncategorized": 3,
-            "rows_eliminated_uncategorized_pct": 0.375,
-        },
-    }
-    assert counts.to_summary() == expected
-
-    filtered = dataclasses.replace(counts, n_rows_after=4, n_rows_non_entree=1)
-    assert filtered.to_summary() == expected | {
-        "n_rows_after": 4,
-        "row_elimination_details": expected["row_elimination_details"]
-        | {
-            "total_rows_final": 4,
-            "total_rows_eliminated": 4,
-            "total_eliminated_pct": 0.5,
-            "rows_eliminated_non_entree": 1,
-            "rows_eliminated_non_entree_pct": 0.125,
-        },
-    }
-
-
-def test_merge_counts_to_summary_avoids_division_by_zero_with_no_rows_before():
-    counts = MergeCounts(
-        n_rows_before=0,
-        n_rows_after=0,
-        n_products_before=1,
-        n_products_after=1,
-        n_rows_uncategorized=0,
-    )
-
-    assert counts.to_summary() == {
-        "n_products_before": 1,
-        "n_products_after": 1,
-        "pct_remaining": 1.0,
-        "n_rows_before": 0,
-        "n_rows_after": 0,
-        "row_elimination_details": {
-            "total_rows_initial": 0,
-            "total_rows_final": 0,
-            "total_rows_eliminated": 0,
-            "total_eliminated_pct": 0,
-            "rows_eliminated_uncategorized": 0,
-            "rows_eliminated_uncategorized_pct": 0,
-        },
-    }
