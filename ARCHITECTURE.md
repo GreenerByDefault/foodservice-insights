@@ -332,9 +332,7 @@ kills the old container outright. Two mitigations, both required:
   commit** — never on push. One consequence follows from that asymmetry: the deployed worker is
   always the side running behind schema and web app, never ahead, so the web ↔ worker and app ↔
   schema contracts must stay backwards compatible for as long as an old worker might still be
-  running. Review enforces that, not CI. *Rejected: a CI check for incompatible migrations.* A
-  grep over Kysely builder chains flags every new table and misses added constraints, and a
-  parser costs more than the risk.
+  running.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they

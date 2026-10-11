@@ -109,10 +109,12 @@ jobs:
           fetch-depth: 0 # for the base branch's migrations
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-supabase
-      # A fresh database accepts a migration that the hosted one, with the base branch's
-      # migrations already applied, refuses: one that sorts before them, or a deleted applied one.
-      # So migrate as the hosted database stands, then apply the PR's, and let Kysely refuse.
-      # `--staged` too, or a migration the PR deleted lingers untracked and Kysely never misses it.
+      # The hosted database has already applied the base branch's migrations, so Kysely would
+      # refuse a PR that adds a migration sorting before them or deletes one of them. A fresh
+      # database would accept both. So, apply the base branch's migrations first, then the PR's,
+      # and let Kysely refuse here instead of at deploy.
+      # `--staged` too, or a migration the PR deleted would linger untracked and Kysely would
+      # never notice it is missing.
       - name: Migrate the base branch's migrations, as the hosted database already has them
         if: github.event_name == 'pull_request'
         env:
