@@ -35,6 +35,8 @@ from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
 from PyPDF2 import PdfReader
 
+JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
+
 
 def test_wrap_text_lines_preserves_bullets_and_wraps_long_lines() -> None:
     wrapped = _wrap_text_lines(
@@ -652,7 +654,7 @@ def test_pdf_table_formatters_skip_absent_columns(
 
 def _report(**overrides: Any) -> FoodReport:
     kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {"2024-01": 100, "2024-02": 120},
+        "diner_meal_mapping": {JAN: 100, FEB: 120},
         "mode": "procurement",
         "region": "us",
         "diner_or_meal": "diner",
@@ -881,7 +883,7 @@ def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> N
     )
     report = build_food_report(
         rows,
-        diner_meal_mapping={"2024-01": 100, "2024-02": 120},
+        diner_meal_mapping={JAN: 100, FEB: 120},
         mode="procurement",
         region="us",
         diner_or_meal="diner",

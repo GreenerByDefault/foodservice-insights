@@ -35,10 +35,6 @@ from gbd_foodservice_insights.report.schema import (
     metric_for_mode,
     required_columns_for_mode,
 )
-from gbd_foodservice_insights.report.utils import (
-    ensure_month_year_column,
-    normalize_diner_meal_mapping,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +99,7 @@ def _ignore() -> None:
 def build_food_report(
     rows: pd.DataFrame,
     *,
-    diner_meal_mapping: Mapping[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     mode: ReportMode,
     region: Region,
     diner_or_meal: DinerOrMeal,
@@ -124,11 +120,16 @@ def build_food_report(
         )
 
     _log_stage("month_normalization", report_progress)
-    df = ensure_month_year_column(rows, date_col="date", month_col="month_year")
+    df = rows.assign(month_year=rows["date"].dt.to_period("M"))
 
     _log_stage("diner_meal_mapping", report_progress)
-    dm_mapping = normalize_diner_meal_mapping(diner_meal_mapping)
-    months_with_rows = set(df["month_year"].dropna())
+    dm_mapping = {month: float(count) for month, count in diner_meal_mapping.items()}
+    months_with_rows = set(df["month_year"])
+    uncounted = sorted(month for month in months_with_rows if not dm_mapping.get(month, 0) > 0)
+    if uncounted:
+        raise ValueError(
+            f"No positive {diner_or_meal} count for {', '.join(str(month) for month in uncounted)}"
+        )
     diner_meals_in_data = float(
         sum(count for month, count in dm_mapping.items() if month in months_with_rows)
     )

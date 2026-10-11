@@ -7,7 +7,8 @@ import pytest
 from gbd_foodservice_insights.report.plots import report
 from matplotlib.figure import Figure
 
-DINER_MEALS = {pd.Period("2023-01"): 100, pd.Period("2023-02"): 100}
+JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
+DINER_MEALS = {JAN: 100, FEB: 100}
 EMISSIONS_SUMMARY = pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]})
 
 
@@ -127,6 +128,6 @@ def test_generate_all_report_plots_raises_for_untyped_categories():
     with pytest.raises(ValueError, match="Unknown categories"):
         report.generate_all_report_plots(
             aggregated_data=_aggregated_data(monthly_category_data),
-            diner_meal_mapping={pd.Period("2023-01"): 100},
+            diner_meal_mapping={JAN: 100},
             metric_total="kilos_total",
         )

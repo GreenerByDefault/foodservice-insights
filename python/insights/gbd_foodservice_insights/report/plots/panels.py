@@ -1,5 +1,6 @@
 """Chart panels: each `draw_*` fills an `Axes` it is handed, empty state included."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ from gbd_foodservice_insights.plotting_utils import (
     standardize_title_case,
 )
 from gbd_foodservice_insights.report.schema import metric_display_label
-from gbd_foodservice_insights.report.utils import divide_by_diner_meals, monthly_totals
+from gbd_foodservice_insights.report.utils import monthly_totals
 
 
 def prepare_monthly_trend_data(
@@ -24,7 +25,7 @@ def prepare_monthly_trend_data(
     metric: str,
     *,
     per_diner_meal: bool,
-    diner_meal_mapping: dict[Any, Any] | None,
+    diner_meal_mapping: Mapping[pd.Period, float] | None,
 ) -> pd.DataFrame:
     """Prepare canonical monthly trend table for plotting."""
     totals = monthly_totals(monthly_category_data, metric, month_col="month_year")
@@ -32,15 +33,16 @@ def prepare_monthly_trend_data(
     if per_diner_meal:
         if diner_meal_mapping is None:
             raise ValueError("diner_meal_mapping is required when per_diner_meal=True")
-        values, _, _ = divide_by_diner_meals(
-            totals,
-            diner_meal_mapping,
-            strict=False,
-        )
+        values = _per_diner(totals, diner_meal_mapping)
     else:
         values = totals
 
     return pd.DataFrame({"month_year": values.index, "value": values.values})
+
+
+def _per_diner(monthly: pd.Series, diner_meal_mapping: Mapping[pd.Period, float]) -> pd.Series:
+    # A month without a count comes out NaN; `build_food_report` refuses one before any chart.
+    return monthly / monthly.index.map(diner_meal_mapping)
 
 
 def filter_monthly_categories_by_type(
@@ -190,7 +192,7 @@ def _food_and_drink_trends(
     metric: str,
     *,
     per_diner_meal: bool,
-    diner_meal_mapping: dict[Any, Any] | None = None,
+    diner_meal_mapping: Mapping[pd.Period, float] | None = None,
 ) -> list[tuple[str, pd.DataFrame]]:
     """Monthly trends of `metric` for food only and for food + drink, as labelled series."""
     if metric not in {"kilos_total", "servings total"}:
@@ -234,7 +236,7 @@ def draw_food_and_drink_totals(
 def draw_food_and_drink_per_diner(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
     metric: str = "kilos_total",
     diner_or_meal: str = "diner",
@@ -274,14 +276,14 @@ def draw_total_emissions(
 def draw_emissions_per_diner(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
     emissions_col: str = "emissions_kg_co2e",
     diner_or_meal: str = "diner",
 ) -> None:
     """kg CO₂e per diner (or meal) by month."""
     totals = monthly_totals(monthly_category_data, emissions_col)
-    per_dm, _, _ = divide_by_diner_meals(totals, diner_meal_mapping, strict=False)
+    per_dm = _per_diner(totals, diner_meal_mapping)
     _draw_metric_over_time_on_axis(
         ax,
         pd.DataFrame({"month_year": per_dm.index, "value": per_dm.values}),

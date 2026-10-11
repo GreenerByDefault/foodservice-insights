@@ -150,7 +150,7 @@ df = pd.read_csv("step_3_output/categorized_data.csv")
 
 from gbd_foodservice_insights.report.aggregation import aggregate_data
 
-df_agg = aggregate_data(df, group_by="category", diners_map=your_diner_map, per_diner_meal=True)
+df_agg = aggregate_data(df, group_by="category")
 ```
 
 ---
@@ -296,15 +296,8 @@ from gbd_foodservice_insights.report.aggregation import aggregate_data
 # Load categorized data
 df = pd.read_csv("test_data/step_3_output/categorized_data.csv")
 
-# Create test diner-meal map
-diners_map = {
-    pd.Period("2023-10", "M"): 5000,
-    pd.Period("2023-11", "M"): 5200,
-    pd.Period("2023-12", "M"): 4800,
-}
-
 # Aggregate
-df_agg = aggregate_data(df, group_by="category", diners_map=diners_map)
+df_agg = aggregate_data(df, group_by="category")
 ```
 
 ## Data Characteristics

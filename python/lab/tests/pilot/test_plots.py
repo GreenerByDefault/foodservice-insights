@@ -1,7 +1,9 @@
 """Tests for baseline-versus-pilot plotting support functions."""
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import pytest
 from gbd_foodservice_insights_lab.pilot.plots import (
     plot_metric_over_time,
     print_baseline_pilot_percent_changes,
@@ -54,16 +56,25 @@ class TestPlotMetricOverTime:
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
-    def test_per_diner_meal(self):
+    @pytest.mark.parametrize(
+        "months",
+        [
+            [pd.Period("2023-01"), pd.Period("2023-02")],
+            ["2023-01", "2023-02"],
+            [pd.Timestamp("2023-01-01"), pd.Timestamp("2023-02-01")],
+        ],
+        ids=["period", "string", "timestamp"],
+    )
+    def test_per_diner_meal(self, months: list):
         data = {
-            "month_year": [pd.Period("2023-01"), pd.Period("2023-02")],
+            "month_year": months,
             "category": ["fruit", "fruit"],
             "kilos_total": [100, 150],
         }
         df = pd.DataFrame(data)
-        diner_meal_mapping = {pd.Period("2023-01"): 100, pd.Period("2023-02"): 120}
+        diner_meal_mapping = {"2023-01": 100, "2023-02": 120}
         fig = plot_metric_over_time(
             df, metric="kilos_total", per_diner_meal=True, diner_meal_mapping=diner_meal_mapping
         )
-        assert isinstance(fig, plt.Figure)
+        assert np.asarray(fig.axes[0].lines[0].get_ydata()).tolist() == pytest.approx([1.0, 1.25])
         plt.close(fig)

@@ -7,6 +7,8 @@ import pytest
 from gbd_foodservice_insights.report.plots import figures
 from matplotlib.figure import Figure
 
+JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
+
 
 def _figure_title(fig: Figure) -> str:
     """Return a figure-level title when present, otherwise its first panel title."""
@@ -110,7 +112,7 @@ def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
     fig = figures.plot_food_and_drink_comparison_page(
         fruit_and_juice_months(),
         metric="kilos_total",
-        diner_meal_mapping={pd.Period("2023-01"): 100, pd.Period("2023-02"): 100},
+        diner_meal_mapping={JAN: 100, FEB: 100},
     )
 
     assert _figure_title(fig) == "Kilos Over Time"
@@ -130,7 +132,7 @@ def test_emissions_summary_page_puts_total_above_per_diner(
 ):
     fig = figures.plot_emissions_summary_over_time(
         fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-        {pd.Period("2023-01"): 100, pd.Period("2023-02"): 100},
+        {JAN: 100, FEB: 100},
     )
 
     assert _figure_title(fig) == "Carbon Emissions Over Time"

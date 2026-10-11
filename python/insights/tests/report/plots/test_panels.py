@@ -8,6 +8,8 @@ import pytest
 from gbd_foodservice_insights.report.plots import panels
 from matplotlib.patches import Rectangle
 
+JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
+
 
 def _y_values(ax: plt.Axes) -> list[list[float]]:
     return [np.asarray(line.get_ydata()).tolist() for line in ax.lines]
@@ -37,13 +39,40 @@ def test_prepare_monthly_trend_data_divides_by_diner_meals(
         fruit_and_juice_months(),
         "kilos_total",
         per_diner_meal=True,
-        diner_meal_mapping={pd.Period("2023-01"): 100, pd.Period("2023-02"): 50},
+        diner_meal_mapping={JAN: 100, FEB: 50},
     )
 
     assert plot_data.to_dict("list") == {
         "month_year": [pd.Period("2023-01"), pd.Period("2023-02")],
         "value": [1.25, 3.8],
     }
+
+
+def test_prepare_monthly_trend_data_leaves_an_uncounted_month_missing(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    plot_data = panels.prepare_monthly_trend_data(
+        fruit_and_juice_months(),
+        "kilos_total",
+        per_diner_meal=True,
+        diner_meal_mapping={JAN: 100},
+    )
+
+    pd.testing.assert_frame_equal(
+        plot_data, pd.DataFrame({"month_year": [JAN, FEB], "value": [1.25, np.nan]})
+    )
+
+
+def test_prepare_monthly_trend_data_keeps_an_all_missing_month_missing():
+    months = pd.DataFrame(
+        {"month_year": [pd.Period("2024-01"), pd.Period("2024-01")], "kilos_total": [pd.NA, pd.NA]}
+    )
+
+    plot_data = panels.prepare_monthly_trend_data(
+        months, "kilos_total", per_diner_meal=False, diner_meal_mapping=None
+    )
+
+    assert plot_data["value"].isna().tolist() == [True]
 
 
 def test_prepare_monthly_trend_data_requires_diner_meals_per_diner(
@@ -98,7 +127,7 @@ def test_draw_food_and_drink_per_diner_divides_by_diner_meals(
     panels.draw_food_and_drink_per_diner(
         ax,
         fruit_and_juice_months(),
-        {pd.Period("2023-01"): 100, pd.Period("2023-02"): 100},
+        {JAN: 100, FEB: 100},
         metric="kilos_total",
         diner_or_meal="meal",
     )
@@ -159,7 +188,7 @@ def test_draw_emissions_per_diner_divides_by_diner_meals(
     panels.draw_emissions_per_diner(
         ax,
         fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-        {pd.Period("2023-01"): 10, pd.Period("2023-02"): 20},
+        {JAN: 10, FEB: 20},
     )
 
     assert ax.get_title() == "Carbon Emissions per Diner Over Time"

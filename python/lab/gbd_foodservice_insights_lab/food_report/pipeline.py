@@ -41,7 +41,10 @@ from gbd_foodservice_insights.report.schema import (
 from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
 from gbd_foodservice_insights_lab.food_report import excel as qa_excel
-from gbd_foodservice_insights_lab.food_report.utils import load_diner_meal_mapping_from_json
+from gbd_foodservice_insights_lab.food_report.utils import (
+    load_diner_meal_mapping_from_json,
+    normalize_diner_meal_mapping,
+)
 from gbd_foodservice_insights_lab.parsing import (
     clean_weight_column,
     parse_and_validate_date_column,
@@ -93,7 +96,7 @@ def _resolve_input_file(input_file: str | Path | None) -> Path:
 
 def _collect_diagnostic_export_sheets(
     df: pd.DataFrame,
-    diner_meal_mapping: dict[Any, Any],
+    diner_meal_mapping: Mapping[pd.Period, float],
     *,
     diner_or_meal: DinerOrMeal,
     metric_total: str,
@@ -209,13 +212,16 @@ def run_food_report(
 
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
-        if diner_meal_mapping is None:
-            diner_meal_mapping = load_diner_meal_mapping_from_json(diner_meal_file)
+        counts = (
+            load_diner_meal_mapping_from_json(diner_meal_file)
+            if diner_meal_mapping is None
+            else normalize_diner_meal_mapping(diner_meal_mapping)
+        )
         df = clean_weight_column(parse_and_validate_date_column(df), metric_for_mode(mode))
 
         report = build_food_report(
             df,
-            diner_meal_mapping=diner_meal_mapping,
+            diner_meal_mapping=counts,
             mode=mode,
             region=region,
             diner_or_meal=diner_or_meal,
