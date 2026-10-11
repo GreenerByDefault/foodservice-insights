@@ -2,6 +2,8 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.categories import category_names
+from gbd_foodservice_insights.report import aggregation
 from gbd_foodservice_insights.report.aggregation import (
     aggregate_data,
     calculate_animal_emissions_concentration,
@@ -63,8 +65,7 @@ def test_aggregate_data_keeps_rows_with_missing_group_keys():
     )
 
 
-def test_create_template_data_preserves_values_when_category_case_differs():
-    """Template rows should align to canonical GBD labels without zeroing case-mismatched data."""
+def test_create_template_data_places_each_value_under_its_category():
     monthly_category_data = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-01", "2024-02"],
@@ -114,13 +115,13 @@ def test_identify_overall_drivers_ranks_products_across_categories(fruit_rows):
 # ----------------------------------------------------------------------
 
 
-def test_calculate_plant_animal_split_is_case_insensitive_and_keeps_one_sided_months():
+def test_calculate_plant_animal_split_keeps_one_sided_months():
     """Plant-vs-animal summaries should keep months where one side is absent instead of dropping
     them."""
     df = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-02", "2024-02"],
-            "category": ["lEgUmEs", "BEEF", "Other"],
+            "category": ["Legumes", "Beef", "Other"],
             "kilos_total": [4.0, 3.0, 99.0],
         }
     )
@@ -180,7 +181,7 @@ def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months
     df = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-02", "2024-02"],
-            "category": ["LEGUMES", "beef", "Vegetables"],
+            "category": ["Legumes", "Beef", "Vegetables"],
             "kilos_total": [4.0, 6.0, 100.0],
         }
     )
@@ -345,32 +346,23 @@ def test_summarize_animal_emissions_intensity_covers_only_animal_categories():
     assert summary["kg_co2e_per_kg_food"].tolist() == [41.35, 4.4]
 
 
-def test_summarize_animal_emissions_intensity_normalizes_case_variants():
-    df = pd.DataFrame(
-        {
-            "category": [
-                "beef and buffalo meat",
-                "Beef and Buffalo Meat",
-                "POULTRY (CHICKEN & TURKEY)",
-            ],
-            "kilos_total": [2.0, 3.0, 4.0],
-            "emissions_kg_co2e": [82.7, 124.05, 17.6],
-        }
-    )
-
-    summary = summarize_animal_emissions_intensity(df)
-
-    assert summary["category"].tolist() == [
-        "Beef and Buffalo Meat",
-        "Poultry (Chicken & Turkey)",
-    ]
-    assert summary["kilos_total"].tolist() == [5.0, 4.0]
-    assert summary["total_kg_co2e"].tolist() == [206.75, 17.6]
-
-
 # ----------------------------------------------------------------------
 # Substitution scenarios
 # ----------------------------------------------------------------------
+
+
+# Categories compare exactly, so a misspelled name here would silently match no rows.
+@pytest.mark.parametrize(
+    "name",
+    [
+        *aggregation._RUMINANT_SWAP_SOURCE_CATEGORIES,
+        aggregation._RUMINANT_SWAP_TARGET_CATEGORY,
+        *aggregation._MILK_SWAP_SOURCE_CATEGORIES,
+        aggregation._MILK_SWAP_TARGET_CATEGORY,
+    ],
+)
+def test_swap_categories_are_gbd_names(name: str):
+    assert name in category_names()
 
 
 def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():

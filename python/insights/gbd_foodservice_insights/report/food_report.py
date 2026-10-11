@@ -226,8 +226,8 @@ def _validate_rows(rows: pd.DataFrame, mode: ReportMode) -> None:
     negative_count = int((rows[metric_total] < 0).sum())
     if negative_count:
         raise ValueError(f"{metric_total} is negative in {negative_count:,} of {len(rows):,} rows")
-    # Exact names: downstream, some steps match categories case-insensitively and others do
-    # not, so `beef` would count toward emissions but split from "Beef" in the tables.
+    # Exact names: every step below compares categories exactly, so `beef` would get no
+    # emission factor and fall out of every plant, animal and protein figure.
     gbd_categories = set(category_names())
     unknown = sorted({str(c) for c in rows["category"].unique() if c not in gbd_categories})
     if unknown:
