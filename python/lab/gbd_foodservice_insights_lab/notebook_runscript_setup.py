@@ -559,7 +559,6 @@ def update_metadata(updates: dict) -> None:
 def update_metadata_with_categorization_stats(summary: dict[str, Any]) -> None:
     """Update client_metadata.json with categorization statistics."""
     output_file = summary.get("output_file", "")
-    human_review_file = summary.get("human_review_file", "")
     update_metadata(
         {
             "categorization_stats": {
@@ -570,11 +569,9 @@ def update_metadata_with_categorization_stats(summary: dict[str, Any]) -> None:
                 "n_rows_after": summary["n_rows_after"],
                 "row_elimination_details": summary.get("row_elimination_details", {}),
                 "output_file": output_file,
-                "human_review_file": human_review_file,
                 "timestamp": datetime.now().isoformat(),
             },
             "categorized_output_file": output_file,
-            "categorization_human_review_file": human_review_file,
             "report_input_file": output_file,
         }
     )

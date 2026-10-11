@@ -9,10 +9,6 @@ into `gbd_foodservice_insights` when the worker needs it. The product has one ca
 symbol to its callers shows what is still in the product only for the lab, or only to tolerate
 inputs the product never sends:
 
-- `categorization/reviews.py` and `CategorizedProducts.ai_review_df`: read only by the lab's
-  `categorization/spreadsheet.py`, which writes the human-review CSV. `analyze()` discards it,
-  and `categorization-cache.md` PR 5 builds the harvested rows from `unique_products_df`, not
-  from it.
 - `MergeCounts.to_summary` and `n_rows_non_entree`: only the lab's `spreadsheet.py` and
   `entrees.filter_to_entrees` (the entree filter moved to the lab in #354 and #376).
 - `aggregation.category_highest_vs_lowest_months` → `aggregation["highest_lowest"]`: computed on
@@ -41,26 +37,20 @@ inputs the product never sends:
   (`_validate_rows`), so nothing below it needs case folding. *Rejected: keeping it for the lab's
   hand-edited CSVs* — the lab now fails at `build_food_report` with the offending names, which
   is the rule ("fail loudly on bad data"), and it already did for emission factors (#492).
-- **What the lab alone reads moves to the lab**, with its tests: the review table, the merge
-  summary, the highest-vs-lowest table, the mapping and region parsers. The product's
-  `CategorizedProducts` keeps `cleaned_df`, `unique_products_df` and `match_type_counts`;
-  `MergeCounts` keeps its counts (the seam docstring in `analysis.py` names it as where result
+- **What the lab alone reads moves to the lab**, with its tests: the merge summary, the
+  highest-vs-lowest table, the mapping and region parsers. `MergeCounts` keeps its counts (the seam docstring in `analysis.py` names it as where result
   metadata would come from).
 - Serving mode stays.
 
-## PR 1 — Move the review table and the merge summary to the lab
+## PR 1 — Move the merge summary to the lab
 
-- `categorization/reviews.py` → `gbd_foodservice_insights_lab/categorization/reviews.py`;
-  `tests/categorization/test_reviews.py` → `lab/tests/categorization/`. `CategorizedProducts`
-  drops `ai_review_df`; `categorize_unique_products` no longer builds it. The lab's
-  `categorize_spreadsheet_to_csvs` calls `build_ai_review_table(categorized.cleaned_df,
-  categorized.unique_products_df)` itself.
 - `MergeCounts` drops `to_summary` and `n_rows_non_entree`. The lab's `spreadsheet.py` gets a
   `merge_summary(counts, *, n_rows_non_entree=None)` returning the same dict;
   `filter_to_entrees` returns the non-entree row count alongside the counts instead of
   `dataclasses.replace`-ing it in.
-- `tests/categorization/test_pipeline.py`, `test_steps.py` and the lab's `test_spreadsheet.py`,
-  `test_entrees.py` follow. `categorization/pipeline.py`'s module docstring drops `reviews.py`.
+- `tests/categorization/test_steps.py`'s two `to_summary` tests move to the lab's
+  `test_spreadsheet.py`; `test_entrees.py` follows the new return shape.
+- Lands before `caches-to-supabase.md` PRs 7–8, which edit `spreadsheet.py`, if convenient.
 
 ## PR 2 — Move the highest-vs-lowest month table to the lab
 
@@ -87,7 +77,7 @@ inputs the product never sends:
 - `tests/report/test_quality_contract.py` is mostly these helpers' tests: move what survives
   into `test_food_report.py` / `test_aggregation.py` and delete the file. `test_analysis.py`'s
   `test_hands_the_report_the_forms_answers` asserts the Period-keyed mapping.
-- Touches `analyze()`; `categorization-cache.md` PR 5 touches its cache lines, not these.
+- Touches `analyze()`; `caches-to-supabase.md` PRs 4–5 touch its cache lines, not these.
 
 ## PR 4 — Compare categories exactly
 
@@ -113,4 +103,4 @@ diffed. After PR 4, `grep -rn "lower()" python/insights/gbd_foodservice_insights
 python/insights/gbd_foodservice_insights/emissions.py` finds no category comparison, and
 `scripts/profile_report.py` (#499) no longer lists
 `_normalize_categories_to_canonical_labels`. `python/insights/README.md` and the lab README's
-description of what the wrapper adds stay accurate; update the sentence on the review CSV.
+description of what the wrapper adds stay accurate.

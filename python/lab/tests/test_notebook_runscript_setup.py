@@ -258,7 +258,6 @@ def test_update_metadata_with_categorization_stats_sets_expected_keys(tmp_path, 
         "n_rows_after": 90,
         "row_elimination_details": {"reason": 10},
         "output_file": str(data_dir / "categorized_output.csv"),
-        "human_review_file": str(data_dir / "categorized_output_for_human_review.csv"),
     }
     update_metadata_with_categorization_stats(summary)
 
@@ -267,9 +266,7 @@ def test_update_metadata_with_categorization_stats_sets_expected_keys(tmp_path, 
 
     assert updated["categorized_output_file"] == summary["output_file"]
     assert updated["report_input_file"] == summary["output_file"]
-    assert updated["categorization_human_review_file"] == summary["human_review_file"]
     assert updated["categorization_stats"]["output_file"] == summary["output_file"]
-    assert updated["categorization_stats"]["human_review_file"] == summary["human_review_file"]
 
 
 def test_update_metadata_with_categorization_stats_serializes_numpy_scalars(tmp_path, monkeypatch):
@@ -289,7 +286,6 @@ def test_update_metadata_with_categorization_stats_serializes_numpy_scalars(tmp_
             "rows_eliminated_uncategorized_pct": np.float64(0.1),
         },
         "output_file": str(data_dir / "categorized_output.csv"),
-        "human_review_file": str(data_dir / "categorized_output_for_human_review.csv"),
     }
 
     update_metadata_with_categorization_stats(summary)
@@ -302,8 +298,6 @@ def test_update_metadata_with_categorization_stats_serializes_numpy_scalars(tmp_
     assert updated["categorization_stats"]["pct_remaining"] == 0.8
     assert updated["categorization_stats"]["n_rows_before"] == 100
     assert updated["categorization_stats"]["n_rows_after"] == 90
-    assert updated["categorization_human_review_file"] == summary["human_review_file"]
-    assert updated["categorization_stats"]["human_review_file"] == summary["human_review_file"]
     assert (
         updated["categorization_stats"]["row_elimination_details"]["rows_eliminated_uncategorized"]
         == 10

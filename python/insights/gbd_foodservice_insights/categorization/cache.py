@@ -3,7 +3,7 @@ Categorization Cache
 ====================
 
 Reads the reviewed product-categorization cache. The product never writes it: new rows reach
-it only through GBD's review, via the lab's `categorization.product_cache`.
+it only through GBD's review.
 """
 
 import logging

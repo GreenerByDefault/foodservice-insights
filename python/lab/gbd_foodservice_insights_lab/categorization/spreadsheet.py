@@ -48,8 +48,7 @@ def categorize_spreadsheet_to_csvs(
     data also runs entree detection, keeps only the entree rows, and requires ``gemini_client``.
 
     ``update_historical_entree_classifications`` appends new entree classifications to the
-    historical file. New product categorizations are never cached here; see
-    ``product_cache.promote_local_review_file_to_reviewed_cache``.
+    historical file. New product categorizations are never cached here.
 
     Returns the categorized frame and a summary dict: ``MergeCounts.to_summary()``, plus
     ``match_type_counts`` and the output file keys.
@@ -120,12 +119,6 @@ def categorize_spreadsheet_to_csvs(
     df_result.to_csv(output_filepath, index=False)
     summary["output_file"] = str(output_filepath)
     logger.info("Wrote categorized output to %s", output_filepath)
-
-    human_review_filepath = output_filepath.with_stem(output_filepath.stem + "_for_human_review")
-    categorized.ai_review_df.to_csv(human_review_filepath, index=False)
-    summary["human_review_file"] = str(human_review_filepath)
-    summary["human_review_n_unique_products"] = len(categorized.ai_review_df)
-    logger.info("Wrote human review output to %s", human_review_filepath)
 
     if entree_review_df is not None:
         entree_human_review_filepath = output_filepath.with_stem(

@@ -283,27 +283,3 @@ cmd = [
 
 print("Running:", " ".join(cmd))
 subprocess.run(args=cmd, check=True)  # nosec B603
-
-
-# %%
-# Optional: manually promote reviewed categorizations into the main reviewed cache.
-# Only set this to True after manually editing the *_for_human_review.csv file.
-from gbd_foodservice_insights_lab.categorization.product_cache import (
-    promote_local_review_file_to_reviewed_cache,
-)
-
-PROMOTE_REVIEWED_CATEGORIZATIONS = False
-REVIEWED_BY = ""
-
-review_file = Path(str(output_file)).with_stem(
-    Path(str(output_file)).stem + "_categorized_for_human_review"
-)
-
-if PROMOTE_REVIEWED_CATEGORIZATIONS:
-    promotion_summary = promote_local_review_file_to_reviewed_cache(
-        review_file=review_file,
-        reviewed_by=REVIEWED_BY or None,
-    )
-    print("Promoted reviewed categorizations:", promotion_summary)
-else:
-    print("Skipped cache promotion. Review file:", review_file)
