@@ -196,35 +196,6 @@ def identify_overall_drivers(
     return top_overall
 
 
-def category_highest_vs_lowest_months(
-    monthly_category_data: pd.DataFrame,
-    metric_col: str,
-) -> pd.DataFrame:
-    """Calculate highest-to-lowest month ratio per category."""
-    if metric_col not in monthly_category_data.columns:
-        raise ValueError(f"Metric column '{metric_col}' not found in DataFrame.")
-
-    results: list[dict[str, Any]] = []
-    for category, cat_data in monthly_category_data.groupby("category", dropna=False):
-        values = cat_data[metric_col].dropna()
-        if values.empty:
-            continue
-        max_val = values.max()
-        min_val = values.min()
-        if min_val == 0:  # noqa: SIM108  # the nested conditional expression reads worse
-            times_higher = float("inf") if max_val > 0 else 1.0
-        else:
-            times_higher = max_val / min_val
-
-        if times_higher >= 2:
-            results.append({"category": category, "times_higher": times_higher})
-
-    if not results:
-        return pd.DataFrame(columns=["category", "times_higher"])
-
-    return pd.DataFrame(results).sort_values("times_higher", ascending=False).round(1)
-
-
 def calculate_plant_animal_split(
     df: pd.DataFrame,
     metric_col: str = "kilos_total",
@@ -681,8 +652,6 @@ def run_aggregation_pipeline(
     overall_drivers = identify_overall_drivers(df, metric=metric_total, top_n=top_n)
     category_drivers = identify_category_drivers(df, metric=metric_total, top_n=top_n)
 
-    per_dm_col = per_diner_metric_name(metric_total, diner_or_meal)
-    highest_lowest = category_highest_vs_lowest_months(monthly_category_data, metric_col=per_dm_col)
     animal_emissions_intensity = summarize_animal_emissions_intensity(
         df,
         weight_col=metric_total,
@@ -711,7 +680,6 @@ def run_aggregation_pipeline(
         "template_data": template_data,
         "overall_drivers": overall_drivers,
         "category_drivers": category_drivers,
-        "highest_lowest": highest_lowest,
         "animal_emissions_intensity": animal_emissions_intensity,
         "decision_kpis": decision_kpis,
         "substitution_scenarios": substitution_scenarios,

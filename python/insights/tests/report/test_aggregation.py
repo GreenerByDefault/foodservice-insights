@@ -9,7 +9,6 @@ from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
     calculate_plant_protein_share,
     calculate_ruminant_legume_swap_scenarios,
-    category_highest_vs_lowest_months,
     create_template_data,
     identify_category_drivers,
     identify_overall_drivers,
@@ -116,37 +115,6 @@ def test_identify_overall_drivers_ranks_products_across_categories(fruit_rows):
     assert len(drivers_df) == 1
     assert drivers_df["product"].iloc[0] == "apple"
     assert drivers_df["percentage"].iloc[0] == 55.6
-
-
-def test_category_highest_vs_lowest_months_reports_the_peak_to_trough_ratio():
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2023-01-01", "2023-02-01", "2023-03-01"]),
-            "product": ["apple", "apple", "apple"],
-            "kilos": [10, 40, 5],
-            "category": ["fruit", "fruit", "fruit"],
-            "month_year": ["2023-01", "2023-02", "2023-03"],
-            "kilos per diner_meal": [0.1, 0.4, 0.05],
-        }
-    )
-    ratio_df = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
-    assert len(ratio_df) == 1
-    assert ratio_df["times_higher"].iloc[0] == 8.0
-
-
-def test_category_highest_vs_lowest_months_returns_empty_frame_when_no_category_hits_threshold():
-    """Keeps the aggregation pipeline usable when no category has a 2x month spread."""
-    df = pd.DataFrame(
-        {
-            "category": ["legumes", "legumes"],
-            "kilos per diner_meal": [0.1, 0.12],
-        }
-    )
-
-    result = category_highest_vs_lowest_months(df, metric_col="kilos per diner_meal")
-
-    assert result.empty
-    assert result.columns.tolist() == ["category", "times_higher"]
 
 
 # ----------------------------------------------------------------------

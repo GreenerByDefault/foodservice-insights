@@ -33,6 +33,7 @@ from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
     ReportMode,
     metric_for_mode,
+    per_diner_metric_name,
     quality_status_from_findings,
     validate_region,
 )
@@ -373,7 +374,10 @@ def _write_qa_workbook(
         monthly_product_data=report.aggregation["monthly_product_data"],
         monthly_category_data=report.aggregation["monthly_category_data"],
         template_data=report.aggregation["template_data"],
-        highest_lowest=report.aggregation["highest_lowest"],
+        highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
+            report.aggregation["monthly_category_data"],
+            metric_col=per_diner_metric_name(report.metric_total, report.diner_or_meal),
+        ),
         diner_meals_df=excel.diner_meals_frame(report),
         emissions_summary=report.emissions_summary,
         animal_emissions_intensity=report.procurement_table("animal_emissions_intensity"),
