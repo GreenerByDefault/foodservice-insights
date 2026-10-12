@@ -5,7 +5,7 @@ Importing this module applies the house style: the Agg backend, the palette, and
 Montserrat fonts.
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from itertools import cycle, islice
 from typing import Literal
@@ -62,7 +62,7 @@ FONT_FILES = [
 
 
 @contextmanager
-def close_new_figures_on_error() -> Iterator[None]:
+def close_new_figures_on_error() -> Generator[None]:
     """On an exception, closes every pyplot figure opened inside the block, since none of them
     reached an owner who would close it. Wrap only our own code: a caller's figure opened inside
     the block would be closed too."""
