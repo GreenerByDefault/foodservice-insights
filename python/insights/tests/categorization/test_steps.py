@@ -7,7 +7,6 @@ import pytest
 from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import NO_MATCHES_FOUND, CategorizationCache
 from gbd_foodservice_insights.categorization.steps import (
-    MergeCounts,
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
     categorize_with_llm,
@@ -43,7 +42,6 @@ def test_categorize_using_historical_classifications_matches_the_cache():
             {
                 "product": ["CHEESE CHEDDAR 5LB", "Paper Towels"],
                 "category": ["Cheese", np.nan],
-                "previously_categorized": [True, False],
                 "match_type": pd.Series(["raw_product_history", pd.NA], dtype="object"),
             }
         ),
@@ -95,7 +93,6 @@ def test_clean_product_names_sends_only_uncategorized_products_to_the_llm():
         {
             "product": ["CHEESE CHEDDAR 5LB", "Chicken Breast!!"],
             "category": ["Cheese", np.nan],
-            "previously_categorized": [True, False],
         }
     )
     llm = KeywordLlmClient()
@@ -114,7 +111,6 @@ def test_clean_product_names_skips_the_llm_when_everything_is_categorized():
         {
             "product": ["CHEESE CHEDDAR 5LB"],
             "category": ["Cheese"],
-            "previously_categorized": [True],
         }
     )
     llm = KeywordLlmClient()
@@ -136,7 +132,6 @@ def test_categorize_using_cleaned_name_history_reuses_a_match_and_trusts_it():
             "product": ["RAW_A", "RAW_B", "RAW_C"],
             "category": ["Cheese", pd.NA, pd.NA],
             "cleaned_item_names": ["cheese", "Chicken  Breast!", "mystery thing"],
-            "previously_categorized": [True, False, False],
             "match_type": ["raw_product_history", pd.NA, pd.NA],
         }
     )
@@ -149,7 +144,6 @@ def test_categorize_using_cleaned_name_history_reuses_a_match_and_trusts_it():
         result,
         products_df.assign(
             category=["Cheese", "Poultry (Chicken & Turkey)", pd.NA],
-            previously_categorized=[True, True, False],
             match_type=["raw_product_history", "cleaned_name_history", pd.NA],
         ),
     )
@@ -170,7 +164,6 @@ def test_categorize_using_cleaned_name_history_leaves_products_unchanged(
             "product": ["RAW_A"],
             "category": [category],
             "cleaned_item_names": ["cheese"],
-            "previously_categorized": [pd.notna(category)],
             "match_type": [pd.NA],
         }
     )
@@ -224,25 +217,6 @@ def test_categorize_with_llm_skips_the_llm_when_everything_is_already_categorize
 
     assert llm.calls == []
     pd.testing.assert_frame_equal(result, products_df)
-
-
-def test_categorize_with_llm_tolerates_a_missing_match_type_column():
-    """`match_type` is absent when this step is exercised in isolation of the full pipeline."""
-    products_df = pd.DataFrame(
-        {
-            "product": ["RAW_A"],
-            "category": [pd.NA],
-            "cleaned_item_names": ["chicken breast"],
-        }
-    )
-    llm = KeywordLlmClient()
-
-    result = categorize_with_llm(products_df, llm)
-
-    assert "match_type" not in result.columns
-    pd.testing.assert_frame_equal(
-        result, products_df.assign(category=["Poultry (Chicken & Turkey)"])
-    )
 
 
 def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
@@ -310,7 +284,7 @@ def test_categorize_with_llm_resolves_every_category_named_in_lower_case() -> No
 # ----------------------------------------------------------------------
 # Merge and filter
 # ----------------------------------------------------------------------
-def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
+def _merge_keeping_one_of(n_products: int) -> pd.DataFrame:
     products = [f"product {i}" for i in range(n_products)]
     return merge_categorizations(
         original_df=pd.DataFrame(
@@ -323,20 +297,11 @@ def _merge_keeping_one_of(n_products: int) -> tuple[pd.DataFrame, MergeCounts]:
 
 
 def test_merge_categorizations_accepts_exactly_20_percent_remaining():
-    df_final, counts = _merge_keeping_one_of(5)
-
     pd.testing.assert_frame_equal(
-        df_final,
+        _merge_keeping_one_of(5),
         pd.DataFrame(
             {"product": ["product 0"], "date": ["2025-01-01"], "weight": 1.0, "category": "Cheese"}
         ),
-    )
-    assert counts == MergeCounts(
-        n_rows_before=5,
-        n_rows_after=1,
-        n_products_before=5,
-        n_products_after=1,
-        n_rows_uncategorized=4,
     )
 
 
@@ -345,31 +310,14 @@ def test_merge_categorizations_rejects_under_20_percent_remaining_as_unusable():
         _merge_keeping_one_of(6)
 
 
-def test_merge_categorizations_drops_a_product_missing_from_the_categorizations():
-    original_df = pd.DataFrame(
-        {
-            "product": ["CHEESE CHEDDAR 5LB", "CHEESE CHEDDAR 5LB", "Paper Towels", "Dish Soap"],
-            "date": ["2025-01-01"] * 4,
-            "weight": [1.0, 2.0, 3.0, 4.0],
-        }
-    )
-    categorized_products_df = pd.DataFrame(
-        {
-            "product": ["CHEESE CHEDDAR 5LB", "Paper Towels"],
-            "category": ["Cheese", "No Matches Found"],
-        }
-    )
-
-    df_final, counts = merge_categorizations(original_df, categorized_products_df)
-
-    pd.testing.assert_frame_equal(df_final, original_df.head(2).assign(category="Cheese"))
-    assert counts == MergeCounts(
-        n_rows_before=4,
-        n_rows_after=2,
-        n_products_before=3,
-        n_products_after=1,
-        n_rows_uncategorized=2,
-    )
+def test_merge_categorizations_rejects_a_product_missing_from_the_categorizations():
+    with pytest.raises(ValueError, match="No categorization for 1 of 2 products"):
+        merge_categorizations(
+            pd.DataFrame(
+                {"product": ["Cheddar", "Paper Towels"], "date": ["2025-01-01"] * 2, "weight": 1.0}
+            ),
+            pd.DataFrame({"product": ["Cheddar"], "category": ["Cheese"]}),
+        )
 
 
 def test_merge_categorizations_rejects_a_duplicate_categorized_product():

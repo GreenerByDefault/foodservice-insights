@@ -20,9 +20,9 @@ read-only.
 sees the response's `usage`.
 
 **Open:** structured result metadata (rows in, rows categorized, products uncategorized, ...) is
-dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. Categorization
-already returns it: `CategorizedProducts.match_type_counts`, and `merge_categorizations`'
-`MergeCounts` (rows and products before and after, and why rows were dropped).
+dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. The frames
+categorization returns hold it: `unique_products_df["match_type"]`, and the rows before and after
+`merge_categorizations`, from which the lab's `MergeCounts.between` derives its counts.
 `AnalysisOutcome` is where it would arrive.
 """
 
@@ -101,9 +101,7 @@ def analyze(
         df = df.assign(weight=df["weight"] * LB_TO_KG)
 
     categorized = categorize_unique_products(df, llm, load_categorization_cache())
-    df_final, _counts = merge_categorizations(
-        categorized.cleaned_df, categorized.unique_products_df
-    )
+    df_final = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
 
     rows = df_final.rename(columns={"weight": "kilos_total"})[
         ["date", "product", "category", "kilos_total"]

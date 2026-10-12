@@ -5,10 +5,10 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.pipeline import CategorizedProducts
-from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.testing import KeywordLlmClient
 from gbd_foodservice_insights_lab.categorization import spreadsheet
 from gbd_foodservice_insights_lab.categorization.spreadsheet import (
+    MergeCounts,
     categorize_spreadsheet_to_csvs,
     merge_summary,
 )
@@ -62,8 +62,9 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
 
     categorized = CategorizedProducts(
         cleaned_df=input_df,
-        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        match_type_counts={"llm": 1},
+        unique_products_df=pd.DataFrame(
+            {"product": ["apple"], "category": ["Fruit"], "match_type": ["llm"]}
+        ),
     )
 
     with patch.object(
@@ -107,8 +108,9 @@ def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_p
     input_df.to_csv(input_path, index=False)
     categorized = CategorizedProducts(
         cleaned_df=input_df,
-        unique_products_df=pd.DataFrame({"product": ["apple"], "category": ["Fruit"]}),
-        match_type_counts={"llm": 1},
+        unique_products_df=pd.DataFrame(
+            {"product": ["apple"], "category": ["Fruit"], "match_type": ["llm"]}
+        ),
     )
 
     with patch.object(spreadsheet, "categorize_unique_products", return_value=categorized):
@@ -118,6 +120,19 @@ def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_p
 
     assert result_summary["output_file"] == str(tmp_path / "input_categorized.csv")
     assert (tmp_path / "input_categorized.csv").exists()
+
+
+def test_merge_counts_between_attributes_every_lost_row_to_categorization():
+    before = pd.DataFrame({"product": ["apple", "apple", "towels", "soap", "pear"]})
+    after = before.iloc[[0, 1, 4]]
+
+    assert MergeCounts.between(before, after) == MergeCounts(
+        n_rows_before=5,
+        n_rows_after=3,
+        n_products_before=4,
+        n_products_after=2,
+        n_rows_uncategorized=2,
+    )
 
 
 def test_merge_summary_omits_non_entree_keys_until_the_entree_filter_runs():

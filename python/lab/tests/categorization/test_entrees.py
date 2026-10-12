@@ -1,11 +1,9 @@
-import dataclasses
 import logging
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights_lab.categorization import entrees
 from gbd_foodservice_insights_lab.categorization.entrees import (
     assign_serving_sizes_from_entree_classification,
@@ -360,19 +358,11 @@ def _merged_rows(products: list[str]) -> pd.DataFrame:
     )
 
 
-def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
+def test_filter_to_entrees_drops_side_add_ons_and_counts_them():
     # Real entrees, a side, and one product `filter_to_entrees` doesn't recognise at all
     # (e.g. dropped upstream as uncategorized) — its classification is NA, not a label.
-    counts = MergeCounts(
-        n_rows_before=5,
-        n_rows_after=4,
-        n_products_before=4,
-        n_products_after=3,
-        n_rows_uncategorized=1,
-    )
-    df_final, filtered_counts, n_rows_non_entree = filter_to_entrees(
+    df_final, n_rows_non_entree = filter_to_entrees(
         _merged_rows(["steak", "bread roll", "pot roast", "steak"]),
-        counts,
         classified_products=pd.DataFrame(
             {
                 "product": ["steak", "bread roll", "pot roast", "unrecognized item"],
@@ -387,7 +377,6 @@ def test_filter_to_entrees_drops_side_add_ons_and_updates_row_counts():
         .set_axis([0, 2, 3])
         .assign(entree_classification="entree"),
     )
-    assert filtered_counts == dataclasses.replace(counts, n_rows_after=3)
     assert n_rows_non_entree == 1
 
 

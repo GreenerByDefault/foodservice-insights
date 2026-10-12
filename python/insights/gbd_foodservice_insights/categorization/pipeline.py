@@ -34,8 +34,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class CategorizedProducts:
     cleaned_df: pd.DataFrame  # the input rows, with product stripped
-    unique_products_df: pd.DataFrame  # one row per product, with its category
-    match_type_counts: dict[str, int]
+    unique_products_df: pd.DataFrame  # one row per product, with its category and match_type
 
 
 # ----------------------------------------------------------------------
@@ -81,17 +80,10 @@ def categorize_unique_products(
     # --- LLM categorization for still-uncategorized items ---
     unique_products_df = categorize_with_llm(unique_products_df, llm)
 
-    # Provenance breakdown (raw-history / cleaned-name-history / llm) for the
-    # cleaned-name reuse hit-rate. Cast to plain str/int so the summary stays
-    # JSON-serialisable for the report manifest.
-    match_type_counts = {
-        str(k): int(v)
-        for k, v in unique_products_df["match_type"].fillna("unknown").value_counts().items()
-    }
-    logger.info("Match-type breakdown (unique products): %s", match_type_counts)
-
-    return CategorizedProducts(
-        cleaned_df=df,
-        unique_products_df=unique_products_df,
-        match_type_counts=match_type_counts,
+    # The cleaned-name reuse hit rate.
+    logger.info(
+        "Match-type breakdown (unique products): %s",
+        unique_products_df["match_type"].value_counts().to_dict(),
     )
+
+    return CategorizedProducts(cleaned_df=df, unique_products_df=unique_products_df)

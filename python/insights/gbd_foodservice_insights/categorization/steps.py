@@ -8,7 +8,6 @@ LLM categorization, and merge-back.
 
 import logging
 from collections import Counter
-from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -40,7 +39,7 @@ def categorize_using_historical_classifications(
     """Match products against historical categorizations.
 
     `unique_products_df` needs a 'product' column. Returns it with 'category' (from history or
-    NaN), a boolean 'previously_categorized', and 'match_type' added.
+    NaN) and 'match_type' added.
     """
     unique_products_df = unique_products_df.merge(
         cache.products[["product", "category"]],
@@ -48,18 +47,16 @@ def categorize_using_historical_classifications(
         how="left",
         validate="many_to_one",
     )
-    unique_products_df["previously_categorized"] = unique_products_df["category"].notna()
+    matched = unique_products_df["category"].notna()
 
     # Provenance for diagnostics / the cleaned-name hit-rate count. Object dtype
     # so later steps can assign string labels alongside the initial NA values.
     unique_products_df["match_type"] = pd.Series(
         pd.NA, index=unique_products_df.index, dtype="object"
     )
-    unique_products_df.loc[unique_products_df["previously_categorized"], "match_type"] = (
-        MATCH_TYPE_RAW
-    )
+    unique_products_df.loc[matched, "match_type"] = MATCH_TYPE_RAW
 
-    n_matched = unique_products_df["previously_categorized"].sum()
+    n_matched = matched.sum()
     n_total = len(unique_products_df)
     logger.info("Historical match: %d/%d products found in cache.", n_matched, n_total)
 
@@ -78,10 +75,9 @@ def clean_product_names(
     Items already matched historically get their original name as the cleaned
     name.  Uncategorized items are cleaned via an LLM call.
 
-    `products_df` needs 'product', 'category', and 'previously_categorized'. Returns a copy with
-    'cleaned_item_names' added.
+    `products_df` needs 'product' and 'category'. Returns a copy with 'cleaned_item_names' added.
     """
-    products_df = products_df.copy()
+    products_df = products_df.assign(cleaned_item_names=products_df["product"])
     mask_needs_cleaning = products_df["category"].isna()
     num_to_clean = mask_needs_cleaning.sum()
 
@@ -100,15 +96,6 @@ def clean_product_names(
             progress_prefix="Name cleaning",
         )
         products_df.loc[mask_needs_cleaning, "cleaned_item_names"] = cleaned_names
-
-    # Previously-categorized items keep their original name as cleaned name
-    mask_prev = products_df["previously_categorized"]
-    products_df.loc[mask_prev, "cleaned_item_names"] = products_df.loc[mask_prev, "product"]
-
-    # Fallback for any remaining NaN
-    products_df["cleaned_item_names"] = products_df["cleaned_item_names"].fillna(
-        products_df["product"]
-    )
 
     return products_df
 
@@ -132,8 +119,8 @@ def categorize_using_cleaned_name_history(
     `CategorizationCache.cleaned_name_index`); everything else falls through to
     the LLM unchanged.
 
-    `products_df` needs 'category', 'cleaned_item_names', 'previously_categorized' and
-    'match_type', which are updated for matches.
+    `products_df` needs 'category', 'cleaned_item_names' and 'match_type'; the first and last
+    are updated for matches.
     """
     products_df = products_df.copy()
     reuse_index = cache.cleaned_name_index
@@ -155,7 +142,6 @@ def categorize_using_cleaned_name_history(
     hit_index = reused_category.dropna().index
 
     products_df.loc[hit_index, "category"] = reused_category.loc[hit_index]
-    products_df.loc[hit_index, "previously_categorized"] = True
     products_df.loc[hit_index, "match_type"] = MATCH_TYPE_CLEANED
 
     logger.info(
@@ -177,9 +163,10 @@ def categorize_with_llm(
 ) -> pd.DataFrame:
     """Apply LLM-based categorization to products not matched historically.
 
-    `products_df` needs 'category' and 'cleaned_item_names'. Returns a copy with 'category'
-    filled for uncategorized rows. An answer is matched to a GBD category ignoring case and
-    punctuation; any other answer becomes "No Matches Found", counted in one warning.
+    `products_df` needs 'category', 'cleaned_item_names' and 'match_type'. Returns a copy with
+    'category' filled and 'match_type' set for uncategorized rows. An answer is matched to a GBD
+    category ignoring case and punctuation; any other answer becomes "No Matches Found", counted in
+    one warning.
     """
     products_df = products_df.copy()
     gbd_categories = category_names()
@@ -196,10 +183,7 @@ def categorize_with_llm(
         (~mask_needs_categorization).sum(),
     )
 
-    # Record provenance for items routed to the LLM (guarded: the column is
-    # absent when this step is exercised in isolation).
-    if "match_type" in products_df.columns:
-        products_df.loc[mask_needs_categorization, "match_type"] = MATCH_TYPE_LLM
+    products_df.loc[mask_needs_categorization, "match_type"] = MATCH_TYPE_LLM
 
     if total_to_categorize > 0:
         items_to_categorize = products_df.loc[mask_needs_categorization, "cleaned_item_names"]
@@ -242,74 +226,51 @@ def categorize_with_llm(
 # ----------------------------------------------------------------------
 # Merge and filter
 # ----------------------------------------------------------------------
-@dataclass(frozen=True)
-class MergeCounts:
-    """How many rows and products survived the merge, and why the rest did not."""
-
-    n_rows_before: int
-    n_rows_after: int
-    n_products_before: int
-    n_products_after: int
-    n_rows_uncategorized: int
-
-
 def merge_categorizations(
     original_df: pd.DataFrame,
     categorized_products_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, MergeCounts]:
-    """Merge categorizations back to the cleaned input data and filter it for aggregation.
+) -> pd.DataFrame:
+    """Merge categorizations back onto the rows, dropping "No Matches Found" rows.
 
-    Drops "No Matches Found" rows and the intermediate categorization columns. Raises
-    UnusableDataError if fewer than 20% of products survive.
+    `categorized_products_df` must categorize every product in `original_df`, as
+    `categorize_unique_products` does. Raises UnusableDataError if fewer than 20% of products
+    survive.
     """
-    n_rows_before = len(original_df)
     n_products_before = original_df["product"].nunique()
+    if n_products_before == 0:
+        raise ValueError("n_products_before is zero — cannot compute elimination rate.")
 
-    df_final = original_df.merge(
+    merged = original_df.merge(
         categorized_products_df[["product", "category"]],
         on="product",
         how="left",
         validate="many_to_one",
     )
-    df_final["category"] = df_final["category"].fillna("No Matches Found")
+    # Both frames come from one `categorize_unique_products` call, so a gap is a bug. Counted, not
+    # named: the worker keeps the child's stderr, and product names are customer data.
+    n_uncategorized_products = merged.loc[merged["category"].isna(), "product"].nunique()
+    if n_uncategorized_products > 0:
+        raise ValueError(
+            f"No categorization for {n_uncategorized_products} of {n_products_before} products."
+        )
 
-    # Track elimination
-    n_rows_uncategorized = int((df_final["category"] == "No Matches Found").sum())
-    df_final = df_final.loc[df_final["category"] != "No Matches Found"]
-
+    df_final = merged.loc[merged["category"] != NO_MATCHES_FOUND]
     n_products_after = df_final["product"].nunique()
 
-    if n_products_before == 0:
-        raise ValueError("n_products_before is zero — cannot compute elimination rate.")
-
     pct_remaining = n_products_after / n_products_before
-
     if pct_remaining < 0.2:
         raise UnusableDataError(
             "Over 80% of products were eliminated during categorization: "
             f"{n_products_after}/{n_products_before} ({pct_remaining:.1%}) remain."
         )
 
-    # Drop intermediate columns
-    columns_to_drop = [
-        "cleaned_item_names",
-        "previously_categorized",
-        "match_type",
-    ]
-    columns_to_drop = [c for c in columns_to_drop if c in df_final.columns]
-    df_final = df_final.drop(columns=columns_to_drop)
-
     logger.info(
-        "Categorization complete: %d/%d products retained (%.1f%%).",
+        "Categorization complete: %d/%d products (%.1f%%) and %d/%d rows retained.",
         n_products_after,
         n_products_before,
         pct_remaining * 100,
+        len(df_final),
+        len(original_df),
     )
 
-    return df_final, MergeCounts(
-        n_rows_before=n_rows_before,
-        n_rows_after=len(df_final),
-        n_products_before=n_products_before,
-        n_products_after=n_products_after,
-        n_rows_uncategorized=n_rows_uncategorized,
-    )
+    return df_final

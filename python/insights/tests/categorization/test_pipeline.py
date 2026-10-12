@@ -93,8 +93,17 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
     assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
-    assert categorized.match_type_counts.get("cleaned_name_history") == 2
-    assert set(categorized.unique_products_df["category"]) == {"Milk (Cow's milk)"}
+    assert_frame_equal(
+        categorized.unique_products_df,
+        pd.DataFrame(
+            {
+                "product": ["MLK WHOLE 2L", "Whole Milk Carton"],
+                "category": ["Milk (Cow's milk)"] * 2,
+                "match_type": pd.Series(["cleaned_name_history"] * 2, dtype="object"),
+                "cleaned_item_names": ["whole milk"] * 2,
+            }
+        ),
+    )
 
 
 def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFixture) -> None:
@@ -159,7 +168,6 @@ def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFi
                     "Milk (Cow's milk)",
                     no_match,
                 ],
-                "previously_categorized": [False] * 3 + [True, False, True, False],
                 "match_type": pd.Series(
                     ["llm"] * 3 + ["raw_product_history", "llm", "raw_product_history", "llm"],
                     dtype="object",
@@ -179,7 +187,6 @@ def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFi
     assert [r.getMessage() for r in caplog.records if r.name.endswith(".steps")] == [
         "2 of 5 LLM answers were not recognized; most common: [('pork', 1), ('None', 1)]",
     ]
-    assert categorized.match_type_counts == {"llm": 5, "raw_product_history": 2}
 
 
 def test_categorize_unique_products_makes_llm_calls_concurrently() -> None:

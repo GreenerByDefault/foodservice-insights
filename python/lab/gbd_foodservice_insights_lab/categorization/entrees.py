@@ -7,7 +7,6 @@ Gemini Flash/Pro two-pass classification, normalization, serving-size
 assignment, and review-sheet construction.
 """
 
-import dataclasses
 import logging
 import time
 from pathlib import Path
@@ -16,7 +15,6 @@ from typing import Any
 import pandas as pd
 from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import normalize_product_name
-from gbd_foodservice_insights.categorization.steps import MergeCounts
 from gbd_foodservice_insights.utils import print_progress
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
@@ -530,18 +528,10 @@ def run_entree_detector(
 
 def filter_to_entrees(
     merged_df: pd.DataFrame,
-    counts: MergeCounts,
     classified_products: pd.DataFrame,
-) -> tuple[pd.DataFrame, MergeCounts, int]:
-    """
-    Keep only the entree rows of `merge_categorizations`' output, and update its counts.
-
-    Also returns how many rows were side/add-ons.
-
-    This runs after the merge, not before, so that side/add-ons do not count toward the
-    merge's "over 80% of products eliminated" check: a file that is mostly sides is still
-    usable serving data. `n_products_after` keeps its pre-filter value for the same reason.
-    """
+) -> tuple[pd.DataFrame, int]:
+    """Keep only the entree rows of `merge_categorizations`' output, and count the side/add-on
+    rows."""
     classifications = merged_df["product"].map(
         classified_products.set_index("product")["entree_classification"]
     )
@@ -550,7 +540,7 @@ def filter_to_entrees(
     ]
     logger.info("Entree filter: kept %d/%d rows.", len(entrees), len(merged_df))
     n_rows_non_entree = int((classifications == ENTREE_LABEL_SIDE_ADDON).sum())
-    return entrees, dataclasses.replace(counts, n_rows_after=len(entrees)), n_rows_non_entree
+    return entrees, n_rows_non_entree
 
 
 def build_entree_human_review_table(
