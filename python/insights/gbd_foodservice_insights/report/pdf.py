@@ -916,7 +916,8 @@ def _executive_narrative(
     co2e_by_cat = report.emissions_summary.dropna(subset=["total_kg_co2e"])
     total_co2e = float(co2e_by_cat["total_kg_co2e"].sum())
 
-    top = co2e_by_cat.nlargest(3, "total_kg_co2e")
+    # A category bought only at zero weight sums to 0 and would otherwise fill a spare slot.
+    top = co2e_by_cat[co2e_by_cat["total_kg_co2e"] > 0].nlargest(3, "total_kg_co2e")
     return ExecutiveNarrative(
         client=client_name,
         period=date_range_label(report.rows),

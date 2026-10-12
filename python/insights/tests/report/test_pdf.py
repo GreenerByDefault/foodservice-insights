@@ -778,6 +778,19 @@ def test_executive_narrative_lists_only_the_top_three_categories() -> None:
     assert narrative.top_categories == (("b", 40.0), ("d", 30.0), ("e", 20.0))
 
 
+def test_executive_narrative_omits_categories_without_emissions() -> None:
+    report = replace(
+        _report(),
+        emissions_summary=pd.DataFrame(
+            {"category": ["a", "b", "c"], "total_kg_co2e": [3.0, 1.0, 0.0]}
+        ),
+    )
+
+    narrative = _executive_narrative(report, "Acme", "pass")
+
+    assert narrative.top_categories == (("a", 75.0), ("b", 25.0))
+
+
 @pytest.mark.parametrize(
     ("kg", "expected"),
     [
