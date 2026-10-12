@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Mapping
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -62,11 +61,6 @@ def detect_unusual_sales(
         "outlier_line_items", "small_category_ratio_threshold"
     )
 
-    required_columns = (metric.column, product_name_col, category_col)
-    missing_columns = [column for column in required_columns if column not in df.columns]
-    if missing_columns:
-        raise KeyError(f"Missing required columns for unusual sales check: {missing_columns}")
-
     no_outliers = [
         make_finding(
             stage="diagnostics",
@@ -82,21 +76,11 @@ def detect_unusual_sales(
         )
     ]
 
-    if df.empty:
-        return no_outliers, pd.DataFrame()
-
     working = df.copy()
     working["_row_index"] = working.index
-    working["_metric_value"] = pd.to_numeric(working[metric.column], errors="coerce")
+    working["_metric_value"] = working[metric.column]
 
-    valid_rows = working[
-        working[category_col].notna()
-        & working["_metric_value"].notna()
-        & (working["_metric_value"] > 0)
-    ].copy()
-
-    if valid_rows.empty:
-        return no_outliers, pd.DataFrame()
+    valid_rows = working[working["_metric_value"] > 0].copy()
 
     grouped = valid_rows.groupby(category_col)["_metric_value"]
     stats = grouped.agg(category_row_count="size", category_median="median").reset_index()
@@ -277,43 +261,9 @@ def check_per_product_weight_bounds(
     if low > high:
         raise ValueError(f"Per-product weight bounds must satisfy low <= high; got {low} > {high}.")
 
-    required_columns = [metric.column, "product"]
-    missing_columns = [column for column in required_columns if column not in df.columns]
-    if missing_columns:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="per_product_weight_bounds",
-                    status="info",
-                    message=(
-                        f"Could not check {subject_label} because these columns are missing: "
-                        f"{missing_columns}"
-                    ),
-                    metadata={"missing_columns": missing_columns},
-                )
-            ],
-            pd.DataFrame(),
-        )
-
-    if df.empty:
-        return (
-            [
-                make_finding(
-                    stage="diagnostics",
-                    category="per_product_weight_bounds",
-                    status="success",
-                    message=f"No {subject_label} issues found.",
-                    count=0,
-                    metadata={"low": low, "high": high, "flagged_row_count": 0},
-                )
-            ],
-            pd.DataFrame(columns=["row_index", "product", metric.column, "breached_bound"]),
-        )
-
     working = df.copy()
     working["_row_index"] = working.index
-    working["_metric_value"] = pd.to_numeric(working[metric.column], errors="coerce")
+    working["_metric_value"] = working[metric.column]
 
     # A zero line is ordinary data, not a unit mistake: the report counts it like any other.
     flagged_rows = working.loc[
@@ -427,20 +377,6 @@ def detect_month_over_month_total_volatility(
     operational shift. Surfacing those jumps gives catering managers a simple
     continuity check before they read the rest of the report.
     """
-    if metric.column not in df.columns:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="month_over_month_total_volatility",
-                status="info",
-                message=(
-                    "Could not check month-to-month total volatility because "
-                    f"'{metric.column}' is missing."
-                ),
-                metadata={"missing_columns": [metric.column]},
-            )
-        ]
-
     monthly_totals = (
         df.dropna(subset=[month_col])
         .groupby(month_col, dropna=False)[metric.column]
@@ -471,19 +407,6 @@ def detect_month_over_month_total_volatility(
     comparison_df["previous_month"] = comparison_df[month_col].shift(1)
     comparison_df["previous_total"] = comparison_df["current_total"].shift(1)
     comparison_df = comparison_df.dropna(subset=["previous_total"]).copy()
-    if comparison_df.empty:
-        return [
-            make_finding(
-                stage="diagnostics",
-                category="month_over_month_total_volatility",
-                status="info",
-                message=(
-                    "Could not check month-to-month total volatility because a "
-                    "previous-month comparison was not available."
-                ),
-                count=0,
-            )
-        ]
 
     zero_previous_mask = comparison_df["previous_total"] == 0
     comparison_df["pct_change"] = (
@@ -548,9 +471,8 @@ def detect_month_over_month_total_volatility(
     return findings
 
 
-def _format_month_label(value: Any) -> str:
-    """Format month-like values consistently across month-based diagnostics."""
-    return pd.Period(str(value), freq="M").strftime("%b %Y")
+def _format_month_label(month: pd.Period) -> str:
+    return month.strftime("%b %Y")
 
 
 def _describe_unmatched_count(
@@ -804,9 +726,6 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     """Check if first/last months look partial based on row count."""
     findings: list[Finding] = []
 
-    if "month_year" not in df.columns:
-        return findings
-
     month_counts = df.groupby("month_year", dropna=False).size().sort_index()
     if len(month_counts) < 3:
         return findings
@@ -816,8 +735,6 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
         "partial_month_ratio_threshold",
     )
     median_count = month_counts.iloc[1:-1].median()
-    if median_count == 0:
-        return findings
 
     for label, idx in [("first", 0), ("last", -1)]:
         count = month_counts.iloc[idx]
@@ -854,21 +771,19 @@ def run_all_diagnostics(
         df, diner_meal_mapping, KILOS.column, diner_or_meal=diner_or_meal
     )
     findings.extend(denominator_reasonableness_findings)
-    if "category" in df.columns and "product" in df.columns and KILOS.column in df.columns:
-        unusual_sales_findings, _ = detect_unusual_sales(
-            df,
-            KILOS,
-            product_name_col="product",
-            category_col="category",
-        )
-        findings.extend(unusual_sales_findings)
-    if "product" in df.columns and KILOS.column in df.columns:
-        per_product_weight_bound_findings, _ = check_per_product_weight_bounds(
-            df,
-            KILOS,
-            low=get_diagnostic_threshold("per_product_weight_bounds", "low"),
-            high=get_diagnostic_threshold("per_product_weight_bounds", "high"),
-        )
-        findings.extend(per_product_weight_bound_findings)
+    unusual_sales_findings, _ = detect_unusual_sales(
+        df,
+        KILOS,
+        product_name_col="product",
+        category_col="category",
+    )
+    findings.extend(unusual_sales_findings)
+    per_product_weight_bound_findings, _ = check_per_product_weight_bounds(
+        df,
+        KILOS,
+        low=get_diagnostic_threshold("per_product_weight_bounds", "low"),
+        high=get_diagnostic_threshold("per_product_weight_bounds", "high"),
+    )
+    findings.extend(per_product_weight_bound_findings)
     findings.extend(check_date_distribution(df))
     return findings
