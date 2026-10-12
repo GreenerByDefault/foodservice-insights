@@ -62,6 +62,7 @@ const ACCEPTED_FILE_TYPES = `.csv,text/csv,.xlsx,${XLSX_CONTENT_TYPE}`;
 // lands instead.
 let fileInputElement: HTMLInputElement | null = $state(null);
 let replaceButtonElement: HTMLButtonElement | HTMLAnchorElement | null = $state(null);
+
 let unitSystemElement: HTMLElement | null = $state(null);
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
