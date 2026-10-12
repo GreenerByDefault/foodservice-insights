@@ -4,7 +4,7 @@ from typing import NoReturn
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights_lab.food_report import pipeline
+from gbd_foodservice_insights_lab.food_report import pipeline, serving
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 
 
@@ -56,33 +56,42 @@ def test_run_food_report_writes_a_failed_manifest_on_a_bad_date(food_report_tmp_
     assert manifest["quality_status"] is None
 
 
-def test_run_food_report_hands_the_report_a_numeric_metric(monkeypatch, tmp_path):
-    input_path = tmp_path / "categorized_serving.csv"
+@pytest.mark.parametrize(
+    ("mode", "metric", "module", "builder"),
+    [
+        ("procurement", "kilos_total", pipeline, "build_food_report"),
+        ("serving", "servings total", serving, "build_serving_report"),
+    ],
+)
+def test_run_food_report_hands_the_report_a_numeric_metric(
+    monkeypatch, tmp_path, mode: str, metric: str, module: object, builder: str
+):
+    input_path = tmp_path / "categorized_test.csv"
     pd.DataFrame(
         {
             "date": ["2024-01-05", "2024-01-06"],
             "product": ["tofu", "beef stew"],
             "category": ["legumes", "beef and buffalo meat"],
-            "servings total": ["1,234", "5"],
+            metric: ["1,234", "5"],
         }
     ).to_csv(input_path, index=False)
     handed: list[pd.DataFrame] = []
 
-    def fake_build_food_report(rows: pd.DataFrame, **_: object) -> NoReturn:
+    def fake_build(rows: pd.DataFrame, **_: object) -> NoReturn:
         handed.append(rows)
         raise _StopRun
 
-    monkeypatch.setattr(pipeline, "build_food_report", fake_build_food_report)
+    monkeypatch.setattr(module, builder, fake_build)
 
     with pytest.raises(_StopRun):
         run_food_report(
             input_file=input_path,
             diner_meal_mapping={"2024-01": 1000},
             output_dir=tmp_path,
-            procurement_serving="serving",
+            procurement_serving=mode,
         )
 
-    assert handed[0]["servings total"].tolist() == [1234.0, 5.0]
+    assert handed[0][metric].tolist() == [1234.0, 5.0]
 
 
 class _StopRun(Exception):

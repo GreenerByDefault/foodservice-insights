@@ -21,7 +21,6 @@ from gbd_foodservice_insights.report.pdf import (
     _format_substitution_scenarios_for_pdf,
     _narrative_paragraphs,
     _pack_columns,
-    _quality_to_lines,
     _wrap_text_lines,
     _wrap_to_width,
     create_category_template_pages,
@@ -30,6 +29,7 @@ from gbd_foodservice_insights.report.pdf import (
     create_substitution_scenarios_page,
     create_text_page,
     create_title_page,
+    quality_lines,
     write_report_pdf,
 )
 from gbd_foodservice_insights.report.quality import Finding, make_finding
@@ -449,7 +449,7 @@ def test_write_report_pdf_caveats_only_a_warning(
 
 
 def test_quality_lines_explain_an_invalid_status() -> None:
-    assert _quality_to_lines(
+    assert quality_lines(
         [
             _finding("success", "All required columns present."),
             _finding("error", "Found 2 negative values in 'kilos_total'."),
@@ -470,7 +470,7 @@ def test_quality_lines_explain_an_invalid_status() -> None:
 
 
 def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
-    assert _quality_to_lines(
+    assert quality_lines(
         [
             _finding("success", "All required columns present."),
             _finding("info", "GBD categories absent from data: ['Butter']"),
@@ -490,7 +490,7 @@ def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
 
 
 def test_quality_lines_for_the_customer_say_so_when_every_check_passed() -> None:
-    assert _quality_to_lines(
+    assert quality_lines(
         [_finding("success", "All required columns present."), _finding("info", "A note.")],
         show_successes=False,
     ) == [
@@ -510,7 +510,7 @@ def test_quality_lines_list_at_most_20_findings_with_5_samples_each() -> None:
         for i in range(25)
     ]
 
-    lines = _quality_to_lines(findings, show_successes=True)
+    lines = quality_lines(findings, show_successes=True)
 
     assert lines[3] == "  25 warnings"
     details = lines[lines.index("Check details:") + 1 :]
@@ -523,14 +523,14 @@ def test_quality_lines_list_at_most_20_findings_with_5_samples_each() -> None:
 
 def test_quality_lines_count_notes_for_the_data_scientist_with_singular_and_plural() -> None:
     def counts(*findings: Finding) -> str:
-        return _quality_to_lines(list(findings), show_successes=True)[3]
+        return quality_lines(list(findings), show_successes=True)[3]
 
     assert counts(_finding("info", "a")) == "  1 note"
     assert counts(_finding("info", "a"), _finding("info", "b")) == "  2 notes"
 
 
 def test_quality_lines_with_no_findings_say_nothing_was_detected() -> None:
-    assert _quality_to_lines([], show_successes=True)[2:] == [
+    assert quality_lines([], show_successes=True)[2:] == [
         "All automated data checks passed — your data looks complete and consistent.",
         "",
         "No issues were detected.",

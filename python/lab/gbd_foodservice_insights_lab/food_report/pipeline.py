@@ -1,44 +1,42 @@
 """The data scientists' food report: reads a categorized CSV and writes the full bundle.
 
-The report itself is built by the product's `food_report.build_food_report` and
+A procurement report is built by the product's `food_report.build_food_report` and
 `build_report_charts`, and its two deliverables by `pdf.write_report_pdf` and
-`excel.write_client_workbook`. This wrapper adds the file handling around them and the rest of
-the bundle, all lab-only: chart PNGs, the QA workbook, the run manifest, the run log, and the
-write-back into `client_metadata.json`.
+`excel.write_client_workbook`; a serving report by the lab's own `serving` module. This wrapper
+adds the file handling around them and the rest of the bundle, all lab-only: chart PNGs, the QA
+workbook, the run manifest, the run log, and the write-back into `client_metadata.json`.
 """
 
 import dataclasses
 import json
 import logging
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 from gbd_foodservice_insights.report import checks, excel, pdf
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
+    ReportCharts,
     build_food_report,
     build_report_charts,
 )
-from gbd_foodservice_insights.report.metric import METRIC_BY_MODE, Metric
+from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.quality import (
     Finding,
     findings_to_frame,
     missingness_summary_frame,
     summarize_findings,
 )
-from gbd_foodservice_insights.report.schema import (
-    VALID_REPORT_MODES,
-    DinerOrMeal,
-    ReportMode,
-    quality_status_from_findings,
-)
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, quality_status_from_findings
 
-from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging
+from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging, serving
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
 from gbd_foodservice_insights_lab.food_report import excel as qa_excel
+from gbd_foodservice_insights_lab.food_report.serving import ServingReport
 from gbd_foodservice_insights_lab.food_report.utils import (
     load_diner_meal_mapping_from_json,
     normalize_diner_meal_mapping,
@@ -50,6 +48,9 @@ from gbd_foodservice_insights_lab.parsing import (
 )
 
 logger = logging.getLogger(__name__)
+
+ReportMode = Literal["procurement", "serving"]
+_METRIC_BY_MODE: dict[ReportMode, Metric] = {"procurement": KILOS, "serving": serving.SERVINGS}
 
 _STAGE_MESSAGES = {
     "plot_generation": "Building the report charts.",
@@ -216,12 +217,12 @@ def run_food_report(
             if diner_meal_mapping is None
             else normalize_diner_meal_mapping(diner_meal_mapping)
         )
-        df = clean_weight_column(parse_and_validate_date_column(df), METRIC_BY_MODE[mode].column)
+        df = clean_weight_column(parse_and_validate_date_column(df), _METRIC_BY_MODE[mode].column)
 
-        report = build_food_report(
+        report = _build_report(
             df,
-            diner_meal_mapping=counts,
             mode=mode,
+            diner_meal_mapping=counts,
             region=region,
             diner_or_meal=diner_or_meal,
             top_n_drivers=top_n_drivers,
@@ -253,7 +254,7 @@ def run_food_report(
         quality_findings = list(report.findings)
 
         _log_stage("plot_generation", report_progress)
-        with build_report_charts(report) as charts:
+        with _report_charts(report) as charts:
             _log_stage("plot_export", report_progress)
             graph_paths = plots.export_report_plots(
                 charts.figures,
@@ -261,7 +262,7 @@ def run_food_report(
             )
 
             _log_stage("pdf_build", report_progress)
-            pdf.write_report_pdf(
+            _write_pdf(
                 report,
                 charts,
                 Path(artifact_paths["pdf_path"]),
@@ -274,7 +275,7 @@ def run_food_report(
         summary_stats = {**report.summary_stats, "Data Quality Status": quality_status.upper()}
 
         _log_stage("client_workbook_build", report_progress)
-        excel.write_client_workbook(report, Path(artifact_paths["client_excel_path"]))
+        _write_client_workbook(report, Path(artifact_paths["client_excel_path"]))
 
         _log_stage("qa_workbook_build", report_progress)
         artifact_paths["qa_excel_path"] = _write_qa_workbook(
@@ -357,8 +358,75 @@ def run_food_report(
         run_logging.close_report_run_file_handler(log_handler_state)
 
 
+def _build_report(
+    rows: pd.DataFrame,
+    *,
+    mode: ReportMode,
+    diner_meal_mapping: Mapping[pd.Period, float],
+    region: Region,
+    diner_or_meal: DinerOrMeal,
+    top_n_drivers: int,
+    report_progress: Callable[[], None],
+) -> FoodReport | ServingReport:
+    if mode == "serving":
+        return serving.build_serving_report(
+            rows,
+            diner_meal_mapping=diner_meal_mapping,
+            diner_or_meal=diner_or_meal,
+            top_n_drivers=top_n_drivers,
+        )
+    return build_food_report(
+        rows,
+        diner_meal_mapping=diner_meal_mapping,
+        mode="procurement",
+        region=region,
+        diner_or_meal=diner_or_meal,
+        top_n_drivers=top_n_drivers,
+        report_progress=report_progress,
+    )
+
+
+def _report_charts(report: FoodReport | ServingReport) -> AbstractContextManager[ReportCharts]:
+    if isinstance(report, ServingReport):
+        return serving.serving_charts(report)
+    return build_report_charts(report)
+
+
+def _write_pdf(
+    report: FoodReport | ServingReport,
+    charts: ReportCharts,
+    path: Path,
+    *,
+    client_name: str,
+    show_quality_successes: bool,
+) -> None:
+    if isinstance(report, ServingReport):
+        serving.write_serving_pdf(
+            report,
+            charts,
+            path,
+            client_name=client_name,
+            show_quality_successes=show_quality_successes,
+        )
+    else:
+        pdf.write_report_pdf(
+            report,
+            charts,
+            path,
+            client_name=client_name,
+            show_quality_successes=show_quality_successes,
+        )
+
+
+def _write_client_workbook(report: FoodReport | ServingReport, path: Path) -> None:
+    if isinstance(report, ServingReport):
+        serving.write_serving_workbook(report, path)
+    else:
+        excel.write_client_workbook(report, path)
+
+
 def _write_qa_workbook(
-    report: FoodReport,
+    report: FoodReport | ServingReport,
     path: str,
     *,
     quality_findings: list[Finding],
@@ -366,7 +434,12 @@ def _write_qa_workbook(
     category_discontinuity: pd.DataFrame,
 ) -> str:
     df = report.rows
-    aggregation = report.aggregation
+    # A serving report holds its tables directly and has no emissions.
+    if isinstance(report, ServingReport):
+        tables, emissions_summary, procurement = report, None, None
+    else:
+        tables = report.aggregation
+        emissions_summary, procurement = report.emissions_summary, report.aggregation.procurement
     data_profile_df = None
     try:
         data_profile_df = qa_diagnostics.summarise_numeric_columns(df)
@@ -376,16 +449,16 @@ def _write_qa_workbook(
     return qa_excel.build_qa_excel_report(
         output_path=path,
         raw_df=df,
-        monthly_product_data=aggregation.monthly_product,
-        monthly_category_data=aggregation.monthly_category,
-        template_data=aggregation.template,
+        monthly_product_data=tables.monthly_product,
+        monthly_category_data=tables.monthly_category,
+        template_data=tables.template,
         highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
-            aggregation.monthly_category,
+            tables.monthly_category,
             metric_col=report.metric.per_head(report.diner_or_meal),
         ),
-        diner_meals_df=excel.diner_meals_frame(report),
-        emissions_summary=report.emissions_summary,
-        procurement=aggregation.procurement,
+        diner_meals_df=excel.diner_meals_frame(report.diner_meal_mapping, report.diner_or_meal),
+        emissions_summary=emissions_summary,
+        procurement=procurement,
         quality_findings_df=findings_to_frame(quality_findings),
         missingness_summary_df=missingness_summary_frame(df),
         data_profile_df=data_profile_df,
@@ -403,13 +476,6 @@ def _write_qa_workbook(
 
 def _normalize_report_mode(value: str | None) -> ReportMode:
     """Normalize arbitrary procurement/serving text into a canonical mode."""
-    if value is None:
-        return "procurement"
-
-    normalized = str(value).strip().lower()
-    if normalized in VALID_REPORT_MODES:
-        return normalized
-
-    if "serv" in normalized:
+    if value is not None and "serv" in str(value).lower():
         return "serving"
     return "procurement"

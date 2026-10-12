@@ -667,7 +667,7 @@ _STATUS_LABELS: dict[DiagnosticStatus, str] = {
 }
 
 
-def _quality_to_lines(findings: Sequence[Finding], *, show_successes: bool) -> list[str]:
+def quality_lines(findings: Sequence[Finding], *, show_successes: bool) -> list[str]:
     """Turn the quality findings into plain lines for the PDF report. Without
     ``show_successes`` (the customer's report), only warnings and issues are listed, and notes
     are not counted."""
@@ -922,7 +922,7 @@ def write_report_pdf(
         create_text_page(
             pdf,
             "Data Completeness & Quality",
-            _quality_to_lines(report.findings, show_successes=show_quality_successes),
+            quality_lines(report.findings, show_successes=show_quality_successes),
         )
 
     logger.info("PDF report saved to %s", path)
