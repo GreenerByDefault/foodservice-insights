@@ -2,7 +2,7 @@
 import PageHeading from '#lib/components/page-heading.svelte';
 import * as Field from '#lib/components/ui/field/index.js';
 import type { PageProps } from './$types';
-import DeleteButton from './delete-button.svelte';
+import DeleteOrganization from './delete-organization.svelte';
 import RenameForm from './rename-form.svelte';
 import { pageTitle } from '#lib/page-title.js';
 
@@ -20,7 +20,7 @@ let { data }: PageProps = $props();
 
   <Field.Separator />
 
-  <DeleteButton
+  <DeleteOrganization
     organizationSlug={data.organization.slug}
     organizationName={data.organization.name}
   />

@@ -4,7 +4,7 @@ import { lastFetchCall, stubFetch, stubUnreachableFetch } from '#lib/testing/fet
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import { goto } from '$app/navigation';
-import DeleteButton from './delete-button.svelte';
+import DeleteOrganization from './delete-organization.svelte';
 
 vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
@@ -15,9 +15,9 @@ afterEach(() => {
   resetToastMocks();
 });
 
-describe('DeleteButton', () => {
+describe('DeleteOrganization', () => {
   test('names the organization in the trigger dialog and keeps confirm disabled until the name is typed', async () => {
-    const screen = await render(DeleteButton, {
+    const screen = await render(DeleteOrganization, {
       organizationSlug: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -35,7 +35,7 @@ describe('DeleteButton', () => {
   });
 
   test('canceling and reopening clears the typed name, so confirm is disabled again', async () => {
-    const screen = await render(DeleteButton, {
+    const screen = await render(DeleteOrganization, {
       organizationSlug: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -55,7 +55,7 @@ describe('DeleteButton', () => {
   });
 
   test('a partially typed name keeps confirm disabled', async () => {
-    const screen = await render(DeleteButton, {
+    const screen = await render(DeleteOrganization, {
       organizationSlug: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -70,7 +70,7 @@ describe('DeleteButton', () => {
 
   test('confirming DELETEs the organization, navigates to /orgs and toasts', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
-    const screen = await render(DeleteButton, {
+    const screen = await render(DeleteOrganization, {
       organizationSlug: 'org-1',
       organizationName: 'Acme Foodservice',
     });
@@ -90,7 +90,7 @@ describe('DeleteButton', () => {
 
   test('an unreachable server shows the inline error, and neither navigates nor toasts', async () => {
     stubUnreachableFetch();
-    const screen = await render(DeleteButton, {
+    const screen = await render(DeleteOrganization, {
       organizationSlug: 'org-1',
       organizationName: 'Acme Foodservice',
     });

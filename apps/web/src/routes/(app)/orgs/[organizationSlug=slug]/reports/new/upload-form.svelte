@@ -20,7 +20,7 @@ import {
 import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '#lib/reports/metadata.js';
 import { type CountDraft, reconcileDraft, serializeCounts } from '#lib/reports/monthly-counts.js';
 import { userFacingRejection, type UploadRejection } from '#lib/reports/rejection.js';
-import { uploadReport } from '#lib/reports/api/upload.js';
+import { uploadReport } from '#lib/reports/api/upload-report.js';
 import MonthlyCounts from './monthly-counts.svelte';
 import RejectionView from './rejection-view.svelte';
 

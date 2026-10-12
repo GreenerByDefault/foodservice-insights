@@ -1,5 +1,5 @@
 import type { OrganizationRole } from '@gbd/db';
-import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { ApiError, apiCall, isApiFailure } from '#lib/api/fetch.js';
 import { organizationInvitesApiHref } from '#lib/hrefs.js';
 
 export type CreateInviteOutcome =
@@ -27,8 +27,7 @@ export async function createInvite(
       if (error.status === 409) return { kind: 'already-member' };
       if (error.status === 429) return { kind: 'rate-limited' };
     }
-    if (error instanceof ApiError || error instanceof ApiUnreachableError)
-      return { kind: 'unknown' };
+    if (isApiFailure(error)) return { kind: 'unknown' };
     throw error;
   }
 }

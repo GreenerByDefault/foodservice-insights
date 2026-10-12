@@ -1,4 +1,4 @@
-import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { ApiError, apiCall, isApiFailure } from '#lib/api/fetch.js';
 import { organizationHref, reportsApiHref } from '#lib/hrefs.js';
 import { parseUploadRejection, type UploadRejection } from '../rejection.ts';
 
@@ -31,8 +31,7 @@ export async function uploadReport(
     // 401/403/404 (the page's `load` already guarded access, so reaching one here means the
     // session died mid-form) — is answered the same way: we don't know whether the upload was
     // received, so the safe advice is to go check the report list.
-    if (error instanceof ApiError || error instanceof ApiUnreachableError)
-      return { kind: 'unknown' };
+    if (isApiFailure(error)) return { kind: 'unknown' };
     throw error;
   }
 }

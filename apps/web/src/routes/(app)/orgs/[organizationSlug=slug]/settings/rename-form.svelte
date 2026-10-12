@@ -3,6 +3,7 @@ import { toast } from 'svelte-sonner';
 import { refreshAll } from '$app/navigation';
 import OrganizationNameForm from '#lib/components/orgs/organization-name-form.svelte';
 import { renameOrganization } from '#lib/orgs/api/rename-organization.js';
+import type { OrganizationNameFailure } from '#lib/orgs/name.js';
 
 interface Props {
   organizationSlug: string;
@@ -11,7 +12,9 @@ interface Props {
 
 let { organizationSlug, initialName }: Props = $props();
 
-async function handleSubmit(name: string): Promise<'done' | 'name-taken' | 'unknown'> {
+async function handleSubmit(
+  name: string,
+): Promise<'done' | Extract<OrganizationNameFailure, 'name-taken' | 'unknown'>> {
   const outcome = await renameOrganization(organizationSlug, name);
   if (outcome.kind !== 'renamed') return outcome.kind;
 

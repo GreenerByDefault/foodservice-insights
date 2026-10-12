@@ -4,7 +4,11 @@ import { Button } from '#lib/components/ui/button/index.js';
 import * as Field from '#lib/components/ui/field/index.js';
 import { Input } from '#lib/components/ui/input/index.js';
 import { MIN_NAME_LENGTH } from '#lib/forms/validation.js';
-import { FIELD, MAX_ORGANIZATION_NAME_LENGTH } from '#lib/orgs/name.js';
+import {
+  FIELD,
+  MAX_ORGANIZATION_NAME_LENGTH,
+  type OrganizationNameFailure,
+} from '#lib/orgs/name.js';
 
 interface Props {
   initialName: string;
@@ -15,11 +19,7 @@ interface Props {
   submitLabel: string;
   submittingLabel: string;
   unknownNotice: Snippet;
-  onSubmit: (
-    name: string,
-  ) => Promise<
-    'done' | 'name-taken' | 'slug-taken' | 'slug-reserved' | 'slug-underivable' | 'unknown'
-  >;
+  onSubmit: (name: string) => Promise<'done' | OrganizationNameFailure>;
 }
 
 let { initialName, legend, submitLabel, submittingLabel, unknownNotice, onSubmit }: Props =

@@ -1,4 +1,4 @@
-import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { ApiError, apiCall, isApiFailure } from '#lib/api/fetch.js';
 import { acceptInviteApiHref } from '#lib/hrefs.js';
 
 export type AcceptInviteOutcome =
@@ -18,8 +18,7 @@ export async function acceptInvite(inviteId: string): Promise<AcceptInviteOutcom
       if (error.status === 409) return { kind: 'no-longer-valid' };
       if (error.status === 410) return { kind: 'expired' };
     }
-    if (error instanceof ApiError || error instanceof ApiUnreachableError)
-      return { kind: 'unknown' };
+    if (isApiFailure(error)) return { kind: 'unknown' };
     throw error;
   }
 }

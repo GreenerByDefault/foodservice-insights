@@ -2,12 +2,9 @@
 import { goto } from '$app/navigation';
 import OrganizationNameForm from '#lib/components/orgs/organization-name-form.svelte';
 import { createOrganization } from '#lib/orgs/api/create-organization.js';
+import type { OrganizationNameFailure } from '#lib/orgs/name.js';
 
-async function handleSubmit(
-  name: string,
-): Promise<
-  'done' | 'name-taken' | 'slug-taken' | 'slug-reserved' | 'slug-underivable' | 'unknown'
-> {
+async function handleSubmit(name: string): Promise<'done' | OrganizationNameFailure> {
   const outcome = await createOrganization(name);
   if (outcome.kind !== 'created') return outcome.kind;
 
