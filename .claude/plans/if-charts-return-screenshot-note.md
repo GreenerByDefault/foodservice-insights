@@ -1,12 +1,13 @@
-# Getting chart images to render in screenshot tests
+# If charts return: getting chart images to render in screenshot tests
 
 ## Status
 
-Charts are currently out of the report page — pulled pending clarity from GBD on what the
-succeeded screen should show at all. This document is not an in-flight plan with PRs to fold
-back; it's a note to come back to whenever charts (or any other `<img>` backed by a signed
-storage URL) return to a screenshotted page. The code this refers to will have moved on by then;
-treat names below as pointers into history, not a spec to match exactly.
+**Not planned work.** Charts on the report page are no longer a requirement (`REQUIREMENTS.md`
+§ Result page); they live only in the PDF. This file has no PRs and nothing to advance. Unlike
+the rest of `.claude/plans/`, it is kept on purpose, as a note for if a page ever shows charts
+again, or any other `<img>` backed by a signed storage URL. If that happens, turn it into a real
+plan. The code it refers to will have moved on by then, so treat the names below as pointers into
+history, not a spec to match.
 
 ## The problem, empirically confirmed
 
