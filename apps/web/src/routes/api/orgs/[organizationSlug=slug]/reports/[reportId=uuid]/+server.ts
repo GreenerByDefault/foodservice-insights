@@ -17,9 +17,7 @@ import type { RequestHandler } from './$types';
 export const DELETE: RequestHandler = async (event) => {
   const { organizationId, reportId, actor } = await requireReportRouteContext(database(), event);
 
-  await _deleteReport(database(), { organizationId, reportId, actor });
-
-  return new Response(null, { status: 204 });
+  return await _deleteReport(database(), { organizationId, reportId, actor });
 };
 
 /** Delete `reportId` — REQUIREMENTS.md § Data deletion.
@@ -32,7 +30,7 @@ export const DELETE: RequestHandler = async (event) => {
 export async function _deleteReport(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId; reportId: ReportId; actor: Actor },
-): Promise<void> {
+): Promise<Response> {
   const { organizationId, actor } = params;
 
   await withDbErrorHandling(
@@ -64,4 +62,6 @@ export async function _deleteReport(
       }),
     { action: 'delete a report', context: { organizationId, reportId: params.reportId } },
   );
+
+  return new Response(null, { status: 204 });
 }

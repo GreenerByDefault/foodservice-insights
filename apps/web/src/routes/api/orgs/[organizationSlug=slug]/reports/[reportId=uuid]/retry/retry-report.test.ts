@@ -32,7 +32,8 @@ describe('_retryReport', () => {
       const retry = (actor: Actor) =>
         _retryReport(transaction, { organizationId: organization.id, reportId: report.id, actor });
 
-      await retry({ userId: admin.id, role: 'member' });
+      const response = await retry({ userId: admin.id, role: 'member' });
+      expect(response.status).toBe(204);
 
       const attempts = await transaction
         .selectFrom('analysisAttempt')
