@@ -6,10 +6,12 @@ An audit on 2026-10-11 of the finished web app against WCAG 2.2 AA and phone-key
 on top of what earlier passes already landed: busy and error states announced and focus kept
 when a row disappears (`focusPageHeading`, PR #429), a title on every page for SvelteKit's route
 announcer (checked by `routes/page-titles.test.ts`), live regions on the report page and list
-(tested), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings
-failing `svelte-check` (nothing filters them; see `compilerOptions` in
-[`vite.config.ts`](../../apps/web/vite.config.ts)). `REQUIREMENTS.md` § Design and accessibility
-asks for a GBD accessibility review; this is the pass before it.
+(tested), the upload form's file field reachable and operable from the keyboard with focus kept
+across its swaps (`new-report.e2e.ts` drives it with Tab and Enter), mobile and tablet
+screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
+(nothing filters them; see `compilerOptions` in [`vite.config.ts`](../../apps/web/vite.config.ts)).
+`REQUIREMENTS.md` § Design and accessibility asks for a GBD accessibility review; this is the pass
+before it.
 
 What the audit checked and found fine, so nobody re-checks it: every input has a label (the
 tests query by it); the OTP field gets `autocomplete="one-time-code"` and `inputmode="numeric"`
@@ -20,6 +22,10 @@ named, no skipped heading levels, no icon without a name (Lucide sets `aria-hidd
 from bits-ui (**verified**); lists are real lists and each row is one link; status is never
 colour alone; `--muted-foreground` on white is 4.7:1; every control is at least 24px (2.5.8 AA);
 the dialog fits 375px; no `target="_blank"`, no positive `tabindex`, no `100vh`.
+
+Component tests (`*.svelte.test.ts`) run without Tailwind, so `hidden`, `sr-only` and every ring
+are inert there — and Chromium forwards `label.focus()` to the labelled control. Whether something
+is focusable or visibly focused can only be proven in Playwright (`toBeFocused`, `toHaveCSS`).
 
 Facts marked **verified** were read in the code or `node_modules` on 2026-10-11. Contrast ratios
 are computed from the oklch tokens in [`layout.css`](../../apps/web/src/routes/layout.css); the
@@ -58,47 +64,15 @@ review every changed PNG rather than committing the batch.
     above Cancel on phones while Tab reaches Cancel first — both shadcn conventions, left alone.
   - The `.dark` block in `layout.css` is dead (nothing applies the class) and is not touched here.
 
-## PR 1 — The upload form works from a keyboard
-
-Two blockers, both in the file field. A keyboard or switch user cannot upload a report today.
-
-- **The file input is `display:none`** ([`file-drop-zone.svelte:32`](../../apps/web/src/lib/components/ui/file-drop-zone/file-drop-zone.svelte)),
-  so it is out of the tab order, and the trigger is a `<label>`, which takes no focus. Make the
-  input `peer sr-only` — a file input in the tab order opens its picker on Enter or Space — and
-  give the label a visible ring while the input has focus (`block rounded-md
-  peer-focus-visible:ring-3 peer-focus-visible:ring-ring`, the same look as `Input`). Expose the
-  input as `ref` on `FileDropZone.Root` the way the other primitives do (`WithElementRef`,
-  `bind:this`), since `bind:this` cannot ride on the `...rest` spread.
-- **Focusing the trigger does nothing** ([`upload-form.svelte:126`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/new/upload-form.svelte)):
-  after an empty submit, `dropZoneTriggerElement?.focus()` lands on a label. Bind the new `ref`
-  and focus the input instead; `scrollIntoView` becomes unnecessary.
-- **Three transitions drop focus to `<body>`**, after which Tab starts over at the header: a
-  successful file check swaps the drop zone for the file-name row; Replace swaps it back;
-  "Back to the form" remounts everything. After `tick()`, focus the Replace button, the file input,
-  and the file input respectively.
-- **"Checking your file…" is probably never announced**: the `aria-live` `<p>` at `:190-192` is
-  created with its text already in it. Keep a `role="status"` element mounted and swap its text,
-  the pattern `code-step.svelte` already uses for "Signing in…" (see its comment near line 293).
-- **Drop the generated hint** in [`file-drop-zone-trigger.svelte`](../../apps/web/src/lib/components/ui/file-drop-zone/file-drop-zone-trigger.svelte)
-  ("You can upload 1 files (up to 10 MB each)"): wrong plural, redundant with the
-  `Field.Description` above the field, and `text-muted-foreground/75` is about 2.9:1. The `label`
-  prop stays the accessible name; `e2e/lib/upload.ts` locates it with `exact: false`, which can
-  become exact.
-
-Tests: `file-drop-zone.svelte.test.ts` — the input is focusable by label and the label shows the
-ring. `upload-form.svelte.test.ts` — the three focus landings, and the status text toggling.
-`new-report.e2e.ts` — Tab to the file field, press Enter, and a `filechooser` event fires: the real
-keyboard path, which no component test can prove. Screenshots: `new-report/*` (hint line gone).
-
-## PR 2 — Radio groups and field errors are announced
+## PR 1 — Radio groups and field errors are announced
 
 - **Three radio groups have no name**: "Weight unit" and "Counts basis" in `upload-form.svelte`
-  (`:242`, `:266`) and "Role" in [`invite-form.svelte:84`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/invite-form.svelte)
+  (`:268`, `:292`) and "Role" in [`invite-form.svelte:84`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/invite-form.svelte)
   each put `Field.Legend` inside `Field.Field`, a `<div role="group">`. A `<legend>` labels only
   as the first child of a `<fieldset>`, so bits-ui's `role="radiogroup"` is announced bare. Swap
   the wrapper for `Field.Set` (nested fieldsets are fine).
-- **"Choose lb or kg." neither moves focus nor attaches to the group** (`upload-form.svelte:130`,
-  `:258`): the radiogroup root has no `tabindex`, so `.focus()` on it is a no-op. Focus its first
+- **"Choose lb or kg." neither moves focus nor attaches to the group** (`upload-form.svelte:140`,
+  `:284`): the radiogroup root has no `tabindex`, so `.focus()` on it is a no-op. Focus its first
   `[role=radio]`, and put `aria-invalid` and `aria-describedby={errorId}` on the `RadioGroup`.
 - **Two field errors are not linked to their input**: the four name outcomes in
   [`organization-name-form.svelte:90-100`](../../apps/web/src/lib/components/orgs/organization-name-form.svelte)
@@ -111,7 +85,7 @@ form tests; `toHaveAccessibleDescription` on the two inputs after a failed submi
 focused after an empty unit submit. Screenshots: `new-report/*` and `organizations/members-*`
 (legend spacing inside a real fieldset is `mb-3` alone, 12px less than before).
 
-## PR 3 — Focus is visible, small text passes, motion can be reduced
+## PR 2 — Focus is visible, small text passes, motion can be reduced
 
 All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primitives.
 
@@ -122,6 +96,8 @@ All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primit
   `input.svelte`, `radio-group-item.svelte:17`, and `input-otp-slot.svelte:18` (`data-active:`).
   The base layer's `outline-ring/50` on `*` (`layout.css:121`), which colours the browser outline
   on plain links, becomes `outline-ring`; the org tabs already use `focus-visible:outline-ring`.
+  The file drop zone's `peer-focus-visible:ring-ring` is already at full opacity and picks up the
+  new `--ring` with no edit.
 - **A highlighted menu item is 1.1:1.** `dropdown-menu-item.svelte:23` (and `-checkbox-item`,
   `-radio-item`, `-sub-trigger`) uses `outline-hidden` with only `focus:bg-accent` (oklch 0.97).
   bits-ui moves real focus to the item on arrow keys, so add
@@ -137,11 +113,11 @@ All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primit
   `@media (prefers-reduced-motion: reduce)` that collapses `animation-duration` and
   `transition-duration` to near zero.
 
-Tests: none of this is testable by assertion beyond the axe gate (PR 7), which checks the contrast
+Tests: none of this is testable by assertion beyond the axe gate (PR 6), which checks the contrast
 numbers for real. Screenshots: every shot with a focused control (`auth/sign-in-*`,
 `account/account*`, possibly the open-menu shots) — review that only the ring changed.
 
-## PR 4 — Focus survives a report action, and a dialog cannot be escaped mid-request
+## PR 3 — Focus survives a report action, and a dialog cannot be escaped mid-request
 
 - **Retry and Cancel drop focus to `<body>`.** Retry ([`failure-view.svelte:26-38`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/failure/failure-view.svelte))
   unmounts its own button when the view swaps to waiting; Cancel
@@ -168,7 +144,7 @@ Tests: the h1 is focused after a retry and after a cancel (`failure-view.svelte.
 beside the component); Escape during a pending confirm leaves the dialog open
 (`confirm-action.svelte.test.ts`); the member-actions focus test above. No screenshots.
 
-## PR 5 — What a screen reader hears
+## PR 4 — What a screen reader hears
 
 - **Timeline step state is icon and colour only** ([`timeline.svelte:19-30`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/waiting/timeline.svelte)):
   only the current step carries `aria-current="step"`; a done step reads as "Waiting to start,
@@ -184,7 +160,7 @@ Tests: the listitem text in `timeline.svelte.test.ts`; `aria-current` on the men
 `organization-switcher.svelte.test.ts`; the heading level in `monthly-counts.svelte.test.ts`.
 No screenshots (sr-only text and a level change render identically).
 
-## PR 6 — Phone keyboards
+## PR 5 — Phone keyboards
 
 - **The typed confirmation can never match on an iPhone.** `confirm-action.svelte:112` is a
   plain text input compared exactly (`:69`); iOS capitalises the first letter of a text field, so
@@ -197,7 +173,7 @@ No screenshots (sr-only text and a level change render identically).
 Email fields are left alone: `type="email"` already turns off capitalisation and autocorrect on
 iOS and Android. Tests: `toHaveAttribute` in the two component tests. No screenshots.
 
-## PR 7 — An axe scan of every captured screen
+## PR 6 — An axe scan of every captured screen
 
 Lands last so it starts green and guards the rest.
 
@@ -227,11 +203,9 @@ each changed image.
 
 Drive the app for what tests cannot prove (the `run` skill or the Playwright MCP):
 
-- PR 1: from the New report page, Tab from the page heading — the dashed box gains a ring, Enter
-  opens the picker, and after choosing a file the Replace button is focused.
-- PR 3: Tab through the sign-in form, a page of buttons, and an open menu with the arrow keys;
+- PR 2: Tab through the sign-in form, a page of buttons, and an open menu with the arrow keys;
   every focused control is unmistakable against white.
-- PR 6, if a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
+- PR 5, if a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
   first letter stays lowercase and the button enables.
-- PR 7: the suite passes with zero violations, and introducing a deliberate one (remove a label
+- PR 6: the suite passes with zero violations, and introducing a deliberate one (remove a label
   locally) fails it with a readable message.

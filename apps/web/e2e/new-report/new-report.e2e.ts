@@ -28,6 +28,32 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
   await expect(page).toHaveTitle(`Q1 procurement · ${org.name} · ${APP_NAME}`);
 });
 
+test('the file field works from the keyboard alone', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
+  await ensureHydrated(page);
+
+  await page.getByRole('heading', { level: 1 }).focus();
+  await page.keyboard.press('Tab');
+
+  const input = page.getByLabel('Choose a CSV or Excel file');
+  await expect(input).toBeFocused();
+  // The input is visually hidden, so the ring on its label is the only sign of where focus is.
+  await expect(page.locator('label', { hasText: 'Choose a CSV or Excel file' })).not.toHaveCSS(
+    'box-shadow',
+    'none',
+  );
+
+  const fileChooser = page.waitForEvent('filechooser');
+  await page.keyboard.press('Enter');
+  await (await fileChooser).setFiles({
+    name: 'procurement.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(GOOD_CSV),
+  });
+
+  await expect(page.getByRole('button', { name: 'Replace' })).toBeFocused();
+});
+
 test('uploading a CSV with bad rows shows the rejection view, naming them, without ever submitting', async ({
   page,
   org,

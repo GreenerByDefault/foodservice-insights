@@ -8,6 +8,26 @@ import UploadForm from './upload-form.svelte';
 
 vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
+const inspection = vi.hoisted(() => ({ gate: Promise.resolve() }));
+
+vi.mock('#lib/reports/inspect-file.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/reports/inspect-file.js')>();
+  return {
+    ...actual,
+    inspectFile: async (file: File) => {
+      await inspection.gate;
+      return actual.inspectFile(file);
+    },
+  };
+});
+
+/** Holds every file in "Checking your file…" until the returned function is called. */
+function holdInspection(): () => void {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  inspection.gate = promise;
+  return resolve;
+}
+
 const ORGANIZATION_SLUG = 'org-1';
 const CSV = 'product,date,weight\nbeef,2026-01-05,12\n';
 
@@ -26,6 +46,7 @@ function workbookFile(): File {
 }
 
 afterEach(() => {
+  inspection.gate = Promise.resolve();
   vi.unstubAllGlobals();
   resetNavigationMocks();
 });
@@ -35,7 +56,7 @@ async function fillRequiredFields(
   { reportName = 'Q1 procurement' }: { reportName?: string } = {},
 ) {
   await screen.getByLabelText('Report name').fill(reportName);
-  await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(csvFile());
+  await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
   await expect.element(screen.getByText('1 of 1 months still need a count')).toBeInTheDocument();
   await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
   await screen.getByRole('radio', { name: 'lb' }).click();
@@ -84,7 +105,7 @@ describe('UploadForm', () => {
       const workbook = workbookFile();
 
       await screen.getByLabelText('Report name').fill('Q1 procurement');
-      await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(workbook);
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(workbook);
       await expect
         .element(screen.getByText('1 of 1 months still need a count'))
         .toBeInTheDocument();
@@ -187,9 +208,7 @@ describe('UploadForm', () => {
       const fetchMock = stubFetch(new Response(null, { status: 201 }));
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
-      await screen
-        .getByLabelText('Choose a CSV or Excel file', { exact: false })
-        .upload(csvFile(''));
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile(''));
 
       await expect.element(screen.getByText('That file has no rows in it.')).toBeInTheDocument();
       await expect.element(screen.getByText('No report was created.')).toBeInTheDocument();
@@ -201,7 +220,7 @@ describe('UploadForm', () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
       await screen
-        .getByLabelText('Choose a CSV or Excel file', { exact: false })
+        .getByLabelText('Choose a CSV or Excel file')
         .upload(new File(['not a csv'], 'notes.txt', { type: 'text/plain' }));
 
       await expect
@@ -217,7 +236,7 @@ describe('UploadForm', () => {
     test('replacing a chosen file returns to the drop zone and clears the months prompt', async () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
-      await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(csvFile());
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
       await expect
         .element(screen.getByText('1 of 1 months still need a count'))
         .toBeInTheDocument();
@@ -227,9 +246,7 @@ describe('UploadForm', () => {
       await expect
         .element(screen.getByText('Choose a file first — we will list the months it covers.'))
         .toBeInTheDocument();
-      await expect
-        .element(screen.getByLabelText('Choose a CSV or Excel file', { exact: false }))
-        .toBeInTheDocument();
+      await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toBeInTheDocument();
     });
 
     test('submitting with no file posts nothing and shows the inline message', async () => {
@@ -243,6 +260,7 @@ describe('UploadForm', () => {
       await expect
         .element(screen.getByText('Choose a CSV or Excel file to upload.'))
         .toBeInTheDocument();
+      await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toHaveFocus();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -251,12 +269,81 @@ describe('UploadForm', () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
       await screen.getByLabelText('Report name').fill('Q1 procurement');
-      await screen.getByLabelText('Choose a CSV or Excel file', { exact: false }).upload(csvFile());
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
       await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
       await expect.element(screen.getByText('Choose lb or kg.')).toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('choosing a file', () => {
+    test('"Checking your file…" arrives in a status region that was already mounted, and leaves it', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      const status = screen.getByRole('status');
+      const statusBeforeChoosing = status.element();
+      const release = holdInspection();
+
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await expect.element(status).toHaveTextContent('Checking your file…');
+      expect(status.element()).toBe(statusBeforeChoosing);
+      release();
+      await expect.element(status).toBeEmptyDOMElement();
+    });
+
+    test('a checked file moves focus to Replace', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await expect.element(screen.getByRole('button', { name: 'Replace' })).toHaveFocus();
+    });
+
+    test('a checked file leaves focus where the user moved it meanwhile', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      const release = holdInspection();
+
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+      await screen.getByLabelText('Report name').click();
+      release();
+
+      await expect
+        .element(screen.getByText('1 of 1 months still need a count'))
+        .toBeInTheDocument();
+      await expect.element(screen.getByLabelText('Report name')).toHaveFocus();
+    });
+
+    test('Replace moves focus to the file input', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await screen.getByRole('button', { name: 'Replace' }).click();
+
+      await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toHaveFocus();
+    });
+  });
+
+  describe('back from the rejection view', () => {
+    test('a file rejected before upload returns focus to the file input', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile(''));
+
+      await screen.getByRole('button', { name: 'Back to the form' }).click();
+
+      await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toHaveFocus();
+    });
+
+    test('a file the server rejected is still chosen, so focus lands on Replace', async () => {
+      stubFetch(new Response(JSON.stringify({ summary: 'We found problems.' }), { status: 400 }));
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await fillRequiredFields(screen);
+      await screen.getByRole('button', { name: 'Upload report' }).click();
+
+      await screen.getByRole('button', { name: 'Back to the form' }).click();
+
+      await expect.element(screen.getByRole('button', { name: 'Replace' })).toHaveFocus();
     });
   });
 

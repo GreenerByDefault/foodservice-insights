@@ -5,6 +5,7 @@ import { box } from 'svelte-toolbelt';
 
 const uid = $props.id();
 let {
+  ref = $bindable(null),
   id = uid,
   maxFiles,
   maxFileSize,
@@ -29,6 +30,8 @@ const rootState = useFileDropZone({
 });
 </script>
 
-<input class="hidden" {...rootState.props} {...rest}>
+<!-- Visually hidden rather than `hidden`, so it stays in the tab order: Enter or Space on a file
+     input opens the picker, and the trigger label shows the focus ring via `peer`. -->
+<input bind:this={ref} class="peer sr-only" {...rootState.props} {...rest}>
 
 {@render children?.()}

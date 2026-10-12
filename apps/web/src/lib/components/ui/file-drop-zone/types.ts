@@ -50,7 +50,7 @@ export type FileDropZoneRootProps = FileDropZoneRootPropsWithoutHTML &
 
 export type FileDropZoneTriggerPropsWithoutHTML = WithChildren<
   WithElementRef<{
-    /** Shown above the upload hint when no `children` are given. */
+    /** Shown when no `children` are given, and so the file input's accessible name. */
     label: string;
   }>
 >;

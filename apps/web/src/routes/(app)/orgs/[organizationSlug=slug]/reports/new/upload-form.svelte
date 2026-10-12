@@ -1,6 +1,7 @@
 <script lang="ts">
 import { XLSX_CONTENT_TYPE } from '@gbd/core';
 import type { CountsBasis, UnitSystem } from '@gbd/db';
+import { tick } from 'svelte';
 import { goto } from '$app/navigation';
 import { Alert, AlertDescription } from '#lib/components/ui/alert/index.js';
 import { Button } from '#lib/components/ui/button/index.js';
@@ -56,7 +57,12 @@ let unitSystemError: string | undefined = $state();
 /** A hint to the file picker only; what a file actually is, `inspectFile` decides from its bytes. */
 const ACCEPTED_FILE_TYPES = `.csv,text/csv,.xlsx,${XLSX_CONTENT_TYPE}`;
 
-let dropZoneTriggerElement: HTMLElement | null = $state(null);
+// Each swap between the drop zone, the file-name row and the rejection view unmounts the focused
+// element, which would drop focus to <body> and send Tab back to the header; these are where it
+// lands instead.
+let fileInputElement: HTMLInputElement | null = $state(null);
+let replaceButtonElement: HTMLButtonElement | HTMLAnchorElement | null = $state(null);
+
 let unitSystemElement: HTMLElement | null = $state(null);
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
@@ -98,13 +104,18 @@ async function inspectChosenFile(files: File[]) {
   months = inspection.months;
   counts = reconcileDraft(counts, months);
   formState = { status: 'idle' };
+  await tick();
+  // Inspecting a large workbook takes long enough to start on the next field meanwhile.
+  if (document.activeElement === document.body) replaceButtonElement?.focus();
 }
 
-function replaceFile() {
+async function replaceFile() {
   upload = undefined;
   months = undefined;
   fileError = undefined;
   formState = { status: 'idle' };
+  await tick();
+  fileInputElement?.focus();
 }
 
 async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElement }) {
@@ -113,17 +124,17 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
   event.preventDefault();
   if (formState.status === 'submitting') return;
 
-  // Two traps native validation can't see: the drop zone's file input is hidden (`required`
-  // there produces a console error and no visible message), and a `RadioGroup` submits through
-  // a hidden input (`required` on it is a no-op). Both need a hand-written check, an inline
-  // message, and a manual focus/scroll — a failed submit otherwise gives the user no locator.
+  // Two traps native validation can't see: the chosen file lives in component state, not the
+  // drop zone's input (which is cleared after every pick and unmounted once a file is chosen), and
+  // a `RadioGroup` submits through a hidden input (`required` on it is a no-op). Both need a
+  // hand-written check, an inline message, and a manual focus — a failed submit otherwise gives
+  // the user no locator.
   const chosenUpload = upload;
   fileError = chosenUpload ? undefined : 'Choose a CSV or Excel file to upload.';
   unitSystemError = unitSystem ? undefined : 'Choose lb or kg.';
 
   if (!chosenUpload) {
-    dropZoneTriggerElement?.scrollIntoView({ block: 'center' });
-    dropZoneTriggerElement?.focus();
+    fileInputElement?.focus();
     return;
   }
   if (!unitSystem) {
@@ -160,8 +171,11 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
   formState = { status: 'outcome-unknown' };
 }
 
-function backToForm() {
+async function backToForm() {
   formState = { status: 'idle' };
+  await tick();
+  // A file the server rejected is still chosen, so there is no drop zone to return to.
+  (fileInputElement ?? replaceButtonElement)?.focus();
 }
 </script>
 
@@ -185,11 +199,15 @@ function backToForm() {
       {#if upload}
         <div class="flex items-center justify-between gap-4 rounded-md border p-3">
           <p class="min-w-0 truncate font-medium">{upload.workbook?.name ?? upload.csvFile.name}</p>
-          <Button type="button" variant="outline" onclick={replaceFile}>Replace</Button>
+          <Button
+            bind:ref={replaceButtonElement}
+            type="button"
+            variant="outline"
+            onclick={replaceFile}
+          >
+            Replace
+          </Button>
         </div>
-        {#if formState.status === 'checking'}
-          <p aria-live="polite" class="text-sm text-muted-foreground">Checking your file…</p>
-        {/if}
       {:else}
         <FileDropZone.Root
           maxFiles={1}
@@ -198,13 +216,22 @@ function backToForm() {
           accept={ACCEPTED_FILE_TYPES}
           onUpload={inspectChosenFile}
           {onFileRejected}
+          bind:ref={fileInputElement}
         >
-          <FileDropZone.Trigger
-            bind:ref={dropZoneTriggerElement}
-            label="Choose a CSV or Excel file"
-          />
+          <FileDropZone.Trigger label="Choose a CSV or Excel file" />
         </FileDropZone.Root>
       {/if}
+      <!-- Mounted whatever the state: a live region that appears along with its text is read by
+           nobody. `sr-only` while empty, rather than `hidden`, keeps it out of the field set's gap
+           without taking it out of the accessibility tree. -->
+      <p
+        role="status"
+        class={formState.status === 'checking' ? 'text-sm text-muted-foreground' : 'sr-only'}
+      >
+        {#if formState.status === 'checking'}
+          Checking your file…
+        {/if}
+      </p>
 
       {#if fileError}
         <Field.Error>{fileError}</Field.Error>
