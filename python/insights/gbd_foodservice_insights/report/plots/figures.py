@@ -1,7 +1,6 @@
 """Report figures, each a PDF page: single charts, and pages laid out from `panels`."""
 
 from collections.abc import Mapping
-from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -17,6 +16,7 @@ from gbd_foodservice_insights.plotting_utils import (
     set_suptitle_font,
     set_title_font,
 )
+from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
 from gbd_foodservice_insights.report.plots.panels import (
     draw_category_drivers,
     draw_emissions_per_diner,
@@ -208,8 +208,8 @@ def plot_emissions_summary_over_time(
 
 
 def plot_plant_breakdown_overview(
-    plant_animal_split: dict[str, Any] | None,
-    plant_protein_share: dict[str, Any] | None,
+    plant_animal_split: PlantAnimalSplit,
+    plant_protein_share: PlantProteinShare | None,
     metric_label: str = "Kilos",
 ) -> Figure:
     """Combine the plant and protein share visuals into a single four-panel page."""

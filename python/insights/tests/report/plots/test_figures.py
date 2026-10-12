@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
 from gbd_foodservice_insights.report.plots import figures
 from matplotlib.figure import Figure
 
@@ -144,16 +145,20 @@ def test_emissions_summary_page_puts_total_above_per_diner(
 
 
 def test_plant_breakdown_overview_puts_the_split_above_protein_with_monthly_on_the_right():
-    months = [pd.Period("2023-01"), pd.Period("2023-02")]
     fig = figures.plot_plant_breakdown_overview(
-        {
-            "plant_pct": 52.0,
-            "monthly": pd.DataFrame({"month_year": months, "plant_pct": [48.0, 55.3]}),
-        },
-        {
-            "plant_protein_pct": 55.0,
-            "monthly": pd.DataFrame({"month_year": months, "plant_protein_pct": [50.0, 59.2]}),
-        },
+        PlantAnimalSplit(
+            plant_pct=52.0,
+            animal_pct=48.0,
+            plant_total=52.0,
+            animal_total=48.0,
+            monthly=pd.DataFrame({"month_year": [JAN, FEB], "plant_pct": [48.0, 55.3]}),
+        ),
+        PlantProteinShare(
+            plant_protein_pct=55.0,
+            plant_protein_total=55.0,
+            protein_total=100.0,
+            monthly=pd.DataFrame({"month_year": [JAN, FEB], "plant_protein_pct": [50.0, 59.2]}),
+        ),
     )
 
     assert _figure_title(fig) == "Plant and Protein Breakdown"

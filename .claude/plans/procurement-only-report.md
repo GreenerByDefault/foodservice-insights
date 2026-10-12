@@ -53,9 +53,8 @@ Facts that shape the design:
 - **The lab's QA workbook, manifest and metadata already take frames and dicts**, not a
   `FoodReport` (`build_qa_excel_report`, `write_run_manifest`, `build_run_result`), so a lab
   serving report with the same attribute names slots in behind them.
-- **`plant-share-types.md` is in flight** and edits `aggregation.py`, `food_report.py`,
-  `panels.py`, `figures.py`, `report.py` and `pdf.py`. This plan lands after its PR, and its
-  `PlantAnimalSplit`/`PlantProteinShare` are what the lab's serving report carries too.
+- **The plant shares are typed.** `aggregation.PlantAnimalSplit` (never `None`) and
+  `PlantProteinShare | None` are what the lab's serving report carries too.
 - 36 product lines and about 50 product-test lines mention serving or the mode.
 
 ## Decisions

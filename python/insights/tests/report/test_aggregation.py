@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import patch
 
 import pandas as pd
@@ -6,6 +7,8 @@ from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.report import aggregation
 from gbd_foodservice_insights.report.aggregation import (
     AnimalEmissionsConcentration,
+    PlantAnimalSplit,
+    PlantProteinShare,
     ProcurementAggregation,
     _attach_monthly_category_emissions,
     aggregate_data,
@@ -296,50 +299,74 @@ def test_identify_drivers_report_zero_percent_when_the_total_is_zero():
 @pytest.fixture
 def plant_and_animal_categories(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(aggregation, "animal_product_categories", lambda: ["Beef"])
-    monkeypatch.setattr(aggregation, "plant_based_categories", lambda: ["Legumes"])
     monkeypatch.setattr(aggregation, "protein_categories", lambda: ["Legumes", "Beef"])
     monkeypatch.setattr(aggregation, "plant_protein_categories", lambda: ["Legumes"])
 
 
+def _without_monthly(share: PlantAnimalSplit | PlantProteinShare) -> dict[str, Any]:
+    return {name: value for name, value in vars(share).items() if name != "monthly"}
+
+
 @pytest.mark.usefixtures("plant_and_animal_categories")
-def test_calculate_plant_animal_split_keeps_one_sided_months():
+def test_calculate_plant_animal_split_counts_every_non_animal_row_as_plant():
     df = pd.DataFrame(
         {
             "month_year": ["2024-01", "2024-02", "2024-02"],
-            "category": ["Legumes", "Beef", "Other"],
-            "kilos_total": [4.0, 3.0, 99.0],
+            "category": ["Legumes", "Beef", "Vegetables"],
+            "kilos_total": [4.0, 3.0, 1.0],
         }
     )
 
     result = calculate_plant_animal_split(df)
 
-    assert result is not None
-    monthly = result.pop("monthly")
-    assert result == {"plant_pct": 57.1, "animal_pct": 42.9, "plant_kg": 4.0, "animal_kg": 3.0}
+    assert _without_monthly(result) == {
+        "plant_pct": 62.5,
+        "animal_pct": 37.5,
+        "plant_total": 5.0,
+        "animal_total": 3.0,
+    }
     pd.testing.assert_frame_equal(
-        monthly,
+        result.monthly,
         pd.DataFrame(
             {
                 "month_year": ["2024-01", "2024-02"],
-                "plant": [4.0, 0.0],
+                "plant": [4.0, 1.0],
                 "animal": [0.0, 3.0],
-                "plant_pct": [100.0, 0.0],
+                "plant_pct": [100.0, 25.0],
             }
-        ).rename_axis(columns="_group"),
+        ),
     )
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
 def test_calculate_plant_animal_split_adds_the_missing_side_to_the_monthly_table():
     df = pd.DataFrame(
-        {"month_year": ["2024-01", "2024-02"], "category": ["Legumes"] * 2, "kilos_total": [3, 1]}
+        {
+            "month_year": ["2024-01", "2024-02"],
+            "category": ["Legumes"] * 2,
+            "kilos_total": [3.0, 1.0],
+        }
     )
 
     result = calculate_plant_animal_split(df)
 
-    assert result is not None
-    assert (result["plant_pct"], result["animal_pct"]) == (100.0, 0.0)
-    assert result["monthly"]["animal"].tolist() == [0.0, 0.0]
+    assert _without_monthly(result) == {
+        "plant_pct": 100.0,
+        "animal_pct": 0.0,
+        "plant_total": 4.0,
+        "animal_total": 0.0,
+    }
+    pd.testing.assert_frame_equal(
+        result.monthly,
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02"],
+                "plant": [3.0, 1.0],
+                "animal": [0.0, 0.0],
+                "plant_pct": [100.0, 100.0],
+            }
+        ),
+    )
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
@@ -354,24 +381,17 @@ def test_calculate_plant_animal_split_gives_a_zero_month_no_percentage():
 
     result = calculate_plant_animal_split(df)
 
-    assert result is not None
-    assert result["monthly"]["plant_pct"].isna().tolist() == [False, True]
+    assert result.monthly["plant_pct"].isna().tolist() == [False, True]
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
-@pytest.mark.parametrize(
-    ("categories", "kilos"),
-    [
-        pytest.param(["Other"], [5.0], id="only-unclassified-rows"),
-        pytest.param(["Legumes", "Beef"], [0.0, 0.0], id="zero-total"),
-    ],
-)
-def test_calculate_plant_animal_split_returns_none_without_a_total_to_split(categories, kilos):
+def test_calculate_plant_animal_split_rejects_a_zero_total():
     df = pd.DataFrame(
-        {"month_year": ["2024-01"] * len(kilos), "category": categories, "kilos_total": kilos}
+        {"month_year": ["2024-01"] * 2, "category": ["Legumes", "Beef"], "kilos_total": [0.0, 0.0]}
     )
 
-    assert calculate_plant_animal_split(df) is None
+    with pytest.raises(ValueError, match="nothing to split"):
+        calculate_plant_animal_split(df)
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
@@ -387,14 +407,13 @@ def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months
     result = calculate_plant_protein_share(df)
 
     assert result is not None
-    monthly = result.pop("monthly")
-    assert result == {
+    assert _without_monthly(result) == {
         "plant_protein_pct": 40.0,
         "plant_protein_total": 4.0,
-        "total_protein_metric": 10.0,
+        "protein_total": 10.0,
     }
     pd.testing.assert_frame_equal(
-        monthly,
+        result.monthly,
         pd.DataFrame(
             {
                 "month_year": ["2024-01", "2024-02"],
@@ -402,34 +421,66 @@ def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months
                 "total_protein_metric": [4.0, 6.0],
                 "plant_protein_pct": [100.0, 0.0],
             }
-        ).rename_axis(columns="_is_plant_protein"),
+        ),
     )
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
 def test_calculate_plant_protein_share_is_zero_percent_when_all_protein_is_animal():
     df = pd.DataFrame(
-        {"month_year": ["2024-01", "2024-02"], "category": ["Beef"] * 2, "kilos_total": [3, 1]}
+        {"month_year": ["2024-01", "2024-02"], "category": ["Beef"] * 2, "kilos_total": [3.0, 1.0]}
     )
 
     result = calculate_plant_protein_share(df)
 
     assert result is not None
-    assert (result["plant_protein_pct"], result["plant_protein_total"]) == (0.0, 0.0)
-    assert result["monthly"]["plant_protein_metric"].tolist() == [0.0, 0.0]
+    assert _without_monthly(result) == {
+        "plant_protein_pct": 0.0,
+        "plant_protein_total": 0.0,
+        "protein_total": 4.0,
+    }
+    pd.testing.assert_frame_equal(
+        result.monthly,
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02"],
+                "plant_protein_metric": [0.0, 0.0],
+                "total_protein_metric": [3.0, 1.0],
+                "plant_protein_pct": [0.0, 0.0],
+            }
+        ),
+    )
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
 def test_calculate_plant_protein_share_is_100_percent_when_all_protein_is_plant():
     df = pd.DataFrame(
-        {"month_year": ["2024-01", "2024-02"], "category": ["Legumes"] * 2, "kilos_total": [3, 1]}
+        {
+            "month_year": ["2024-01", "2024-02"],
+            "category": ["Legumes"] * 2,
+            "kilos_total": [3.0, 1.0],
+        }
     )
 
     result = calculate_plant_protein_share(df)
 
     assert result is not None
-    assert result["plant_protein_pct"] == 100.0
-    assert result["monthly"]["total_protein_metric"].tolist() == [3.0, 1.0]
+    assert _without_monthly(result) == {
+        "plant_protein_pct": 100.0,
+        "plant_protein_total": 4.0,
+        "protein_total": 4.0,
+    }
+    pd.testing.assert_frame_equal(
+        result.monthly,
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02"],
+                "plant_protein_metric": [3.0, 1.0],
+                "total_protein_metric": [3.0, 1.0],
+                "plant_protein_pct": [100.0, 100.0],
+            }
+        ),
+    )
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
@@ -445,7 +496,7 @@ def test_calculate_plant_protein_share_gives_a_zero_month_no_percentage():
     result = calculate_plant_protein_share(df)
 
     assert result is not None
-    assert result["monthly"]["plant_protein_pct"].isna().tolist() == [False, True]
+    assert result.monthly["plant_protein_pct"].isna().tolist() == [False, True]
 
 
 @pytest.mark.usefixtures("plant_and_animal_categories")
@@ -462,36 +513,6 @@ def test_calculate_plant_protein_share_returns_none_without_protein_volume(categ
     )
 
     assert calculate_plant_protein_share(df) is None
-
-
-@pytest.mark.parametrize("calculate", [calculate_plant_animal_split, calculate_plant_protein_share])
-@pytest.mark.parametrize("missing", ["kilos_total", "category"])
-def test_plant_shares_are_none_when_a_required_column_is_missing(calculate, missing):
-    df = pd.DataFrame({"category": ["Legumes"], "kilos_total": [1.0]}).drop(columns=missing)
-
-    assert calculate(df) is None
-
-
-@pytest.mark.usefixtures("plant_and_animal_categories")
-def test_plant_shares_have_no_monthly_table_without_month_year():
-    df = pd.DataFrame({"category": ["Legumes", "Beef"], "kilos_total": [1.0, 1.0]})
-
-    split = calculate_plant_animal_split(df)
-    protein = calculate_plant_protein_share(df)
-
-    assert split == {
-        "plant_pct": 50.0,
-        "animal_pct": 50.0,
-        "plant_kg": 1.0,
-        "animal_kg": 1.0,
-        "monthly": None,
-    }
-    assert protein == {
-        "plant_protein_pct": 50.0,
-        "plant_protein_total": 1.0,
-        "total_protein_metric": 2.0,
-        "monthly": None,
-    }
 
 
 # ----------------------------------------------------------------------

@@ -79,6 +79,21 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
     assert report.aggregation.procurement.animal_emissions_intensity is not None
 
 
+def test_summary_stats_leave_out_the_protein_lines_without_protein():
+    rows = _rows().assign(category=["Cheese", "Oat Milk", "Cheese", "Oat Milk"])
+
+    report = _build(rows)
+
+    assert report.plant_protein_share is None
+    assert report.summary_stats.keys().isdisjoint(
+        {
+            "Plant protein share (% of protein categories)",
+            "Plant protein total",
+            "Protein-category total",
+        }
+    )
+
+
 def test_a_missing_required_column_raises():
     with pytest.raises(ValueError, match="Missing required columns: date"):
         _build(_rows().drop(columns=["date"]))
