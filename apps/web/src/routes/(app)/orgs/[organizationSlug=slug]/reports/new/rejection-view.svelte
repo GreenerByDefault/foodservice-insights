@@ -39,7 +39,7 @@ let hasScrollableDetail = $derived(
   </div>
 
   {#if rejection.dateOrderProblem}
-    <div class="rounded-md border border-destructive/40 bg-destructive/5 p-4">
+    <div class="rounded-md border border-destructive/40 p-4">
       <p class="text-xs font-medium uppercase tracking-wide text-destructive">
         Affects the whole file
       </p>
@@ -66,8 +66,7 @@ let hasScrollableDetail = $derived(
             {#if problem.examples.length > 0}
               <div class="flex flex-wrap gap-2">
                 {#each problem.examples as example (example)}
-                  <span
-                    class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
+                  <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
                     >{example}</span
                   >
                 {/each}
