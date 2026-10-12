@@ -2,7 +2,6 @@
 # %%
 import pandas as pd
 from dotenv import load_dotenv
-from gbd_foodservice_insights.utils import rel_path
 from gbd_foodservice_insights_lab.clean_product_weights import (
     convert_products_to_kilograms,
 )
@@ -13,6 +12,7 @@ from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     setup_pandas_display,
     update_metadata,
 )
+from gbd_foodservice_insights_lab.notebook_utils import rel_path
 
 setup_pandas_display()
 

@@ -8,28 +8,8 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-
-# ----------------------------------------------------------------------
-# File helpers
-# ----------------------------------------------------------------------
-
-
-def rel_path(p: str | Path | None) -> str | Path | None:
-    """Return *p* relative to the current working directory if possible.
-
-    Falls back to the original value if *p* is outside cwd or is ``None``.
-    Useful for keeping printed file paths short.
-    """
-    if p is None:
-        return None
-    try:
-        return Path(p).resolve().relative_to(Path.cwd())
-    except ValueError:
-        return p
 
 
 # ----------------------------------------------------------------------

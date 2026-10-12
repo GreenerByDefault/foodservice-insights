@@ -35,8 +35,8 @@ Programmatic usage:
 import argparse
 import logging
 
-from gbd_foodservice_insights.utils import rel_path
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
+from gbd_foodservice_insights_lab.notebook_utils import rel_path
 
 logger = logging.getLogger("gbd_foodservice_insights.food_report_cli")
 

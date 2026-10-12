@@ -5,7 +5,8 @@ import logging
 import pandas as pd
 from gbd_foodservice_insights.report.aggregation import Aggregation
 from gbd_foodservice_insights.report.excel import procurement_sheets, write_excel_workbook
-from gbd_foodservice_insights.utils import rel_path
+
+from gbd_foodservice_insights_lab.notebook_utils import rel_path
 
 logger = logging.getLogger(__name__)
 

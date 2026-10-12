@@ -3,10 +3,10 @@
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast, get_args
 
 import pandas as pd
-from gbd_foodservice_insights.report.schema import VALID_REGIONS, Region
+from gbd_foodservice_insights.report.schema import Region
 
 
 def _to_month_period(value: Any, *, context: str) -> pd.Period:
@@ -64,6 +64,6 @@ def load_diner_meal_mapping_from_json(
 def validate_region(region: str) -> Region:
     """Validate and normalize region identifier."""
     normalized = str(region).strip().lower()
-    if normalized not in VALID_REGIONS:
-        raise ValueError(f"region must be one of {list(VALID_REGIONS)}, got '{region}'")
-    return normalized
+    if normalized not in get_args(Region):
+        raise ValueError(f"region must be one of {list(get_args(Region))}, got '{region}'")
+    return cast(Region, normalized)

@@ -3,7 +3,6 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 from gbd_foodservice_insights_lab.food_report import diagnostics
 from gbd_foodservice_insights_lab.food_report.diagnostics import (
     category_highest_vs_lowest_months,
@@ -17,6 +16,7 @@ from gbd_foodservice_insights_lab.food_report.diagnostics import (
     identify_potentially_abnormal_weight_meat_items,
     summarise_numeric_columns,
 )
+from gbd_foodservice_insights_lab.food_report.thresholds import get_diagnostic_threshold
 
 
 @pytest.fixture

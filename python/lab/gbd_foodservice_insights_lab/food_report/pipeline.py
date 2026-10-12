@@ -25,17 +25,17 @@ from gbd_foodservice_insights.report.food_report import (
     build_report_charts,
 )
 from gbd_foodservice_insights.report.metric import KILOS, Metric
-from gbd_foodservice_insights.report.quality import (
-    Finding,
-    findings_to_frame,
-    missingness_summary_frame,
-    summarize_findings,
-)
+from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, quality_status_from_findings
 
 from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging, serving, summary
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
 from gbd_foodservice_insights_lab.food_report import excel as qa_excel
+from gbd_foodservice_insights_lab.food_report.quality import (
+    findings_to_frame,
+    missingness_summary_frame,
+    summarize_findings,
+)
 from gbd_foodservice_insights_lab.food_report.serving import ServingReport
 from gbd_foodservice_insights_lab.food_report.utils import (
     load_diner_meal_mapping_from_json,

@@ -1,0 +1,18 @@
+near_duplicate_product_names:
+  max_levenshtein_distance: 2
+  warning_share_threshold: 0.03
+
+missing_weeks_within_month:
+  max_gap_days: 10
+
+category_discontinuity:
+  min_gap_months: 1
+
+single_product_dominance:
+  threshold_pct: 0.30
+
+category_concentration:
+  threshold_pct: 0.30
+
+meat_quantity_reasonableness:
+  large_quantity_threshold: 30.0
