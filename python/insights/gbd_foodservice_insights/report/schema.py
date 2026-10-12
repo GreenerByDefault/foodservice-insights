@@ -17,7 +17,7 @@ QualityStatus = Literal["pass", "warning", "invalid"]
 
 def quality_status_from_findings(findings: Iterable[Finding]) -> QualityStatus:
     """Compute overall quality status from finding severities; ``info`` never counts."""
-    statuses = {str(item.get("status", "info")) for item in findings}
+    statuses = {item["status"] for item in findings}
     if "error" in statuses:
         return "invalid"
     if "warning" in statuses:
@@ -27,7 +27,7 @@ def quality_status_from_findings(findings: Iterable[Finding]) -> QualityStatus:
 
 def summarize_status_counts(findings: Iterable[Finding]) -> dict[str, int]:
     """Count findings by status."""
-    counter = Counter(str(item.get("status", "info")) for item in findings)
+    counter = Counter(item["status"] for item in findings)
     return {
         "success": counter.get("success", 0),
         "info": counter.get("info", 0),
