@@ -75,7 +75,10 @@ describe('UploadForm', () => {
 
       await fillRequiredFields(screen);
       await screen.getByLabelText('Site name (optional)').fill('Main kitchen');
-      await screen.getByRole('radio', { name: 'Meals' }).click();
+      await screen
+        .getByRole('radiogroup', { name: 'Counts basis' })
+        .getByRole('radio', { name: 'Meals' })
+        .click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
@@ -264,7 +267,7 @@ describe('UploadForm', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    test('submitting with no unit system posts nothing', async () => {
+    test('submitting with no unit system posts nothing, describes the group, and focuses its first radio', async () => {
       const fetchMock = stubFetch(new Response(null, { status: 201 }));
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
@@ -273,7 +276,10 @@ describe('UploadForm', () => {
       await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
-      await expect.element(screen.getByText('Choose lb or kg.')).toBeInTheDocument();
+      const unitSystem = screen.getByRole('radiogroup', { name: 'Weight unit' });
+      await expect.element(unitSystem).toHaveAccessibleDescription('Choose lb or kg.');
+      await expect.element(unitSystem).toHaveAttribute('aria-invalid', 'true');
+      await expect.element(unitSystem.getByRole('radio', { name: 'lb' })).toHaveFocus();
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });

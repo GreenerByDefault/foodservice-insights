@@ -30,6 +30,9 @@ type FormState =
 
 let formState: FormState = $state({ status: 'idle' });
 let emailInputElement: HTMLInputElement | null = $state(null);
+const id = $props.id();
+const emailErrorId = `${id}-email-error`;
+const roleTitleId = `${id}-role-title`;
 
 async function handleSubmit(event: SubmitEvent) {
   event.preventDefault();
@@ -74,16 +77,19 @@ async function handleSubmit(event: SubmitEvent) {
         maxlength={MAX_EMAIL_LENGTH}
         required
         autocomplete="off"
+        aria-invalid={formState.status === 'already-member' || undefined}
+        aria-describedby={formState.status === 'already-member' ? emailErrorId : undefined}
         bind:value={email}
       />
       {#if formState.status === 'already-member'}
-        <Field.Error>That person is already a member.</Field.Error>
+        <Field.Error id={emailErrorId}>That person is already a member.</Field.Error>
       {/if}
     </Field.Field>
 
     <Field.Field>
-      <Field.Legend variant="label">Role</Field.Legend>
+      <Field.Title id={roleTitleId}>Role</Field.Title>
       <RadioGroup
+        aria-labelledby={roleTitleId}
         name={FIELD.role}
         value={role}
         onValueChange={(value) => (role = value as OrganizationRole)}

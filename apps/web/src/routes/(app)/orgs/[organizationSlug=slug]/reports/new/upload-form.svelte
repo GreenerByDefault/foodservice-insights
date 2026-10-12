@@ -64,6 +64,10 @@ let fileInputElement: HTMLInputElement | null = $state(null);
 let replaceButtonElement: HTMLButtonElement | HTMLAnchorElement | null = $state(null);
 
 let unitSystemElement: HTMLElement | null = $state(null);
+const id = $props.id();
+const unitSystemErrorId = `${id}-unit-system-error`;
+const unitSystemTitleId = `${id}-unit-system-title`;
+const countsBasisTitleId = `${id}-counts-basis-title`;
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
   switch (reason) {
@@ -138,7 +142,8 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
     return;
   }
   if (!unitSystem) {
-    unitSystemElement?.focus();
+    // The radiogroup root has no tabindex, so focusing it is a no-op.
+    unitSystemElement?.querySelector<HTMLElement>('[role=radio]')?.focus();
     return;
   }
 
@@ -267,10 +272,13 @@ async function backToForm() {
       </Field.Field>
 
       <Field.Field>
-        <Field.Legend variant="label">Weight unit</Field.Legend>
+        <Field.Title id={unitSystemTitleId}>Weight unit</Field.Title>
         <RadioGroup
           bind:ref={unitSystemElement}
+          aria-labelledby={unitSystemTitleId}
           name={FIELD.unitSystem}
+          aria-invalid={unitSystemError ? true : undefined}
+          aria-describedby={unitSystemError ? unitSystemErrorId : undefined}
           value={unitSystem}
           onValueChange={(value) => (unitSystem = value as UnitSystem)}
         >
@@ -282,7 +290,7 @@ async function backToForm() {
           {/each}
         </RadioGroup>
         {#if unitSystemError}
-          <Field.Error>{unitSystemError}</Field.Error>
+          <Field.Error id={unitSystemErrorId}>{unitSystemError}</Field.Error>
         {/if}
       </Field.Field>
     </Field.Set>
@@ -291,8 +299,9 @@ async function backToForm() {
       <Field.Legend>Monthly counts</Field.Legend>
 
       <Field.Field>
-        <Field.Legend variant="label">Counts basis</Field.Legend>
+        <Field.Title id={countsBasisTitleId}>Counts basis</Field.Title>
         <RadioGroup
+          aria-labelledby={countsBasisTitleId}
           name={FIELD.countsBasis}
           value={countsBasis}
           onValueChange={(value) => (countsBasis = value as CountsBasis)}

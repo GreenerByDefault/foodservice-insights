@@ -7,8 +7,9 @@ on top of what earlier passes already landed: busy and error states announced an
 when a row disappears (`focusPageHeading`, PR #429), a title on every page for SvelteKit's route
 announcer (checked by `routes/page-titles.test.ts`), live regions on the report page and list
 (tested), the upload form's file field reachable and operable from the keyboard with focus kept
-across its swaps (`new-report.e2e.ts` drives it with Tab and Enter), mobile and tablet
-screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
+across its swaps (`new-report.e2e.ts` drives it with Tab and Enter), every radio group named
+and every inline field error tied to its input with `aria-invalid` and `aria-describedby`
+(asserted in the form component tests), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
 (nothing filters them; see `compilerOptions` in [`vite.config.ts`](../../apps/web/vite.config.ts)).
 `REQUIREMENTS.md` § Design and accessibility asks for a GBD accessibility review; this is the pass
 before it.
@@ -43,11 +44,6 @@ review every changed PNG rather than committing the batch.
   route if it is more than ~10s locally.
 - *Accepted: a darker `--ring` at full opacity, and an inset ring on highlighted menu items.* Both
   are shadcn-svelte defaults that fail 3:1 (1.4.11); the look stays neutral grey.
-- *Accepted: real fieldsets around the radio groups, not `aria-labelledby`.* `Field.Set` +
-  `Field.Legend variant="label"` is what the Field primitives are built for
-  (`has-[>[data-slot=radio-group]]:gap-3`). *Rejected: `aria-labelledby` on the `RadioGroup`*,
-  which avoids a 12px spacing shift and a screenshot re-baseline but leaves a `<legend>` outside
-  any fieldset.
 - *Considered, not done — each a judgement that the cost outweighs the gain:*
   - The reconnecting notice stays `role="alert"`. Losing the connection is worth an interruption,
     and it does not re-announce per poll (the `{#if}` stays mounted while `retrying`).
@@ -64,28 +60,7 @@ review every changed PNG rather than committing the batch.
     above Cancel on phones while Tab reaches Cancel first — both shadcn conventions, left alone.
   - The `.dark` block in `layout.css` is dead (nothing applies the class) and is not touched here.
 
-## PR 1 — Radio groups and field errors are announced
-
-- **Three radio groups have no name**: "Weight unit" and "Counts basis" in `upload-form.svelte`
-  (`:268`, `:292`) and "Role" in [`invite-form.svelte:84`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/invite-form.svelte)
-  each put `Field.Legend` inside `Field.Field`, a `<div role="group">`. A `<legend>` labels only
-  as the first child of a `<fieldset>`, so bits-ui's `role="radiogroup"` is announced bare. Swap
-  the wrapper for `Field.Set` (nested fieldsets are fine).
-- **"Choose lb or kg." neither moves focus nor attaches to the group** (`upload-form.svelte:140`,
-  `:284`): the radiogroup root has no `tabindex`, so `.focus()` on it is a no-op. Focus its first
-  `[role=radio]`, and put `aria-invalid` and `aria-describedby={errorId}` on the `RadioGroup`.
-- **Two field errors are not linked to their input**: the four name outcomes in
-  [`organization-name-form.svelte:90-100`](../../apps/web/src/lib/components/orgs/organization-name-form.svelte)
-  and "already a member" in `invite-form.svelte:79`. Focus moves to the input but the error is not
-  read with it, and inserting the alert at the same moment can cut it off. Copy `email-step.svelte`
-  lines 98–108: `aria-invalid` when failed, `aria-describedby` pointing at the `Field.Error`'s `id`.
-
-Tests: `getByRole('radiogroup', { name: 'Weight unit' })` and the other two names in the existing
-form tests; `toHaveAccessibleDescription` on the two inputs after a failed submit; the first radio
-focused after an empty unit submit. Screenshots: `new-report/*` and `organizations/members-*`
-(legend spacing inside a real fieldset is `mb-3` alone, 12px less than before).
-
-## PR 2 — Focus is visible, small text passes, motion can be reduced
+## PR 1 — Focus is visible, small text passes, motion can be reduced
 
 All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primitives.
 
@@ -113,11 +88,11 @@ All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primit
   `@media (prefers-reduced-motion: reduce)` that collapses `animation-duration` and
   `transition-duration` to near zero.
 
-Tests: none of this is testable by assertion beyond the axe gate (PR 6), which checks the contrast
+Tests: none of this is testable by assertion beyond the axe gate (PR 5), which checks the contrast
 numbers for real. Screenshots: every shot with a focused control (`auth/sign-in-*`,
 `account/account*`, possibly the open-menu shots) — review that only the ring changed.
 
-## PR 3 — Focus survives a report action, and a dialog cannot be escaped mid-request
+## PR 2 — Focus survives a report action, and a dialog cannot be escaped mid-request
 
 - **Retry and Cancel drop focus to `<body>`.** Retry ([`failure-view.svelte:26-38`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/failure/failure-view.svelte))
   unmounts its own button when the view swaps to waiting; Cancel
@@ -144,7 +119,7 @@ Tests: the h1 is focused after a retry and after a cancel (`failure-view.svelte.
 beside the component); Escape during a pending confirm leaves the dialog open
 (`confirm-action.svelte.test.ts`); the member-actions focus test above. No screenshots.
 
-## PR 4 — What a screen reader hears
+## PR 3 — What a screen reader hears
 
 - **Timeline step state is icon and colour only** ([`timeline.svelte:19-30`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/waiting/timeline.svelte)):
   only the current step carries `aria-current="step"`; a done step reads as "Waiting to start,
@@ -160,7 +135,7 @@ Tests: the listitem text in `timeline.svelte.test.ts`; `aria-current` on the men
 `organization-switcher.svelte.test.ts`; the heading level in `monthly-counts.svelte.test.ts`.
 No screenshots (sr-only text and a level change render identically).
 
-## PR 5 — Phone keyboards
+## PR 4 — Phone keyboards
 
 - **The typed confirmation can never match on an iPhone.** `confirm-action.svelte:112` is a
   plain text input compared exactly (`:69`); iOS capitalises the first letter of a text field, so
@@ -173,7 +148,7 @@ No screenshots (sr-only text and a level change render identically).
 Email fields are left alone: `type="email"` already turns off capitalisation and autocorrect on
 iOS and Android. Tests: `toHaveAttribute` in the two component tests. No screenshots.
 
-## PR 6 — An axe scan of every captured screen
+## PR 5 — An axe scan of every captured screen
 
 Lands last so it starts green and guards the rest.
 
@@ -203,9 +178,9 @@ each changed image.
 
 Drive the app for what tests cannot prove (the `run` skill or the Playwright MCP):
 
-- PR 2: Tab through the sign-in form, a page of buttons, and an open menu with the arrow keys;
+- PR 1: Tab through the sign-in form, a page of buttons, and an open menu with the arrow keys;
   every focused control is unmistakable against white.
-- PR 5, if a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
+- PR 4, if a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
   first letter stays lowercase and the button enables.
-- PR 6: the suite passes with zero violations, and introducing a deliberate one (remove a label
+- PR 5: the suite passes with zero violations, and introducing a deliberate one (remove a label
   locally) fails it with a readable message.

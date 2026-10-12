@@ -39,7 +39,10 @@ describe('InviteForm', () => {
     const fetchMock = stubFetch(jsonResponse({ inviteId: 'invite-1', emailSent: true }, 201));
     const screen = await filledOut();
 
-    await screen.getByRole('radio', { name: 'Admin' }).click();
+    await screen
+      .getByRole('radiogroup', { name: 'Role' })
+      .getByRole('radio', { name: 'Admin' })
+      .click();
     await screen.getByRole('button', { name: 'Send invitation' }).click();
 
     await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
@@ -74,16 +77,19 @@ describe('InviteForm', () => {
     await expect.poll(() => toast.success.mock.calls).toEqual([['Invited invitee@example.test']]);
   });
 
-  test('a 409 shows an inline "already a member" error and keeps the typed email', async () => {
+  test('a 409 shows an inline "already a member" error on the field and keeps the typed email', async () => {
     stubFetch(jsonResponse({ message: 'Already a member', code: 'already-member' }, 409));
     const screen = await filledOut();
 
     await screen.getByRole('button', { name: 'Send invitation' }).click();
 
+    const emailInput = screen.getByLabelText('Email address');
     await expect.element(screen.getByText('That person is already a member.')).toBeVisible();
+    await expect.element(emailInput).toHaveValue('invitee@example.test');
     await expect
-      .element(screen.getByLabelText('Email address'))
-      .toHaveValue('invitee@example.test');
+      .element(emailInput)
+      .toHaveAccessibleDescription('That person is already a member.');
+    await expect.element(emailInput).toHaveAttribute('aria-invalid', 'true');
   });
 
   test('a 429 shows the rate-limit alert', async () => {
