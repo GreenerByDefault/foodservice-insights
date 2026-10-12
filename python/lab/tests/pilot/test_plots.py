@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.metric import KILOS, SERVINGS
+from gbd_foodservice_insights.report.metric import KILOS
+from gbd_foodservice_insights_lab.food_report.serving import SERVINGS
 from gbd_foodservice_insights_lab.pilot.plots import (
     plot_metric_over_time,
     print_baseline_pilot_percent_changes,

@@ -1,11 +1,9 @@
 from collections.abc import Callable
-from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import Aggregation, PlantAnimalSplit
-from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.plots import report
 from matplotlib.figure import Figure
 
@@ -43,7 +41,9 @@ def _aggregation(
             if category_drivers is not None
             else pd.DataFrame({"category": ["fruit"], "product": ["apple"], "percentage": [100.0]})
         ),
-        procurement=None,
+        animal_emissions_intensity=None,
+        animal_emissions_concentration=None,
+        substitution_scenarios=None,
     )
 
 
@@ -74,9 +74,9 @@ def test_generate_all_report_plots_orders_every_page(
         aggregation=_aggregation(fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])),
         diner_meal_mapping=DINER_MEALS,
         emissions_summary=EMISSIONS_SUMMARY,
-        metric=KILOS,
         plant_animal_split=PLANT_SPLIT,
         plant_protein_share=None,
+        diner_or_meal="diner",
     )
 
     assert [caption for caption, _ in plots_output] == [""] * len(plots_output)
@@ -86,45 +86,6 @@ def test_generate_all_report_plots_orders_every_page(
         "Kilos by Category Across All Months",
         "Carbon Emissions by Category",
         "Carbon Emissions Over Time",
-        "Plant and Protein Breakdown",
-        "Top Products Driving Overall (Kilos)",
-        "Top Products by Category",
-    ]
-
-
-@pytest.mark.parametrize(
-    ("options", "drop_emissions_column", "expected_carbon_pages"),
-    [
-        ({"emissions_summary": EMISSIONS_SUMMARY, "serving": True}, False, []),
-        ({}, False, []),
-        ({"emissions_summary": EMISSIONS_SUMMARY}, True, ["Carbon Emissions by Category"]),
-    ],
-    ids=["serving report", "no emissions summary", "no monthly emissions"],
-)
-def test_generate_all_report_plots_leaves_out_pages_without_their_data(
-    fruit_and_juice_months: Callable[..., pd.DataFrame],
-    options: dict[str, Any],
-    drop_emissions_column: bool,
-    expected_carbon_pages: list[str],
-):
-    months = fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])
-    if drop_emissions_column:
-        months = months.drop(columns="emissions_kg_co2e")
-
-    plots_output = report.generate_all_report_plots(
-        aggregation=_aggregation(months),
-        diner_meal_mapping=DINER_MEALS,
-        plant_animal_split=PLANT_SPLIT,
-        plant_protein_share=None,
-        metric=KILOS,
-        **options,
-    )
-
-    assert [_figure_title(fig) for _, fig in plots_output] == [
-        "Number of Diners by Month",
-        "Kilos Over Time",
-        "Kilos by Category Across All Months",
-        *expected_carbon_pages,
         "Plant and Protein Breakdown",
         "Top Products Driving Overall (Kilos)",
         "Top Products by Category",

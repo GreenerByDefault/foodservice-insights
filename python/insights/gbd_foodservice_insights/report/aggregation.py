@@ -13,12 +13,8 @@ from gbd_foodservice_insights.categories import (
     protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
-from gbd_foodservice_insights.report.metric import METRIC_BY_MODE
-from gbd_foodservice_insights.report.schema import (
-    DinerOrMeal,
-    Region,
-    ReportMode,
-)
+from gbd_foodservice_insights.report.metric import KILOS
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region
 
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
     "Beef and Buffalo Meat",
@@ -70,24 +66,18 @@ class PlantProteinShare:
 
 
 @dataclass(frozen=True)
-class ProcurementAggregation:
+class Aggregation:
+    monthly_product: pd.DataFrame
+    # Also each (month, category)'s `emissions_kg_co2e`.
+    monthly_category: pd.DataFrame
+    template: pd.DataFrame
+    overall_drivers: pd.DataFrame
+    category_drivers: pd.DataFrame
     # Each is `None` when the data has nothing to show: no animal rows, or no ruminant or cow's
     # milk rows to swap.
     animal_emissions_intensity: pd.DataFrame | None
     animal_emissions_concentration: AnimalEmissionsConcentration | None
     substitution_scenarios: pd.DataFrame | None
-
-
-@dataclass(frozen=True)
-class Aggregation:
-    monthly_product: pd.DataFrame
-    # In procurement, also each (month, category)'s `emissions_kg_co2e`.
-    monthly_category: pd.DataFrame
-    template: pd.DataFrame
-    overall_drivers: pd.DataFrame
-    category_drivers: pd.DataFrame
-    # `None` exactly when the report is a serving report.
-    procurement: ProcurementAggregation | None
 
 
 def aggregate_data(
@@ -531,49 +521,28 @@ def run_aggregation_pipeline(
     diner_meal_mapping: Mapping[pd.Period, float],
     top_n: int = 5,
     *,
-    mode: ReportMode,
     region: Region = "us",
     diner_or_meal: DinerOrMeal,
 ) -> Aggregation:
-    """Run the full report aggregation pipeline.
-
-    A procurement ``df`` must already carry ``emissions_kg_co2e``.
-    """
-    metric = METRIC_BY_MODE[mode]
+    """Run the full report aggregation pipeline on a ``df`` that already carries
+    ``emissions_kg_co2e``."""
 
     def monthly(group_by: str) -> pd.DataFrame:
-        agg = aggregate_data(df, group_by=group_by, metrics=metric.column)
+        agg = aggregate_data(df, group_by=group_by, metrics=KILOS.column)
         return agg.assign(
             **{
-                metric.per_head(diner_or_meal): agg[metric.column]
+                KILOS.per_head(diner_or_meal): agg[KILOS.column]
                 / agg["month_year"].map(diner_meal_mapping)
             }
         )
 
-    monthly_product_data = monthly("product")
     monthly_category_data = monthly("category")
-
-    procurement = mode == "procurement"
     return Aggregation(
-        monthly_product=monthly_product_data,
-        monthly_category=(
-            _attach_monthly_category_emissions(monthly_category_data, df)
-            if procurement
-            else monthly_category_data
-        ),
-        template=create_template_data(monthly_category_data, metric.column),
-        overall_drivers=identify_overall_drivers(df, metric=metric.column, top_n=top_n),
-        category_drivers=identify_category_drivers(df, metric=metric.column, top_n=top_n),
-        procurement=(
-            _procurement_aggregation(df, top_n=top_n, region=region) if procurement else None
-        ),
-    )
-
-
-def _procurement_aggregation(
-    df: pd.DataFrame, *, top_n: int, region: Region
-) -> ProcurementAggregation:
-    return ProcurementAggregation(
+        monthly_product=monthly("product"),
+        monthly_category=_attach_monthly_category_emissions(monthly_category_data, df),
+        template=create_template_data(monthly_category_data, KILOS.column),
+        overall_drivers=identify_overall_drivers(df, metric=KILOS.column, top_n=top_n),
+        category_drivers=identify_category_drivers(df, metric=KILOS.column, top_n=top_n),
         animal_emissions_intensity=_none_if_empty(summarize_animal_emissions_intensity(df)),
         animal_emissions_concentration=calculate_animal_emissions_concentration(df, top_n=top_n),
         substitution_scenarios=_none_if_empty(_substitution_scenarios(df, region=region)),

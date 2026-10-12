@@ -340,19 +340,16 @@ def test_analyze_golden_deliverables(
     def record_pdf_inputs(
         report: FoodReport, charts: ReportCharts, path: Path, *, client_name: str, **kwargs: Any
     ) -> None:
-        procurement = report.aggregation.procurement
-        assert procurement is not None
+        procurement = report.aggregation
         assert procurement.animal_emissions_intensity is not None
         assert procurement.animal_emissions_concentration is not None
         assert procurement.substitution_scenarios is not None
         narrative = pdf._executive_narrative(
             report, client_name, quality_status_from_findings(report.findings)
         )
-        assert narrative is not None
         pdf_inputs.update(
             {
-                "title": [client_name, report.mode],
-                "summary_stats": report.summary_stats,
+                "title": client_name,
                 "narrative": dataclasses.asdict(narrative),
                 "tables": {
                     "Category Template": pdf._format_category_template_for_pdf(
@@ -454,7 +451,6 @@ def test_hands_the_report_the_forms_answers(
 
     assert fake_report.kwargs == {
         "diner_meal_mapping": {pd.Period(month, freq="M"): 1000.0 for month in SAMPLE_MONTHS},
-        "mode": "procurement",
         "region": "us",
         "diner_or_meal": diner_or_meal,
         "top_n_drivers": 5,

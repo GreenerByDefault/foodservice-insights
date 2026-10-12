@@ -27,14 +27,10 @@ from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
     calculate_plant_protein_share,
 )
-from gbd_foodservice_insights.report.metric import METRIC_BY_MODE, Metric
+from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import Finding
-from gbd_foodservice_insights.report.schema import (
-    DinerOrMeal,
-    Region,
-    ReportMode,
-)
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Region
 
 logger = logging.getLogger(__name__)
 
@@ -52,24 +48,17 @@ _STAGE_MESSAGES = {
 @dataclass(frozen=True)
 class FoodReport:
     rows: pd.DataFrame
-    mode: ReportMode
     region: Region
     diner_or_meal: DinerOrMeal
     diner_meal_mapping: dict[pd.Period, float]
     diner_meals_in_data: float
     aggregation: Aggregation
-    emissions_summary: pd.DataFrame | None
+    emissions_summary: pd.DataFrame
     plant_animal_split: PlantAnimalSplit
     # `None` when the rows have no protein.
     plant_protein_share: PlantProteinShare | None
     # In the order they were collected, which is the order the PDF lists them in.
     findings: tuple[Finding, ...]
-    # Without "Data Quality Status", which the lab's own findings can still change.
-    summary_stats: dict[str, str]
-
-    @property
-    def metric(self) -> Metric:
-        return METRIC_BY_MODE[self.mode]
 
 
 @dataclass(frozen=True)
@@ -92,7 +81,6 @@ def build_food_report(
     rows: pd.DataFrame,
     *,
     diner_meal_mapping: Mapping[pd.Period, float],
-    mode: ReportMode,
     region: Region,
     diner_or_meal: DinerOrMeal,
     top_n_drivers: int,
@@ -100,15 +88,13 @@ def build_food_report(
 ) -> FoodReport:
     """Rows that break `validate_rows`' contract raise `TypeError` or `ValueError`; rows that
     weigh nothing, `UnusableDataError`."""
-    metric = METRIC_BY_MODE[mode]
-
     _log_stage("ingestion", report_progress)
-    validate_rows(rows, metric)
+    validate_rows(rows, KILOS)
     # Every figure is a share of this total. `apps/web` refuses a file whose weights are all 0,
     # but only categorized rows reach here, so its uncategorized products can have held them all.
-    if (rows[metric.column] == 0).all():
+    if (rows[KILOS.column] == 0).all():
         raise UnusableDataError(
-            f"Every row has a {metric.column} of 0, so there is nothing to report."
+            f"Every row has a {KILOS.column} of 0, so there is nothing to report."
         )
 
     _log_stage("month_normalization", report_progress)
@@ -127,48 +113,41 @@ def build_food_report(
     )
 
     _log_stage("emissions", report_progress)
-    emissions_summary = None
-    if mode == "procurement":
-        df = emissions.calculate_emissions(
-            df,
-            weight_col=metric.column,
-            category_col="category",
-            region=region,
-        )
+    df = emissions.calculate_emissions(
+        df,
+        weight_col=KILOS.column,
+        category_col="category",
+        region=region,
+    )
 
     _log_stage("aggregation", report_progress)
     agg_results = aggregation.run_aggregation_pipeline(
         df,
         dm_mapping,
         top_n=top_n_drivers,
-        mode=mode,
         region=region,
         diner_or_meal=diner_or_meal,
     )
 
     _log_stage("emissions_summary", report_progress)
-    if mode == "procurement" and "emissions_kg_co2e" in df.columns:
-        emissions_summary = emissions.calculate_emissions_summary(df)
-        emissions_summary = emissions.calculate_emissions_per_diner_meal(
-            emissions_summary,
-            diner_meals_in_data,
-            diner_or_meal,
-        )
+    emissions_summary = emissions.calculate_emissions_per_diner_meal(
+        emissions.calculate_emissions_summary(df),
+        diner_meals_in_data,
+        diner_or_meal,
+    )
 
     _log_stage("client_metrics_and_diagnostics", report_progress)
-    plant_animal_split = calculate_plant_animal_split(df, metric_col=metric.column)
-    plant_protein_share = calculate_plant_protein_share(df, metric_col=metric.column)
+    plant_animal_split = calculate_plant_animal_split(df, metric_col=KILOS.column)
+    plant_protein_share = calculate_plant_protein_share(df, metric_col=KILOS.column)
 
     findings = checks.run_all_diagnostics(
         df=df,
         diner_meal_mapping=dm_mapping,
         diner_or_meal=diner_or_meal,
-        metric=metric,
     )
 
     return FoodReport(
         rows=df,
-        mode=mode,
         region=region,
         diner_or_meal=diner_or_meal,
         diner_meal_mapping=dm_mapping,
@@ -178,17 +157,6 @@ def build_food_report(
         plant_animal_split=plant_animal_split,
         plant_protein_share=plant_protein_share,
         findings=tuple(findings),
-        summary_stats=_summary_stats(
-            df,
-            mode=mode,
-            metric=metric,
-            region=region,
-            diner_or_meal=diner_or_meal,
-            diner_meals_in_data=diner_meals_in_data,
-            emissions_summary=emissions_summary,
-            plant_animal_split=plant_animal_split,
-            plant_protein_share=plant_protein_share,
-        ),
     )
 
 
@@ -225,8 +193,6 @@ def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
             aggregation=report.aggregation,
             diner_meal_mapping=report.diner_meal_mapping,
             emissions_summary=report.emissions_summary,
-            metric=report.metric,
-            serving=(report.mode == "serving"),
             plant_animal_split=report.plant_animal_split,
             plant_protein_share=report.plant_protein_share,
             diner_or_meal=report.diner_or_meal,
@@ -238,65 +204,7 @@ def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
             plt.close(figure)
 
 
-def _summary_stats(
-    df: pd.DataFrame,
-    *,
-    mode: ReportMode,
-    metric: Metric,
-    region: Region,
-    diner_or_meal: DinerOrMeal,
-    diner_meals_in_data: float,
-    emissions_summary: pd.DataFrame | None,
-    plant_animal_split: PlantAnimalSplit,
-    plant_protein_share: PlantProteinShare | None,
-) -> dict[str, str]:
-    region_summary_label = {
-        "europe": "EU/UK",
-        "us": "US/Canada",
-    }[region]
-
-    summary_stats = {
-        "Total rows": f"{len(df):,}",
-        "Unique products": f"{df['product'].nunique():,}" if "product" in df.columns else "N/A",
-        "Date range": _date_range(df),
-        f"Total {diner_or_meal}s": f"{diner_meals_in_data:,.0f}",
-        "Data type": mode.title(),
-        "Region used for climate emissions factors": region_summary_label,
-    }
-
-    if emissions_summary is not None:
-        total_co2e = emissions_summary["total_kg_co2e"].sum(min_count=1)
-        if pd.notna(total_co2e):
-            summary_stats["Total CO₂e"] = f"{float(total_co2e):,.0f} kg"
-            if diner_meals_in_data > 0:
-                summary_stats[f"CO₂e per {diner_or_meal}"] = (
-                    f"{float(total_co2e) / diner_meals_in_data:.3f} kg"
-                )
-
-    summary_stats["Plant-based (% of classified food)"] = f"{plant_animal_split.plant_pct:.1f}%"
-    summary_stats["Animal-based (% of classified food)"] = f"{plant_animal_split.animal_pct:.1f}%"
-    summary_stats["Plant-based total"] = (
-        f"{plant_animal_split.plant_total:,.1f} {metric.unit_plural}"
-    )
-    summary_stats["Animal-based total"] = (
-        f"{plant_animal_split.animal_total:,.1f} {metric.unit_plural}"
-    )
-    if plant_protein_share is not None:
-        summary_stats["Plant protein share (% of protein categories)"] = (
-            f"{plant_protein_share.plant_protein_pct:.1f}%"
-        )
-        summary_stats["Plant protein total"] = (
-            f"{plant_protein_share.plant_protein_total:,.1f} {metric.unit_plural}"
-        )
-        summary_stats["Protein-category total"] = (
-            f"{plant_protein_share.protein_total:,.1f} {metric.unit_plural}"
-        )
-
-    return summary_stats
-
-
-def _date_range(df: pd.DataFrame) -> str:
-    if "date" not in df.columns or not df["date"].notna().any():
-        return "N/A"
-    first, last = df["date"].min().strftime("%b %Y"), df["date"].max().strftime("%b %Y")
+def date_range_label(rows: pd.DataFrame) -> str:
+    """The months the rows span, as in "Jan 2024 – Mar 2024"."""
+    first, last = rows["date"].min().strftime("%b %Y"), rows["date"].max().strftime("%b %Y")
     return first if first == last else f"{first} – {last}"

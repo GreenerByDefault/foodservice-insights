@@ -3,7 +3,7 @@
 import logging
 
 import pandas as pd
-from gbd_foodservice_insights.report.aggregation import ProcurementAggregation
+from gbd_foodservice_insights.report.aggregation import Aggregation
 from gbd_foodservice_insights.report.excel import procurement_sheets, write_excel_workbook
 from gbd_foodservice_insights.utils import rel_path
 
@@ -20,7 +20,8 @@ def build_qa_excel_report(
     highest_lowest: pd.DataFrame | None = None,
     diner_meals_df: pd.DataFrame | None = None,
     emissions_summary: pd.DataFrame | None = None,
-    procurement: ProcurementAggregation | None = None,
+    # `None` for a serving report, which has no emissions.
+    procurement: Aggregation | None = None,
     quality_findings_df: pd.DataFrame | None = None,
     missingness_summary_df: pd.DataFrame | None = None,
     data_profile_df: pd.DataFrame | None = None,
@@ -44,7 +45,7 @@ def build_qa_excel_report(
         "Category Stability": highest_lowest,
         f"{diner_or_meal.title()}s": diner_meals_df,
         "Emissions Summary": emissions_summary,
-        **procurement_sheets(procurement),
+        **(procurement_sheets(procurement) if procurement is not None else {}),
         "Data_Quality_Findings": quality_findings_df,
         "Missingness_Summary": missingness_summary_df,
         "Data Profile": data_profile_df,

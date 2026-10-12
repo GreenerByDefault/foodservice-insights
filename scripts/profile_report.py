@@ -74,7 +74,6 @@ def build_deliverables(rows: pd.DataFrame, output_directory: Path) -> dict[str, 
         report = build_food_report(
             rows,
             diner_meal_mapping={month: DINERS_PER_MONTH for month in MONTHS},
-            mode="procurement",
             region="us",
             diner_or_meal="diner",
             top_n_drivers=5,

@@ -10,20 +10,20 @@ from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     build_food_report,
     build_report_charts,
+    date_range_label,
 )
-from gbd_foodservice_insights.report.metric import SERVINGS
 from gbd_foodservice_insights.report.plots import report as report_plots
 
 JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
 
 
-def _rows(metric: str = "kilos_total") -> pd.DataFrame:
+def _rows() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
             "product": ["Ground Beef", "Lentils", "Ground Beef", "Lentils"],
             "category": ["Beef and Buffalo Meat", "Legumes", "Beef and Buffalo Meat", "Legumes"],
-            metric: [10.0, 20.0, 12.0, 18.0],
+            "kilos_total": [10.0, 20.0, 12.0, 18.0],
         }
     )
 
@@ -31,7 +31,6 @@ def _rows(metric: str = "kilos_total") -> pd.DataFrame:
 def _build(rows: pd.DataFrame, **overrides: Any) -> FoodReport:
     kwargs: dict[str, Any] = {
         "diner_meal_mapping": {JAN: 100, FEB: 120},
-        "mode": "procurement",
         "region": "us",
         "diner_or_meal": "diner",
         "top_n_drivers": 5,
@@ -58,41 +57,22 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
 
     assert report.rows["month_year"].tolist() == [JAN, JAN, FEB, FEB]
     assert report.diner_meal_mapping == {JAN: 100.0, FEB: 120.0}
-    assert report.summary_stats == {
-        "Total rows": "4",
-        "Unique products": "2",
-        "Date range": "Jan 2024 – Feb 2024",
-        "Total diners": "220",
-        "Data type": "Procurement",
-        "Region used for climate emissions factors": "US/Canada",
-        "Total CO₂e": "970 kg",
-        "CO₂e per diner": "4.411 kg",
-        "Plant-based (% of classified food)": "63.3%",
-        "Animal-based (% of classified food)": "36.7%",
-        "Plant-based total": "38.0 kg",
-        "Animal-based total": "22.0 kg",
-        "Plant protein share (% of protein categories)": "63.3%",
-        "Plant protein total": "38.0 kg",
-        "Protein-category total": "60.0 kg",
-    }
-    assert report.emissions_summary is not None
-    assert report.aggregation.procurement is not None
-    assert report.aggregation.procurement.animal_emissions_intensity is not None
+    assert report.region == "us"
+    assert report.diner_meals_in_data == 220.0
+    assert report.emissions_summary["total_kg_co2e"].sum() == pytest.approx(970.5)
+    assert (report.plant_animal_split.plant_total, report.plant_animal_split.animal_total) == (
+        38.0,
+        22.0,
+    )
+    assert report.plant_protein_share is not None
+    assert report.plant_protein_share.protein_total == 60.0
+    assert report.aggregation.animal_emissions_intensity is not None
 
 
-def test_summary_stats_leave_out_the_protein_lines_without_protein():
+def test_rows_without_protein_have_no_plant_protein_share():
     rows = _rows().assign(category=["Cheese", "Oat Milk", "Cheese", "Oat Milk"])
 
-    report = _build(rows)
-
-    assert report.plant_protein_share is None
-    assert report.summary_stats.keys().isdisjoint(
-        {
-            "Plant protein share (% of protein categories)",
-            "Plant protein total",
-            "Protein-category total",
-        }
-    )
+    assert _build(rows).plant_protein_share is None
 
 
 def test_a_missing_required_column_raises():
@@ -114,17 +94,11 @@ def test_a_negative_metric_raises():
         _build(rows)
 
 
-@pytest.mark.parametrize(
-    ("mode", "metric", "diner_or_meal"),
-    [("procurement", "kilos_total", "diner"), ("serving", "servings total", "meal")],
-)
-def test_a_category_outside_the_gbd_list_raises_even_if_only_its_case_differs(
-    mode: str, metric: str, diner_or_meal: str
-):
-    rows = _rows(metric).assign(category=["Beef and Buffalo Meat", "legumes", "Mlik", "Legumes"])
+def test_a_category_outside_the_gbd_list_raises_even_if_only_its_case_differs():
+    rows = _rows().assign(category=["Beef and Buffalo Meat", "legumes", "Mlik", "Legumes"])
 
     with pytest.raises(ValueError, match="Not GBD categories: Mlik, legumes"):
-        _build(rows, mode=mode, diner_or_meal=diner_or_meal)
+        _build(rows)
 
 
 @pytest.mark.parametrize(
@@ -189,8 +163,7 @@ def test_a_category_bought_at_zero_weight_has_0_percent_drivers_and_no_intensity
             "percentage": 0.0,
         }
     ]
-    assert report.aggregation.procurement is not None
-    intensity = report.aggregation.procurement.animal_emissions_intensity
+    intensity = report.aggregation.animal_emissions_intensity
     assert intensity is not None
     assert intensity[intensity["category"] == "Pork (pig meat)"].to_dict("records") == [
         {
@@ -213,8 +186,6 @@ def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     report = _build(_rows(), diner_meal_mapping={JAN: 100, FEB: 120, MAR: 0})
 
     assert report.diner_meals_in_data == 220.0
-    assert report.summary_stats == aligned.summary_stats
-    assert report.emissions_summary is not None and aligned.emissions_summary is not None
     pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
 
 
@@ -236,7 +207,6 @@ def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
         per_head,
         "emissions_kg_co2e",
     ]
-    assert report.emissions_summary is not None
     assert list(report.emissions_summary.columns) == [
         "category",
         "total_kg_co2e",
@@ -245,53 +215,10 @@ def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
     ]
 
 
-def test_serving_per_head_columns_drop_the_servings_total_suffix():
-    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
+def test_date_range_label_prints_a_single_month_once():
+    dates = pd.to_datetime(["2024-01-15", "2024-01-30"])
 
-    assert list(report.aggregation.monthly_product.columns) == [
-        "month_year",
-        "product",
-        "servings total",
-        "servings per meal",
-    ]
-
-
-def test_serving_mode_computes_no_emissions():
-    report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
-
-    assert report.metric == SERVINGS
-    assert report.emissions_summary is None
-    assert "emissions_kg_co2e" not in report.rows.columns
-    assert report.aggregation.procurement is None
-    assert report.summary_stats == {
-        "Total rows": "4",
-        "Unique products": "2",
-        "Date range": "Jan 2024 – Feb 2024",
-        "Total meals": "220",
-        "Data type": "Serving",
-        "Region used for climate emissions factors": "US/Canada",
-        "Plant-based (% of classified food)": "63.3%",
-        "Animal-based (% of classified food)": "36.7%",
-        "Plant-based total": "38.0 servings",
-        "Animal-based total": "22.0 servings",
-        "Plant protein share (% of protein categories)": "63.3%",
-        "Plant protein total": "38.0 servings",
-        "Protein-category total": "60.0 servings",
-    }
-
-
-@pytest.mark.parametrize(("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK")])
-def test_summary_stats_names_the_emissions_factor_region(region, label):
-    report = _build(_rows(), region=region)
-
-    assert report.summary_stats["Region used for climate emissions factors"] == label
-
-
-def test_summary_stats_prints_a_single_month_once():
-    dates = pd.to_datetime(["2024-01-15", "2024-01-20", "2024-01-25", "2024-01-30"])
-    report = _build(_rows().assign(date=dates), diner_meal_mapping={JAN: 100})
-
-    assert report.summary_stats["Date range"] == "Jan 2024"
+    assert date_range_label(pd.DataFrame({"date": dates})) == "Jan 2024"
 
 
 def test_a_text_date_raises_type_error():
