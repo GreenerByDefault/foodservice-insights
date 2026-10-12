@@ -167,6 +167,8 @@ class ExecutiveNarrative:
     # Percentages of the categorised food by weight.
     plant_pct: float
     animal_pct: float
+    # Whether any animal product was bought, which `animal_pct` rounds away below 0.05%.
+    any_animal: bool
     # The largest emitters, largest first.
     top_categories: tuple[CategoryShare, ...]
     quality_status: QualityStatus
@@ -255,6 +257,15 @@ def create_executive_summary_page(
     plt.close(fig)
 
 
+def _share_text(pct: float, *, nonzero: bool) -> str:
+    """`pct` as a whole percent, except that a nonzero share never reads as 0% or 100%."""
+    if nonzero and pct < 0.5:
+        return "under 1%"
+    if nonzero and pct >= 99.5:
+        return "over 99%"
+    return f"{pct:.0f}%"
+
+
 def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
     headline = _format_co2e(narrative.total_co2e_kg)
     paragraphs = []
@@ -282,10 +293,12 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
 
     paragraphs.append(
         "All of the categorised food was plant-based."
-        if narrative.animal_pct == 0
+        if not narrative.any_animal
         else (
-            f"Plant-based items made up {narrative.plant_pct:.0f}% of the categorised food by "
-            f"weight, and animal products {narrative.animal_pct:.0f}%. Animal products carry far "
+            "Plant-based items made up "
+            f"{_share_text(narrative.plant_pct, nonzero=narrative.plant_pct > 0)} of the "
+            "categorised food by weight, and animal products "
+            f"{_share_text(narrative.animal_pct, nonzero=True)}. Animal products carry far "
             "higher emissions per kilogram, so a small number of categories drive most of the "
             "footprint. Modest, targeted menu changes in those areas deliver the largest "
             "reductions."
@@ -914,6 +927,7 @@ def _executive_narrative(
         diner_or_meal=report.diner_or_meal,
         plant_pct=report.plant_animal_split.plant_pct,
         animal_pct=report.plant_animal_split.animal_pct,
+        any_animal=report.plant_animal_split.animal_total > 0,
         top_categories=tuple(
             CategoryShare(str(category), 100 * kg_co2e / total_co2e)
             for category, kg_co2e in zip(top["category"], top["total_kg_co2e"], strict=True)

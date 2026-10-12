@@ -755,6 +755,7 @@ def test_executive_narrative_summarises_the_report() -> None:
         "diner_or_meal": "diner",
         "plant_pct": 63.3,
         "animal_pct": 36.7,
+        "any_animal": True,
         "top_categories": (
             ("Beef and Buffalo Meat", pytest.approx(100 * 909.7 / 970.5)),
             ("Legumes", pytest.approx(100 * 60.8 / 970.5)),
@@ -803,6 +804,7 @@ def _narrative(**overrides: Any) -> ExecutiveNarrative:
         "diner_or_meal": "meal",
         "plant_pct": 63.3,
         "animal_pct": 36.7,
+        "any_animal": True,
         "top_categories": (
             CategoryShare("Beef and Buffalo Meat", 60.2),
             CategoryShare("Cheese", 20.4),
@@ -835,6 +837,7 @@ def test_narrative_paragraphs_caveat_the_quality() -> None:
         _narrative(
             plant_pct=100.0,
             animal_pct=0.0,
+            any_animal=False,
             top_categories=(CategoryShare("Legumes", 70.0), CategoryShare("Cheese", 30.0)),
             quality_status="warning",
         )
@@ -848,6 +851,22 @@ def test_narrative_paragraphs_caveat_the_quality() -> None:
         "The pages that follow show how the footprint breaks down by month, category and "
         "product. The methodology is explained at the back.",
     ]
+
+
+@pytest.mark.parametrize(
+    ("plant_pct", "animal_pct"),
+    [(100.0, 0.0), (99.6, 0.4)],
+    ids=["0.04% animal, rounded to 0.0", "0.4% animal"],
+)
+def test_narrative_paragraphs_never_round_a_nonzero_share_to_zero_or_all(
+    plant_pct: float, animal_pct: float
+) -> None:
+    paragraph = _narrative_paragraphs(_narrative(plant_pct=plant_pct, animal_pct=animal_pct))[2]
+
+    assert paragraph.startswith(
+        "Plant-based items made up over 99% of the categorised food by weight, and animal "
+        "products under 1%."
+    )
 
 
 @pytest.mark.parametrize("count", [0, 4])
