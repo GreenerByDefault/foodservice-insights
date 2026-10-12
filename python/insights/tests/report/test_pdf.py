@@ -169,14 +169,13 @@ def _write(
         charts or ReportCharts(figures=[]),
         path,
         client_name="Acme",
-        baseline_pilot="pilot",
         show_quality_successes=False,
     )
 
 
 def _title_page(client: str) -> list[_PageText]:
     pdf = _RecordingPdf()
-    create_title_page(pdf, client, "baseline", "procurement")  # ty: ignore[invalid-argument-type]
+    create_title_page(pdf, client, "Procurement")  # ty: ignore[invalid-argument-type]
     return pdf.pages[0]
 
 
@@ -184,7 +183,7 @@ def test_title_page_shows_the_client_name_as_typed() -> None:
     assert [t.text for t in _title_page("McDonald's")][:3] == [
         "Food Report",
         "McDonald's",
-        "Baseline | Procurement",
+        "Procurement",
     ]
 
 
@@ -205,11 +204,8 @@ def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
     assert name_lines[-1].y > subtitle.y > generated.y
 
 
-def test_title_page_replaces_underscores_and_hyphens_in_the_labels() -> None:
-    pdf = _RecordingPdf()
-    create_title_page(pdf, "acme_corp", "pilot_phase", "on-site_serving")  # ty: ignore[invalid-argument-type]
-
-    assert [t.text for t in pdf.pages[0]][1:3] == ["acme corp", "Pilot Phase | On Site Serving"]
+def test_title_page_replaces_underscores_in_the_client_name() -> None:
+    assert [t.text for t in _title_page("acme_corp")][1] == "acme corp"
 
 
 def _text_page_titles(lines: list[str], bold_lines: set[str] | None = None) -> list[str]:

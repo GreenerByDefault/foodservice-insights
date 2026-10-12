@@ -88,7 +88,6 @@ def build_deliverables(rows: pd.DataFrame, output_directory: Path) -> dict[str, 
                 charts,
                 output_directory / "report.pdf",
                 client_name="Profile",
-                baseline_pilot="baseline",
                 show_quality_successes=False,
             )
     with timed("write_client_workbook", timings):

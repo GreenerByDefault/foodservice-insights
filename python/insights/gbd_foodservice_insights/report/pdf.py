@@ -64,14 +64,10 @@ def _new_text_figure(fig_size: tuple[float, float] = LETTER_PORTRAIT) -> tuple[F
 def create_title_page(
     pdf: PdfPages,
     client: str,
-    baseline_pilot: str,
-    procurement_serving: str,
+    subtitle: str,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
-    """Render a branded title page in the PDF.
-
-    ``baseline_pilot`` is the phase, e.g. ``"baseline"`` or ``"pilot"``.
-    """
+    """Render a branded title page in the PDF."""
     fig, ax = _new_text_figure(fig_size)
     ax.text(
         0.5,
@@ -104,15 +100,11 @@ def create_title_page(
             fontfamily="Montserrat",
         )
         y -= _TITLE_CLIENT_LINE_HEIGHT
-    subtitle_parts = [
-        baseline_pilot.replace("_", " ").title(),
-        procurement_serving.replace("_", " ").replace("-", " ").title(),
-    ]
     subtitle_y = min(0.47, y - 0.02)
     ax.text(
         0.5,
         subtitle_y,
-        " | ".join(subtitle_parts),
+        subtitle,
         transform=ax.transAxes,
         ha="center",
         va="center",
@@ -889,7 +881,6 @@ def write_report_pdf(
     path: Path,
     *,
     client_name: str,
-    baseline_pilot: str,
     show_quality_successes: bool,
 ) -> None:
     """Write the report's PDF. With ``show_quality_successes`` (the data scientist's report),
@@ -900,7 +891,7 @@ def write_report_pdf(
     procurement = report.aggregation.procurement
 
     with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, baseline_pilot, report.mode)
+        create_title_page(pdf, client_name, report.mode.title())
         if narrative is None:
             create_key_value_summary_page(
                 pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}

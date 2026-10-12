@@ -134,7 +134,6 @@ def analyze(
             charts,
             pdf_path,
             client_name=_title(request),
-            baseline_pilot="baseline",
             show_quality_successes=False,
         )
 
