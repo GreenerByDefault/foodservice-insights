@@ -98,8 +98,8 @@ it was stopped and offering to delete it.
 
 ### Result page
 
-Buttons to download the input file, the result PDF, and the result Excel sheet, plus roughly 8
-rendered charts and potentially some metadata.
+Buttons to download the input file, the result PDF, and the result Excel sheet, plus potentially
+some metadata. The page does not render charts; they live in the PDF.
 
 ### User email
 
