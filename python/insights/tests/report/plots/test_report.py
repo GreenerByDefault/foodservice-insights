@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import Aggregation, PlantAnimalSplit
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.plots import report
 from matplotlib.figure import Figure
 
@@ -73,7 +74,7 @@ def test_generate_all_report_plots_orders_every_page(
         aggregation=_aggregation(fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])),
         diner_meal_mapping=DINER_MEALS,
         emissions_summary=EMISSIONS_SUMMARY,
-        metric_total="kilos_total",
+        metric=KILOS,
         plant_animal_split=PLANT_SPLIT,
         plant_protein_share=None,
     )
@@ -115,7 +116,7 @@ def test_generate_all_report_plots_leaves_out_pages_without_their_data(
         diner_meal_mapping=DINER_MEALS,
         plant_animal_split=PLANT_SPLIT,
         plant_protein_share=None,
-        metric_total="kilos_total",
+        metric=KILOS,
         **options,
     )
 

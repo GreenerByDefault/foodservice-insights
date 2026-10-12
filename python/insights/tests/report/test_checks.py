@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Callable
 
 import gbd_foodservice_insights.report.checks as report_checks
@@ -12,6 +13,7 @@ from gbd_foodservice_insights.report.checks import (
     detect_unusual_sales,
     run_all_diagnostics,
 )
+from gbd_foodservice_insights.report.metric import KILOS, SERVINGS
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
@@ -23,6 +25,9 @@ from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 # ----------------------------------------------------------------------
 # Outliers and weight bounds
 # ----------------------------------------------------------------------
+
+QUANTITY_SOLD = dataclasses.replace(KILOS, column="quantity_sold")
+KILO_BOUNDS = (0.001, 500.0)
 
 
 @pytest.fixture
@@ -57,7 +62,7 @@ def unusual_sales_df():
 def test_detect_unusual_sales_flags_category_outliers_with_export_table(unusual_sales_df):
     findings, outlier_rows = detect_unusual_sales(
         unusual_sales_df,
-        summary_col="quantity_sold",
+        metric=QUANTITY_SOLD,
         product_name_col="product_name",
     )
 
@@ -95,7 +100,7 @@ def test_detect_unusual_sales_returns_nothing_within_normal_range():
     )
     findings, outlier_rows = detect_unusual_sales(
         df,
-        summary_col="quantity_sold",
+        metric=QUANTITY_SOLD,
         product_name_col="product_name",
     )
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
@@ -117,7 +122,7 @@ def test_detect_unusual_sales_handles_string_metric_values_when_returning_detail
 
     findings, outlier_rows = detect_unusual_sales(
         df,
-        summary_col="kilos_total",
+        metric=KILOS,
         product_name_col="product_name",
     )
 
@@ -143,7 +148,7 @@ def test_detect_unusual_sales_samples_only_the_largest_lines():
     )
 
     findings, outlier_rows = detect_unusual_sales(
-        df, summary_col="kilos_total", product_name_col="product_name", sample_limit=2
+        df, metric=KILOS, product_name_col="product_name", sample_limit=2
     )
 
     assert findings[0]["count"] == 5
@@ -174,7 +179,7 @@ def test_detect_unusual_sales_flags_severe_small_category_outlier():
 
     findings, outlier_rows = detect_unusual_sales(
         df,
-        summary_col="quantity_sold",
+        metric=QUANTITY_SOLD,
         product_name_col="product_name",
     )
 
@@ -194,7 +199,7 @@ def test_detect_unusual_sales_small_category_needs_five_times_the_median(spike, 
         }
     )
 
-    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+    findings, outlier_rows = detect_unusual_sales(df, QUANTITY_SOLD, "product_name")
 
     assert (findings[0]["count"], len(outlier_rows)) == (flagged, flagged)
 
@@ -209,7 +214,7 @@ def test_detect_unusual_sales_is_only_info_when_few_lines_are_flagged_and_none_s
         }
     )
 
-    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+    findings, outlier_rows = detect_unusual_sales(df, QUANTITY_SOLD, "product_name")
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 1)]
     assert outlier_rows["flag_reason"].tolist() == ["MAD threshold"]
@@ -224,7 +229,7 @@ def test_detect_unusual_sales_ignores_lines_without_a_positive_numeric_weight_or
         }
     )
 
-    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+    findings, outlier_rows = detect_unusual_sales(df, QUANTITY_SOLD, "product_name")
 
     # The 500 has no category, the 0 and -3 are not purchases: none joins the baseline or is
     # flagged, but they still count as lines in the share.
@@ -237,7 +242,7 @@ def test_detect_unusual_sales_succeeds_when_no_line_has_a_positive_weight():
         {"product_name": ["a", "b"], "category": ["Legumes"] * 2, "quantity_sold": [0, -1]}
     )
 
-    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+    findings, outlier_rows = detect_unusual_sales(df, QUANTITY_SOLD, "product_name")
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert outlier_rows.empty
@@ -245,7 +250,7 @@ def test_detect_unusual_sales_succeeds_when_no_line_has_a_positive_weight():
 
 def test_detect_unusual_sales_returns_success_for_no_rows():
     df = pd.DataFrame({"product_name": [], "category": [], "quantity_sold": []})
-    findings, outlier_rows = detect_unusual_sales(df, "quantity_sold", "product_name")
+    findings, outlier_rows = detect_unusual_sales(df, QUANTITY_SOLD, "product_name")
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert outlier_rows.empty
 
@@ -253,7 +258,7 @@ def test_detect_unusual_sales_returns_success_for_no_rows():
 def test_detect_unusual_sales_raises_for_missing_columns():
     df = pd.DataFrame({"p": ["A"], "q": [1]})
     with pytest.raises(KeyError, match=r"Missing required columns.*quantity_sold"):
-        detect_unusual_sales(df, "quantity_sold", "product_name")
+        detect_unusual_sales(df, QUANTITY_SOLD, "product_name")
 
 
 def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
@@ -270,7 +275,7 @@ def test_check_per_product_weight_bounds_flags_rows_and_returns_export_table():
         index=[10, 11, 12, 13, 14],
     )
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, KILOS, *KILO_BOUNDS)
 
     assert (findings[0]["status"], findings[0]["count"]) == ("warning", 4)
     assert findings[0]["metadata"] == {
@@ -314,7 +319,7 @@ def test_check_per_product_weight_bounds_treats_zero_and_the_bounds_as_in_range(
         }
     )
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, KILOS, *KILO_BOUNDS)
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert list(flagged_rows.columns) == ["row_index", "product", "kilos_total", "breached_bound"]
@@ -324,7 +329,7 @@ def test_check_per_product_weight_bounds_treats_zero_and_the_bounds_as_in_range(
 def test_check_per_product_weight_bounds_flags_values_just_outside_the_bounds():
     df = pd.DataFrame({"product": ["Beans", "Tofu"], "kilos_total": [0.00099, 500.01]})
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, KILOS, *KILO_BOUNDS)
 
     assert findings[0]["count"] == 2
     assert flagged_rows["breached_bound"].tolist() == ["lower", "upper"]
@@ -333,7 +338,7 @@ def test_check_per_product_weight_bounds_flags_values_just_outside_the_bounds():
 def test_check_per_product_weight_bounds_ignores_negative_blank_and_non_numeric_values():
     df = pd.DataFrame({"product": ["Beans", "Tofu", "Rice"], "kilos_total": [-5, None, "lots"]})
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, KILOS, *KILO_BOUNDS)
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert flagged_rows.empty
@@ -342,7 +347,9 @@ def test_check_per_product_weight_bounds_ignores_negative_blank_and_non_numeric_
 def test_check_per_product_weight_bounds_samples_only_sample_limit_lines():
     df = pd.DataFrame({"product": ["A", "B", "C"], "kilos_total": [600.0, 700.0, 800.0]})
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total", sample_limit=2)
+    findings, flagged_rows = check_per_product_weight_bounds(
+        df, KILOS, *KILO_BOUNDS, sample_limit=2
+    )
 
     assert findings[0]["count"] == 3
     assert findings[0]["sample_values"] == [
@@ -354,7 +361,9 @@ def test_check_per_product_weight_bounds_samples_only_sample_limit_lines():
 
 @pytest.mark.parametrize("columns", [{"product": ["A"]}, {"kilos_total": [1.0]}])
 def test_check_per_product_weight_bounds_notes_when_a_column_is_missing(columns):
-    findings, flagged_rows = check_per_product_weight_bounds(pd.DataFrame(columns), "kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(
+        pd.DataFrame(columns), KILOS, *KILO_BOUNDS
+    )
 
     assert [finding["status"] for finding in findings] == ["info"]
     assert findings[0]["metadata"]["missing_columns"] == [
@@ -366,22 +375,20 @@ def test_check_per_product_weight_bounds_notes_when_a_column_is_missing(columns)
 def test_check_per_product_weight_bounds_succeeds_for_no_rows():
     df = pd.DataFrame({"product": [], "kilos_total": []})
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, KILOS, *KILO_BOUNDS)
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert flagged_rows.empty
 
 
-def test_check_per_product_weight_bounds_rejects_inverted_bounds(monkeypatch):
-    _override_thresholds(monkeypatch, {"per_product_weight_bounds": {"low": 10, "high": 1}})
-
+def test_check_per_product_weight_bounds_rejects_inverted_bounds():
     with pytest.raises(ValueError, match="low <= high"):
         check_per_product_weight_bounds(
-            pd.DataFrame({"product": ["Beans"], "kilos_total": [5.0]}), "kilos_total"
+            pd.DataFrame({"product": ["Beans"], "kilos_total": [5.0]}), KILOS, low=10, high=1
         )
 
 
-def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_metric():
+def test_check_per_product_weight_bounds_words_serving_counts_in_servings():
     df = pd.DataFrame(
         {
             "product": ["Beans", "Soup", "Salad"],
@@ -390,7 +397,7 @@ def test_check_per_product_weight_bounds_uses_serving_thresholds_for_serving_met
         index=[20, 21, 22],
     )
 
-    findings, flagged_rows = check_per_product_weight_bounds(df, "servings total")
+    findings, flagged_rows = check_per_product_weight_bounds(df, SERVINGS, low=1.0, high=1000.0)
 
     assert findings[0]["status"] == "warning"
     assert findings[0]["metadata"] == {
@@ -420,7 +427,7 @@ def test_detect_month_over_month_total_volatility_warns_for_large_swings():
         }
     )
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert findings[0]["status"] == "warning"
     assert findings[0]["count"] == 2
@@ -442,7 +449,7 @@ def test_detect_month_over_month_total_volatility_gives_no_percentage_for_a_rise
         }
     )
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert findings[0]["message"].startswith("Found 1 month where the total kilos changed")
     assert findings[0]["sample_values"] == ["Feb 2025: 50 kg against 0 kg in Jan 2025."]
@@ -456,7 +463,7 @@ def test_detect_month_over_month_total_volatility_succeeds_when_changes_are_smal
         }
     )
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("success", 0)]
     assert findings[0]["message"] == "No months changed by more than 30% versus the previous month."
@@ -477,7 +484,7 @@ def test_detect_month_over_month_total_volatility_thresholds_the_change(totals, 
         {"month_year": pd.period_range("2025-01", periods=2, freq="M"), "kilos_total": totals}
     )
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert findings[0]["count"] == volatile
 
@@ -486,7 +493,7 @@ def test_detect_month_over_month_total_volatility_sums_each_month_before_compari
     jan, feb = pd.period_range("2025-01", periods=2, freq="M")
     df = pd.DataFrame({"month_year": [feb, jan, feb, jan], "kilos_total": [70.0, 50.0, 70.0, 50.0]})
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert findings[0]["sample_values"] == ["Feb 2025: 140 kg against 100 kg in Jan 2025 (+40%)."]
 
@@ -499,9 +506,7 @@ def test_detect_month_over_month_total_volatility_samples_only_sample_limit_mont
         }
     )
 
-    findings = detect_month_over_month_total_volatility(
-        df, metric_total="kilos_total", sample_limit=2
-    )
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS, sample_limit=2)
 
     assert findings[0]["count"] == 4
     assert findings[0]["sample_values"] == [
@@ -518,7 +523,7 @@ def test_detect_month_over_month_total_volatility_speaks_of_servings_for_serving
         }
     )
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="servings total")
+    findings = detect_month_over_month_total_volatility(df, metric=SERVINGS)
 
     assert findings[0]["message"].startswith("Found 1 month where the total servings changed")
     assert findings[0]["sample_values"] == [
@@ -531,7 +536,7 @@ def test_detect_month_over_month_total_volatility_notes_a_single_month():
         {"month_year": pd.period_range("2025-01", periods=1, freq="M"), "kilos_total": [1.0]}
     )
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert [(finding["status"], finding["count"]) for finding in findings] == [("info", 0)]
 
@@ -539,7 +544,7 @@ def test_detect_month_over_month_total_volatility_notes_a_single_month():
 def test_detect_month_over_month_total_volatility_notes_a_missing_metric_column():
     df = pd.DataFrame({"month_year": pd.period_range("2025-01", periods=2, freq="M")})
 
-    findings = detect_month_over_month_total_volatility(df, metric_total="kilos_total")
+    findings = detect_month_over_month_total_volatility(df, metric=KILOS)
 
     assert [finding["status"] for finding in findings] == ["info"]
     assert findings[0]["metadata"] == {"missing_columns": ["kilos_total"]}
@@ -894,14 +899,21 @@ def _counts_30_percent_off_the_median_with_flat_food() -> dict[str, object]:
 
 
 def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
-    df = pd.DataFrame({"product": ["Beans", "Tofu", "Tempeh"], "kilos_total": [1.5, 10.0, 11.0]})
-    findings, flagged_rows = check_per_product_weight_bounds(df, "kilos_total")
+    df = pd.DataFrame(
+        {
+            "month_year": pd.PeriodIndex(["2025-01"] * 3, freq="M"),
+            "product": ["Beans", "Tofu", "Tempeh"],
+            "kilos_total": [1.5, 10.0, 11.0],
+        }
+    )
+    findings = run_all_diagnostics(df, {}, "diner", KILOS)
+    bounds = next(f for f in findings if f["category"] == "per_product_weight_bounds")
     return {
-        "status": findings[0]["status"],
-        "count": findings[0]["count"],
-        "low": findings[0]["metadata"]["low"],
-        "high": findings[0]["metadata"]["high"],
-        "flagged": flagged_rows["product"].tolist(),
+        "status": bounds["status"],
+        "count": bounds["count"],
+        "low": bounds["metadata"]["low"],
+        "high": bounds["metadata"]["high"],
+        "sample_values": bounds["sample_values"],
     }
 
 
@@ -912,7 +924,7 @@ def _a_40_percent_swing() -> list[Finding]:
             "kilos_total": [100.0, 140.0],
         }
     )
-    return detect_month_over_month_total_volatility(df, "kilos_total")
+    return detect_month_over_month_total_volatility(df, KILOS)
 
 
 def _one_mild_outlier_in_five_lines() -> list[Finding]:
@@ -923,7 +935,7 @@ def _one_mild_outlier_in_five_lines() -> list[Finding]:
             "kilos_total": [10, 10, 10, 10, 100],
         }
     )
-    findings, _ = detect_unusual_sales(df, "kilos_total", "product_name")
+    findings, _ = detect_unusual_sales(df, KILOS, "product_name")
     return findings
 
 
@@ -956,7 +968,10 @@ def _first_month_at_40_percent_of_the_median() -> list[Finding]:
                 "count": 2,
                 "low": 2.0,
                 "high": 10.0,
-                "flagged": ["Beans", "Tempeh"],
+                "sample_values": [
+                    "Beans at 1.5 kg, below the lower bound of 2 kg.",
+                    "Tempeh at 11 kg, above the upper bound of 10 kg.",
+                ],
             },
             id="per_product_weight_bounds",
         ),
@@ -1031,7 +1046,7 @@ def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
     )
 
     findings = run_all_diagnostics(
-        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=True
+        df=df, diner_meal_mapping={}, diner_or_meal="diner", metric=SERVINGS
     )
 
     bounds_finding = next(
@@ -1081,7 +1096,7 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         df=df,
         diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
         diner_or_meal="diner",
-        serving=False,
+        metric=KILOS,
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
@@ -1099,7 +1114,7 @@ def test_run_all_diagnostics_skips_row_level_checks_without_their_columns():
     df = pd.DataFrame({"month_year": [jan, feb], "kilos_total": [100.0, 100.0]})
 
     findings = run_all_diagnostics(
-        df=df, diner_meal_mapping={jan: 100.0, feb: 100.0}, diner_or_meal="meal"
+        df=df, diner_meal_mapping={jan: 100.0, feb: 100.0}, diner_or_meal="meal", metric=KILOS
     )
 
     assert [finding["category"] for finding in findings] == [
@@ -1107,17 +1122,6 @@ def test_run_all_diagnostics_skips_row_level_checks_without_their_columns():
         "missing_internal_months",
         "diner_meal_count_reasonableness",
     ]
-
-
-def test_run_all_diagnostics_falls_back_to_kilos_when_a_serving_report_has_no_servings():
-    jan, feb = pd.period_range("2025-01", periods=2, freq="M")
-    df = pd.DataFrame({"month_year": [jan, feb], "kilos_total": [100.0, 200.0]})
-
-    findings = run_all_diagnostics(
-        df=df, diner_meal_mapping={}, diner_or_meal="diner", serving=True
-    )
-
-    assert findings[0]["column"] == "kilos_total"
 
 
 def _finding(status: DiagnosticStatus) -> Finding:

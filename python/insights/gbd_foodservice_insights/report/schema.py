@@ -18,50 +18,12 @@ QualityStatus = Literal["pass", "warning", "invalid"]
 VALID_REPORT_MODES: tuple[ReportMode, ...] = ("procurement", "serving")
 VALID_REGIONS: tuple[Region, ...] = ("us", "europe")
 
-REQUIRED_COLUMNS_BY_MODE: dict[ReportMode, tuple[str, ...]] = {
-    "procurement": ("date", "product", "category", "kilos_total"),
-    "serving": ("date", "product", "category", "servings total"),
-}
-
 STATUS_SEVERITY: dict[DiagnosticStatus, int] = {
     "success": 0,
     "info": 1,
     "warning": 2,
     "error": 3,
 }
-
-
-def metric_for_mode(mode: ReportMode) -> str:
-    """Return canonical total metric column for a report mode."""
-    return "servings total" if mode == "serving" else "kilos_total"
-
-
-def required_columns_for_mode(mode: ReportMode) -> tuple[str, ...]:
-    """Return required input columns for mode."""
-    return REQUIRED_COLUMNS_BY_MODE[mode]
-
-
-def metric_display_label(metric: str) -> str:
-    """Return a human-readable display label from an internal metric column name.
-
-    Strips '_total' or ' total' suffixes and replaces underscores with spaces.
-
-    Examples::
-
-        metric_display_label('kilos_total')   # → 'Kilos'
-        metric_display_label('serving total') # → 'Serving'
-        metric_display_label('kilos_co2e')    # → 'Kilos Co2E'
-    """
-    return metric.replace("_total", "").replace(" total", "").replace("_", " ").strip().title()
-
-
-def per_diner_metric_name(total_metric: str, diner_or_meal: DinerOrMeal) -> str:
-    """'kilos_total' or 'kilos total' → 'kilos per diner' (or 'kilos per meal')."""
-    if total_metric.endswith("_total"):
-        return f"{total_metric.removesuffix('_total')} per {diner_or_meal}"
-    if " total" in total_metric:
-        return f"{total_metric.replace(' total', '')} per {diner_or_meal}"
-    raise ValueError(f"Expected metric name to end with '_total' or ' total', got '{total_metric}'")
 
 
 def quality_status_from_findings(findings: Iterable[Finding]) -> QualityStatus:

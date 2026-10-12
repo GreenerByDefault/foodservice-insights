@@ -11,6 +11,7 @@ from gbd_foodservice_insights.report.food_report import (
     build_food_report,
     build_report_charts,
 )
+from gbd_foodservice_insights.report.metric import SERVINGS
 from gbd_foodservice_insights.report.plots import report as report_plots
 
 JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
@@ -258,13 +259,25 @@ def test_serving_per_head_columns_drop_the_servings_total_suffix():
 def test_serving_mode_computes_no_emissions():
     report = _build(_rows("servings total"), mode="serving", diner_or_meal="meal")
 
-    assert report.metric_total == "servings total"
+    assert report.metric == SERVINGS
     assert report.emissions_summary is None
     assert "emissions_kg_co2e" not in report.rows.columns
     assert report.aggregation.procurement is None
-    assert report.summary_stats["Data type"] == "Serving"
-    assert report.summary_stats["Total meals"] == "220"
-    assert "Total CO₂e" not in report.summary_stats
+    assert report.summary_stats == {
+        "Total rows": "4",
+        "Unique products": "2",
+        "Date range": "Jan 2024 – Feb 2024",
+        "Total meals": "220",
+        "Data type": "Serving",
+        "Region used for climate emissions factors": "US/Canada",
+        "Plant-based (% of classified food)": "63.3%",
+        "Animal-based (% of classified food)": "36.7%",
+        "Plant-based total": "38.0 servings",
+        "Animal-based total": "22.0 servings",
+        "Plant protein share (% of protein categories)": "63.3%",
+        "Plant protein total": "38.0 servings",
+        "Protein-category total": "60.0 servings",
+    }
 
 
 @pytest.mark.parametrize(("region", "label"), [("us", "US/Canada"), ("europe", "EU/UK")])

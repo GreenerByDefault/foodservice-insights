@@ -22,6 +22,7 @@ from gbd_foodservice_insights.report.food_report import (
     build_food_report,
     build_report_charts,
 )
+from gbd_foodservice_insights.report.metric import METRIC_BY_MODE, Metric
 from gbd_foodservice_insights.report.quality import (
     Finding,
     findings_to_frame,
@@ -32,8 +33,6 @@ from gbd_foodservice_insights.report.schema import (
     VALID_REPORT_MODES,
     DinerOrMeal,
     ReportMode,
-    metric_for_mode,
-    per_diner_metric_name,
     quality_status_from_findings,
 )
 
@@ -99,7 +98,7 @@ def _collect_diagnostic_export_sheets(
     diner_meal_mapping: Mapping[pd.Period, float],
     *,
     diner_or_meal: DinerOrMeal,
-    metric_total: str,
+    metric: Metric,
     potential_name_splits: pd.DataFrame,
     category_discontinuity: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
@@ -117,7 +116,7 @@ def _collect_diagnostic_export_sheets(
     try:
         _, outlier_line_items_df = checks.detect_unusual_sales(
             df,
-            summary_col=metric_total,
+            metric,
             product_name_col="product",
             category_col="category",
         )
@@ -128,7 +127,7 @@ def _collect_diagnostic_export_sheets(
 
     try:
         _, denominator_qc_df = checks.check_diner_meal_reasonableness(
-            df, diner_meal_mapping, metric_total, diner_or_meal=diner_or_meal
+            df, diner_meal_mapping, metric.column, diner_or_meal=diner_or_meal
         )
         if not denominator_qc_df.empty:
             diagnostic_export_sheets["Denominator_QC"] = denominator_qc_df
@@ -217,7 +216,7 @@ def run_food_report(
             if diner_meal_mapping is None
             else normalize_diner_meal_mapping(diner_meal_mapping)
         )
-        df = clean_weight_column(parse_and_validate_date_column(df), metric_for_mode(mode))
+        df = clean_weight_column(parse_and_validate_date_column(df), METRIC_BY_MODE[mode].column)
 
         report = build_food_report(
             df,
@@ -235,19 +234,19 @@ def run_food_report(
         name_split_findings, potential_name_splits = (
             qa_diagnostics.detect_near_duplicate_product_names(
                 report.rows,
-                report.metric_total,
+                report.metric.column,
                 pdf_extracted=metadata.get("pdf_extracted"),
             )
         )
         discontinuity_findings, category_discontinuity = (
-            qa_diagnostics.detect_category_discontinuity(report.rows, report.metric_total)
+            qa_diagnostics.detect_category_discontinuity(report.rows, report.metric.column)
         )
         lab_findings = (
             *name_split_findings,
             *qa_diagnostics.check_meat_quantities(report.rows),
             *discontinuity_findings,
-            *qa_diagnostics.check_single_product_dominance(report.rows, report.metric_total),
-            *qa_diagnostics.check_category_concentration(report.rows, report.metric_total),
+            *qa_diagnostics.check_single_product_dominance(report.rows, report.metric.column),
+            *qa_diagnostics.check_category_concentration(report.rows, report.metric.column),
             *qa_diagnostics.check_missing_weeks_within_month(report.rows),
         )
         report = dataclasses.replace(report, findings=(*report.findings, *lab_findings))
@@ -382,7 +381,7 @@ def _write_qa_workbook(
         template_data=aggregation.template,
         highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
             aggregation.monthly_category,
-            metric_col=per_diner_metric_name(report.metric_total, report.diner_or_meal),
+            metric_col=report.metric.per_head(report.diner_or_meal),
         ),
         diner_meals_df=excel.diner_meals_frame(report),
         emissions_summary=report.emissions_summary,
@@ -394,7 +393,7 @@ def _write_qa_workbook(
             df,
             report.diner_meal_mapping,
             diner_or_meal=report.diner_or_meal,
-            metric_total=report.metric_total,
+            metric=report.metric,
             potential_name_splits=potential_name_splits,
             category_discontinuity=category_discontinuity,
         ),

@@ -16,7 +16,7 @@ from gbd_foodservice_insights.plotting_utils import (
     standardize_title_case,
 )
 from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
-from gbd_foodservice_insights.report.schema import metric_display_label
+from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.utils import monthly_totals
 
 
@@ -196,13 +196,13 @@ def draw_food_and_drink_totals(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
     *,
-    metric: str = "kilos_total",
+    metric: Metric = KILOS,
 ) -> None:
     """Total `metric` by month, food only against food + drink."""
-    title = f"Total {metric_display_label(metric)}"
+    title = f"Total {metric.label}"
     _draw_multi_series_metric_over_time_on_axis(
         ax,
-        _food_and_drink_trends(monthly_category_data, metric, per_diner_meal=False),
+        _food_and_drink_trends(monthly_category_data, metric.column, per_diner_meal=False),
         title=title,
         y_label=title,
     )
@@ -213,16 +213,16 @@ def draw_food_and_drink_per_diner(
     monthly_category_data: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
     *,
-    metric: str = "kilos_total",
+    metric: Metric = KILOS,
     diner_or_meal: str = "diner",
 ) -> None:
     """`metric` per diner (or meal) by month, food only against food + drink."""
-    title = f"{metric_display_label(metric)} per {diner_or_meal.title()}"
+    title = f"{metric.label} per {diner_or_meal.title()}"
     _draw_multi_series_metric_over_time_on_axis(
         ax,
         _food_and_drink_trends(
             monthly_category_data,
-            metric,
+            metric.column,
             per_diner_meal=True,
             diner_meal_mapping=diner_meal_mapping,
         ),
@@ -328,7 +328,7 @@ def draw_plant_animal_split(
     ax: plt.Axes,
     plant_animal_split: PlantAnimalSplit,
     *,
-    metric_label: str = "Kilos",
+    metric: Metric = KILOS,
 ) -> None:
     """Plant-based against animal-based share of the whole period, as one stacked bar."""
     _draw_share_bar_axis(
@@ -337,7 +337,7 @@ def draw_plant_animal_split(
         title="Plant vs. Animal Split",
         primary_label="Plant-based",
         secondary_label="Animal-based",
-        xlabel=f"% of total {metric_label.lower()} (plant + animal categories only)",
+        xlabel=f"% of total {metric.label.lower()} (plant + animal categories only)",
     )
 
 
@@ -356,7 +356,7 @@ def draw_plant_protein_share(
     ax: plt.Axes,
     plant_protein_share: PlantProteinShare | None,
     *,
-    metric_label: str = "Kilos",
+    metric: Metric = KILOS,
 ) -> None:
     """Plant protein against other protein for the whole period, as one stacked bar."""
     title = "Plant Protein Share"
@@ -369,7 +369,7 @@ def draw_plant_protein_share(
         title=title,
         primary_label="Plant protein",
         secondary_label="Other protein",
-        xlabel=f"% of total {metric_label.lower()} in protein categories",
+        xlabel=f"% of total {metric.label.lower()} in protein categories",
     )
 
 
@@ -395,7 +395,7 @@ def draw_category_drivers(
     category_drivers: pd.DataFrame,
     category: str,
     *,
-    metric_label: str = "Kilos",
+    metric: Metric = KILOS,
 ) -> None:
     """The products making up most of one category, each as its share of the category."""
     drivers = category_drivers[category_drivers["category"] == category]
@@ -408,6 +408,6 @@ def draw_category_drivers(
         percentage_col="percentage",
         add_percentage_labels=False,
     )
-    ax.set_xlabel(f"% of category {metric_label.lower()}")
+    ax.set_xlabel(f"% of category {metric.label.lower()}")
     ax.set_ylabel("")
     set_title_font(ax, standardize_title_case(category), fontsize=12)

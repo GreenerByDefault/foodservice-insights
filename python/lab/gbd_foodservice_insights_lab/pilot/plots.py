@@ -15,8 +15,8 @@ from gbd_foodservice_insights.plotting_utils import (
     set_suptitle_font,
     set_title_font,
 )
+from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.plots.panels import prepare_monthly_trend_data
-from gbd_foodservice_insights.report.schema import metric_display_label
 
 from gbd_foodservice_insights_lab.food_report.utils import normalize_diner_meal_mapping
 from gbd_foodservice_insights_lab.plotting_extras import (
@@ -472,7 +472,7 @@ def plot_kilos_over_time(
 
             return plot_metric_over_time(
                 monthly_category_data=monthly_category_data,
-                metric="kilos_total",
+                metric=KILOS,
                 per_diner_meal=True,
                 diner_meal_mapping=diner_meal_mapping,
                 custom_title=title,
@@ -481,7 +481,7 @@ def plot_kilos_over_time(
         else:
             return plot_metric_over_time(
                 monthly_category_data=monthly_category_data,
-                metric="kilos_total",
+                metric=KILOS,
                 per_diner_meal=False,
                 custom_title=title,
                 figsize=figsize,
@@ -1172,31 +1172,24 @@ def _as_months(month_year: pd.Series) -> pd.Series:
 
 def plot_metric_over_time(
     monthly_category_data: pd.DataFrame,
-    metric: str = "kilos_total",
+    metric: Metric = KILOS,
     per_diner_meal: bool = False,
     diner_meal_mapping: dict[Any, Any] | None = None,
     custom_title: str | None = None,
     figsize: tuple[int, int] = (10, 5),
 ) -> plt.Figure:
     """Line graph of total or per-diner metric over time."""
-    if metric not in {"kilos_total", "servings total"}:
-        raise ValueError("metric must be 'kilos_total' or 'servings total'")
-
     plot_data = prepare_monthly_trend_data(
         # A workbook read back with `pd.read_excel` can hold months as strings or timestamps,
         # which would not match the mapping's `Period` keys and plot as NaN.
         monthly_category_data.assign(month_year=_as_months(monthly_category_data["month_year"])),
-        metric,
+        metric.column,
         per_diner_meal=per_diner_meal,
         diner_meal_mapping=(
             None if diner_meal_mapping is None else normalize_diner_meal_mapping(diner_meal_mapping)
         ),
     )
-    metric_label = (
-        f"{metric_display_label(metric)} per diner-meal"
-        if per_diner_meal
-        else f"Total {metric_display_label(metric)}"
-    )
+    metric_label = f"{metric.label} per diner-meal" if per_diner_meal else f"Total {metric.label}"
 
     plot_title = custom_title or f"{metric_label.title()} Over Time"
     fig = plot_time_series_with_periods(

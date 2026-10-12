@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Callable
 from typing import Any
 
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
+from gbd_foodservice_insights.report.metric import KILOS, SERVINGS
 from gbd_foodservice_insights.report.plots import panels
 from matplotlib.patches import Rectangle
 
@@ -90,7 +92,7 @@ def test_draw_food_and_drink_totals_draws_food_only_then_food_and_drink(
 ):
     _fig, ax = plt.subplots()
 
-    panels.draw_food_and_drink_totals(ax, fruit_and_juice_months(), metric="kilos_total")
+    panels.draw_food_and_drink_totals(ax, fruit_and_juice_months(), metric=KILOS)
 
     assert ax.get_title() == "Total Kilos"
     assert [line.get_label() for line in ax.lines] == ["Food Only", "Food + Drink"]
@@ -129,7 +131,7 @@ def test_draw_food_and_drink_per_diner_divides_by_diner_meals(
         ax,
         fruit_and_juice_months(),
         {JAN: 100, FEB: 100},
-        metric="kilos_total",
+        metric=KILOS,
         diner_or_meal="meal",
     )
 
@@ -163,7 +165,11 @@ def test_draw_food_and_drink_totals_rejects_a_metric_without_food_and_drink(
     _fig, ax = plt.subplots()
 
     with pytest.raises(ValueError, match="metric must be"):
-        panels.draw_food_and_drink_totals(ax, fruit_and_juice_months(), metric="emissions_kg_co2e")
+        panels.draw_food_and_drink_totals(
+            ax,
+            fruit_and_juice_months(),
+            metric=dataclasses.replace(KILOS, column="emissions_kg_co2e"),
+        )
 
 
 def test_draw_total_emissions_labels_a_narrow_range_from_zero(
@@ -216,7 +222,7 @@ PLANT_PROTEIN_SHARE = PlantProteinShare(
 def test_draw_plant_animal_split_labels_both_shares():
     _fig, ax = plt.subplots()
 
-    panels.draw_plant_animal_split(ax, PLANT_SPLIT, metric_label="Servings")
+    panels.draw_plant_animal_split(ax, PLANT_SPLIT, metric=SERVINGS)
 
     assert ax.get_title() == "Plant vs. Animal Split"
     assert ax.get_xlabel() == "% of total servings (plant + animal categories only)"
@@ -297,7 +303,7 @@ CATEGORY_DRIVERS = pd.DataFrame(
 def test_draw_category_drivers_draws_only_its_categorys_products():
     _fig, ax = plt.subplots()
 
-    panels.draw_category_drivers(ax, CATEGORY_DRIVERS, "fruit", metric_label="Servings")
+    panels.draw_category_drivers(ax, CATEGORY_DRIVERS, "fruit", metric=SERVINGS)
 
     assert ax.get_title() == "Fruit"
     assert ax.get_xlabel() == "% of category servings"
