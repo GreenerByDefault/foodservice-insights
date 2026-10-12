@@ -945,7 +945,7 @@ def _executive_narrative(
     return ExecutiveNarrative(
         client=client_name,
         period=report.summary_stats["Date range"],
-        total_food_kg=float(report.rows[report.metric_total].sum()),
+        total_food_kg=float(report.rows[report.metric.column].sum()),
         total_co2e_kg=total_co2e,
         co2e_kg_per_diner_or_meal=(
             total_co2e / report.diner_meals_in_data if report.diner_meals_in_data else None

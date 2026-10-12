@@ -7,28 +7,22 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from gbd_foodservice_insights.report.metric import SERVINGS, Metric
 from gbd_foodservice_insights.report.quality import Finding, make_finding
-from gbd_foodservice_insights.report.schema import (
-    DinerOrMeal,
-    metric_display_label,
-)
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 
 logger = logging.getLogger(__name__)
 
 
-def _unit_label(metric_col: str) -> str:
-    return "servings" if metric_col == "servings total" else "kg"
-
-
-def _format_quantity(value: float, unit: str) -> str:
+def _format_quantity(value: float, metric: Metric) -> str:
     # Below 0.01, two significant figures: a fixed two decimals would print the tiny weights
     # the bounds check exists to catch as 0.
     if 0 < abs(value) < 0.01:
         number = np.format_float_positional(value, precision=2, fractional=False)
     else:
         number = f"{value:,.2f}".rstrip("0").rstrip(".")
-    return f"{number} {unit.removesuffix('s') if number == '1' else unit}"
+    return f"{number} {metric.unit_singular if number == '1' else metric.unit_plural}"
 
 
 def _format_line_count(count: int) -> str:
@@ -37,7 +31,7 @@ def _format_line_count(count: int) -> str:
 
 def detect_unusual_sales(
     df: pd.DataFrame,
-    summary_col: str,
+    metric: Metric,
     product_name_col: str,
     *,
     category_col: str = "category",
@@ -68,7 +62,7 @@ def detect_unusual_sales(
         "outlier_line_items", "small_category_ratio_threshold"
     )
 
-    required_columns = (summary_col, product_name_col, category_col)
+    required_columns = (metric.column, product_name_col, category_col)
     missing_columns = [column for column in required_columns if column not in df.columns]
     if missing_columns:
         raise KeyError(f"Missing required columns for unusual sales check: {missing_columns}")
@@ -93,7 +87,7 @@ def detect_unusual_sales(
 
     working = df.copy()
     working["_row_index"] = working.index
-    working["_metric_value"] = pd.to_numeric(working[summary_col], errors="coerce")
+    working["_metric_value"] = pd.to_numeric(working[metric.column], errors="coerce")
 
     valid_rows = working[
         working[category_col].notna()
@@ -197,14 +191,13 @@ def detect_unusual_sales(
         else "info"
     )
 
-    unit = _unit_label(summary_col)
     top_row = flagged_rows.iloc[0]
     sample_values = [
         (
             f"{row[product_name_col]} in {row[category_col]}: "
-            f"{_format_quantity(row['_metric_value'], unit)}, "
+            f"{_format_quantity(row['_metric_value'], metric)}, "
             f"{row['ratio_to_category_median']:.1f}x the category's typical line of "
-            f"{_format_quantity(row['category_median'], unit)}."
+            f"{_format_quantity(row['category_median'], metric)}."
         )
         for _, row in flagged_rows.head(sample_limit).iterrows()
     ]
@@ -219,12 +212,12 @@ def detect_unusual_sales(
                 f"{'its' if outlier_row_count == 1 else 'their'} category "
                 f"({outlier_row_share:.2%} of all lines). The largest is "
                 f"{top_row[product_name_col]} in {top_row[category_col]} at "
-                f"{_format_quantity(top_row['_metric_value'], unit)}, "
+                f"{_format_quantity(top_row['_metric_value'], metric)}, "
                 f"{top_row['ratio_to_category_median']:.1f}x that category's typical line of "
-                f"{_format_quantity(top_row['category_median'], unit)}. Lines like these are "
-                "often a unit or entry mistake."
+                f"{_format_quantity(top_row['category_median'], metric)}. Lines like these "
+                "are often a unit or entry mistake."
             ),
-            column=summary_col,
+            column=metric.column,
             count=outlier_row_count,
             sample_values=sample_values,
             metadata={
@@ -244,7 +237,7 @@ def detect_unusual_sales(
         "date",
         product_name_col,
         category_col,
-        summary_col,
+        metric.column,
         "category_row_count",
         "category_median",
         "category_mad",
@@ -267,7 +260,9 @@ def detect_unusual_sales(
 
 def check_per_product_weight_bounds(
     df: pd.DataFrame,
-    metric_col: str,
+    metric: Metric,
+    low: float,
+    high: float,
     sample_limit: int = 20,
 ) -> tuple[list[Finding], pd.DataFrame]:
     """Flag line items with weights outside the hard bounds used for unit-error QA.
@@ -277,21 +272,12 @@ def check_per_product_weight_bounds(
     not depend on distribution shape and are intended for obviously implausible
     single-row transaction weights.
     """
-    threshold_group = "per_product_weight_bounds"
-    subject_label = "per-product weights"
-    line_subject = "weight"
-    if metric_col == "servings total":
-        threshold_group = "per_product_serving_bounds"
-        subject_label = "per-product serving counts"
-        line_subject = "serving count"
-    unit_label = _unit_label(metric_col)
+    subject_label = f"per-product {metric.line_noun}s"
 
-    low = get_diagnostic_threshold(threshold_group, "low")
-    high = get_diagnostic_threshold(threshold_group, "high")
     if low > high:
         raise ValueError(f"Per-product weight bounds must satisfy low <= high; got {low} > {high}.")
 
-    required_columns = [metric_col, "product"]
+    required_columns = [metric.column, "product"]
     missing_columns = [column for column in required_columns if column not in df.columns]
     if missing_columns:
         return (
@@ -322,12 +308,12 @@ def check_per_product_weight_bounds(
                     metadata={"low": low, "high": high, "flagged_row_count": 0},
                 )
             ],
-            pd.DataFrame(columns=["row_index", "product", metric_col, "breached_bound"]),
+            pd.DataFrame(columns=["row_index", "product", metric.column, "breached_bound"]),
         )
 
     working = df.copy()
     working["_row_index"] = working.index
-    working["_metric_value"] = pd.to_numeric(working[metric_col], errors="coerce")
+    working["_metric_value"] = pd.to_numeric(working[metric.column], errors="coerce")
 
     # A zero line is ordinary data, not a unit mistake: the report counts it like any other.
     flagged_rows = working.loc[
@@ -347,7 +333,7 @@ def check_per_product_weight_bounds(
                     metadata={"low": low, "high": high, "flagged_row_count": 0},
                 )
             ],
-            pd.DataFrame(columns=["row_index", "product", metric_col, "breached_bound"]),
+            pd.DataFrame(columns=["row_index", "product", metric.column, "breached_bound"]),
         )
 
     flagged_rows["breached_bound"] = np.where(
@@ -376,8 +362,8 @@ def check_per_product_weight_bounds(
     def describe(row: pd.Series) -> str:
         side = "below the lower" if row["breached_bound"] == "lower" else "above the upper"
         return (
-            f"{row['product']} at {_format_quantity(row['_metric_value'], unit_label)}, "
-            f"{side} bound of {_format_quantity(row['breached_threshold'], unit_label)}."
+            f"{row['product']} at {_format_quantity(row['_metric_value'], metric)}, "
+            f"{side} bound of {_format_quantity(row['breached_threshold'], metric)}."
         )
 
     sample_values = [describe(row) for _, row in flagged_rows.head(sample_limit).iterrows()]
@@ -388,18 +374,18 @@ def check_per_product_weight_bounds(
             category="per_product_weight_bounds",
             status="warning",
             message=(
-                f"Found {_format_line_count(len(flagged_rows))} with a {line_subject} above "
-                f"zero but under {_format_quantity(low, unit_label)}, or over "
-                f"{_format_quantity(high, unit_label)}, which usually means a unit mistake. "
+                f"Found {_format_line_count(len(flagged_rows))} with a {metric.line_noun} above "
+                f"zero but under {_format_quantity(low, metric)}, or over "
+                f"{_format_quantity(high, metric)}, which usually means a unit mistake. "
                 f"For example, {describe(flagged_rows.iloc[0])}"
             ),
-            column=metric_col,
+            column=metric.column,
             count=len(flagged_rows),
             sample_values=sample_values,
             metadata={
                 "low": low,
                 "high": high,
-                "unit_label": unit_label,
+                "unit_label": metric.unit_plural,
                 "flagged_row_count": len(flagged_rows),
             },
         )
@@ -410,7 +396,7 @@ def check_per_product_weight_bounds(
         "date",
         "product",
         "category",
-        metric_col,
+        metric.column,
         "_metric_value",
         "breached_bound",
         "breached_threshold",
@@ -429,7 +415,7 @@ def check_per_product_weight_bounds(
 
 def detect_month_over_month_total_volatility(
     df: pd.DataFrame,
-    metric_total: str,
+    metric: Metric,
     *,
     month_col: str = "month_year",
     sample_limit: int = 6,
@@ -441,7 +427,7 @@ def detect_month_over_month_total_volatility(
     operational shift. Surfacing those jumps gives catering managers a simple
     continuity check before they read the rest of the report.
     """
-    if metric_total not in df.columns:
+    if metric.column not in df.columns:
         return [
             make_finding(
                 stage="diagnostics",
@@ -449,15 +435,15 @@ def detect_month_over_month_total_volatility(
                 status="info",
                 message=(
                     "Could not check month-to-month total volatility because "
-                    f"'{metric_total}' is missing."
+                    f"'{metric.column}' is missing."
                 ),
-                metadata={"missing_columns": [metric_total]},
+                metadata={"missing_columns": [metric.column]},
             )
         ]
 
     monthly_totals = (
         df.dropna(subset=[month_col])
-        .groupby(month_col, dropna=False)[metric_total]
+        .groupby(month_col, dropna=False)[metric.column]
         .sum(min_count=1)
         .sort_index()
     )
@@ -535,12 +521,11 @@ def detect_month_over_month_total_volatility(
         change = "" if np.isinf(row["pct_change"]) else f" ({row['pct_change']:+.0%})"
         return (
             f"{_format_month_label(row[month_col])}: "
-            f"{_format_quantity(row['current_total'], unit)} against "
-            f"{_format_quantity(row['previous_total'], unit)} in "
+            f"{_format_quantity(row['current_total'], metric)} against "
+            f"{_format_quantity(row['previous_total'], metric)} in "
             f"{_format_month_label(row['previous_month'])}{change}."
         )
 
-    unit = _unit_label(metric_total)
     sample_values = [describe(row) for _, row in volatile_months.head(sample_limit).iterrows()]
 
     findings = [
@@ -550,11 +535,11 @@ def detect_month_over_month_total_volatility(
             status="warning",
             message=(
                 f"Found {len(volatile_months)} month{'' if len(volatile_months) == 1 else 's'} "
-                f"where the total {metric_display_label(metric_total).lower()} changed by more "
+                f"where the total {metric.label.lower()} changed by more "
                 f"than {change_threshold:.0%} from the month before. Large swings like this "
                 "often mean a month is missing, partial, or counted twice."
             ),
-            column=metric_total,
+            column=metric.column,
             count=len(volatile_months),
             sample_values=sample_values,
             metadata={"warning_pct_change_threshold": change_threshold},
@@ -860,30 +845,35 @@ def run_all_diagnostics(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
     diner_or_meal: DinerOrMeal,
-    serving: bool = False,
-    metric_total: str = "kilos_total",
+    metric: Metric,
 ) -> list[Finding]:
     """Run report diagnostics on rows whose `month_year` is already `Period[M]`."""
-    if serving and metric_total == "kilos_total" and "servings total" in df.columns:
-        metric_total = "servings total"
+    bounds_group = (
+        "per_product_serving_bounds" if metric == SERVINGS else "per_product_weight_bounds"
+    )
 
     findings: list[Finding] = []
-    findings.extend(detect_month_over_month_total_volatility(df, metric_total))
+    findings.extend(detect_month_over_month_total_volatility(df, metric))
     findings.extend(check_missing_internal_months(df))
     denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
-        df, diner_meal_mapping, metric_total, diner_or_meal=diner_or_meal
+        df, diner_meal_mapping, metric.column, diner_or_meal=diner_or_meal
     )
     findings.extend(denominator_reasonableness_findings)
-    if "category" in df.columns and "product" in df.columns and metric_total in df.columns:
+    if "category" in df.columns and "product" in df.columns and metric.column in df.columns:
         unusual_sales_findings, _ = detect_unusual_sales(
             df,
-            summary_col=metric_total,
+            metric,
             product_name_col="product",
             category_col="category",
         )
         findings.extend(unusual_sales_findings)
-    if "product" in df.columns and metric_total in df.columns:
-        per_product_weight_bound_findings, _ = check_per_product_weight_bounds(df, metric_total)
+    if "product" in df.columns and metric.column in df.columns:
+        per_product_weight_bound_findings, _ = check_per_product_weight_bounds(
+            df,
+            metric,
+            low=get_diagnostic_threshold(bounds_group, "low"),
+            high=get_diagnostic_threshold(bounds_group, "high"),
+        )
         findings.extend(per_product_weight_bound_findings)
     findings.extend(check_date_distribution(df))
     return findings

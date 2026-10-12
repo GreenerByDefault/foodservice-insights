@@ -13,12 +13,11 @@ from gbd_foodservice_insights.categories import (
     protein_categories,
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
+from gbd_foodservice_insights.report.metric import METRIC_BY_MODE
 from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
     Region,
     ReportMode,
-    metric_for_mode,
-    per_diner_metric_name,
 )
 
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
@@ -540,13 +539,15 @@ def run_aggregation_pipeline(
 
     A procurement ``df`` must already carry ``emissions_kg_co2e``.
     """
-    metric_total = metric_for_mode(mode)
-    per_head = per_diner_metric_name(metric_total, diner_or_meal)
+    metric = METRIC_BY_MODE[mode]
 
     def monthly(group_by: str) -> pd.DataFrame:
-        agg = aggregate_data(df, group_by=group_by, metrics=metric_total)
+        agg = aggregate_data(df, group_by=group_by, metrics=metric.column)
         return agg.assign(
-            **{per_head: agg[metric_total] / agg["month_year"].map(diner_meal_mapping)}
+            **{
+                metric.per_head(diner_or_meal): agg[metric.column]
+                / agg["month_year"].map(diner_meal_mapping)
+            }
         )
 
     monthly_product_data = monthly("product")
@@ -560,9 +561,9 @@ def run_aggregation_pipeline(
             if procurement
             else monthly_category_data
         ),
-        template=create_template_data(monthly_category_data, metric_total),
-        overall_drivers=identify_overall_drivers(df, metric=metric_total, top_n=top_n),
-        category_drivers=identify_category_drivers(df, metric=metric_total, top_n=top_n),
+        template=create_template_data(monthly_category_data, metric.column),
+        overall_drivers=identify_overall_drivers(df, metric=metric.column, top_n=top_n),
+        category_drivers=identify_category_drivers(df, metric=metric.column, top_n=top_n),
         procurement=(
             _procurement_aggregation(df, top_n=top_n, region=region) if procurement else None
         ),

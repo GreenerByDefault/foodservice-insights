@@ -27,15 +27,13 @@ from gbd_foodservice_insights.report.aggregation import (
     calculate_plant_animal_split,
     calculate_plant_protein_share,
 )
+from gbd_foodservice_insights.report.metric import METRIC_BY_MODE, Metric
 from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
     Region,
     ReportMode,
-    metric_display_label,
-    metric_for_mode,
-    required_columns_for_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,8 +68,8 @@ class FoodReport:
     summary_stats: dict[str, str]
 
     @property
-    def metric_total(self) -> str:
-        return metric_for_mode(self.mode)
+    def metric(self) -> Metric:
+        return METRIC_BY_MODE[self.mode]
 
 
 @dataclass(frozen=True)
@@ -100,17 +98,17 @@ def build_food_report(
     top_n_drivers: int,
     report_progress: Callable[[], None] = _ignore,
 ) -> FoodReport:
-    """Rows that break `_validate_rows`' contract raise `TypeError` or `ValueError`; rows that
+    """Rows that break `validate_rows`' contract raise `TypeError` or `ValueError`; rows that
     weigh nothing, `UnusableDataError`."""
-    metric_total = metric_for_mode(mode)
+    metric = METRIC_BY_MODE[mode]
 
     _log_stage("ingestion", report_progress)
-    _validate_rows(rows, mode)
+    validate_rows(rows, metric)
     # Every figure is a share of this total. `apps/web` refuses a file whose weights are all 0,
     # but only categorized rows reach here, so its uncategorized products can have held them all.
-    if (rows[metric_total] == 0).all():
+    if (rows[metric.column] == 0).all():
         raise UnusableDataError(
-            f"Every row has a {metric_total} of 0, so there is nothing to report."
+            f"Every row has a {metric.column} of 0, so there is nothing to report."
         )
 
     _log_stage("month_normalization", report_progress)
@@ -133,7 +131,7 @@ def build_food_report(
     if mode == "procurement":
         df = emissions.calculate_emissions(
             df,
-            weight_col=metric_total,
+            weight_col=metric.column,
             category_col="category",
             region=region,
         )
@@ -158,15 +156,14 @@ def build_food_report(
         )
 
     _log_stage("client_metrics_and_diagnostics", report_progress)
-    plant_animal_split = calculate_plant_animal_split(df, metric_col=metric_total)
-    plant_protein_share = calculate_plant_protein_share(df, metric_col=metric_total)
+    plant_animal_split = calculate_plant_animal_split(df, metric_col=metric.column)
+    plant_protein_share = calculate_plant_protein_share(df, metric_col=metric.column)
 
     findings = checks.run_all_diagnostics(
         df=df,
         diner_meal_mapping=dm_mapping,
         diner_or_meal=diner_or_meal,
-        serving=(mode == "serving"),
-        metric_total=metric_total,
+        metric=metric,
     )
 
     return FoodReport(
@@ -184,6 +181,7 @@ def build_food_report(
         summary_stats=_summary_stats(
             df,
             mode=mode,
+            metric=metric,
             region=region,
             diner_or_meal=diner_or_meal,
             diner_meals_in_data=diner_meals_in_data,
@@ -194,8 +192,8 @@ def build_food_report(
     )
 
 
-def _validate_rows(rows: pd.DataFrame, mode: ReportMode) -> None:
-    required = required_columns_for_mode(mode)
+def validate_rows(rows: pd.DataFrame, metric: Metric) -> None:
+    required = ("date", "product", "category", metric.column)
     missing = [column for column in required if column not in rows.columns]
     if missing:
         raise ValueError(f"Missing required columns: {', '.join(missing)}")
@@ -204,15 +202,14 @@ def _validate_rows(rows: pd.DataFrame, mode: ReportMode) -> None:
         if null_count:
             raise ValueError(f"{column} is missing in {null_count:,} of {len(rows):,} rows")
 
-    metric_total = metric_for_mode(mode)
     if not pd.api.types.is_datetime64_dtype(rows["date"]):
         raise TypeError(f"date must be datetime64, not {rows['date'].dtype}")
-    if not pd.api.types.is_numeric_dtype(rows[metric_total]):
-        raise TypeError(f"{metric_total} must be numeric, not {rows[metric_total].dtype}")
+    if not pd.api.types.is_numeric_dtype(rows[metric.column]):
+        raise TypeError(f"{metric.column} must be numeric, not {rows[metric.column].dtype}")
 
-    negative_count = int((rows[metric_total] < 0).sum())
+    negative_count = int((rows[metric.column] < 0).sum())
     if negative_count:
-        raise ValueError(f"{metric_total} is negative in {negative_count:,} of {len(rows):,} rows")
+        raise ValueError(f"{metric.column} is negative in {negative_count:,} of {len(rows):,} rows")
     # Exact names: every step below compares categories exactly, so `beef` would get no
     # emission factor and fall out of every plant, animal and protein figure.
     gbd_categories = set(category_names())
@@ -228,7 +225,7 @@ def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
             aggregation=report.aggregation,
             diner_meal_mapping=report.diner_meal_mapping,
             emissions_summary=report.emissions_summary,
-            metric_total=report.metric_total,
+            metric=report.metric,
             serving=(report.mode == "serving"),
             plant_animal_split=report.plant_animal_split,
             plant_protein_share=report.plant_protein_share,
@@ -245,6 +242,7 @@ def _summary_stats(
     df: pd.DataFrame,
     *,
     mode: ReportMode,
+    metric: Metric,
     region: Region,
     diner_or_meal: DinerOrMeal,
     diner_meals_in_data: float,
@@ -252,8 +250,6 @@ def _summary_stats(
     plant_animal_split: PlantAnimalSplit,
     plant_protein_share: PlantProteinShare | None,
 ) -> dict[str, str]:
-    metric_label_lower = metric_display_label(metric_for_mode(mode)).lower()
-    metric_value_unit = "kg" if metric_label_lower == "kilos" else metric_label_lower
     region_summary_label = {
         "europe": "EU/UK",
         "us": "US/Canada",
@@ -280,20 +276,20 @@ def _summary_stats(
     summary_stats["Plant-based (% of classified food)"] = f"{plant_animal_split.plant_pct:.1f}%"
     summary_stats["Animal-based (% of classified food)"] = f"{plant_animal_split.animal_pct:.1f}%"
     summary_stats["Plant-based total"] = (
-        f"{plant_animal_split.plant_total:,.1f} {metric_value_unit}"
+        f"{plant_animal_split.plant_total:,.1f} {metric.unit_plural}"
     )
     summary_stats["Animal-based total"] = (
-        f"{plant_animal_split.animal_total:,.1f} {metric_value_unit}"
+        f"{plant_animal_split.animal_total:,.1f} {metric.unit_plural}"
     )
     if plant_protein_share is not None:
         summary_stats["Plant protein share (% of protein categories)"] = (
             f"{plant_protein_share.plant_protein_pct:.1f}%"
         )
         summary_stats["Plant protein total"] = (
-            f"{plant_protein_share.plant_protein_total:,.1f} {metric_value_unit}"
+            f"{plant_protein_share.plant_protein_total:,.1f} {metric.unit_plural}"
         )
         summary_stats["Protein-category total"] = (
-            f"{plant_protein_share.protein_total:,.1f} {metric_value_unit}"
+            f"{plant_protein_share.protein_total:,.1f} {metric.unit_plural}"
         )
 
     return summary_stats

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.plots import figures
 from matplotlib.figure import Figure
 
@@ -69,7 +70,7 @@ def test_plot_category_totals_titles_and_labels_its_own_axes_with_categories_lar
         }
     )
 
-    fig = figures.plot_category_totals(monthly, "kilos_total")
+    fig = figures.plot_category_totals(monthly, KILOS)
 
     (ax,) = fig.axes
     assert ax.get_title() == "Kilos by Category Across All Months"
@@ -112,7 +113,7 @@ def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
 ):
     fig = figures.plot_food_and_drink_comparison_page(
         fruit_and_juice_months(),
-        metric="kilos_total",
+        metric=KILOS,
         diner_meal_mapping={JAN: 100, FEB: 100},
     )
 

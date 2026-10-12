@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.metric import KILOS, SERVINGS
 from gbd_foodservice_insights_lab.pilot.plots import (
     plot_metric_over_time,
     print_baseline_pilot_percent_changes,
@@ -45,15 +46,17 @@ def test_print_baseline_pilot_percent_changes_returns_calculated_metrics(capsys)
 
 
 class TestPlotMetricOverTime:
-    def test_returns_figure(self):
+    def test_plots_and_labels_the_metrics_column(self):
         data = {
             "month_year": [pd.Period("2023-01"), pd.Period("2023-02"), pd.Period("2023-03")],
             "category": ["fruit", "fruit", "fruit"],
-            "kilos_total": [100, 150, 120],
+            "servings total": [100, 150, 120],
         }
         df = pd.DataFrame(data)
-        fig = plot_metric_over_time(df, metric="kilos_total")
-        assert isinstance(fig, plt.Figure)
+        fig = plot_metric_over_time(df, metric=SERVINGS)
+        (ax,) = fig.axes
+        assert (ax.get_title(), ax.get_ylabel()) == ("Total Servings Over Time", "Total Servings")
+        assert np.asarray(ax.lines[0].get_ydata()).tolist() == [100, 150, 120]
         plt.close(fig)
 
     @pytest.mark.parametrize(
@@ -74,13 +77,7 @@ class TestPlotMetricOverTime:
         df = pd.DataFrame(data)
         diner_meal_mapping = {"2023-01": 100, "2023-02": 120}
         fig = plot_metric_over_time(
-            df, metric="kilos_total", per_diner_meal=True, diner_meal_mapping=diner_meal_mapping
+            df, metric=KILOS, per_diner_meal=True, diner_meal_mapping=diner_meal_mapping
         )
         assert np.asarray(fig.axes[0].lines[0].get_ydata()).tolist() == pytest.approx([1.0, 1.25])
         plt.close(fig)
-
-    def test_rejects_an_unknown_metric(self):
-        df = pd.DataFrame({"month_year": [pd.Period("2023-01")], "category": ["fruit"], "x": [1]})
-
-        with pytest.raises(ValueError, match="metric must be"):
-            plot_metric_over_time(df, metric="x")
