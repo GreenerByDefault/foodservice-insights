@@ -48,9 +48,9 @@ categories carry emissions; and `_narrative_paragraphs` reads the plant and anim
 after rounding, so food that is 0.04% animal is called "all plant-based" and food that is 0.4%
 animal reads "100% … and animal products 0%".
 
-`procurement-only-report.md` owns the metric parameters and `summary_stats`; `caches-to-supabase.md`
-PR 5 adds `new_categorizations` to `CategorizedProducts`. Nothing below touches those, and the
-PRs here land in either order relative to them — whichever lands second rebases.
+`caches-to-supabase.md` PR 5 adds `new_categorizations` to `CategorizedProducts`. Nothing below
+touches that, and the PRs here land in either order relative to it — whichever lands second
+rebases.
 
 ## Decisions
 
@@ -93,8 +93,7 @@ fixture does not change: its three top categories all emit.
 - The six lab-only threshold groups move to the lab's YAML; `missing_internal_months: {}` is
   deleted; the lab's `food_report/diagnostics.py` reads its own loader. The product YAML keeps
   `outlier_line_items`, `per_product_weight_bounds`, `month_over_month_total_volatility`,
-  `diner_meal_count_reasonableness` and `date_distribution` (and `per_product_serving_bounds`
-  until `procurement-only-report.md` removes it).
+  `diner_meal_count_reasonableness` and `date_distribution`.
 
 ## PR 3 — Categorization returns what the product reads
 

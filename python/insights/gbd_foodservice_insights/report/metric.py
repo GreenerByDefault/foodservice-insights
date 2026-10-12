@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from gbd_foodservice_insights.report.schema import DinerOrMeal, ReportMode
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 
 @dataclass(frozen=True)
@@ -29,13 +29,3 @@ KILOS = Metric(
     per_head_stem="kilos",
     line_noun="weight",
 )
-SERVINGS = Metric(
-    column="servings total",
-    label="Servings",
-    unit_singular="serving",
-    unit_plural="servings",
-    per_head_stem="servings",
-    line_noun="serving count",
-)
-
-METRIC_BY_MODE: dict[ReportMode, Metric] = {"procurement": KILOS, "serving": SERVINGS}

@@ -14,10 +14,6 @@ per_product_weight_bounds:
   low: 0.001
   high: 500.0
 
-per_product_serving_bounds:
-  low: 1.0
-  high: 1000.0
-
 missing_weeks_within_month:
   max_gap_days: 10
 

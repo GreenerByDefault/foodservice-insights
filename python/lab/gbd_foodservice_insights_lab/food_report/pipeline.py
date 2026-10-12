@@ -33,7 +33,7 @@ from gbd_foodservice_insights.report.quality import (
 )
 from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, quality_status_from_findings
 
-from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging, serving
+from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging, serving, summary
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
 from gbd_foodservice_insights_lab.food_report import excel as qa_excel
 from gbd_foodservice_insights_lab.food_report.serving import ServingReport
@@ -217,7 +217,8 @@ def run_food_report(
             if diner_meal_mapping is None
             else normalize_diner_meal_mapping(diner_meal_mapping)
         )
-        df = clean_weight_column(parse_and_validate_date_column(df), _METRIC_BY_MODE[mode].column)
+        metric = _METRIC_BY_MODE[mode]
+        df = clean_weight_column(parse_and_validate_date_column(df), metric.column)
 
         report = _build_report(
             df,
@@ -235,19 +236,19 @@ def run_food_report(
         name_split_findings, potential_name_splits = (
             qa_diagnostics.detect_near_duplicate_product_names(
                 report.rows,
-                report.metric.column,
+                metric.column,
                 pdf_extracted=metadata.get("pdf_extracted"),
             )
         )
         discontinuity_findings, category_discontinuity = (
-            qa_diagnostics.detect_category_discontinuity(report.rows, report.metric.column)
+            qa_diagnostics.detect_category_discontinuity(report.rows, metric.column)
         )
         lab_findings = (
             *name_split_findings,
             *qa_diagnostics.check_meat_quantities(report.rows),
             *discontinuity_findings,
-            *qa_diagnostics.check_single_product_dominance(report.rows, report.metric.column),
-            *qa_diagnostics.check_category_concentration(report.rows, report.metric.column),
+            *qa_diagnostics.check_single_product_dominance(report.rows, metric.column),
+            *qa_diagnostics.check_category_concentration(report.rows, metric.column),
             *qa_diagnostics.check_missing_weeks_within_month(report.rows),
         )
         report = dataclasses.replace(report, findings=(*report.findings, *lab_findings))
@@ -272,7 +273,10 @@ def run_food_report(
 
         quality_summary = summarize_findings(quality_findings)
         quality_status = quality_status_from_findings(quality_findings)
-        summary_stats = {**report.summary_stats, "Data Quality Status": quality_status.upper()}
+        summary_stats = {
+            **_summary_stats(report),
+            "Data Quality Status": quality_status.upper(),
+        }
 
         _log_stage("client_workbook_build", report_progress)
         _write_client_workbook(report, Path(artifact_paths["client_excel_path"]))
@@ -281,6 +285,7 @@ def run_food_report(
         artifact_paths["qa_excel_path"] = _write_qa_workbook(
             report,
             artifact_paths["qa_excel_path"],
+            metric=metric,
             quality_findings=quality_findings,
             potential_name_splits=potential_name_splits,
             category_discontinuity=category_discontinuity,
@@ -378,7 +383,6 @@ def _build_report(
     return build_food_report(
         rows,
         diner_meal_mapping=diner_meal_mapping,
-        mode="procurement",
         region=region,
         diner_or_meal=diner_or_meal,
         top_n_drivers=top_n_drivers,
@@ -418,6 +422,12 @@ def _write_pdf(
         )
 
 
+def _summary_stats(report: FoodReport | ServingReport) -> dict[str, str]:
+    if isinstance(report, ServingReport):
+        return report.summary_stats
+    return summary.procurement_summary_stats(report)
+
+
 def _write_client_workbook(report: FoodReport | ServingReport, path: Path) -> None:
     if isinstance(report, ServingReport):
         serving.write_serving_workbook(report, path)
@@ -429,6 +439,7 @@ def _write_qa_workbook(
     report: FoodReport | ServingReport,
     path: str,
     *,
+    metric: Metric,
     quality_findings: list[Finding],
     potential_name_splits: pd.DataFrame,
     category_discontinuity: pd.DataFrame,
@@ -439,7 +450,7 @@ def _write_qa_workbook(
         tables, emissions_summary, procurement = report, None, None
     else:
         tables = report.aggregation
-        emissions_summary, procurement = report.emissions_summary, report.aggregation.procurement
+        emissions_summary, procurement = report.emissions_summary, report.aggregation
     data_profile_df = None
     try:
         data_profile_df = qa_diagnostics.summarise_numeric_columns(df)
@@ -454,7 +465,7 @@ def _write_qa_workbook(
         template_data=tables.template,
         highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
             tables.monthly_category,
-            metric_col=report.metric.per_head(report.diner_or_meal),
+            metric_col=metric.per_head(report.diner_or_meal),
         ),
         diner_meals_df=excel.diner_meals_frame(report.diner_meal_mapping, report.diner_or_meal),
         emissions_summary=emissions_summary,
@@ -466,7 +477,7 @@ def _write_qa_workbook(
             df,
             report.diner_meal_mapping,
             diner_or_meal=report.diner_or_meal,
-            metric=report.metric,
+            metric=metric,
             potential_name_splits=potential_name_splits,
             category_discontinuity=category_discontinuity,
         ),

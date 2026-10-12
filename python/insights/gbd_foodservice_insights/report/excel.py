@@ -14,10 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from gbd_foodservice_insights.report.aggregation import (
-    AnimalEmissionsConcentration,
-    ProcurementAggregation,
-)
+from gbd_foodservice_insights.report.aggregation import Aggregation, AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 
@@ -86,7 +83,7 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
             report.diner_meal_mapping, report.diner_or_meal
         ),
         "Emissions Summary": report.emissions_summary,
-        **procurement_sheets(aggregation.procurement),
+        **procurement_sheets(aggregation),
     }
     saved_path = write_excel_workbook(str(path), sheets)
     logger.info("Client Excel report saved to %s", saved_path)
@@ -100,17 +97,13 @@ def diner_meals_frame(
     )
 
 
-def procurement_sheets(
-    procurement: ProcurementAggregation | None,
-) -> dict[str, pd.DataFrame | None]:
-    if procurement is None:
-        return {}
+def procurement_sheets(aggregation: Aggregation) -> dict[str, pd.DataFrame | None]:
     return {
-        "Animal Emissions Intensity": procurement.animal_emissions_intensity,
+        "Animal Emissions Intensity": aggregation.animal_emissions_intensity,
         "Decision KPIs": _animal_emissions_concentration_frame(
-            procurement.animal_emissions_concentration
+            aggregation.animal_emissions_concentration
         ),
-        "Substitution Scenarios": procurement.substitution_scenarios,
+        "Substitution Scenarios": aggregation.substitution_scenarios,
     }
 
 

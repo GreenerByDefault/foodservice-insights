@@ -9,7 +9,6 @@ from gbd_foodservice_insights.report.aggregation import (
     AnimalEmissionsConcentration,
     PlantAnimalSplit,
     PlantProteinShare,
-    ProcurementAggregation,
     _attach_monthly_category_emissions,
     aggregate_data,
     calculate_animal_emissions_concentration,
@@ -882,7 +881,7 @@ def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emis
     assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0, 0.0]
 
 
-def test_run_aggregation_pipeline_fills_the_procurement_aggregation_from_the_rows():
+def test_run_aggregation_pipeline_fills_the_procurement_tables_from_the_rows():
     df = pd.DataFrame(
         {
             "month_year": [JAN, FEB, FEB],
@@ -897,24 +896,21 @@ def test_run_aggregation_pipeline_fills_the_procurement_aggregation_from_the_row
         df,
         diner_meal_mapping={JAN: 100.0, FEB: 120.0},
         top_n=1,
-        mode="procurement",
         region="us",
         diner_or_meal="diner",
     )
 
-    procurement = result.procurement
-    assert procurement is not None
-    assert procurement.animal_emissions_concentration == AnimalEmissionsConcentration(
+    assert result.animal_emissions_concentration == AnimalEmissionsConcentration(
         top_products=("beef mince",), top_products_kg_co2e=413.5, total_animal_kg_co2e=687.2
     )
-    assert procurement.animal_emissions_intensity is not None
-    assert procurement.animal_emissions_intensity["category"].tolist() == [
+    assert result.animal_emissions_intensity is not None
+    assert result.animal_emissions_intensity["category"].tolist() == [
         "Beef and Buffalo Meat",
         "Lamb/mutton & goat meat",
         "Milk (Cow's milk)",
     ]
-    assert procurement.substitution_scenarios is not None
-    assert procurement.substitution_scenarios["scenario"].tolist() == [
+    assert result.substitution_scenarios is not None
+    assert result.substitution_scenarios["scenario"].tolist() == [
         "10% ruminant-to-legume swap",
         "25% ruminant-to-legume swap",
         "50% ruminant-to-legume swap",
@@ -949,7 +945,6 @@ def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
     result = run_aggregation_pipeline(
         df,
         diner_meal_mapping={JAN: 100.0, FEB: 120.0},
-        mode="procurement",
         region="us",
         diner_or_meal="diner",
     )
@@ -973,7 +968,6 @@ def test_run_aggregation_pipeline_divides_each_month_by_its_count(diner_or_meal)
     result = run_aggregation_pipeline(
         df,
         diner_meal_mapping={JAN: 100.0, FEB: 120.0},
-        mode="procurement",
         diner_or_meal=diner_or_meal,
     )
 
@@ -997,41 +991,14 @@ def test_run_aggregation_pipeline_leaves_out_procurement_tables_with_nothing_to_
     result = run_aggregation_pipeline(
         df,
         diner_meal_mapping={JAN: 100.0},
-        mode="procurement",
         diner_or_meal="diner",
     )
 
-    assert result.procurement == ProcurementAggregation(
-        animal_emissions_intensity=None,
-        animal_emissions_concentration=None,
-        substitution_scenarios=None,
-    )
-
-
-def test_run_aggregation_pipeline_serving_has_no_procurement_aggregation_or_emissions():
-    df = pd.DataFrame(
-        {
-            "month_year": [JAN, JAN],
-            "category": ["Beef and Buffalo Meat", "Milk (Cow's milk)"],
-            "product": ["beef mince", "whole milk"],
-            "servings total": [10.0, 20.0],
-        }
-    )
-
-    result = run_aggregation_pipeline(
-        df,
-        diner_meal_mapping={JAN: 100.0},
-        mode="serving",
-        diner_or_meal="meal",
-    )
-
-    assert list(result.monthly_category.columns) == [
-        "month_year",
-        "category",
-        "servings total",
-        "servings per meal",
-    ]
-    assert result.procurement is None
+    assert (
+        result.animal_emissions_intensity,
+        result.animal_emissions_concentration,
+        result.substitution_scenarios,
+    ) == (None, None, None)
 
 
 def test_attach_monthly_category_emissions_keeps_each_category_share():

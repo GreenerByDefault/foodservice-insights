@@ -15,7 +15,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 from gbd_foodservice_insights.errors import UnusableDataError
-from gbd_foodservice_insights.plotting_utils import close_new_figures_on_error
+from gbd_foodservice_insights.plotting_utils import LETTER_PORTRAIT, close_new_figures_on_error
 from gbd_foodservice_insights.report import checks
 from gbd_foodservice_insights.report.aggregation import (
     PlantAnimalSplit,
@@ -32,9 +32,9 @@ from gbd_foodservice_insights.report.food_report import ReportCharts, validate_r
 from gbd_foodservice_insights.report.metric import Metric
 from gbd_foodservice_insights.report.pdf import (
     create_category_template_pages,
-    create_key_value_summary_page,
     create_text_page,
     create_title_page,
+    new_summary_figure,
     quality_lines,
 )
 from gbd_foodservice_insights.report.plots.figures import (
@@ -61,6 +61,7 @@ SERVINGS = Metric(
 )
 # A line outside these usually means a unit mistake, such as kilos in the servings column.
 SERVING_LINE_BOUNDS = (1.0, 1000.0)
+_SUMMARY_MARGIN_IN = 1.0
 
 
 @dataclass(frozen=True)
@@ -249,7 +250,7 @@ def write_serving_pdf(
     quality_status = quality_status_from_findings(report.findings)
     with close_new_figures_on_error(), PdfPages(path) as pdf:
         create_title_page(pdf, client_name, "Serving")
-        create_key_value_summary_page(
+        _create_summary_page(
             pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
         )
         for _caption, figure in charts.figures:
@@ -261,6 +262,31 @@ def write_serving_pdf(
             quality_lines(report.findings, show_successes=show_quality_successes),
         )
     logger.info("Serving PDF report saved to %s", path)
+
+
+def _create_summary_page(
+    pdf: PdfPages,
+    summary_stats: dict[str, str],
+    fig_size: tuple[float, float] = LETTER_PORTRAIT,
+) -> None:
+    """The executive summary as a ``label: value`` listing, until the data scientists write a
+    serving report's prose."""
+    fig, ax = new_summary_figure(fig_size)
+    y = 0.74
+    for label, value in summary_stats.items():
+        ax.text(
+            _SUMMARY_MARGIN_IN / fig_size[0],
+            y,
+            f"{label}:  {value}",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=12,
+            fontfamily="Lato",
+        )
+        y -= 0.035
+    pdf.savefig(fig)
+    plt.close(fig)
 
 
 def write_serving_workbook(report: ServingReport, path: Path) -> None:

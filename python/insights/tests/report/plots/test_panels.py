@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
-from gbd_foodservice_insights.report.metric import KILOS, SERVINGS
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.plots import panels
 from matplotlib.patches import Rectangle
 
@@ -222,10 +222,10 @@ PLANT_PROTEIN_SHARE = PlantProteinShare(
 def test_draw_plant_animal_split_labels_both_shares():
     _fig, ax = plt.subplots()
 
-    panels.draw_plant_animal_split(ax, PLANT_SPLIT, metric=SERVINGS)
+    panels.draw_plant_animal_split(ax, PLANT_SPLIT, metric=KILOS)
 
     assert ax.get_title() == "Plant vs. Animal Split"
-    assert ax.get_xlabel() == "% of total servings (plant + animal categories only)"
+    assert ax.get_xlabel() == "% of total kilos (plant + animal categories only)"
     assert ax.get_legend_handles_labels()[1] == [
         "Plant-based (52.0%)",
         "Animal-based (48.0%)",
@@ -303,10 +303,10 @@ CATEGORY_DRIVERS = pd.DataFrame(
 def test_draw_category_drivers_draws_only_its_categorys_products():
     _fig, ax = plt.subplots()
 
-    panels.draw_category_drivers(ax, CATEGORY_DRIVERS, "fruit", metric=SERVINGS)
+    panels.draw_category_drivers(ax, CATEGORY_DRIVERS, "fruit", metric=KILOS)
 
     assert ax.get_title() == "Fruit"
-    assert ax.get_xlabel() == "% of category servings"
+    assert ax.get_xlabel() == "% of category kilos"
     assert [label.get_text() for label in ax.get_yticklabels()] == ["apple", "banana"]
     assert [bar.get_width() for bar in ax.patches if isinstance(bar, Rectangle)] == [60.0, 40.0]
 

@@ -24,7 +24,8 @@ from gbd_foodservice_insights.plotting_utils import (
     close_new_figures_on_error,
 )
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
-from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
+from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, date_range_label
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
@@ -161,7 +162,7 @@ class ExecutiveNarrative:
     period: str
     total_food_kg: float
     total_co2e_kg: float
-    co2e_kg_per_diner_or_meal: float | None
+    co2e_kg_per_diner_or_meal: float
     diner_or_meal: DinerOrMeal
     # Percentages of the categorised food by weight.
     plant_pct: float
@@ -175,7 +176,7 @@ class ExecutiveNarrative:
             raise ValueError(f"Expected 1 to 3 top categories, got {len(self.top_categories)}")
 
 
-def _new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
+def new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
     """A page headed "Executive Summary", whose axes coordinates are page coordinates."""
     fig, ax = _new_text_figure(fig_size)
     # The default subplot margins are lopsided, pushing left-aligned text off the right edge.
@@ -194,31 +195,6 @@ def _new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes
     return fig, ax
 
 
-def create_key_value_summary_page(
-    pdf: PdfPages,
-    summary_stats: dict[str, str],
-    fig_size: tuple[float, float] = LETTER_PORTRAIT,
-) -> None:
-    """Render the executive summary as a ``label: value`` listing, for a report without
-    emissions to write a narrative about."""
-    fig, ax = _new_summary_figure(fig_size)
-    y = 0.74
-    for label, value in summary_stats.items():
-        ax.text(
-            _SUMMARY_MARGIN_IN / fig_size[0],
-            y,
-            f"{label}:  {value}",
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontsize=12,
-            fontfamily="Lato",
-        )
-        y -= 0.035
-    pdf.savefig(fig)
-    plt.close(fig)
-
-
 def create_executive_summary_page(
     pdf: PdfPages,
     narrative: ExecutiveNarrative,
@@ -226,7 +202,7 @@ def create_executive_summary_page(
 ) -> None:
     """Render the executive summary for readers who will never hear the report explained: a
     headline figure followed by short prose paragraphs."""
-    fig, ax = _new_summary_figure(fig_size)
+    fig, ax = new_summary_figure(fig_size)
     text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
     left_x = _SUMMARY_MARGIN_IN / fig_size[0]
 
@@ -287,13 +263,9 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
         f"Over this period the kitchen purchased about {narrative.total_food_kg:,.0f} kg "
         f"of categorised food. Producing that food released an estimated {headline} of carbon "
         "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
-        "different foods."
+        "different foods. That works out at roughly "
+        f"{narrative.co2e_kg_per_diner_or_meal:.2f} kg of CO₂e per {narrative.diner_or_meal}."
     )
-    if narrative.co2e_kg_per_diner_or_meal is not None:
-        sentence += (
-            f" That works out at roughly {narrative.co2e_kg_per_diner_or_meal:.2f} kg of CO₂e "
-            f"per {narrative.diner_or_meal}."
-        )
     paragraphs.append(sentence)
 
     top = narrative.top_categories
@@ -887,30 +859,25 @@ def write_report_pdf(
     the quality section lists passed checks and notes too; without it (the customer's), only
     warnings and issues."""
     quality_status = quality_status_from_findings(report.findings)
-    narrative = _executive_narrative(report, client_name, quality_status)
-    procurement = report.aggregation.procurement
+    aggregation = report.aggregation
 
     with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, report.mode.title())
-        if narrative is None:
-            create_key_value_summary_page(
-                pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
-            )
-        else:
-            create_executive_summary_page(pdf, narrative)
+        create_title_page(pdf, client_name, "Procurement")
+        create_executive_summary_page(
+            pdf, _executive_narrative(report, client_name, quality_status)
+        )
         create_text_page(pdf, "How to Read This Report", _how_to_read_lines(report.diner_or_meal))
 
         for _caption, fig in charts.figures:
             pdf.savefig(fig)
 
-        create_category_template_pages(pdf, report.aggregation.template)
-        if procurement is not None:
-            if procurement.animal_emissions_intensity is not None:
-                create_animal_intensity_page(pdf, procurement.animal_emissions_intensity)
-            if procurement.animal_emissions_concentration is not None:
-                create_decision_kpis_page(pdf, procurement.animal_emissions_concentration)
-            if procurement.substitution_scenarios is not None:
-                create_substitution_scenarios_page(pdf, procurement.substitution_scenarios)
+        create_category_template_pages(pdf, aggregation.template)
+        if aggregation.animal_emissions_intensity is not None:
+            create_animal_intensity_page(pdf, aggregation.animal_emissions_intensity)
+        if aggregation.animal_emissions_concentration is not None:
+            create_decision_kpis_page(pdf, aggregation.animal_emissions_concentration)
+        if aggregation.substitution_scenarios is not None:
+            create_substitution_scenarios_page(pdf, aggregation.substitution_scenarios)
 
         methodology = _methodology_lines(report.diner_or_meal)
         create_text_page(
@@ -930,26 +897,20 @@ def write_report_pdf(
 
 def _executive_narrative(
     report: FoodReport, client_name: str, quality_status: QualityStatus
-) -> ExecutiveNarrative | None:
-    """The plain-English executive summary. Only procurement runs compute emissions; the rest
-    keep the key-value summary page."""
-    emissions_summary = report.emissions_summary
-    if emissions_summary is None or "total_kg_co2e" not in emissions_summary:
-        return None
-    co2e_by_cat = emissions_summary.dropna(subset=["total_kg_co2e"])
-    total_co2e = float(co2e_by_cat["total_kg_co2e"].sum(min_count=1) or 0.0)
-    if not total_co2e > 0:  # NaN too
-        return None
+) -> ExecutiveNarrative:
+    # Positive: every GBD category has a nonzero emission factor, and `build_food_report` rejects
+    # rows that all weigh 0.
+    co2e_by_cat = report.emissions_summary.dropna(subset=["total_kg_co2e"])
+    total_co2e = float(co2e_by_cat["total_kg_co2e"].sum())
 
     top = co2e_by_cat.nlargest(3, "total_kg_co2e")
     return ExecutiveNarrative(
         client=client_name,
-        period=report.summary_stats["Date range"],
-        total_food_kg=float(report.rows[report.metric.column].sum()),
+        period=date_range_label(report.rows),
+        total_food_kg=float(report.rows[KILOS.column].sum()),
         total_co2e_kg=total_co2e,
-        co2e_kg_per_diner_or_meal=(
-            total_co2e / report.diner_meals_in_data if report.diner_meals_in_data else None
-        ),
+        # Positive, since `build_food_report` requires a positive count for every month.
+        co2e_kg_per_diner_or_meal=total_co2e / report.diner_meals_in_data,
         diner_or_meal=report.diner_or_meal,
         plant_pct=report.plant_animal_split.plant_pct,
         animal_pct=report.plant_animal_split.animal_pct,

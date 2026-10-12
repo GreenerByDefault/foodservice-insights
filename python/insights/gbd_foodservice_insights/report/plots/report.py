@@ -10,7 +10,7 @@ from gbd_foodservice_insights.report.aggregation import (
     PlantAnimalSplit,
     PlantProteinShare,
 )
-from gbd_foodservice_insights.report.metric import KILOS, Metric
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.plots.figures import (
     plot_category_drivers_pages,
     plot_category_totals,
@@ -22,6 +22,7 @@ from gbd_foodservice_insights.report.plots.figures import (
     plot_plant_breakdown_overview,
 )
 from gbd_foodservice_insights.report.plots.panels import filter_monthly_categories_by_type
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 
 def _normalize_axis_text(value: str) -> str:
@@ -49,12 +50,10 @@ def _remove_duplicate_xlabels(fig: Figure) -> Figure:
 def generate_all_report_plots(
     aggregation: Aggregation,
     diner_meal_mapping: Mapping[pd.Period, float],
+    emissions_summary: pd.DataFrame,
     plant_animal_split: PlantAnimalSplit,
     plant_protein_share: PlantProteinShare | None,
-    emissions_summary: pd.DataFrame | None = None,
-    metric: Metric = KILOS,
-    serving: bool = False,
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal,
 ) -> list[tuple[str, Figure]]:
     """Generate all report plots and return ``(caption, figure)`` tuples."""
     if not aggregation.monthly_category.empty:
@@ -64,39 +63,24 @@ def generate_all_report_plots(
         plot_diner_meal_numbers(diner_meal_mapping, diner_or_meal),
         plot_food_and_drink_comparison_page(
             aggregation.monthly_category,
-            metric=metric,
+            metric=KILOS,
             diner_meal_mapping=diner_meal_mapping,
             diner_or_meal=diner_or_meal,
         ),
-        plot_category_totals(aggregation.monthly_category, metric),
-    ]
-
-    if emissions_summary is not None and not serving:
-        figures.append(plot_emissions_by_category(emissions_summary))
-        if "emissions_kg_co2e" in aggregation.monthly_category.columns:
-            figures.append(
-                plot_emissions_summary_over_time(
-                    aggregation.monthly_category,
-                    diner_meal_mapping,
-                    diner_or_meal=diner_or_meal,
-                )
-            )
-
-    figures.append(
-        plot_plant_breakdown_overview(
-            plant_animal_split,
-            plant_protein_share,
-            metric=metric,
-        )
-    )
-
-    figures.append(plot_overall_drivers(aggregation.overall_drivers, metric))
-    figures.extend(
-        plot_category_drivers_pages(
+        plot_category_totals(aggregation.monthly_category, KILOS),
+        plot_emissions_by_category(emissions_summary),
+        plot_emissions_summary_over_time(
+            aggregation.monthly_category,
+            diner_meal_mapping,
+            diner_or_meal=diner_or_meal,
+        ),
+        plot_plant_breakdown_overview(plant_animal_split, plant_protein_share, metric=KILOS),
+        plot_overall_drivers(aggregation.overall_drivers, KILOS),
+        *plot_category_drivers_pages(
             aggregation.category_drivers,
             aggregation.category_drivers["category"].dropna().unique().tolist(),
-            metric=metric,
-        )
-    )
+            metric=KILOS,
+        ),
+    ]
 
     return [("", _remove_duplicate_xlabels(fig)) for fig in figures]

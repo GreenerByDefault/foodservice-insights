@@ -1,26 +1,6 @@
 {
   "pdf": {
-    "title": [
-      "Acme Foodservice",
-      "procurement"
-    ],
-    "summary_stats": {
-      "Total rows": "19",
-      "Unique products": "19",
-      "Date range": "Oct 2023 – Dec 2023",
-      "Total diners": "3,000",
-      "Data type": "Procurement",
-      "Region used for climate emissions factors": "US/Canada",
-      "Total CO₂e": "513 kg",
-      "CO₂e per diner": "0.171 kg",
-      "Plant-based (% of classified food)": "71.9%",
-      "Animal-based (% of classified food)": "28.1%",
-      "Plant-based total": "127.7 kg",
-      "Animal-based total": "49.8 kg",
-      "Plant protein share (% of protein categories)": "89.6%",
-      "Plant protein total": "127.7 kg",
-      "Protein-category total": "142.5 kg"
-    },
+    "title": "Acme Foodservice",
     "narrative": {
       "client": "Acme Foodservice",
       "period": "Oct 2023 – Dec 2023",

@@ -6,10 +6,7 @@ from typing import TypedDict
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.report.aggregation import (
-    AnimalEmissionsConcentration,
-    ProcurementAggregation,
-)
+from gbd_foodservice_insights.report.aggregation import Aggregation, AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights_lab.food_report import serving
@@ -31,7 +28,7 @@ class _ExcelPayload(TypedDict):
     highest_lowest: pd.DataFrame
     diner_meals_df: pd.DataFrame
     emissions_summary: pd.DataFrame
-    procurement: ProcurementAggregation
+    procurement: Aggregation
     quality_findings_df: pd.DataFrame
     missingness_summary_df: pd.DataFrame
     data_profile_df: pd.DataFrame
@@ -52,7 +49,13 @@ def _sample_excel_payload() -> _ExcelPayload:
         "highest_lowest": pd.DataFrame({"category": ["Legumes"], "times_higher": [1.2]}),
         "diner_meals_df": pd.DataFrame({"month_year": ["2024-01"], "Diners": [100]}),
         "emissions_summary": pd.DataFrame({"category": ["Legumes"], "total_kg_co2e": [3.4]}),
-        "procurement": ProcurementAggregation(
+        # The QA workbook reads only the procurement tables from it.
+        "procurement": Aggregation(
+            monthly_product=pd.DataFrame(),
+            monthly_category=pd.DataFrame(),
+            template=pd.DataFrame(),
+            overall_drivers=pd.DataFrame(),
+            category_drivers=pd.DataFrame(),
             animal_emissions_intensity=pd.DataFrame(
                 {
                     "category": ["Beef and Buffalo Meat"],

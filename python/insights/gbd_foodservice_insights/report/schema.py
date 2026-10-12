@@ -9,13 +9,11 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from gbd_foodservice_insights.report.quality import Finding
 
-ReportMode = Literal["procurement", "serving"]
 Region = Literal["us", "europe"]
 DinerOrMeal = Literal["diner", "meal"]
 DiagnosticStatus = Literal["success", "info", "warning", "error"]
 QualityStatus = Literal["pass", "warning", "invalid"]
 
-VALID_REPORT_MODES: tuple[ReportMode, ...] = ("procurement", "serving")
 VALID_REGIONS: tuple[Region, ...] = ("us", "europe")
 
 STATUS_SEVERITY: dict[DiagnosticStatus, int] = {

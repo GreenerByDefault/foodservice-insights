@@ -11,18 +11,16 @@ JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
 def _report(**overrides: Any) -> FoodReport:
     kwargs: dict[str, Any] = {
         "diner_meal_mapping": {JAN: 100, FEB: 120},
-        "mode": "procurement",
         "region": "us",
         "diner_or_meal": "diner",
         "top_n_drivers": 5,
     }
-    metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
     rows = pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-15", "2024-02-20"]),
             "product": ["Ground Beef", "Lentils"],
             "category": ["Beef and Buffalo Meat", "Legumes"],
-            metric: [10.0, 20.0],
+            "kilos_total": [10.0, 20.0],
         }
     )
     return build_food_report(rows, **(kwargs | overrides))
@@ -48,19 +46,6 @@ def test_write_client_workbook_excludes_internal_tabs(tmp_path: Path):
     pd.testing.assert_frame_equal(
         sheets["Diners"], pd.DataFrame({"month_year": ["2024-01", "2024-02"], "diners": [100, 120]})
     )
-
-
-def test_write_client_workbook_serving_omits_the_emissions_tabs(tmp_path: Path):
-    output_path = tmp_path / "client.xlsx"
-
-    write_client_workbook(_report(mode="serving", diner_or_meal="meal"), output_path)
-
-    assert pd.ExcelFile(output_path).sheet_names == [
-        "Monthly by Product",
-        "Monthly by Category",
-        "Template",
-        "Meals",
-    ]
 
 
 def test_diner_meals_frame_keeps_its_columns_without_a_mapping():

@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from gbd_foodservice_insights.report.metric import SERVINGS, Metric
+from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
@@ -845,34 +845,29 @@ def run_all_diagnostics(
     df: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
     diner_or_meal: DinerOrMeal,
-    metric: Metric,
 ) -> list[Finding]:
     """Run report diagnostics on rows whose `month_year` is already `Period[M]`."""
-    bounds_group = (
-        "per_product_serving_bounds" if metric == SERVINGS else "per_product_weight_bounds"
-    )
-
     findings: list[Finding] = []
-    findings.extend(detect_month_over_month_total_volatility(df, metric))
+    findings.extend(detect_month_over_month_total_volatility(df, KILOS))
     findings.extend(check_missing_internal_months(df))
     denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
-        df, diner_meal_mapping, metric.column, diner_or_meal=diner_or_meal
+        df, diner_meal_mapping, KILOS.column, diner_or_meal=diner_or_meal
     )
     findings.extend(denominator_reasonableness_findings)
-    if "category" in df.columns and "product" in df.columns and metric.column in df.columns:
+    if "category" in df.columns and "product" in df.columns and KILOS.column in df.columns:
         unusual_sales_findings, _ = detect_unusual_sales(
             df,
-            metric,
+            KILOS,
             product_name_col="product",
             category_col="category",
         )
         findings.extend(unusual_sales_findings)
-    if "product" in df.columns and metric.column in df.columns:
+    if "product" in df.columns and KILOS.column in df.columns:
         per_product_weight_bound_findings, _ = check_per_product_weight_bounds(
             df,
-            metric,
-            low=get_diagnostic_threshold(bounds_group, "low"),
-            high=get_diagnostic_threshold(bounds_group, "high"),
+            KILOS,
+            low=get_diagnostic_threshold("per_product_weight_bounds", "low"),
+            high=get_diagnostic_threshold("per_product_weight_bounds", "high"),
         )
         findings.extend(per_product_weight_bound_findings)
     findings.extend(check_date_distribution(df))

@@ -143,19 +143,17 @@ def _report(
     one, chickpeas."""
     kwargs: dict[str, Any] = {
         "diner_meal_mapping": {JAN: 100, FEB: 120},
-        "mode": "procurement",
         "region": "us",
         "diner_or_meal": "diner",
         "top_n_drivers": 5,
     }
     product, category = animal_product or ("Chickpeas", "Legumes")
-    metric = "servings total" if overrides.get("mode") == "serving" else "kilos_total"
     rows = pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-02-15", "2024-02-20"]),
             "product": [product, "Lentils", product, "Lentils"],
             "category": [category, "Legumes", category, "Legumes"],
-            metric: [10.0, 20.0, 12.0, 18.0],
+            "kilos_total": [10.0, 20.0, 12.0, 18.0],
         }
     )
     return build_food_report(rows, **(kwargs | overrides))
@@ -311,28 +309,6 @@ def test_write_report_pdf_includes_each_procurement_page_its_data_supports(
 
     titles = _page_titles(recording_pdf)
     assert titles[titles.index("Category Template") + 1 : -2] == procurement_pages
-
-
-def test_write_report_pdf_summarises_a_serving_report_as_key_values(
-    recording_pdf: _RecordingPdf,
-) -> None:
-    report = _report(mode="serving")
-
-    _write(report)
-
-    assert _page_titles(recording_pdf) == [
-        "Food Report",
-        "Executive Summary",
-        "How to Read This Report",
-        "Category Template",
-        "About This Report",
-        "Data Completeness & Quality",
-    ]
-    assert [t.text for t in recording_pdf.pages[1]] == [
-        "Executive Summary",
-        *(f"{label}:  {value}" for label, value in report.summary_stats.items()),
-        "Data Quality Status:  PASS",
-    ]
 
 
 def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(
@@ -770,7 +746,6 @@ def test_substitution_scenarios_page_wraps_a_long_scenario_inside_its_cell() -> 
 def test_executive_narrative_summarises_the_report() -> None:
     narrative = _executive_narrative(_report(), "Acme", "pass")
 
-    assert narrative is not None
     assert asdict(narrative) == {
         "client": "Acme",
         "period": "Jan 2024 – Feb 2024",
@@ -798,36 +773,8 @@ def test_executive_narrative_lists_only_the_top_three_categories() -> None:
 
     narrative = _executive_narrative(report, "Acme", "pass")
 
-    assert narrative is not None
     assert narrative.total_co2e_kg == 10.0
     assert narrative.top_categories == (("b", 40.0), ("d", 30.0), ("e", 20.0))
-
-
-def test_executive_narrative_leaves_per_unit_blank_without_diners() -> None:
-    report = replace(_report(), diner_meals_in_data=0.0)
-
-    narrative = _executive_narrative(report, "Acme", "pass")
-
-    assert narrative is not None
-    assert narrative.co2e_kg_per_diner_or_meal is None
-
-
-@pytest.mark.parametrize(
-    "emissions_summary",
-    [
-        None,
-        pd.DataFrame({"category": ["Legumes"]}),
-        pd.DataFrame({"category": ["Legumes"], "total_kg_co2e": [0.0]}),
-        pd.DataFrame({"category": ["Legumes"], "total_kg_co2e": [np.nan]}),
-    ],
-    ids=["no-summary", "no-total-column", "zero-total", "all-missing"],
-)
-def test_executive_narrative_is_omitted_without_positive_emissions(
-    emissions_summary: pd.DataFrame | None,
-) -> None:
-    report = replace(_report(), emissions_summary=emissions_summary)
-
-    assert _executive_narrative(report, "Acme", "pass") is None
 
 
 @pytest.mark.parametrize(
@@ -883,10 +830,9 @@ def test_narrative_paragraphs_describe_the_footprint() -> None:
     ]
 
 
-def test_narrative_paragraphs_skip_the_per_unit_figure_and_caveat_the_quality() -> None:
+def test_narrative_paragraphs_caveat_the_quality() -> None:
     paragraphs = _narrative_paragraphs(
         _narrative(
-            co2e_kg_per_diner_or_meal=None,
             plant_pct=100.0,
             animal_pct=0.0,
             top_categories=(CategoryShare("Legumes", 70.0), CategoryShare("Cheese", 30.0)),
@@ -894,7 +840,6 @@ def test_narrative_paragraphs_skip_the_per_unit_figure_and_caveat_the_quality() 
         )
     )
 
-    assert paragraphs[0].endswith("the climate impact of different foods.")
     assert paragraphs[1:] == [
         "The biggest contributors were Legumes (70%) and Cheese (30%).",
         "All of the categorised food was plant-based.",
@@ -913,7 +858,6 @@ def test_executive_narrative_rejects_a_count_of_top_categories_it_cannot_word(co
 
 def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
     narrative = _executive_narrative(_report(animal_product=None), "Acme", "pass")
-    assert narrative is not None
 
     assert _narrative_paragraphs(narrative)[1:] == [
         "The biggest contributors were Legumes (100%).",

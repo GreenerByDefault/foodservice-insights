@@ -118,7 +118,6 @@ def analyze(
     report = build_food_report(
         rows,
         diner_meal_mapping=monthly_counts,
-        mode="procurement",
         region="us",
         diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
         top_n_drivers=5,

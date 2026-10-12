@@ -13,7 +13,7 @@ from gbd_foodservice_insights.report.checks import (
     detect_unusual_sales,
     run_all_diagnostics,
 )
-from gbd_foodservice_insights.report.metric import KILOS, SERVINGS
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
@@ -388,31 +388,6 @@ def test_check_per_product_weight_bounds_rejects_inverted_bounds():
         )
 
 
-def test_check_per_product_weight_bounds_words_serving_counts_in_servings():
-    df = pd.DataFrame(
-        {
-            "product": ["Beans", "Soup", "Salad"],
-            "servings total": [0.5, 600.0, 1200.0],
-        },
-        index=[20, 21, 22],
-    )
-
-    findings, flagged_rows = check_per_product_weight_bounds(df, SERVINGS, low=1.0, high=1000.0)
-
-    assert findings[0]["status"] == "warning"
-    assert findings[0]["metadata"] == {
-        "low": 1.0,
-        "high": 1000.0,
-        "unit_label": "servings",
-        "flagged_row_count": 2,
-    }
-    assert findings[0]["sample_values"] == [
-        "Beans at 0.5 servings, below the lower bound of 1 serving.",
-        "Salad at 1,200 servings, above the upper bound of 1,000 servings.",
-    ]
-    assert list(flagged_rows["row_index"]) == [20, 22]
-
-
 # ----------------------------------------------------------------------
 # Dates and months
 # ----------------------------------------------------------------------
@@ -512,22 +487,6 @@ def test_detect_month_over_month_total_volatility_samples_only_sample_limit_mont
     assert findings[0]["sample_values"] == [
         "Feb 2025: 200 kg against 100 kg in Jan 2025 (+100%).",
         "Mar 2025: 100 kg against 200 kg in Feb 2025 (-50%).",
-    ]
-
-
-def test_detect_month_over_month_total_volatility_speaks_of_servings_for_serving_reports():
-    df = pd.DataFrame(
-        {
-            "month_year": pd.period_range("2025-01", periods=2, freq="M"),
-            "servings total": [100.0, 140.0],
-        }
-    )
-
-    findings = detect_month_over_month_total_volatility(df, metric=SERVINGS)
-
-    assert findings[0]["message"].startswith("Found 1 month where the total servings changed")
-    assert findings[0]["sample_values"] == [
-        "Feb 2025: 140 servings against 100 servings in Jan 2025 (+40%)."
     ]
 
 
@@ -906,7 +865,7 @@ def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
             "kilos_total": [1.5, 10.0, 11.0],
         }
     )
-    findings = run_all_diagnostics(df, {}, "diner", KILOS)
+    findings = run_all_diagnostics(df, {}, "diner")
     bounds = next(f for f in findings if f["category"] == "per_product_weight_bounds")
     return {
         "status": bounds["status"],
@@ -1033,38 +992,6 @@ def test_checks_read_their_thresholds_from_yaml(
 # ----------------------------------------------------------------------
 
 
-def test_run_all_diagnostics_uses_serving_bounds_for_serving_reports():
-    """Serving reports should not describe serving counts as kilograms."""
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2025-01-01", "2025-01-02", "2025-01-03"]),
-            "month_year": pd.PeriodIndex(["2025-01"] * 3, freq="M"),
-            "product": ["Beans", "Soup", "Salad"],
-            "category": ["Legumes", "Legumes", "Legumes"],
-            "servings total": [0.5, 600.0, 1200.0],
-        }
-    )
-
-    findings = run_all_diagnostics(
-        df=df, diner_meal_mapping={}, diner_or_meal="diner", metric=SERVINGS
-    )
-
-    bounds_finding = next(
-        finding for finding in findings if finding.get("category") == "per_product_weight_bounds"
-    )
-    assert bounds_finding["metadata"] == {
-        "low": 1.0,
-        "high": 1000.0,
-        "unit_label": "servings",
-        "flagged_row_count": 2,
-    }
-    assert bounds_finding["message"] == (
-        "Found 2 lines with a serving count above zero but under 1 serving, or over 1,000 "
-        "servings, which usually means a unit mistake. For example, Beans at 0.5 servings, "
-        "below the lower bound of 1 serving."
-    )
-
-
 def test_run_all_diagnostics_returns_every_checks_findings_in_order():
     # Shaped like what `build_food_report` hands over: parsed dates, Period months, and a
     # Period-keyed mapping. March is short, so the date distribution check, which stays silent
@@ -1096,7 +1023,6 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
         df=df,
         diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
         diner_or_meal="diner",
-        metric=KILOS,
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
@@ -1114,7 +1040,7 @@ def test_run_all_diagnostics_skips_row_level_checks_without_their_columns():
     df = pd.DataFrame({"month_year": [jan, feb], "kilos_total": [100.0, 100.0]})
 
     findings = run_all_diagnostics(
-        df=df, diner_meal_mapping={jan: 100.0, feb: 100.0}, diner_or_meal="meal", metric=KILOS
+        df=df, diner_meal_mapping={jan: 100.0, feb: 100.0}, diner_or_meal="meal"
     )
 
     assert [finding["category"] for finding in findings] == [
