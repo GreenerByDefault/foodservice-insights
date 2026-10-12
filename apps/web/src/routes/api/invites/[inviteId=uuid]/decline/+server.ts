@@ -3,7 +3,7 @@ import { withTransaction } from '@gbd/db';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
-import { lockInviteForEmailOrNotFound } from '#lib/server/invites/claim.js';
+import { lockInviteForEmailOrNotFound, noLongerValidResponse } from '#lib/server/invites/claim.js';
 import type { RequestHandler } from './$types';
 
 /** Decline an invite. Same guard as accepting, separate audit action. */
@@ -58,10 +58,7 @@ export async function _declineInvite(
   );
 
   if (outcome.kind === 'no-longer-valid') {
-    return Response.json(
-      { message: 'This invitation is no longer valid.', code: 'no-longer-valid' },
-      { status: 409 },
-    );
+    return noLongerValidResponse();
   }
   return new Response(null, { status: 204 });
 }

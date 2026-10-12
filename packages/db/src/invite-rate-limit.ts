@@ -5,7 +5,7 @@ import type { UserId } from './types.ts';
 
 /**
  * Serializes invite-rate-limit decisions (`HOURLY_INVITE_LIMIT` in
- * `apps/web/src/lib/invites/limits.ts`) for one inviting user against every other invite they
+ * `apps/web/src/lib/server/invites/limits.ts`) for one inviting user against every other invite they
  * send — see `lockRateLimitKey` for why a lock is needed at all. See
  * `tests/invite-rate-limit.test.ts` for the race this closes.
  */

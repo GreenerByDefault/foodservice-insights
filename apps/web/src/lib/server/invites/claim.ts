@@ -1,4 +1,4 @@
-/** The row lock accept and decline share. */
+/** What accept and decline share: the row lock and the 409 for an invite that is no longer pending. */
 
 import type { Database, OrganizationInviteId } from '@gbd/db';
 import { error } from '@sveltejs/kit';
@@ -25,4 +25,12 @@ export async function lockInviteForEmailOrNotFound(
 
   if (!invite) error(404, 'Not found', { code: 'not_found' });
   return invite;
+}
+
+/** The 409 for an invite whose status is no longer `pending`. */
+export function noLongerValidResponse(): Response {
+  return Response.json(
+    { message: 'This invitation is no longer valid.', code: 'no-longer-valid' },
+    { status: 409 },
+  );
 }

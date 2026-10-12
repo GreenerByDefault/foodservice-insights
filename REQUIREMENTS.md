@@ -286,7 +286,7 @@ Follow security best practices for web development.
 - **Report retries:** a report can be attempted up to `MAX_ANALYSIS_ATTEMPTS` times — see
   [`packages/db/src/types.ts`](packages/db/src/types.ts). Retries exist for internal errors.
 - **Invites:** a user can invite `HOURLY_INVITE_LIMIT` people per hour — see
-  [`apps/web/src/lib/invites/limits.ts`](apps/web/src/lib/invites/limits.ts).
+  [`apps/web/src/lib/server/invites/limits.ts`](apps/web/src/lib/server/invites/limits.ts).
 - Cloudflare for DDoS protection, and potentially geo-restrictions.
 
 ### Performance
