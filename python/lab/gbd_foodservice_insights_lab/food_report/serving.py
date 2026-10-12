@@ -11,6 +11,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -141,11 +142,11 @@ def build_serving_report(
 
 def _monthly(
     df: pd.DataFrame,
-    group_by: str,
+    group_by: Literal["product", "category"],
     diner_meal_mapping: Mapping[pd.Period, float],
     diner_or_meal: DinerOrMeal,
 ) -> pd.DataFrame:
-    totals = aggregate_data(df, group_by=group_by, metrics=SERVINGS.column)
+    totals = aggregate_data(df, group_by=group_by, metric=SERVINGS.column)
     return totals.assign(
         **{
             SERVINGS.per_head(diner_or_meal): totals[SERVINGS.column]

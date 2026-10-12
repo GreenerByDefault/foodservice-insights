@@ -13,7 +13,8 @@ def _known_category_with_us_factor() -> tuple[str, float]:
 def test_get_emission_factor_matches_the_exact_name_only():
     category, factor = _known_category_with_us_factor()
     assert emissions.get_emission_factor(category, region="us") == factor
-    assert emissions.get_emission_factor(category.lower(), region="us") is None
+    with pytest.raises(KeyError):
+        emissions.get_emission_factor(category.lower(), region="us")
 
 
 def test_calculate_emissions_multiplies_weight_by_factor():
@@ -21,7 +22,7 @@ def test_calculate_emissions_multiplies_weight_by_factor():
     category, factor = _known_category_with_us_factor()
     df = pd.DataFrame({"category": [category], "kilos_total": [2.5]})
 
-    out = emissions.calculate_emissions(df, weight_col="kilos_total", category_col="category")
+    out = emissions.calculate_emissions(df)
 
     assert out.at[0, "emission_factor_used"] == factor
     assert out.at[0, "emissions_kg_co2e"] == pytest.approx(2.5 * factor)
@@ -30,17 +31,9 @@ def test_calculate_emissions_multiplies_weight_by_factor():
 def test_calculate_emissions_leaves_an_unknown_category_without_a_factor_or_emissions():
     df = pd.DataFrame({"category": ["Mlik"], "kilos_total": [1.0]})
 
-    out = emissions.calculate_emissions(df, weight_col="kilos_total", category_col="category")
+    out = emissions.calculate_emissions(df)
 
     assert out[["emission_factor_used", "emissions_kg_co2e"]].isna().all(axis=None)
-
-
-@pytest.mark.parametrize("missing", ["kilos_total", "category"])
-def test_calculate_emissions_rejects_a_missing_column(missing: str):
-    df = pd.DataFrame({"category": ["x"], "kilos_total": [1.0]}).drop(columns=[missing])
-
-    with pytest.raises(ValueError, match=f"'{missing}' not found"):
-        emissions.calculate_emissions(df, weight_col="kilos_total", category_col="category")
 
 
 def test_calculate_emissions_summary_sorts_and_computes_percentages():
@@ -59,15 +52,11 @@ def test_calculate_emissions_summary_sorts_and_computes_percentages():
     assert summary["pct_of_total"].tolist() == [75.0, 25.0]
 
 
-def test_calculate_emissions_per_diner_meal_handles_zero_or_missing_denominator():
-    """Ensures per-diner metrics do not divide by zero and remain missing when unsupported."""
+def test_calculate_emissions_per_diner_meal_rejects_a_count_that_is_not_positive():
     summary = pd.DataFrame({"category": ["A"], "total_kg_co2e": [10.0]})
 
-    out_zero = emissions.calculate_emissions_per_diner_meal(summary, 0, "diner")
-    out_none = emissions.calculate_emissions_per_diner_meal(summary, None, "diner")
-
-    assert pd.isna(out_zero.loc[0, "kg_co2e_per_diner"])
-    assert pd.isna(out_none.loc[0, "kg_co2e_per_diner"])
+    with pytest.raises(ValueError, match="diner count must be positive, got 0"):
+        emissions.calculate_emissions_per_diner_meal(summary, 0, "diner")
 
 
 @pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])

@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -81,42 +81,21 @@ class Aggregation:
 
 
 def aggregate_data(
-    df: pd.DataFrame,
-    group_by: str = "product",
-    metrics: list[str] | str = "kilos_total",
+    df: pd.DataFrame, group_by: Literal["product", "category"], metric: str
 ) -> pd.DataFrame:
-    """Aggregate metrics by month and group.
-
-    Uses ``sum(min_count=1)`` to preserve all-missing groups as missing values.
-    """
-    if "month_year" not in df.columns:
-        raise ValueError("'month_year' column not found in DataFrame.")
-
-    if group_by not in {"product", "category"}:
-        raise ValueError("group_by must be 'product' or 'category'.")
-    if group_by not in df.columns:
-        raise ValueError(f"'{group_by}' column not found in DataFrame.")
-
-    metric_list = [metrics] if isinstance(metrics, str) else list(metrics)
-    if not metric_list:
-        raise ValueError("metrics must contain at least one metric column.")
-
-    for metric_name in metric_list:
-        if metric_name not in df.columns:
-            raise ValueError(f"Metric column '{metric_name}' not found in DataFrame.")
-
+    """Sum ``metric`` by month and group, leaving an all-missing group missing."""
     return (
-        df.groupby(["month_year", group_by], dropna=False)[metric_list]
-        .sum(min_count=1)
-        .reset_index()
+        df.groupby(["month_year", group_by], dropna=False)[[metric]].sum(min_count=1).reset_index()
     )
+
+
+def monthly_totals(df: pd.DataFrame, metric: str) -> pd.Series:
+    """Sum ``metric`` by month, leaving an all-missing month missing."""
+    return df.groupby("month_year", dropna=False)[metric].sum(min_count=1)
 
 
 def create_template_data(monthly_category_data: pd.DataFrame, metric: str) -> pd.DataFrame:
     """Create category x month pivot table for report template."""
-    if metric not in monthly_category_data.columns:
-        raise KeyError(metric)
-
     tbl = (
         monthly_category_data.pivot_table(
             index="category",
@@ -145,9 +124,6 @@ def identify_category_drivers(
     top_n: int = 5,
 ) -> pd.DataFrame:
     """Identify top N product drivers within each category."""
-    if metric not in one_big_table.columns:
-        raise ValueError(f"Metric column '{metric}' not found in DataFrame.")
-
     product_cat = (
         one_big_table.groupby(["category", "product"], dropna=False)[metric]
         .sum(min_count=1)
@@ -180,9 +156,6 @@ def identify_overall_drivers(
     top_n: int = 10,
 ) -> pd.DataFrame:
     """Identify top N overall product drivers."""
-    if metric not in one_big_table.columns:
-        raise ValueError(f"Metric column '{metric}' not found in DataFrame.")
-
     product_totals = (
         one_big_table.groupby("product", dropna=False)[metric].sum(min_count=1).reset_index()
     )
@@ -294,64 +267,46 @@ def calculate_plant_protein_share(
     )
 
 
-def summarize_animal_emissions_intensity(
-    df: pd.DataFrame,
-    *,
-    weight_col: str = "kilos_total",
-    category_col: str = "category",
-    emissions_col: str = "emissions_kg_co2e",
-) -> pd.DataFrame:
+def summarize_animal_emissions_intensity(df: pd.DataFrame) -> pd.DataFrame:
     """Summarize animal-category weight, emissions, and emissions intensity.
 
     This exists so procurement reports can show which animal categories are
     high-impact because they combine meaningful purchased volume with a high
     carbon intensity per kilogram of food.
     """
-    required_columns = {weight_col, category_col, emissions_col}
-    output_columns = [category_col, weight_col, "total_kg_co2e", "kg_co2e_per_kg_food"]
-    if not required_columns.issubset(df.columns):
-        return pd.DataFrame(columns=output_columns)
-
-    animal_rows = df[df[category_col].isin(animal_product_categories())]
+    animal_rows = df[df["category"].isin(animal_product_categories())]
     if animal_rows.empty:
-        return pd.DataFrame(columns=output_columns)
+        return pd.DataFrame(
+            columns=["category", "kilos_total", "total_kg_co2e", "kg_co2e_per_kg_food"]
+        )
 
     summary = (
-        animal_rows.groupby(category_col, dropna=False)[[weight_col, emissions_col]]
+        animal_rows.groupby("category", dropna=False)[["kilos_total", "emissions_kg_co2e"]]
         .sum(min_count=1)
         .reset_index()
-        .rename(columns={emissions_col: "total_kg_co2e"})
+        .rename(columns={"emissions_kg_co2e": "total_kg_co2e"})
     )
-    summary["kg_co2e_per_kg_food"] = summary["total_kg_co2e"] / summary[weight_col].mask(
-        summary[weight_col] == 0
+    summary["kg_co2e_per_kg_food"] = summary["total_kg_co2e"] / summary["kilos_total"].mask(
+        summary["kilos_total"] == 0
     )
 
     return summary.sort_values("total_kg_co2e", ascending=False).reset_index(drop=True)
 
 
 def calculate_animal_emissions_concentration(
-    df: pd.DataFrame,
-    *,
-    product_col: str = "product",
-    category_col: str = "category",
-    emissions_col: str = "emissions_kg_co2e",
-    top_n: int = 5,
+    df: pd.DataFrame, *, top_n: int
 ) -> AnimalEmissionsConcentration | None:
     """Summarize how concentrated animal-product emissions are in a few products.
 
     This exists to help clients focus effort on the small number of animal
     products that drive the largest share of their animal-product emissions.
     """
-    required_columns = {product_col, category_col, emissions_col}
-    if not required_columns.issubset(df.columns):
-        return None
-
-    animal_rows = df[df[category_col].isin(animal_product_categories())]
+    animal_rows = df[df["category"].isin(animal_product_categories())]
     if animal_rows.empty:
         return None
 
     product_emissions = (
-        animal_rows.groupby(product_col, dropna=False)[emissions_col]
+        animal_rows.groupby("product", dropna=False)["emissions_kg_co2e"]
         .sum(min_count=1)
         .dropna()
         .sort_values(ascending=False, kind="stable")
@@ -377,8 +332,6 @@ def calculate_category_swap_scenarios(
     scenario_label_template: str,
     source_categories: tuple[str, ...],
     replacement_category: str,
-    weight_col: str = "kilos_total",
-    category_col: str = "category",
     region: Region = "us",
     substitution_levels: tuple[float, ...],
 ) -> pd.DataFrame:
@@ -398,48 +351,28 @@ def calculate_category_swap_scenarios(
         "avoidable_kg_co2e",
         "institution_emissions_avoided_pct",
     ]
-    if weight_col not in df.columns or category_col not in df.columns:
-        return pd.DataFrame(columns=columns)
-
-    ruminant_rows = df.loc[df[category_col].isin(source_categories)].copy()
+    ruminant_rows = df.loc[df["category"].isin(source_categories)].copy()
     if ruminant_rows.empty:
         return pd.DataFrame(columns=columns)
 
     replacement_factor = get_emission_factor(replacement_category, region=region)
-    if replacement_factor is None:
-        raise ValueError(
-            f"No emission factor found for '{replacement_category}' in region '{region}'."
-        )
-
     factor_lookup = {
         category_name: get_emission_factor(category_name, region=region)
-        for category_name in ruminant_rows[category_col].dropna().astype(str).unique()
+        for category_name in source_categories
     }
-    ruminant_rows["_source_emission_factor"] = (
-        ruminant_rows[category_col].astype(str).map(factor_lookup)
-    )
-    missing_categories = sorted(
-        ruminant_rows.loc[ruminant_rows["_source_emission_factor"].isna(), category_col]
-        .dropna()
-        .astype(str)
-        .unique()
-    )
-    if missing_categories:
-        raise ValueError(
-            "Missing ruminant emission factors for categories: " + ", ".join(missing_categories)
-        )
+    ruminant_rows["_source_emission_factor"] = ruminant_rows["category"].map(factor_lookup)
 
-    ruminant_rows["_baseline_emissions_kg_co2e"] = ruminant_rows[weight_col].astype(
-        float
-    ) * ruminant_rows["_source_emission_factor"].astype(float)
-    baseline_weight = float(ruminant_rows[weight_col].sum(min_count=1) or 0.0)
+    ruminant_rows["_baseline_emissions_kg_co2e"] = (
+        ruminant_rows["kilos_total"] * ruminant_rows["_source_emission_factor"]
+    )
+    baseline_weight = float(ruminant_rows["kilos_total"].sum())
     if baseline_weight <= 0:
         return pd.DataFrame(columns=columns)
 
-    baseline_emissions = float(ruminant_rows["_baseline_emissions_kg_co2e"].sum(min_count=1) or 0.0)
+    baseline_emissions = float(ruminant_rows["_baseline_emissions_kg_co2e"].sum())
     average_ruminant_factor = baseline_emissions / baseline_weight
-    institution_total_emissions = float(df["emissions_kg_co2e"].sum(min_count=1) or 0.0)
-    source_categories = ", ".join(sorted(ruminant_rows[category_col].dropna().astype(str).unique()))
+    institution_total_emissions = float(df["emissions_kg_co2e"].sum())
+    source_categories_present = ", ".join(sorted(ruminant_rows["category"].unique()))
 
     scenario_rows: list[dict[str, Any]] = []
     for substitution_level in substitution_levels:
@@ -452,7 +385,7 @@ def calculate_category_swap_scenarios(
             {
                 "scenario": scenario_label_template.format(level=substitution_level),
                 "substitution_pct": round(substitution_level * 100, 1),
-                "source_categories": source_categories,
+                "source_categories": source_categories_present,
                 "replacement_category": replacement_category,
                 "baseline_source_weight_kg": round(baseline_weight, 3),
                 "baseline_source_emissions_kg_co2e": round(baseline_emissions, 3),
@@ -477,8 +410,6 @@ def calculate_category_swap_scenarios(
 def calculate_ruminant_legume_swap_scenarios(
     df: pd.DataFrame,
     *,
-    weight_col: str = "kilos_total",
-    category_col: str = "category",
     region: Region = "us",
     substitution_levels: tuple[float, ...] = _DEFAULT_RUMINANT_SWAP_LEVELS,
 ) -> pd.DataFrame:
@@ -488,8 +419,6 @@ def calculate_ruminant_legume_swap_scenarios(
         scenario_label_template="{level:.0%} ruminant-to-legume swap",
         source_categories=_RUMINANT_SWAP_SOURCE_CATEGORIES,
         replacement_category=_RUMINANT_SWAP_TARGET_CATEGORY,
-        weight_col=weight_col,
-        category_col=category_col,
         region=region,
         substitution_levels=substitution_levels,
     )
@@ -498,8 +427,6 @@ def calculate_ruminant_legume_swap_scenarios(
 def calculate_milk_oat_swap_scenarios(
     df: pd.DataFrame,
     *,
-    weight_col: str = "kilos_total",
-    category_col: str = "category",
     region: Region = "us",
     substitution_levels: tuple[float, ...] = _DEFAULT_MILK_SWAP_LEVELS,
 ) -> pd.DataFrame:
@@ -509,8 +436,6 @@ def calculate_milk_oat_swap_scenarios(
         scenario_label_template="{level:.0%} cow's-milk-to-oat-milk swap",
         source_categories=_MILK_SWAP_SOURCE_CATEGORIES,
         replacement_category=_MILK_SWAP_TARGET_CATEGORY,
-        weight_col=weight_col,
-        category_col=category_col,
         region=region,
         substitution_levels=substitution_levels,
     )
@@ -527,8 +452,8 @@ def run_aggregation_pipeline(
     """Run the full report aggregation pipeline on a ``df`` that already carries
     ``emissions_kg_co2e``."""
 
-    def monthly(group_by: str) -> pd.DataFrame:
-        agg = aggregate_data(df, group_by=group_by, metrics=KILOS.column)
+    def monthly(group_by: Literal["product", "category"]) -> pd.DataFrame:
+        agg = aggregate_data(df, group_by=group_by, metric=KILOS.column)
         return agg.assign(
             **{
                 KILOS.per_head(diner_or_meal): agg[KILOS.column]

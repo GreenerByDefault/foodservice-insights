@@ -113,12 +113,7 @@ def build_food_report(
     )
 
     _log_stage("emissions", report_progress)
-    df = emissions.calculate_emissions(
-        df,
-        weight_col=KILOS.column,
-        category_col="category",
-        region=region,
-    )
+    df = emissions.calculate_emissions(df, region=region)
 
     _log_stage("aggregation", report_progress)
     agg_results = aggregation.run_aggregation_pipeline(
