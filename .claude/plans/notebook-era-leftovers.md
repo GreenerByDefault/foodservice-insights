@@ -7,16 +7,9 @@ each function from a notebook on whatever frame they had. Two rounds of moves an
 (#378, #380, #452, #466, #484, #501, #502, #509, #510 among them) have taken most of that era out
 of the product. What remains is small and scattered, in three kinds:
 
-1. **Lab conveniences still living in the product.** `quality.findings_to_frame`,
-   `missingness_summary_frame` and `summarize_findings` (QA-workbook sheets, no product reader),
-   `utils.rel_path` (log formatting, two lab readers), `schema.STATUS_SEVERITY` (no reader at
-   all), `schema.VALID_REGIONS` (the lab's `validate_region`), `MergeCounts` and
-   `CategorizedProducts.match_type_counts` (the categorization runscript's summary; `analyze()`
-   discards both), and six of the twelve groups in `data_files/diagnostic_thresholds.yaml`, read
-   only by the lab's own diagnostics: `near_duplicate_product_names`,
-   `missing_weeks_within_month`, `category_discontinuity`, `single_product_dominance`,
-   `category_concentration`, `meat_quantity_reasonableness`. A seventh, `missing_internal_months`,
-   is empty and read by nobody.
+1. **A lab convenience still living in the product.** `MergeCounts` and
+   `CategorizedProducts.match_type_counts` serve the categorization runscript's summary;
+   `analyze()` discards both.
 2. **Guards for conditions validation already excludes**, each answering with a quiet default
    instead of a failure. `apps/web` rejects a file whose product is blank or a placeholder, whose
    date is not a date, whose weight is not a plain non-negative number, or whose weights are all
@@ -56,9 +49,6 @@ rebases.
 - **Lab-only code moves with its tests; import paths break.** The lab's gitignored notebooks are
   invisible callers and a breaking change there is accepted; the lab's checked-in callers are
   updated in the same PR.
-- **The lab gets its own thresholds file**, `gbd_foodservice_insights_lab/data_files/diagnostic_thresholds.yaml`,
-  and its own twenty-line `thresholds.py` against the lab's `PACKAGE_DIR`. *Rejected: one YAML the
-  lab reads through the product's loader.* The product would keep carrying numbers it never reads.
 - **`MergeCounts` becomes a lab type built from the frames.** `merge_categorizations` returns the
   merged frame; the lab's `merge_summary` derives the counts from the before and after frames
   (the merge drops only `No Matches Found` rows, so rows lost are rows uncategorized), and
@@ -70,20 +60,7 @@ rebases.
   both a count and food" finding — reachable when enough months' lines all weigh zero. *Rejected: dissolving `schema.py` and moving
   `emissions.py` under `report/`.* Cosmetic once the above lands.
 
-## PR 1 — Lab-only helpers and thresholds leave the product
-
-- `findings_to_frame`, `missingness_summary_frame`, `summarize_findings` → a new
-  `gbd_foodservice_insights_lab/food_report/quality.py`; `summarize_findings` counts statuses
-  with its own `Counter` rather than importing `summarize_status_counts`.
-- `rel_path` → `gbd_foodservice_insights_lab/notebook_utils.py`, with its two tests from
-  `test_utils.py`.
-- `STATUS_SEVERITY` deleted. `VALID_REGIONS` deleted; `validate_region` uses `get_args(Region)`.
-- The six lab-only threshold groups move to the lab's YAML; `missing_internal_months: {}` is
-  deleted; the lab's `food_report/diagnostics.py` reads its own loader. The product YAML keeps
-  `outlier_line_items`, `per_product_weight_bounds`, `month_over_month_total_volatility`,
-  `diner_meal_count_reasonableness` and `date_distribution`.
-
-## PR 2 — Categorization returns what the product reads
+## PR 1 — Categorization returns what the product reads
 
 - `merge_categorizations(original_df, categorized_products_df) -> pd.DataFrame`; the 20% check
   computes its two counts inline; the `fillna("No Matches Found")` after the left merge becomes a
@@ -103,7 +80,7 @@ rebases.
 - Tests: `test_steps.py` and `test_pipeline.py` re-pin the frames without the column;
   `test_categorize_unique_products_characterization` is the one to read closely.
 
-## PR 3 — Emissions and aggregation read the rows' fixed columns
+## PR 2 — Emissions and aggregation read the rows' fixed columns
 
 - `emissions.py`: `calculate_emissions(df, region)` and `calculate_emissions_summary(df)` on
   `kilos_total`, `category` and `emissions_kg_co2e`, without column checks and without the
@@ -122,7 +99,7 @@ rebases.
 - Tests: the `pytest.raises(ValueError, match="not found")` family and the missing-column
   cases in `test_emissions.py` and `test_aggregation.py` go; everything else keeps passing.
 
-## PR 4 — Checks without guards for validated rows
+## PR 3 — Checks without guards for validated rows
 
 - `detect_unusual_sales`: the `missing_columns` raise, the `df.empty` and `valid_rows.empty`
   returns (rows are never empty, and at least one weighs more than zero), and `pd.to_numeric`.
@@ -139,7 +116,7 @@ rebases.
 - Tests: the tests of the deleted branches go; the messages, statuses and export frames the
   remaining tests pin do not change.
 
-## PR 5 — Chart and writer signatures
+## PR 4 — Chart and writer signatures
 
 - `plots/report.py`: delete the `filter_monthly_categories_by_type(...)` call whose result is
   discarded; delete `_remove_duplicate_xlabels` and `_normalize_axis_text` with their test —
@@ -164,5 +141,5 @@ rebases.
 Each PR: `just lint && just check && just test && just test-lab`. The golden fixture does not
 change in any PR. For every PR, render the golden run's PDF before and after on the same day with
 `SOURCE_DATE_EPOCH` fixed and compare the bytes. After PR 1,
-`git grep -n 'findings_to_frame\|missingness_summary_frame\|summarize_findings\|rel_path\|STATUS_SEVERITY\|VALID_REGIONS' python/insights`
-returns nothing; after PR 2, the same for `MergeCounts\|match_type_counts\|previously_categorized`.
+`git grep -n 'MergeCounts\|match_type_counts\|previously_categorized' python/insights` returns
+nothing.

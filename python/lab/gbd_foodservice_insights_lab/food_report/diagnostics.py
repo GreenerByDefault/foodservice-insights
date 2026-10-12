@@ -7,10 +7,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.report.quality import Finding, make_finding
-from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 from Levenshtein import distance
 
 from gbd_foodservice_insights_lab.categories import meat_categories
+from gbd_foodservice_insights_lab.food_report.thresholds import get_diagnostic_threshold
 
 
 def summarise_numeric_columns(

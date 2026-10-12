@@ -2,36 +2,12 @@ import logging
 import re
 import threading
 import time
-from pathlib import Path
 
 import pytest
 from gbd_foodservice_insights.utils import (
     map_concurrently,
     print_progress,
-    rel_path,
 )
-
-# ----------------------------------------------------------------------
-# Tests for path helpers
-# ----------------------------------------------------------------------
-
-
-class TestRelPath:
-    """Tests for rel_path helper."""
-
-    def test_returns_none_for_none(self):
-        """None input should stay as None."""
-        assert rel_path(None) is None
-
-    def test_returns_relative_path_inside_cwd(self, tmp_path, monkeypatch):
-        """Paths under the working directory should be shortened."""
-        nested_file = tmp_path / "nested" / "file.csv"
-        nested_file.parent.mkdir()
-        nested_file.write_text("x", encoding="utf-8")
-        monkeypatch.chdir(tmp_path)
-
-        assert rel_path(nested_file) == Path("nested/file.csv")
-
 
 # ----------------------------------------------------------------------
 # Tests for print_progress

@@ -1,7 +1,3 @@
-near_duplicate_product_names:
-  max_levenshtein_distance: 2
-  warning_share_threshold: 0.03
-
 outlier_line_items:
   mad_threshold: 5.0
   min_category_rows: 5
@@ -14,29 +10,12 @@ per_product_weight_bounds:
   low: 0.001
   high: 500.0
 
-missing_weeks_within_month:
-  max_gap_days: 10
-
 month_over_month_total_volatility:
   warning_pct_change_threshold: 0.30
-
-missing_internal_months: {}
-
-category_discontinuity:
-  min_gap_months: 1
 
 diner_meal_count_reasonableness:
   low_ratio_threshold: 0.5
   high_ratio_threshold: 2.0
-
-single_product_dominance:
-  threshold_pct: 0.30
-
-category_concentration:
-  threshold_pct: 0.30
-
-meat_quantity_reasonableness:
-  large_quantity_threshold: 30.0
 
 date_distribution:
   partial_month_ratio_threshold: 0.5

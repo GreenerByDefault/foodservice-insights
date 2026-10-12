@@ -14,15 +14,6 @@ DinerOrMeal = Literal["diner", "meal"]
 DiagnosticStatus = Literal["success", "info", "warning", "error"]
 QualityStatus = Literal["pass", "warning", "invalid"]
 
-VALID_REGIONS: tuple[Region, ...] = ("us", "europe")
-
-STATUS_SEVERITY: dict[DiagnosticStatus, int] = {
-    "success": 0,
-    "info": 1,
-    "warning": 2,
-    "error": 3,
-}
-
 
 def quality_status_from_findings(findings: Iterable[Finding]) -> QualityStatus:
     """Compute overall quality status from finding severities; ``info`` never counts."""
