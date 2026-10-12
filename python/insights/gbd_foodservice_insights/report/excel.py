@@ -9,6 +9,7 @@ on top of `write_excel_workbook` below.
 """
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +19,7 @@ from gbd_foodservice_insights.report.aggregation import (
     ProcurementAggregation,
 )
 from gbd_foodservice_insights.report.food_report import FoodReport
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +82,9 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
         "Monthly by Product": aggregation.monthly_product,
         "Monthly by Category": aggregation.monthly_category,
         "Template": aggregation.template.reset_index(),
-        f"{report.diner_or_meal.title()}s": diner_meals_frame(report),
+        f"{report.diner_or_meal.title()}s": diner_meals_frame(
+            report.diner_meal_mapping, report.diner_or_meal
+        ),
         "Emissions Summary": report.emissions_summary,
         **procurement_sheets(aggregation.procurement),
     }
@@ -88,10 +92,11 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
     logger.info("Client Excel report saved to %s", saved_path)
 
 
-def diner_meals_frame(report: FoodReport) -> pd.DataFrame:
+def diner_meals_frame(
+    diner_meal_mapping: Mapping[pd.Period, float], diner_or_meal: DinerOrMeal
+) -> pd.DataFrame:
     return pd.DataFrame(
-        list(report.diner_meal_mapping.items()),
-        columns=["month_year", f"{report.diner_or_meal}s"],
+        list(diner_meal_mapping.items()), columns=["month_year", f"{diner_or_meal}s"]
     )
 
 

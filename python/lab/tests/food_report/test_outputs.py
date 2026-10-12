@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TypedDict
 
@@ -9,10 +10,13 @@ from gbd_foodservice_insights.report.aggregation import (
     AnimalEmissionsConcentration,
     ProcurementAggregation,
 )
-from gbd_foodservice_insights.report.food_report import FoodReport
+from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights_lab.food_report import serving
 from gbd_foodservice_insights_lab.food_report.excel import build_qa_excel_report
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
+from gbd_foodservice_insights_lab.food_report.serving import ServingReport
+from PyPDF2 import PdfReader
 
 
 def _write_placeholder_pdf(_report: FoodReport, _charts: object, path: Path, **_: object) -> None:
@@ -249,6 +253,52 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
     plt.close(fig)
 
 
+def test_run_food_report_writes_a_serving_bundle_without_emissions(tmp_path: Path):
+    input_path = tmp_path / "categorized_serving.csv"
+    pd.DataFrame(
+        {
+            "date": ["2024-01-05", "2024-02-05"],
+            "product": ["tofu", "beef stew"],
+            "category": ["Legumes", "Beef and Buffalo Meat"],
+            "servings total": [10.0, 5.0],
+        }
+    ).to_csv(input_path, index=False)
+
+    result = run_food_report(
+        input_file=input_path,
+        diner_meal_mapping={"2024-01": 1000, "2024-02": 1100},
+        output_dir=tmp_path,
+        procurement_serving="serving",
+        diner_or_meal="meal",
+    )
+
+    assert result["summary"]["Data type"] == "Serving"
+    assert result["summary"]["Plant-based total"] == "10.0 servings"
+    assert result["summary"]["Data Quality Status"] == result["quality_status"].upper()
+    # Title, summary, category template and quality pages around the charts.
+    assert len(PdfReader(result["pdf_path"]).pages) == 4 + len(result["graph_paths"])
+    assert pd.ExcelFile(result["client_excel_path"]).sheet_names == [
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Meals",
+    ]
+    assert pd.ExcelFile(result["qa_excel_path"]).sheet_names == [
+        "Raw Data",
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Category Stability",
+        "Meals",
+        "Data_Quality_Findings",
+        "Missingness_Summary",
+        "Data Profile",
+        "Denominator_QC",
+    ]
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert (manifest["run_status"], manifest["mode"]) == ("success", "serving")
+
+
 def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
     monkeypatch, food_report_tmp_data, tmp_path: Path
 ):
@@ -295,15 +345,12 @@ def test_run_food_report_hands_the_pdf_its_meat_quantity_finding(monkeypatch, tm
     diner_path.write_text(json.dumps({"2024-01": 1000, "2024-02": 1100}))
     pdf_findings: list[Finding] = []
 
-    def record_findings(report: FoodReport, charts: object, path: Path, **_: object) -> None:
+    def record_findings(report: ServingReport, _charts: object, path: Path, **_: object) -> None:
         pdf_findings.extend(report.findings)
-        _write_placeholder_pdf(report, charts, path)
+        path.write_text("placeholder pdf")
 
-    monkeypatch.setattr("gbd_foodservice_insights.report.pdf.write_report_pdf", record_findings)
-    monkeypatch.setattr(
-        "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
-        lambda **kwargs: [],
-    )
+    monkeypatch.setattr(serving, "write_serving_pdf", record_findings)
+    monkeypatch.setattr(serving, "serving_charts", lambda _report: nullcontext(ReportCharts([])))
 
     result = run_food_report(
         input_file=input_path,

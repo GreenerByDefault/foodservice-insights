@@ -1,4 +1,3 @@
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -65,9 +64,7 @@ def test_write_client_workbook_serving_omits_the_emissions_tabs(tmp_path: Path):
 
 
 def test_diner_meals_frame_keeps_its_columns_without_a_mapping():
-    report = replace(_report(diner_or_meal="meal"), diner_meal_mapping={})
-
     pd.testing.assert_frame_equal(
-        diner_meals_frame(report),
+        diner_meals_frame({}, "meal"),
         pd.DataFrame(columns=["month_year", "meals"], dtype=object),
     )
