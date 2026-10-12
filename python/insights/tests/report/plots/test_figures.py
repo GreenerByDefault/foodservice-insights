@@ -82,7 +82,7 @@ def test_plot_category_totals_titles_and_labels_its_own_axes_with_categories_lar
 def test_plot_diner_meal_numbers_pads_the_y_axis_by_a_fifth_of_each_limit():
     months = pd.period_range("2024-01", periods=3, freq="M")
 
-    fig = figures.plot_diner_meal_numbers(pd.Series([10, 20, 30], index=months))
+    fig = figures.plot_diner_meal_numbers(dict(zip(months, [10, 20, 30], strict=True)))
 
     (ax,) = fig.axes
     assert ax.get_ylim() == pytest.approx((8, 36))
@@ -120,13 +120,6 @@ def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
     assert _figure_title(fig) == "Kilos Over Time"
     assert [ax.get_title() for ax in fig.axes] == ["Total Kilos", "Kilos per Diner"]
     assert _is_stacked(*fig.axes)
-
-
-def test_food_and_drink_comparison_page_requires_diner_meals(
-    fruit_and_juice_months: Callable[..., pd.DataFrame],
-):
-    with pytest.raises(ValueError, match="diner_meal_mapping is required"):
-        figures.plot_food_and_drink_comparison_page(fruit_and_juice_months())
 
 
 def test_emissions_summary_page_puts_total_above_per_diner(

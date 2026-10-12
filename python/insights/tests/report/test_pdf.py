@@ -271,7 +271,7 @@ def test_executive_summary_page_leads_with_the_headline_and_fits_the_page() -> N
 def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _RecordingPdf) -> None:
     fig = plt.figure()
 
-    _write(_report(), charts=ReportCharts(figures=[("caption", fig)]))
+    _write(_report(), charts=ReportCharts(figures=[fig]))
     plt.close(fig)
 
     assert _page_titles(recording_pdf) == [
@@ -330,17 +330,6 @@ def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(
     )
 
 
-def test_write_report_pdf_does_not_render_plot_captions(tmp_path: Path) -> None:
-    path = tmp_path / "report.pdf"
-    fig = plt.figure()
-
-    _write(_report(), path, ReportCharts(figures=[("This caption should not appear.", fig)]))
-    plt.close(fig)
-
-    page_text = "".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
-    assert "Thiscaptionshouldnotappear" not in "".join(page_text.split())
-
-
 def test_write_report_pdf_closes_its_own_figures_when_a_page_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -354,7 +343,7 @@ def test_write_report_pdf_closes_its_own_figures_when_a_page_raises(
     monkeypatch.setattr(pdf_module, "create_executive_summary_page", _boom)
 
     with pytest.raises(RuntimeError, match="boom"):
-        _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[("caption", fig)]))
+        _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[fig]))
 
     assert set(plt.get_fignums()) == before | {fig.number}
     plt.close(fig)
@@ -364,7 +353,7 @@ def test_write_report_pdf_leaves_the_callers_plots_open(tmp_path: Path) -> None:
     before = set(plt.get_fignums())
     fig = plt.figure()
 
-    _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[("caption", fig)]))
+    _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[fig]))
 
     assert set(plt.get_fignums()) == before | {fig.number}
     plt.close(fig)

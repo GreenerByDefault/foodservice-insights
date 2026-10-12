@@ -364,7 +364,7 @@ def test_analyze_golden_deliverables(
                     ),
                 },
                 "findings": report.findings,
-                "chart_titles": [_chart_titles(figure) for _, figure in charts.figures],
+                "chart_titles": [_chart_titles(figure) for figure in charts.figures],
             }
         )
         write_report_pdf(report, charts, path, client_name=client_name, **kwargs)

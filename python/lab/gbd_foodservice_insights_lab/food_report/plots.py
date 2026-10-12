@@ -30,7 +30,7 @@ def _figure_export_label(fig: Figure) -> str:
 
 
 def export_report_plots(
-    plots: list[tuple[str, Figure]],
+    plots: list[Figure],
     output_dir: str | Path,
     *,
     image_format: str = "png",
@@ -43,8 +43,8 @@ def export_report_plots(
     used_names: dict[str, int] = {}
     saved_paths: list[str] = []
 
-    for index, (caption, fig) in enumerate(plots, start=1):
-        base_label = caption.strip() or _figure_export_label(fig) or f"plot_{index:02d}"
+    for index, fig in enumerate(plots, start=1):
+        base_label = _figure_export_label(fig) or f"plot_{index:02d}"
         base_name = _slugify_plot_label(base_label)
         duplicate_count = used_names.get(base_name, 0) + 1
         used_names[base_name] = duplicate_count

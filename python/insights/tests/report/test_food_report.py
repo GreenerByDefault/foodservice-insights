@@ -244,7 +244,7 @@ def test_report_charts_stay_open_until_the_block_exits():
     before = set(plt.get_fignums())
 
     with build_report_charts(_build(_rows())) as charts:
-        assert set(plt.get_fignums()) - before == {fig.number for _, fig in charts.figures}
+        assert set(plt.get_fignums()) - before == {fig.number for fig in charts.figures}
 
     assert set(plt.get_fignums()) == before
 

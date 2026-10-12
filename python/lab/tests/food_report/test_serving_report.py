@@ -225,7 +225,7 @@ def _title(figure: Figure) -> str:
 
 def test_serving_charts_title_every_page_in_servings_and_close_on_exit():
     with serving_charts(_build()) as charts:
-        figures = [figure for _caption, figure in charts.figures]
+        figures = charts.figures
         assert [_title(figure) for figure in figures] == [
             "Number of Meals by Month",
             "Servings Over Time",
@@ -295,7 +295,7 @@ def test_write_serving_pdf_summarises_as_key_values_without_the_procurement_pros
     report = dataclasses.replace(built, findings=(*built.findings, warning))
     chart, _ax = plt.subplots()
 
-    _write_pdf(report, ReportCharts(figures=[("", chart)]), show_successes=False)
+    _write_pdf(report, ReportCharts(figures=[chart]), show_successes=False)
     plt.close(chart)
 
     # A chart page has no text of its own.

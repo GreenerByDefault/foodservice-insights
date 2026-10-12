@@ -21,6 +21,7 @@ from gbd_foodservice_insights.report.aggregation import (
     monthly_totals,
 )
 from gbd_foodservice_insights.report.metric import KILOS, Metric
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 
 def prepare_monthly_trend_data(
@@ -54,9 +55,6 @@ def filter_monthly_categories_by_type(
     include_drinks: bool,
 ) -> pd.DataFrame:
     """Filter monthly category data to food only or food + drink categories."""
-    if "category" not in monthly_category_data.columns:
-        return monthly_category_data.iloc[0:0].copy()
-
     categories = food_categories() + drink_categories() if include_drinks else food_categories()
     return monthly_category_data[monthly_category_data["category"].isin(categories)].copy()
 
@@ -100,7 +98,7 @@ def _draw_metric_over_time_on_axis(
         data_sorted["value"].values,
         marker="o",
         linewidth=2,
-        color=GBD_COLORS[0] if GBD_COLORS else None,
+        color=GBD_COLORS[0],
     )
     ax.set_xticks(x_positions)
     ax.set_xticklabels(format_month_labels(data_sorted["month_year"]), rotation=45)
@@ -145,7 +143,7 @@ def _draw_multi_series_metric_over_time_on_axis(
     month_to_x = {month: idx for idx, month in enumerate(month_order)}
 
     for idx, (label, plot_data) in enumerate(non_empty_payloads):
-        color = GBD_COLORS[idx % len(GBD_COLORS)] if GBD_COLORS else None
+        color = GBD_COLORS[idx % len(GBD_COLORS)]
         x_values = [month_to_x[month] for month in plot_data["month_year"]]
         ax.plot(
             x_values,
@@ -217,7 +215,7 @@ def draw_food_and_drink_per_diner(
     diner_meal_mapping: Mapping[pd.Period, float],
     *,
     metric: Metric = KILOS,
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal = "diner",
 ) -> None:
     """`metric` per diner (or meal) by month, food only against food + drink."""
     title = f"{metric.label} per {diner_or_meal.title()}"
@@ -237,11 +235,9 @@ def draw_food_and_drink_per_diner(
 def draw_total_emissions(
     ax: plt.Axes,
     monthly_category_data: pd.DataFrame,
-    *,
-    emissions_col: str = "emissions_kg_co2e",
 ) -> None:
     """Total kg CO₂e by month."""
-    totals = monthly_totals(monthly_category_data, emissions_col)
+    totals = monthly_totals(monthly_category_data, "emissions_kg_co2e")
     _draw_metric_over_time_on_axis(
         ax,
         pd.DataFrame({"month_year": totals.index, "value": totals.values}),
@@ -256,11 +252,10 @@ def draw_emissions_per_diner(
     monthly_category_data: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
     *,
-    emissions_col: str = "emissions_kg_co2e",
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal = "diner",
 ) -> None:
     """kg CO₂e per diner (or meal) by month."""
-    totals = monthly_totals(monthly_category_data, emissions_col)
+    totals = monthly_totals(monthly_category_data, "emissions_kg_co2e")
     per_dm = _per_diner(totals, diner_meal_mapping)
     _draw_metric_over_time_on_axis(
         ax,

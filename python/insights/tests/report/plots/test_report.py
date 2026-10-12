@@ -1,15 +1,15 @@
 from collections.abc import Callable
 
-import matplotlib.pyplot as plt
 import pandas as pd
-import pytest
 from gbd_foodservice_insights.report.aggregation import Aggregation, PlantAnimalSplit
 from gbd_foodservice_insights.report.plots import report
 from matplotlib.figure import Figure
 
 JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
 DINER_MEALS = {JAN: 100, FEB: 100}
-EMISSIONS_SUMMARY = pd.DataFrame({"category": ["fruit", "juice"], "total_kg_co2e": [75, 13]})
+EMISSIONS_SUMMARY = pd.DataFrame(
+    {"category": ["fruit", "juice"], "total_kg_co2e": [75, 13], "pct_of_total": [85.2, 14.8]}
+)
 PLANT_SPLIT = PlantAnimalSplit(
     plant_pct=100.0,
     animal_pct=0.0,
@@ -47,26 +47,6 @@ def _aggregation(
     )
 
 
-@pytest.mark.parametrize(
-    ("x_label", "expected"),
-    [
-        ("carbon  emissions by CATEGORY ", ""),
-        ("Total kg CO2e", "Total kg CO2e"),
-    ],
-    ids=["repeats the title", "says something else"],
-)
-def test_remove_duplicate_xlabels_clears_only_an_x_label_that_repeats_the_title(
-    x_label: str, expected: str
-):
-    fig, ax = plt.subplots()
-    ax.set_title("Carbon Emissions by Category")
-    ax.set_xlabel(x_label)
-
-    cleaned = report._remove_duplicate_xlabels(fig)
-
-    assert cleaned.axes[0].get_xlabel() == expected
-
-
 def test_generate_all_report_plots_orders_every_page(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
@@ -79,8 +59,7 @@ def test_generate_all_report_plots_orders_every_page(
         diner_or_meal="diner",
     )
 
-    assert [caption for caption, _ in plots_output] == [""] * len(plots_output)
-    assert [_figure_title(fig) for _, fig in plots_output] == [
+    assert [_figure_title(fig) for fig in plots_output] == [
         "Number of Diners by Month",
         "Kilos Over Time",
         "Kilos by Category Across All Months",

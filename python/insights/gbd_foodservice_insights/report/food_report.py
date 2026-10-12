@@ -65,7 +65,7 @@ class FoodReport:
 class ReportCharts:
     """Closed when the `build_report_charts` block exits."""
 
-    figures: list[tuple[str, Figure]]
+    figures: list[Figure]
 
 
 def _log_stage(stage_key: str, report_progress: Callable[[], None]) -> None:
@@ -195,7 +195,7 @@ def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
     try:
         yield ReportCharts(figures=figures)
     finally:
-        for _caption, figure in figures:
+        for figure in figures:
             plt.close(figure)
 
 

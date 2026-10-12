@@ -881,7 +881,7 @@ def write_report_pdf(
         )
         create_text_page(pdf, "How to Read This Report", _how_to_read_lines(report.diner_or_meal))
 
-        for _caption, fig in charts.figures:
+        for fig in charts.figures:
             pdf.savefig(fig)
 
         create_category_template_pages(pdf, aggregation.template)
