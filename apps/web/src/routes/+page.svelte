@@ -38,9 +38,7 @@ const steps = [
   </PublicHeader>
 
   <main class="flex flex-1 flex-col">
-    <section
-      class="mx-auto flex w-full max-w-4xl flex-col items-start gap-6 px-6 py-16 sm:px-8 sm:py-24"
-    >
+    <section class="page-width flex flex-col items-start gap-6 py-16 sm:py-24">
       <p class="text-sm font-medium text-muted-foreground">From Greener by Default</p>
       <h1 class="max-w-2xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
         See the climate impact of your food purchasing
@@ -53,7 +51,7 @@ const steps = [
     </section>
 
     <section class="flex-1 border-t bg-muted/40">
-      <div class="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-16 sm:px-8">
+      <div class="page-width flex flex-col gap-8 py-16">
         <h2 class="text-2xl font-semibold tracking-tight">How it works</h2>
         <ol class="grid gap-8 sm:grid-cols-3 sm:gap-6">
           {#each steps as step, index (step.title)}
@@ -74,7 +72,7 @@ const steps = [
   </main>
 
   <footer class="border-t">
-    <div class="mx-auto w-full max-w-4xl px-6 py-6 sm:px-8">
+    <div class="page-width py-6">
       <p class="text-sm text-muted-foreground">{APP_NAME} is a tool from Greener by Default.</p>
     </div>
   </footer>

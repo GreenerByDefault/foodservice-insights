@@ -12,9 +12,11 @@ let { data }: PageProps = $props();
   <title>{pageTitle('Reports', data.organization.name)}</title>
 </svelte:head>
 
-<div class="flex w-full items-center justify-between">
-  <PageHeading>Reports</PageHeading>
-  <Button href={data.newReportHref}>New report</Button>
-</div>
+<PageHeading>
+  Reports
+  {#snippet actions()}
+    <Button href={data.newReportHref}>New report</Button>
+  {/snippet}
+</PageHeading>
 
 <ReportsView {data} />

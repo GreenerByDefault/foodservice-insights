@@ -40,7 +40,7 @@ let { steps, now }: Props = $props();
           <p class="text-muted-foreground text-sm">{step.description}</p>
         {/if}
         {#if step.warning}
-          <p class="mt-1 text-sm text-amber-700 dark:text-amber-500">{step.warning}</p>
+          <p class="mt-1 text-sm text-amber-700">{step.warning}</p>
         {/if}
       </div>
     </li>

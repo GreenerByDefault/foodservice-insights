@@ -15,7 +15,7 @@ let { data }: PageProps = $props();
 
 <PageHeading>Settings</PageHeading>
 
-<div class="flex w-full max-w-md flex-col gap-4">
+<div class="flex w-full max-w-md flex-col gap-8">
   <RenameForm organizationSlug={data.organization.slug} initialName={data.organization.name} />
 
   <Field.Separator />
