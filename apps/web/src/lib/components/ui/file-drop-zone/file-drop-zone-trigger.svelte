@@ -1,7 +1,6 @@
 <script lang="ts">
 import { cn } from '#lib/utils/shadcn.js';
 import { useFileDropZoneTrigger } from './file-drop-zone.svelte.js';
-import { displaySize } from './index.js';
 import type { FileDropZoneTriggerProps } from './types.js';
 import UploadIcon from '@lucide/svelte/icons/upload';
 
@@ -18,7 +17,10 @@ const triggerState = useFileDropZoneTrigger();
 
 <label
   bind:this={ref}
-  class={cn('group/file-drop-zone-trigger', className)}
+  class={cn(
+    'group/file-drop-zone-trigger block rounded-md peer-focus-visible:ring-3 peer-focus-visible:ring-ring',
+    className,
+  )}
   {...triggerState.props}
   {...rest}
 >
@@ -33,31 +35,7 @@ const triggerState = useFileDropZoneTrigger();
       >
         <UploadIcon class="size-7" />
       </div>
-      <div class="flex flex-col gap-0.5 text-center">
-        <span class="font-medium text-muted-foreground">
-          {label}
-        </span>
-        {#if triggerState.rootState.opts.maxFiles.current ||
-          triggerState.rootState.opts.maxFileSize.current}
-          <span class="text-sm text-muted-foreground/75">
-            {#if triggerState.rootState.opts.maxFiles.current}
-              <span> You can upload {triggerState.rootState.opts.maxFiles.current} files </span>
-            {/if}
-            {#if triggerState.rootState.opts.maxFiles.current &&
-              triggerState.rootState.opts.maxFileSize.current}
-              <span>
-                (up to {displaySize(triggerState.rootState.opts.maxFileSize.current)} each)
-              </span>
-            {/if}
-            {#if triggerState.rootState.opts.maxFileSize.current &&
-              !triggerState.rootState.opts.maxFiles.current}
-              <span>
-                Maximum size {displaySize(triggerState.rootState.opts.maxFileSize.current)}
-              </span>
-            {/if}
-          </span>
-        {/if}
-      </div>
+      <span class="text-center font-medium text-muted-foreground">{label}</span>
     </div>
   {/if}
 </label>
