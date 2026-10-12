@@ -41,12 +41,9 @@ Two dead lines in the categorization steps belong to the same era: `clean_produc
 ends with a `fillna` for names that cannot be missing, `merge_categorizations` drops three
 columns that are never present, and `categorize_with_llm` guards a `match_type` column that
 only an isolation test omits. The `previously_categorized` column equals `category.notna()` at
-every step and no lab code reads it. And two correctness nits in the PDF's narrative:
-`_executive_narrative` names the three largest categories by CO₂e with `nlargest`, so a
-category bought only at zero weight can appear as "and Pork (0%)" when fewer than three
-categories carry emissions; and `_narrative_paragraphs` reads the plant and animal shares
-after rounding, so food that is 0.04% animal is called "all plant-based" and food that is 0.4%
-animal reads "100% … and animal products 0%".
+every step and no lab code reads it. And a correctness nit in the PDF's narrative: `_executive_narrative` names the three largest
+categories by CO₂e with `nlargest`, so a category bought only at zero weight can appear as
+"and Pork (0%)" when fewer than three categories carry emissions.
 
 `caches-to-supabase.md` PR 5 adds `new_categorizations` to `CategorizedProducts`. Nothing below
 touches that, and the PRs here land in either order relative to it — whichever lands second
@@ -77,7 +74,7 @@ rebases.
 
 ## PR 1 — The narrative names only categories with emissions
 
-One of the plan's two behavior changes, with PR 7. `_executive_narrative` filters `co2e_by_cat` to
+The plan's one behavior change. `_executive_narrative` filters `co2e_by_cat` to
 `total_kg_co2e > 0` before `nlargest(3, ...)`. A test in `test_pdf.py` builds a report with two
 emitting categories and one zero-weight category and asserts the narrative names two. The golden
 fixture does not change: its three top categories all emit.
@@ -171,20 +168,10 @@ fixture does not change: its three top categories all emit.
 - `excel.write_excel_workbook(path: Path, sheets) -> None`; `write_client_workbook` passes its
   `Path`; the lab's `build_qa_excel_report` wraps its string once and logs the path it was given.
 
-## PR 7 — The narrative's plant sentence reads unrounded shares
-
-The other behavior change. `ExecutiveNarrative` gains `any_animal: bool`, set from
-`PlantAnimalSplit.animal_total > 0`, and the "All of the categorised food was plant-based"
-sentence branches on it instead of `animal_pct == 0`. A `_share_text` helper in `pdf.py` prints
-a nonzero share that `:.0f` would show as 0% or 100% as "under 1%" or "over 99%". Tests in
-`test_pdf.py`: 0.04% animal gets the two-share sentence with "under 1%", not the all-plant one;
-0.4% animal reads "over 99%" and "under 1%". The golden fixture's narrative gains
-`any_animal: true`; its rendered sentence does not change.
-
 ## Verification
 
 Each PR: `just lint && just check && just test && just test-lab`. The golden fixture does not
-change in any PR but PR 7's one added field. For PRs 2–6, render the golden run's PDF before and after on the same day with
+change in any PR. For PRs 2–6, render the golden run's PDF before and after on the same day with
 `SOURCE_DATE_EPOCH` fixed and compare the bytes. After PR 2,
 `git grep -n 'findings_to_frame\|missingness_summary_frame\|summarize_findings\|rel_path\|STATUS_SEVERITY\|VALID_REGIONS' python/insights`
 returns nothing; after PR 3, the same for `MergeCounts\|match_type_counts\|previously_categorized`.

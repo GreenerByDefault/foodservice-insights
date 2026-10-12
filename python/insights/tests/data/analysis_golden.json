@@ -10,6 +10,7 @@
       "diner_or_meal": "diner",
       "plant_pct": 71.9,
       "animal_pct": 28.1,
+      "any_animal": true,
       "top_categories": [
         [
           "Cheese",
