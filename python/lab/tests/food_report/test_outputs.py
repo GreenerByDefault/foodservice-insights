@@ -275,8 +275,9 @@ def test_run_food_report_writes_a_serving_bundle_without_emissions(tmp_path: Pat
     assert result["summary"]["Data type"] == "Serving"
     assert result["summary"]["Plant-based total"] == "10.0 servings"
     assert result["summary"]["Data Quality Status"] == result["quality_status"].upper()
+    assert len(result["graph_paths"]) == 6
     # Title, summary, category template and quality pages around the charts.
-    assert len(PdfReader(result["pdf_path"]).pages) == 4 + len(result["graph_paths"])
+    assert len(PdfReader(result["pdf_path"]).pages) == 4 + 6
     assert pd.ExcelFile(result["client_excel_path"]).sheet_names == [
         "Monthly by Product",
         "Monthly by Category",

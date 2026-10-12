@@ -1,3 +1,4 @@
+import dataclasses
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NoReturn
@@ -7,6 +8,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.report.food_report import ReportCharts
+from gbd_foodservice_insights.report.quality import make_finding
 from gbd_foodservice_insights_lab.food_report import serving
 from gbd_foodservice_insights_lab.food_report.serving import (
     SERVINGS,
@@ -66,12 +68,25 @@ def test_serving_report_counts_servings_per_meal_and_no_emissions():
             }
         ),
     )
-    assert list(report.monthly_product.columns) == [
-        "month_year",
-        "product",
-        "servings total",
-        "servings per meal",
-    ]
+    pd.testing.assert_frame_equal(
+        report.monthly_product,
+        pd.DataFrame(
+            {
+                "month_year": [JAN, JAN, FEB, FEB],
+                "product": ["Ground Beef", "Lentils"] * 2,
+                "servings total": [10.0, 20.0, 12.0, 18.0],
+                "servings per meal": [0.1, 0.2, 0.1, 0.15],
+            }
+        ),
+    )
+    # Only these rows: every other GBD category is listed at 0.
+    assert report.template.loc[["Beef and Buffalo Meat", "Legumes", "total"]].to_dict(
+        orient="index"
+    ) == {
+        "Beef and Buffalo Meat": {JAN: 10.0, FEB: 12.0, "total": 22.0},
+        "Legumes": {JAN: 20.0, FEB: 18.0, "total": 38.0},
+        "total": {JAN: 30.0, FEB: 30.0, "total": 60.0},
+    }
     assert report.summary_stats == {
         "Total rows": "4",
         "Unique products": "2",
@@ -88,6 +103,20 @@ def test_serving_report_counts_servings_per_meal_and_no_emissions():
     }
 
 
+def test_drivers_rank_products_by_servings_up_to_top_n():
+    report = _build(top_n_drivers=1)
+
+    assert report.overall_drivers[["product", "percentage"]].to_dict(orient="records") == [
+        {"product": "Lentils", "percentage": 63.3}
+    ]
+    assert report.category_drivers[["category", "product", "percentage"]].to_dict(
+        orient="records"
+    ) == [
+        {"category": "Beef and Buffalo Meat", "product": "Ground Beef", "percentage": 100.0},
+        {"category": "Legumes", "product": "Lentils", "percentage": 100.0},
+    ]
+
+
 def test_build_serving_report_leaves_the_callers_rows_alone():
     rows = _rows()
 
@@ -100,13 +129,17 @@ def test_summary_stats_leave_out_the_protein_lines_without_protein():
     report = _build(_rows(category=["Cheese", "Oat Milk", "Cheese", "Oat Milk"]))
 
     assert report.plant_protein_share is None
-    assert report.summary_stats.keys().isdisjoint(
-        {
-            "Plant protein share (% of protein categories)",
-            "Plant protein total",
-            "Protein-category total",
-        }
-    )
+    assert list(report.summary_stats) == [
+        "Total rows",
+        "Unique products",
+        "Date range",
+        "Total meals",
+        "Data type",
+        "Plant-based (% of classified food)",
+        "Animal-based (% of classified food)",
+        "Plant-based total",
+        "Animal-based total",
+    ]
 
 
 def test_summary_stats_print_a_single_month_once():
@@ -124,7 +157,9 @@ def test_a_procurement_file_is_not_a_serving_report():
         _build(rows)
 
 
-def test_rows_that_count_no_servings_are_unusable():
+def test_rows_are_unusable_only_when_every_one_counts_no_servings():
+    _build(_rows(**{"servings total": [0.0, 20.0, 12.0, 18.0]}))
+
     with pytest.raises(UnusableDataError, match="Every row has a servings total of 0"):
         _build(_rows(**{"servings total": 0.0}))
 
@@ -254,7 +289,10 @@ def _write_pdf(report: ServingReport, charts: ReportCharts, *, show_successes: b
 def test_write_serving_pdf_summarises_as_key_values_without_the_procurement_prose(
     recording_pdf: _RecordingPdf,
 ):
-    report = _build()
+    # A finding the lab added after building, as `run_food_report` does.
+    warning = make_finding(stage="lab", category="test", status="warning", message="Odd.")
+    built = _build()
+    report = dataclasses.replace(built, findings=(*built.findings, warning))
     chart, _ax = plt.subplots()
 
     _write_pdf(report, ReportCharts(figures=[("", chart)]), show_successes=False)
@@ -273,7 +311,7 @@ def test_write_serving_pdf_summarises_as_key_values_without_the_procurement_pros
     assert recording_pdf.pages[1] == [
         "Executive Summary",
         *(f"{label}:  {value}" for label, value in report.summary_stats.items()),
-        "Data Quality Status:  PASS",
+        "Data Quality Status:  WARNING",
     ]
 
 
