@@ -65,7 +65,7 @@ describe('OrganizationNameForm', () => {
     await expect.element(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
-  test('a "name-taken" outcome shows the inline error, moves focus, and keeps the typed name', async () => {
+  test('a "name-taken" outcome shows the error on the field, moves focus, and keeps the typed name', async () => {
     const onSubmit = vi.fn().mockResolvedValue('name-taken');
     const screen = await render(OrganizationNameForm, props(onSubmit));
 
@@ -75,8 +75,13 @@ describe('OrganizationNameForm', () => {
     await expect
       .element(screen.getByText('An organization with that name already exists.'))
       .toBeInTheDocument();
-    await expect.element(screen.getByLabelText('Organization name')).toHaveValue('Riverside Foods');
-    await expect.element(screen.getByLabelText('Organization name')).toHaveFocus();
+    const nameInput = screen.getByLabelText('Organization name');
+    await expect.element(nameInput).toHaveValue('Riverside Foods');
+    await expect.element(nameInput).toHaveFocus();
+    await expect
+      .element(nameInput)
+      .toHaveAccessibleDescription('An organization with that name already exists.');
+    await expect.element(nameInput).toHaveAttribute('aria-invalid', 'true');
   });
 
   test.for([
@@ -87,7 +92,7 @@ describe('OrganizationNameForm', () => {
     ['slug-reserved', "That name isn't available. Try adding your region or division."],
     ['slug-underivable', 'That name needs at least one letter or number in a–z or 0–9.'],
   ] as const)(
-    'a "%s" outcome shows its inline error and moves focus',
+    'a "%s" outcome shows its error on the field and moves focus',
     async ([outcome, message]) => {
       const onSubmit = vi.fn().mockResolvedValue(outcome);
       const screen = await render(OrganizationNameForm, props(onSubmit));
@@ -95,8 +100,11 @@ describe('OrganizationNameForm', () => {
       await screen.getByLabelText('Organization name').fill('Riverside Foods');
       await screen.getByRole('button', { name: 'Save' }).click();
 
+      const nameInput = screen.getByLabelText('Organization name');
       await expect.element(screen.getByText(message)).toBeInTheDocument();
-      await expect.element(screen.getByLabelText('Organization name')).toHaveFocus();
+      await expect.element(nameInput).toHaveFocus();
+      await expect.element(nameInput).toHaveAccessibleDescription(message);
+      await expect.element(nameInput).toHaveAttribute('aria-invalid', 'true');
     },
   );
 

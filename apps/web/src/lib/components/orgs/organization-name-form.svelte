@@ -33,17 +33,26 @@ let { initialName, legend, submitLabel, submittingLabel, unknownNotice, onSubmit
 // svelte-ignore state_referenced_locally
 let name = $state(initialName);
 
+type NameFailure = Exclude<OrganizationNameFailure, 'unknown'>;
+
+const FAILURE_MESSAGES: Record<NameFailure, string> = {
+  'name-taken': 'An organization with that name already exists.',
+  'slug-taken':
+    "That name is too close to another organization's. Try adding your region or division.",
+  'slug-reserved': "That name isn't available. Try adding your region or division.",
+  'slug-underivable': 'That name needs at least one letter or number in a–z or 0–9.',
+};
+
 type FormState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  | { status: 'name-taken' }
-  | { status: 'slug-taken' }
-  | { status: 'slug-reserved' }
-  | { status: 'slug-underivable' }
+  | { status: 'failed'; failure: NameFailure }
   | { status: 'outcome-unknown' };
 
 let formState: FormState = $state({ status: 'idle' });
 let nameInputElement: HTMLInputElement | null = $state(null);
+const id = $props.id();
+const nameErrorId = `${id}-name-error`;
 
 async function handleSubmit(event: SubmitEvent) {
   event.preventDefault();
@@ -57,18 +66,13 @@ async function handleSubmit(event: SubmitEvent) {
     return;
   }
 
-  if (
-    outcome === 'name-taken' ||
-    outcome === 'slug-taken' ||
-    outcome === 'slug-reserved' ||
-    outcome === 'slug-underivable'
-  ) {
-    formState = { status: outcome };
-    nameInputElement?.focus();
+  if (outcome === 'unknown') {
+    formState = { status: 'outcome-unknown' };
     return;
   }
 
-  formState = { status: 'outcome-unknown' };
+  formState = { status: 'failed', failure: outcome };
+  nameInputElement?.focus();
 }
 </script>
 
@@ -85,18 +89,12 @@ async function handleSubmit(event: SubmitEvent) {
       maxlength={MAX_ORGANIZATION_NAME_LENGTH}
       required
       autocomplete="off"
+      aria-invalid={formState.status === 'failed' || undefined}
+      aria-describedby={formState.status === 'failed' ? nameErrorId : undefined}
       bind:value={name}
     />
-    {#if formState.status === 'name-taken'}
-      <Field.Error>An organization with that name already exists.</Field.Error>
-    {:else if formState.status === 'slug-taken'}
-      <Field.Error>
-        That name is too close to another organization's. Try adding your region or division.
-      </Field.Error>
-    {:else if formState.status === 'slug-reserved'}
-      <Field.Error>That name isn't available. Try adding your region or division.</Field.Error>
-    {:else if formState.status === 'slug-underivable'}
-      <Field.Error>That name needs at least one letter or number in a–z or 0–9.</Field.Error>
+    {#if formState.status === 'failed'}
+      <Field.Error id={nameErrorId}>{FAILURE_MESSAGES[formState.failure]}</Field.Error>
     {/if}
   </Field.Field>
 
