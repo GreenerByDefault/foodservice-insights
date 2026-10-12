@@ -36,7 +36,7 @@ const progressId = $props.id();
 
   {#each groups as group (group.year)}
     {#if showYearHeadings}
-      <h3 class="text-sm font-medium text-muted-foreground">{group.year}</h3>
+      <h2 class="text-sm font-medium text-muted-foreground">{group.year}</h2>
     {/if}
     <div class="grid {gridClass} gap-3">
       {#each group.months as month (month)}

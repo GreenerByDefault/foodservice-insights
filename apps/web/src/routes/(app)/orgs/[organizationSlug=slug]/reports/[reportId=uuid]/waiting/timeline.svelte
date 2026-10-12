@@ -27,7 +27,14 @@ let { steps, now }: Props = $props();
         <CircleIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       {/if}
       <div>
-        <p class={step.current ? 'font-medium' : 'text-muted-foreground'}>{step.title}</p>
+        <p class={step.current ? 'font-medium' : 'text-muted-foreground'}>
+          {#if step.completedAt}
+            <span class="sr-only">Done:</span>
+          {:else if !step.current}
+            <span class="sr-only">Not started:</span>
+          {/if}
+          {step.title}
+        </p>
         {#if step.completedAt}
           <RelativeTime
             at={step.completedAt}

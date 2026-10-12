@@ -12,7 +12,10 @@ and every inline field error tied to its input with `aria-invalid` and `aria-des
 (asserted in the form component tests), phone keyboards told what the field is (the typed
 confirmation in `confirm-action.svelte` turns off autocapitalise, autocorrect and spellcheck so
 iOS cannot break its exact match; the display name capitalises words; email fields need nothing,
-since `type="email"` already does it), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
+since `type="email"` already does it), state a screen reader would otherwise miss put into
+words (each waiting-timeline step says "Done:" or "Not started:" in `sr-only` text beside its
+icon, and the organization switcher marks the current org `aria-current="true"` — not `"page"`,
+since its link goes to the org's home and you are usually on a page below it), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
 (nothing filters them; see `compilerOptions` in [`vite.config.ts`](../../apps/web/vite.config.ts)).
 `REQUIREMENTS.md` § Design and accessibility asks for a GBD accessibility review; this is the pass
 before it.
@@ -91,7 +94,7 @@ All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primit
   `@media (prefers-reduced-motion: reduce)` that collapses `animation-duration` and
   `transition-duration` to near zero.
 
-Tests: none of this is testable by assertion beyond the axe gate (PR 4), which checks the contrast
+Tests: none of this is testable by assertion beyond the axe gate (PR 3), which checks the contrast
 numbers for real. Screenshots: every shot with a focused control (`auth/sign-in-*`,
 `account/account*`, possibly the open-menu shots) — review that only the ring changed.
 
@@ -122,23 +125,7 @@ Tests: the h1 is focused after a retry and after a cancel (`failure-view.svelte.
 beside the component); Escape during a pending confirm leaves the dialog open
 (`confirm-action.svelte.test.ts`); the member-actions focus test above. No screenshots.
 
-## PR 3 — What a screen reader hears
-
-- **Timeline step state is icon and colour only** ([`timeline.svelte:19-30`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/waiting/timeline.svelte)):
-  only the current step carries `aria-current="step"`; a done step reads as "Waiting to start,
-  4 minutes ago". Prefix the title with `<span class="sr-only">Done: </span>` and
-  `<span class="sr-only">Not started: </span>`.
-- **The organization switcher does not say which org is current**
-  ([`organization-switcher.svelte:55`](../../apps/web/src/routes/(app)/shell/organization-switcher.svelte)):
-  the check icon is `aria-hidden`. Add `aria-current="page"` to the current org's link.
-- **Year headings in `monthly-counts.svelte:39` are `<h3>`** under a page whose only heading is
-  the `<h1>`. Make them `<h2>`.
-
-Tests: the listitem text in `timeline.svelte.test.ts`; `aria-current` on the menuitem in
-`organization-switcher.svelte.test.ts`; the heading level in `monthly-counts.svelte.test.ts`.
-No screenshots (sr-only text and a level change render identically).
-
-## PR 4 — An axe scan of every captured screen
+## PR 3 — An axe scan of every captured screen
 
 Lands last so it starts green and guards the rest.
 
@@ -172,5 +159,5 @@ Drive the app for what tests cannot prove (the `run` skill or the Playwright MCP
   every focused control is unmistakable against white.
 - If a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
   first letter stays lowercase and the button enables.
-- PR 4: the suite passes with zero violations, and introducing a deliberate one (remove a label
+- PR 3: the suite passes with zero violations, and introducing a deliberate one (remove a label
   locally) fails it with a readable message.

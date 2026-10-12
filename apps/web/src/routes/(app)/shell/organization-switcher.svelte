@@ -50,6 +50,7 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
           <a
             {...props}
             href={organizationHref(organization.slug)}
+            aria-current={organization.id === current?.id ? 'true' : undefined}
             class={cnChildProps(props, 'flex items-center gap-2')}
           >
             <CheckIcon

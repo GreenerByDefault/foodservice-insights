@@ -62,7 +62,7 @@ describe('OrganizationSwitcher', () => {
       .not.toBeInTheDocument();
   });
 
-  test('over the cap, exactly eight organizations show, current first and checked', async () => {
+  test('over the cap, exactly eight organizations show, current first, checked and marked current', async () => {
     const current = anOrganization('Riverside Foods');
     const eightAlphabeticallyFirst = Array.from({ length: 8 }, (_, i) =>
       anOrganization(`Org ${String(i).padStart(2, '0')}`),
@@ -78,6 +78,8 @@ describe('OrganizationSwitcher', () => {
     expect(firstRow?.textContent?.trim()).toBe('Riverside Foods');
     expect(firstRow && isChecked(firstRow)).toBe(true);
     expect(otherRows.every((row) => !isChecked(row))).toBe(true);
+    expect(firstRow?.getAttribute('aria-current')).toBe('true');
+    expect(otherRows.every((row) => !row.hasAttribute('aria-current'))).toBe(true);
     await expect
       .element(screen.getByRole('menuitem', { name: 'View all organizations' }))
       .toBeVisible();
@@ -94,7 +96,7 @@ describe('OrganizationSwitcher', () => {
     expect(rows[0]?.textContent?.trim()).toBe('Zzz Foods');
   });
 
-  test('no current organization: the trigger reads "Choose an organization" and nothing is checked', async () => {
+  test('no current organization: the trigger reads "Choose an organization" and nothing is checked or current', async () => {
     const screen = await opened({
       current: undefined,
       organizations: [anOrganization('Acme Foodservice'), anOrganization('Northwind Catering')],
@@ -103,6 +105,7 @@ describe('OrganizationSwitcher', () => {
 
     await expect.element(screen.getByText('Choose an organization')).toBeVisible();
     expect(organizationRows(screen).every((row) => !isChecked(row))).toBe(true);
+    expect(organizationRows(screen).every((row) => !row.hasAttribute('aria-current'))).toBe(true);
   });
 
   test('each organization links to organizationHref(slug)', async () => {
