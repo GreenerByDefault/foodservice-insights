@@ -1,13 +1,10 @@
 import { ApiError, apiCall } from '#lib/api/fetch.js';
+import type { OrganizationNameFailure } from '#lib/orgs/name.js';
 import { classifyNameWriteFailure } from './failure.ts';
 
 export type CreateOrganizationOutcome =
   | { kind: 'created'; location: string }
-  | { kind: 'name-taken' }
-  | { kind: 'slug-taken' }
-  | { kind: 'slug-reserved' }
-  | { kind: 'slug-underivable' }
-  | { kind: 'unknown' };
+  | { kind: OrganizationNameFailure };
 
 /** The three codes unique to create — a name that can't become an address, or one that becomes
  * an address that's reserved or already taken. Rename never hits these (its slug is fixed at

@@ -1,4 +1,4 @@
-import { ApiError, ApiUnreachableError, apiCall } from '#lib/api/fetch.js';
+import { apiCall, isApiFailure } from '#lib/api/fetch.js';
 
 export type RenameSelfOutcome = { kind: 'renamed' } | { kind: 'unknown' };
 
@@ -9,8 +9,7 @@ export async function renameSelf(displayName: string): Promise<RenameSelfOutcome
     await apiCall('/api/account', { method: 'PATCH', body: JSON.stringify({ displayName }) });
     return { kind: 'renamed' };
   } catch (error) {
-    if (error instanceof ApiError || error instanceof ApiUnreachableError)
-      return { kind: 'unknown' };
+    if (isApiFailure(error)) return { kind: 'unknown' };
     throw error;
   }
 }

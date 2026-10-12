@@ -13,6 +13,14 @@ export const FIELD = {
  * `@gbd/db` here would pull `pg` into the browser bundle. `name.test.ts` pins the two together. */
 export const MAX_ORGANIZATION_NAME_LENGTH = 100;
 
+/** Every way a create or rename can come back unsuccessful; rename never sees the slug ones. */
+export type OrganizationNameFailure =
+  | 'name-taken'
+  | 'slug-taken'
+  | 'slug-reserved'
+  | 'slug-underivable'
+  | 'unknown';
+
 export const OrganizationNameSchema = requiredText({
   minLength: MIN_NAME_LENGTH,
   maxLength: MAX_ORGANIZATION_NAME_LENGTH,

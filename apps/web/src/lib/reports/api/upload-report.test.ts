@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import type { Problem } from '../csv/describe/index.ts';
-import { uploadReport } from './upload.ts';
+import { uploadReport } from './upload-report.ts';
 
 const PROBLEM: Problem = {
   rule: 'The weight has a unit in it',

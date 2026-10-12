@@ -39,6 +39,11 @@ export class ApiUnreachableError extends Error {
   }
 }
 
+/** Whether `error` is what `apiCall` throws, as opposed to a bug in the caller. */
+export function isApiFailure(error: unknown): error is ApiError | ApiUnreachableError {
+  return error instanceof ApiError || error instanceof ApiUnreachableError;
+}
+
 /** This timeout covers most of our routes: small Postgres reads/writes with room for a cold
  * connection or a slow query. */
 const DEFAULT_TIMEOUT_MS = 20_000;
