@@ -22,7 +22,15 @@ Facts from the tree (2026-09-27) that shape the design:
 - **But rows do leave.** Deleting an organization cascades to its reports, their attempts and its
   rejected uploads. Deleting an account will remove the `auth.users` row, once
   [`account-self-service.md`](account-self-service.md) lands. So a count over live rows falls,
-  after the fact, for every week the deleted rows touched.
+  after the fact, for every week the deleted rows touched. Deleting a report is soft and keeps
+  everything (`REQUIREMENTS.md` § Data deletion), so these two hard deletes are the only leaks.
+  `audit_event` already keeps raw ids with no FK, so it outlives what it names.
+- **Cascades fire row triggers on every child, in order.** When an organization is deleted,
+  each report's `BEFORE DELETE` trigger fires while the report row still exists. The report's
+  attempts are deleted only after it, so an attempt's trigger can no longer read its report.
+  Supabase Auth's admin API connects as `supabase_auth_admin`, not `postgres`, so a trigger on
+  `auth.users` runs with that role's grants unless it is `SECURITY DEFINER`. That is Supabase's
+  documented pattern for `auth.users` triggers; PR 6 confirms it against a real delete.
 - **An `auth.users` row is not a user.** The sign-in form's first code request passes
   `shouldCreateUser: true` (`email-step.svelte`), so anyone who types an address gets a row,
   whether or not they ever enter the code. `email_confirmed_at` marks the ones who did.
@@ -79,10 +87,33 @@ user country, which Cloudflare's dashboard already shows.
   be reconstructible.
   *Rejected: materialized views.* They would need a refresh schedule, and at our volume a plain
   view answers in milliseconds.
-- **Views count what still exists.** A deleted organization's reports drop out of every week
-  they were in, and the view comments say so. *Considered, not done: a daily rollup table, so
-  history survives deletes.* Deletes are rare, and what they remove is what a customer asked us to
-  remove. Build the rollup if someone ever needs exact historical counts.
+- **Views count what ever existed: a hard delete leaves a tombstone** (PR 6).
+  - Each table a view reads that can be hard-deleted (`report`, `analysis_attempt` and
+    `auth.users`) gets a `BEFORE DELETE` row trigger. The trigger copies the columns the view
+    exposes, plus `purged_at`, into a tombstone table in `metrics`: `metrics.purged_report`,
+    `metrics.purged_attempt` and `metrics.purged_user`. It is `purged_at`, not `deleted_at`,
+    because `report.deleted_at` already means the soft delete.
+  - Each view becomes its live rows `UNION ALL` its tombstones, with `purged_at` null for a
+    live row. So a deleted organization's reports, and a deleted account, stay in every week they
+    were in.
+  - `metrics.attempt` gets `organization_id` by joining `metrics.report`, live or tombstoned,
+    because an attempt's trigger fires after its report is gone (§ Context).
+  - What a customer asked us to remove is removed. A tombstone holds only what the
+    no-free-text rule below already allows: ids, timestamps, enums and numbers. The one id that
+    names a person is a deleted user's raw id, the same call as "the raw user ID stays in the
+    audit log". A hard delete on request, GBD's TBD script, deletes the tombstones too.
+  - The trigger functions are `SECURITY DEFINER`, owned by `postgres`, with `search_path = ''`.
+    So a delete made through Supabase Auth's role can still write a tombstone, and the only
+    thing they write is a tombstone. Tombstones live in `metrics`, so `metrics_reader` reads
+    them through the default privileges, the no-free-text test covers their columns, and Kanel
+    never sees them.
+  - The rule for later views: a view over a table that can be hard-deleted gets its tombstone
+    in the same migration. `rejected_upload` is the next, if a view ever reads it.
+
+  *Rejected: a daily rollup table.* It keeps counts, not rows. So percentiles and
+  per-organization slices are lost, and it is a job to run.
+  *Rejected: soft-deleting organizations.* `REQUIREMENTS.md` has an organization's deletion
+  remove its reports, and a customer who deletes one expects that.
 - **Views expose ids, timestamps, enums and numbers, never free text**: no email address, no
   name, no `failure_detail` or `rejection_detail`, no file name. That is what makes
   `metrics_reader` safe to hand to a dashboard, a notebook or an AI agent. A conventions test
@@ -201,9 +232,12 @@ user country, which Cloudflare's dashboard already shows.
 - **`pnpm seed:history` replaces; it never appends.** In one transaction, under an advisory lock,
   it deletes every marked organization, which cascades to its reports, attempts and uploads,
   then every marked user, and then calls the generator. Running it twice leaves what running it
-  once does, with the dates moved up to today. It never touches the placeholder identity or rows
-  someone made by hand, and `pnpm truncate` still clears everything. It refuses any connection
-  string that is not local.
+  once does, with the dates moved up to today. Its deletes leave tombstones (PR 6), which would
+  make a second run's history count twice, so it collects the marked ids first and deletes their
+  tombstones in the same transaction. It never touches the placeholder identity or rows someone
+  made by hand, and `pnpm truncate` still clears everything. `TRUNCATE` fires no row triggers,
+  and the script clears `metrics`' tables too. It refuses any connection string that is not
+  local.
   *Rejected: append a batch per run.* A second run doubles every count, so a panel's shape
   depends on how many times someone ran a command.
 
@@ -305,7 +339,8 @@ All in `packages/db`.
     `auth.users`. "Users over time" counts by `email_confirmed_at`, per § Context.
 
   The file's header carries the reasoning from Decisions: why views, the rejected alternatives,
-  the role race, where the password is set, and the rule that deleted rows drop out.
+  the role race, and where the password is set. It also says that hard-deleted rows drop out
+  until PR 6 adds their tombstones.
 - `scripts/dump-public-schema.ts` becomes `dump-schema.ts`, taking the schema as an argument.
   `gen-types` dumps `metrics` into `metrics-schema.sql`, and the `ts-db-types` job adds that file
   to the ones it diffs.
@@ -426,8 +461,43 @@ This PR needs PR 3's generator and PR 2's data source builder.
   - § Metrics gains a sentence about where dashboards live and how they deploy.
   - § Secrets management's line about production credentials in GitHub Actions gains the two new
     secrets.
-- This PR deletes this plan, and turns `observability-vendors.md`'s pointers to it into pointers
-  to `apps/grafana/` and `002_metrics.ts`.
+- Whichever of this PR and PR 6 lands last deletes this plan. It also turns
+  `observability-vendors.md`'s pointers to this plan into pointers to `apps/grafana/` and
+  `002_metrics.ts`.
+
+## PR 6 — hard-deleted rows stay counted
+
+`packages/db`, the next migration. This needs only PR 1, so it can land any time after it. Land
+it before launch, though: a delete before it lands is not counted.
+
+- The migration creates:
+  - `metrics.purged_report`, `metrics.purged_attempt` and `metrics.purged_user`, each with the
+    columns its view reads plus `purged_at timestamptz NOT NULL DEFAULT now()`, PK on the
+    original id;
+  - one `SECURITY DEFINER` trigger function per table, `search_path = ''`;
+  - `BEFORE DELETE … FOR EACH ROW` triggers on `report`, `analysis_attempt` and `auth.users`.
+
+  It then recreates `metrics.report`, `metrics.attempt` and `metrics.app_user` as live `UNION ALL`
+  tombstones, each with `purged_at`. `metrics.attempt` takes `organization_id` from
+  `metrics.report`. `CREATE OR REPLACE VIEW` cannot add a column in the middle, so it drops and
+  recreates the views, which PR 1's default privilege re-grants.
+- `scripts/truncate.ts` also truncates `metrics`' tables. If PR 3 has landed, `seed:history`
+  deletes the tombstones of the rows it replaces, per Decisions; if not, PR 3 does.
+- Tests, in `tests/metrics.test.ts`, inside `withRollback`:
+  - Deleting an organization with a report and two attempts leaves `metrics.report` and
+    `metrics.attempt` returning the same rows as before, `organization_id` included, plus
+    `purged_at`.
+  - Deleting an `auth.users` row leaves `metrics.app_user` returning it. So does deleting it
+    after `SET ROLE supabase_auth_admin`, which is the path Supabase Auth's admin API takes.
+  - A soft-deleted report stays live with its `deleted_at` and no `purged_at`.
+  - The existing conventions cover the tombstones: no free text in `metrics`, and
+    `metrics_reader` can read them.
+- `packages/db/README.md` gains the rule from Decisions: a view over a hard-deletable table gets
+  its tombstone in the same migration. `REQUIREMENTS.md` § Data deletion gets one line:
+  metric tombstones (ids, timestamps and enums) outlive a deleted organization or account, and a
+  requested hard delete removes them.
+- By hand, after `account-self-service.md` lands: delete an account through the app, and the
+  user still counts in "users over time".
 
 ## Verification
 
@@ -436,7 +506,9 @@ Each PR is verified by `pnpm lint && pnpm check && pnpm test`. Then by hand:
 - After PR 2, `pnpm grafana` serves the product dashboard. Editing a panel's SQL in the file
   reloads the open tab. Saving a change in the UI gives a diff containing only that change.
 - After PR 3, every panel draws a shape. Running `pnpm seed:history` a second time leaves every
-  panel's totals unchanged.
+  panel's totals unchanged, including after PR 6.
+- After PR 6, deleting a synthetic organization in the app leaves every panel's totals
+  unchanged.
 - After PR 4, renaming a column in a view without touching the dashboard fails `pnpm test`, and
   names the panel. So does a panel whose filter matches nothing. Two worktrees running
   `pnpm test` at once both pass, and leave no run database or run data source behind.
