@@ -22,7 +22,7 @@ describe('MonthlyCounts', () => {
     await expect.element(february).toHaveAttribute('min', '1');
   });
 
-  test('shows a year heading only once the months span more than one year', async () => {
+  test('shows a second-level year heading only once the months span more than one year', async () => {
     const withinOneYear: CountDraft = $state({});
     const singleYear = await render(MonthlyCounts, {
       months: ['2026-01', '2026-02'],
@@ -37,8 +37,12 @@ describe('MonthlyCounts', () => {
       basis: 'people',
       counts: acrossYears,
     });
-    await expect.element(twoYears.getByRole('heading', { name: '2025' })).toBeInTheDocument();
-    await expect.element(twoYears.getByRole('heading', { name: '2026' })).toBeInTheDocument();
+    await expect
+      .element(twoYears.getByRole('heading', { name: '2025', level: 2 }))
+      .toBeInTheDocument();
+    await expect
+      .element(twoYears.getByRole('heading', { name: '2026', level: 2 }))
+      .toBeInTheDocument();
   });
 
   test('legend follows the counts basis', async () => {

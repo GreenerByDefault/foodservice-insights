@@ -27,6 +27,20 @@ describe('Timeline', () => {
     await expect.element(notCurrent).not.toHaveAttribute('aria-current');
   });
 
+  test('every step says its state in words, not only by its icon', async () => {
+    const screen = await render(Timeline, { steps: STEPS, now: NOW });
+
+    const titles = screen
+      .getByRole('listitem')
+      .elements()
+      .map((item) => item.querySelector('p')?.textContent?.replace(/\s+/g, ' ').trim());
+    expect(titles).toEqual([
+      'Done: We checked your file',
+      'Waiting to start',
+      'Not started: Reading your purchases and building your charts',
+    ]);
+  });
+
   test('a completed step carries an ISO datetime', async () => {
     const screen = await render(Timeline, { steps: STEPS, now: NOW });
 
