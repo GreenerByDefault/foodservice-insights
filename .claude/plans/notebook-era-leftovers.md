@@ -5,12 +5,9 @@
 `gbd_foodservice_insights` was ported from `catering_analysis`, where data scientists called
 each function from a notebook on whatever frame they had. Two rounds of moves and fixes since
 (#378, #380, #452, #466, #484, #501, #502, #509, #510 among them) have taken most of that era out
-of the product. What remains is small and scattered, in three kinds:
+of the product. What remains is small and scattered, in two kinds:
 
-1. **A lab convenience still living in the product.** `MergeCounts` and
-   `CategorizedProducts.match_type_counts` serve the categorization runscript's summary;
-   `analyze()` discards both.
-2. **Guards for conditions validation already excludes**, each answering with a quiet default
+1. **Guards for conditions validation already excludes**, each answering with a quiet default
    instead of a failure. `apps/web` rejects a file whose product is blank or a placeholder, whose
    date is not a date, whose weight is not a plain non-negative number, or whose weights are all
    zero; `read_input_csv` re-checks the promises the contract makes; `validate_rows` (today
@@ -23,22 +20,12 @@ of the product. What remains is small and scattered, in three kinds:
    more, and `check_date_distribution` and `run_all_diagnostics` silently skip checks whose
    columns are "missing". The two line-level checks also run
    `pd.to_numeric(..., errors="coerce")` over a column that is already numeric.
-3. **Parameters nothing varies.** `weight_col`, `category_col`, `emissions_col` and
+2. **Parameters nothing varies.** `weight_col`, `category_col`, `emissions_col` and
    `product_col` on the emissions and aggregation functions, `aggregate_data`'s
    `metrics: list[str] | str`, `create_horizontal_percentage_barplot(palette=None)`,
    `plot_food_and_drink_comparison_page(diner_meal_mapping=None)` followed by a raise, the
    caption in `ReportCharts.figures: list[tuple[str, Figure]]` that is always `""`, and
    `_remove_duplicate_xlabels`, a cleanup step that no product chart triggers.
-
-Two dead lines in the categorization steps belong to the same era: `clean_product_names`
-ends with a `fillna` for names that cannot be missing, `merge_categorizations` drops three
-columns that are never present, and `categorize_with_llm` guards a `match_type` column that
-only an isolation test omits. The `previously_categorized` column equals `category.notna()` at
-every step and no lab code reads it.
-
-`caches-to-supabase.md` PR 5 adds `new_categorizations` to `CategorizedProducts`. Nothing below
-touches that, and the PRs here land in either order relative to it — whichever lands second
-rebases.
 
 ## Decisions
 
@@ -49,10 +36,6 @@ rebases.
 - **Lab-only code moves with its tests; import paths break.** The lab's gitignored notebooks are
   invisible callers and a breaking change there is accepted; the lab's checked-in callers are
   updated in the same PR.
-- **`MergeCounts` becomes a lab type built from the frames.** `merge_categorizations` returns the
-  merged frame; the lab's `merge_summary` derives the counts from the before and after frames
-  (the merge drops only `No Matches Found` rows, so rows lost are rows uncategorized), and
-  `filter_to_entrees` keeps adjusting the lab's type.
 - **Kept, deliberately.** `Finding.metadata`, `column` and `count` — the lab's QA sheet shows
   them and the lab's own diagnostics tests pin them. The `(findings, export_df)` tuples the
   checks return — the lab's QA workbook. `categorize_unique_products`'s dtype checks — the lab
@@ -60,27 +43,7 @@ rebases.
   both a count and food" finding — reachable when enough months' lines all weigh zero. *Rejected: dissolving `schema.py` and moving
   `emissions.py` under `report/`.* Cosmetic once the above lands.
 
-## PR 1 — Categorization returns what the product reads
-
-- `merge_categorizations(original_df, categorized_products_df) -> pd.DataFrame`; the 20% check
-  computes its two counts inline; the `fillna("No Matches Found")` after the left merge becomes a
-  raise when a product has no categorization, since the frames come from one
-  `categorize_unique_products` call and a gap is a bug; the never-present `columns_to_drop` go.
-  `analysis.py` drops `_counts`.
-- `MergeCounts` → the lab, built by `MergeCounts.between(before, after)`; `spreadsheet.py`,
-  `entrees.py` and their tests import it from there.
-- `CategorizedProducts` loses `match_type_counts`; `categorize_unique_products` logs the
-  breakdown as it does now; `spreadsheet.py` computes
-  `unique_products_df["match_type"].value_counts()` for its summary.
-- The `previously_categorized` column goes: `clean_product_names` masks on `category.notna()`,
-  `categorize_using_cleaned_name_history` and `categorize_using_historical_classifications`
-  stop writing it. `clean_product_names`'s trailing `fillna` goes. `categorize_with_llm` writes
-  `match_type` unconditionally, and `test_categorize_with_llm_tolerates_a_missing_match_type_column`
-  goes with the guard.
-- Tests: `test_steps.py` and `test_pipeline.py` re-pin the frames without the column;
-  `test_categorize_unique_products_characterization` is the one to read closely.
-
-## PR 2 — Emissions and aggregation read the rows' fixed columns
+## PR 1 — Emissions and aggregation read the rows' fixed columns
 
 - `emissions.py`: `calculate_emissions(df, region)` and `calculate_emissions_summary(df)` on
   `kilos_total`, `category` and `emissions_kg_co2e`, without column checks and without the
@@ -99,7 +62,7 @@ rebases.
 - Tests: the `pytest.raises(ValueError, match="not found")` family and the missing-column
   cases in `test_emissions.py` and `test_aggregation.py` go; everything else keeps passing.
 
-## PR 3 — Checks without guards for validated rows
+## PR 2 — Checks without guards for validated rows
 
 - `detect_unusual_sales`: the `missing_columns` raise, the `df.empty` and `valid_rows.empty`
   returns (rows are never empty, and at least one weighs more than zero), and `pd.to_numeric`.
@@ -116,7 +79,7 @@ rebases.
 - Tests: the tests of the deleted branches go; the messages, statuses and export frames the
   remaining tests pin do not change.
 
-## PR 4 — Chart and writer signatures
+## PR 3 — Chart and writer signatures
 
 - `plots/report.py`: delete the `filter_monthly_categories_by_type(...)` call whose result is
   discarded; delete `_remove_duplicate_xlabels` and `_normalize_axis_text` with their test —
@@ -140,6 +103,4 @@ rebases.
 
 Each PR: `just lint && just check && just test && just test-lab`. The golden fixture does not
 change in any PR. For every PR, render the golden run's PDF before and after on the same day with
-`SOURCE_DATE_EPOCH` fixed and compare the bytes. After PR 1,
-`git grep -n 'MergeCounts\|match_type_counts\|previously_categorized' python/insights` returns
-nothing.
+`SOURCE_DATE_EPOCH` fixed and compare the bytes.

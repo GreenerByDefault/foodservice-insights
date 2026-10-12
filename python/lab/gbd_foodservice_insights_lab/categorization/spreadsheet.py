@@ -5,7 +5,9 @@ Composes the product's `categorize_unique_products` and `merge_categorizations` 
 `gbd_foodservice_insights.analysis` does, then, for serving data, keeps only the entree rows.
 """
 
+import dataclasses
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,7 +15,7 @@ import pandas as pd
 from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
-from gbd_foodservice_insights.categorization.steps import MergeCounts, merge_categorizations
+from gbd_foodservice_insights.categorization.steps import merge_categorizations
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     get_previously_classified_entrees,
@@ -30,6 +32,28 @@ from gbd_foodservice_insights_lab.parsing import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MergeCounts:
+    """How many rows and products survived the merge, and why the rest did not."""
+
+    n_rows_before: int
+    n_rows_after: int
+    n_products_before: int
+    n_products_after: int
+    n_rows_uncategorized: int
+
+    @classmethod
+    def between(cls, before: pd.DataFrame, after: pd.DataFrame) -> MergeCounts:
+        """The counts across `merge_categorizations`, which drops only uncategorized rows."""
+        return cls(
+            n_rows_before=len(before),
+            n_rows_after=len(after),
+            n_products_before=before["product"].nunique(),
+            n_products_after=after["product"].nunique(),
+            n_rows_uncategorized=len(before) - len(after),
+        )
 
 
 def merge_summary(counts: MergeCounts, *, n_rows_non_entree: int | None = None) -> dict[str, Any]:
@@ -120,9 +144,8 @@ def categorize_spreadsheet_to_csvs(
         llm=llm,
         cache=load_categorization_cache(),
     )
-    df_result, counts = merge_categorizations(
-        categorized.cleaned_df, categorized.unique_products_df
-    )
+    df_result = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
+    counts = MergeCounts.between(categorized.cleaned_df, df_result)
 
     entree_review_df = None
     n_rows_non_entree = None
@@ -141,12 +164,16 @@ def categorize_spreadsheet_to_csvs(
         )
         if update_historical_entree_classifications:
             save_historical_entree_classifications(classified_products)
-        df_result, counts, n_rows_non_entree = filter_to_entrees(
-            df_result, counts, classified_products
-        )
+        # After the merge, not before, so that side/add-ons do not count toward the merge's "over
+        # 80% of products eliminated" check: a file that is mostly sides is still usable serving
+        # data. `n_products_after` keeps its pre-filter value for the same reason.
+        df_result, n_rows_non_entree = filter_to_entrees(df_result, classified_products)
+        counts = dataclasses.replace(counts, n_rows_after=len(df_result))
 
     summary = merge_summary(counts, n_rows_non_entree=n_rows_non_entree)
-    summary["match_type_counts"] = categorized.match_type_counts
+    summary["match_type_counts"] = (
+        categorized.unique_products_df["match_type"].value_counts().to_dict()
+    )
 
     # Write output
     df_result.to_csv(output_filepath, index=False)
