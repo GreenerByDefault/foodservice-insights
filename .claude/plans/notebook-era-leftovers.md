@@ -41,9 +41,7 @@ Two dead lines in the categorization steps belong to the same era: `clean_produc
 ends with a `fillna` for names that cannot be missing, `merge_categorizations` drops three
 columns that are never present, and `categorize_with_llm` guards a `match_type` column that
 only an isolation test omits. The `previously_categorized` column equals `category.notna()` at
-every step and no lab code reads it. And a correctness nit in the PDF's narrative: `_executive_narrative` names the three largest
-categories by CO₂e with `nlargest`, so a category bought only at zero weight can appear as
-"and Pork (0%)" when fewer than three categories carry emissions.
+every step and no lab code reads it.
 
 `caches-to-supabase.md` PR 5 adds `new_categorizations` to `CategorizedProducts`. Nothing below
 touches that, and the PRs here land in either order relative to it — whichever lands second
@@ -72,14 +70,7 @@ rebases.
   both a count and food" finding — reachable when enough months' lines all weigh zero. *Rejected: dissolving `schema.py` and moving
   `emissions.py` under `report/`.* Cosmetic once the above lands.
 
-## PR 1 — The narrative names only categories with emissions
-
-The plan's one behavior change. `_executive_narrative` filters `co2e_by_cat` to
-`total_kg_co2e > 0` before `nlargest(3, ...)`. A test in `test_pdf.py` builds a report with two
-emitting categories and one zero-weight category and asserts the narrative names two. The golden
-fixture does not change: its three top categories all emit.
-
-## PR 2 — Lab-only helpers and thresholds leave the product
+## PR 1 — Lab-only helpers and thresholds leave the product
 
 - `findings_to_frame`, `missingness_summary_frame`, `summarize_findings` → a new
   `gbd_foodservice_insights_lab/food_report/quality.py`; `summarize_findings` counts statuses
@@ -92,7 +83,7 @@ fixture does not change: its three top categories all emit.
   `outlier_line_items`, `per_product_weight_bounds`, `month_over_month_total_volatility`,
   `diner_meal_count_reasonableness` and `date_distribution`.
 
-## PR 3 — Categorization returns what the product reads
+## PR 2 — Categorization returns what the product reads
 
 - `merge_categorizations(original_df, categorized_products_df) -> pd.DataFrame`; the 20% check
   computes its two counts inline; the `fillna("No Matches Found")` after the left merge becomes a
@@ -112,7 +103,7 @@ fixture does not change: its three top categories all emit.
 - Tests: `test_steps.py` and `test_pipeline.py` re-pin the frames without the column;
   `test_categorize_unique_products_characterization` is the one to read closely.
 
-## PR 4 — Emissions and aggregation read the rows' fixed columns
+## PR 3 — Emissions and aggregation read the rows' fixed columns
 
 - `emissions.py`: `calculate_emissions(df, region)` and `calculate_emissions_summary(df)` on
   `kilos_total`, `category` and `emissions_kg_co2e`, without column checks and without the
@@ -131,7 +122,7 @@ fixture does not change: its three top categories all emit.
 - Tests: the `pytest.raises(ValueError, match="not found")` family and the missing-column
   cases in `test_emissions.py` and `test_aggregation.py` go; everything else keeps passing.
 
-## PR 5 — Checks without guards for validated rows
+## PR 4 — Checks without guards for validated rows
 
 - `detect_unusual_sales`: the `missing_columns` raise, the `df.empty` and `valid_rows.empty`
   returns (rows are never empty, and at least one weighs more than zero), and `pd.to_numeric`.
@@ -148,7 +139,7 @@ fixture does not change: its three top categories all emit.
 - Tests: the tests of the deleted branches go; the messages, statuses and export frames the
   remaining tests pin do not change.
 
-## PR 6 — Chart and writer signatures
+## PR 5 — Chart and writer signatures
 
 - `plots/report.py`: delete the `filter_monthly_categories_by_type(...)` call whose result is
   discarded; delete `_remove_duplicate_xlabels` and `_normalize_axis_text` with their test —
@@ -171,7 +162,7 @@ fixture does not change: its three top categories all emit.
 ## Verification
 
 Each PR: `just lint && just check && just test && just test-lab`. The golden fixture does not
-change in any PR. For PRs 2–6, render the golden run's PDF before and after on the same day with
-`SOURCE_DATE_EPOCH` fixed and compare the bytes. After PR 2,
+change in any PR. For every PR, render the golden run's PDF before and after on the same day with
+`SOURCE_DATE_EPOCH` fixed and compare the bytes. After PR 1,
 `git grep -n 'findings_to_frame\|missingness_summary_frame\|summarize_findings\|rel_path\|STATUS_SEVERITY\|VALID_REGIONS' python/insights`
-returns nothing; after PR 3, the same for `MergeCounts\|match_type_counts\|previously_categorized`.
+returns nothing; after PR 2, the same for `MergeCounts\|match_type_counts\|previously_categorized`.
