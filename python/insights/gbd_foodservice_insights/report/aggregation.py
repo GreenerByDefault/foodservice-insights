@@ -210,7 +210,8 @@ def calculate_plant_animal_split(
     df: pd.DataFrame,
     metric_col: str = "kilos_total",
 ) -> PlantAnimalSplit:
-    """Every GBD category is either plant or animal, so this splits every row."""
+    """Counts every row not in an animal category as plant, so `df` must hold only GBD
+    categories, as `build_food_report`'s validation ensures."""
     classified = df.assign(
         _group=df["category"]
         .isin(animal_product_categories())
@@ -227,6 +228,7 @@ def calculate_plant_animal_split(
         classified.groupby(["month_year", "_group"], dropna=False)[metric_col]
         .sum(min_count=1)
         .unstack(fill_value=0)
+        .rename_axis(columns=None)
         .reset_index()
     )
     # Ensure both columns exist even if one group has no data
@@ -271,6 +273,7 @@ def calculate_plant_protein_share(
         classified.groupby(["month_year", "_is_plant_protein"], dropna=False)[metric_col]
         .sum(min_count=1)
         .unstack(fill_value=0)
+        .rename_axis(columns=None)
         .reset_index()
         .rename(
             columns={

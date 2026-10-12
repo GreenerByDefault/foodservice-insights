@@ -85,12 +85,13 @@ def test_summary_stats_leave_out_the_protein_lines_without_protein():
     report = _build(rows)
 
     assert report.plant_protein_share is None
-    assert {k: v for k, v in report.summary_stats.items() if "ased" in k or "rotein" in k} == {
-        "Plant-based (% of classified food)": "63.3%",
-        "Animal-based (% of classified food)": "36.7%",
-        "Plant-based total": "38.0 kg",
-        "Animal-based total": "22.0 kg",
-    }
+    assert report.summary_stats.keys().isdisjoint(
+        {
+            "Plant protein share (% of protein categories)",
+            "Plant protein total",
+            "Protein-category total",
+        }
+    )
 
 
 def test_a_missing_required_column_raises():

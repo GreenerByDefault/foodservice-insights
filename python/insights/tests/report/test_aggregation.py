@@ -334,7 +334,7 @@ def test_calculate_plant_animal_split_counts_every_non_animal_row_as_plant():
                 "animal": [0.0, 3.0],
                 "plant_pct": [100.0, 25.0],
             }
-        ).rename_axis(columns="_group"),
+        ),
     )
 
 
@@ -365,7 +365,7 @@ def test_calculate_plant_animal_split_adds_the_missing_side_to_the_monthly_table
                 "animal": [0.0, 0.0],
                 "plant_pct": [100.0, 100.0],
             }
-        ).rename_axis(columns="_group"),
+        ),
     )
 
 
@@ -421,7 +421,7 @@ def test_calculate_plant_protein_share_ignores_non_protein_rows_and_keeps_months
                 "total_protein_metric": [4.0, 6.0],
                 "plant_protein_pct": [100.0, 0.0],
             }
-        ).rename_axis(columns="_is_plant_protein"),
+        ),
     )
 
 
@@ -448,7 +448,7 @@ def test_calculate_plant_protein_share_is_zero_percent_when_all_protein_is_anima
                 "total_protein_metric": [3.0, 1.0],
                 "plant_protein_pct": [0.0, 0.0],
             }
-        ).rename_axis(columns="_is_plant_protein"),
+        ),
     )
 
 
@@ -479,7 +479,7 @@ def test_calculate_plant_protein_share_is_100_percent_when_all_protein_is_plant(
                 "total_protein_metric": [3.0, 1.0],
                 "plant_protein_pct": [100.0, 100.0],
             }
-        ).rename_axis(columns="_is_plant_protein"),
+        ),
     )
 
 
