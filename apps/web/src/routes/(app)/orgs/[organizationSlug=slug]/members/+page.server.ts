@@ -21,19 +21,13 @@ export const load: PageServerLoad = async ({ locals, parent, depends }) => {
   depends(MEMBERS_DEPENDENCY);
 
   return {
-    members: await withDbErrorHandling(
-      () => _loadMembers(database(), { organizationId: organization.id, viewerId: auth.user.id }),
-      { action: "load an organization's members", context: { organizationId: organization.id } },
-    ),
+    members: await _loadMembers(database(), {
+      organizationId: organization.id,
+      viewerId: auth.user.id,
+    }),
     invites:
       role === 'admin'
-        ? await withDbErrorHandling(
-            () => _loadPendingInvites(database(), { organizationId: organization.id }),
-            {
-              action: "load an organization's pending invites",
-              context: { organizationId: organization.id },
-            },
-          )
+        ? await _loadPendingInvites(database(), { organizationId: organization.id })
         : null,
   };
 };
@@ -55,33 +49,41 @@ export async function _loadMembers(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId; viewerId: UserId },
 ): Promise<MemberRow[]> {
-  const rows = await db
-    .selectFrom('organizationMember')
-    .innerJoin('appUser', 'appUser.id', 'organizationMember.userId')
-    .innerJoin('auth.users', 'auth.users.id', 'appUser.id')
-    .select([
-      'organizationMember.userId as userId',
-      'appUser.displayName as displayName',
-      'auth.users.email as email',
-      'organizationMember.role as role',
-    ])
-    .where('organizationMember.organizationId', '=', params.organizationId)
-    // `organization_role` is a Postgres enum declared `('member', 'admin')`, so a bare enum
-    // comparison sorts by that declaration order, not alphabetically — `desc` is what puts
-    // 'admin' first.
-    .orderBy('organizationMember.role', 'desc')
-    .orderBy('auth.users.email', 'asc')
-    .execute();
+  return await withDbErrorHandling(
+    async () => {
+      const rows = await db
+        .selectFrom('organizationMember')
+        .innerJoin('appUser', 'appUser.id', 'organizationMember.userId')
+        .innerJoin('auth.users', 'auth.users.id', 'appUser.id')
+        .select([
+          'organizationMember.userId as userId',
+          'appUser.displayName as displayName',
+          'auth.users.email as email',
+          'organizationMember.role as role',
+        ])
+        .where('organizationMember.organizationId', '=', params.organizationId)
+        // `organization_role` is a Postgres enum declared `('member', 'admin')`, so a bare enum
+        // comparison sorts by that declaration order, not alphabetically — `desc` is what puts
+        // 'admin' first.
+        .orderBy('organizationMember.role', 'desc')
+        .orderBy('auth.users.email', 'asc')
+        .execute();
 
-  return rows.map((row) => ({
-    userId: row.userId,
-    displayName: row.displayName,
-    // `auth.users.email` is nullable in the generated type but never actually null for a row
-    // that made it into `app_user` — see `AuthenticatedUser.email`'s own comment.
-    email: row.email as string,
-    role: row.role,
-    isYou: row.userId === params.viewerId,
-  }));
+      return rows.map((row) => ({
+        userId: row.userId,
+        displayName: row.displayName,
+        // `auth.users.email` is nullable in the generated type but never actually null for a row
+        // that made it into `app_user` — see `AuthenticatedUser.email`'s own comment.
+        email: row.email as string,
+        role: row.role,
+        isYou: row.userId === params.viewerId,
+      }));
+    },
+    {
+      action: "load an organization's members",
+      context: { organizationId: params.organizationId },
+    },
+  );
 }
 
 export type InviteRow = {
@@ -104,24 +106,32 @@ export async function _loadPendingInvites(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId },
 ): Promise<InviteRow[]> {
-  const rows = await db
-    .selectFrom('organizationInvite')
-    .select([
-      'id as inviteId',
-      'email',
-      'role',
-      'expiresAt',
-      sql<boolean>`expires_at <= now()`.as('isExpired'),
-      sql<Date>`now()`.as('now'),
-    ])
-    .where('organizationId', '=', params.organizationId)
-    .where('status', '=', 'pending')
-    // `id desc` breaks a tie on `createdAt`: `now()` is fixed for a whole transaction, so two
-    // invites created in the same one — as a fixture, or two rapid re-invites — share one
-    // timestamp. `id` is a UUIDv7, so this still lands newest-first.
-    .orderBy('createdAt', 'desc')
-    .orderBy('id', 'desc')
-    .execute();
+  return await withDbErrorHandling(
+    async () => {
+      const rows = await db
+        .selectFrom('organizationInvite')
+        .select([
+          'id as inviteId',
+          'email',
+          'role',
+          'expiresAt',
+          sql<boolean>`expires_at <= now()`.as('isExpired'),
+          sql<Date>`now()`.as('now'),
+        ])
+        .where('organizationId', '=', params.organizationId)
+        .where('status', '=', 'pending')
+        // `id desc` breaks a tie on `createdAt`: `now()` is fixed for a whole transaction, so two
+        // invites created in the same one — as a fixture, or two rapid re-invites — share one
+        // timestamp. `id` is a UUIDv7, so this still lands newest-first.
+        .orderBy('createdAt', 'desc')
+        .orderBy('id', 'desc')
+        .execute();
 
-  return rows;
+      return rows;
+    },
+    {
+      action: "load an organization's pending invites",
+      context: { organizationId: params.organizationId },
+    },
+  );
 }

@@ -149,7 +149,9 @@ Applies to `packages/storage` and every app or package that imports it.
   doesn't recognize.
 - **The exported `_`-prefixed function wraps its own DB calls in `withDbErrorHandling`**
   (`apps/web/src/lib/server/db.ts`), so a failure is logged with context instead of leaking to
-  the client — or the route handler does, when there is no `_` function to own it. It splits
+  the client — or the route handler does, when there is no `_` function to own it. A `load`'s
+  `_load*` function is covered by the same rule, so the `load` and any `poll/+server.ts` that
+  reuse it call it bare. It splits
   three ways — a statement we could not complete is a 503, one Postgres refused is a 500,
   anything else is rethrown — and the status is not the caller's to pass in.
 - **A violation a caller *expects* is handled inside the callback, not by the wrapper.** If it
