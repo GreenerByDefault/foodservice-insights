@@ -20,7 +20,12 @@ a report action swaps the view (Retry and Cancel move it to the h1 with `focusPa
 the Remove-member dialog hands it back to the "Manage {name}" trigger even though the menu item
 that opened it is gone — bits-ui does that unaided, and `member-actions.svelte.test.ts` pins it),
 the confirm dialog refusing Escape while its request is in flight (closing would reset
-`actionState` and hide a late failure), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
+`actionState` and hide a late failure), a focus ring that passes 3:1 (`--ring` is oklch 0.556, the
+`--muted-foreground` grey, drawn at full opacity by every `ui/` primitive and by the base layer's
+`outline-ring` for plain links), an inset ring on the keyboard-highlighted `DropdownMenu.Item` (the
+only menu-item part we use — the unused checkbox, radio and sub-trigger parts still lack it), the
+rejection view's 12px texts at 4.5:1, a base-layer `prefers-reduced-motion` rule that collapses
+every animation and transition (the `!important`s are what beat Tailwind's utilities layer), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
 (nothing filters them; see `compilerOptions` in [`vite.config.ts`](../../apps/web/vite.config.ts)).
 `REQUIREMENTS.md` § Design and accessibility asks for a GBD accessibility review; this is the pass
 before it.
@@ -41,11 +46,12 @@ is focusable or visibly focused can only be proven in Playwright (`toBeFocused`,
 
 Facts marked **verified** were read in the code or `node_modules` on 2026-10-11. Contrast ratios
 are computed from the oklch tokens in [`layout.css`](../../apps/web/src/routes/layout.css); the
-axe gate in the last PR is what checks them for real.
+axe gate in PR 1 is what checks them for real.
 
-Each PR re-baselines its own screenshots: `pnpm turbo run screenshots:update --filter=@gbd/web`
-from the repo root (see [`e2e/README.md`](../../apps/web/e2e/README.md) § Screenshots), then
-review every changed PNG rather than committing the batch.
+A fix that changes how a screen looks re-baselines its screenshots: `pnpm turbo run
+screenshots:update --filter=@gbd/web` from the repo root (see
+[`e2e/README.md`](../../apps/web/e2e/README.md) § Screenshots), then review every changed PNG
+rather than committing the batch.
 
 ## Decisions
 
@@ -54,7 +60,10 @@ review every changed PNG rather than committing the batch.
   (`@axe-core/playwright`); the PR measures the wall-clock delta and scales back to one scan per
   route if it is more than ~10s locally.
 - *Accepted: a darker `--ring` at full opacity, and an inset ring on highlighted menu items.* Both
-  are shadcn-svelte defaults that fail 3:1 (1.4.11); the look stays neutral grey.
+  shadcn-svelte defaults failed 3:1 (1.4.11); the look stays neutral grey.
+- *Accepted: contrast fixed by colour, not size.* The rejection view's example chips became
+  `text-foreground` and its "Affects the whole file" box lost its red tint. A bigger font would
+  not have helped — below 18.66px bold it is still normal-size text needing 4.5:1.
 - *Considered, not done — each a judgement that the cost outweighs the gain:*
   - The reconnecting notice stays `role="alert"`. Losing the connection is worth an interruption,
     and it does not re-announce per poll (the `{#if}` stays mounted while `retrying`).
@@ -73,41 +82,9 @@ review every changed PNG rather than committing the batch.
     above Cancel on phones while Tab reaches Cancel first — both shadcn conventions, left alone.
   - The `.dark` block in `layout.css` is dead (nothing applies the class) and is not touched here.
 
-## PR 1 — Focus is visible, small text passes, motion can be reduced
+## PR 1 — An axe scan of every captured screen
 
-All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primitives.
-
-- **The focus ring is 1.5:1.** `--ring` is oklch 0.708 (#a1a1a1) and every primitive draws
-  `focus-visible:ring-3 focus-visible:ring-ring/50`; at 50% over white that is #d0d0d0. The 1px
-  `border-ring` beside it is 2.6:1. Set `--ring: oklch(0.556 0 0)` (#737373, 4.7:1 — the same grey
-  as `--muted-foreground`) and drop the `/50` in `button.svelte:7`, both branches of
-  `input.svelte`, `radio-group-item.svelte:17`, and `input-otp-slot.svelte:18` (`data-active:`).
-  The base layer's `outline-ring/50` on `*` (`layout.css:121`), which colours the browser outline
-  on plain links, becomes `outline-ring`; the org tabs already use `focus-visible:outline-ring`.
-  The file drop zone's `peer-focus-visible:ring-ring` is already at full opacity and picks up the
-  new `--ring` with no edit.
-- **A highlighted menu item is 1.1:1.** `dropdown-menu-item.svelte:23` (and `-checkbox-item`,
-  `-radio-item`, `-sub-trigger`) uses `outline-hidden` with only `focus:bg-accent` (oklch 0.97).
-  bits-ui moves real focus to the item on arrow keys, so add
-  `focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`; pointer hover keeps the
-  subtle background.
-- **Two 12px texts in [`rejection-view.svelte`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/new/rejection-view.svelte) miss 4.5:1.**
-  The example chips (`:70`, muted on `bg-muted`) are 4.35:1 — use `text-foreground`. "Affects the
-  whole file" (`:43`, destructive on `bg-destructive/5`) is 4.37:1 — remove the tint; on white the
-  red is 4.77:1. (`text-sm` would not help: 14px is still normal-size text.)
-- **Nothing honours `prefers-reduced-motion`** except the two spinners' `motion-safe:` guards.
-  `tw-animate-css` ships no such rule (**verified**, zero matches in its dist), so dialog and
-  menu zoom/fade and the OTP caret blink always play. Add one base-layer rule under
-  `@media (prefers-reduced-motion: reduce)` that collapses `animation-duration` and
-  `transition-duration` to near zero.
-
-Tests: none of this is testable by assertion beyond the axe gate (PR 2), which checks the contrast
-numbers for real. Screenshots: every shot with a focused control (`auth/sign-in-*`,
-`account/account*`, possibly the open-menu shots) — review that only the ring changed.
-
-## PR 2 — An axe scan of every captured screen
-
-Lands last so it starts green and guards the rest.
+The audit's fixes have landed, so this starts green and guards them.
 
 - `@axe-core/playwright` in the `catalog:` block of `pnpm-workspace.yaml`, as a devDependency of
   `apps/web`. It peers on `playwright-core`; with `strictPeerDependencies: true`, add
@@ -129,15 +106,6 @@ Lands last so it starts green and guards the rest.
 
 ## Verification
 
-Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`, and `svelte-autofixer` on
-every `.svelte` file touched. Re-baseline screenshots with the turbo command in Context and read
-each changed image.
-
-Drive the app for what tests cannot prove (the `run` skill or the Playwright MCP):
-
-- PR 1: Tab through the sign-in form, a page of buttons, and an open menu with the arrow keys;
-  every focused control is unmistakable against white.
-- If a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
-  first letter stays lowercase and the button enables.
-- PR 2: the suite passes with zero violations, and introducing a deliberate one (remove a label
-  locally) fails it with a readable message.
+From the repo root: `pnpm lint && pnpm check && pnpm test`. Then prove the gate bites: introduce
+a deliberate violation locally (remove a label) and check the suite fails with a message that
+names the rule and the node.
