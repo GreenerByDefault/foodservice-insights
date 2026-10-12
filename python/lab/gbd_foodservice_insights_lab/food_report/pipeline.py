@@ -267,7 +267,6 @@ def run_food_report(
                 charts,
                 Path(artifact_paths["pdf_path"]),
                 client_name=metadata.get("client", input_path.parent.name),
-                baseline_pilot=metadata.get("baseline_pilot", "baseline"),
                 show_quality_successes=show_quality_successes,
             )
 

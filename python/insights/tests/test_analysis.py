@@ -351,7 +351,7 @@ def test_analyze_golden_deliverables(
         assert narrative is not None
         pdf_inputs.update(
             {
-                "title": [client_name, kwargs["baseline_pilot"], report.mode],
+                "title": [client_name, report.mode],
                 "summary_stats": report.summary_stats,
                 "narrative": dataclasses.asdict(narrative),
                 "tables": {
@@ -462,7 +462,6 @@ def test_hands_the_report_the_forms_answers(
     }
     assert fake_report.pdf_kwargs == {
         "client_name": client,
-        "baseline_pilot": "baseline",
         "show_quality_successes": False,
     }
 

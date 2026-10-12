@@ -21,7 +21,7 @@ servings per entree, no emissions — and it threads through every layer:
   `run_all_diagnostics(serving=...)` has a fallback that swaps the metric column.
 - `report/plots/report.py`: `serving` flag, `emissions_summary: DataFrame | None`, a check for the
   emissions column.
-- `report/pdf.py`: `create_title_page(procurement_serving=...)`, `create_key_value_summary_page`
+- `report/pdf.py`: the title page's subtitle is `report.mode.title()`, `create_key_value_summary_page`
   (serving's substitute for the narrative), `_executive_narrative` returning `None`, and
   `if procurement is not None` around three table pages.
 - `report/excel.py`: `procurement_sheets(None)`, an optional "Emissions Summary" sheet.
@@ -87,27 +87,16 @@ Facts that shape the design:
 - **`summary_stats` leaves `FoodReport`.** The lab computes its own, from the typed fields it
   already has, in `food_report/summary.py`. The narrative takes its period from a public
   `date_range_label(rows)` in `food_report.py`, the one line of `_summary_stats` the product reads.
-- **The customer's title page says "Procurement", not "Baseline | Procurement".**
-  `baseline`/`pilot` is GBD's pilot-program phase: meaningful on the lab's reports, which
-  carry it in `client_metadata.json`, and noise to a web-app customer. `create_title_page`
-  takes its subtitle parts from the caller, and `write_report_pdf` takes `phase: str | None`
-  in place of `baseline_pilot` — the lab passes its metadata's phase, `analyze()` passes
-  `None`. It is its own PR, first, so the one customer-visible change in this plan is a
-  one-line diff of the golden fixture and every later PR stays byte-identical.
+- **The title page names only the report type.** `create_title_page(pdf, client, subtitle)`
+  takes the subtitle as display text, so the product passes "Procurement" and the lab's serving
+  PDF passes "Serving". GBD's pilot-program phase (`baseline`/`pilot`) is not on any cover: it
+  was noise to a web-app customer, and the lab still records it in `client_metadata.json` and
+  the run manifest. Nothing in the remaining PRs changes customer-visible output.
 - **`check_per_product_weight_bounds` takes `low` and `high`** rather than choosing a YAML group
   from the metric; `run_all_diagnostics` reads `per_product_weight_bounds` and passes them. It is
   the one check with a serving-specific threshold, and this keeps the lab's bounds in the lab.
 
-## PR 1 — The customer's title page drops the phase
-
-- `pdf.py`: `create_title_page(pdf, client, subtitle_parts: Sequence[str])`, joined with
-  `" | "` and title-cased as today; `write_report_pdf(..., phase: str | None, ...)` passes
-  `(phase, report.mode)` or `(report.mode,)`. `analysis.py` passes `phase=None`; the lab's
-  `run_food_report` passes `metadata.get("baseline_pilot", "baseline")` as it does now.
-- Tests: `test_title_page_*` in `test_pdf.py` take subtitle parts; the golden fixture's
-  `title` entry becomes `["Acme Foodservice", "procurement"]` and nothing else changes.
-
-## PR 2 — `Metric` replaces the string-derived labels
+## PR 1 — `Metric` replaces the string-derived labels
 
 A prefactor with no behavior change; serving still exists, as `SERVINGS` in `metric.py`, so the
 serving tests keep passing and prove the labels come out the same. (The PR after this one is
@@ -118,10 +107,10 @@ the lab's serving report, so the one branch `run_all_diagnostics` keeps here is 
   `required_columns_for_mode`, `REQUIRED_COLUMNS_BY_MODE`. `build_food_report` maps the mode to a
   `Metric`; `FoodReport.metric: Metric` replaces the `metric_total` property; `_validate_rows`
   becomes public `validate_rows(rows, metric)` with required columns
-  `("date", "product", "category", metric.column)`, since PR 3's lab report validates the same way.
+  `("date", "product", "category", metric.column)`, since PR 2's lab report validates the same way.
 - `aggregation.py`, `checks.py` (`_unit_label` goes; `_format_quantity` takes `metric.unit`; the
   bounds check takes `metric`, `low`, `high`; `run_all_diagnostics` reads the YAML group for the
-  mode — the one branch PR 4 deletes), `plots/report.py`, `plots/figures.py`, `plots/panels.py`
+  mode — the one branch PR 3 deletes), `plots/report.py`, `plots/figures.py`, `plots/panels.py`
   (`metric_label: str` parameters become `metric: Metric`), `food_report.py`
   (`metric_value_unit` is `metric.unit`).
 - Lab: `food_report/pipeline.py` reads `report.metric.column` and `report.metric.per_head(...)`;
@@ -130,9 +119,9 @@ the lab's serving report, so the one branch `run_all_diagnostics` keeps here is 
 - Tests: the helpers' tests become `Metric` tests; everything else re-points. The golden fixture
   does not change.
 
-## PR 3 — The lab's serving report
+## PR 2 — The lab's serving report
 
-After this PR nothing in the lab calls `build_food_report(mode="serving")`, so PR 4 can delete it.
+After this PR nothing in the lab calls `build_food_report(mode="serving")`, so PR 3 can delete it.
 
 - `gbd_foodservice_insights_lab/food_report/serving.py`: `SERVINGS`, `SERVING_LINE_BOUNDS`, a
   frozen `ServingReport` (rows, diner_or_meal, diner_meal_mapping, diner_meals_in_data,
@@ -142,13 +131,13 @@ After this PR nothing in the lab calls `build_food_report(mode="serving")`, so P
     `validate_rows(rows, SERVINGS)`, the month column and positive-count check as
     `build_food_report` does them, `aggregate_data`/`create_template_data`/`identify_*` with
     `SERVINGS`, the two plant shares, and the six checks called directly with `SERVINGS` and the
-    serving bounds (not `run_all_diagnostics`, which still reads the product YAML until PR 4).
+    serving bounds (not `run_all_diagnostics`, which still reads the product YAML until PR 3).
   - `serving_charts(report)` — a context manager over `plot_diner_meal_numbers`,
     `plot_food_and_drink_comparison_page`, `plot_category_totals`,
     `plot_plant_breakdown_overview`, `plot_overall_drivers` and `plot_category_drivers_pages`,
     closed on exit like `build_report_charts`.
-  - `write_serving_pdf(report, figures, path, *, client_name, phase, show_quality_successes)`
-    — `create_title_page` with `(phase, "serving")`, the key-value summary page (moved
+  - `write_serving_pdf(report, figures, path, *, client_name, show_quality_successes)`
+    — `create_title_page` with `"Serving"`, the key-value summary page (moved
     here from `pdf.py`, with its test), the charts, `create_category_template_pages`, and the
     quality page through a public `quality_lines` (today's `_quality_to_lines`).
   - `write_serving_workbook(report, path)` — `write_excel_workbook` with the four sheets a serving
@@ -161,7 +150,7 @@ After this PR nothing in the lab calls `build_food_report(mode="serving")`, so P
   existing serving cases in `tests/food_report/test_outputs.py` and `test_quality_contract.py`
   keep passing through `run_food_report`.
 
-## PR 4 — Serving leaves the product
+## PR 3 — Serving leaves the product
 
 - `schema.py`: delete `ReportMode`, `VALID_REPORT_MODES`. `metric.py`: delete `SERVINGS`.
 - `food_report.py`: `build_food_report(rows, *, diner_meal_mapping, region, diner_or_meal,
@@ -176,7 +165,7 @@ After this PR nothing in the lab calls `build_food_report(mode="serving")`, so P
   `per_product_serving_bounds`.
 - `plots/report.py`: `generate_all_report_plots(aggregation, diner_meal_mapping, emissions_summary,
   plant_animal_split, plant_protein_share, diner_or_meal)` always draws the two emissions pages.
-- `pdf.py`: `write_report_pdf` passes `(phase, "procurement")` or `("procurement",)`, and always
+- `pdf.py`: `write_report_pdf` passes `"Procurement"` to `create_title_page`, and always
   writes the narrative and the three table pages their data supports; `_executive_narrative` returns
   `ExecutiveNarrative`, whose period is `date_range_label(report.rows)` and whose
   `co2e_kg_per_diner_or_meal` is a `float`.
@@ -191,10 +180,9 @@ After this PR nothing in the lab calls `build_food_report(mode="serving")`, so P
 
 ## Verification
 
-Each PR: `just lint && just check && just test && just test-lab`. PR 1 changes the title page's
-subtitle and nothing else; the fixture's `title` entry is the whole diff. For PRs 2 and 4,
+Each PR: `just lint && just check && just test && just test-lab`. For PRs 1 and 3,
 render the golden run's PDF before and after on the same day with `SOURCE_DATE_EPOCH` fixed and
 compare the bytes; the title page's date is the only thing that could differ, and it does not
-within a day. After PR 4, `git grep -n 'serving\|ReportMode\|metric_total\|summary_stats' python/insights`
+within a day. After PR 3, `git grep -n 'serving\|ReportMode\|metric_total\|summary_stats' python/insights`
 returns nothing, and the step-2 runscript still produces a serving bundle from
 `python/lab/test_data/`.
