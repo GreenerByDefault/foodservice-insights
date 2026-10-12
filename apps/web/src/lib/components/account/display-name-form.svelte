@@ -48,6 +48,7 @@ async function handleSubmit(event: SubmitEvent) {
       maxlength={MAX_DISPLAY_NAME_LENGTH}
       required
       autocomplete="name"
+      autocapitalize="words"
       bind:value={name}
     />
     <Field.Description>Shown to your teammates.</Field.Description>

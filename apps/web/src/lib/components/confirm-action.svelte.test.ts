@@ -56,4 +56,18 @@ describe('ConfirmAction', () => {
       .element(screen.getByRole('heading', { name: 'Do the thing?' }))
       .not.toBeInTheDocument();
   });
+
+  test('the typed confirmation resists phone keyboard autocapitalisation and autocorrect', async () => {
+    const screen = await render(ConfirmAction, {
+      ...baseProps(vi.fn()),
+      confirmPhrase: 'eric@example.com',
+      open: true,
+    });
+
+    const input = screen.getByLabelText('Type "eric@example.com" to confirm');
+
+    await expect.element(input).toHaveAttribute('autocapitalize', 'none');
+    await expect.element(input).toHaveAttribute('autocorrect', 'off');
+    await expect.element(input).toHaveAttribute('spellcheck', 'false');
+  });
 });

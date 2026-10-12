@@ -109,7 +109,15 @@ async function confirm() {
     {#if confirmPhrase !== undefined}
       <Field.Field>
         <Field.Label for={confirmPhraseId}>Type "{confirmPhrase}" to confirm</Field.Label>
-        <Input id={confirmPhraseId} autocomplete="off" bind:value={typedPhrase} />
+        <!-- The phrase is compared exactly, so keep iOS from capitalising its first letter. -->
+        <Input
+          id={confirmPhraseId}
+          autocomplete="off"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck={false}
+          bind:value={typedPhrase}
+        />
       </Field.Field>
     {/if}
     {#if actionState.status === 'error'}
