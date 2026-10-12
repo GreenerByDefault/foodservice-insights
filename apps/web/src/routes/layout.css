@@ -127,3 +127,9 @@
     @apply font-sans;
   }
 }
+
+/* The column every page's content sits in. The header and the content beneath it line up because
+   both use this. */
+@utility page-width {
+  @apply mx-auto w-full max-w-4xl px-6 sm:px-8;
+}

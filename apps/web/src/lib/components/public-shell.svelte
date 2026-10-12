@@ -15,9 +15,7 @@ let { children }: Props = $props();
 <div class="flex min-h-svh flex-col">
   <PublicHeader />
 
-  <main
-    class="mx-auto flex w-full max-w-4xl flex-1 flex-col items-start justify-center gap-4 px-6 py-8 sm:px-8"
-  >
+  <main class="page-width flex flex-1 flex-col items-start justify-center gap-4 py-8">
     {@render children()}
   </main>
 </div>

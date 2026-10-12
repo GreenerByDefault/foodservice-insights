@@ -4,10 +4,10 @@
  * height sets the minimum height of a `fullPage` capture. `tablet` and `desktop` are one iPad,
  * rotated.
  *
- * `desktop` is 1024 rather than a typical monitor width because the shell is `max-w-4xl` (896px)
- * with `p-8`, so content caps at 832px — every viewport at or above 896 renders *identical*
- * content, and a wider one only adds empty gutter. 1024 is the narrowest width at which the
- * layout is fully realized.
+ * `desktop` is 1024 rather than a typical monitor width because the shell's `page-width` is
+ * `max-w-4xl` (896px) with `px-8`, so content caps at 832px — every viewport at or above 896
+ * renders *identical* content, and a wider one only adds empty gutter. 1024 is the narrowest width
+ * at which the layout is fully realized.
  */
 export const SCREENSHOT_VIEWPORTS = {
   desktop: { width: 1024, height: 768 },

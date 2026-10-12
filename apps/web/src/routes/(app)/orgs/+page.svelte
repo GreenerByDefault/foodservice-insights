@@ -12,9 +12,11 @@ let { data }: PageProps = $props();
   <title>{pageTitle('Organizations')}</title>
 </svelte:head>
 
-<div class="flex w-full flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-  <PageHeading>Organizations</PageHeading>
-  <Button href="/orgs/new">New organization</Button>
-</div>
+<PageHeading>
+  Organizations
+  {#snippet actions()}
+    <Button href="/orgs/new">New organization</Button>
+  {/snippet}
+</PageHeading>
 
 <OrganizationsList organizations={data.organizations} />
