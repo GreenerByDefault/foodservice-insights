@@ -32,8 +32,7 @@ let formState: FormState = $state({ status: 'idle' });
 let emailInputElement: HTMLInputElement | null = $state(null);
 const id = $props.id();
 const emailErrorId = `${id}-email-error`;
-// A legend names its fieldset, not the radiogroup inside it.
-const roleLegendId = `${id}-role-legend`;
+const roleTitleId = `${id}-role-title`;
 
 async function handleSubmit(event: SubmitEvent) {
   event.preventDefault();
@@ -87,10 +86,10 @@ async function handleSubmit(event: SubmitEvent) {
       {/if}
     </Field.Field>
 
-    <Field.Set>
-      <Field.Legend id={roleLegendId} variant="label">Role</Field.Legend>
+    <Field.Field>
+      <Field.Title id={roleTitleId}>Role</Field.Title>
       <RadioGroup
-        aria-labelledby={roleLegendId}
+        aria-labelledby={roleTitleId}
         name={FIELD.role}
         value={role}
         onValueChange={(value) => (role = value as OrganizationRole)}
@@ -105,7 +104,7 @@ async function handleSubmit(event: SubmitEvent) {
           Admin
         </Field.Label>
       </RadioGroup>
-    </Field.Set>
+    </Field.Field>
   </Field.Set>
 
   {#if formState.status === 'rate-limited'}

@@ -66,9 +66,8 @@ let replaceButtonElement: HTMLButtonElement | HTMLAnchorElement | null = $state(
 let unitSystemElement: HTMLElement | null = $state(null);
 const id = $props.id();
 const unitSystemErrorId = `${id}-unit-system-error`;
-// A legend names its fieldset, not the radiogroup inside it, so each group points back at its own.
-const unitSystemLegendId = `${id}-unit-system-legend`;
-const countsBasisLegendId = `${id}-counts-basis-legend`;
+const unitSystemTitleId = `${id}-unit-system-title`;
+const countsBasisTitleId = `${id}-counts-basis-title`;
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
   switch (reason) {
@@ -272,11 +271,11 @@ async function backToForm() {
         />
       </Field.Field>
 
-      <Field.Set>
-        <Field.Legend id={unitSystemLegendId} variant="label">Weight unit</Field.Legend>
+      <Field.Field>
+        <Field.Title id={unitSystemTitleId}>Weight unit</Field.Title>
         <RadioGroup
           bind:ref={unitSystemElement}
-          aria-labelledby={unitSystemLegendId}
+          aria-labelledby={unitSystemTitleId}
           name={FIELD.unitSystem}
           aria-invalid={unitSystemError ? true : undefined}
           aria-describedby={unitSystemError ? unitSystemErrorId : undefined}
@@ -293,16 +292,16 @@ async function backToForm() {
         {#if unitSystemError}
           <Field.Error id={unitSystemErrorId}>{unitSystemError}</Field.Error>
         {/if}
-      </Field.Set>
+      </Field.Field>
     </Field.Set>
 
     <Field.Set>
       <Field.Legend>Monthly counts</Field.Legend>
 
-      <Field.Set>
-        <Field.Legend id={countsBasisLegendId} variant="label">Counts basis</Field.Legend>
+      <Field.Field>
+        <Field.Title id={countsBasisTitleId}>Counts basis</Field.Title>
         <RadioGroup
-          aria-labelledby={countsBasisLegendId}
+          aria-labelledby={countsBasisTitleId}
           name={FIELD.countsBasis}
           value={countsBasis}
           onValueChange={(value) => (countsBasis = value as CountsBasis)}
@@ -314,7 +313,7 @@ async function backToForm() {
             </Field.Label>
           {/each}
         </RadioGroup>
-      </Field.Set>
+      </Field.Field>
 
       {#if months}
         <MonthlyCounts {months} basis={countsBasis} bind:counts />
