@@ -3,7 +3,7 @@ import json
 import math
 import os
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from types import MappingProxyType
@@ -89,7 +89,7 @@ class FakeReport:
         return object()
 
     @contextmanager
-    def build_report_charts(self, report: object) -> Iterator[object]:
+    def build_report_charts(self, report: object) -> Generator[object]:
         yield object()
 
     def write_report_pdf(self, report: object, charts: object, path: Path, **kwargs: Any) -> None:

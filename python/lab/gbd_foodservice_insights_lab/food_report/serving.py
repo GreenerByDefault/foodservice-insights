@@ -7,7 +7,7 @@ This Report" pages, which are written about procurement data.
 """
 
 import logging
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -212,7 +212,7 @@ def _summary_stats(
 
 
 @contextmanager
-def serving_charts(report: ServingReport) -> Iterator[ReportCharts]:
+def serving_charts(report: ServingReport) -> Generator[ReportCharts]:
     with close_new_figures_on_error():
         figures = [
             plot_diner_meal_numbers(report.diner_meal_mapping, report.diner_or_meal),

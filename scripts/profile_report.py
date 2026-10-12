@@ -22,7 +22,7 @@ import pstats
 import re
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
@@ -57,7 +57,7 @@ def synthetic_rows(row_count: int, seed: int = 0) -> pd.DataFrame:
 
 
 @contextmanager
-def timed(stage: str, timings: dict[str, float]) -> Iterator[None]:
+def timed(stage: str, timings: dict[str, float]) -> Generator[None]:
     start = time.perf_counter()
     yield
     timings[stage] = time.perf_counter() - start

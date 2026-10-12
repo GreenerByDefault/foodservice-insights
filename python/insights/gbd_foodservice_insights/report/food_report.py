@@ -7,7 +7,7 @@ wrapper that also writes the data scientists' bundle.
 """
 
 import logging
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -182,7 +182,7 @@ def validate_rows(rows: pd.DataFrame, metric: Metric) -> None:
 
 
 @contextmanager
-def build_report_charts(report: FoodReport) -> Iterator[ReportCharts]:
+def build_report_charts(report: FoodReport) -> Generator[ReportCharts]:
     with close_new_figures_on_error():
         figures = report_plots.generate_all_report_plots(
             aggregation=report.aggregation,
