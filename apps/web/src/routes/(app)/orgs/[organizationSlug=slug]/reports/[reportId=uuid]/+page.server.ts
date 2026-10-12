@@ -27,16 +27,12 @@ export const load: PageServerLoad = async ({ params, parent }) => {
   const { organization } = await parent();
   const reportId = params.reportId as ReportId;
 
-  return await withDbErrorHandling(
-    () =>
-      _loadReport(database(), {
-        organizationId: organization.id,
-        organizationSlug: organization.slug,
-        reportId,
-        ..._reportEnvironment(),
-      }),
-    { action: 'load a report', context: { organizationId: organization.id, reportId } },
-  );
+  return await _loadReport(database(), {
+    organizationId: organization.id,
+    organizationSlug: organization.slug,
+    reportId,
+    ..._reportEnvironment(),
+  });
 };
 
 /** What `_loadReport` needs beyond the ids, read from the environment. Shared with
@@ -131,71 +127,79 @@ export async function _loadReport(
     pollIntervalMs: number;
   },
 ): Promise<ReportPageData> {
-  // Latest attempt via `order by attempt_number desc limit 1`, safe because of the
-  // `(report_id, attempt_number)` unique constraint. Result files aren't joined here — they
-  // only exist once an attempt succeeds, so paying for the join on every poll to use it once
-  // is the wrong trade.
-  const row: ReportRow | undefined = await db
-    .selectFrom('report')
-    .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
-    .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
-    // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL` (public-schema.sql), and a
-    // report outlives the account that submitted it (see api/account/+server.ts).
-    .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
-    .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
-    .select([
-      'report.id as reportId',
-      'report.name as reportName',
-      'report.siteName as siteName',
-      'appUser.displayName as creatorDisplayName',
-      'auth.users.email as creatorEmail',
-      'inputFile.id as inputFileId',
-      'inputFile.originalFilename as inputFileOriginalFilename',
-      'inputFile.byteSize as inputFileByteSize',
-      'inputFile.workbookByteSize as inputFileWorkbookByteSize',
-      'analysisAttempt.id as attemptId',
-      'analysisAttempt.attemptNumber as attemptNumber',
-      'analysisAttempt.status as status',
-      'analysisAttempt.createdAt as createdAt',
-      'analysisAttempt.claimedAt as claimedAt',
-      'analysisAttempt.finishedAt as finishedAt',
-      'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
-      'analysisAttempt.failureReason as failureReason',
-      // Selected alongside the row rather than as a separate query, so it's one consistent
-      // snapshot — see `ReportPageData.now`.
-      sql<Date>`now()`.as('now'),
-    ])
-    .where('report.id', '=', params.reportId)
-    .where('report.organizationId', '=', params.organizationId)
-    .where('report.deletedAt', 'is', null)
-    .orderBy('analysisAttempt.attemptNumber', 'desc')
-    .limit(1)
-    .executeTakeFirst();
+  return await withDbErrorHandling(
+    async () => {
+      // Latest attempt via `order by attempt_number desc limit 1`, safe because of the
+      // `(report_id, attempt_number)` unique constraint. Result files aren't joined here — they
+      // only exist once an attempt succeeds, so paying for the join on every poll to use it once
+      // is the wrong trade.
+      const row: ReportRow | undefined = await db
+        .selectFrom('report')
+        .innerJoin('inputFile', 'inputFile.reportId', 'report.id')
+        .innerJoin('analysisAttempt', 'analysisAttempt.reportId', 'report.id')
+        // Left, not inner: `created_by_user_id` goes null on `ON DELETE SET NULL` (public-schema.sql), and a
+        // report outlives the account that submitted it (see api/account/+server.ts).
+        .leftJoin('appUser', 'appUser.id', 'report.createdByUserId')
+        .leftJoin('auth.users', 'auth.users.id', 'appUser.id')
+        .select([
+          'report.id as reportId',
+          'report.name as reportName',
+          'report.siteName as siteName',
+          'appUser.displayName as creatorDisplayName',
+          'auth.users.email as creatorEmail',
+          'inputFile.id as inputFileId',
+          'inputFile.originalFilename as inputFileOriginalFilename',
+          'inputFile.byteSize as inputFileByteSize',
+          'inputFile.workbookByteSize as inputFileWorkbookByteSize',
+          'analysisAttempt.id as attemptId',
+          'analysisAttempt.attemptNumber as attemptNumber',
+          'analysisAttempt.status as status',
+          'analysisAttempt.createdAt as createdAt',
+          'analysisAttempt.claimedAt as claimedAt',
+          'analysisAttempt.finishedAt as finishedAt',
+          'analysisAttempt.cancelRequestedAt as cancelRequestedAt',
+          'analysisAttempt.failureReason as failureReason',
+          // Selected alongside the row rather than as a separate query, so it's one consistent
+          // snapshot — see `ReportPageData.now`.
+          sql<Date>`now()`.as('now'),
+        ])
+        .where('report.id', '=', params.reportId)
+        .where('report.organizationId', '=', params.organizationId)
+        .where('report.deletedAt', 'is', null)
+        .orderBy('analysisAttempt.attemptNumber', 'desc')
+        .limit(1)
+        .executeTakeFirst();
 
-  if (!row) return await failNotFoundOrBug(db, params);
+      if (!row) return await failNotFoundOrBug(db, params);
 
-  return {
-    organizationSlug: params.organizationSlug,
-    report: {
-      id: row.reportId,
-      name: row.reportName,
-      siteName: row.siteName,
-      creator: row.creatorEmail
-        ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
-        : null,
+      return {
+        organizationSlug: params.organizationSlug,
+        report: {
+          id: row.reportId,
+          name: row.reportName,
+          siteName: row.siteName,
+          creator: row.creatorEmail
+            ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
+            : null,
+        },
+        newReportHref: newReportHref(params.organizationSlug),
+        pollHref: reportPollHref(params.organizationSlug, row.reportId),
+        pollIntervalMs: params.pollIntervalMs,
+        inputFile: {
+          href: inputFileHref(row.inputFileId),
+          originalFilename: row.inputFileOriginalFilename,
+          // The download this links to serves the workbook, not the normalized CSV, when there was one.
+          byteSize: row.inputFileWorkbookByteSize ?? row.inputFileByteSize,
+        },
+        attempt: await toAttempt(db, row, params.supportEmail),
+        now: row.now,
+      };
     },
-    newReportHref: newReportHref(params.organizationSlug),
-    pollHref: reportPollHref(params.organizationSlug, row.reportId),
-    pollIntervalMs: params.pollIntervalMs,
-    inputFile: {
-      href: inputFileHref(row.inputFileId),
-      originalFilename: row.inputFileOriginalFilename,
-      // The download this links to serves the workbook, not the normalized CSV, when there was one.
-      byteSize: row.inputFileWorkbookByteSize ?? row.inputFileByteSize,
+    {
+      action: 'load a report',
+      context: { organizationId: params.organizationId, reportId: params.reportId },
     },
-    attempt: await toAttempt(db, row, params.supportEmail),
-    now: row.now,
-  };
+  );
 }
 
 /** The join found nothing. A report with no attempt should be impossible — one transaction

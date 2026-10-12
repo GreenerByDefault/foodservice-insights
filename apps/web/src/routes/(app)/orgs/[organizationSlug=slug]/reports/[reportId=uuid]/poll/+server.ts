@@ -1,6 +1,6 @@
 import { jsonFromThisDeploy } from '#lib/api/deploy-version.js';
 import { requireReportRouteContext } from '#lib/server/auth/route-context.js';
-import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { database } from '#lib/server/db.js';
 import { _loadReport, _reportEnvironment } from '../+page.server.ts';
 import type { RequestHandler } from './$types';
 
@@ -17,16 +17,12 @@ export const GET: RequestHandler = async (event) => {
 
   // Same query as the page's own `load`, so a first request landing here directly gets the same
   // 404/500 shape.
-  const data = await withDbErrorHandling(
-    () =>
-      _loadReport(database(), {
-        organizationId,
-        organizationSlug: event.params.organizationSlug,
-        reportId,
-        ..._reportEnvironment(),
-      }),
-    { action: 'poll a report', context: { organizationId, reportId } },
-  );
+  const data = await _loadReport(database(), {
+    organizationId,
+    organizationSlug: event.params.organizationSlug,
+    reportId,
+    ..._reportEnvironment(),
+  });
 
   return jsonFromThisDeploy(data);
 };

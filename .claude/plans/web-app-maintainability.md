@@ -14,7 +14,7 @@ test tiers are named consistently. What surfaced is a few conventions the code f
 ways, and three class strings that have already drifted between copies. The docs that had drifted
 from the code have been rewritten to match it.
 
-Each PR below is independent and ordered by cost, cheapest first. None changes behaviour; PR 2
+Each PR below is independent and ordered by cost, cheapest first. None changes behaviour; PR 1
 resolves two visual drifts, and says which side wins. Stop wherever the returns run out — the
 later PRs are the ones most reasonable to skip.
 
@@ -26,14 +26,14 @@ Facts marked **verified** were checked against the file on 2026-10-11.
   `.claude/rules/typescript.md` says the `_` function wraps its own DB calls and returns what the
   handler sends; the plan moves the stragglers to that, rather than relitigating the rule.
 - *Accepted: styling is DRYed only where two copies have already disagreed, or sit on one screen.*
-  Three cases qualify (PR 2, PR 3). The rest — `space-y-4` vs `space-y-6` across report views,
+  Three cases qualify (PR 1, PR 2). The rest — `space-y-4` vs `space-y-6` across report views,
   three `<h2>` styles each local to one view, ten inline `<p role="alert" class="text-sm
   text-destructive">`, twenty `text-sm text-muted-foreground` — are short Tailwind phrases, not
   page shapes, and are left alone.
 - *Considered, not done: wiring or removing dark mode.* Nothing in `src/` ever sets the `.dark`
   class (**verified**), so `layout.css`'s `.dark` block and every `dark:` variant are dead. The
   block and the variants in `ui/` are vendored shadcn and stay; the one hand-written `dark:` goes
-  (PR 2). Turning dark mode on is a feature, not cleanup.
+  (PR 1). Turning dark mode on is a feature, not cleanup.
 - *Considered, not done: deduplicating failure copy between server and client.* The last-admin,
   name-taken, slug-*, already-member, and rate-limited messages are each written once in a
   `+server.ts` or `lib/server/orgs/*.ts` and again in the form that renders the outcome.
@@ -58,22 +58,7 @@ Facts marked **verified** were checked against the file on 2026-10-11.
   every other loading button sets. *Deferred until the form is next touched:*
   `account/change-email-form.svelte` has no `FIELD` map, unlike every other form.
 
-## PR 1 — A load's `_` function wraps its own DB calls
-
-The rule says the `_`-prefixed function wraps its own calls in `withDbErrorHandling`. Write
-routes do; most loads don't — seven `+page.server.ts` files wrap at the `load` instead
-(**verified**: `account`, `invites`, `orgs/[organizationSlug=slug]` and its `members`,
-`reports/[reportId=uuid]`, `reports/new`), while `_organizationsPageRedirect` and
-`listOrganizations` wrap inside. The two `poll/+server.ts` handlers then wrap the same `_load*`
-again. Three shapes for one job, and a new page copies whichever it sits next to.
-
-Move the wrap inside each `_load*`, drop it from the `load` and from both poll handlers. No
-`load-*.test.ts` asserts on a 503 or 500 today (**verified**), so the tests are unaffected. Add one
-clause to `typescript.md`'s `withDbErrorHandling` bullet (§ Svelte and SvelteKit) saying a `load`'s `_load*` function is covered by the same rule.
-
-This is the most skippable code PR: it buys consistency, nothing else.
-
-## PR 2 — The page shell comes from one place
+## PR 1 — The page shell comes from one place
 
 `apps/web/README.md` § UI components: "A page's shape comes from a component, not a class string
 copied between pages." The app shell is where that is not yet true (**verified** throughout):
@@ -103,7 +88,7 @@ Expected screenshot diffs: the reports page at the mobile viewport, the settings
 possibly the app header's height if `min-h-15` is taller than its buttons made it. Every other
 screen must be pixel-identical — that is the proof the refactor changed nothing else.
 
-## PR 3 — Two list rows on one screen share a row
+## PR 2 — Two list rows on one screen share a row
 
 Optional. `members-list.svelte:31,35` and `pending-invite-row.svelte:41,43` carry identical class
 strings for the `<li>` (`flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-2 py-3`) and the
@@ -124,7 +109,7 @@ Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`, in the backg
 change is ready. While iterating, run only the file under change
 (`pnpm --filter @gbd/web test:unit -- path/to/thing.test.ts`).
 
-PR 2 and PR 3 additionally run `pnpm test:screenshots`. Only the screens PR 2 names may differ;
+PR 1 and PR 2 additionally run `pnpm test:screenshots`. Only the screens PR 1 names may differ;
 regenerate those with `pnpm turbo run screenshots:update --filter=@gbd/web` from the repo root
 (not from inside `apps/web`, which captures a stale build) and commit them. A diff on any other
 screen is a bug in the refactor, not a baseline to update.

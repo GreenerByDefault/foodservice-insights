@@ -19,16 +19,12 @@ export const load: PageServerLoad = async ({ url, parent }) => {
   const { organization } = await parent();
   const cursor = parseCursor(url.searchParams);
 
-  return await withDbErrorHandling(
-    () =>
-      _loadReports(database(), {
-        organizationId: organization.id,
-        organizationSlug: organization.slug,
-        cursor,
-        pollIntervalMs: pollIntervalMsForWorkerMode(WORKER_MODE),
-      }),
-    { action: "load an organization's reports", context: { organizationId: organization.id } },
-  );
+  return await _loadReports(database(), {
+    organizationId: organization.id,
+    organizationSlug: organization.slug,
+    cursor,
+    pollIntervalMs: pollIntervalMsForWorkerMode(WORKER_MODE),
+  });
 };
 
 /** How many reports one page of the list shows. Matches `WEEKLY_REPORT_LIMIT`, so a full page is
@@ -177,50 +173,62 @@ export async function _loadReports(
     pollIntervalMs: number;
   },
 ): Promise<ReportsPageData> {
-  const cursor = await resolveCursor(db, params.cursor);
+  return await withDbErrorHandling(
+    async () => {
+      const cursor = await resolveCursor(db, params.cursor);
 
-  // Wrapped in a subquery because DISTINCT ON dictates its own ORDER BY (see
-  // `latestAttemptPerReport`), leaving the outer query free to order by report instead.
-  let query = db
-    .selectFrom(latestAttemptPerReport(db, params.organizationId).as('latest'))
-    .selectAll();
+      // Wrapped in a subquery because DISTINCT ON dictates its own ORDER BY (see
+      // `latestAttemptPerReport`), leaving the outer query free to order by report instead.
+      let query = db
+        .selectFrom(latestAttemptPerReport(db, params.organizationId).as('latest'))
+        .selectAll();
 
-  // `newer` walks the index ascending and gets reversed below, so its page comes out newest
-  // first like every other direction — the caller never sees the ascending order.
-  if (cursor.direction === 'newer') {
-    query = query
-      .where(cursorCondition('newer', cursor.cursor))
-      .orderBy('reportCreatedAt', 'asc')
-      .orderBy('reportId', 'asc');
-  } else {
-    if (cursor.direction === 'older') {
-      query = query.where(cursorCondition('older', cursor.cursor));
-    }
-    query = query.orderBy('reportCreatedAt', 'desc').orderBy('reportId', 'desc');
-  }
+      // `newer` walks the index ascending and gets reversed below, so its page comes out newest
+      // first like every other direction — the caller never sees the ascending order.
+      if (cursor.direction === 'newer') {
+        query = query
+          .where(cursorCondition('newer', cursor.cursor))
+          .orderBy('reportCreatedAt', 'asc')
+          .orderBy('reportId', 'asc');
+      } else {
+        if (cursor.direction === 'older') {
+          query = query.where(cursorCondition('older', cursor.cursor));
+        }
+        query = query.orderBy('reportCreatedAt', 'desc').orderBy('reportId', 'desc');
+      }
 
-  // One extra row, discarded below, only to learn whether a further page exists in this
-  // direction — the opposite direction follows from the request itself (see `ReportsCursor`).
-  let rows: ReportListRowQuery[] = await query.limit(_REPORTS_PAGE_SIZE + 1).execute();
-  const hasMoreInDirection = rows.length > _REPORTS_PAGE_SIZE;
-  rows = rows.slice(0, _REPORTS_PAGE_SIZE);
-  if (cursor.direction === 'newer') {
-    rows.reverse();
-  }
+      // One extra row, discarded below, only to learn whether a further page exists in this
+      // direction — the opposite direction follows from the request itself (see `ReportsCursor`).
+      let rows: ReportListRowQuery[] = await query.limit(_REPORTS_PAGE_SIZE + 1).execute();
+      const hasMoreInDirection = rows.length > _REPORTS_PAGE_SIZE;
+      rows = rows.slice(0, _REPORTS_PAGE_SIZE);
+      if (cursor.direction === 'newer') {
+        rows.reverse();
+      }
 
-  const { hasOlder, hasNewer } = paginationFlags(cursor.direction, hasMoreInDirection);
-  const { olderCursorId, newerCursorId } = pagingCursorIds(rows, cursor);
+      const { hasOlder, hasNewer } = paginationFlags(cursor.direction, hasMoreInDirection);
+      const { olderCursorId, newerCursorId } = pagingCursorIds(rows, cursor);
 
-  return {
-    newReportHref: newReportHref(params.organizationSlug),
-    reports: rows.map((row) => toReportListRow(params.organizationSlug, row)),
-    olderHref:
-      hasOlder && olderCursorId ? olderReportsHref(params.organizationSlug, olderCursorId) : null,
-    newerHref:
-      hasNewer && newerCursorId ? newerReportsHref(params.organizationSlug, newerCursorId) : null,
-    pollHref: reportsPollHref(params.organizationSlug),
-    pollIntervalMs: params.pollIntervalMs,
-  };
+      return {
+        newReportHref: newReportHref(params.organizationSlug),
+        reports: rows.map((row) => toReportListRow(params.organizationSlug, row)),
+        olderHref:
+          hasOlder && olderCursorId
+            ? olderReportsHref(params.organizationSlug, olderCursorId)
+            : null,
+        newerHref:
+          hasNewer && newerCursorId
+            ? newerReportsHref(params.organizationSlug, newerCursorId)
+            : null,
+        pollHref: reportsPollHref(params.organizationSlug),
+        pollIntervalMs: params.pollIntervalMs,
+      };
+    },
+    {
+      action: "load an organization's reports",
+      context: { organizationId: params.organizationId },
+    },
+  );
 }
 
 /** Refreshes latest field values for exactly the given reports, for the list's poller.
@@ -235,15 +243,20 @@ export async function _loadReportsByIds(
   db: DatabaseExecutor,
   params: { organizationId: OrganizationId; organizationSlug: string; ids: ReportId[] },
 ): Promise<ReportsPollData> {
-  if (params.ids.length === 0) {
-    return { reports: [] };
-  }
+  return await withDbErrorHandling(
+    async () => {
+      if (params.ids.length === 0) {
+        return { reports: [] };
+      }
 
-  const rows = await latestAttemptPerReport(db, params.organizationId)
-    .where('report.id', 'in', params.ids)
-    .execute();
+      const rows = await latestAttemptPerReport(db, params.organizationId)
+        .where('report.id', 'in', params.ids)
+        .execute();
 
-  return { reports: rows.map((row) => toReportListRow(params.organizationSlug, row)) };
+      return { reports: rows.map((row) => toReportListRow(params.organizationSlug, row)) };
+    },
+    { action: 'poll the reports list', context: { organizationId: params.organizationId } },
+  );
 }
 
 /** Whether the page should show an Older/Newer link, given the direction paged and whether the

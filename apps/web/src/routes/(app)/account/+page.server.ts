@@ -8,13 +8,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   const { user } = requireAuth(locals);
 
   return {
-    soleAdminOrganizations: await withDbErrorHandling(
-      () => _loadSoleAdminOrganizations(database(), user.id),
-      {
-        action: 'load the organizations a user is the only admin of',
-        context: { userId: user.id },
-      },
-    ),
+    soleAdminOrganizations: await _loadSoleAdminOrganizations(database(), user.id),
   };
 };
 
@@ -26,23 +20,28 @@ export async function _loadSoleAdminOrganizations(
   db: DatabaseExecutor,
   userId: UserId,
 ): Promise<SoleAdminOrganization[]> {
-  return await db
-    .selectFrom('organizationMember as mine')
-    .innerJoin('organization', 'organization.id', 'mine.organizationId')
-    .select(['organization.slug', 'organization.name'])
-    .where('mine.userId', '=', userId)
-    .where('mine.role', '=', 'admin')
-    .where(({ not, exists, selectFrom }) =>
-      not(
-        exists(
-          selectFrom('organizationMember as other')
-            .select('other.userId')
-            .whereRef('other.organizationId', '=', 'mine.organizationId')
-            .where('other.role', '=', 'admin')
-            .where('other.userId', '!=', userId),
-        ),
-      ),
-    )
-    .orderBy('organization.name')
-    .execute();
+  return await withDbErrorHandling(
+    async () => {
+      return await db
+        .selectFrom('organizationMember as mine')
+        .innerJoin('organization', 'organization.id', 'mine.organizationId')
+        .select(['organization.slug', 'organization.name'])
+        .where('mine.userId', '=', userId)
+        .where('mine.role', '=', 'admin')
+        .where(({ not, exists, selectFrom }) =>
+          not(
+            exists(
+              selectFrom('organizationMember as other')
+                .select('other.userId')
+                .whereRef('other.organizationId', '=', 'mine.organizationId')
+                .where('other.role', '=', 'admin')
+                .where('other.userId', '!=', userId),
+            ),
+          ),
+        )
+        .orderBy('organization.name')
+        .execute();
+    },
+    { action: 'load the organizations a user is the only admin of', context: { userId } },
+  );
 }

@@ -3,7 +3,7 @@ import { error } from '@sveltejs/kit';
 import * as v from 'valibot';
 import { jsonFromThisDeploy } from '#lib/api/deploy-version.js';
 import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
-import { database, withDbErrorHandling } from '#lib/server/db.js';
+import { database } from '#lib/server/db.js';
 import { _loadReportsByIds } from '../+page.server.ts';
 import type { RequestHandler } from './$types';
 
@@ -24,15 +24,11 @@ export const POST: RequestHandler = async (event) => {
     error(400, 'Malformed poll request');
   }
 
-  const data = await withDbErrorHandling(
-    () =>
-      _loadReportsByIds(database(), {
-        organizationId,
-        organizationSlug: event.params.organizationSlug,
-        ids: body.output.ids as ReportId[],
-      }),
-    { action: 'poll the reports list', context: { organizationId } },
-  );
+  const data = await _loadReportsByIds(database(), {
+    organizationId,
+    organizationSlug: event.params.organizationSlug,
+    ids: body.output.ids as ReportId[],
+  });
 
   return jsonFromThisDeploy(data);
 };
