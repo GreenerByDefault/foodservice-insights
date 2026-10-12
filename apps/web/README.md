@@ -92,10 +92,8 @@ rather than depending on a component library.
 **A route-local component is promoted** to `src/lib/components/<feature>/` only once a second
 route needs it.
 
-**A page's shape comes from a component, not a class string copied between pages** — the heading a
-page opens with, the header bar every page carries, and the chrome a page outside the `(app)` gate
-carries are each one component in `src/lib/components/`. The column they line up in is the
-`page-width` utility in [`src/routes/layout.css`](src/routes/layout.css).
+**A page's shape comes from a component in `src/lib/components/`, not a class string copied
+between pages.**
 
 **A view within a route gets its own subfolder once it's more than one file** — a single-file
 view stays flat, and a component two views share sits beside them at the route root.
