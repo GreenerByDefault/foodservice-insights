@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import ConfirmAction, { ConfirmActionError } from './confirm-action.svelte';
 
@@ -52,6 +53,35 @@ describe('ConfirmAction', () => {
     await screen.getByRole('button', { name: 'Yes, do it' }).click();
 
     await expect.poll(() => onConfirm.mock.calls.length).toBe(1);
+    await expect
+      .element(screen.getByRole('heading', { name: 'Do the thing?' }))
+      .not.toBeInTheDocument();
+  });
+
+  test('Escape does not close the dialog while its request is in flight', async () => {
+    const pending = Promise.withResolvers<void>();
+    const screen = await render(ConfirmAction, {
+      ...baseProps(() => pending.promise),
+      open: true,
+    });
+
+    await screen.getByRole('button', { name: 'Yes, do it' }).click();
+    await expect.element(screen.getByRole('button', { name: 'Yes, do it' })).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+
+    await expect.element(screen.getByRole('heading', { name: 'Do the thing?' })).toBeVisible();
+    pending.reject(new Error('unexpected'));
+    await expect
+      .element(screen.getByText('Could not do the thing. Please try again.'))
+      .toBeVisible();
+  });
+
+  test('Escape closes the dialog when no request is in flight', async () => {
+    const screen = await render(ConfirmAction, { ...baseProps(vi.fn()), open: true });
+    await expect.element(screen.getByRole('heading', { name: 'Do the thing?' })).toBeVisible();
+
+    await userEvent.keyboard('{Escape}');
+
     await expect
       .element(screen.getByRole('heading', { name: 'Do the thing?' }))
       .not.toBeInTheDocument();

@@ -1,6 +1,7 @@
 <script lang="ts">
 import ConfirmAction from '#lib/components/confirm-action.svelte';
 import { cancelReport } from '#lib/reports/api/cancel-report.js';
+import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 
 interface Props {
   organizationSlug: string;
@@ -22,6 +23,10 @@ async function confirm() {
   // can't reach the server leaves the page on its last known state under its own reconnecting
   // notice. So a failure past this point isn't reported as a cancel error.
   await onReportChanged();
+
+  // The refresh swaps the waiting view out, so the dialog's trigger is gone and bits-ui has
+  // nowhere to return focus to.
+  await focusPageHeading();
 }
 </script>
 

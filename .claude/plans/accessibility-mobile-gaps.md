@@ -15,7 +15,12 @@ iOS cannot break its exact match; the display name capitalises words; email fiel
 since `type="email"` already does it), state a screen reader would otherwise miss put into
 words (each waiting-timeline step says "Done:" or "Not started:" in `sr-only` text beside its
 icon, and the organization switcher marks the current org `aria-current="true"` — not `"page"`,
-since its link goes to the org's home and you are usually on a page below it), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
+since its link goes to the org's home and you are usually on a page below it), focus kept when
+a report action swaps the view (Retry and Cancel move it to the h1 with `focusPageHeading`, and
+the Remove-member dialog hands it back to the "Manage {name}" trigger even though the menu item
+that opened it is gone — bits-ui does that unaided, and `member-actions.svelte.test.ts` pins it),
+the confirm dialog refusing Escape while its request is in flight (closing would reset
+`actionState` and hide a late failure), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
 (nothing filters them; see `compilerOptions` in [`vite.config.ts`](../../apps/web/vite.config.ts)).
 `REQUIREMENTS.md` § Design and accessibility asks for a GBD accessibility review; this is the pass
 before it.
@@ -61,6 +66,8 @@ review every changed PNG rather than committing the batch.
   - The sign-out error toast stays as is. It fires only when the auth client itself failed to
     load, and the next click is the retry.
   - Touch targets stay 32–40px. Raising every button to 44px is a redesign; 2.5.8 AA is met.
+  - The poll-driven swap from waiting to a result leaves focus where it is. Only a swap the user
+    asked for (Retry, Cancel) moves it; moving focus unprompted is worse than leaving it.
   - No skip link: two focusable elements precede `<main>` on a phone, three on desktop.
   - The dialog opens with focus on its container (bits-ui default) and its footer puts Confirm
     above Cancel on phones while Tab reaches Cancel first — both shadcn conventions, left alone.
@@ -94,38 +101,11 @@ All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primit
   `@media (prefers-reduced-motion: reduce)` that collapses `animation-duration` and
   `transition-duration` to near zero.
 
-Tests: none of this is testable by assertion beyond the axe gate (PR 3), which checks the contrast
+Tests: none of this is testable by assertion beyond the axe gate (PR 2), which checks the contrast
 numbers for real. Screenshots: every shot with a focused control (`auth/sign-in-*`,
 `account/account*`, possibly the open-menu shots) — review that only the ring changed.
 
-## PR 2 — Focus survives a report action, and a dialog cannot be escaped mid-request
-
-- **Retry and Cancel drop focus to `<body>`.** Retry ([`failure-view.svelte:26-38`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/failure/failure-view.svelte))
-  unmounts its own button when the view swaps to waiting; Cancel
-  ([`cancel-button.svelte:15-25`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/waiting/cancel-button.svelte))
-  closes a dialog whose trigger is gone, and bits-ui restores focus only to an element still on
-  the page (**verified**, `focus-scope.svelte.js`). The live region announces the new state but
-  the user has lost their place. `await focusPageHeading()` after `onReportChanged()` in both —
-  `member-actions.svelte`'s `remove()` is the precedent. Not for the poll-driven swap from waiting
-  to a result: moving focus unprompted is worse than leaving it.
-- **Escape closes the confirm dialog while its request is in flight**
-  ([`confirm-action.svelte`](../../apps/web/src/lib/components/confirm-action.svelte)): Cancel is
-  disabled and outside-clicks are ignored, but Escape is not, and closing resets `actionState`,
-  so a failure arriving afterwards is shown to nobody. `AlertDialogContent` spreads `restProps`
-  onto the bits-ui content, so pass `onEscapeKeydown` that calls `preventDefault()` while
-  `loading`.
-- **Where focus goes when the Remove dialog is cancelled is unverified.** It opens from a menu
-  item that is gone by the time it closes ([`member-actions.svelte:84`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/members/member-actions.svelte)).
-  Write the test first — open the menu, choose Remove, press Escape, expect the "Manage {name}"
-  button focused — and fix only if it fails, by forwarding an `onCloseAutoFocus` from
-  `ConfirmAction` that focuses that button.
-
-Tests: the h1 is focused after a retry and after a cancel (`failure-view.svelte.test.ts`,
-`cancel-button.svelte.test.ts`; `focus-page-heading.svelte.test.ts` shows how to render an h1
-beside the component); Escape during a pending confirm leaves the dialog open
-(`confirm-action.svelte.test.ts`); the member-actions focus test above. No screenshots.
-
-## PR 3 — An axe scan of every captured screen
+## PR 2 — An axe scan of every captured screen
 
 Lands last so it starts green and guards the rest.
 
@@ -159,5 +139,5 @@ Drive the app for what tests cannot prove (the `run` skill or the Playwright MCP
   every focused control is unmistakable against white.
 - If a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
   first letter stays lowercase and the button enables.
-- PR 3: the suite passes with zero violations, and introducing a deliberate one (remove a label
+- PR 2: the suite passes with zero violations, and introducing a deliberate one (remove a label
   locally) fails it with a readable message.

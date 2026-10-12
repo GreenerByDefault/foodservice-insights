@@ -101,7 +101,13 @@ async function confirm() {
       {@render trigger()}
     </AlertDialogTrigger>
   {/if}
-  <AlertDialogContent>
+  <!-- Cancel is disabled while loading, but Escape would still close the dialog — and closing
+       resets `actionState`, so a failure arriving afterwards would be shown to nobody. -->
+  <AlertDialogContent
+    onEscapeKeydown={(event) => {
+      if (actionState.status === 'loading') event.preventDefault();
+    }}
+  >
     <AlertDialogHeader>
       <AlertDialogTitle>{title}</AlertDialogTitle>
       <AlertDialogDescription>{description}</AlertDialogDescription>
