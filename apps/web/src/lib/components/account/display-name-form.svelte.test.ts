@@ -23,6 +23,14 @@ describe('DisplayNameForm', () => {
     await expect.element(screen.getByLabelText('Your name')).toHaveValue('Sam Cook');
   });
 
+  test('capitalises each word on a phone keyboard', async () => {
+    const screen = await render(DisplayNameForm, props());
+
+    await expect
+      .element(screen.getByLabelText('Your name'))
+      .toHaveAttribute('autocapitalize', 'words');
+  });
+
   test('an unrelated re-render does not clobber an in-progress edit', async () => {
     const screen = await render(DisplayNameForm, props());
     const input = screen.getByLabelText('Your name');

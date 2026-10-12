@@ -9,7 +9,10 @@ announcer (checked by `routes/page-titles.test.ts`), live regions on the report 
 (tested), the upload form's file field reachable and operable from the keyboard with focus kept
 across its swaps (`new-report.e2e.ts` drives it with Tab and Enter), every radio group named
 and every inline field error tied to its input with `aria-invalid` and `aria-describedby`
-(asserted in the form component tests), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
+(asserted in the form component tests), phone keyboards told what the field is (the typed
+confirmation in `confirm-action.svelte` turns off autocapitalise, autocorrect and spellcheck so
+iOS cannot break its exact match; the display name capitalises words; email fields need nothing,
+since `type="email"` already does it), mobile and tablet screenshots of every screen, and Svelte's compile-time a11y warnings failing `svelte-check`
 (nothing filters them; see `compilerOptions` in [`vite.config.ts`](../../apps/web/vite.config.ts)).
 `REQUIREMENTS.md` § Design and accessibility asks for a GBD accessibility review; this is the pass
 before it.
@@ -88,7 +91,7 @@ All in [`layout.css`](../../apps/web/src/routes/layout.css) and the `ui/` primit
   `@media (prefers-reduced-motion: reduce)` that collapses `animation-duration` and
   `transition-duration` to near zero.
 
-Tests: none of this is testable by assertion beyond the axe gate (PR 5), which checks the contrast
+Tests: none of this is testable by assertion beyond the axe gate (PR 4), which checks the contrast
 numbers for real. Screenshots: every shot with a focused control (`auth/sign-in-*`,
 `account/account*`, possibly the open-menu shots) — review that only the ring changed.
 
@@ -135,20 +138,7 @@ Tests: the listitem text in `timeline.svelte.test.ts`; `aria-current` on the men
 `organization-switcher.svelte.test.ts`; the heading level in `monthly-counts.svelte.test.ts`.
 No screenshots (sr-only text and a level change render identically).
 
-## PR 4 — Phone keyboards
-
-- **The typed confirmation can never match on an iPhone.** `confirm-action.svelte:112` is a
-  plain text input compared exactly (`:69`); iOS capitalises the first letter of a text field, so
-  the delete-account phrase (the user's email) becomes `Eric@…` and the button stays disabled with
-  no message. Add `autocapitalize="none" autocorrect="off" spellcheck={false}` (Svelte types
-  `autocorrect`; it is Safari-only and harmless elsewhere).
-- **Display name** (`display-name-form.svelte:44-52`) gets `autocapitalize="words"`, so a phone
-  keyboard capitalises a name without the user reaching for Shift.
-
-Email fields are left alone: `type="email"` already turns off capitalisation and autocorrect on
-iOS and Android. Tests: `toHaveAttribute` in the two component tests. No screenshots.
-
-## PR 5 — An axe scan of every captured screen
+## PR 4 — An axe scan of every captured screen
 
 Lands last so it starts green and guards the rest.
 
@@ -180,7 +170,7 @@ Drive the app for what tests cannot prove (the `run` skill or the Playwright MCP
 
 - PR 1: Tab through the sign-in form, a page of buttons, and an open menu with the arrow keys;
   every focused control is unmistakable against white.
-- PR 4, if a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
+- If a phone is to hand: Safari on iOS, Account → Delete account, type the email — the
   first letter stays lowercase and the button enables.
-- PR 5: the suite passes with zero violations, and introducing a deliberate one (remove a label
+- PR 4: the suite passes with zero violations, and introducing a deliberate one (remove a label
   locally) fails it with a readable message.
