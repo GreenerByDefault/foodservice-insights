@@ -310,7 +310,3 @@ export async function insertReportWithAttempt(
   }
   return report.id;
 }
-
-export function reportUrl(reportId: ReportId, organizationSlug: string): string {
-  return `/orgs/${organizationSlug}/reports/${reportId}`;
-}

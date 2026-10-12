@@ -1,3 +1,4 @@
+import { reportHref } from '../../src/lib/hrefs.ts';
 /** The one thing no other layer can check: a real poll, hitting the real read endpoint, updating
  * the screen with no page reload.
  *
@@ -7,7 +8,7 @@
 
 import { advancePoll, ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
-import { reportUrl, succeedLatestAttempt } from '../fixtures/reports.ts';
+import { succeedLatestAttempt } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
 import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
@@ -22,7 +23,7 @@ test('a report that finishes while the page is open updates in place, without a 
   await page.clock.install();
 
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId, org.slug));
+  await page.goto(reportHref(org.slug, reportId));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { expectFetched, jsonResponse, stubFetch } from '#lib/testing/fetch.js';
+import { aLastAdminResponse } from '#lib/orgs/testing/fixtures.js';
+import { expectFetched, stubFetch } from '#lib/testing/fetch.js';
 import { changeMemberRole } from './change-member-role.ts';
 
 afterEach(() => {
@@ -20,7 +21,7 @@ describe('changeMemberRole', () => {
   });
 
   test('a write failure is classified by classifyMemberWriteFailure', async () => {
-    stubFetch(jsonResponse({ message: 'Only admin', code: 'last-admin' }, 409));
+    stubFetch(aLastAdminResponse());
 
     await expect(changeMemberRole('org-1', 'user-1', 'member')).resolves.toEqual({
       kind: 'last-admin',

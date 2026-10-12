@@ -1,10 +1,10 @@
+import { reportHref } from '../../src/lib/hrefs.ts';
 /** One report's own rendering and linking inside the list, in a dedicated organization
  * (`e2e/fixtures/organizations.ts`) so nothing another spec creates can appear alongside it.
  */
 
 import { dbMsAgo } from '@gbd/db/testing';
 import { expect } from '@playwright/test';
-import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 
 test('a report appears in the organization list and links to its report page', async ({
@@ -24,8 +24,8 @@ test('a report appears in the organization list and links to its report page', a
 
   const link = page.getByRole('link', { name: new RegExp(name) });
   await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute('href', reportUrl(reportId, organizationSlug));
+  await expect(link).toHaveAttribute('href', reportHref(organizationSlug, reportId));
 
   await link.click();
-  await expect(page).toHaveURL(reportUrl(reportId, organizationSlug));
+  await expect(page).toHaveURL(reportHref(organizationSlug, reportId));
 });

@@ -69,7 +69,7 @@ export const BROWSER_WS_ENDPOINT = `ws://127.0.0.1:${HOST_PORT}/`;
 
 /** Generous, because the first run on a machine pulls a multi-gigabyte image. */
 const READY_TIMEOUT_MS = 600_000;
-const POLL_INTERVAL_MS = 250;
+const READY_POLL_INTERVAL_MS = 250;
 
 export async function startBrowserServer(): Promise<void> {
   // Cold start (check, maybe stop, run, wait) is serialized so a concurrent run can't tear down
@@ -232,7 +232,7 @@ async function waitUntilServing(): Promise<void> {
       throw new Error(`The browser container exited before it began serving.\n${logs}`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, READY_POLL_INTERVAL_MS));
   }
 
   throw new Error(

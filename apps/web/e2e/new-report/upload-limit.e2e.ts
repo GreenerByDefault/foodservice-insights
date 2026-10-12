@@ -7,8 +7,11 @@
  */
 
 import { expect } from '@playwright/test';
-import { MAX_UPLOAD_FIELD_BYTES, TRANSPORT_MARGIN_BYTES } from '../src/lib/reports/upload-limit.js';
-import { test } from './fixtures/test.ts';
+import {
+  MAX_UPLOAD_FIELD_BYTES,
+  TRANSPORT_MARGIN_BYTES,
+} from '../../src/lib/reports/upload-limit.js';
+import { test } from '../fixtures/test.ts';
 
 const HEADER = 'product name,date ordered,weight\n';
 const ROW = 'beef mince,2026-01-05,12\n';

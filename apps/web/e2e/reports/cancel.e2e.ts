@@ -1,3 +1,4 @@
+import { reportHref } from '../../src/lib/hrefs.ts';
 /** The one thing no other layer can check: a real click, through the real dialog, hitting the
  * real `POST .../cancel` route, converging on the canceled screen without a page reload.
  *
@@ -7,7 +8,6 @@
 
 import { ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
-import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
 
@@ -17,7 +17,7 @@ test('canceling a report from the waiting screen shows the canceled screen, with
   org,
 }) => {
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId, org.slug));
+  await page.goto(reportHref(org.slug, reportId));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);
