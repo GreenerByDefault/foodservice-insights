@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
-import {
-  expectFetched,
-  jsonResponse,
-  stubFetch,
-  stubUnreachableFetch,
-} from '#lib/testing/fetch.js';
+import { aLastAdminResponse } from '#lib/orgs/testing/fixtures.js';
+import { expectFetched, stubFetch, stubUnreachableFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import { goto } from '$app/navigation';
@@ -114,7 +110,7 @@ describe('DeleteAccount', () => {
     });
 
     test('a last-admin 409 explains itself and neither signs out, navigates, nor toasts', async () => {
-      stubFetch(jsonResponse({ message: 'Only admin', code: 'last-admin' }, 409));
+      stubFetch(aLastAdminResponse());
       const auth = fakeBrowserAuth();
       const screen = await openDialog(auth);
 

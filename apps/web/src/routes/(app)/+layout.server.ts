@@ -4,7 +4,7 @@ import type { AuthContext } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { listOrganizations, type OrganizationRow } from '#lib/server/orgs/list.js';
 import type { LayoutServerLoad } from './$types';
-import { SWITCHER_LIMIT } from './shell/switcher-limit';
+import { SWITCHER_LIMIT } from './shell/switcher-limit.ts';
 
 export type SwitcherOrganization = OrganizationRow;
 

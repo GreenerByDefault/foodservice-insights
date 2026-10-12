@@ -1,3 +1,4 @@
+import { reportHref } from '../../src/lib/hrefs.ts';
 /** The one thing no other layer can check: a real click hitting the real `POST .../retry`
  * route, converging on the waiting screen without a page reload, and the poll the settled failure
  * screen had stopped picking back up.
@@ -9,7 +10,7 @@
 
 import { advancePoll, ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
-import { reportUrl, succeedLatestAttempt } from '../fixtures/reports.ts';
+import { succeedLatestAttempt } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
 import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
@@ -27,7 +28,7 @@ test('retrying a failed report shows the waiting screen and resumes polling, wit
   // screenshot, which collides with a concurrent run of this test. 'failed-retried' still has
   // attempts to spare, so retry behaves the same either way.
   const reportId = await reports.create('failed-retried');
-  await page.goto(reportUrl(reportId, org.slug));
+  await page.goto(reportHref(org.slug, reportId));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

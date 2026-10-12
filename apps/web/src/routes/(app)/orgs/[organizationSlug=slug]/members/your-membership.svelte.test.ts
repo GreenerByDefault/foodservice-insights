@@ -1,12 +1,12 @@
 import type { OrganizationRole } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { aLastAdminResponse } from '#lib/orgs/testing/fixtures.js';
 import { expectFetched, stubFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import { goto, refreshAll } from '$app/navigation';
 import { LAST_ADMIN_MESSAGE } from './member-write.ts';
-import { lastAdminResponse } from './testing/fixtures.ts';
 import YourMembership from './your-membership.svelte';
 
 vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
@@ -57,7 +57,7 @@ describe('YourMembership', () => {
     });
 
     test('the sole admin is refused, and told how to proceed', async () => {
-      stubFetch(lastAdminResponse());
+      stubFetch(aLastAdminResponse());
       const screen = await renderAs('admin');
 
       await screen.getByRole('button', { name: 'Step down as admin' }).click();
@@ -84,7 +84,7 @@ describe('YourMembership', () => {
     });
 
     test('the only admin leaving is refused, and told how to proceed', async () => {
-      stubFetch(lastAdminResponse());
+      stubFetch(aLastAdminResponse());
       const screen = await renderAs('admin');
 
       await screen.getByRole('button', { name: 'Leave organization' }).click();

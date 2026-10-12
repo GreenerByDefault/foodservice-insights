@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { expectFetched, jsonResponse, stubFetch } from '#lib/testing/fetch.js';
+import { aLastAdminResponse } from '#lib/orgs/testing/fixtures.js';
+import { expectFetched, stubFetch } from '#lib/testing/fetch.js';
 import { deleteAccount } from './delete-account.ts';
 
 afterEach(() => {
@@ -16,7 +17,7 @@ describe('deleteAccount', () => {
   });
 
   test('a write failure is classified by classifyMemberWriteFailure', async () => {
-    stubFetch(jsonResponse({ message: 'Only admin', code: 'last-admin' }, 409));
+    stubFetch(aLastAdminResponse());
 
     await expect(deleteAccount()).resolves.toEqual({ kind: 'last-admin' });
   });

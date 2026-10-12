@@ -1,3 +1,4 @@
+import { reportHref } from '../../src/lib/hrefs.ts';
 /** A tab left polling across a web deploy reloads rather than reading the new build's response
  * with the old build's JavaScript. `live-update.e2e.ts` covers the other half: a response from this
  * build, header and all, never reloads.
@@ -5,7 +6,6 @@
 
 import { advancePoll, ensureHydrated } from '@gbd/browser-testing';
 import { expect } from '@playwright/test';
-import { reportUrl } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { watchPageLoads } from '../lib/no-reload.ts';
 import { POLL_INTERVAL_MS } from '../lib/poll-interval.ts';
@@ -15,7 +15,7 @@ test('a poll answered by another deploy reloads the page', async ({ page, report
   await page.clock.install();
 
   const reportId = await reports.create('pending');
-  await page.goto(reportUrl(reportId, org.slug));
+  await page.goto(reportHref(org.slug, reportId));
   await ensureHydrated(page);
 
   const loads = watchPageLoads(page);

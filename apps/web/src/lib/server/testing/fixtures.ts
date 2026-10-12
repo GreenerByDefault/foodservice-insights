@@ -82,6 +82,15 @@ export async function anOrganizationWithMembers(
   return { organizationId: organization.id, admin: admin.id as UserId, members };
 }
 
+/** An organization and its sole admin, acting as themselves — the preamble for tests that don't
+ * need a second member. */
+export async function anAdminOrg(
+  transaction: Transaction<Database>,
+): Promise<{ organizationId: OrganizationId; admin: UserId; actor: Actor }> {
+  const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+  return { organizationId, admin, actor: { userId: admin, role: 'admin' } };
+}
+
 export type OrganizationFixtures = {
   transaction: Transaction<Database>;
   store: BlobStore;

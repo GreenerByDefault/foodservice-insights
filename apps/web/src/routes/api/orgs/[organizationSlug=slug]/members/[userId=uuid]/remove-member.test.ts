@@ -1,22 +1,12 @@
-import type { Database, OrganizationId, UserId } from '@gbd/db';
+import type { UserId } from '@gbd/db';
 import { insertOrganizationMember, withRollback } from '@gbd/db/testing';
-import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import type { Actor } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
+import { anAdminOrg, anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { statusOf } from '#lib/server/testing/http-error.js';
 import { _removeMember } from './+server.ts';
-
-/** An organization and its sole admin, acting as themselves — the preamble every situation below
- * that doesn't need a second member starts from. */
-async function anAdminOrg(
-  transaction: Transaction<Database>,
-): Promise<{ organizationId: OrganizationId; admin: UserId; actor: Actor }> {
-  const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
-  return { organizationId, admin, actor: { userId: admin, role: 'admin' } };
-}
 
 describe('_removeMember', () => {
   describe('an admin removing another member', () => {

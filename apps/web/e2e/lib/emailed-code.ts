@@ -1,7 +1,7 @@
 import { type MailboxMessage, readMailbox } from '@gbd/email/testing';
 
 const TIMEOUT_MS = 5_000;
-const POLL_INTERVAL_MS = 50;
+const MAILBOX_POLL_INTERVAL_MS = 50;
 
 /** Each code email's lead-in, from its template under `supabase-dev/supabase/templates/`.
  * Anchored on the template's own copy, rather than on the first run of digits: a year in a footer
@@ -34,7 +34,7 @@ async function waitForCode(address: string, kind: keyof typeof LEAD_IN): Promise
       const received = messages.map((message) => message.html).join('\n\n');
       throw new Error(`No ${kind} code reached ${address} within ${TIMEOUT_MS}ms:\n${received}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, MAILBOX_POLL_INTERVAL_MS));
   }
 }
 
