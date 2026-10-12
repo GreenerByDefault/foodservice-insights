@@ -186,7 +186,7 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
     )
     monkeypatch.setattr(
         "gbd_foodservice_insights.report.plots.report.generate_all_report_plots",
-        lambda **kwargs: [("", fig)],
+        lambda **kwargs: [fig],
     )
 
     result = run_food_report(

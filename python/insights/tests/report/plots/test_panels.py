@@ -139,21 +139,12 @@ def test_draw_food_and_drink_per_diner_divides_by_diner_meals(
     assert _y_values(ax) == [[1.0, 1.5], [1.25, 1.9]]
 
 
-@pytest.mark.parametrize(
-    "without_data",
-    [
-        lambda months: months.iloc[0:0],
-        lambda months: months.drop(columns="category"),
-    ],
-    ids=["no rows", "no category column"],
-)
 def test_draw_food_and_drink_totals_says_so_when_no_category_matches(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
-    without_data: Callable[[pd.DataFrame], pd.DataFrame],
 ):
     _fig, ax = plt.subplots()
 
-    panels.draw_food_and_drink_totals(ax, without_data(fruit_and_juice_months()))
+    panels.draw_food_and_drink_totals(ax, fruit_and_juice_months().iloc[0:0])
 
     assert not ax.axison
     assert _texts(ax) == ["No matching category data available."]

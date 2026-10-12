@@ -49,28 +49,21 @@ def _neutralise_cell(value):
     return value
 
 
-def write_excel_workbook(
-    output_path: str,
-    sheets: dict[str, pd.DataFrame | None],
-) -> str:
+def write_excel_workbook(path: Path, sheets: dict[str, pd.DataFrame | None]) -> None:
     """Write a sheet-name to DataFrame mapping into one workbook.
 
     This exists so the client workbook and the lab's QA workbook share one write
     path and stay aligned on Excel-writing behavior. It is public because the lab
     builds its QA workbook from a different package.
 
-    ``None`` sheets are skipped. Returns the absolute path of the written workbook.
+    ``None`` sheets are skipped.
     """
-    output_path = str(Path(output_path).resolve())
-
-    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
         for sheet_name, sheet_df in sheets.items():
             if sheet_df is None:
                 continue
             # Neutralise formula-injection before the cells hit the workbook.
             sanitize_for_spreadsheet(sheet_df).to_excel(writer, sheet_name=sheet_name, index=False)
-
-    return output_path
 
 
 def write_client_workbook(report: FoodReport, path: Path) -> None:
@@ -85,8 +78,8 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
         "Emissions Summary": report.emissions_summary,
         **procurement_sheets(aggregation),
     }
-    saved_path = write_excel_workbook(str(path), sheets)
-    logger.info("Client Excel report saved to %s", saved_path)
+    write_excel_workbook(path, sheets)
+    logger.info("Client Excel report saved to %s", path)
 
 
 def diner_meals_frame(

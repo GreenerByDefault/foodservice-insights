@@ -1,6 +1,7 @@
 """The lab's internal QA workbook, built on top of the product's Excel writer."""
 
 import logging
+from pathlib import Path
 
 import pandas as pd
 from gbd_foodservice_insights.report.aggregation import Aggregation
@@ -35,8 +36,7 @@ def build_qa_excel_report(
     exports without overloading the client-facing workbook. This workbook is
     intentionally the internal superset artifact.
 
-    Empty or ``None`` ``diagnostic_sheets`` entries are skipped. Returns the workbook's
-    absolute path.
+    Empty or ``None`` ``diagnostic_sheets`` entries are skipped. Returns ``output_path``.
     """
     sheets: dict[str, pd.DataFrame | None] = {
         "Raw Data": raw_df,
@@ -58,6 +58,6 @@ def build_qa_excel_report(
                 continue
             sheets[sheet_name] = sheet_df
 
-    saved_path = write_excel_workbook(output_path, sheets)
-    logger.info("QA Excel report saved to %s", rel_path(saved_path))
-    return saved_path
+    write_excel_workbook(Path(output_path), sheets)
+    logger.info("QA Excel report saved to %s", rel_path(output_path))
+    return output_path

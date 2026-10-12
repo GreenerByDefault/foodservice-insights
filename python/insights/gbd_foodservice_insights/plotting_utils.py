@@ -165,25 +165,19 @@ def create_horizontal_percentage_barplot(
     percentage_col: str = "percentage",
     max_label_width: int = 30,
     add_percentage_labels: bool = True,
-    palette: list[str] | None = None,
 ) -> None:
     """Create a horizontal bar plot, with percentage values and optional text labels.
 
     This function creates a horizontal bar plot where the x-axis represents percentages
     (0-100) and optionally adds percentage text labels at the end of each bar.
-
-    `palette` defaults to GBD_COLORS.
     """
-    if palette is None:
-        palette = GBD_COLORS
-
     sns.barplot(
         data=data,
         y=y_col,
         x=percentage_col,
         hue=y_col,
         # Exactly one color per bar: seaborn warns when the list is longer or shorter.
-        palette=list(islice(cycle(palette), data[y_col].nunique())),
+        palette=list(islice(cycle(GBD_COLORS), data[y_col].nunique())),
         legend=False,
         ax=ax,
     )

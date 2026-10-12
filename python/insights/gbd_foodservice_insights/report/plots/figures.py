@@ -29,11 +29,12 @@ from gbd_foodservice_insights.report.plots.panels import (
     draw_plant_share_by_month,
     draw_total_emissions,
 )
+from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 
 def plot_diner_meal_numbers(
-    diner_meal_mapping: Mapping[pd.Period, float] | pd.Series,
-    diner_or_meal: str = "diner",
+    diner_meal_mapping: Mapping[pd.Period, float],
+    diner_or_meal: DinerOrMeal = "diner",
 ) -> Figure:
     """Line graph of diner-meal counts per month."""
     diner_meal_series = pd.Series(diner_meal_mapping).sort_index()
@@ -133,13 +134,10 @@ def plot_food_and_drink_comparison_page(
     monthly_category_data: pd.DataFrame,
     *,
     metric: Metric = KILOS,
-    diner_meal_mapping: Mapping[pd.Period, float] | None = None,
-    diner_or_meal: str = "diner",
+    diner_meal_mapping: Mapping[pd.Period, float],
+    diner_or_meal: DinerOrMeal = "diner",
 ) -> Figure:
     """Create one page with total and per-diner trends, each comparing food vs food + drink."""
-    if diner_meal_mapping is None:
-        raise ValueError("diner_meal_mapping is required for the comparison page")
-
     fig, axes = plt.subplots(2, 1, figsize=LETTER_LANDSCAPE)
     set_suptitle_font(fig, f"{metric.label} Over Time", fontsize=16)
     draw_food_and_drink_totals(axes[0], monthly_category_data, metric=metric)
@@ -165,20 +163,19 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
     add_grid(ax, axis="x")
 
     # Add percentage labels at the right end of each bar
-    if "pct_of_total" in data.columns:
-        x_max = data["total_kg_co2e"].max()
-        for bar, pct in zip(bars, data["pct_of_total"], strict=True):
-            if pd.notna(pct) and x_max > 0:
-                ax.text(
-                    bar.get_width() + x_max * 0.01,
-                    bar.get_y() + bar.get_height() / 2,
-                    f"{pct:.1f}%",
-                    va="center",
-                    ha="left",
-                    fontsize=8,
-                    color="gray",
-                )
-        ax.set_xlim(right=x_max * 1.15)
+    x_max = data["total_kg_co2e"].max()
+    for bar, pct in zip(bars, data["pct_of_total"], strict=True):
+        if pd.notna(pct) and x_max > 0:
+            ax.text(
+                bar.get_width() + x_max * 0.01,
+                bar.get_y() + bar.get_height() / 2,
+                f"{pct:.1f}%",
+                va="center",
+                ha="left",
+                fontsize=8,
+                color="gray",
+            )
+    ax.set_xlim(right=x_max * 1.15)
 
     plt.tight_layout()
     return fig
@@ -187,19 +184,14 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
 def plot_emissions_summary_over_time(
     monthly_category_data: pd.DataFrame,
     diner_meal_mapping: Mapping[pd.Period, float],
-    emissions_col: str = "emissions_kg_co2e",
-    diner_or_meal: str = "diner",
+    diner_or_meal: DinerOrMeal = "diner",
 ) -> Figure:
     """Put total and per-diner emissions trends together on one report page."""
     fig, axes = plt.subplots(2, 1, figsize=LETTER_LANDSCAPE)
     set_suptitle_font(fig, "Carbon Emissions Over Time", fontsize=16)
-    draw_total_emissions(axes[0], monthly_category_data, emissions_col=emissions_col)
+    draw_total_emissions(axes[0], monthly_category_data)
     draw_emissions_per_diner(
-        axes[1],
-        monthly_category_data,
-        diner_meal_mapping,
-        emissions_col=emissions_col,
-        diner_or_meal=diner_or_meal,
+        axes[1], monthly_category_data, diner_meal_mapping, diner_or_meal=diner_or_meal
     )
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     return fig

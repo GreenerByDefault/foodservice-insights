@@ -234,7 +234,7 @@ def serving_charts(report: ServingReport) -> Iterator[ReportCharts]:
             ),
         ]
     try:
-        yield ReportCharts(figures=[("", figure) for figure in figures])
+        yield ReportCharts(figures=figures)
     finally:
         for figure in figures:
             plt.close(figure)
@@ -254,7 +254,7 @@ def write_serving_pdf(
         _create_summary_page(
             pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
         )
-        for _caption, figure in charts.figures:
+        for figure in charts.figures:
             pdf.savefig(figure)
         create_category_template_pages(pdf, report.template)
         create_text_page(
@@ -291,8 +291,8 @@ def _create_summary_page(
 
 
 def write_serving_workbook(report: ServingReport, path: Path) -> None:
-    saved_path = write_excel_workbook(
-        str(path),
+    write_excel_workbook(
+        path,
         {
             "Monthly by Product": report.monthly_product,
             "Monthly by Category": report.monthly_category,
@@ -302,4 +302,4 @@ def write_serving_workbook(report: ServingReport, path: Path) -> None:
             ),
         },
     )
-    logger.info("Serving Excel report saved to %s", saved_path)
+    logger.info("Serving Excel report saved to %s", path)
