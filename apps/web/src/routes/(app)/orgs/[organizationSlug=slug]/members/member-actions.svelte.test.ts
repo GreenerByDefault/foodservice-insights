@@ -1,5 +1,6 @@
 import type { UserId } from '@gbd/db';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { aLastAdminResponse } from '#lib/orgs/testing/fixtures.js';
 import { expectFetched, jsonResponse, stubFetch } from '#lib/testing/fetch.js';
@@ -140,6 +141,20 @@ describe('MemberActions', () => {
       await expect.poll(() => onDone.mock.calls.length).toBe(1);
       expectFetched(fetchMock, { url: '/api/orgs/org-1/members/user-1', method: 'DELETE' });
       await expect.poll(() => toast.success.mock.calls).toEqual([['Removed Ana Ruiz']]);
+    });
+
+    test('dismissing the dialog returns focus to the menu trigger', async () => {
+      const screen = await opened({
+        organizationSlug: 'org-1',
+        member: aMember({ displayName: 'Ana Ruiz' }),
+        onDone: vi.fn(),
+      });
+
+      await screen.getByRole('menuitem', { name: 'Remove from organization' }).click();
+      await expect.element(screen.getByRole('heading', { name: 'Remove Ana Ruiz?' })).toBeVisible();
+      await userEvent.keyboard('{Escape}');
+
+      await expect.element(screen.getByRole('button', { name: 'Manage Ana Ruiz' })).toHaveFocus();
     });
 
     test('a 409 shows the last-admin message and does not call onDone', async () => {

@@ -10,6 +10,7 @@ const REPORT_ID = 'report-1';
 const onReportChanged = vi.fn(() => Promise.resolve());
 
 afterEach(() => {
+  document.querySelector('h1')?.remove();
   vi.unstubAllGlobals();
   onReportChanged.mockClear();
 });
@@ -53,6 +54,21 @@ describe('CancelButton', () => {
       .element(screen.getByRole('heading', { name: 'Cancel this report?' }))
       .not.toBeInTheDocument();
     await expect.poll(() => onReportChanged.mock.calls.length).toBe(1);
+  });
+
+  test('a cancel moves focus to the page heading, since the refresh unmounts the dialog trigger', async () => {
+    stubFetch(new Response(null, { status: 204 }));
+    document.body.insertAdjacentHTML('afterbegin', '<h1 tabindex="-1">Q1 procurement</h1>');
+    const screen = await render(CancelButton, {
+      organizationSlug: ORGANIZATION_SLUG,
+      reportId: REPORT_ID,
+      onReportChanged,
+    });
+
+    await screen.getByRole('button', { name: 'Cancel report' }).click();
+    await screen.getByRole('button', { name: 'Yes, cancel report' }).click();
+
+    await expect.element(screen.getByRole('heading', { level: 1 })).toHaveFocus();
   });
 
   test('a 409 — the attempt already finished — closes and refreshes rather than showing an error', async () => {

@@ -16,6 +16,7 @@ const NOT_RETRYABLE = notRetryableFailure();
 const AT_RETRY_CAP = atRetryCapFailure();
 
 afterEach(() => {
+  document.querySelector('h1')?.remove();
   vi.unstubAllGlobals();
   onReportChanged.mockClear();
 });
@@ -116,6 +117,23 @@ describe('FailureView', () => {
     await screen.getByRole('button', { name: 'Retry' }).click();
 
     await expect.poll(() => onReportChanged.mock.calls.length).toBe(1);
+  });
+
+  test('a retry moves focus to the page heading, since the refresh unmounts the Retry button', async () => {
+    stubFetch(new Response(null, { status: 204 }));
+    document.body.insertAdjacentHTML('afterbegin', '<h1 tabindex="-1">Q1 procurement</h1>');
+    const screen = await render(FailureView, {
+      attemptNumber: 1,
+      failure: RETRYABLE,
+      organizationSlug: ORGANIZATION_SLUG,
+      reportId: REPORT_ID,
+      reportName: REPORT_NAME,
+      onReportChanged,
+    });
+
+    await screen.getByRole('button', { name: 'Retry' }).click();
+
+    await expect.element(screen.getByRole('heading', { level: 1 })).toHaveFocus();
   });
 
   test('a 409 — another attempt already exists — refreshes rather than showing an error', async () => {

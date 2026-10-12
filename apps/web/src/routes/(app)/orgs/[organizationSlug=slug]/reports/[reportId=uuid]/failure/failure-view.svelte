@@ -5,6 +5,7 @@ import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 import { Button } from '#lib/components/ui/button/index.js';
 import { retryReport } from '#lib/reports/api/retry-report.js';
 import type { ActionState } from '#lib/forms/action-state.js';
+import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 import DeleteButton from '../delete-button.svelte';
 import type { FailureCopy } from './failure-copy.ts';
 import StatusLine from '../status-line.svelte';
@@ -32,6 +33,8 @@ async function retry() {
     // refresh cannot fail the retry — see the same note in `waiting/cancel-button.svelte`.
     await onReportChanged();
     actionState = { status: 'success' };
+    // The refresh swaps this view for the waiting one, taking the focused Retry button with it.
+    await focusPageHeading();
   } catch {
     actionState = { status: 'error', message: 'Could not retry this report. Please try again.' };
   }
