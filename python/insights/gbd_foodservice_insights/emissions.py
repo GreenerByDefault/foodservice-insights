@@ -17,60 +17,29 @@ def load_emission_factors() -> dict[str, dict[Region, float]]:
     }
 
 
-def get_emission_factor(category: str, region: Region = "us") -> float | None:
-    """Look up the emission factor for a single category."""
-    factors = load_emission_factors().get(category)
-    return None if factors is None else factors[region]
+def get_emission_factor(category: str, region: Region = "us") -> float:
+    return load_emission_factors()[category][region]
 
 
-def calculate_emissions(
-    df: pd.DataFrame,
-    weight_col: str,
-    category_col: str = "category",
-    region: Region = "us",
-) -> pd.DataFrame:
-    """Multiply each row's weight by category emission factor.
-
-    Returns DataFrame with columns:
-    - ``emission_factor_used``
-    - ``emissions_kg_co2e``
-    """
-    if weight_col not in df.columns:
-        raise ValueError(f"Weight column '{weight_col}' not found in DataFrame.")
-    if category_col not in df.columns:
-        raise ValueError(f"Category column '{category_col}' not found in DataFrame.")
-
+def calculate_emissions(df: pd.DataFrame, region: Region = "us") -> pd.DataFrame:
+    """Add each row's ``emission_factor_used`` and ``emissions_kg_co2e``."""
     out = df.copy()
     factors = {name: by_region[region] for name, by_region in load_emission_factors().items()}
-    out["emission_factor_used"] = out[category_col].map(factors)
-    out["emissions_kg_co2e"] = out[weight_col] * out["emission_factor_used"]
+    out["emission_factor_used"] = out["category"].map(factors)
+    out["emissions_kg_co2e"] = out["kilos_total"] * out["emission_factor_used"]
     return out
 
 
-def calculate_emissions_summary(
-    df: pd.DataFrame,
-    category_col: str = "category",
-    emissions_col: str = "emissions_kg_co2e",
-) -> pd.DataFrame:
+def calculate_emissions_summary(df: pd.DataFrame) -> pd.DataFrame:
     """Aggregate total emissions per category."""
-    if category_col not in df.columns:
-        raise ValueError(f"Category column '{category_col}' not found in DataFrame.")
-    if emissions_col not in df.columns:
-        raise ValueError(f"Emissions column '{emissions_col}' not found in DataFrame.")
-
     summary = (
-        df.groupby(category_col, dropna=False)[emissions_col]
+        df.groupby("category", dropna=False)["emissions_kg_co2e"]
         .sum(min_count=1)
         .reset_index()
-        .rename(columns={emissions_col: "total_kg_co2e", category_col: "category"})
+        .rename(columns={"emissions_kg_co2e": "total_kg_co2e"})
     )
-
-    total = summary["total_kg_co2e"].sum(min_count=1)
-    if pd.isna(total) or total == 0:
-        summary["pct_of_total"] = 0.0
-    else:
-        summary["pct_of_total"] = ((summary["total_kg_co2e"] / total) * 100).round(1)
-
+    total = summary["total_kg_co2e"].sum()
+    summary["pct_of_total"] = ((summary["total_kg_co2e"] / total) * 100).round(1)
     return summary.sort_values("total_kg_co2e", ascending=False).reset_index(drop=True)
 
 
@@ -89,15 +58,13 @@ def _round_to_significant_figures(values: pd.Series, significant_figures: int) -
 
 def calculate_emissions_per_diner_meal(
     emissions_summary: pd.DataFrame,
-    total_diner_meals: float | None,
+    total_diner_meals: float,
     diner_or_meal: DinerOrMeal,
 ) -> pd.DataFrame:
     """Add a ``kg_co2e_per_diner`` (or ``kg_co2e_per_meal``) column to an emissions summary."""
-    out = emissions_summary.copy()
-    column = f"kg_co2e_per_{diner_or_meal}"
-    if total_diner_meals and total_diner_meals > 0:
-        per_diner_meal = out["total_kg_co2e"] / float(total_diner_meals)
-        out[column] = _round_to_significant_figures(per_diner_meal, 3)
-    else:
-        out[column] = float("nan")
-    return out
+    if not total_diner_meals > 0:
+        raise ValueError(f"The {diner_or_meal} count must be positive, got {total_diner_meals}")
+    per_diner_meal = emissions_summary["total_kg_co2e"] / total_diner_meals
+    return emissions_summary.assign(
+        **{f"kg_co2e_per_{diner_or_meal}": _round_to_significant_figures(per_diner_meal, 3)}
+    )

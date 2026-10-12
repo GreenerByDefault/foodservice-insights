@@ -15,9 +15,12 @@ from gbd_foodservice_insights.plotting_utils import (
     set_title_font,
     standardize_title_case,
 )
-from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
+from gbd_foodservice_insights.report.aggregation import (
+    PlantAnimalSplit,
+    PlantProteinShare,
+    monthly_totals,
+)
 from gbd_foodservice_insights.report.metric import KILOS, Metric
-from gbd_foodservice_insights.report.utils import monthly_totals
 
 
 def prepare_monthly_trend_data(
@@ -28,7 +31,7 @@ def prepare_monthly_trend_data(
     diner_meal_mapping: Mapping[pd.Period, float] | None,
 ) -> pd.DataFrame:
     """Prepare canonical monthly trend table for plotting."""
-    totals = monthly_totals(monthly_category_data, metric, month_col="month_year")
+    totals = monthly_totals(monthly_category_data, metric)
 
     if per_diner_meal:
         if diner_meal_mapping is None:
