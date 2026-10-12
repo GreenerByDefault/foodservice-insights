@@ -7,9 +7,7 @@ import {
   withTransaction,
 } from '@gbd/db';
 import { sql } from 'kysely';
-import * as v from 'valibot';
-import { emailAddress } from '#lib/forms/validation.js';
-import { HOURLY_INVITE_LIMIT } from '#lib/invites/limits.js';
+import { CreateInviteBodySchema } from '#lib/invites/invite.js';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
@@ -17,12 +15,8 @@ import type { Actor } from '#lib/server/auth/types.js';
 import { parseBody } from '#lib/server/body.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { sendInvite } from '#lib/server/email.js';
+import { HOURLY_INVITE_LIMIT } from '#lib/server/invites/limits.js';
 import type { RequestHandler } from './$types';
-
-const CreateInviteBodySchema = v.object({
-  email: emailAddress,
-  role: v.picklist(['admin', 'member']),
-});
 
 /** Invite an address, or re-invite one that is already outstanding — which supersedes the pending
  * row and restarts its lifetime, because `organization_invite_one_pending_per_email` permits only

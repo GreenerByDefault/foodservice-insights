@@ -1,10 +1,10 @@
 import { DAY_MS } from '@gbd/core';
 import { insertOrganizationInvite, withRollback } from '@gbd/db/testing';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { HOURLY_INVITE_LIMIT } from '#lib/invites/limits.js';
 import type { Actor } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { sendInvite } from '#lib/server/email.js';
+import { HOURLY_INVITE_LIMIT } from '#lib/server/invites/limits.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
 import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { _createInvite } from './+server.ts';

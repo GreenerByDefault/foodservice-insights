@@ -3,7 +3,7 @@ import { withTransaction } from '@gbd/db';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
-import { lockInviteForEmailOrNotFound } from '#lib/server/invites/claim.js';
+import { lockInviteForEmailOrNotFound, noLongerValidResponse } from '#lib/server/invites/claim.js';
 import type { RequestHandler } from './$types';
 
 /** Accept an invite, joining the organization with the role it names.
@@ -97,10 +97,7 @@ export async function _acceptInvite(
   );
 
   if (outcome.kind === 'no-longer-valid') {
-    return Response.json(
-      { message: 'This invitation is no longer valid.', code: 'no-longer-valid' },
-      { status: 409 },
-    );
+    return noLongerValidResponse();
   }
   if (outcome.kind === 'expired') {
     return Response.json(

@@ -1,6 +1,7 @@
 import type { DatabaseExecutor, OrganizationId, UserId } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import * as v from 'valibot';
+import { OrganizationRoleSchema } from '#lib/orgs/role.js';
 import { recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import { requireMemberRouteContext } from '#lib/server/auth/route-context.js';
@@ -10,7 +11,7 @@ import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { attemptMemberWrite, lastAdminResponse } from '#lib/server/orgs/members.js';
 import type { RequestHandler } from './$types';
 
-const ChangeRoleBodySchema = v.object({ role: v.picklist(['admin', 'member']) });
+const ChangeRoleBodySchema = v.object({ role: OrganizationRoleSchema });
 
 /** Promote or demote. Admin only. */
 export const PATCH: RequestHandler = async (event) => {

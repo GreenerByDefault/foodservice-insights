@@ -1,4 +1,8 @@
-/** Shared by the invite form and its clients. */
+/** Shared by the invite form and the route that receives it. */
+
+import * as v from 'valibot';
+import { emailAddress } from '#lib/forms/validation.js';
+import { OrganizationRoleSchema } from '#lib/orgs/role.js';
 
 export const FIELD = {
   // Not `email`: iOS Safari keys its QuickType contact-autofill suggestion off the field's
@@ -7,3 +11,8 @@ export const FIELD = {
   email: 'invitee-email',
   role: 'role',
 } as const;
+
+export const CreateInviteBodySchema = v.object({
+  email: emailAddress,
+  role: OrganizationRoleSchema,
+});

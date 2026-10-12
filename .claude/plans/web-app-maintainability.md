@@ -14,7 +14,7 @@ test tiers are named consistently. What surfaced is a few conventions the code f
 ways, and three class strings that have already drifted between copies. The docs that had drifted
 from the code have been rewritten to match it.
 
-Each PR below is independent and ordered by cost, cheapest first. None changes behaviour; PR 4
+Each PR below is independent and ordered by cost, cheapest first. None changes behaviour; PR 3
 resolves two visual drifts, and says which side wins. Stop wherever the returns run out — the
 later PRs are the ones most reasonable to skip.
 
@@ -26,14 +26,14 @@ Facts marked **verified** were checked against the file on 2026-10-11.
   `.claude/rules/typescript.md` says the `_` function wraps its own DB calls and returns what the
   handler sends; the plan moves the stragglers to that, rather than relitigating the rule.
 - *Accepted: styling is DRYed only where two copies have already disagreed, or sit on one screen.*
-  Three cases qualify (PR 4, PR 5). The rest — `space-y-4` vs `space-y-6` across report views,
+  Three cases qualify (PR 3, PR 4). The rest — `space-y-4` vs `space-y-6` across report views,
   three `<h2>` styles each local to one view, ten inline `<p role="alert" class="text-sm
   text-destructive">`, twenty `text-sm text-muted-foreground` — are short Tailwind phrases, not
   page shapes, and are left alone.
 - *Considered, not done: wiring or removing dark mode.* Nothing in `src/` ever sets the `.dark`
   class (**verified**), so `layout.css`'s `.dark` block and every `dark:` variant are dead. The
   block and the variants in `ui/` are vendored shadcn and stay; the one hand-written `dark:` goes
-  (PR 4). Turning dark mode on is a feature, not cleanup.
+  (PR 3). Turning dark mode on is a feature, not cleanup.
 - *Considered, not done: deduplicating failure copy between server and client.* The last-admin,
   name-taken, slug-*, already-member, and rate-limited messages are each written once in a
   `+server.ts` or `lib/server/orgs/*.ts` and again in the form that renders the outcome.
@@ -52,33 +52,14 @@ Facts marked **verified** were checked against the file on 2026-10-11.
   `*RouteContext` signature for a small win. Leave.
 - *Considered, not done: Biome's `useImportExtensions`.* It would make the `.ts` convention
   executable but flags `./$types`. The two hand-written extensionless imports are fixed by hand
-  (PR 2).
+  (PR 1).
 - *Considered, not done: the shadcn CLI's `@internationalized/date` devDependency.* No file imports
   it (**verified**); `bits-ui` depends on it transitively. The CLI manages it; leave.
 - *Deferred to the a11y pass:* `failure/failure-view.svelte`'s Retry button lacks the `aria-busy`
   every other loading button sets. *Deferred until the form is next touched:*
   `account/change-email-form.svelte` has no `FIELD` map, unlike every other form.
 
-## PR 1 — Invites are laid out like orgs
-
-Orgs keeps its request schema in `lib/orgs/name.ts` (browser-safe, imported by form and route
-alike) and its 4xx bodies in `lib/server/orgs/name.ts` and `members.ts`. Invites does neither.
-
-- `api/orgs/[organizationSlug=slug]/invites/+server.ts:22-25` defines `CreateInviteBodySchema`
-  inline. Move it to `lib/invites/invite.ts` beside `FIELD`, which then is what its header already
-  claims: shared by the form and the route.
-- `v.picklist(['admin', 'member'])` appears there and in `members/[userId=uuid]/+server.ts:13`.
-  One `OrganizationRoleSchema` in a new `lib/orgs/role.ts`, declared `satisfies OrganizationRole[]`
-  against the `@gbd/db` type (type-only import, so browser-safe).
-- The `no-longer-valid` 409 is built word for word in `api/invites/[inviteId=uuid]/accept/
-  +server.ts:99-104` and `decline/+server.ts:60-65`. One helper in `lib/server/invites/`, the way
-  `lib/server/orgs/name.ts` holds orgs' 409s. The single-use `rate-limited` and `already-member`
-  bodies stay inline.
-- `lib/invites/limits.ts` is read only by that route and its test. It is server-only code outside
-  `lib/server/`; move it to `lib/server/invites/limits.ts` and update the link in
-  `REQUIREMENTS.md` § Abuse limits.
-
-## PR 2 — Tests reach their fixtures from where they live
+## PR 1 — Tests reach their fixtures from where they live
 
 - **`lastAdminResponse()` is a test helper in a route** (`members/testing/fixtures.ts:31`) that
   `lib` tests cannot import, so four of them hand-roll it (**verified**: `lib/orgs/api/
@@ -109,7 +90,7 @@ alike) and its 4xx bodies in `lib/server/orgs/name.ts` and `members.ts`. Invites
   `e2e/upload-limit.e2e.ts` sits at the e2e root though `new-report/` already holds two specs
   for the same feature; move it there.
 
-## PR 3 — A load's `_` function wraps its own DB calls
+## PR 2 — A load's `_` function wraps its own DB calls
 
 The rule says the `_`-prefixed function wraps its own calls in `withDbErrorHandling`. Write
 routes do; most loads don't — seven `+page.server.ts` files wrap at the `load` instead
@@ -124,7 +105,7 @@ clause to `typescript.md`'s `withDbErrorHandling` bullet (§ Svelte and SvelteKi
 
 This is the most skippable code PR: it buys consistency, nothing else.
 
-## PR 4 — The page shell comes from one place
+## PR 3 — The page shell comes from one place
 
 `apps/web/README.md` § UI components: "A page's shape comes from a component, not a class string
 copied between pages." The app shell is where that is not yet true (**verified** throughout):
@@ -154,7 +135,7 @@ Expected screenshot diffs: the reports page at the mobile viewport, the settings
 possibly the app header's height if `min-h-15` is taller than its buttons made it. Every other
 screen must be pixel-identical — that is the proof the refactor changed nothing else.
 
-## PR 5 — Two list rows on one screen share a row
+## PR 4 — Two list rows on one screen share a row
 
 Optional. `members-list.svelte:31,35` and `pending-invite-row.svelte:41,43` carry identical class
 strings for the `<li>` (`flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-2 py-3`) and the
@@ -175,7 +156,7 @@ Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`, in the backg
 change is ready. While iterating, run only the file under change
 (`pnpm --filter @gbd/web test:unit -- path/to/thing.test.ts`).
 
-PR 4 and PR 5 additionally run `pnpm test:screenshots`. Only the screens PR 4 names may differ;
+PR 3 and PR 4 additionally run `pnpm test:screenshots`. Only the screens PR 3 names may differ;
 regenerate those with `pnpm turbo run screenshots:update --filter=@gbd/web` from the repo root
 (not from inside `apps/web`, which captures a stale build) and commit them. A diff on any other
 screen is a bug in the refactor, not a baseline to update.
