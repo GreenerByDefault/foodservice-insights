@@ -191,18 +191,42 @@ describe('createWorkerConfig', () => {
       });
     });
 
-    test('refuses a platform grace that does not outlast drainGraceMs + killGraceMs + one terminal write', () => {
-      const { violations } = refusalFor({}, {}, drainPlusKillPlusWrite);
-      expect(violations).toHaveLength(1);
-      const [violation] = violations;
-      expect(violation).toContain('PLATFORM_SHUTDOWN_GRACE_MS');
-      expect(violation).toContain('must exceed drainGraceMs + killGraceMs');
-    });
-
-    test('accepts a platform grace that leaves room for the terminal write after a kill', () => {
-      expect(createWorkerConfig(REQUIRED_FIELDS, {}, drainPlusKillPlusWrite + 1)).toEqual({
+    test('derives drainGraceMs as whatever the platform grace leaves after the kill and the write', () => {
+      expect(createWorkerConfig(REQUIRED_FIELDS, {}, drainPlusKillPlusWrite)).toEqual({
         ...WORKER_DEFAULTS,
         ...REQUIRED_FIELDS,
+      });
+      expect(
+        createWorkerConfig(REQUIRED_FIELDS, { killGraceMs: 20_000 }, 600_000).drainGraceMs,
+      ).toBe(600_000 - 20_000 - MAX_RENEWAL_ROUND_TRIP_MS);
+    });
+
+    test('refuses a platform grace too short to leave any drain', () => {
+      const tooShort = WORKER_DEFAULTS.killGraceMs + MAX_RENEWAL_ROUND_TRIP_MS;
+      expect(refusalFor({}, {}, tooShort).violations).toEqual([
+        'drainGraceMs must be a positive whole number, not 0',
+      ]);
+    });
+
+    describe('with drainGraceMs overridden', () => {
+      test('keeps the override', () => {
+        expect(createWorkerConfig(REQUIRED_FIELDS, { drainGraceMs: 1_000 }, 600_000)).toEqual({
+          ...WORKER_DEFAULTS,
+          ...REQUIRED_FIELDS,
+          drainGraceMs: 1_000,
+        });
+      });
+
+      test('refuses an override the platform grace does not cover', () => {
+        const { violations } = refusalFor(
+          { drainGraceMs: WORKER_DEFAULTS.drainGraceMs + 1 },
+          {},
+          drainPlusKillPlusWrite,
+        );
+        expect(violations).toHaveLength(1);
+        const [violation] = violations;
+        expect(violation).toContain('PLATFORM_SHUTDOWN_GRACE_MS');
+        expect(violation).toContain('must cover drainGraceMs + killGraceMs');
       });
     });
   });

@@ -29,6 +29,8 @@ Beyond the vars every package reads from `.env`, it needs:
 | `WORKER_MODE` | Which `analyze` the child runs — see below |
 | `WORKER_ID` | Optional. Defaults to a value derived from the host and process |
 | `WORKER_MAX_CONCURRENT_ATTEMPTS` | Optional. Overrides `maxConcurrentAttempts` |
+| `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `live`; optional otherwise |
+| `WORKER_DRAIN_GRACE_MS` | Optional. Overrides the derived `drainGraceMs` |
 
 `createWorkerConfig` in [`src/config.ts`](src/config.ts) is the only way to obtain a checked
 `WorkerConfig` — every tunable, and the relations enforced between them, is documented there

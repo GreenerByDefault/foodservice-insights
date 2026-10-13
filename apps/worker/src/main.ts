@@ -30,9 +30,12 @@ process.on('unhandledRejection', (reason) => {
 
 async function main(): Promise<void> {
   try {
+    const platformShutdownGraceMs = optionalIntEnv('PLATFORM_SHUTDOWN_GRACE_MS');
     const resolved = resolveWorkerMode({
       mode: requireEnv('WORKER_MODE'),
       pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
+      openAiApiKey: process.env.OPENAI_API_KEY,
+      platformShutdownGraceMs,
     });
     if (resolved.mode === 'off') {
       WORKER_LOG.info('WORKER_MODE=off; not starting a worker.');
@@ -52,7 +55,7 @@ async function main(): Promise<void> {
         maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS'),
         drainGraceMs: optionalIntEnv('WORKER_DRAIN_GRACE_MS'),
       },
-      optionalIntEnv('PLATFORM_SHUTDOWN_GRACE_MS'),
+      platformShutdownGraceMs,
     );
 
     if (!(await bucketExists(BLOB_STORE))) {

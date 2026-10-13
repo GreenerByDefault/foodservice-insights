@@ -26,8 +26,8 @@ What changed since this plan was last revised on 2026-09-05, all landed:
 - **The hosting choice is effectively DigitalOcean App Platform** ([`hosting-provider.md`](hosting-provider.md)),
   which has no IPv6 egress, and the provider's deploy call is still a stub — so migrating against the
   real project happens before anything serves traffic, which is the cheapest possible rehearsal.
-- **[`deploy-safety.md`](deploy-safety.md)** raised migration lock contention and the connection
-  cap. Both are settled below; its PR 1 moved the budget into code.
+- **A deploy-safety review** raised migration lock contention and the connection cap. Both are
+  settled below; the connection budget is in code.
 
 An earlier pass chose the shared pooler, inherited from `caches-to-supabase.md`. The criterion is
 how the database behaves in production under this workload, and on that § Connectivity records why

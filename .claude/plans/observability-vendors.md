@@ -213,6 +213,11 @@ path for Better Stack, whose monitor is then the "users cannot use the app" aler
 "the container died". [`hooks.server.ts`](../../apps/web/src/hooks.server.ts) skips auth by exact
 path, so the new path joins it; Playwright's readiness probe keeps pointing at `/health`.
 
+**Open:** synthetics — a check after each deploy, or a scheduled monitor, that exercises the app
+rather than `/health`. It should make one mutating request: a wrong `HOST_HEADER` fails
+SvelteKit's CSRF check only on non-GET requests (`hosting-provider.md` § After the decision,
+item 3), so a GET-only check passes while every form is broken.
+
 **Disk.** § Failure modes promises alerts on disk, and DigitalOcean has no disk rule. The worker
 deletes each run directory when the attempt settles, the ephemeral disk is 4 GiB, and a full disk
 replaces the container (`hosting-provider.md` § 5). **Open:** drop "disk" from the contract
