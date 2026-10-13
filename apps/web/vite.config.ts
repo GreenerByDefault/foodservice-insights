@@ -43,6 +43,26 @@ export default defineConfig(({ command }) => ({
           filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
       },
       adapter: adapter(),
+      // Sent on rendered pages only. `handle` adds the Supabase origin to `connect-src` at runtime,
+      // so one image serves every environment: `#lib/server/security-headers.ts`.
+      csp: {
+        directives: {
+          'default-src': ['self'],
+          'script-src': ['self'],
+          // bits-ui writes `style` attributes, during SSR and through `setAttribute`, and neither
+          // can carry a nonce. `script-src` is what protects the session cookie.
+          'style-src': ['self', 'unsafe-inline'],
+          // Vite inlines `favicon.svg` as a `data:` URI.
+          'img-src': ['self', 'data:'],
+          'connect-src': ['self'],
+          // fflate unzips a workbook entry of 512 KiB or more in a `blob:` worker.
+          'worker-src': ['blob:'],
+          'object-src': ['none'],
+          'base-uri': ['none'],
+          'form-action': ['self'],
+          'frame-ancestors': ['none'],
+        },
+      },
     }),
   ],
   test: {

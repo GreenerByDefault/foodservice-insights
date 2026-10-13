@@ -84,9 +84,9 @@ Auth is entirely within `apps/web` — Supabase Auth on the client, a `handle()`
 the JWT into `locals` on the server. See [`apps/web/README.md`](apps/web/README.md#auth) for the
 design.
 
-**Open:** a CSP (SvelteKit's `kit.csp`, with nonces). The session cookie cannot be `HttpOnly`, so a
-CSP is what stands between an XSS and a stolen session. `connect-src` must allow the runtime
-Supabase URL.
+**A Content Security Policy is what stands between an XSS and a stolen session**, because the
+session cookie cannot be `HttpOnly`. See `kit.csp` in `apps/web/vite.config.ts` and
+`apps/web/src/lib/server/security-headers.ts`.
 
 **Open:** validating sessions with `getClaims()` instead of `getUser()`, once the hosted project is
 confirmed on asymmetric signing keys. It checks the JWT locally, removing the round trip to Supabase

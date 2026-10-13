@@ -18,5 +18,6 @@ export function assertConfigured(): void {
   database();
   blobStore();
   emailer();
-  if (authMode() === 'supabase') supabaseProject();
+  authMode();
+  supabaseProject();
 }
