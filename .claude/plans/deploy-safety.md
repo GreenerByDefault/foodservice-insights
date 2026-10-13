@@ -8,9 +8,10 @@ worker-runs-behind invariant, the drain with its `config.ts` relations, migratio
 workspace rather than the image, deploys that only ever fix forward, report pages that reload once
 their poll is answered by another deploy, a web server that refuses to start without its config
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)),
-`ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
-missing, as the hosted database would, and `deploy-web` moving a `deploy/web` tag on success, which
-names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
+`ts-db-types` migrating the base branch first (in the merge queue, the entry ahead) so that
+Kysely refuses a migration out of order or missing, as the hosted database would, a merge queue
+that runs the full suite on the exact commit that lands, and `deploy-web` moving a `deploy/web`
+tag on success, which names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -38,9 +39,14 @@ Findings that went elsewhere rather than into a PR here:
   own) and the image `deploy.yml` pushes can sit on different `:latest` bases, but UBI minimal is
   conservative within a major, and a digest pin plus Dependabot's `docker` ecosystem is a PR per
   base bump for little caught. Revisit if a base update ever breaks a deploy.
-- *Considered: a merge queue instead of deploys following main's CI.* Available to a public org
-  repo (`ci.yml` would need `merge_group`), and it keeps main green rather than only gating
-  deploys, but costs latency on every merge. Deploys follow main's CI instead (PR 2).
+- *Rejected: deploying once main's CI passes (`workflow_run` on `CI`).* It gates deploys but
+  still lets a bad combination of PRs land, and a red main then blocks every deploy until it is
+  fixed forward. The merge queue keeps that commit off main instead, for the same deploy
+  latency: the queue's run replaces main's. What it costs is merge latency (a PR reaches main a
+  full CI run after it is queued) and flakes that eject a PR rather than delay a deploy.
+- *Rejected: CI on push to main as well as in the queue.* The queue already tested the exact
+  commit that lands, and the ruleset has no bypass actors (**verified** 2026-10-12), so a second
+  run tests nothing new.
 - *Rejected: checking config in `/health`.* The web app validates config at startup instead —
   `assertConfigured` builds every lazy handle (database, blob store, emailer, logger, and the
   Supabase project in `supabase` mode), so a missing variable crashes the server, as the worker's
@@ -67,31 +73,18 @@ their third-party actions by SHA — including those inside the composite action
 (`deploy-service`'s `docker/setup-buildx-action`). Dependabot's `github-actions` ecosystem already
 keeps such pins current.
 
-## PR 2 — Web deploys once main's CI passes
+## Open from the merge queue
 
-The `main branch` ruleset requires `CI` but not an up-to-date branch, auto-merge is on, and PR CI
-runs `--affected` (**verified**). Two PRs green apart can be red together, and `deploy-web` ships
-them — and once `deploy-migrations.md` lands, migrates them — before main's own CI has tested the
-merged commit.
+Checks for after it has run a while, not PRs yet.
 
-**`deploy-web` runs when CI completes, rather than on push.** `deploy.yml` keeps `push` for the
-builds and adds `workflow_run` on `CI` `completed`; `deploy-web` ships
-`github.event.workflow_run.head_sha` when that run's conclusion is `success` and its event is
-`push`. The event check is the boundary, not `branches: [main]`, which also matches a fork's PR
-from a branch named `main` — and this job will hold prod credentials. Builds finish well inside
-main's CI (**verified** 2026-10-11: under two minutes against four to eight), and `deploy-service`
-already fails clearly on a missing image.
+- **Cache warming.** A PR run restores caches saved on main, but not those saved on the queue's
+  `gh-readonly-queue/*` refs, and main's push run used to be what saved the pnpm, uv and
+  Playwright caches. If the first lockfile change leaves every PR run cold, add a push job
+  filtered to the lockfiles that only runs the setup actions.
+- **`gh-stack`.** Whether it handles a queued base PR, since the next PR in a stack can only
+  rebase once the one below it lands.
 
-A trigger instead of a wait means a failed or cancelled CI never starts a deploy, and re-running a
-flaked CI fires `workflow_run` again, so the deploy follows. *Rejected: polling for CI inside
-`deploy-web`* (#489's first draft) — a poll loop, a grace period for a run that might not exist
-yet, and a `cancelled` result every caller had to refuse, all to wait for an event GitHub already
-sends.
-
-The worker needs no check of its own: it deploys the commit `deploy/web` names, which `deploy-web`
-then moves only once CI has passed.
-
-## PR 3 — The fleet's connections fit the session pooler
+## PR 2 — The fleet's connections fit the session pooler
 
 A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
 
@@ -117,7 +110,7 @@ down — Σ `maxConnections` across every process alive during a deploy overlap,
 within Pool Size — then set Pool Size or the per-service maxima to fit. Separate roles per
 service would each get their own cap; weigh that against one more credential to manage.
 
-## PR 4 — The worker refuses a production config that would fail silently
+## PR 3 — The worker refuses a production config that would fail silently
 
 - **Drain grace.** `drainGraceMs` defaults to 30s and `PLATFORM_SHUTDOWN_GRACE_MS` is optional
   ([`config.ts`](../../apps/worker/src/config.ts)). Forget `WORKER_DRAIN_GRACE_MS` and every
@@ -133,7 +126,7 @@ service would each get their own cap; weigh that against one more credential to 
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 5 — Smoke-test every deploy
+## PR 4 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -161,7 +154,5 @@ Not PRs here; sequencing checks for whoever flips production on.
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
 PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
-refused before any step runs. PR 2 after it merges: the push run only builds, and the
-`workflow_run` run deploys once CI passes. PR 3 by
-holding more session-mode connections than Pool Size against the dev stack's pooler and
-confirming the worker keeps ticking.
+refused before any step runs. PR 2 by holding more session-mode connections than Pool Size
+against the dev stack's pooler and confirming the worker keeps ticking.
