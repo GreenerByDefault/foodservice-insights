@@ -56,7 +56,7 @@ function reviewColumnTests(table: string, insert: Insert): void {
 /** For the two tables keyed on a product, which the pipeline strips and then matches exactly. */
 function productTableTests(table: string, insert: Insert): void {
   // `btrim` would let the newline and the no-break space through; Python's `str.strip` does not.
-  test.each([' Beef', 'Beef\n', 'Beef '])(
+  test.each([' Beef', 'Beef\n', 'Beef\u00a0'])(
     'rejects a product with surrounding whitespace %j',
     async (product) => {
       await expectConstraintViolation(
@@ -400,6 +400,29 @@ describe('cache_client', () => {
     });
 
     expect(row).toMatchObject({ isVerified: false, verifiedAt: null, suggestedBy: 'lab:ada' });
+  });
+
+  // The insert every automatic writer makes, so the first suggestion for a key wins.
+  test('leaves an existing answer alone when a suggestion for its key conflicts', async () => {
+    const row = await withRollback(DATABASE, async (transaction) => {
+      const { product } = await insertProductCategorization(transaction, {
+        category: 'Beef',
+        isVerified: true,
+      });
+      await asCacheClient(transaction);
+      await transaction
+        .insertInto('productCategorization')
+        .values({ product, category: 'Cheese', suggestedBy: 'lab:ada' })
+        .onConflict((conflict) => conflict.column('product').doNothing())
+        .execute();
+      return await transaction
+        .selectFrom('productCategorization')
+        .select(['category', 'isVerified', 'suggestedBy'])
+        .where('product', '=', product)
+        .executeTakeFirstOrThrow();
+    });
+
+    expect(row).toEqual({ category: 'Beef', isVerified: true, suggestedBy: 'manual' });
   });
 
   test('cannot insert a row already verified', async () => {

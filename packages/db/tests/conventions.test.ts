@@ -82,6 +82,9 @@ describe('conventions', () => {
             SELECT 1 FROM pg_trigger t
             JOIN pg_proc p ON p.oid = t.tgfoid
             WHERE t.tgrelid = c.oid AND p.proname = 'set_verified_at' AND NOT t.tgisinternal
+              -- BEFORE INSERT OR UPDATE, FOR EACH ROW (tgtype bits 2, 4, 16, 1). Without INSERT,
+              -- a row inserted verified would carry no stamp, or whatever stamp it was given.
+              AND (t.tgtype::int & 23) = 23
           )
       `.execute(transaction);
     });

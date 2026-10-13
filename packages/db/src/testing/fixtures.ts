@@ -475,8 +475,9 @@ export async function insertResultFile(
     .executeTakeFirstOrThrow();
 }
 
-// The cache tables. Each fixture names only the columns `cache_client` may insert, so a test can
-// run it as that role.
+// ---------------------------------------------------------------------------
+// Cache tables
+// ---------------------------------------------------------------------------
 
 export async function insertProductCategorization(
   database: DatabaseExecutor,
