@@ -221,7 +221,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **Its connection limit is 10, and an idle session closes after 10 minutes.** The limit keeps
   the role from starving the production web and worker of the project's shared connections, and
   does nothing for security, which is the grants' job. It is a row in
-  [`hosted-database.md`](hosted-database.md) § The connection budget, which keeps the sum against
+  [`budget.ts`](../../packages/db/src/budget.ts), whose test keeps the sum against
   `max_connections`. Ten covers the realistic peak: two data
   scientists with a kernel or two and a runscript each, plus a developer's lab and `live`
   worker, about 6–9. A lower limit would raise `53300 too many connections for role` whenever

@@ -27,7 +27,7 @@ What changed since this plan was last revised on 2026-09-05, all landed:
   which has no IPv6 egress, and the provider's deploy call is still a stub — so migrating against the
   real project happens before anything serves traffic, which is the cheapest possible rehearsal.
 - **[`deploy-safety.md`](deploy-safety.md)** raised migration lock contention and the connection
-  cap. Both are settled below; its PR 1 keeps the code side of the budget.
+  cap. Both are settled below; its PR 1 moved the budget into code.
 
 An earlier pass chose the shared pooler, inherited from `caches-to-supabase.md`. The criterion is
 how the database behaves in production under this workload, and on that § Connectivity records why
@@ -95,28 +95,19 @@ Five things follow, and together they are the decision:
 
 ### The connection budget
 
-`max_connections` is per compute tier — 60 on Micro, 90 on Small (**verified**) — and Supabase's
-own services (Auth, Storage, PostgREST, pg-meta for Studio, the health checker) draw from the same
-number. Every client here, by the maximum it can hold open at once:
+`max_connections` is per compute tier — 60 on Micro, 90 on Small (**verified**) — less the three
+`superuser_reserved_connections` that `postgres`, not a superuser on Supabase, cannot take.
+Supabase's Auth and Storage servers draw from the same number: an S3 call still reads or writes
+`storage.objects` in our database. [`budget.ts`](../../packages/db/src/budget.ts) lists every
+client, theirs included, by the most connections it can hold open at once, and its test holds the
+sum within 80% of what our roles can reach; it is the one place the sum is written down, and a role
+or a maximum that changes updates it. `metrics-dashboards.md` PR 1
+adds `metrics_reader`'s row.
 
-| Client | Max | Where the number lives |
-| --- | ---: | --- |
-| Web, 1 instance | 10 | `DEFAULT_LIMITS` in [`client.ts`](../../packages/db/src/client.ts); 5 after `deploy-safety.md` PR 1 |
-| Workers, 2 planned | 20 | `WORKER_DB_LIMITS`, held to `2 × attempts + 4` by the check in [`config.ts`](../../apps/worker/src/config.ts) |
-| Deploy overlap | 10 | DigitalOcean runs old and new side by side, one service at a time |
-| Migrate step | 1 | its own handle, PR 2; `seed:identity` runs after it, not beside it |
-| `cache_client` | 10 | `CONNECTION LIMIT` in `002_caches` |
-| `metrics_reader` | 5 | `CONNECTION LIMIT` in `metrics-dashboards.md` PR 1 |
-| **Total** | **56** | 51 once the web's maximum is trimmed |
-
-**Small compute, not Micro.** Micro's 60 minus the services' own draw leaves no room over this
-total, and a worker renewal refused with `53300` is a lease a step closer to expiring; Small's 90
-leaves a third spare, for $5/month over Micro after Pro's compute credit. The invariant: this sum,
-plus the services' baseline, stays under 80% of `max_connections`. The baseline is measured, not
-guessed — § Verification runs `SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1` on the
-idle project. This table is the one place the sum is written down; `deploy-safety.md`,
-`caches-to-supabase.md` and `metrics-dashboards.md` point here, and a role or a maximum that
-changes updates it.
+**Small compute, not Micro.** Micro's 60 does not hold the budget at all, and a worker renewal
+refused with `53300` is a lease a step closer to expiring; Small holds it inside the 80%, for
+$5/month over Micro after Pro's compute credit. Storage's row is an estimate, since its pool size is
+Supabase's and unpublished; § Verification measures it.
 
 ## TLS, verified
 
@@ -226,12 +217,13 @@ project is unconfigured today:
    `S3_SECRET_ACCESS_KEY`. Variables, so they are readable in the UI: `DB_SSL_CA`, `S3_ENDPOINT`,
    `S3_REGION`, `S3_BUCKET`. Repo secrets reach any `pull_request` run from a same-repo branch;
    the Environment reaches only `main`.
-7. **Auth** stays as it is: the OTP templates and custom SMTP belong to
+7. **Auth.** Under Auth's performance settings, maximum connections 5, from Supabase's default
+   10 — `budget.ts`'s row. The OTP templates and custom SMTP belong to
    [`email-provider.md`](email-provider.md), and production is in `placeholder` mode until then.
 
 A laptop can rehearse steps 2–4 before any PR lands: `psql "postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres?sslmode=verify-full&sslrootcert=prod-ca-2021.crt"`,
 then `SET statement_timeout = 1; SELECT pg_sleep(1)` to watch a session setting take effect, and
-`SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1` for the services' baseline.
+`SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1` to see what each role holds.
 
 ## PR 1 — TLS to the database
 
@@ -272,7 +264,7 @@ this plan by its old name, goes.
 Docs in the same PR: `ARCHITECTURE.md` § Secrets management records that the database and bucket
 credentials are also held by GitHub Actions, in the `production` Environment; § Supabase gains the
 lines other components must know — every process connects directly, with the IPv4 add-on and
-TLS, and the budget lives here until this plan is deleted, then in `client.ts`'s header.
+TLS, and the connection budget is [`budget.ts`](../../packages/db/src/budget.ts).
 
 ## Verification
 
@@ -286,7 +278,8 @@ Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`. Then:
   values exported: `pnpm migrate` applies `001` and `002` and creates the bucket;
   `pnpm seed:identity` seeds; Studio shows the tables, two `kysely_migration` rows, and the
   bucket. With *Enforce SSL* on, the run succeeding is also the proof that `DB_SSL_CA` worked.
-  Then the baseline query from § The hosted project, and the budget table against it. This is the
+  Then the `pg_stat_activity` query from § The hosted project, run while an upload is in flight:
+  `supabase_storage_admin`'s count replaces `budget.ts`'s Storage estimate. This is the
   rehearsal; PR 3 then only moves the same command into the workflow.
 - **PR 3**: the first push to `main` after it lands runs the step and reports no pending
   migrations, since the laptop already applied them; the next PR that adds a migration is the

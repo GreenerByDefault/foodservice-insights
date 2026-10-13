@@ -2,6 +2,7 @@ export {
   ANALYSIS_FAILURE_EXPLANATIONS,
   type AnalysisFailureFollowUp,
 } from './analysis-failure-explanations.ts';
+export { WEB_DB_LIMITS, WORKER_DB_LIMITS } from './budget.ts';
 export {
   type DatabaseConfig,
   type DatabaseLimits,

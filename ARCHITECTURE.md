@@ -288,7 +288,9 @@ Note that `asyncio` is *not* the right tool inside `gbd_foodservice_insights`; u
 `ThreadPoolExecutor`.
 
 Every lever multiplies API load: `max concurrent API calls = workers × child processes × threads`.
-Watch upstream rate limits when tuning any of them.
+Watch upstream rate limits when tuning any of them. More workers, or more attempts per worker, also
+spend database connections, which [`budget.ts`](packages/db/src/budget.ts) holds under the hosted
+project's `max_connections`.
 
 We will probably start with 2 workers, handling 4–6 concurrent attempts depending on whether each
 worker runs 2 or 3.

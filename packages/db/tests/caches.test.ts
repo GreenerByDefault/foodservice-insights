@@ -3,6 +3,7 @@
 
 import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { CACHE_CLIENT_CONNECTION_LIMIT } from '../src/budget.ts';
 import { DATABASE } from '../src/env.ts';
 import {
   POSTGRES_CODE_INSUFFICIENT_PRIVILEGE,
@@ -331,7 +332,7 @@ describe('cache_client', () => {
       rolcreatedb: false,
       rolreplication: false,
       rolbypassrls: false,
-      rolconnlimit: 10,
+      rolconnlimit: CACHE_CLIENT_CONNECTION_LIMIT,
       rolconfig: [
         'statement_timeout=30s',
         'idle_in_transaction_session_timeout=60s',

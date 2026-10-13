@@ -1,3 +1,4 @@
+import { WORKER_DB_LIMITS } from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
@@ -10,7 +11,7 @@ import {
   type WorkerDefaultableFields,
   type WorkerRequiredFields,
 } from './config.ts';
-import { WORKER_DATABASE, WORKER_DB_LIMITS } from './db.ts';
+import { WORKER_DATABASE } from './db.ts';
 
 const REQUIRED_FIELDS: WorkerRequiredFields = {
   workerId: 'worker-under-test',

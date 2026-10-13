@@ -10,7 +10,9 @@ their poll is answered by another deploy, a web server that refuses to start wit
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)),
 `ts-db-types` migrating the base branch first (in the merge queue, the entry ahead) so that
 Kysely refuses a migration out of order or missing, as the hosted database would, a merge queue
-that runs the full suite on the exact commit that lands, `deploy-web` moving a `deploy/web` tag
+that runs the full suite on the exact commit that lands, a connection budget
+([`budget.ts`](../../packages/db/src/budget.ts)) whose test holds every pool, instance and role
+limit within `max_connections`, `deploy-web` moving a `deploy/web` tag
 on success, which names the commit `deploy-worker` deploys, dispatched from main only, production
 secrets held only in a `production` Environment that deploys only from main (a dispatch of
 another branch's `deploy.yml` runs without them), and every third-party action on the deploy path
@@ -69,25 +71,7 @@ Checks for after it has run a while, not PRs yet.
 - **`gh-stack`.** Whether it handles a queued base PR, since the next PR in a stack can only
   rebase once the one below it lands.
 
-## PR 1 — The fleet's connections fit `max_connections`
-
-A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
-
-Every process connects directly ([`hosted-database.md`](hosted-database.md) § Connectivity), so
-the project's `max_connections` is the one cap, shared with Supabase's own services, and Postgres
-refuses a connection past it with `53300`, which `TRANSIENT_SQL_STATES` already classifies
-([`errors.ts`](../../packages/db/src/errors.ts)): the worker keeps ticking and the web answers
-503. What is left is sizing. Web and worker both use `maxConnections: 10`
-([`client.ts`](../../packages/db/src/client.ts)); the sum across the fleet, a deploy overlap, the
-migrate step and the other roles is the table in `hosted-database.md` § The connection budget,
-which owns it and the compute tier it implies.
-
-Shape: the web's handle gets `maxConnections: 5` — its queries are milliseconds and its traffic
-is polls and page loads; `WORKER_DB_LIMITS` becomes an explicit object, the TODO goes, and the
-`config.ts` check that ties it to `maxConcurrentAttempts` stays the proof. A maximum that changes
-updates the budget table. A separate role per service is rejected there, for now.
-
-## PR 2 — The worker refuses a production config that would fail silently
+## PR 1 — The worker refuses a production config that would fail silently
 
 - **Drain grace.** `drainGraceMs` defaults to 30s and `PLATFORM_SHUTDOWN_GRACE_MS` is optional
   ([`config.ts`](../../apps/worker/src/config.ts)). Forget `WORKER_DRAIN_GRACE_MS` and every
@@ -103,7 +87,7 @@ updates the budget table. A separate role per service is rejected there, for now
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 3 — Smoke-test every deploy
+## PR 2 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -130,5 +114,3 @@ Not PRs here; sequencing checks for whoever flips production on.
 ## Verification
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
-PR 1 by the budget table in `hosted-database.md` still adding up, and `config.ts`'s check still
-passing with the worker's explicit limits.
