@@ -9,10 +9,6 @@ inputs:
   sha:
     description: Commit SHA to tag the image with
     required: true
-  force_rebuild:
-    description: Build and push even if this commit's tag already exists
-    required: false
-    default: 'false'
 
 runs:
   using: composite
@@ -39,15 +35,14 @@ runs:
         password: ${{ github.token }}
 
     # main only ever moves forward, so a tag that already exists means this exact commit was
-    # already built — rebuilding costs time and buys nothing. force_rebuild is the escape hatch
-    # for a build that succeeded but produced a bad image.
+    # already built, as on a re-run — rebuilding costs time and buys nothing. A bad image is fixed
+    # forward like any other change, with a new commit.
     - name: Check whether this commit already has an image
       id: existing
-      if: inputs.force_rebuild != 'true'
       shell: bash
       run: |
         if docker manifest inspect "${{ steps.image.outputs.name }}:${{ inputs.sha }}" >/dev/null 2>&1; then
-          echo "::notice::${{ inputs.service }}@${{ inputs.sha }} is already built — skipping. Pass force_rebuild to override."
+          echo "::notice::${{ inputs.service }}@${{ inputs.sha }} is already built — skipping."
           echo "skip=true" >> "$GITHUB_OUTPUT"
         else
           echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -56,9 +51,9 @@ runs:
     - uses: docker/setup-buildx-action@v4
       if: steps.existing.outputs.skip != 'true'
 
-    # Never delete a commit-tagged version from the resulting package: each one is a rollback
-    # target, and public GHCR packages have free storage, so there is no cost pressure to prune
-    # them. Build cache lives in the separate `cache` package instead, which is the only one
+    # Never delete a commit-tagged version from the resulting package: the hosting provider's own
+    # rollback redeploys an earlier one, and public GHCR packages have free storage, so there is no
+    # cost pressure to prune them. Build cache lives in the separate `cache` package instead, which is the only one
     # ever safe to garbage-collect.
     - uses: docker/build-push-action@v7
       if: steps.existing.outputs.skip != 'true'

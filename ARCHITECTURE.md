@@ -311,7 +311,7 @@ full RPM-based system if we ever need a package the slim bases lack.
 and pushes each to the GitHub Container Registry, tagged with the commit SHA — one pair of images per
 commit, whether or not that commit ever deploys. **A deploy is a promotion of an existing image,
 never a rebuild:** it resolves the commit SHA it's deploying to that image's digest and hands the
-digest to the hosting provider. That's also what makes a rollback simple.
+digest to the hosting provider.
 
 **An image carries no environment's configuration.** A build-time `PUBLIC_*` or a
 `static: true` variable would bake one in, and promoting that image — forward or back — would
@@ -328,11 +328,10 @@ hosting provider.** There is no way to unapply a database migration; a bad one i
 Deploying the worker naively kills every in-flight analysis attempt, since the hosting platform
 kills the old container outright. Two mitigations, both required:
 
-- **The worker deploys independently of web, and only when someone dispatches it for a specific
-  commit** — never on push. One consequence follows from that asymmetry: the deployed worker is
-  always the side running behind schema and web app, never ahead, so the web ↔ worker and app ↔
-  schema contracts must stay backwards compatible for as long as an old worker might still be
-  running.
+- **The worker deploys independently of web, and only when someone dispatches it** — never on
+  push. One consequence follows from that asymmetry: the deployed worker is always the side running
+  behind schema and web app, never ahead, so the web ↔ worker and app ↔ schema contracts must stay
+  backwards compatible for as long as an old worker might still be running.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
@@ -344,11 +343,16 @@ shutdown delay defaults to 30s (configurable to 300s); Railway's
 `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**, which SIGKILLs the worker mid-drain and
 looks exactly like a worker bug.
 
-### Rollback
+### Bad deploys are fixed forward
 
-**A rollback is fast and reproducible: it's the same promotion described in § Images, aimed at an
-older commit.** It does nothing to undo a migration already applied against the database — that's
-the fix-forward rule above, and it applies regardless of which service is rolled back.
+**`deploy.yml` never rolls back: a bad deploy is undone by reverting its PR, which deploys like
+any other change.** That is one path everyone, agents included, already knows, rather than a
+second one used only under pressure. It also keeps migrations simple: every deploy migrates
+forward, so nothing has to decide when to skip one. CI refuses a revert that deletes a migration;
+undo one with a new migration instead.
+
+When an outage can't wait for CI, the hosting provider's own rollback redeploys an earlier image.
+Land the revert before the next worker deploy, which would otherwise run ahead of the web.
 
 ### Choosing a host
 
