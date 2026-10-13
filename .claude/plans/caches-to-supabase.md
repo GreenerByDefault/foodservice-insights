@@ -158,15 +158,49 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   attempts. *Rejected: pulling the verified rows into the dev database and pushing harvests
   back.* A second mechanism, and a local run's suggestions would sit unreviewed until someone
   remembered to push.
-- **Honored only in `live`.** `resolveWorkerMode` refuses to start `mock-llm` or `stubbed` with
-  the variable set, naming the reason: a keyword categorization in a shared cache would block
+- **Honored only in `live`.** In `mock-llm` and `stubbed` the worker ignores the variable and
+  logs one startup WARNING naming it: a keyword categorization in a shared cache would block
   the real LLM's suggestion for that product forever, since the first suggestion wins. Those
   modes keep the cache in the local database, read and written, which is what the by-hand check
-  in § Verification relies on.
+  in § Verification relies on. `off` spawns nothing and ignores it silently. So a developer
+  leaves the line in `.env` and switches modes with `WORKER_MODE` alone.
+  *Rejected: refusing to start in those modes.* It protects nothing more, since the shared
+  cache is untouched either way, and it makes every mode switch a two-line edit.
 - **It is the same variable and the same role the lab uses**, so a developer who also runs the
   lab holds one credential, and a harvested row's `suggested_by` carries the worker id after
   the attempt id, so a reviewer can tell a laptop's run from the fleet's — a laptop's attempt id
   is not in production's `analysis_attempt`.
+- **What an app developer who never opens the lab does**, and what the root `README.md`
+  § Analysis modes says (PR 2):
+  1. Ask whoever holds dashboard access (Eric, until § Reviewing in Studio's **Open** is
+     settled) for the composed `cache_client` string, delivered the way `OPENAI_API_KEY` is,
+     never in a chat that an agent or a log can read.
+  2. Put it in the repo root's `.env` as `CACHE_DB_CONNECTION_STRING`, beside
+     `WORKER_MODE=live`. In `.env`, not a shell export: turbo's strict env mode drops undeclared
+     variables before `pnpm dev:worker` starts, and the worker reads `.env` itself. Any file
+     path inside the string, such as a CA certificate, must be absolute, because the worker runs
+     from `apps/worker` and the lab from wherever the notebook is. `.worktreeinclude` already
+     copies `.env` into new worktrees.
+  3. Never put a production string in `DB_CONNECTION_STRING`. The worker would claim real
+     attempts, and the web app would serve real reports. `.env.example`'s comment says so on
+     both variables.
+  4. Start the worker and read its startup line naming the cache database.
+
+  That's all there is to "pulling": every claim reads the latest verified rows, so there is no
+  sync step and nothing goes stale. "Updating" is automatic too: every `live` run suggests its new
+  products. Only a human with dashboard access can *verify* a suggestion. `cache_client` cannot,
+  by design, so a developer who wants a row corrected asks the reviewer, or fixes it in Studio
+  if they are one.
+- **A developer changing the categorization prompt or model unsets the variable first.** An
+  experiment's answers would otherwise become the first suggestion for every product they
+  touch and block the real model's suggestion until a reviewer deletes them, which is the lab's
+  `push_suggestions=False` case (PR 6) on the worker side. With the variable unset, the
+  experiment's cache is the local database. The README says this beside step 2.
+- **The string is one shared password.** Everyone who holds `cache_client` holds the same one,
+  so revoking a single person means `ALTER ROLE cache_client PASSWORD` and handing the new string
+  to everyone else. That's acceptable for a role that can only read three tables and insert
+  unverified rows. *Rejected: a role per person.* Every grant, limit and password would be
+  multiplied, for a credential this weak, held by a handful of people.
 
 ### A role that can read and suggest, nothing more
 
@@ -353,10 +387,14 @@ ignores it until PR 3, so this PR changes no report.
   `main.ts` builds it from `CACHE_DB_CONNECTION_STRING` when set, with `minConnections: 0` and
   `maxConnections: 2`, because the role's 10 connections are shared by everyone who holds it
   (§ A role that can read and suggest); else it passes
-  `WORKER_DATABASE`, and logs which at startup; `resolveWorkerMode` takes the variable and throws
-  for any mode but `live`. `.env.example` gains the variable with its two forms; the root
-  `README.md` § Analysis modes `live` row and `apps/worker/README.md`'s variable table say what
-  it does.
+  `WORKER_DATABASE`, and logs which at startup; `resolveWorkerMode` takes the variable and says
+  whether the mode uses it, and `main.ts` logs the WARNING when it is set but unused, which is in
+  `stubbed` and `mock-llm`. `.env.example` gains the variable,
+  commented out, with its two forms and a warning on it and on `DB_CONNECTION_STRING` that a
+  production string never goes in the latter; `.env.test` never sets it, so no test can reach
+  the hosted project. The root `README.md` § Analysis modes `live` row points to a short
+  subsection with § Local development's four developer steps and the prompt-experiment rule;
+  `apps/worker/README.md`'s variable table says what it does.
 - Python: `contract/layout.py`, `contract/fields.py` (`objects(key)` → `list[Fields]` at
   `rows[i]`), `contract/messages.py` (`read_categorization_cache(run_directory)`), `run.py`
   (read after the manifest, pass on the request). `analysis.py` gains
@@ -368,7 +406,7 @@ ignores it until PR 3, so this PR changes no report.
   `insertProductCategorization` (committed, so deleted in a `finally`; `withCommittedFixture`'s cleanup is keyed on organizations, which
   these rows are not), parks a fake child on a sentinel, reads the document, and sees only the
   verified row; `breakableDatabase` broken after the claim gives `infrastructure` and no spawned
-  child; `modes.test.ts` covers the variable with each mode. Python: `test_fixtures.py` (the valid fixture parses to the expected tuple, newline row
+  child; `modes.test.ts` covers the variable with each mode, `off` included. Python: `test_fixtures.py` (the valid fixture parses to the expected tuple, newline row
   included; every invalid fixture is rejected), `test_run.py` (missing document →
   `contract_violation` and no `result.json`; malformed → `contract_violation`; a recording
   `analyze` receives the parsed rows), `test_library_agreement.py` (the child's row type is the
@@ -469,11 +507,13 @@ cache and the worker image needs no file.
   with the variable's name and each file's age; step 0.5 reaches it through step 1 unchanged.
   The loaders themselves do not change.
 - Tests: the frame builders; a `db`-marked round trip (`pytest` marker added to the root
-  `pyproject.toml`) that runs when `CACHE_DB_CONNECTION_STRING` is set — random keys, deleted in
-  `finally`, since the test stack is shared across worktrees — and the runscript's pull-or-warn
-  branch through `test_runscript.py`'s module-loading pattern. CI: the `py-lab` job gains
-  `setup-node`, `setup-supabase` and `TEST_DB=1 pnpm migrate`, and sets the variable to the test
-  stack's `postgres` URL from `.env.test`; `.github/filters.yml`'s `python_lab` filter stops
+  `pyproject.toml`) that runs when `TEST_DB=1`, connecting with `.env.test`'s
+  `DB_CONNECTION_STRING` as the TypeScript tests do. Random keys are deleted in `finally`, since
+  the test stack is shared across worktrees. It never reads `CACHE_DB_CONNECTION_STRING`: on a
+  developer's laptop that is production, where the test would leave its rows in the review queue
+  because `cache_client` cannot delete them. The runscript's pull-or-warn branch is tested
+  through `test_runscript.py`'s module-loading pattern. CI: the `py-lab` job gains
+  `setup-node`, `setup-supabase` and `TEST_DB=1 pnpm migrate`, and sets `TEST_DB=1`; `.github/filters.yml`'s `python_lab` filter stops
   excluding `packages/db/migrations/**`, so a schema change reruns the round trip on the PR and
   not only on `main`.
 - `.env.example`'s `CACHE_DB_CONNECTION_STRING` comment, added in PR 2, now names the lab too.
@@ -523,7 +563,9 @@ can 5 and 6.
 | Two attempts suggest the same product | the second `DO NOTHING` waits on the first's tuple, then skips |
 | Reviewer types a category not in the YAML | the child drops the row with a WARNING; the product goes to the LLM, and its suggestion is skipped because the row exists |
 | Reviewer deletes a row | the next run suggests it again, unverified |
-| `CACHE_DB_CONNECTION_STRING` set with `mock-llm` or `stubbed` | the worker refuses to start, naming the reason |
+| `CACHE_DB_CONNECTION_STRING` set with `mock-llm` or `stubbed` | ignored with one startup WARNING; the cache is the local database |
+| `CACHE_DB_CONNECTION_STRING` set with `off` | ignored; nothing runs |
+| A production string put in `DB_CONNECTION_STRING` by mistake | the local worker claims real attempts; prevented only by `.env.example`'s warning and the README, since the worker cannot tell a hosted database from a local one |
 | A `live` worker without `CACHE_DB_CONNECTION_STRING` | the cache is the worker's own database, read and written; one startup log line says so |
 | Lab push names `is_verified` | `42501` from the role; the push code never does |
 | All 10 of `cache_client`'s connections are in use | the next connection fails with `53300`; the production web and worker are unaffected |
@@ -551,7 +593,9 @@ the import both connect through `buildPoolConfig`, so the pooler's acceptance of
 3. Merge PRs 2–4 and dispatch a worker deploy. If 2 is deployed before the import, the parent
    writes `{"rows": []}` and the run costs LLM calls, nothing more; if 4 lands before the import,
    the import's `DO UPDATE … WHERE NOT is_verified` later promotes any harvested rows the CSV
-   knows. From here, every developer's `live` worker runs with `CACHE_DB_CONNECTION_STRING` set.
+   knows. From here, every developer's `live` worker runs with `CACHE_DB_CONNECTION_STRING` set:
+   hand each app developer the composed string the same way as in step 4, and have them follow
+   § Local development's steps.
 4. Merge PRs 5–6; hand each data scientist the same composed string, checked with `psql`
    first (if the project ever turns on network restrictions, their addresses need allowing);
    they set `CACHE_DB_CONNECTION_STRING`, pull once, and delete
@@ -569,7 +613,8 @@ that product under the new category in its workbook, which only a cache hit can 
 child logs at WARNING, so the match-type counts are not visible from the worker). On `live`
 with `CACHE_DB_CONNECTION_STRING` at the hosted project: a local upload's new products appear in
 production's Studio unverified, with the laptop's worker id in `suggested_by`, and the same
-variable under `mock-llm` stops the worker at startup. On the lab:
+variable under `mock-llm` logs the WARNING and its upload's suggestions land in the local
+database, not production's. On the lab:
 `just pull-caches` writes three files whose row counts match the verified counts in Studio; a
 step 1 run's new categorizations appear in Studio unverified as `lab:<user>`; a second run of
 the same file adds nothing.
