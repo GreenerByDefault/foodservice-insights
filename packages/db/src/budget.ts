@@ -44,6 +44,22 @@ export const WORKER_DB_LIMITS: DatabaseLimits = {
   statementTimeoutMs: 30_000,
   idleInTransactionSessionTimeoutMs: 60_000,
   idleSessionTimeoutMs: 600_000,
+  lockTimeoutMs: 0,
+};
+
+/** The migrate step's handle. One connection, since Kysely runs every pending migration in one
+ * transaction on one. Ten minutes for a statement or an idle transaction, so a migration that
+ * backfills a table is not cut off mid-deploy. And a short `lock_timeout`: DDL queues every later
+ * statement on its table behind its own wait for a lock, so a migration stalled behind one open
+ * transaction would stall every claim and poll with it. It yields instead, and
+ * `scripts/migrate.ts` retries. */
+export const MIGRATE_DB_LIMITS: DatabaseLimits = {
+  ...DEFAULT_LIMITS,
+  minConnections: 1,
+  maxConnections: 1,
+  statementTimeoutMs: 600_000,
+  idleInTransactionSessionTimeoutMs: 600_000,
+  lockTimeoutMs: 5_000,
 };
 
 /** `cache_client`'s `CONNECTION LIMIT`, set by migration `002_caches` and asserted against the
@@ -61,9 +77,8 @@ export const CONNECTION_BUDGET = {
   // one service at a time, so at most one fleet is doubled — all of its instances at once.
   deployOverlap: Math.max(WEB_FLEET, WORKER_FLEET),
 
-  // A one-connection handle, from `hosted-database.md` PR 2. `seed:identity` runs after it, not
-  // beside it.
-  migrate: 1,
+  // `seed:identity` runs after it, not beside it.
+  migrate: MIGRATE_DB_LIMITS.maxConnections,
 
   cacheClient: CACHE_CLIENT_CONNECTION_LIMIT,
 

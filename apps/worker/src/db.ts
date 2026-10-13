@@ -15,6 +15,7 @@ loadLocalEnv();
 export const WORKER_DATABASE: Kysely<Database> = initializeDatabase({
   connectionString: requireEnv('DB_CONNECTION_STRING'),
   sslCa: process.env.DB_SSL_CA,
+  applicationName: 'worker',
   limits: WORKER_DB_LIMITS,
   log: WORKER_LOG,
 });

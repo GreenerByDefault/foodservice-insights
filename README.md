@@ -297,7 +297,8 @@ Which to run when:
 
 Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
 Keep them backwards-compatible with the running app, since migrations run *before* the new
-code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
+code deploys. `CREATE INDEX CONCURRENTLY` is unavailable, because every migration runs in one
+transaction; a plain `CREATE INDEX` is fine at our table sizes.
 
 #### Reset a database
 

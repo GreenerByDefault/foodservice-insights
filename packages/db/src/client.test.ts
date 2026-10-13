@@ -28,7 +28,8 @@ test('with no override, every field comes from DEFAULT_LIMITS', () => {
     options:
       `-c statement_timeout=${DEFAULT_LIMITS.statementTimeoutMs} ` +
       `-c idle_in_transaction_session_timeout=${DEFAULT_LIMITS.idleInTransactionSessionTimeoutMs} ` +
-      `-c idle_session_timeout=${DEFAULT_LIMITS.idleSessionTimeoutMs}`,
+      `-c idle_session_timeout=${DEFAULT_LIMITS.idleSessionTimeoutMs} ` +
+      `-c lock_timeout=${DEFAULT_LIMITS.lockTimeoutMs}`,
   });
 });
 
@@ -48,7 +49,9 @@ test('an override for every field reaches the matching pg option', () => {
         statementTimeoutMs: 6,
         idleInTransactionSessionTimeoutMs: 7,
         idleSessionTimeoutMs: 8,
+        lockTimeoutMs: 9,
       },
+      applicationName: 'a process',
     }),
   ).toEqual({
     connectionString: 'postgres://irrelevant',
@@ -59,7 +62,9 @@ test('an override for every field reaches the matching pg option', () => {
     maxLifetimeSeconds: 5,
     allowExitOnIdle: false,
     options:
-      '-c statement_timeout=6 -c idle_in_transaction_session_timeout=7 -c idle_session_timeout=8',
+      '-c statement_timeout=6 -c idle_in_transaction_session_timeout=7 ' +
+      '-c idle_session_timeout=8 -c lock_timeout=9',
+    application_name: 'a process',
   });
 });
 
@@ -107,6 +112,25 @@ test('a custom statementTimeoutMs is enforced by the real database', async () =>
     // The override didn't just disable statements entirely: a query well under the limit still
     // succeeds.
     await expect(sql`select 1`.execute(database)).resolves.toBeDefined();
+  } finally {
+    await shutdownDatabase(database);
+  }
+});
+
+test('the lock timeout and application name reach the real session', async () => {
+  const database = initializeDatabase({
+    connectionString: requireEnv('DB_CONNECTION_STRING'),
+    limits: { lockTimeoutMs: 1_234 },
+    applicationName: 'client.test',
+    log: 'console',
+  });
+
+  try {
+    const { rows } = await sql<{ lockTimeout: string; applicationName: string }>`
+      select current_setting('lock_timeout') as lock_timeout,
+        current_setting('application_name') as application_name
+    `.execute(database);
+    expect(rows).toEqual([{ lockTimeout: '1234ms', applicationName: 'client.test' }]);
   } finally {
     await shutdownDatabase(database);
   }
