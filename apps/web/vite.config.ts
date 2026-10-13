@@ -62,7 +62,9 @@ export default defineConfig(({ command }) => ({
           'form-action': ['self'],
           'frame-ancestors': ['none'],
           // Both, since Firefox and Safari read only `report-uri`. `csp` names the endpoint in
-          // `Reporting-Endpoints`, set beside this policy in `handle`.
+          // `Reporting-Endpoints`, set beside this policy in `handle`. Chromium sends `report-to`
+          // reports only from an `https:` page, so under `pnpm dev` it reports nothing; its
+          // console still shows the violation.
           'report-uri': ['/csp-report'],
           'report-to': ['csp'],
         },
