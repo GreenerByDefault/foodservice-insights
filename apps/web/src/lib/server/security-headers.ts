@@ -23,24 +23,18 @@ export function applySecurityHeaders(response: Response): Response {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(name, value);
   }
-
-  // `kit.csp` in `vite.config.ts` sets a policy only on rendered pages, so its absence is what
-  // marks every other response.
-  const pagePolicy = response.headers.get('Content-Security-Policy');
-  if (pagePolicy === null) {
-    response.headers.set('Content-Security-Policy', NON_PAGE_POLICY);
-  } else {
-    response.headers.set('Content-Security-Policy', withSupabase(pagePolicy));
-    // Relative, so the browser resolves it against the page it loaded. An absolute URL would come
-    // from `event.url`, whose scheme behind a proxy is only as right as adapter-node's config.
-    response.headers.set('Reporting-Endpoints', 'csp="/csp-report"');
-  }
+  response.headers.set(
+    'Content-Security-Policy',
+    contentSecurityPolicy(response.headers.get('Content-Security-Policy')),
+  );
   return response;
 }
 
-/** Finished here rather than in `kit.csp`, because the Supabase URL varies by environment and the
- * build does not. */
-function withSupabase(pagePolicy: string): string {
+/** `kit.csp` in `vite.config.ts` sets a policy only on rendered pages, so its absence is what
+ * marks every other response. A page's is finished here, because the Supabase URL varies by
+ * environment and the build does not. */
+function contentSecurityPolicy(pagePolicy: string | null): string {
+  if (pagePolicy === null) return NON_PAGE_POLICY;
   const supabaseOrigin = new URL(requirePublicVar('PUBLIC_SUPABASE_URL')).origin;
   return pagePolicy
     .split('; ')
