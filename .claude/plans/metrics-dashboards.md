@@ -61,7 +61,7 @@ Facts from the tree (2026-09-27) that shape the design:
   panel check on the test stack draws on one `metrics_reader` allowance.
 - **The repo is public.** No Grafana file can hold a secret, and the hosted project's hostnames
   stay out of it too.
-- **`deploy.yml` does not migrate yet.** [`deploy-migrations.md`](deploy-migrations.md) adds that
+- **`deploy.yml` does not migrate yet.** [`hosted-database.md`](hosted-database.md) adds that
   step, and the push to Grafana Cloud has to run after it, so a dashboard never reaches Cloud
   before the view it reads.
 
@@ -132,7 +132,8 @@ user country, which Cloudflare's dashboard already shows.
 ### Access: one read-only role
 
 - **`metrics_reader` is the only reader.** It is created `LOGIN NOINHERIT` with a
-  `CONNECTION LIMIT`, and `default_transaction_read_only` and `statement_timeout` are set on the
+  `CONNECTION LIMIT` — a row in [`hosted-database.md`](hosted-database.md) § The connection
+  budget — and `default_transaction_read_only` and `statement_timeout` are set on the
   role. It has `USAGE` on `metrics`, `SELECT` on its views, and nothing on `public` or `auth`. A
   view runs with its owner's rights, so `metrics.app_user` can read `auth.users.created_at`
   without the role holding any grant on `auth`.
@@ -210,8 +211,9 @@ user country, which Cloudflare's dashboard already shows.
   - A function in `apps/grafana/src/` builds it: its type, its uid (`metrics`, which every panel
     names) and its pool limits.
   - It reads `METRICS_DB_CONNECTION_STRING`, the address as Grafana sees it:
-    `host.docker.internal` in `.env.example` and `.env.test`, and in a GitHub secret the
-    Supavisor session pooler, with TLS, as `metrics_reader.<project-ref>`.
+    `host.docker.internal` in `.env.example` and `.env.test`, and in a GitHub secret the hosted
+    project's direct connection as `metrics_reader`, carrying TLS as `sslmode` and `sslrootcert`
+    the way every hand-composed string does ([`hosted-database.md`](hosted-database.md) § TLS).
   - One API call upserts it into the dev, test or Cloud Grafana.
   - Grafana's pool is capped below the role's `CONNECTION LIMIT`, so Grafana waits for a free
     connection instead of being refused one.
@@ -450,11 +452,11 @@ This PR needs PR 3's generator and PR 2's data source builder.
   which verifies the release checksum.
 - A step at the end of `deploy-web` runs it, with the conditions from Decisions and a comment
   explaining why it comes after both the migration and the deploy. This PR follows
-  `deploy-migrations.md`, which adds the migrate step and the Node setup this step reuses.
-- Before the first deploy, press the data source's Test button in Grafana Cloud. Supabase
-  documents `metrics_reader.<project-ref>` as the pooler username for a custom role, and the
-  button proves Grafana Cloud reaches the pooler. Grafana's egress ranges would need adding to an
-  allowlist only if Supabase's network restrictions were ever turned on.
+  `hosted-database.md`, which adds the migrate step and the Node setup this step reuses.
+- Before the first deploy, press the data source's Test button in Grafana Cloud: it proves
+  Grafana Cloud reaches the direct host over the IPv4 add-on and trusts the CA it was given.
+  Grafana's egress ranges would need adding to an allowlist only if Supabase's network
+  restrictions were ever turned on.
 - `ARCHITECTURE.md`:
   - The Stack table gains a Dashboards row: Grafana Cloud, with Grafana OSS locally.
   - § Metrics gains a sentence about where dashboards live and how they deploy.

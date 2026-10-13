@@ -16,7 +16,7 @@ secrets held only in a `production` Environment that deploys only from main (a d
 another branch's `deploy.yml` runs without them), and every third-party action on the deploy path
 pinned by SHA. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
-[`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
+[`hosted-database.md`](hosted-database.md) has not landed — so each fix here is cheapest now.
 
 Facts marked **verified** were checked on 2026-10-08.
 
@@ -24,8 +24,8 @@ Findings that went elsewhere rather than into a PR here:
 
 - **One DigitalOcean app would redeploy the worker on every web push** — a note in
   [`hosting-provider.md`](hosting-provider.md) § After the decision.
-- **Migration lock contention** — a problem statement in [`deploy-migrations.md`](deploy-migrations.md),
-  whose PR owns the migration session's settings.
+- **Migration lock contention** — settled in [`hosted-database.md`](hosted-database.md), whose
+  PR 2 owns the migration session's settings.
 - **Health check as readiness, not liveness** — also in `hosting-provider.md`, since it is
   provider config.
 
@@ -69,31 +69,23 @@ Checks for after it has run a while, not PRs yet.
 - **`gh-stack`.** Whether it handles a queued base PR, since the next PR in a stack can only
   rebase once the one below it lands.
 
-## PR 1 — The fleet's connections fit the session pooler
+## PR 1 — The fleet's connections fit `max_connections`
 
 A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
 
-The problem, in two halves:
+Every process connects directly ([`hosted-database.md`](hosted-database.md) § Connectivity), so
+the project's `max_connections` is the one cap, shared with Supabase's own services, and Postgres
+refuses a connection past it with `53300`, which `TRANSIENT_SQL_STATES` already classifies
+([`errors.ts`](../../packages/db/src/errors.ts)): the worker keeps ticking and the web answers
+503. What is left is sizing. Web and worker both use `maxConnections: 10`
+([`client.ts`](../../packages/db/src/client.ts)); the sum across the fleet, a deploy overlap, the
+migrate step and the other roles is the table in `hosted-database.md` § The connection budget,
+which owns it and the compute tier it implies.
 
-1. **Budget.** Supavisor's session mode caps clients at the project's *Pool Size* per
-   role + database — around 15 on the small compute tiers; check Database Settings. Web and worker
-   both use `maxConnections: 10` ([`client.ts`](../../packages/db/src/client.ts)). One web and the
-   planned two workers can ask for 30, a deploy's old/new overlap adds a service's worth more, and
-   the migration step and anyone in Studio share the same cap.
-2. **Classification.** Supavisor rejects a connection over the cap with
-   `FATAL XX000 (EMAXCONNSESSION) max clients reached in session mode…` (**verified** in
-   `supabase/supavisor`'s `max_connections_error.ex` and `proxy_test.exs`). `XX000` is not in
-   `TRANSIENT_SQL_STATES` ([`errors.ts`](../../packages/db/src/errors.ts)), so it counts as a
-   statement Postgres refused. The worker's claim poll treats that as "drain and exit nonzero"
-   ([`worker.ts`](../../apps/worker/src/worker.ts) `pollQueue`) — killing its in-flight attempts
-   as `shut_down` at exactly the busy moment that exhausted the pool. The web answers 500 instead
-   of 503.
-
-Likely shape: treat `EMAXCONN*` as transient (a message match, the way
-`TRANSIENT_DRIVER_MESSAGES` already works, with a test pinning the string), and write the budget
-down — Σ `maxConnections` across every process alive during a deploy overlap, plus migrations,
-within Pool Size — then set Pool Size or the per-service maxima to fit. Separate roles per
-service would each get their own cap; weigh that against one more credential to manage.
+Shape: the web's handle gets `maxConnections: 5` — its queries are milliseconds and its traffic
+is polls and page loads; `WORKER_DB_LIMITS` becomes an explicit object, the TODO goes, and the
+`config.ts` check that ties it to `maxConcurrentAttempts` stays the proof. A maximum that changes
+updates the budget table. A separate role per service is rejected there, for now.
 
 ## PR 2 — The worker refuses a production config that would fail silently
 
@@ -138,5 +130,5 @@ Not PRs here; sequencing checks for whoever flips production on.
 ## Verification
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
-PR 1 by holding more session-mode connections than Pool Size against the dev stack's pooler and
-confirming the worker keeps ticking.
+PR 1 by the budget table in `hosted-database.md` still adding up, and `config.ts`'s check still
+passing with the worker's explicit limits.

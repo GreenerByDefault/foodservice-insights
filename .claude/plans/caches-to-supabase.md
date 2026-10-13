@@ -51,14 +51,15 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **Hosted Supabase facts, from its docs on 2026-10-11.** A custom role is an ordinary
   `CREATE ROLE … LOGIN PASSWORD` that the SQL editor, running as `postgres`, may issue —
   Supabase's own roles post creates one that way; `postgres` is not a superuser but has the
-  admin privileges that covers. The shared pooler accepts a custom role as
-  `[ROLE].[PROJECT-REF]`, session mode on port 5432, IPv4 on every plan; supplying the bare role
-  name gives `Tenant or user not found`. The direct connection is IPv6 unless the IPv4 add-on
-  is bought. Dashboard roles: Owner, Administrator and Developer can all run arbitrary SQL;
+  admin privileges that covers. Every process reaches the project over the direct connection,
+  `db.<project-ref>.supabase.co`, with the IPv4 add-on and TLS
+  ([`hosted-database.md`](hosted-database.md) § Connectivity), so a custom role logs in under its
+  bare name, as on the local stacks. Dashboard roles: Owner, Administrator and Developer can all
+  run arbitrary SQL;
   Read-Only, which runs SELECT only as `supabase_read_only_user`, exists on Team and Enterprise
   plans only. So on a Free or Pro plan, anyone who can open Studio can drop a table.
-- **No prod migration pipeline yet** (`deploy-migrations.md` is unlanded), so prod steps below are
-  hand-run against the session-mode pooler URL.
+- **No prod migration pipeline yet** ([`hosted-database.md`](hosted-database.md) is unlanded), so
+  prod steps below are hand-run against the direct connection, as § Go-live says.
 - **GBD's product CSV** (copy dated 2026-09-27): 23,505 of 38,692 rows are `No Matches Found`,
   so negative results are most of the cache's value; 20,008 rows have `cleaned_item_names` equal
   to the raw product, from old cache hits written back verbatim; 747 products carry surrounding
@@ -210,14 +211,18 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   other column gets `42501`. It has a statement timeout and an idle-in-transaction timeout, the
   latter so an abandoned transaction holding an uncommitted suggestion cannot block every other
   insert of that key, a production harvest's included; so the lab's `connect()` (PR 5) uses
-  autocommit or short transactions.
+  autocommit or short transactions. The role's settings are a floor for clients that send none:
+  the worker's cache handle (PR 2) sends `DEFAULT_LIMITS` as startup parameters, the same values
+  today, and those override them; only the lab's psycopg relies on the role's.
   *Rejected: read-only.* Then every new row the lab produces would reach the database by hand,
   which is the sync problem this plan exists to end. *Rejected: letting the role verify rows in
   the lab-only tables.* One rule for three tables is easier to hold; revisit if ticking entree
   rows in Studio turns out to be the bottleneck.
 - **Its connection limit is 10, and an idle session closes after 10 minutes.** The limit keeps
   the role from starving the production web and worker of the project's shared connections, and
-  does nothing for security, which is the grants' job. Ten covers the realistic peak: two data
+  does nothing for security, which is the grants' job. It is a row in
+  [`hosted-database.md`](hosted-database.md) § The connection budget, which keeps the sum against
+  `max_connections`. Ten covers the realistic peak: two data
   scientists with a kernel or two and a runscript each, plus a developer's lab and `live`
   worker, about 6–9. A lower limit would raise `53300 too many connections for role` whenever
   someone has a few notebooks open. The idle-session timeout keeps a forgotten kernel from holding
@@ -229,8 +234,11 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   connections at once.
 - **A human sets its password once, in the hosted SQL editor** (`ALTER ROLE cache_client
   PASSWORD '…'`), so no secret is ever in a migration. A data scientist's or a developer's
-  credential is composed, not copied: the session-pooler string from the dashboard's Connect dialog with `postgres.<ref>` replaced by
-  `cache_client.<ref>` and the password by the role's. Neither sees the `postgres` password, and
+  credential is composed, not copied:
+  `postgresql://cache_client:<password>@db.<project-ref>.supabase.co:5432/postgres?sslmode=verify-full&sslrootcert=<path to the repo's supabase-ca.crt>`
+  — the dashboard's *Direct connection* string with the role, its password, and the TLS
+  parameters that psycopg, `psql` and `pg` all read from a URL
+  ([`hosted-database.md`](hosted-database.md) § TLS). Neither sees the `postgres` password, and
   the string they hold can read three tables and insert unverified rows into them, nothing else.
   *Rejected: giving the data scientists `DB_CONNECTION_STRING`.* It is `postgres`, and an agent
   with it can drop a table. *Considered: Supabase's temporary access*, where a dashboard member
@@ -240,16 +248,14 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **The hosted path is unproven, so prove it before migrating production** (§ Go-live step
   1), in ten minutes against the real project with a throwaway role: `CREATE ROLE smoke LOGIN
   PASSWORD …` in the SQL editor, `GRANT SELECT` on an existing table, then from a laptop `psql`
-  to the session pooler as `smoke.<ref>`; confirm a `SELECT` works and an `UPDATE` and a
+  to the direct host as `smoke`, with TLS; confirm a `SELECT` works and an `UPDATE` and a
   `SELECT` from `report` fail with `42501`; then `DROP ROLE`. `002_caches` grants no `USAGE ON
   SCHEMA public`, because `PUBLIC` holds it on both local stacks; if the smoke test's `SELECT`
   fails on the schema rather than the table, add that grant in a new migration before migrating
-  production. If the pooler
-  refuses a custom role after all, the fallbacks are the direct connection (IPv6, or the IPv4
-  add-on) with the same role; the `postgres` string is the last resort, not the first.
+  production.
 - **The lab reads the worker's `CACHE_DB_CONNECTION_STRING`, never `DB_CONNECTION_STRING`.**
-  For the data scientists it is `cache_client.<project-ref>` on the session-mode pooler; a
-  developer uses one string for the lab and `pnpm dev:worker` alike, or points it at the local
+  For the data scientists it is `cache_client` on the direct host, with TLS — the string above;
+  a developer uses one string for the lab and `pnpm dev:worker` alike, or points it at the local
   dev stack as `postgres`. Unset, every lab command works exactly as today, on whatever CSV is
   on disk, with a WARNING naming the variable and the file's age.
 - **`pull` writes the verified rows to the three CSV paths the loaders read today**, atomically,
@@ -386,7 +392,10 @@ ignores it until PR 3, so this PR changes no report.
   `AttemptDependencies` gains `cacheDb: DatabaseExecutor`, the only handle the cache query uses.
   `main.ts` builds it from `CACHE_DB_CONNECTION_STRING` when set, with `minConnections: 0` and
   `maxConnections: 2`, because the role's 10 connections are shared by everyone who holds it
-  (§ A role that can read and suggest); else it passes
+  (§ A role that can read and suggest), and with no `ssl` of its own: this string is only ever
+  composed by hand on a laptop and carries its TLS as `sslmode` and `sslrootcert`, which `pg`
+  reads from the URL; `DB_SSL_CA` belongs to the production handles alone
+  (`hosted-database.md` § TLS); else it passes
   `WORKER_DATABASE`, and logs which at startup; `resolveWorkerMode` takes the variable and says
   whether the mode uses it, and `main.ts` logs the WARNING when it is set but unused, which is in
   `stubbed` and `mock-llm`. `.env.example` gains the variable,
@@ -493,7 +502,8 @@ cache and the worker image needs no file.
 
 - `python/lab/pyproject.toml` gains `psycopg[binary]` (check its Python 3.14 wheel at PR time).
 - `gbd_foodservice_insights_lab/cache_sync.py`: `connect()` reading `CACHE_DB_CONNECTION_STRING`
-  via the lab's existing dotenv loading, in autocommit (§ Decisions: the role's idle timeouts).
+  via the lab's existing dotenv loading, in autocommit (§ Decisions: the role's idle timeouts);
+  psycopg reads the string's `sslmode` and `sslrootcert` itself, so TLS needs no code.
   Each command opens its own connection and closes it on the way out, never one held in a
   notebook global, which the role's idle-session timeout would close after 10 minutes.
   `pull(connection)` selecting the verified rows of each
@@ -518,8 +528,9 @@ cache and the worker image needs no file.
   not only on `main`.
 - `.env.example`'s `CACHE_DB_CONNECTION_STRING` comment, added in PR 2, now names the lab too.
   `python/lab/README.md`:
-  the "handed out privately" paragraph becomes pull, with the hosted username format; the lab's
-  `data_files/README.md` says the files are pulled, never committed.
+  the "handed out privately" paragraph becomes pull, with the hosted string's form, TLS
+  parameters included, pointing at the repo's `supabase-ca.crt`; the lab's `data_files/README.md`
+  says the files are pulled, never committed.
 
 ## PR 6 — the lab pushes, and stops writing its files
 
@@ -574,17 +585,19 @@ can 5 and 6.
 
 ## Go-live
 
-Hand-run until `deploy-migrations.md` lands, against the session-mode pooler URL with
-`DB_CONNECTION_STRING` set for the one command. If that plan lands first, its first deploy applies
+Hand-run until [`hosted-database.md`](hosted-database.md) lands, against the direct connection
+with `DB_CONNECTION_STRING` set for the one command, carrying `sslmode=verify-full&sslrootcert=…`
+the way a hand-composed string does (§ A role that can read and suggest) — which needs that plan's
+IPv4 add-on turned on, or an IPv6 laptop. If that plan lands first, its first deploy applies
 `002_caches`, the first incremental migration to reach the hosted database through the pipeline
-— the rehearsal that plan asks for — and step 1's migrate is that deploy. Either way, the hand-run migrate and
-the import both connect through `buildPoolConfig`, so the pooler's acceptance of its startup
-`options` (`deploy-migrations.md` § Connectivity) is checked once, by whichever runs first.
+— the rehearsal that plan asks for — and step 1's migrate is that deploy. A hand-run migrate
+before that plan's PR 2 runs with `DEFAULT_LIMITS`' 30s statement timeout; `002` is seconds of
+work, so that is fine.
 
 1. Run the smoke test in § A role that can read and suggest; then `pnpm --filter @gbd/db
    migrate` against prod (additive; the running worker is unaffected); `ALTER ROLE cache_client PASSWORD '…'` in the SQL editor; compose your own
-   `CACHE_DB_CONNECTION_STRING` from the Connect dialog's session-pooler string with
-   `cache_client.<project-ref>` and that password, and check it from a laptop with `psql`.
+   `CACHE_DB_CONNECTION_STRING` in the form § A role that can read and suggest gives, with that
+   password, and check it from a laptop with `psql`.
 2. Merge PR 1. From a workstation, dry-run each of the three CSVs against prod; take any
    refused category or surprising skip back to the data scientist and repeat until the report is
    clean; then run each with `--write`. Check each count against the CSV's rows minus the
@@ -597,7 +610,8 @@ the import both connect through `buildPoolConfig`, so the pooler's acceptance of
    hand each app developer the composed string the same way as in step 4, and have them follow
    § Local development's steps.
 4. Merge PRs 5–6; hand each data scientist the same composed string, checked with `psql`
-   first (if the project ever turns on network restrictions, their addresses need allowing);
+   first — the CA it points at is already in their checkout (if the project ever turns on
+   network restrictions, their addresses need allowing);
    they set `CACHE_DB_CONNECTION_STRING`, pull once, and delete
    their hand-copied files. `.worktreeinclude` keeps copying the pulled files into new
    worktrees, now a convenience rather than the only way to get them.
