@@ -38,9 +38,14 @@ Findings that went elsewhere rather than into a PR here:
   own) and the image `deploy.yml` pushes can sit on different `:latest` bases, but UBI minimal is
   conservative within a major, and a digest pin plus Dependabot's `docker` ecosystem is a PR per
   base bump for little caught. Revisit if a base update ever breaks a deploy.
-- *Considered: a merge queue instead of deploys following main's CI.* Available to a public org
-  repo (`ci.yml` would need `merge_group`), and it keeps main green rather than only gating
-  deploys, but costs latency on every merge. Deploys follow main's CI instead (PR 2).
+- *Rejected: deploying once main's CI passes (`workflow_run` on `CI`).* It gates deploys but
+  still lets a bad combination of PRs land, and a red main then blocks every deploy until it is
+  fixed forward. The merge queue (PR 2) keeps that commit off main instead, for the same deploy
+  latency: the queue's run replaces main's. What it costs is merge latency (a PR reaches main a
+  full CI run after it is queued) and flakes that eject a PR rather than delay a deploy.
+- *Rejected: CI on push to main as well as in the queue.* The queue already tested the exact
+  commit that lands, and the ruleset has no bypass actors (**verified** 2026-10-12), so a second
+  run tests nothing new.
 - *Rejected: checking config in `/health`.* The web app validates config at startup instead —
   `assertConfigured` builds every lazy handle (database, blob store, emailer, logger, and the
   Supabase project in `supabase` mode), so a missing variable crashes the server, as the worker's
@@ -67,29 +72,37 @@ their third-party actions by SHA — including those inside the composite action
 (`deploy-service`'s `docker/setup-buildx-action`). Dependabot's `github-actions` ecosystem already
 keeps such pins current.
 
-## PR 2 — Web deploys once main's CI passes
+## PR 2 — Merges go through a merge queue
+
+Coupled to repo settings, so it lands with them: enable the queue just before merging this PR,
+which then goes through it. Until this PR is on main, a queued PR's `ci.yml` lacks
+`merge_group`, so its `CI` never reports.
 
 The `main branch` ruleset requires `CI` but not an up-to-date branch, auto-merge is on, and PR CI
 runs `--affected` (**verified**). Two PRs green apart can be red together, and `deploy-web` ships
-them — and once `deploy-migrations.md` lands, migrates them — before main's own CI has tested the
+them — and once `deploy-migrations.md` lands, migrates them — before anything has tested the
 merged commit.
 
-**`deploy-web` runs when CI completes, rather than on push.** `deploy.yml` keeps `push` for the
-builds and adds `workflow_run` on `CI` `completed`; `deploy-web` ships
-`github.event.workflow_run.head_sha` when that run's conclusion is `success` and its event is
-`push`. The event check is the boundary, not `branches: [main]`, which also matches a fork's PR
-from a branch named `main` — and this job will hold prod credentials. Builds finish well inside
-main's CI (**verified** 2026-10-11: under two minutes against four to eight), and `deploy-service`
-already fails clearly on a missing image.
+**The queue runs CI on the commit that will land, and only that commit reaches main.**
 
-A trigger instead of a wait means a failed or cancelled CI never starts a deploy, and re-running a
-flaked CI fires `workflow_run` again, so the deploy follows. *Rejected: polling for CI inside
-`deploy-web`* (#489's first draft) — a poll loop, a grace period for a run that might not exist
-yet, and a `cancelled` result every caller had to refuse, all to wait for an event GitHub already
-sends.
+- **Ruleset:** enable the merge queue on `main branch`, squash-merging, so auto-merge enqueues.
+- **`ci.yml`:** add `merge_group` and drop `push`. A non-`pull_request` event already runs the
+  full suite (the paths filter and `TURBO_SCOPE` both key on the event name), so the queue's run
+  needs no other change.
+- **`deploy.yml`:** unchanged but for comments. It still deploys on `push`, because the SHA the
+  queue tested is the SHA that lands, so the per-commit image is a tested one. The supersession
+  guard stays: builds can still finish out of push order.
 
-The worker needs no check of its own: it deploys the commit `deploy/web` names, which `deploy-web`
-then moves only once CI has passed.
+The worker needs no check of its own: it deploys the commit `deploy/web` names, and every commit
+on main has now passed the full suite.
+
+**Open:** cache warming. A PR run restores caches saved on main, but not those saved on the
+queue's `gh-readonly-queue/*` refs, and main's push run is what saves the pnpm, uv and Playwright
+caches today. Without it, the first lockfile change leaves every PR run cold. Check after merging;
+if so, a push job filtered to the lockfiles that only runs the setup actions would fix it.
+
+**Open:** whether `gh-stack` handles a queued base PR, since the next PR in a stack can only
+rebase once the one below it lands.
 
 ## PR 3 — The fleet's connections fit the session pooler
 
@@ -161,7 +174,7 @@ Not PRs here; sequencing checks for whoever flips production on.
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
 PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
-refused before any step runs. PR 2 after it merges: the push run only builds, and the
-`workflow_run` run deploys once CI passes. PR 3 by
+refused before any step runs. PR 2 by merging it through the queue: a `merge_group` run reports
+`CI`, and the push to main starts `deploy.yml` but not `ci.yml`. PR 3 by
 holding more session-mode connections than Pool Size against the dev stack's pooler and
 confirming the worker keeps ticking.
