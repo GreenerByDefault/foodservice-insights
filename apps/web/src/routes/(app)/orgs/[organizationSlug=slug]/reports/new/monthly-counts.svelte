@@ -29,6 +29,8 @@ const progressId = $props.id();
 
 <Field.Set aria-describedby={progressId}>
   <Field.Legend>{legend}</Field.Legend>
+  <!-- Live for now, though chatty: it speaks after each field once typing pauses. It is the only
+       sense of progress through up to 120 fields. Revisit if it proves too noisy. -->
   <Field.Description id={progressId} aria-live="polite">
     {missing}
     of {months.length} months still need a count

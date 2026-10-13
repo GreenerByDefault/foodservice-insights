@@ -5,7 +5,7 @@ Two suites share this directory, separated by suffix and by Playwright project:
 | Suffix | Asserts | Runs in |
 | --- | --- | --- |
 | `*.e2e.ts` | behaviour | host browser |
-| `*.screenshot.ts` | pixels | browser in Docker |
+| `*.screenshot.ts` | pixels, and axe's accessibility rules ([`lib/a11y.ts`](lib/a11y.ts)) | browser in Docker |
 
 See [`../playwright.config.ts`](../playwright.config.ts).
 

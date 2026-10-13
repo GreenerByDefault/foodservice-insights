@@ -18,6 +18,8 @@ export const buttonVariants = tv({
         'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
       link: 'text-primary underline-offset-4 hover:underline',
     },
+    // 24–40px tall: meets WCAG 2.5.8 (AA, 24px) but not 2.5.5 (AAA, 44px). Raising every button
+    // is a redesign, so for now it waits for one.
     size: {
       default:
         'h-9 gap-1.5 px-2.5 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
