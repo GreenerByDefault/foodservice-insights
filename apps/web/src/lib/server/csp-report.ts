@@ -1,4 +1,4 @@
-/** Reading the violation reports browsers send to `/csp-report`.
+/** Reading the violation reports browsers send to `/csp-report`, in either of the two formats.
  *
  * A report is cut down before it reaches the log: its URLs can carry query strings — an auth
  * callback's `code`, a search — and only where a violation happened is worth keeping.
@@ -23,7 +23,7 @@ const EXTENSION_SCHEMES: readonly string[] = [
   'safari-web-extension:',
 ];
 
-/** The original `report-uri` body, which Chromium and Firefox send. Older browsers leave out
+/** The original `report-uri` body, which Firefox sends. Older browsers leave out
  * `effective-directive`, and their `violated-directive` is the whole directive, sources included. */
 const LegacyReport = v.pipe(
   v.object({
@@ -47,8 +47,9 @@ const LegacyReport = v.pipe(
   ),
 );
 
-/** Safari's, in the Reporting API's shape even though `report-uri`, not `report-to`, sent it. */
-const SafariReport = v.pipe(
+/** One report in the Reporting API's shape. Chromium sends these to `report-to`, batched into an
+ * array; Safari sends one at a time to `report-uri`, still labelled `application/csp-report`. */
+const ReportingApiReport = v.pipe(
   v.object({
     type: v.literal('csp-violation'),
     body: v.object({
@@ -70,7 +71,19 @@ const SafariReport = v.pipe(
   ),
 );
 
-const ReportUriBody = v.union([LegacyReport, SafariReport]);
+type BodySchema = v.GenericSchema<unknown, RawViolation[]>;
+
+/** Keyed by media type. A `Map`, so a content type of `constructor` finds nothing. */
+const BODY_SCHEMAS: ReadonlyMap<string, BodySchema> = new Map<string, BodySchema>([
+  [
+    'application/csp-report',
+    v.pipe(
+      v.union([LegacyReport, ReportingApiReport]),
+      v.transform((violation) => [violation]),
+    ),
+  ],
+  ['application/reports+json', v.array(ReportingApiReport)],
+]);
 
 type RawViolation = {
   directive: string;
@@ -80,13 +93,15 @@ type RawViolation = {
   line: number | null | undefined;
 };
 
-/** `null` for a body that is not a violation report. */
+/** `null` for a body in neither format. */
 export function parseCspReport(contentType: string | null, body: string): CspViolation[] | null {
-  if (contentType?.split(';')[0]?.trim() !== 'application/csp-report') return null;
+  const mediaType = contentType?.split(';')[0]?.trim() ?? '';
+  const schema = BODY_SCHEMAS.get(mediaType);
+  if (schema === undefined) return null;
 
-  const parsed = v.safeParse(ReportUriBody, parseJson(body));
+  const parsed = v.safeParse(schema, parseJson(body));
   if (!parsed.success) return null;
-  return isFromExtension(parsed.output) ? [] : [reduce(parsed.output)];
+  return parsed.output.filter((violation) => !isFromExtension(violation)).map(reduce);
 }
 
 function parseJson(body: string): unknown {

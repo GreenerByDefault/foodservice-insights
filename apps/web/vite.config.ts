@@ -61,9 +61,10 @@ export default defineConfig(({ command }) => ({
           'base-uri': ['none'],
           'form-action': ['self'],
           'frame-ancestors': ['none'],
-          // Not `report-to` as well: Chromium then ignores `report-uri`, and sends `report-to`
-          // reports only from an `https:` page, so `pnpm dev` would never report.
+          // Both, since Firefox and Safari read only `report-uri`. `csp` names the endpoint in
+          // `Reporting-Endpoints`, set beside this policy in `handle`.
           'report-uri': ['/csp-report'],
+          'report-to': ['csp'],
         },
       },
     }),

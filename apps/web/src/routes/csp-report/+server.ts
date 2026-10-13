@@ -2,10 +2,11 @@ import { parseCspReport } from '#lib/server/csp-report.js';
 import { logger } from '#lib/server/log.js';
 import type { RequestHandler } from './$types';
 
-/** A browser's report is a few hundred bytes, most of it the policy it quotes back. */
+/** A browser's report is a few hundred bytes, and Chromium's batches stay well under this. */
 const MAX_BODY_BYTES = 64 * 1024;
 
-/** Where browsers report a page breaking its Content-Security-Policy: `report-uri` in `kit.csp`. Unauthenticated, as every browser sends it.
+/** Where browsers report a page breaking its Content-Security-Policy: `report-uri` and
+ * `report-to` in `kit.csp`. Unauthenticated, as every browser sends it.
  *
  * *Rejected: rate-limiting it.* Every unauthenticated URL already costs an access line, and a
  * report at most doubles that; Cloudflare is the layer for floods (REQUIREMENTS § Abuse limits).

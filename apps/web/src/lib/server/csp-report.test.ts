@@ -22,7 +22,7 @@ function aLegacyReport(overrides: Record<string, unknown> = {}): string {
   });
 }
 
-/** The same violation as Safari sends it, with `overrides` applied to its `body`. */
+/** The same violation in the Reporting API's shape, with `overrides` applied to its `body`. */
 function aReportingApiReport(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     type: 'csp-violation',
@@ -55,36 +55,50 @@ const THE_VIOLATION = {
 };
 
 describe('parseCspReport', () => {
-  test('reduces the report to where the violation happened', () => {
-    expect(parseCspReport('application/csp-report', aLegacyReport())).toEqual([THE_VIOLATION]);
-  });
-
-  test('takes the directive from violated-directive when effective-directive is missing', () => {
-    const body = aLegacyReport({
-      'effective-directive': undefined,
-      'violated-directive': "connect-src 'self'",
+  describe('application/csp-report', () => {
+    test('reduces the report to where the violation happened', () => {
+      expect(parseCspReport('application/csp-report', aLegacyReport())).toEqual([THE_VIOLATION]);
     });
 
-    expect(parseCspReport('application/csp-report', body)).toEqual([THE_VIOLATION]);
-  });
+    test('takes the directive from violated-directive when effective-directive is missing', () => {
+      const body = aLegacyReport({
+        'effective-directive': undefined,
+        'violated-directive': "connect-src 'self'",
+      });
 
-  test('accepts a charset on the content type', () => {
-    expect(parseCspReport('application/csp-report; charset=utf-8', aLegacyReport())).toEqual([
-      THE_VIOLATION,
-    ]);
-  });
+      expect(parseCspReport('application/csp-report', body)).toEqual([THE_VIOLATION]);
+    });
 
-  describe("Safari's report, in the Reporting API's shape", () => {
-    test('reduces it the same way', () => {
+    test("accepts Safari's single report in the Reporting API's shape", () => {
       const body = JSON.stringify(aReportingApiReport());
 
       expect(parseCspReport('application/csp-report', body)).toEqual([THE_VIOLATION]);
     });
 
-    test('leaves out a location the browser reports as null', () => {
-      const body = JSON.stringify(aReportingApiReport({ sourceFile: null, lineNumber: null }));
+    test('accepts a charset on the content type', () => {
+      expect(parseCspReport('application/csp-report; charset=utf-8', aLegacyReport())).toEqual([
+        THE_VIOLATION,
+      ]);
+    });
+  });
 
-      expect(parseCspReport('application/csp-report', body)).toEqual([
+  describe('application/reports+json', () => {
+    test('reduces every report in the batch', () => {
+      const body = JSON.stringify([
+        aReportingApiReport(),
+        aReportingApiReport({ effectiveDirective: 'img-src', blockedURL: 'data' }),
+      ]);
+
+      expect(parseCspReport('application/reports+json', body)).toEqual([
+        THE_VIOLATION,
+        { ...THE_VIOLATION, directive: 'img-src', blocked: 'data' },
+      ]);
+    });
+
+    test('leaves out a location the browser reports as null', () => {
+      const body = JSON.stringify([aReportingApiReport({ sourceFile: null, lineNumber: null })]);
+
+      expect(parseCspReport('application/reports+json', body)).toEqual([
         {
           directive: 'connect-src',
           blocked: 'https://example.com',
@@ -100,10 +114,10 @@ describe('parseCspReport', () => {
       ['eval', 'eval'],
       ['data:image/png;base64,AAAA', 'data:'],
       ['blob:https://app.example/1234', 'https://app.example'],
-    ])('reports %s as %s', (blockedUri, blocked) => {
-      const body = aLegacyReport({ 'blocked-uri': blockedUri });
+    ])('reports %s as %s', (blockedUrl, blocked) => {
+      const body = JSON.stringify([aReportingApiReport({ blockedURL: blockedUrl })]);
 
-      expect(parseCspReport('application/csp-report', body)).toEqual([
+      expect(parseCspReport('application/reports+json', body)).toEqual([
         { ...THE_VIOLATION, blocked },
       ]);
     });
@@ -118,6 +132,15 @@ describe('parseCspReport', () => {
       const body = aLegacyReport({ [field]: `${scheme}//abcdef/content.js` });
 
       expect(parseCspReport('application/csp-report', body)).toEqual([]);
+    });
+
+    test('keeps the rest of a batch', () => {
+      const body = JSON.stringify([
+        aReportingApiReport({ blockedURL: 'chrome-extension://abcdef/content.js' }),
+        aReportingApiReport(),
+      ]);
+
+      expect(parseCspReport('application/reports+json', body)).toEqual([THE_VIOLATION]);
     });
   });
 
@@ -134,14 +157,15 @@ describe('parseCspReport', () => {
         'application/csp-report',
         aLegacyReport({ 'document-uri': 'about' }),
       ],
+      ['the other format', 'application/reports+json', aLegacyReport()],
       [
         'a report of another type',
-        'application/csp-report',
-        JSON.stringify({ type: 'deprecation', body: {} }),
+        'application/reports+json',
+        JSON.stringify([{ type: 'deprecation', body: {} }]),
       ],
-      ['a batch', 'application/csp-report', JSON.stringify([aReportingApiReport()])],
-      ['another content type', 'application/reports+json', aLegacyReport()],
+      ['an unrelated content type', 'application/json', aLegacyReport()],
       ['no content type', null, aLegacyReport()],
+      ['a content type naming an Object property', 'constructor', aLegacyReport()],
     ])('returns null for %s', (_situation, contentType, body) => {
       expect(parseCspReport(contentType, body)).toBeNull();
     });
