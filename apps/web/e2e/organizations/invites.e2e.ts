@@ -54,6 +54,12 @@ test('re-inviting an outstanding address still shows one row', async ({ page, or
   await page.getByLabel('Email address').fill(invitee);
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
+  // The toast is raised only after the list has been re-fetched, so the count below is of the
+  // re-invited list, not the pre-click one that already had one row. It also keeps the test from
+  // ending while the re-invite's transaction still holds the invite row: the fixture's teardown
+  // then deletes the organization, whose cascade waits on that row while the re-invite's insert
+  // waits on the organization row — a deadlock.
+  await expect(page.getByText(`Invited ${invitee}`)).toBeVisible();
   await expect(
     page.getByRole('main').getByRole('listitem').filter({ hasText: invitee }),
   ).toHaveCount(1);
