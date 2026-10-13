@@ -94,9 +94,10 @@ this (the time it may wait for a lock, what happens when that runs out, and whet
 migrations need splitting) before it first runs against the hosted database. Raised in
 [`deploy-safety.md`](deploy-safety.md).
 
-**The secrets go in the `production` GitHub Environment**, not repo secrets, once
-`deploy-safety.md` PR 1 creates it — repo secrets reach any `pull_request` run from a same-repo
-branch.
+**The secrets go in the `production` GitHub Environment**, not repo secrets — repo secrets reach
+any `pull_request` run from a same-repo branch. Both deploy jobs already declare it; the migrate
+step reads them as `secrets.*` in `deploy-web`, and any third-party action it adds is pinned by SHA
+like the rest of the deploy path.
 
 **The migrate step is ungated.** `deploy.yml` never rolls back (`ARCHITECTURE.md` § Bad deploys
 are fixed forward), so the checkout is always the commit being deployed. Kysely's
