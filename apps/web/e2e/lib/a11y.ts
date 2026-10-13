@@ -42,24 +42,7 @@ const UNFIXED: readonly (Exemption & {
   /** An image it is known to occur in, as a path under `e2e/__screenshots__` — one width, since
    * a state like hover only exists at one. */
   seenOn: string;
-})[] = [
-  {
-    rule: 'color-contrast',
-    within: '[data-slot="alert-dialog-action"]',
-    why:
-      "ConfirmAction's destructive button is red on its own pink tint, 4.0:1 against the 4.5:1 " +
-      'text needs — the `destructive` variant in `ui/button/button.svelte`.',
-    seenOn: 'account/account-delete-dialog.png',
-  },
-  {
-    rule: 'color-contrast',
-    within: 'a:hover',
-    why:
-      "A hovered row's `bg-accent` takes `text-muted-foreground` to 4.34:1, short of 4.5:1. " +
-      'Both tokens are in `layout.css`.',
-    seenOn: 'reports-list/list.png',
-  },
-];
+})[] = [];
 
 /** The minified build: `axe.source` is the unminified one, twice the size, and sending and parsing
  * it was most of what a scan cost. */
