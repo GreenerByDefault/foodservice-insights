@@ -8,9 +8,10 @@ worker-runs-behind invariant, the drain with its `config.ts` relations, migratio
 workspace rather than the image, deploys that only ever fix forward, report pages that reload once
 their poll is answered by another deploy, a web server that refuses to start without its config
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)),
-`ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
-missing, as the hosted database would, and `deploy-web` moving a `deploy/web` tag on success, which
-names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
+`ts-db-types` migrating the base branch first (in the merge queue, the entry ahead) so that
+Kysely refuses a migration out of order or missing, as the hosted database would, a merge queue
+that runs the full suite on the exact commit that lands, and `deploy-web` moving a `deploy/web`
+tag on success, which names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -40,7 +41,7 @@ Findings that went elsewhere rather than into a PR here:
   base bump for little caught. Revisit if a base update ever breaks a deploy.
 - *Rejected: deploying once main's CI passes (`workflow_run` on `CI`).* It gates deploys but
   still lets a bad combination of PRs land, and a red main then blocks every deploy until it is
-  fixed forward. The merge queue (PR 2) keeps that commit off main instead, for the same deploy
+  fixed forward. The merge queue keeps that commit off main instead, for the same deploy
   latency: the queue's run replaces main's. What it costs is merge latency (a PR reaches main a
   full CI run after it is queued) and flakes that eject a PR rather than delay a deploy.
 - *Rejected: CI on push to main as well as in the queue.* The queue already tested the exact
@@ -72,39 +73,18 @@ their third-party actions by SHA — including those inside the composite action
 (`deploy-service`'s `docker/setup-buildx-action`). Dependabot's `github-actions` ecosystem already
 keeps such pins current.
 
-## PR 2 — Merges go through a merge queue
+## Open from the merge queue
 
-Coupled to repo settings, so it lands with them: enable the queue just before merging this PR,
-which then goes through it. Until this PR is on main, a queued PR's `ci.yml` lacks
-`merge_group`, so its `CI` never reports.
+Checks for after it has run a while, not PRs yet.
 
-The `main branch` ruleset requires `CI` but not an up-to-date branch, auto-merge is on, and PR CI
-runs `--affected` (**verified**). Two PRs green apart can be red together, and `deploy-web` ships
-them — and once `deploy-migrations.md` lands, migrates them — before anything has tested the
-merged commit.
+- **Cache warming.** A PR run restores caches saved on main, but not those saved on the queue's
+  `gh-readonly-queue/*` refs, and main's push run used to be what saved the pnpm, uv and
+  Playwright caches. If the first lockfile change leaves every PR run cold, add a push job
+  filtered to the lockfiles that only runs the setup actions.
+- **`gh-stack`.** Whether it handles a queued base PR, since the next PR in a stack can only
+  rebase once the one below it lands.
 
-**The queue runs CI on the commit that will land, and only that commit reaches main.**
-
-- **Ruleset:** enable the merge queue on `main branch`, squash-merging, so auto-merge enqueues.
-- **`ci.yml`:** add `merge_group` and drop `push`. A non-`pull_request` event already runs the
-  full suite (the paths filter and `TURBO_SCOPE` both key on the event name), so the queue's run
-  needs no other change.
-- **`deploy.yml`:** unchanged but for comments. It still deploys on `push`, because the SHA the
-  queue tested is the SHA that lands, so the per-commit image is a tested one. The supersession
-  guard stays: builds can still finish out of push order.
-
-The worker needs no check of its own: it deploys the commit `deploy/web` names, and every commit
-on main has now passed the full suite.
-
-**Open:** cache warming. A PR run restores caches saved on main, but not those saved on the
-queue's `gh-readonly-queue/*` refs, and main's push run is what saves the pnpm, uv and Playwright
-caches today. Without it, the first lockfile change leaves every PR run cold. Check after merging;
-if so, a push job filtered to the lockfiles that only runs the setup actions would fix it.
-
-**Open:** whether `gh-stack` handles a queued base PR, since the next PR in a stack can only
-rebase once the one below it lands.
-
-## PR 3 — The fleet's connections fit the session pooler
+## PR 2 — The fleet's connections fit the session pooler
 
 A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
 
@@ -130,7 +110,7 @@ down — Σ `maxConnections` across every process alive during a deploy overlap,
 within Pool Size — then set Pool Size or the per-service maxima to fit. Separate roles per
 service would each get their own cap; weigh that against one more credential to manage.
 
-## PR 4 — The worker refuses a production config that would fail silently
+## PR 3 — The worker refuses a production config that would fail silently
 
 - **Drain grace.** `drainGraceMs` defaults to 30s and `PLATFORM_SHUTDOWN_GRACE_MS` is optional
   ([`config.ts`](../../apps/worker/src/config.ts)). Forget `WORKER_DRAIN_GRACE_MS` and every
@@ -146,7 +126,7 @@ service would each get their own cap; weigh that against one more credential to 
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 5 — Smoke-test every deploy
+## PR 4 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -174,7 +154,5 @@ Not PRs here; sequencing checks for whoever flips production on.
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
 PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
-refused before any step runs. PR 2 by merging it through the queue: a `merge_group` run reports
-`CI`, and the push to main starts `deploy.yml` but not `ci.yml`. PR 3 by
-holding more session-mode connections than Pool Size against the dev stack's pooler and
-confirming the worker keeps ticking.
+refused before any step runs. PR 2 by holding more session-mode connections than Pool Size
+against the dev stack's pooler and confirming the worker keeps ticking.
