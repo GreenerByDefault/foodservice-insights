@@ -187,7 +187,7 @@ backfills a table mid-deploy, so `scripts/migrate.ts` connects with `MIGRATE_DB_
 `applicationName`; the web, the worker and the migrate step set `web`, `worker` and `migrate`, so
 `pg_stat_activity` tells them apart. `lockTimeoutMs` defaults to `0` for everyone else.
 
-**`CREATE INDEX CONCURRENTLY` is not available**, and the README says so. It cannot
+**`CREATE INDEX CONCURRENTLY` is not available**, and `packages/db/README.md` § Writing a migration says so. It cannot
 run inside a transaction, and `disableTransactions` is a per-run switch, not per-migration
 (**verified**). Every table here is small enough that a plain `CREATE INDEX` holds its lock for
 milliseconds, and the `lock_timeout` above bounds the wait to take it. Revisit when a table is big

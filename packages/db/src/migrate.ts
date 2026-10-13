@@ -10,10 +10,10 @@ function migrationFolder(): string {
   return path.join(import.meta.dirname, '..', 'migrations');
 }
 
-/** Apply every migration that has not run yet.
+/** Apply every migration that has not run yet, all in one transaction.
  *
- * Safe to run concurrently from several processes: Kysely serialises on its
- * `kysely_migration_lock` table, so the loser waits and then finds nothing to do.
+ * Safe to run concurrently from several processes: Kysely serialises them on a session-level
+ * advisory lock, so the loser waits and then finds nothing to do.
  *
  * @returns the migrations applied by this call, in order.
  */
