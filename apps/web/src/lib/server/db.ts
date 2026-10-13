@@ -6,6 +6,7 @@ import {
   POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
   shutdownDatabase,
+  WEB_DB_LIMITS,
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
@@ -26,6 +27,7 @@ let handle: Kysely<Database> | undefined;
 export function database(): Kysely<Database> {
   handle ??= initializeDatabase({
     connectionString: requirePrivateVar('DB_CONNECTION_STRING'),
+    limits: WEB_DB_LIMITS,
     // The root, not `logger()`: the pool outlives the request that happens to open it.
     log: rootLogger(),
   });

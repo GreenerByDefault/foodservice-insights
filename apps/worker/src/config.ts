@@ -7,9 +7,9 @@
  */
 
 import { MINUTE_MS, SECOND_MS } from '@gbd/core';
+import { WORKER_DB_LIMITS } from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
-import { WORKER_DB_LIMITS } from './db.ts';
 import { TRANSIENT_RETRY_WAITS_MS } from './retry.ts';
 
 export type WorkerConfig = {

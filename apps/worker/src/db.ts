@@ -1,25 +1,16 @@
 /** The worker's own database handle, configured from the environment.
  *
- * A dedicated singleton, rather than `@gbd/db/env`'s, because the worker needs pool limits tuned
- * to its own connection budget instead of `@gbd/db`'s defaults. `@gbd/db/env` stays the
+ * A dedicated singleton, rather than `@gbd/db/env`'s, because the worker needs its own pool limits,
+ * `WORKER_DB_LIMITS` from `@gbd/db`'s connection budget. `@gbd/db/env` stays the
  * shared handle for scripts and tests that don't need that tuning.
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
-import {
-  type Database,
-  type DatabaseLimits,
-  DEFAULT_LIMITS,
-  initializeDatabase,
-  shutdownDatabase,
-} from '@gbd/db';
+import { type Database, initializeDatabase, shutdownDatabase, WORKER_DB_LIMITS } from '@gbd/db';
 import type { Kysely } from 'kysely';
 import { WORKER_LOG } from './log.ts';
 
 loadLocalEnv();
-
-// TODO: Tune these away from @gbd/db's defaults once the worker's connection budget is measured.
-export const WORKER_DB_LIMITS: DatabaseLimits = DEFAULT_LIMITS;
 
 export const WORKER_DATABASE: Kysely<Database> = initializeDatabase({
   connectionString: requireEnv('DB_CONNECTION_STRING'),

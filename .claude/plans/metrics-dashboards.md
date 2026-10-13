@@ -132,11 +132,26 @@ user country, which Cloudflare's dashboard already shows.
 ### Access: one read-only role
 
 - **`metrics_reader` is the only reader.** It is created `LOGIN NOINHERIT` with a
-  `CONNECTION LIMIT` — a row in [`hosted-database.md`](hosted-database.md) § The connection
-  budget — and `default_transaction_read_only` and `statement_timeout` are set on the
+  `CONNECTION LIMIT` — a new row in [`budget.ts`](../../packages/db/src/budget.ts), asserted
+  against the role the way `tests/caches.test.ts` asserts `cache_client`'s — and `default_transaction_read_only` and `statement_timeout` are set on the
   role. It has `USAGE` on `metrics`, `SELECT` on its views, and nothing on `public` or `auth`. A
   view runs with its owner's rights, so `metrics.app_user` can read `auth.users.created_at`
   without the role holding any grant on `auth`.
+- **Five connections, paid for by trimming `cache_client` to three.** `budget.ts` has no room
+  for a new role otherwise, and `cache_client`'s 10 was sized for notebooks holding connections,
+  which the lab never does: it connects only for the length of a pull or a push, and a local
+  worker's cache handle holds at most two for one query at attempt start. Three covers one of
+  each at the same moment, which is already rare — the data scientists sync occasionally, not
+  hourly — and the tests never log in as the role, only `SET ROLE` to it, which the limit does
+  not count. A refusal is a `53300` the worker retries and a person re-runs. The same migration
+  runs `ALTER ROLE cache_client CONNECTION LIMIT 3`, and
+  `CACHE_CLIENT_CONNECTION_LIMIT` and `caches-to-supabase.md`'s sizing paragraph follow.
+  On the hosted project only Grafana Cloud logs in as `metrics_reader`. Its data source's
+  *Max open* is 4, enough for most of the six panel queries a browser sends at once, and below
+  the limit so Grafana's `database/sql` pool waits for a free connection rather than being
+  refused one; the fifth is for a person checking the role by hand. On the test stack, five is
+  what lets several worktrees' panel checks, one connection each, run at once against the
+  cluster-wide limit.
   `ALTER DEFAULT PRIVILEGES IN SCHEMA metrics GRANT SELECT ON TABLES TO metrics_reader` covers
   every view a later migration creates or recreates, so a new metric cannot ship unreadable.
   The grants are the real enforcement. The role settings are only defaults, which a client could
@@ -215,8 +230,8 @@ user country, which Cloudflare's dashboard already shows.
     project's direct connection as `metrics_reader`, carrying TLS as `sslmode` and `sslrootcert`
     the way every hand-composed string does ([`hosted-database.md`](hosted-database.md) § TLS).
   - One API call upserts it into the dev, test or Cloud Grafana.
-  - Grafana's pool is capped below the role's `CONNECTION LIMIT`, so Grafana waits for a free
-    connection instead of being refused one.
+  - Grafana's pool is capped at 4, below the role's `CONNECTION LIMIT` (§ Access), so Grafana
+    waits for a free connection instead of being refused one.
 - **Local data is synthetic, from one generator with two callers.** `insertSyntheticHistory`, in
   `@gbd/db/testing`, writes several months of backdated organizations, users, reports and
   attempts through the fixtures, so a panel has a shape before production exists. The dev seed
