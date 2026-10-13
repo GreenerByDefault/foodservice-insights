@@ -290,14 +290,15 @@ Which to run when:
 
 #### Add a database migration
 
-1. Add a file to `packages/db/migrations/`, numbered in sequence, following the naming and
-   testing conventions in [`packages/db/README.md`](packages/db/README.md#conventions).
+1. Add the next numbered file to `packages/db/migrations/`, following
+   [Writing a migration](packages/db/README.md#writing-a-migration) and the schema
+   [conventions](packages/db/README.md#conventions).
 2. `pnpm migrate`
 3. `pnpm db:gen-types`, and commit the regenerated files alongside the migration.
 
-Once anything is deployed, migrations are forward-only: fix forward rather than reverting.
-Keep them backwards-compatible with the running app, since migrations run *before* the new
-code deploys, and prefer `CREATE INDEX CONCURRENTLY` to avoid locking.
+Running the tests applies the migration to the test database, which every checkout on this machine
+shares. Until it lands, any other checkout's tests fail on the migration they lack;
+[reset](#reset-a-database) the test database from that checkout to go on working there.
 
 #### Reset a database
 

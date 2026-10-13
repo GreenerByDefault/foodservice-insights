@@ -325,6 +325,8 @@ start shipping the wrong config with it. Read configuration at runtime instead.
 Web deploys automatically on every push to `main`, database migrations included, because it's the side
 that owns the schema. **`deploy.yml` runs the database migrations itself, before it deploys to the
 hosting provider.** There is no way to unapply a database migration; a bad one is fixed forward.
+So every migration runs against the code already deployed, and
+[`packages/db/README.md`](packages/db/README.md#writing-a-migration) says what that rules out.
 
 ### Worker deploys only on demand
 

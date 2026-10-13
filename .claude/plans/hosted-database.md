@@ -173,17 +173,21 @@ transaction on `analysis_attempt` stalls every claim, renewal, and poll for as l
 The remedy is the standard one: **the migration session sets a short `lock_timeout` (5s) and the
 migrate step retries.** Kysely runs every pending migration in one transaction (**verified**), so a
 timeout rolls the whole run back and a retry is safe; five attempts spend under a minute before the
-deploy fails, still before `deploy-service`. Our own transactions are short and
+deploy fails, still before `deploy-service`. This has landed: `scripts/migrate.ts` retries on
+`55P03` only, on the schedule `lockRetryDelayMs` in `src/migrate.ts` sets, and `55P03` is
+transient to `isTransientDatabaseError`, so an app that ever meets one answers 503. Our own transactions are short and
 `idle_in_transaction_session_timeout` bounds a hung one, so contention should be rare. Kysely's
 migration lock is a session-level advisory lock waited for up to an hour (**verified**) and is not
 in play: `deploy-web`'s concurrency group already serialises runs.
 
-**Its own handle.** `DEFAULT_LIMITS`' 30s `statement_timeout` applies to a migration too; one that
-backfills a table aborts mid-deploy. `scripts/migrate.ts` builds a handle via `initializeDatabase`
-with one connection, a `statement_timeout` and `idle_in_transaction_session_timeout` of ten
-minutes, and the 5s `lock_timeout` — instead of importing `DATABASE` from `@gbd/db/env`.
+**Its own handle**, landed. `DEFAULT_LIMITS`' 30s `statement_timeout` would abort a migration that
+backfills a table mid-deploy, so `scripts/migrate.ts` connects with `MIGRATE_DB_LIMITS` from
+`budget.ts` — one connection, ten minutes for a statement or an idle transaction, the 5s
+`lock_timeout` — rather than `@gbd/db/env`'s `DATABASE`. Every handle can now carry
+`applicationName`; the web, the worker and the migrate step set `web`, `worker` and `migrate`, so
+`pg_stat_activity` tells them apart. `lockTimeoutMs` defaults to `0` for everyone else.
 
-**`CREATE INDEX CONCURRENTLY` is not available, and the README stops recommending it.** It cannot
+**`CREATE INDEX CONCURRENTLY` is not available**, and `packages/db/README.md` § Writing a migration says so. It cannot
 run inside a transaction, and `disableTransactions` is a per-run switch, not per-migration
 (**verified**). Every table here is small enough that a plain `CREATE INDEX` holds its lock for
 milliseconds, and the `lock_timeout` above bounds the wait to take it. Revisit when a table is big
@@ -196,7 +200,7 @@ header gains this step.
 
 ## The hosted project
 
-Dashboard work, for a human, before PR 2's first deploy — and before `caches-to-supabase.md`'s
+Dashboard work, for a human, before PR 1's first deploy — and before `caches-to-supabase.md`'s
 go-live, whichever comes first, since both reach the project the same way. A checklist because the
 project is unconfigured today:
 
@@ -230,23 +234,7 @@ A laptop can rehearse steps 2–4 before any PR lands: `psql "postgresql://postg
 then `SET statement_timeout = 1; SELECT pg_sleep(1)` to watch a session setting take effect, and
 `SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1` to see what each role holds.
 
-## PR 1 — The migrate step's own handle, with a lock retry
-
-- `DatabaseLimits` gains `lockTimeoutMs`, default `0` (off): the apps' statements already carry
-  `statement_timeout`, and only the migration handle wants to yield a lock early. It rides the
-  same `options` string as the others, and the equality tests in `client.test.ts` gain the flag.
-- `55P03 lock_not_available` joins `TRANSIENT_SQL_STATES` in [`errors.ts`](../../packages/db/src/errors.ts):
-  the statement never ran, and retrying it can succeed.
-- `DatabaseConfig` gains `applicationName`, which `pg` sends as a startup parameter, so
-  `pg_stat_activity` names the process: `web`, `worker`, `migrate`.
-- `packages/db/scripts/migrate.ts` builds its handle with the limits in § Its own handle and
-  wraps `migrateToLatest` in a retry on `55P03` only — five attempts, five seconds apart, each
-  failure logged with the attempt number. The retry predicate and schedule are a pure function
-  with its own test; the end-to-end case is in § Verification.
-- The README's § Add a database migration drops `CREATE INDEX CONCURRENTLY` in favour of the
-  rule in § Migrations, in one sentence.
-
-## PR 2 — Migrations run in the deploy workflow
+## PR 1 — Migrations run in the deploy workflow
 
 Steps in `deploy-web`, below the supersession guard, above `deploy-service`:
 [`setup-node`](../../.github/actions/setup-node/action.yml), then `pnpm exec turbo run migrate`,
@@ -265,18 +253,14 @@ TLS, and the connection budget is [`budget.ts`](../../packages/db/src/budget.ts)
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`. Then:
 
-- **PR 1**, against the dev stack: hold `LOCK TABLE analysis_attempt IN ACCESS EXCLUSIVE MODE` in a
-  `psql` transaction, run `pnpm migrate` with a throwaway `003_*` that alters the table, and watch
-  it retry five times and fail with a message naming the lock; release the lock mid-retry and watch
-  it succeed. Delete the throwaway migration.
-- **PR 1 and the landed TLS, against the real project, from a laptop** with the Environment's seven
+- **Before PR 1, against the real project, from a laptop** with the Environment's seven
   values exported: `pnpm migrate` applies `001` and `002` and creates the bucket;
   `pnpm seed:identity` seeds; Studio shows the tables, two `kysely_migration` rows, and the
   bucket. With *Enforce SSL* on, the run succeeding is also the proof that `DB_SSL_CA` worked.
   Then the `pg_stat_activity` query from § The hosted project, run while an upload is in flight:
   `supabase_storage_admin`'s count replaces `budget.ts`'s Storage estimate. This is the
-  rehearsal; PR 2 then only moves the same command into the workflow.
-- **PR 2**: the first push to `main` after it lands runs the step and reports no pending
+  rehearsal; PR 1 then only moves the same command into the workflow.
+- **PR 1**: the first push to `main` after it lands runs the step and reports no pending
   migrations, since the laptop already applied them; the next PR that adds a migration is the
   first hosted incremental migration, and `ts-db-types` has already run it the same way.
 

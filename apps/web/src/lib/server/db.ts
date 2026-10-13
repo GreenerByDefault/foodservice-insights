@@ -29,6 +29,7 @@ export function database(): Kysely<Database> {
   handle ??= initializeDatabase({
     connectionString: requirePrivateVar('DB_CONNECTION_STRING'),
     sslCa: DB_SSL_CA,
+    applicationName: 'web',
     limits: WEB_DB_LIMITS,
     // The root, not `logger()`: the pool outlives the request that happens to open it.
     log: rootLogger(),

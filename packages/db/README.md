@@ -98,6 +98,30 @@ Design reasoning:
   [Use The Index, Luke](https://use-the-index-luke.com) — this is what "queries are optimized" in
   [`REQUIREMENTS.md`](../../REQUIREMENTS.md#performance) means in practice.
 
+## Writing a migration
+
+A migration reaches production before the code that needs it, and runs against a live app:
+
+- **A landed migration is never edited, reordered, or deleted.** The hosted database has already
+  run it, so CI's `ts-db-types` job refuses all three; change the schema with a new migration
+  instead. One that has not landed yet you can edit freely, but Kysely never re-runs a migration it
+  has applied, so [reset](../../README.md#reset-a-database) your local databases to see the edit.
+- **The schema must keep working for the code already deployed.** That is the web for a few minutes
+  and the worker for as long as it goes undeployed — see
+  [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-deploys-only-on-demand). So expand, then
+  contract: add what new code needs in one PR, and drop or rename the old shape only in a later
+  PR, once nothing deployed reads it.
+- **Every pending migration runs in one transaction**, so a failed deploy applies nothing. It also
+  means nothing that refuses a transaction, such as `CREATE INDEX CONCURRENTLY`; a plain
+  `CREATE INDEX` is quick at our table sizes. And an enum value added with `ALTER TYPE ... ADD VALUE`
+  cannot be used until that transaction commits, so a migration in the same deploy cannot use it
+  either.
+- **Keep strong locks short on tables the app is using.** Most DDL blocks every query on its table
+  for as long as it runs, and a rewrite of a whole table runs for as long as the table is big. A
+  migration waiting for a lock gives up and is retried rather than queueing the app behind it, so
+  an unlucky deploy fails instead of stalling; [`budget.ts`](src/budget.ts)' `MIGRATE_DB_LIMITS`
+  holds the timeouts and their reasons.
+
 ## The analysis attempt state machine
 
 `analysis_attempt.status` is the coordination point between the web app and the workers. Its

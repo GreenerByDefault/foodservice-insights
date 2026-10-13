@@ -13,6 +13,7 @@ import {
 import {
   POSTGRES_CODE_CHECK_VIOLATION,
   POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
+  POSTGRES_CODE_LOCK_NOT_AVAILABLE,
   POSTGRES_CODE_QUERY_CANCELED,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from './postgres-codes.ts';
@@ -67,6 +68,7 @@ const GAVE_UP_CODES = [
   ['53300', 'too_many_connections'],
   ['40001', 'serialization_failure'],
   ['40P01', 'deadlock_detected'],
+  [POSTGRES_CODE_LOCK_NOT_AVAILABLE, 'lock_timeout gave up waiting for a lock'],
 ] as const;
 
 const REFUSED_CODES = [

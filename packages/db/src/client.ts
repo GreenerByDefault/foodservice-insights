@@ -38,6 +38,10 @@ export type DatabaseLimits = {
   /** Server-side: kill connections idle longer than this, so connections are reclaimed even
    * when a client dies without cleaning up, such as a SIGKILLed app. */
   idleSessionTimeoutMs: number;
+
+  /** Server-side: a statement waiting this long for a lock gives up with `55P03`. `0` waits
+   * forever, which suits the apps, whose `statementTimeoutMs` already bounds the wait. */
+  lockTimeoutMs: number;
 };
 
 export const DEFAULT_LIMITS: DatabaseLimits = {
@@ -49,6 +53,7 @@ export const DEFAULT_LIMITS: DatabaseLimits = {
   statementTimeoutMs: 30_000,
   idleInTransactionSessionTimeoutMs: 60_000,
   idleSessionTimeoutMs: 600_000,
+  lockTimeoutMs: 0,
 };
 
 export type DatabaseConfig = {
@@ -58,6 +63,8 @@ export type DatabaseConfig = {
    * `supabase-ca.crt`. Unset or empty means no TLS at all, as on the local stacks. A connection
    * string carrying its own `sslmode` overrides this. */
   sslCa?: string | undefined;
+  /** Names the process in `pg_stat_activity`, as `web`, `worker`, or `migrate`. */
+  applicationName?: string;
   /** Where the pool reports a dropped connection. `'console'` suits scripts and tests, whose
    * readers want a line rather than a record. Required, so that no caller falls back to it by
    * forgetting. */
@@ -83,7 +90,9 @@ export function buildPoolConfig(config: Omit<DatabaseConfig, 'log'>): PoolConfig
     options:
       `-c statement_timeout=${limits.statementTimeoutMs} ` +
       `-c idle_in_transaction_session_timeout=${limits.idleInTransactionSessionTimeoutMs} ` +
-      `-c idle_session_timeout=${limits.idleSessionTimeoutMs}`,
+      `-c idle_session_timeout=${limits.idleSessionTimeoutMs} ` +
+      `-c lock_timeout=${limits.lockTimeoutMs}`,
+    application_name: config.applicationName,
     // Node checks both the chain and the hostname: libpq's `verify-full`.
     ...(config.sslCa ? { ssl: { ca: config.sslCa } } : {}),
   };

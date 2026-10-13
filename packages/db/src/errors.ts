@@ -21,6 +21,7 @@ const TRANSIENT_SQL_STATES: ReadonlySet<string> = new Set([
   '40P01', // deadlock_detected
   '53200', // out_of_memory
   '53300', // too_many_connections
+  '55P03', // lock_not_available — what `lock_timeout` produces
   '57014', // query_canceled — what `statement_timeout` produces
   '57P01', // admin_shutdown
   '57P02', // crash_shutdown
