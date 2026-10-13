@@ -1,11 +1,11 @@
-import { describe, expect, test } from 'vitest';
-import { applySecurityHeaders, contentSecurityPolicy } from './security-headers.ts';
+import { describe, expect, test, vi } from 'vitest';
+import { applySecurityHeaders } from './security-headers.ts';
 
-const SUPABASE_ORIGIN = 'https://abcdefgh.supabase.co';
+vi.mock('./env.ts', () => ({ requirePublicVar: () => 'https://abcdefgh.supabase.co/' }));
 
 describe('applySecurityHeaders', () => {
-  test('sets the full header set', () => {
-    const response = applySecurityHeaders(new Response('ok'), null);
+  test('sets the full header set, with a policy that loads nothing on anything but a page', () => {
+    const response = applySecurityHeaders(new Response('ok'));
 
     expect(Object.fromEntries(response.headers)).toEqual({
       'content-type': 'text/plain;charset=UTF-8',
@@ -23,29 +23,22 @@ describe('applySecurityHeaders', () => {
   test('replaces a value the route already set', () => {
     const response = applySecurityHeaders(
       new Response('ok', { headers: { 'X-Frame-Options': 'SAMEORIGIN' } }),
-      null,
     );
 
     expect(response.headers.get('x-frame-options')).toBe('DENY');
   });
-});
 
-describe('contentSecurityPolicy', () => {
-  const PAGE_POLICY = "default-src 'self'; connect-src 'self'; frame-ancestors 'none'";
-
-  test('lets a page reach Supabase', () => {
-    expect(contentSecurityPolicy(PAGE_POLICY, SUPABASE_ORIGIN)).toBe(
-      `default-src 'self'; connect-src 'self' ${SUPABASE_ORIGIN}; frame-ancestors 'none'`,
+  test("lets a page's policy reach Supabase", () => {
+    const response = applySecurityHeaders(
+      new Response('<html>', {
+        headers: {
+          'Content-Security-Policy': "default-src 'self'; connect-src 'self'; base-uri 'none'",
+        },
+      }),
     );
-  });
 
-  test('leaves a page alone in placeholder mode', () => {
-    expect(contentSecurityPolicy(PAGE_POLICY, null)).toBe(PAGE_POLICY);
-  });
-
-  test('loads nothing, and allows no framing, for anything that is not a page', () => {
-    expect(contentSecurityPolicy(null, SUPABASE_ORIGIN)).toBe(
-      "default-src 'none'; frame-ancestors 'none'",
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'self'; connect-src 'self' https://abcdefgh.supabase.co; base-uri 'none'",
     );
   });
 });

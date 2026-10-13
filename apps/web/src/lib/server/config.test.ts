@@ -29,43 +29,38 @@ afterEach(() => {
 });
 
 describe('assertConfigured', () => {
-  describe('placeholder mode', () => {
-    test('passes with every variable set, and without the Supabase project', async () => {
+  test.each(['placeholder', 'supabase'])(
+    'passes with every variable set in %s mode',
+    async (mode) => {
+      const assertConfigured = await freshAssertConfigured();
+      publicEnv.PUBLIC_AUTH_MODE = mode;
+
+      expect(assertConfigured).not.toThrow();
+    },
+  );
+
+  test.each(['DB_CONNECTION_STRING', 'S3_BUCKET', 'EMAIL_FROM_ADDRESS'])(
+    'throws without %s',
+    async (name) => {
       const assertConfigured = await freshAssertConfigured();
       publicEnv.PUBLIC_AUTH_MODE = 'placeholder';
-      publicEnv.PUBLIC_SUPABASE_URL = undefined;
+      privateEnv[name] = undefined;
 
-      expect(assertConfigured).not.toThrow();
-    });
+      expect(assertConfigured).toThrow(`Must set the env var '${name}'`);
+    },
+  );
 
-    test.each(['DB_CONNECTION_STRING', 'S3_BUCKET', 'EMAIL_FROM_ADDRESS'])(
-      'throws without %s',
-      async (name) => {
-        const assertConfigured = await freshAssertConfigured();
-        publicEnv.PUBLIC_AUTH_MODE = 'placeholder';
-        privateEnv[name] = undefined;
-
-        expect(assertConfigured).toThrow(`Must set the env var '${name}'`);
-      },
-    );
-  });
-
-  describe('supabase mode', () => {
-    test('passes with the Supabase project set', async () => {
+  // Every page's Content-Security-Policy names it, sign-in or not.
+  test.each(['placeholder', 'supabase'])(
+    'throws without the Supabase project in %s mode',
+    async (mode) => {
       const assertConfigured = await freshAssertConfigured();
-      publicEnv.PUBLIC_AUTH_MODE = 'supabase';
-
-      expect(assertConfigured).not.toThrow();
-    });
-
-    test('throws without the Supabase project', async () => {
-      const assertConfigured = await freshAssertConfigured();
-      publicEnv.PUBLIC_AUTH_MODE = 'supabase';
+      publicEnv.PUBLIC_AUTH_MODE = mode;
       publicEnv.PUBLIC_SUPABASE_URL = undefined;
 
       expect(assertConfigured).toThrow("Must set the env var 'PUBLIC_SUPABASE_URL'");
-    });
-  });
+    },
+  );
 
   test('throws on an unset PUBLIC_AUTH_MODE', async () => {
     const assertConfigured = await freshAssertConfigured();

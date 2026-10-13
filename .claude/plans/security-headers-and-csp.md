@@ -4,8 +4,6 @@
 
 [`REQUIREMENTS.md`](../../REQUIREMENTS.md) § Security asks for a CSP and HSTS. Both are enforced
 now; what is left is hearing about violations once real browsers hit the policy.
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Auth records why the CSP exists and the alternatives
-it rejected.
 
 What exists, checked 2026-10-12:
 
@@ -13,17 +11,15 @@ What exists, checked 2026-10-12:
   [`vite.config.ts`](../../apps/web/vite.config.ts) — SvelteKit 3 has no `svelte.config.js`. It is
   serialized at build time and sent only on rendered pages
   (`kit/src/runtime/server/page/render.js:594`).
-- **`applySecurityHeaders(response, supabaseOrigin)`** in
+- **`applySecurityHeaders(response)`** in
   [`lib/server/security-headers.ts`](../../apps/web/src/lib/server/security-headers.ts) runs on every
-  response that passes through `handle`. It calls the pure `contentSecurityPolicy(pagePolicy,
-  supabaseOrigin)`, which tells the two kinds of response apart by whether SvelteKit already set a
-  `content-security-policy`:
-  - A page keeps its policy, with the Supabase origin added to `connect-src` in `supabase` mode.
+  response that passes through `handle`. It tells the two kinds of response apart by whether
+  SvelteKit already set a `content-security-policy`:
+  - A page keeps its policy, with the origin of `PUBLIC_SUPABASE_URL` added to `connect-src`. That
+    variable is required in every auth mode (`assertConfigured`).
   - Everything else — `/api`, polls, `__data.json`, redirects, `/health` — gets
     `default-src 'none'; frame-ancestors 'none'`. A JSON body has nothing in it to violate, so this
     policy never reports.
-- **`supabaseOrigin()`** in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts) reads
-  `PUBLIC_SUPABASE_URL` only in `supabase` mode.
 - **The browser fixtures already fail on any violation.**
   [`packages/browser-testing/src/fixtures.ts`](../../packages/browser-testing/src/fixtures.ts)
   records `securitypolicyviolation` events in `context` and `users.contextFor`, so every e2e and
@@ -49,8 +45,8 @@ What exists, checked 2026-10-12:
 - **Limits and logging:** a 413 when `content-length` is missing or over 64 KiB. The route's
   access line goes at `debug`, because the `warn` line already records the visit.
 - **Only pages report.** `Reporting-Endpoints` goes on the same responses that keep a page policy,
-  so it belongs beside `contentSecurityPolicy`'s page branch. Its value needs the request's origin,
-  which `applySecurityHeaders` is not given today.
+  so it belongs beside the page branch in `security-headers.ts`. Its value needs the request's
+  origin, which `applySecurityHeaders` is not given today.
 - **Reports don't send from `host.docker.internal`**, which is not a trustworthy origin. The
   screenshot browser reaches the app there, which is one more reason no test relies on a report.
 - *Rejected: rate-limiting the endpoint.* Any unauthenticated URL already costs an access line,

@@ -85,21 +85,8 @@ the JWT into `locals` on the server. See [`apps/web/README.md`](apps/web/README.
 design.
 
 **A Content Security Policy is what stands between an XSS and a stolen session**, because the
-session cookie cannot be `HttpOnly`. Pages get `kit.csp` from `apps/web/vite.config.ts`, with a
-nonce on SvelteKit's one inline script. At runtime `handle` adds the Supabase origin to
-`connect-src`, in `supabase` mode only. Every other response gets a policy that loads nothing
-(`lib/server/security-headers.ts`). The browser fixtures fail any e2e or screenshot test that
-triggers a violation.
-
-- *Rejected: the Supabase origin in `kit.csp`.* It would bake one environment into the image.
-- *Rejected: proxying Supabase Auth through our origin.* That is a proxy to keep one origin out
-  of a header.
-- *Rejected: a nonce-only `style-src`.* bits-ui writes `style` attributes, which cannot carry
-  a nonce, and `script-src` is what protects the cookie.
-- *Rejected: `'strict-dynamic'`.* Nothing a user controls is served from our origin as script,
-  so `'self'` is already safe.
-- *Rejected: a Report-Only phase.* There are no users yet for a false positive to hurt, and the
-  e2e suite enforces the policy on every page it visits.
+session cookie cannot be `HttpOnly`. See `kit.csp` in `apps/web/vite.config.ts` and
+`apps/web/src/lib/server/security-headers.ts`.
 
 **Open:** validating sessions with `getClaims()` instead of `getUser()`, once the hosted project is
 confirmed on asymmetric signing keys. It checks the JWT locally, removing the round trip to Supabase
