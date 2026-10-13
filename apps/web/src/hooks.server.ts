@@ -13,13 +13,17 @@ import { applySecurityHeaders } from '#lib/server/security-headers.js';
 import { closeBlobStore } from '#lib/server/storage.js';
 import type { RouteId } from '$app/types';
 
-/** The liveness probe reports on the database, so it must be able to answer without one. */
-const HEALTH_PATH = '/health';
+/** Paths no caller identifies itself on. The liveness probe reports on the database, so it must
+ * be able to answer without one; a violation report would otherwise cost a Supabase round trip
+ * to learn a user nothing logs. */
+const ANONYMOUS_PATHS: ReadonlySet<string> = new Set(['/health', '/csp-report']);
 
-/** Called on a timer rather than by a person, so their access lines are `debug`, not `info`. A
- * failure on one still writes its own line at `error`. */
-const POLLED_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
+/** Called by a timer or a browser rather than by a person, so their access lines are `debug`, not
+ * `info`. A failure on one still writes its own line at `error`, and a violation report its own at
+ * `warn`. */
+const UNATTENDED_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
   '/health',
+  '/csp-report',
   '/(app)/orgs/[organizationSlug=slug]/poll',
   '/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/poll',
 ]);
@@ -39,7 +43,7 @@ function applyHeaders(response: Response, requestId: string): Response {
 /** One line per request. The duration runs until the response's headers, not the end of its body. */
 function logAccess(event: RequestEvent, status: number, startedAt: number): void {
   const routeId = event.route.id;
-  const level = POLLED_ROUTES.has(routeId) ? 'debug' : 'info';
+  const level = UNATTENDED_ROUTES.has(routeId) ? 'debug' : 'info';
   event.locals.log[level](
     {
       method: event.request.method,
@@ -58,7 +62,7 @@ function logAccess(event: RequestEvent, status: number, startedAt: number): void
 
 /** Identify the caller, then look up what they may do, once per request. */
 async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
-  if (event.url.pathname === HEALTH_PATH) return null;
+  if (ANONYMOUS_PATHS.has(event.url.pathname)) return null;
 
   const userId = await identifyUser(event);
   if (!userId) return null;

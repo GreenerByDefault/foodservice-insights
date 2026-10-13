@@ -97,14 +97,17 @@ describe('handle', () => {
     expect(requestIdOf(first)).not.toBe(requestIdOf(second));
   });
 
-  test('logs a poll at debug, so the default level shows only what a person did', async () => {
-    await handle({
-      event: anEvent('/orgs/acme/poll', '/(app)/orgs/[organizationSlug=slug]/poll'),
-      resolve: respond,
-    });
+  test.each([
+    ['/orgs/acme/poll', '/(app)/orgs/[organizationSlug=slug]/poll'],
+    ['/csp-report', '/csp-report'],
+  ] as const)(
+    'logs %s at debug, so the default level shows only what a person did',
+    async (pathname, routeId) => {
+      await handle({ event: anEvent(pathname, routeId), resolve: respond });
 
-    expect(SERVER_LOGS.records).toEqual([expect.objectContaining({ level: 'debug' })]);
-  });
+      expect(SERVER_LOGS.records).toEqual([expect.objectContaining({ level: 'debug' })]);
+    },
+  );
 
   test("leaves a file link's path out of the log, since the link alone downloads the file", async () => {
     const fileId = crypto.randomUUID();
@@ -148,6 +151,15 @@ describe('handle', () => {
 
     expect(event.locals.auth).toBeNull();
     expect(authorization.loadAuthorization).not.toHaveBeenCalled();
+  });
+
+  test('identifies no one sending a violation report', async () => {
+    const event = anEvent('/csp-report');
+
+    await handle({ event, resolve: respond });
+
+    expect(event.locals.auth).toBeNull();
+    expect(identify.identifyUser).not.toHaveBeenCalled();
   });
 
   // `withDbErrorHandling` is handed no event, so this is `logger()` finding the request's own.

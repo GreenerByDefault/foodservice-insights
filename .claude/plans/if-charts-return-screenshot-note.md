@@ -44,6 +44,16 @@ already resolves `host.docker.internal` back to the host via `--add-host=host.do
 for the screenshot run might let the real redirect-and-sign chain work end-to-end, no stub needed.
 Not verified — worth checking before committing to the stub approach below.
 
+## The Content Security Policy blocks it in production too
+
+Separately from the test problem, the page's `img-src` is `'self' data:` (`kit.csp` in
+`apps/web/vite.config.ts`). CSP checks every redirect hop, so an `<img>` whose app-origin URL
+302s to the storage host is blocked in every environment. Either add the storage origin to
+`img-src` at runtime, the way `applySecurityHeaders` adds Supabase's to `connect-src`, or stream
+the bytes from the app route instead of redirecting. The stub below fulfills the app-origin URL, so
+it cannot catch this. Only a test that follows the real redirect fails on it, through the browser
+fixtures' violation check.
+
 ## The approach
 
 Stub the file-serving route in the screenshot project only, fulfilling from a committed image

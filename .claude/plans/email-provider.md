@@ -317,11 +317,25 @@ provider, and `EMAIL_TRANSPORT` already selects between implementations. Switchi
    disabled: nothing uses it, and with no RLS it could expose the tables to the publishable key the
    browser now holds.
 5. Flip production to `PUBLIC_AUTH_MODE=supabase`, and in the same change flip `tests/e2e`'s run
-   with it — `webContainerCommand` then also needs `PUBLIC_SUPABASE_URL` through `forContainer`,
-   and the publishable key. The placeholder's organization and reports belong to an address nobody
+   with it. `webContainerCommand` already passes the Supabase URL and publishable key, since
+   startup requires them in both modes. The placeholder's organization and reports belong to an address nobody
    can sign in as, so before flipping, add a real admin to that organization in Studio, or accept
    that its data is abandoned. Then delete `placeholder` mode: `src/lib/auth/mode.ts`,
    `pnpm seed:identity`, and the browser-testing fixtures' `placeholder` branch.
+
+**The Content Security Policy needs nothing for any candidate.** It governs what our pages load, and
+no email path runs in our pages: the worker's `fetch` to the provider and Supabase's SMTP are both
+server-side, and a mail client renders our HTML under its own policy. The browser half of sign-in
+calls Supabase Auth, whose origin `applySecurityHeaders` already adds to `connect-src`. The auth
+e2e failed on `/auth/v1/otp` without it. Three changes would need the policy revisited:
+
+- **A Supabase custom domain for Auth.** `PUBLIC_SUPABASE_URL` has to become that domain, since
+  `connect-src` is built from it. Pointing only the client at it would be blocked.
+- **An image in an email** served through `handle`, such as a logo route. Its `Cross-Origin-Resource-Policy:
+  same-origin` would block a webmail client that loads it directly instead of through a proxy. A
+  file in `static/` skips `handle`, so put the image there.
+- **A provider SDK or widget in the browser**, for example to show delivery status. Nothing in
+  this plan calls for one.
 
 **Open:** nothing consumes bounce or complaint webhooks, whichever provider wins. A hard-bouncing
 address will be suppressed provider-side and our sends will silently succeed forever after. Decide
