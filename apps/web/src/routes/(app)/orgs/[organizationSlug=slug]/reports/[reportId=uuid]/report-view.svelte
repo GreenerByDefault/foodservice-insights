@@ -60,6 +60,8 @@ function screenHeadline(report: ReportPageData): string {
   <ReconnectingAlert subject="report" />
 {/if}
 
+<!-- A swap the poll brings leaves focus where it is: moving it unprompted is worse than leaving it.
+     Only a swap the user asked for — Retry, Cancel — moves it, to the heading. -->
 {#if isWaiting(current.attempt)}
   <WaitingView
     attempt={current.attempt}

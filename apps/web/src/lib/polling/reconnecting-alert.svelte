@@ -7,6 +7,8 @@ let { subject }: { subject: 'report' | 'reports' } = $props();
 let verb = $derived(subject === 'reports' ? 'are' : 'is');
 </script>
 
+<!-- `Alert` is `role="alert"`, which interrupts — deliberately: losing the connection is worth
+     it, and callers keep this mounted while retrying, so it speaks once rather than every poll. -->
 <Alert>
   <WifiOffIcon />
   <AlertTitle>Reconnecting…</AlertTitle>

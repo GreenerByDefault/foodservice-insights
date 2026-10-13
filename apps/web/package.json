@@ -39,6 +39,7 @@
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitest/browser-playwright": "catalog:",
+    "axe-core": "catalog:",
     "bits-ui": "catalog:",
     "clsx": "catalog:",
     "fflate": "catalog:",

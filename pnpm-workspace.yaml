@@ -93,6 +93,9 @@ catalog:
   playwright: 1.63.0
   '@playwright/test': 1.63.0
 
+  # --- Accessibility ----------------------------------------------------------
+  axe-core: ^4.14.0
+
 # runed's `@sveltejs/kit` peer is optional and only backs its `runed/kit` subpath, which we don't
 # import; no runed release declares SvelteKit 3 yet. Drop this once one does.
 peerDependencyRules:

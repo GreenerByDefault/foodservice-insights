@@ -54,6 +54,10 @@ export default defineConfig(({ command }) => ({
         extends: './vite.config.ts',
         test: {
           name: 'client',
+          // Rendered without Tailwind's CSS, so `hidden`, `sr-only` and every focus ring are inert
+          // here, and Chromium forwards `label.focus()` to its control: whether something is
+          // focusable, or visibly focused, can only be proven in Playwright.
+          //
           // This tier's wall clock says little about the tests: startup is ~1.5s and the tests
           // ~10s, but `chrome-headless-shell` then takes 1.5s to Playwright's 30s force-kill cap
           // to exit, which is the whole of the variance. A bare launch-then-close, no page ever

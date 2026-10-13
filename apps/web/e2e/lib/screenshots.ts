@@ -1,4 +1,6 @@
+import { dirname, join, relative } from 'node:path';
 import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expectNoA11yViolations } from './a11y.ts';
 import { SCREENSHOT_VIEWPORTS } from './viewports.ts';
 
 /** Move the pointer out of the way before a touch-width capture.
@@ -13,8 +15,8 @@ async function clearHover(page: Page): Promise<void> {
   await page.mouse.move(0, 0);
 }
 
-/** Compare `page` against the committed `name` in `e2e/__screenshots__`, at every viewport in
- * `SCREENSHOT_VIEWPORTS`.
+/** Compare `page` against the committed `name` in `e2e/__screenshots__`, and scan it for
+ * accessibility violations, at every viewport in `SCREENSHOT_VIEWPORTS`.
  *
  * Goes through here rather than calling `toHaveScreenshot` directly so that the container is an
  * invariant rather than a convention. That's necessary for cross-platform consistency.
@@ -40,7 +42,7 @@ export async function expectScreenshots(
     clipBelow?: Locator;
   } = {},
 ): Promise<void> {
-  const { project } = test.info();
+  const { project, file } = test.info();
   if (!project.use.connectOptions?.wsEndpoint) {
     throw new Error(
       `Project "${project.name}" has no connectOptions.wsEndpoint, so this screenshot would be ` +
@@ -49,14 +51,17 @@ export async function expectScreenshots(
     );
   }
 
+  const dir = relative(project.testDir, dirname(file));
   for (const [label, viewport] of Object.entries(SCREENSHOT_VIEWPORTS)) {
     await page.setViewportSize(viewport);
     if (label !== 'desktop') await clearHover(page);
     const clip = options.clipBelow && (await clipBelow(options.clipBelow, viewport.width));
-    await expect(page).toHaveScreenshot(label === 'desktop' ? name : [label, name], {
-      fullPage: !clip,
-      clip,
-    });
+    const shot = label === 'desktop' ? [name] : [label, name];
+    await expect(page).toHaveScreenshot(shot, { fullPage: !clip, clip });
+    // Every width, since a Tailwind breakpoint can swap which markup is visible, and axe skips
+    // what is hidden. After the capture, which waits for the page to settle: a scan mid-transition
+    // would measure contrast on half-faded colours.
+    await expectNoA11yViolations(page, join(dir, ...shot));
   }
 
   // Restored so the helper leaves no viewport behind it: an assertion added after a capture
