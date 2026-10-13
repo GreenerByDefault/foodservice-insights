@@ -9,6 +9,7 @@ import type { AuthContext } from '#lib/server/auth/types.js';
 import { assertConfigured } from '#lib/server/config.js';
 import { closeDatabase, database, withDbErrorHandling } from '#lib/server/db.js';
 import { bindRequestLogger, logger } from '#lib/server/log.js';
+import { applySecurityHeaders } from '#lib/server/security-headers.js';
 import { closeBlobStore } from '#lib/server/storage.js';
 import type { RouteId } from '$app/types';
 
@@ -30,9 +31,7 @@ const FILE_LINK_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
 ]);
 
 function applyHeaders(response: Response, requestId: string): Response {
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  applySecurityHeaders(response);
   response.headers.set('X-Request-Id', requestId);
   return response;
 }
