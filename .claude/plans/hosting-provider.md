@@ -165,8 +165,9 @@ Five things, whichever provider wins:
 2. Commit the provider's config-as-code file: both services, the shutdown grace at its maximum,
    and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it, per the relation in
    [`config.ts`](../../apps/worker/src/config.ts).
-3. Set the production secrets in the provider, and `DB_CONNECTION_STRING` in GitHub Actions
-   ([`deploy-migrations.md`](deploy-migrations.md)), both pointing at the Supavisor session pooler.
+3. Set the production secrets in the provider, and `DB_CONNECTION_STRING` in the `production`
+   GitHub Environment ([`deploy-migrations.md`](deploy-migrations.md)), both pointing at the
+   Supavisor session pooler.
    Until there is an email provider, production runs as the placeholder identity behind a site
    password: set `PUBLIC_AUTH_MODE=placeholder` and run `pnpm seed:identity` once against the
    hosted database ([`apps/web/README.md`](../../apps/web/README.md#auth)). The site password is then

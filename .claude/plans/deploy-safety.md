@@ -10,8 +10,11 @@ their poll is answered by another deploy, a web server that refuses to start wit
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)),
 `ts-db-types` migrating the base branch first (in the merge queue, the entry ahead) so that
 Kysely refuses a migration out of order or missing, as the hosted database would, a merge queue
-that runs the full suite on the exact commit that lands, and `deploy-web` moving a `deploy/web`
-tag on success, which names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
+that runs the full suite on the exact commit that lands, `deploy-web` moving a `deploy/web` tag
+on success, which names the commit `deploy-worker` deploys, dispatched from main only, production
+secrets held only in a `production` Environment that deploys only from main (a dispatch of
+another branch's `deploy.yml` runs without them), and every third-party action on the deploy path
+pinned by SHA. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -55,24 +58,6 @@ Findings that went elsewhere rather than into a PR here:
   handle needs one line. And it leaves `/health` free for `observability-vendors.md`'s split into
   liveness and a dependency check.
 
-## PR 1 — Production secrets live in a `production` Environment
-
-Coupled to repo settings, so it lands with them. A human has created the `production` Environment
-but not yet configured it.
-
-`deploy-migrations.md` adds six production secrets; as repo secrets they reach any `pull_request`
-run from a same-repo branch, so any PR — agent-authored included — can edit `ci.yml` and print
-them. Both deploy jobs declare `environment: production`; the Environment limits deployment
-branches to `main` and holds the secrets. The secrets living only there is the boundary: a
-dispatch runs the chosen branch's own `deploy.yml`, which can drop the declaration and
-`deploy-worker`'s branch check alike, but then has no credentials. The branch rule and that check
-stop honest mistakes; keep both.
-
-While these jobs gain prod credentials (on top of `packages: write` and `contents: write`), pin
-their third-party actions by SHA — including those inside the composite actions they call
-(`deploy-service`'s `docker/setup-buildx-action`). Dependabot's `github-actions` ecosystem already
-keeps such pins current.
-
 ## Open from the merge queue
 
 Checks for after it has run a while, not PRs yet.
@@ -84,7 +69,7 @@ Checks for after it has run a while, not PRs yet.
 - **`gh-stack`.** Whether it handles a queued base PR, since the next PR in a stack can only
   rebase once the one below it lands.
 
-## PR 2 — The fleet's connections fit the session pooler
+## PR 1 — The fleet's connections fit the session pooler
 
 A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
 
@@ -110,7 +95,7 @@ down — Σ `maxConnections` across every process alive during a deploy overlap,
 within Pool Size — then set Pool Size or the per-service maxima to fit. Separate roles per
 service would each get their own cap; weigh that against one more credential to manage.
 
-## PR 3 — The worker refuses a production config that would fail silently
+## PR 2 — The worker refuses a production config that would fail silently
 
 - **Drain grace.** `drainGraceMs` defaults to 30s and `PLATFORM_SHUTDOWN_GRACE_MS` is optional
   ([`config.ts`](../../apps/worker/src/config.ts)). Forget `WORKER_DRAIN_GRACE_MS` and every
@@ -126,7 +111,7 @@ service would each get their own cap; weigh that against one more credential to 
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 4 — Smoke-test every deploy
+## PR 3 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -153,6 +138,5 @@ Not PRs here; sequencing checks for whoever flips production on.
 ## Verification
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
-PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
-refused before any step runs. PR 2 by holding more session-mode connections than Pool Size
-against the dev stack's pooler and confirming the worker keeps ticking.
+PR 1 by holding more session-mode connections than Pool Size against the dev stack's pooler and
+confirming the worker keeps ticking.
