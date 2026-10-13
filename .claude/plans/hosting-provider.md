@@ -23,8 +23,8 @@ provider builds nothing and needs no git integration. What is left:
    to an earlier deployment is the emergency hatch; confirm it works for an image pinned by digest.
 2. **A shutdown grace measured in minutes.** An attempt averages ~5 minutes (range 2–15). The
    worker drains on SIGTERM and needs the platform to wait;
-   [`config.ts`](../../apps/worker/src/config.ts)'s `PLATFORM_SHUTDOWN_GRACE_MS` check makes that
-   relation checkable once the platform's number is known.
+   [`config.ts`](../../apps/worker/src/config.ts) sizes the drain from `PLATFORM_SHUTDOWN_GRACE_MS`
+   once the platform's number is known.
 3. **Manual scaling, restarts, alerts on CPU/memory/disk, and logs** — § Choosing a host and
    § Failure modes.
 4. **Price, and simplicity over time**, for a two-person nonprofit team. No autoscaling.
@@ -99,9 +99,8 @@ documented call versus our own code.
 Ten minutes covers the average attempt twice over and most of the 2–15 minute range; five covers
 about the average. None covers the 15-minute tail, and none needs to: the worker deploys only when
 someone dispatches it, so it can go out at a quiet hour, and an attempt cut off at the grace is
-recorded `shut_down` and retried by the user. `drainGraceMs` is then sized to the platform's number
-minus `killGraceMs` and one terminal write — the `PLATFORM_SHUTDOWN_GRACE_MS` check in
-[`config.ts`](../../apps/worker/src/config.ts).
+recorded `shut_down` and retried by the user. `drainGraceMs` is then derived from the platform's number
+minus `killGraceMs` and one terminal write, in [`config.ts`](../../apps/worker/src/config.ts).
 
 ## 5. Running it: scaling, logs, alerts
 
@@ -164,8 +163,8 @@ Five things, whichever provider wins:
 1. Replace the stub step in `actions/deploy-service` with the provider's deploy-by-digest call,
    waiting for a terminal status.
 2. Commit the provider's config-as-code file: both services, the shutdown grace at its maximum,
-   and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it, per the relation in
-   [`config.ts`](../../apps/worker/src/config.ts).
+   and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it. `live` refuses to start without it, and derives
+   `drainGraceMs` from it ([`config.ts`](../../apps/worker/src/config.ts)).
 3. Set the production secrets in the provider — the same database and bucket values the
    `production` GitHub Environment holds ([`hosted-database.md`](hosted-database.md) § The hosted
    project): the direct connection, with `DB_SSL_CA` beside it.
@@ -185,7 +184,7 @@ Five things, whichever provider wins:
 The deployed commit needs no provider-injected variable: every image carries
 `org.opencontainers.image.revision`, and the deploy run logs the digest.
 
-Two provider-config traps, from [`deploy-safety.md`](deploy-safety.md):
+Two provider-config traps:
 
 - **On DigitalOcean, web and worker must be separate apps.** DO's community answers say App
   Platform cannot deploy one component of an app alone — every deployment redeploys all of them.

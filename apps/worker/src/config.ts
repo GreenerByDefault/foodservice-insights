@@ -47,10 +47,11 @@ export type WorkerConfig = {
 
   /** How long shutdown waits for in-flight attempts to finish before killing them.
    *
-   * The hosting platform's own shutdown grace has to exceed this plus `killGraceMs` plus one
+   * The hosting platform's own shutdown grace has to cover this plus `killGraceMs` plus one
    * terminal write, or the platform kills the worker mid-drain and every attempt still draining is
-   * left to another worker's reaper instead of recording `shut_down`. Checked against
-   * `PLATFORM_SHUTDOWN_GRACE_MS`, when set, by `createWorkerConfig`'s optional third argument. See
+   * left to another worker's reaper instead of recording `shut_down`. So when
+   * `createWorkerConfig` is given `PLATFORM_SHUTDOWN_GRACE_MS`, it derives this from it unless
+   * overridden, and checks an override against it. See
    * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#deployments). */
   drainGraceMs: number;
 
@@ -153,13 +154,20 @@ export class WorkerConfigError extends Error {
 /** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below.
  *
  * `platformShutdownGraceMs` (`PLATFORM_SHUTDOWN_GRACE_MS`) is a platform fact, not a worker
- * behaviour, so it stays out of `WorkerConfig` — see `drainGraceMs` for the relation it checks. */
+ * behaviour, so it stays out of `WorkerConfig` — see `drainGraceMs` for what it decides. */
 export function createWorkerConfig(
   required: WorkerRequiredFields,
   overrides: WorkerDefaultableFields = {},
   platformShutdownGraceMs?: number,
 ): WorkerConfig {
-  const config = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...required };
+  const merged = { ...WORKER_DEFAULTS, ...definedOverrides(overrides), ...required };
+  const config =
+    platformShutdownGraceMs === undefined || overrides.drainGraceMs !== undefined
+      ? merged
+      : {
+          ...merged,
+          drainGraceMs: platformShutdownGraceMs - merged.killGraceMs - MAX_RENEWAL_ROUND_TRIP_MS,
+        };
   const violations = workerConfigViolations(config, platformShutdownGraceMs);
   if (violations.length > 0) throw new WorkerConfigError(violations);
   return config;
@@ -266,9 +274,9 @@ function workerConfigViolations(config: WorkerConfig, platformShutdownGraceMs?: 
 
   if (platformShutdownGraceMs !== undefined) {
     check(
-      platformShutdownGraceMs >
+      platformShutdownGraceMs >=
         config.drainGraceMs + config.killGraceMs + MAX_RENEWAL_ROUND_TRIP_MS,
-      `PLATFORM_SHUTDOWN_GRACE_MS (${platformShutdownGraceMs}ms) must exceed drainGraceMs + ` +
+      `PLATFORM_SHUTDOWN_GRACE_MS (${platformShutdownGraceMs}ms) must cover drainGraceMs + ` +
         `killGraceMs plus one terminal write's round trip (${MAX_RENEWAL_ROUND_TRIP_MS}ms). ` +
         'Otherwise the platform can kill the worker mid-drain, leaving an attempt still draining ' +
         "to another worker's reaper instead of recording shut_down.",

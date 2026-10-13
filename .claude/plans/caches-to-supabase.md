@@ -34,8 +34,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   same prompts as production; `mock-llm` is a keyword fake whose answers must never reach a
   shared cache.
 - **A CI-built worker image has no cache.** The CSV is gitignored, so `live` mode in production
-  would send every product to the LLM; `deploy-safety.md` § Before launch names this as a launch
-  blocker. Local images hide it because the file is on the developer's disk.
+  would send every product to the LLM, which makes this a launch blocker. Local images hide it because the file is on the developer's disk.
 - **No client-side database access and no RLS** (`ARCHITECTURE.md` § Supabase). Both local
   stacks also run with `[api] enabled = false`, so PostgREST is not a path for the lab either.
 - **One connection string serves everything, as `postgres`**, and it is the string the Supabase
@@ -440,8 +439,7 @@ cache and the worker image needs no file.
   glob already covers it); `python/insights/.../data_files/README.md` loses the cache; the lab's
   gains it;
   the root `README.md` paragraph about getting the CSV from GBD becomes a pointer to
-  `python/lab/README.md`; `analysis.py`'s cache **Open** is deleted; `deploy-safety.md`
-  § Before launch drops its cache bullet.
+  `python/lab/README.md`; `analysis.py`'s cache **Open** is deleted.
 
 ## PR 4 — contract: new-categorizations document out, parent harvests
 

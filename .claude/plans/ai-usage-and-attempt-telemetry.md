@@ -69,7 +69,7 @@ landed) that shape the design:
   - No stage is timed, and nothing measures memory.
 - **The cache is the cost lever, and its "hit" is not "categorized".** `raw_product_history`
   also counts products whose cached category *is* "No Matches Found". A missing cache CSV only
-  warns, and then sends every product to the LLM. That is `deploy-safety.md`'s launch blocker,
+  warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker,
   invisible per attempt today.
 - **Nothing says which build ran an attempt.** `worker_id` is `hostname-pid-uuid`. The SHA
   exists only as the image's OCI label, and both Python packages are version `0.0.0`. Prompts,

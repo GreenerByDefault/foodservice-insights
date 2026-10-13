@@ -37,6 +37,11 @@ export type RawWorkerModeSettings = {
   mode: string;
   /** Required by every mode but `off`, which spawns nothing. */
   pythonBin: string | undefined;
+  /** Required by `live`. Without it, every attempt fails and emails its requester. */
+  openAiApiKey: string | undefined;
+  /** Required by `live`. Without it, `drainGraceMs` falls back to a default no platform was sized
+   * against, and a deploy kills in-flight attempts as an ordinary `shut_down`. */
+  platformShutdownGraceMs: number | undefined;
 };
 
 export type ResolvedWorkerMode =
@@ -47,9 +52,9 @@ export type ResolvedWorkerMode =
       overrides: WorkerDefaultableFields;
     };
 
-/** Validate `WORKER_MODE` (and `PYTHON_BIN`, where the mode needs it), or throw naming what went
- * wrong. Takes plain values rather than reading the environment itself so `modes.test.ts` can
- * drive it with no database, no child, and no clock — the same shape `config.test.ts` uses. */
+/** Validate `WORKER_MODE` and the variables that mode needs, or throw naming what went wrong.
+ * Takes plain values rather than reading the environment itself so `modes.test.ts` can drive it
+ * with no database, no child, and no clock — the same shape `config.test.ts` uses. */
 export function resolveWorkerMode(settings: RawWorkerModeSettings): ResolvedWorkerMode {
   const mode = WORKER_MODES.find((candidate) => candidate === settings.mode);
   if (mode === undefined) {
@@ -64,6 +69,14 @@ export function resolveWorkerMode(settings: RawWorkerModeSettings): ResolvedWork
     throw new Error(
       `WORKER_MODE=${mode} needs PYTHON_BIN, the interpreter that runs the analysis child.`,
     );
+  }
+
+  if (mode === 'live') {
+    const missing = [
+      ...(settings.openAiApiKey ? [] : ['OPENAI_API_KEY']),
+      ...(settings.platformShutdownGraceMs === undefined ? ['PLATFORM_SHUTDOWN_GRACE_MS'] : []),
+    ];
+    if (missing.length > 0) throw new Error(`WORKER_MODE=live needs ${missing.join(' and ')}.`);
   }
 
   const childCommand: ChildCommand = {
