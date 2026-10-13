@@ -4,6 +4,9 @@ name: Deploy
 # commit is what allows a deploy to simply point at a commit SHA to move the pointer to the
 # pre-built image.
 #
+# Deploying on push needs no wait for CI: main only moves through the merge queue, which ran the
+# full suite on the very commit that lands, so every image built here is of a tested commit.
+#
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
@@ -12,6 +15,15 @@ name: Deploy
 #
 # Nothing here rolls back: a bad deploy is reverted and deploys forward like any other change, per
 # ARCHITECTURE.md § Bad deploys are fixed forward.
+#
+# Production secrets live only in the `production` Environment, never as repo secrets, which any
+# pull_request run from a same-repo branch can read by editing a workflow. The Environment only
+# deploys from main, so a dispatch of another branch's copy of this file — which may have dropped
+# its `environment:` lines and every check below — runs without credentials.
+#
+# Every third-party action on the deploy path, including inside the composite actions these jobs
+# call, is pinned by commit SHA: the build jobs push the image prod runs, and the deploy jobs
+# hold prod credentials. Dependabot keeps the pins current.
 on:
   push:
     branches: [main]
@@ -62,6 +74,7 @@ jobs:
   deploy-web:
     name: Deploy web
     needs: build-web
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -109,6 +122,7 @@ jobs:
   deploy-worker:
     name: Deploy worker
     if: github.event_name == 'workflow_dispatch'
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -117,8 +131,9 @@ jobs:
     permissions:
       contents: write # to move the deploy/worker tag on success
     steps:
-      # The deploy tooling is the dispatched branch's copy. This catches a mistake, not an
-      # attacker: a branch's own deploy.yml can simply drop it.
+      # The deploy tooling is the dispatched branch's copy. The Environment's branch rule already
+      # refuses this job before any step runs; this says why in the log, and still catches the
+      # mistake if that rule is ever loosened.
       - name: Refuse a dispatch from outside main
         if: github.ref != 'refs/heads/main'
         run: |

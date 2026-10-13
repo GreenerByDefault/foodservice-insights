@@ -38,6 +38,13 @@ export const MAX_DISPLAY_NAME_LENGTH = 100;
  * `deriveOrganizationSlug` and its tests. */
 export const MAX_ORGANIZATION_SLUG_LENGTH = 48;
 
+/** How long a cache table's key may be, in bytes: `product` in `product_categorization` and
+ * `entree_classification`, `original_unit` in `unit_weight`. Enforced by each table's
+ * `*_length` CHECK constraint (`packages/db/public-schema.sql`), which keeps the key's unique
+ * index entry inside the b-tree's limit. Mirrored here, not read from the DB, for what validates a
+ * suggestion before inserting it. */
+export const MAX_CACHE_KEY_BYTES = 2000;
+
 /** What an organization's slug may look like, enforced by the `organization_slug_format` CHECK
  * constraint (`packages/db/public-schema.sql`): lowercase alphanumerics, hyphen-separated, no
  * leading, trailing, or doubled hyphen. Mirrored here, not read from the DB, for

@@ -1,9 +1,9 @@
 name: CI
 
+# No `push`: every commit reaches main through the merge queue, whose run already tested it.
 on:
   pull_request:
-  push:
-    branches: [main]
+  merge_group:
 
 concurrency:
   group: ci-${{ github.head_ref || github.ref }}
@@ -115,12 +115,14 @@ jobs:
       # and let Kysely refuse here instead of at deploy.
       # `--staged` too, or a migration the PR deleted would linger untracked and Kysely would
       # never notice it is missing.
+      # In the queue, the base is the entry ahead of this one: a PR whose migration sorted after
+      # main's when it was green can sort before one that a PR ahead of it lands.
       - name: Migrate the base branch's migrations, as the hosted database already has them
-        if: github.event_name == 'pull_request'
         env:
           TEST_DB: '1'
+          BASE: ${{ github.event.merge_group.base_sha || env.TURBO_SCM_BASE }}
         run: |
-          git restore --source="$TURBO_SCM_BASE" --staged --worktree packages/db/migrations
+          git restore --source="$BASE" --staged --worktree packages/db/migrations
           pnpm migrate
           git restore --source=HEAD --staged --worktree packages/db/migrations
       - run: pnpm migrate

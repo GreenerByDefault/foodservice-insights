@@ -11,3 +11,15 @@ export async function updatedAtTrigger(database: Kysely<any>, table: string): Pr
       FOR EACH ROW EXECUTE FUNCTION set_updated_at()
   `.execute(database);
 }
+
+/**
+ * Attach the `set_verified_at()` trigger (created in `002_caches`) to a table's `is_verified` and
+ * `verified_at` columns. Call this from any migration that adds a reviewed cache table.
+ */
+export async function verifiedAtTrigger(database: Kysely<any>, table: string): Promise<void> {
+  await sql`
+    CREATE TRIGGER ${sql.raw(`${table}_set_verified_at`)}
+      BEFORE INSERT OR UPDATE ON ${sql.table(table)}
+      FOR EACH ROW EXECUTE FUNCTION set_verified_at()
+  `.execute(database);
+}

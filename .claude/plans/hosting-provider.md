@@ -116,8 +116,9 @@ minus `killGraceMs` and one terminal write — the `PLATFORM_SHUTDOWN_GRACE_MS` 
 ## 6. Reaching Supabase
 
 Render and DigitalOcean have **no outbound IPv6**; Railway has a per-service toggle. Supabase's
-direct connection is IPv6-only, so on all three the practical path is the Supavisor session pooler
-over IPv4 — how `cfa-web-app` already connects. Not a differentiator.
+direct connection is IPv6-only without its IPv4 add-on, which
+[`hosted-database.md`](hosted-database.md) buys so that every process, the CI migrate step
+included, connects directly rather than through the shared pooler. Not a differentiator.
 
 ## 7. Reliability in 2026
 
@@ -165,11 +166,12 @@ Five things, whichever provider wins:
 2. Commit the provider's config-as-code file: both services, the shutdown grace at its maximum,
    and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it, per the relation in
    [`config.ts`](../../apps/worker/src/config.ts).
-3. Set the production secrets in the provider, and `DB_CONNECTION_STRING` in GitHub Actions
-   ([`deploy-migrations.md`](deploy-migrations.md)), both pointing at the Supavisor session pooler.
+3. Set the production secrets in the provider — the same database and bucket values the
+   `production` GitHub Environment holds ([`hosted-database.md`](hosted-database.md) § The hosted
+   project): the direct connection, with `DB_SSL_CA` beside it.
    Until there is an email provider, production runs as the placeholder identity behind a site
-   password: set `PUBLIC_AUTH_MODE=placeholder` and run `pnpm seed:identity` once against the
-   hosted database ([`apps/web/README.md`](../../apps/web/README.md#auth)). The site password is then
+   password: set `PUBLIC_AUTH_MODE=placeholder`; the deploy's migrate step seeds the identity
+   ([`apps/web/README.md`](../../apps/web/README.md#auth)). The site password is then
    all that stands between the internet and the placeholder admin. The web app has no `ORIGIN` to set
    (adapter-node 6 removed it): it takes its origin from `Host` and assumes `https`, which is right
    behind a TLS-terminating proxy. Set `HOST_HEADER=x-forwarded-host` only if the proxy rewrites

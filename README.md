@@ -118,9 +118,11 @@ Everything above the TypeScript heading applies to both.
 
 ## What CI runs
 
-A pull request runs only the jobs its changes can affect; `main` runs everything. A
-TypeScript-only change skips every Python job, and vice versa. See
-[`.github/filters.yml`](.github/filters.yml) for the rules.
+A pull request runs only the jobs its changes can affect: a TypeScript-only change skips every
+Python job, and vice versa. See [`.github/filters.yml`](.github/filters.yml) for the rules.
+
+PRs merge through a merge queue, which runs everything on the exact commit that will land on
+`main`, so a PR can be green alone and still be ejected for clashing with one ahead of it.
 
 ## TypeScript
 

@@ -8,11 +8,15 @@ worker-runs-behind invariant, the drain with its `config.ts` relations, migratio
 workspace rather than the image, deploys that only ever fix forward, report pages that reload once
 their poll is answered by another deploy, a web server that refuses to start without its config
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)),
-`ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
-missing, as the hosted database would, and `deploy-web` moving a `deploy/web` tag on success, which
-names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
+`ts-db-types` migrating the base branch first (in the merge queue, the entry ahead) so that
+Kysely refuses a migration out of order or missing, as the hosted database would, a merge queue
+that runs the full suite on the exact commit that lands, `deploy-web` moving a `deploy/web` tag
+on success, which names the commit `deploy-worker` deploys, dispatched from main only, production
+secrets held only in a `production` Environment that deploys only from main (a dispatch of
+another branch's `deploy.yml` runs without them), and every third-party action on the deploy path
+pinned by SHA. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
-[`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
+[`hosted-database.md`](hosted-database.md) has not landed — so each fix here is cheapest now.
 
 Facts marked **verified** were checked on 2026-10-08.
 
@@ -20,8 +24,8 @@ Findings that went elsewhere rather than into a PR here:
 
 - **One DigitalOcean app would redeploy the worker on every web push** — a note in
   [`hosting-provider.md`](hosting-provider.md) § After the decision.
-- **Migration lock contention** — a problem statement in [`deploy-migrations.md`](deploy-migrations.md),
-  whose PR owns the migration session's settings.
+- **Migration lock contention** — settled in [`hosted-database.md`](hosted-database.md), whose
+  PR 2 owns the migration session's settings.
 - **Health check as readiness, not liveness** — also in `hosting-provider.md`, since it is
   provider config.
 
@@ -38,9 +42,14 @@ Findings that went elsewhere rather than into a PR here:
   own) and the image `deploy.yml` pushes can sit on different `:latest` bases, but UBI minimal is
   conservative within a major, and a digest pin plus Dependabot's `docker` ecosystem is a PR per
   base bump for little caught. Revisit if a base update ever breaks a deploy.
-- *Considered: a merge queue instead of deploys following main's CI.* Available to a public org
-  repo (`ci.yml` would need `merge_group`), and it keeps main green rather than only gating
-  deploys, but costs latency on every merge. Deploys follow main's CI instead (PR 2).
+- *Rejected: deploying once main's CI passes (`workflow_run` on `CI`).* It gates deploys but
+  still lets a bad combination of PRs land, and a red main then blocks every deploy until it is
+  fixed forward. The merge queue keeps that commit off main instead, for the same deploy
+  latency: the queue's run replaces main's. What it costs is merge latency (a PR reaches main a
+  full CI run after it is queued) and flakes that eject a PR rather than delay a deploy.
+- *Rejected: CI on push to main as well as in the queue.* The queue already tested the exact
+  commit that lands, and the ruleset has no bypass actors (**verified** 2026-10-12), so a second
+  run tests nothing new.
 - *Rejected: checking config in `/health`.* The web app validates config at startup instead —
   `assertConfigured` builds every lazy handle (database, blob store, emailer, logger, and the
   Supabase project in `supabase` mode), so a missing variable crashes the server, as the worker's
@@ -49,75 +58,36 @@ Findings that went elsewhere rather than into a PR here:
   handle needs one line. And it leaves `/health` free for `observability-vendors.md`'s split into
   liveness and a dependency check.
 
-## PR 1 — Production secrets live in a `production` Environment
+## Open from the merge queue
 
-Coupled to repo settings, so it lands with them. A human has created the `production` Environment
-but not yet configured it.
+Checks for after it has run a while, not PRs yet.
 
-`deploy-migrations.md` adds six production secrets; as repo secrets they reach any `pull_request`
-run from a same-repo branch, so any PR — agent-authored included — can edit `ci.yml` and print
-them. Both deploy jobs declare `environment: production`; the Environment limits deployment
-branches to `main` and holds the secrets. The secrets living only there is the boundary: a
-dispatch runs the chosen branch's own `deploy.yml`, which can drop the declaration and
-`deploy-worker`'s branch check alike, but then has no credentials. The branch rule and that check
-stop honest mistakes; keep both.
+- **Cache warming.** A PR run restores caches saved on main, but not those saved on the queue's
+  `gh-readonly-queue/*` refs, and main's push run used to be what saved the pnpm, uv and
+  Playwright caches. If the first lockfile change leaves every PR run cold, add a push job
+  filtered to the lockfiles that only runs the setup actions.
+- **`gh-stack`.** Whether it handles a queued base PR, since the next PR in a stack can only
+  rebase once the one below it lands.
 
-While these jobs gain prod credentials (on top of `packages: write` and `contents: write`), pin
-their third-party actions by SHA — including those inside the composite actions they call
-(`deploy-service`'s `docker/setup-buildx-action`). Dependabot's `github-actions` ecosystem already
-keeps such pins current.
-
-## PR 2 — Web deploys once main's CI passes
-
-The `main branch` ruleset requires `CI` but not an up-to-date branch, auto-merge is on, and PR CI
-runs `--affected` (**verified**). Two PRs green apart can be red together, and `deploy-web` ships
-them — and once `deploy-migrations.md` lands, migrates them — before main's own CI has tested the
-merged commit.
-
-**`deploy-web` runs when CI completes, rather than on push.** `deploy.yml` keeps `push` for the
-builds and adds `workflow_run` on `CI` `completed`; `deploy-web` ships
-`github.event.workflow_run.head_sha` when that run's conclusion is `success` and its event is
-`push`. The event check is the boundary, not `branches: [main]`, which also matches a fork's PR
-from a branch named `main` — and this job will hold prod credentials. Builds finish well inside
-main's CI (**verified** 2026-10-11: under two minutes against four to eight), and `deploy-service`
-already fails clearly on a missing image.
-
-A trigger instead of a wait means a failed or cancelled CI never starts a deploy, and re-running a
-flaked CI fires `workflow_run` again, so the deploy follows. *Rejected: polling for CI inside
-`deploy-web`* (#489's first draft) — a poll loop, a grace period for a run that might not exist
-yet, and a `cancelled` result every caller had to refuse, all to wait for an event GitHub already
-sends.
-
-The worker needs no check of its own: it deploys the commit `deploy/web` names, which `deploy-web`
-then moves only once CI has passed.
-
-## PR 3 — The fleet's connections fit the session pooler
+## PR 1 — The fleet's connections fit `max_connections`
 
 A dedicated PR. No pool has been tuned yet; `WORKER_DB_LIMITS` is `DEFAULT_LIMITS` with a TODO.
 
-The problem, in two halves:
+Every process connects directly ([`hosted-database.md`](hosted-database.md) § Connectivity), so
+the project's `max_connections` is the one cap, shared with Supabase's own services, and Postgres
+refuses a connection past it with `53300`, which `TRANSIENT_SQL_STATES` already classifies
+([`errors.ts`](../../packages/db/src/errors.ts)): the worker keeps ticking and the web answers
+503. What is left is sizing. Web and worker both use `maxConnections: 10`
+([`client.ts`](../../packages/db/src/client.ts)); the sum across the fleet, a deploy overlap, the
+migrate step and the other roles is the table in `hosted-database.md` § The connection budget,
+which owns it and the compute tier it implies.
 
-1. **Budget.** Supavisor's session mode caps clients at the project's *Pool Size* per
-   role + database — around 15 on the small compute tiers; check Database Settings. Web and worker
-   both use `maxConnections: 10` ([`client.ts`](../../packages/db/src/client.ts)). One web and the
-   planned two workers can ask for 30, a deploy's old/new overlap adds a service's worth more, and
-   the migration step and anyone in Studio share the same cap.
-2. **Classification.** Supavisor rejects a connection over the cap with
-   `FATAL XX000 (EMAXCONNSESSION) max clients reached in session mode…` (**verified** in
-   `supabase/supavisor`'s `max_connections_error.ex` and `proxy_test.exs`). `XX000` is not in
-   `TRANSIENT_SQL_STATES` ([`errors.ts`](../../packages/db/src/errors.ts)), so it counts as a
-   statement Postgres refused. The worker's claim poll treats that as "drain and exit nonzero"
-   ([`worker.ts`](../../apps/worker/src/worker.ts) `pollQueue`) — killing its in-flight attempts
-   as `shut_down` at exactly the busy moment that exhausted the pool. The web answers 500 instead
-   of 503.
+Shape: the web's handle gets `maxConnections: 5` — its queries are milliseconds and its traffic
+is polls and page loads; `WORKER_DB_LIMITS` becomes an explicit object, the TODO goes, and the
+`config.ts` check that ties it to `maxConcurrentAttempts` stays the proof. A maximum that changes
+updates the budget table. A separate role per service is rejected there, for now.
 
-Likely shape: treat `EMAXCONN*` as transient (a message match, the way
-`TRANSIENT_DRIVER_MESSAGES` already works, with a test pinning the string), and write the budget
-down — Σ `maxConnections` across every process alive during a deploy overlap, plus migrations,
-within Pool Size — then set Pool Size or the per-service maxima to fit. Separate roles per
-service would each get their own cap; weigh that against one more credential to manage.
-
-## PR 4 — The worker refuses a production config that would fail silently
+## PR 2 — The worker refuses a production config that would fail silently
 
 - **Drain grace.** `drainGraceMs` defaults to 30s and `PLATFORM_SHUTDOWN_GRACE_MS` is optional
   ([`config.ts`](../../apps/worker/src/config.ts)). Forget `WORKER_DRAIN_GRACE_MS` and every
@@ -133,7 +103,7 @@ service would each get their own cap; weigh that against one more credential to 
 Update `hosting-provider.md` § After the decision item 2, which currently says to set
 `drainGraceMs` by hand.
 
-## PR 5 — Smoke-test every deploy
+## PR 3 — Smoke-test every deploy
 
 Blocked on the hosting decision: it needs the public URL. The first step toward synthetics.
 
@@ -160,8 +130,5 @@ Not PRs here; sequencing checks for whoever flips production on.
 ## Verification
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
-PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
-refused before any step runs. PR 2 after it merges: the push run only builds, and the
-`workflow_run` run deploys once CI passes. PR 3 by
-holding more session-mode connections than Pool Size against the dev stack's pooler and
-confirming the worker keeps ticking.
+PR 1 by the budget table in `hosted-database.md` still adding up, and `config.ts`'s check still
+passing with the worker's explicit limits.
