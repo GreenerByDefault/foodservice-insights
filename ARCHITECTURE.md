@@ -331,7 +331,9 @@ kills the old container outright. Two mitigations, both required:
 - **The worker deploys independently of web, and only when someone dispatches it** — never on
   push. One consequence follows from that asymmetry: the deployed worker is always the side running
   behind schema and web app, never ahead, so the web ↔ worker and app ↔ schema contracts must stay
-  backwards compatible for as long as an old worker might still be running.
+  backwards compatible for as long as an old worker might still be running. `deploy.yml` deploys
+  the worker at the commit the web runs, so only a rollback from the host's dashboard can leave the
+  worker ahead.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they

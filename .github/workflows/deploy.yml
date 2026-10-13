@@ -7,7 +7,7 @@ name: Deploy
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
-# The worker only ever deploys via workflow_dispatch from main, at main's latest commit. This is
+# The worker only ever deploys via workflow_dispatch from main, at the commit the web runs. This is
 # because deploying the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
 #
 # Nothing here rolls back: a bad deploy is reverted and deploys forward like any other change, per
@@ -67,10 +67,12 @@ jobs:
     concurrency:
       group: deploy-web
       cancel-in-progress: false
+    permissions:
+      contents: write # to move the deploy/web tag on success
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # need origin/main's current tip for the supersession check below
+          fetch-depth: 0 # for the supersession check below, and to move the tag
 
       # Build time varies, so runs can finish out of push order: push A (a slow base-layer change)
       # can finish after push B (a fast cache hit) has already deployed, which would roll prod
@@ -84,15 +86,25 @@ jobs:
         run: |
           current_tip=$(git rev-parse origin/main)
           if [ "${{ github.sha }}" != "$current_tip" ]; then
-            echo "::notice::main is now at $current_tip, past ${{ github.sha }} — a newer push will deploy instead. Skipping."
+            echo "::notice::Skipping: main has moved on to $(git rev-parse --short "$current_tip"), whose own deploy will ship instead."
             echo "superseded=true" >> "$GITHUB_ENV"
           fi
 
       - uses: ./.github/actions/deploy-service
+        id: deploy
         if: env.superseded != 'true'
         with:
           service: web
           sha: ${{ github.sha }}
+
+      # deploy-worker deploys the commit this tag names.
+      - name: Move the deploy/web tag
+        if: env.superseded != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f -a deploy/web "${{ github.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
+          git push -f origin deploy/web
 
   deploy-worker:
     name: Deploy worker
@@ -105,14 +117,34 @@ jobs:
     permissions:
       contents: write # to move the deploy/worker tag on success
     steps:
+      # The deploy tooling is the dispatched branch's copy. This catches a mistake, not an
+      # attacker: a branch's own deploy.yml can simply drop it.
+      - name: Refuse a dispatch from outside main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::The worker deploys from main only, not ${GITHUB_REF#refs/heads/}. Run the workflow again with 'Use workflow from' set to main."
+          exit 1
+
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # need full history and tags for the delta below, and to move the tag
+          fetch-depth: 0 # need full history and tags for the steps below, and to move the tag
+
+      # Not main's tip: the worker never runs ahead of the web, which applies the migrations it
+      # needs, and main's tip may still be migrating or have failed to.
+      - name: Resolve the commit the web runs
+        id: target
+        run: |
+          if ! sha=$(git rev-parse -q --verify 'refs/tags/deploy/web^{commit}'); then
+            echo "::error::The web has never deployed through this workflow, and the worker deploys only a commit the web runs. Wait for the next push to main to deploy the web."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying the worker at the commit the web runs: $(git log -1 --format='%h %s' "$sha")"
 
       - name: Show commits since the last worker deploy
         run: |
           if git rev-parse -q --verify refs/tags/deploy/worker >/dev/null; then
-            git log deploy/worker..HEAD --oneline
+            git log "deploy/worker..${{ steps.target.outputs.sha }}" --oneline
           else
             echo 'No deploy/worker tag yet — this is the first tracked worker deploy.'
           fi
@@ -121,11 +153,11 @@ jobs:
         id: deploy
         with:
           service: worker
-          sha: ${{ github.sha }}
+          sha: ${{ steps.target.outputs.sha }}
 
       - name: Move the deploy/worker tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f -a deploy/worker HEAD -m "digest: ${{ steps.deploy.outputs.digest }}"
+          git tag -f -a deploy/worker "${{ steps.target.outputs.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
           git push -f origin deploy/worker
