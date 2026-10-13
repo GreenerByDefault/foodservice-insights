@@ -49,6 +49,19 @@ An upload that fails validation never becomes a `report`. It is recorded as a **
 
 Users, organizations, membership, and invites make up the auth side of the schema. **`audit_event`** is an append-only trail of key auth events.
 
+Three tables cache answers the analysis would otherwise ask an LLM for:
+**`product_categorization`**, **`entree_classification`** and **`unit_weight`**. They stand
+apart from the rest, with no foreign keys, because a cached answer must outlive the report that
+suggested it.
+
+- **Only a verified row is used.** Code only ever inserts unverified suggestions, and the first
+  suggestion for a key wins. A human corrects and verifies rows in Supabase Studio by ticking
+  `is_verified`.
+- **`cache_client` is the role for the lab and for developers' local workers.** It can read
+  these three tables and insert suggestions, nothing else, which
+  [`tests/caches.test.ts`](tests/caches.test.ts) asserts. Its password is set by hand on the
+  hosted project and nowhere else.
+
 Design reasoning:
 
 - **`input_file.storage_key` points at the normalized CSV file the worker reads.** `input_file.is_modified` says whether it

@@ -69,6 +69,26 @@ describe('conventions', () => {
     expect(rows.map((row) => row.name)).toEqual([]);
   });
 
+  test('every verified_at column has a trigger that maintains it', async () => {
+    const { rows } = await withRollback(DATABASE, async (transaction) => {
+      return await sql<{ name: string }>`
+        SELECT c.relname AS name
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'verified_at' AND NOT a.attisdropped
+        WHERE n.nspname = 'public'
+          AND c.relkind = 'r'
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_trigger t
+            JOIN pg_proc p ON p.oid = t.tgfoid
+            WHERE t.tgrelid = c.oid AND p.proname = 'set_verified_at' AND NOT t.tgisinternal
+          )
+      `.execute(transaction);
+    });
+
+    expect(rows.map((row) => row.name)).toEqual([]);
+  });
+
   test('set_updated_at bumps the column on update', async () => {
     // `now()` is the transaction's start time, so a bump is only observable against a row that
     // was inserted claiming an older one. Exercised through `organization`, one of several

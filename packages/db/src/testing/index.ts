@@ -25,13 +25,16 @@ export {
   insertAnalysisAttempt,
   insertAppUser,
   insertAppUserWithEmail,
+  insertEntreeClassification,
   insertInputFile,
   insertOrganization,
   insertOrganizationInvite,
   insertOrganizationMember,
+  insertProductCategorization,
   insertReport,
   insertReportWithAttempt,
   insertResultFile,
+  insertUnitWeight,
   readAnalysisAttemptRow,
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';

@@ -97,6 +97,18 @@ CREATE TYPE "public"."counts_basis" AS ENUM (
 ALTER TYPE "public"."counts_basis" OWNER TO "postgres";
 
 --
+-- Name: entree_classification_label; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE "public"."entree_classification_label" AS ENUM (
+    'entree',
+    'side/add-on'
+);
+
+
+ALTER TYPE "public"."entree_classification_label" OWNER TO "postgres";
+
+--
 -- Name: organization_invite_status; Type: TYPE; Schema: public; Owner: postgres
 --
 
@@ -470,6 +482,26 @@ CREATE OR REPLACE FUNCTION "public"."set_updated_at"() RETURNS "trigger"
 ALTER FUNCTION "public"."set_updated_at"() OWNER TO "postgres";
 
 --
+-- Name: set_verified_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."set_verified_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' OR NEW.is_verified IS DISTINCT FROM OLD.is_verified THEN
+        NEW.verified_at := CASE WHEN NEW.is_verified THEN now() END;
+      ELSE
+        NEW.verified_at := OLD.verified_at;
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."set_verified_at"() OWNER TO "postgres";
+
+--
 -- Name: uuidv7(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -678,6 +710,50 @@ ALTER TABLE "public"."audit_event" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDE
 
 
 --
+-- Name: entree_classification; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."entree_classification" (
+    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
+    "product" "text" NOT NULL,
+    "classification" "public"."entree_classification_label" NOT NULL,
+    "cleaned_name" "text",
+    "is_verified" boolean DEFAULT false NOT NULL,
+    "verified_at" timestamp with time zone,
+    "suggested_by" "text" DEFAULT 'manual'::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "entree_classification_cleaned_name_not_blank" CHECK ((("cleaned_name" IS NULL) OR ("cleaned_name" ~ '[^[:space:]]'::"text"))),
+    CONSTRAINT "entree_classification_product_length" CHECK ((("octet_length"("product") >= 1) AND ("octet_length"("product") <= 2000))),
+    CONSTRAINT "entree_classification_product_trimmed" CHECK (("product" !~ '^[[:space:]]|[[:space:]]$'::"text")),
+    CONSTRAINT "entree_classification_suggested_by_not_blank" CHECK (("suggested_by" ~ '[^[:space:]]'::"text"))
+);
+
+
+ALTER TABLE "public"."entree_classification" OWNER TO "postgres";
+
+--
+-- Name: TABLE "entree_classification"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."entree_classification" IS 'Only verified rows are ever used. The app and the lab insert suggestions unverified; a human corrects the value here if needed and ticks is_verified.';
+
+
+--
+-- Name: COLUMN "entree_classification"."verified_at"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."entree_classification"."verified_at" IS 'Maintained by a trigger from is_verified. A value typed here is ignored.';
+
+
+--
+-- Name: COLUMN "entree_classification"."suggested_by"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."entree_classification"."suggested_by" IS 'Where the row came from: attempt:<id> from a worker run, lab:<user>, import:<file>, or manual.';
+
+
+--
 -- Name: input_file; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -800,6 +876,58 @@ CREATE TABLE IF NOT EXISTS "public"."organization_member" (
 ALTER TABLE "public"."organization_member" OWNER TO "postgres";
 
 --
+-- Name: product_categorization; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."product_categorization" (
+    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
+    "product" "text" NOT NULL,
+    "category" "text" NOT NULL,
+    "cleaned_name" "text",
+    "is_verified" boolean DEFAULT false NOT NULL,
+    "verified_at" timestamp with time zone,
+    "suggested_by" "text" DEFAULT 'manual'::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "product_categorization_category_trimmed_not_empty" CHECK ((("category" !~ '^[[:space:]]|[[:space:]]$'::"text") AND ("category" <> ''::"text"))),
+    CONSTRAINT "product_categorization_cleaned_name_not_blank" CHECK ((("cleaned_name" IS NULL) OR ("cleaned_name" ~ '[^[:space:]]'::"text"))),
+    CONSTRAINT "product_categorization_product_length" CHECK ((("octet_length"("product") >= 1) AND ("octet_length"("product") <= 2000))),
+    CONSTRAINT "product_categorization_product_trimmed" CHECK (("product" !~ '^[[:space:]]|[[:space:]]$'::"text")),
+    CONSTRAINT "product_categorization_suggested_by_not_blank" CHECK (("suggested_by" ~ '[^[:space:]]'::"text"))
+);
+
+
+ALTER TABLE "public"."product_categorization" OWNER TO "postgres";
+
+--
+-- Name: TABLE "product_categorization"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."product_categorization" IS 'Only verified rows are ever used. The app and the lab insert suggestions unverified; a human corrects the value here if needed and ticks is_verified.';
+
+
+--
+-- Name: COLUMN "product_categorization"."category"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."product_categorization"."category" IS 'A category from GBD_categories.yaml, or No Matches Found. A row whose category is not in the YAML is skipped by every run, with a warning.';
+
+
+--
+-- Name: COLUMN "product_categorization"."verified_at"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."product_categorization"."verified_at" IS 'Maintained by a trigger from is_verified. A value typed here is ignored.';
+
+
+--
+-- Name: COLUMN "product_categorization"."suggested_by"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."product_categorization"."suggested_by" IS 'Where the row came from: attempt:<id> from a worker run, lab:<user>, import:<file>, or manual.';
+
+
+--
 -- Name: rejected_upload; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -880,6 +1008,53 @@ CREATE TABLE IF NOT EXISTS "public"."result_file" (
 ALTER TABLE "public"."result_file" OWNER TO "postgres";
 
 --
+-- Name: unit_weight; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."unit_weight" (
+    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
+    "original_unit" "text" NOT NULL,
+    "cleaned_unit" "text" NOT NULL,
+    "extracted_weight" double precision,
+    "example_products" "text",
+    "is_verified" boolean DEFAULT false NOT NULL,
+    "verified_at" timestamp with time zone,
+    "suggested_by" "text" DEFAULT 'manual'::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "unit_weight_cleaned_unit_not_blank" CHECK (("cleaned_unit" ~ '[^[:space:]]'::"text")),
+    CONSTRAINT "unit_weight_example_products_not_blank" CHECK ((("example_products" IS NULL) OR ("example_products" ~ '[^[:space:]]'::"text"))),
+    CONSTRAINT "unit_weight_extracted_weight_positive_finite" CHECK ((("extracted_weight" IS NULL) OR (("extracted_weight" > (0)::double precision) AND ("extracted_weight" < 'Infinity'::double precision)))),
+    CONSTRAINT "unit_weight_original_unit_length" CHECK (("octet_length"("original_unit") <= 2000)),
+    CONSTRAINT "unit_weight_original_unit_not_blank" CHECK (("original_unit" ~ '[^[:space:]]'::"text")),
+    CONSTRAINT "unit_weight_suggested_by_not_blank" CHECK (("suggested_by" ~ '[^[:space:]]'::"text"))
+);
+
+
+ALTER TABLE "public"."unit_weight" OWNER TO "postgres";
+
+--
+-- Name: TABLE "unit_weight"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."unit_weight" IS 'Only verified rows are ever used. The app and the lab insert suggestions unverified; a human corrects the value here if needed and ticks is_verified.';
+
+
+--
+-- Name: COLUMN "unit_weight"."verified_at"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."unit_weight"."verified_at" IS 'Maintained by a trigger from is_verified. A value typed here is ignored.';
+
+
+--
+-- Name: COLUMN "unit_weight"."suggested_by"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."unit_weight"."suggested_by" IS 'Where the row came from: attempt:<id> from a worker run, lab:<user>, import:<file>, or manual.';
+
+
+--
 -- Name: analysis_attempt analysis_attempt_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -909,6 +1084,22 @@ ALTER TABLE ONLY "public"."app_user"
 
 ALTER TABLE ONLY "public"."audit_event"
     ADD CONSTRAINT "audit_event_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: entree_classification entree_classification_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."entree_classification"
+    ADD CONSTRAINT "entree_classification_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: entree_classification entree_classification_product_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."entree_classification"
+    ADD CONSTRAINT "entree_classification_product_key" UNIQUE ("product");
 
 
 --
@@ -984,6 +1175,22 @@ ALTER TABLE ONLY "public"."organization"
 
 
 --
+-- Name: product_categorization product_categorization_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_categorization"
+    ADD CONSTRAINT "product_categorization_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: product_categorization product_categorization_product_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_categorization"
+    ADD CONSTRAINT "product_categorization_product_key" UNIQUE ("product");
+
+
+--
 -- Name: rejected_upload rejected_upload_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1013,6 +1220,22 @@ ALTER TABLE ONLY "public"."result_file"
 
 ALTER TABLE ONLY "public"."result_file"
     ADD CONSTRAINT "result_file_storage_key_key" UNIQUE ("storage_key");
+
+
+--
+-- Name: unit_weight unit_weight_original_unit_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."unit_weight"
+    ADD CONSTRAINT "unit_weight_original_unit_key" UNIQUE ("original_unit");
+
+
+--
+-- Name: unit_weight unit_weight_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."unit_weight"
+    ADD CONSTRAINT "unit_weight_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -1198,6 +1421,20 @@ CREATE OR REPLACE TRIGGER "audit_event_is_append_only" BEFORE DELETE OR UPDATE O
 
 
 --
+-- Name: entree_classification entree_classification_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "entree_classification_set_updated_at" BEFORE UPDATE ON "public"."entree_classification" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+--
+-- Name: entree_classification entree_classification_set_verified_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "entree_classification_set_verified_at" BEFORE INSERT OR UPDATE ON "public"."entree_classification" FOR EACH ROW EXECUTE FUNCTION "public"."set_verified_at"();
+
+
+--
 -- Name: organization organization_has_a_member; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -1233,10 +1470,38 @@ CREATE OR REPLACE TRIGGER "organization_set_updated_at" BEFORE UPDATE ON "public
 
 
 --
+-- Name: product_categorization product_categorization_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "product_categorization_set_updated_at" BEFORE UPDATE ON "public"."product_categorization" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+--
+-- Name: product_categorization product_categorization_set_verified_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "product_categorization_set_verified_at" BEFORE INSERT OR UPDATE ON "public"."product_categorization" FOR EACH ROW EXECUTE FUNCTION "public"."set_verified_at"();
+
+
+--
 -- Name: report report_has_an_input_file; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
 CREATE CONSTRAINT TRIGGER "report_has_an_input_file" AFTER INSERT ON "public"."report" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "public"."report_check_has_input_file"();
+
+
+--
+-- Name: unit_weight unit_weight_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "unit_weight_set_updated_at" BEFORE UPDATE ON "public"."unit_weight" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+--
+-- Name: unit_weight unit_weight_set_verified_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "unit_weight_set_verified_at" BEFORE INSERT OR UPDATE ON "public"."unit_weight" FOR EACH ROW EXECUTE FUNCTION "public"."set_verified_at"();
 
 
 --
@@ -1398,6 +1663,44 @@ GRANT UPDATE ON SEQUENCE "public"."audit_event_id_seq" TO "service_role";
 
 
 --
+-- Name: TABLE "entree_classification"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."entree_classification" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."entree_classification" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."entree_classification" TO "service_role";
+GRANT SELECT ON TABLE "public"."entree_classification" TO "cache_client";
+
+
+--
+-- Name: COLUMN "entree_classification"."product"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("product") ON TABLE "public"."entree_classification" TO "cache_client";
+
+
+--
+-- Name: COLUMN "entree_classification"."classification"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("classification") ON TABLE "public"."entree_classification" TO "cache_client";
+
+
+--
+-- Name: COLUMN "entree_classification"."cleaned_name"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("cleaned_name") ON TABLE "public"."entree_classification" TO "cache_client";
+
+
+--
+-- Name: COLUMN "entree_classification"."suggested_by"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("suggested_by") ON TABLE "public"."entree_classification" TO "cache_client";
+
+
+--
 -- Name: TABLE "input_file"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1452,6 +1755,44 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."organization_membe
 
 
 --
+-- Name: TABLE "product_categorization"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."product_categorization" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."product_categorization" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."product_categorization" TO "service_role";
+GRANT SELECT ON TABLE "public"."product_categorization" TO "cache_client";
+
+
+--
+-- Name: COLUMN "product_categorization"."product"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("product") ON TABLE "public"."product_categorization" TO "cache_client";
+
+
+--
+-- Name: COLUMN "product_categorization"."category"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("category") ON TABLE "public"."product_categorization" TO "cache_client";
+
+
+--
+-- Name: COLUMN "product_categorization"."cleaned_name"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("cleaned_name") ON TABLE "public"."product_categorization" TO "cache_client";
+
+
+--
+-- Name: COLUMN "product_categorization"."suggested_by"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("suggested_by") ON TABLE "public"."product_categorization" TO "cache_client";
+
+
+--
 -- Name: TABLE "rejected_upload"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1476,6 +1817,51 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "servic
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."result_file" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."result_file" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."result_file" TO "service_role";
+
+
+--
+-- Name: TABLE "unit_weight"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."unit_weight" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."unit_weight" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."unit_weight" TO "service_role";
+GRANT SELECT ON TABLE "public"."unit_weight" TO "cache_client";
+
+
+--
+-- Name: COLUMN "unit_weight"."original_unit"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("original_unit") ON TABLE "public"."unit_weight" TO "cache_client";
+
+
+--
+-- Name: COLUMN "unit_weight"."cleaned_unit"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("cleaned_unit") ON TABLE "public"."unit_weight" TO "cache_client";
+
+
+--
+-- Name: COLUMN "unit_weight"."extracted_weight"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("extracted_weight") ON TABLE "public"."unit_weight" TO "cache_client";
+
+
+--
+-- Name: COLUMN "unit_weight"."example_products"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("example_products") ON TABLE "public"."unit_weight" TO "cache_client";
+
+
+--
+-- Name: COLUMN "unit_weight"."suggested_by"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT INSERT("suggested_by") ON TABLE "public"."unit_weight" TO "cache_client";
 
 
 --
