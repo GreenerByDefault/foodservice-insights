@@ -52,7 +52,8 @@ async function cacheClientRole(database: Kysely<any>): Promise<void> {
   //
   // The settings are defaults a client could override; they stop a forgotten session, not a
   // hostile one. An idle transaction holding an uncommitted suggestion would otherwise block every
-  // other insert of the same key, including a production run's.
+  // other insert of the same key, including a production run's. An idle session, such as a
+  // notebook kernel left open, would otherwise hold one of the role's connections indefinitely.
   //
   // No password: it is set by hand on the hosted project, and the local stacks never log in as
   // this role.
@@ -61,6 +62,7 @@ async function cacheClientRole(database: Kysely<any>): Promise<void> {
       CREATE ROLE cache_client LOGIN NOINHERIT CONNECTION LIMIT 10;
       ALTER ROLE cache_client SET statement_timeout = '30s';
       ALTER ROLE cache_client SET idle_in_transaction_session_timeout = '60s';
+      ALTER ROLE cache_client SET idle_session_timeout = '10min';
       GRANT cache_client TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
       COMMENT ON ROLE cache_client IS
         'The lab and developers'' local workers: reads the cache tables and inserts unverified suggestions into them.';

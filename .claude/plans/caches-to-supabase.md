@@ -171,22 +171,34 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **`cache_client` can read the three tables and insert suggestions, nothing else.** Its
   `INSERT` is column-level, on the key, the values and `suggested_by` only, so every row it
   writes lands unverified with the table's own id and timestamps, and a writer that names any
-  other column gets `42501`. It has a connection limit, a statement timeout and an
-  idle-in-transaction timeout, the last so an abandoned transaction holding an uncommitted
-  suggestion cannot block every other insert of that key, a production harvest's included; so
-  the lab's `connect()` (PR 5) uses autocommit or short transactions. A human sets its password
-  once in the hosted SQL editor (`ALTER ROLE cache_client PASSWORD '…'`), so no secret is ever in
-  a migration. A data scientist's or a developer's credential is composed, not copied: the
-  session-pooler string from the dashboard's Connect dialog with `postgres.<ref>` replaced by
+  other column gets `42501`. It has a statement timeout and an idle-in-transaction timeout, the
+  latter so an abandoned transaction holding an uncommitted suggestion cannot block every other
+  insert of that key, a production harvest's included; so the lab's `connect()` (PR 5) uses
+  autocommit or short transactions.
+  *Rejected: read-only.* Then every new row the lab produces would reach the database by hand,
+  which is the sync problem this plan exists to end. *Rejected: letting the role verify rows in
+  the lab-only tables.* One rule for three tables is easier to hold; revisit if ticking entree
+  rows in Studio turns out to be the bottleneck.
+- **Its connection limit is 10, and an idle session closes after 10 minutes.** The limit keeps
+  the role from starving the production web and worker of the project's shared connections, and
+  does nothing for security, which is the grants' job. Ten covers the realistic peak: two data
+  scientists with a kernel or two and a runscript each, plus a developer's lab and `live`
+  worker, about 6–9. A lower limit would raise `53300 too many connections for role` whenever
+  someone has a few notebooks open. The idle-session timeout keeps a forgotten kernel from holding
+  a slot indefinitely, which is what would otherwise exhaust any limit over a week. So every
+  client of the role opens connections briefly: the worker's cache pool keeps none open while
+  idle (PR 2), and the lab connects per command (PR 5). Raising the limit is a one-line
+  `ALTER ROLE` migration, if the team grows.
+  *Rejected: a limit of 3–5, about one per person.* One person routinely holds several
+  connections at once.
+- **A human sets its password once, in the hosted SQL editor** (`ALTER ROLE cache_client
+  PASSWORD '…'`), so no secret is ever in a migration. A data scientist's or a developer's
+  credential is composed, not copied: the session-pooler string from the dashboard's Connect dialog with `postgres.<ref>` replaced by
   `cache_client.<ref>` and the password by the role's. Neither sees the `postgres` password, and
   the string they hold can read three tables and insert unverified rows into them, nothing else.
   *Rejected: giving the data scientists `DB_CONNECTION_STRING`.* It is `postgres`, and an agent
-  with it can drop a table. *Rejected: read-only.* Then every new row the lab produces would
-  reach the database by hand, which is the sync problem this plan exists to end.
-  *Rejected: letting the role verify rows in the lab-only tables.* One rule for three tables is
-  easier to hold; revisit if ticking entree rows in Studio turns out to be the bottleneck.
-  *Considered: Supabase's temporary access*, where a dashboard member assumes a Postgres role
-  with their own token as the password, with an expiry and IP allowlist. It needs the person to
+  with it can drop a table. *Considered: Supabase's temporary access*, where a dashboard member
+  assumes a Postgres role with their own token as the password, with an expiry and IP allowlist. It needs the person to
   be a dashboard member, which on Free and Pro means Developer and so the SQL editor anyway, and
   its plan availability is undocumented. Worth revisiting if GBD is ever on Team.
 - **The hosted path is unproven, so prove it before migrating production** (§ Go-live step
@@ -303,7 +315,9 @@ ignores it until PR 3, so this PR changes no report.
   `attempt/lifecycle.ts` `startAttempt`: the query beside `loadAttemptInputs`, under the same
   retry, before any filesystem work; the write beside `writeManifest`.
   `AttemptDependencies` gains `cacheDb: DatabaseExecutor`, the only handle the cache query uses.
-  `main.ts` builds it from `CACHE_DB_CONNECTION_STRING` with a small pool when set, else passes
+  `main.ts` builds it from `CACHE_DB_CONNECTION_STRING` when set, with `minConnections: 0` and
+  `maxConnections: 2`, because the role's 10 connections are shared by everyone who holds it
+  (§ A role that can read and suggest); else it passes
   `WORKER_DATABASE`, and logs which at startup; `resolveWorkerMode` takes the variable and throws
   for any mode but `live`. `.env.example` gains the variable with its two forms; the root
   `README.md` § Analysis modes `live` row and `apps/worker/README.md`'s variable table say what
@@ -406,7 +420,10 @@ cache and the worker image needs no file.
 
 - `python/lab/pyproject.toml` gains `psycopg[binary]` (check its Python 3.14 wheel at PR time).
 - `gbd_foodservice_insights_lab/cache_sync.py`: `connect()` reading `CACHE_DB_CONNECTION_STRING`
-  via the lab's existing dotenv loading, in autocommit (§ Decisions: the role's idle timeout); `pull(connection)` selecting the verified rows of each
+  via the lab's existing dotenv loading, in autocommit (§ Decisions: the role's idle timeouts).
+  Each command opens its own connection and closes it on the way out, never one held in a
+  notebook global, which the role's idle-session timeout would close after 10 minutes.
+  `pull(connection)` selecting the verified rows of each
   table and writing the three CSVs through a temp file and rename, column names mapped to what
   the loaders expect (the reverse of the import's mapping), `""` for a null; the pure frame-building functions separate
   from the connection so they test without a database. `python -m
@@ -472,6 +489,8 @@ can 5 and 6.
 | `CACHE_DB_CONNECTION_STRING` set with `mock-llm` or `stubbed` | the worker refuses to start, naming the reason |
 | A `live` worker without `CACHE_DB_CONNECTION_STRING` | the cache is the worker's own database, read and written; one startup log line says so |
 | Lab push names `is_verified` | `42501` from the role; the push code never does |
+| All 10 of `cache_client`'s connections are in use | the next connection fails with `53300`; the production web and worker are unaffected |
+| A notebook leaves a connection idle for 10 minutes | the server closes it; the next lab command opens a new one |
 | Data scientist runs without `CACHE_DB_CONNECTION_STRING` | today's behaviour on today's file, plus a WARNING with the file's age |
 
 ## Go-live

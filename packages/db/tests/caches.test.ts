@@ -332,7 +332,11 @@ describe('cache_client', () => {
       rolreplication: false,
       rolbypassrls: false,
       rolconnlimit: 10,
-      rolconfig: ['statement_timeout=30s', 'idle_in_transaction_session_timeout=60s'],
+      rolconfig: [
+        'statement_timeout=30s',
+        'idle_in_transaction_session_timeout=60s',
+        'idle_session_timeout=10min',
+      ],
     });
   });
 
