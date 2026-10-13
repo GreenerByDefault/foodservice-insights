@@ -18,6 +18,7 @@ loadLocalEnv();
 
 export const DATABASE: Kysely<Database> = initializeDatabase({
   connectionString: requireEnv('DB_CONNECTION_STRING'),
+  sslCa: process.env.DB_SSL_CA,
   log: 'console',
 });
 

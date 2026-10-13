@@ -11,6 +11,7 @@ import {
 import { error } from '@sveltejs/kit';
 import type { Kysely } from 'kysely';
 import { SERVICE_UNAVAILABLE_MESSAGE, UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
+import { DB_SSL_CA } from '$app/env/private';
 import { requirePrivateVar } from './env.ts';
 import { logger } from './log.ts';
 import { rootLogger } from './root-log.ts';
@@ -27,6 +28,7 @@ let handle: Kysely<Database> | undefined;
 export function database(): Kysely<Database> {
   handle ??= initializeDatabase({
     connectionString: requirePrivateVar('DB_CONNECTION_STRING'),
+    sslCa: DB_SSL_CA,
     limits: WEB_DB_LIMITS,
     // The root, not `logger()`: the pool outlives the request that happens to open it.
     log: rootLogger(),

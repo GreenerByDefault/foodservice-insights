@@ -63,6 +63,17 @@ test('an override for every field reaches the matching pg option', () => {
   });
 });
 
+test('a CA turns on TLS, verified against it', () => {
+  const { ssl } = buildPoolConfig({ connectionString: 'postgres://irrelevant', sslCa: 'the PEM' });
+  expect(ssl).toEqual({ ca: 'the PEM' });
+});
+
+// `.env.example` leaves `DB_SSL_CA` blank, which reaches here as `''`, not `undefined`.
+test('an empty CA leaves TLS off', () => {
+  const config = buildPoolConfig({ connectionString: 'postgres://irrelevant', sslCa: '' });
+  expect(config).not.toHaveProperty('ssl');
+});
+
 // A real `destroy()` is too fast, locally, to reliably lose to any timeout worth setting — so
 // this stands in a handle whose `destroy()` hangs, the only way to observe the race at all.
 function neverDestroys(): Kysely<Database> {
