@@ -11,9 +11,11 @@ now and leaves only settings that depend on the domain or the edge.
 
 What exists, checked 2026-10-12:
 
-- **`applyHeaders`** in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts) sets
-  `X-Frame-Options: DENY`, `nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin` on
-  every response that passes through `handle`. `hooks.server.test.ts` tests it.
+- **`applySecurityHeaders`** in
+  [`lib/server/security-headers.ts`](../../apps/web/src/lib/server/security-headers.ts) sets the
+  seven headers of § The other headers on every response that passes through `handle`, which
+  calls it from `applyHeaders` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts).
+  `security-headers.test.ts` asserts the full set, and `hooks.server.test.ts` checks the wiring.
 - **There is no separate API server.** Everything is SvelteKit and passes through `handle`:
   - `/api/*` and the two `*/poll` routes
   - `/file/*`, which 302s to a signed storage URL
@@ -61,7 +63,7 @@ nonces, since nothing is prerendered.
 | `form-action` | `'self'` | All seven forms submit through `onsubmit` and have no `action`. |
 | `frame-ancestors` | `'none'` | |
 
-PR 3 adds `report-uri` and `report-to`.
+PR 2 adds `report-uri` and `report-to`.
 
 **At runtime**, `handle` adds the Supabase origin to `connect-src` in `supabase` mode. The origin
 is `new URL(requirePublicVar('PUBLIC_SUPABASE_URL')).origin`. In placeholder mode, which is how
@@ -84,12 +86,12 @@ dev and e2e. In production, HSTS covers the same ground, and we load no `http:` 
 - *Rejected: proxying Supabase Auth through our origin so `connect-src` stays `'self'`.* That is
   a proxy to keep one origin out of a header.
 - *Rejected: a Report-Only phase before enforcing.* Before launch there are no users for a false
-  positive to hurt. The e2e fixture in PR 2 enforces the policy on every page the suite visits,
+  positive to hurt. The e2e fixture in PR 1 enforces the policy on every page the suite visits,
   and reports keep arriving under enforcement.
 
 ### The other headers
 
-`handle` sets these on every response:
+`applySecurityHeaders` sets these four on every response, besides the three kept below:
 
 | Header | Value | Note |
 | --- | --- | --- |
@@ -147,7 +149,7 @@ protect.
   (`http://127.0.0.1:55321`) and the test stack (`:65321`) reach `connect-src` from
   `PUBLIC_SUPABASE_URL`.
 - **HMR's WebSocket** uses the same host and port. In CSP Level 3, `'self'` matches `ws:` for the
-  same host and port. Verify this in Chrome, Firefox and Safari in PR 2. If one of them blocks
+  same host and port. Verify this in Chrome, Firefox and Safari in PR 1. If one of them blocks
   it, add `ws:` to `connect-src` in dev only.
 - **There is no switch to turn the CSP off.**
 - **e2e runs the production build** (`node start.js`) over `http:` on a random port. The
@@ -157,26 +159,11 @@ protect.
 
 ## PRs
 
-### PR 1 — Headers module, with HSTS, Permissions-Policy, COOP and CORP
-
-A small prefactor that gives the CSP a home.
-
-- **New module:** add `apps/web/src/lib/server/security-headers.ts` and move the three existing
-  security headers into it from `applyHeaders`. `X-Request-Id` stays in `hooks.server.ts`.
-- **New headers:** add the four from § The other headers.
-- **Tests:**
-  - `security-headers.test.ts` asserts the full header set with `toEqual`.
-  - `hooks.server.test.ts` keeps one wiring test in place of the `toMatchObject` list.
-- **Deploy notes:** add two lines to [`hosting-provider.md`](hosting-provider.md) § After the
-  decision:
-  - Turn on Cloudflare's Always Use HTTPS, and leave its HSTS setting off.
-  - Revisit `includeSubDomains` once the domain is known.
-
-### PR 2 — The CSP
+### PR 1 — The CSP
 
 - **`vite.config.ts`:** `sveltekit({ csp: { directives } })`. Comment only the directives the
   table had to explain: `style-src`, `img-src` and `worker-src`.
-- **`security-headers.ts`:** a pure function that takes the response's existing policy (or none)
+- **`security-headers.ts`:** add a pure function that takes the response's existing policy (or none)
   and the Supabase origin (or null).
   - For a page, it adds the origin to `connect-src`.
   - For anything else, it returns the API policy.
@@ -206,7 +193,7 @@ A small prefactor that gives the CSP a home.
   its *Rejected* bullets. Check that
   [`apps/web/README.md`](../../apps/web/README.md#auth)'s pointer to it still reads right.
 
-### PR 3 — Violation reports
+### PR 2 — Violation reports
 
 - **Parsing:** `apps/web/src/lib/server/csp-report.ts` turns either body format into the reduced
   records, or returns a parse failure. It is pure.
@@ -227,10 +214,10 @@ A small prefactor that gives the CSP a home.
 ## Verification
 
 - **Each PR:** run `pnpm lint && pnpm check && pnpm test` from the repo root.
-  `pnpm test` runs Playwright, so from PR 2 on the violation fixture checks every page the suite
+  `pnpm test` runs Playwright, so from PR 1 on the violation fixture checks every page the suite
   visits.
 - **Headers by hand:** with `pnpm dev:web` running:
   - `curl -sI http://localhost:5173/` shows the page policy, and in `supabase` mode the Supabase
     origin in `connect-src`.
   - `curl -sI http://localhost:5173/health` shows `default-src 'none'; frame-ancestors 'none'`.
-- **The manual browser checks** listed under PR 2 and PR 3.
+- **The manual browser checks** listed under PR 1 and PR 2.

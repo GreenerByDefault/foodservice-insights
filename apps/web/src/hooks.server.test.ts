@@ -47,14 +47,11 @@ function requestIdOf(response: Response): string {
 }
 
 describe('handle', () => {
-  test('sets baseline security headers on the response', async () => {
+  test('applies the security headers to the response', async () => {
     const response = await handle({ event: anEvent(), resolve: respond });
 
-    expect(Object.fromEntries(response.headers)).toMatchObject({
-      'x-frame-options': 'DENY',
-      'x-content-type-options': 'nosniff',
-      'referrer-policy': 'strict-origin-when-cross-origin',
-    });
+    // The full set is asserted in security-headers.test.ts.
+    expect(response.headers.get('x-frame-options')).toBe('DENY');
   });
 
   test('logs one line per request, under the id the response carries', async () => {

@@ -158,7 +158,7 @@ overlap on deploy (then Render's documented 60 seconds matters).
 
 ## After the decision
 
-Four things, whichever provider wins:
+Five things, whichever provider wins:
 
 1. Replace the stub step in `actions/deploy-service` with the provider's deploy-by-digest call,
    waiting for a terminal status.
@@ -176,6 +176,9 @@ Four things, whichever provider wins:
    `Host` — a mismatch fails SvelteKit's CSRF check on every mutating request. Not `paths.origin`
    in `vite.config.ts`, which would bake one environment's origin into the image.
 4. Set the spend and resource alerts, and on DigitalOcean, log forwarding.
+5. Turn on Cloudflare's Always Use HTTPS, and leave its HSTS setting off: the app sends
+   `Strict-Transport-Security` itself, so the response would otherwise carry two. Revisit
+   `includeSubDomains` once the domain is known.
 
 The deployed commit needs no provider-injected variable: every image carries
 `org.opencontainers.image.revision`, and the deploy run logs the digest.
