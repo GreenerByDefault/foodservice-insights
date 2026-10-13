@@ -64,7 +64,9 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   to the raw product, from old cache hits written back verbatim; 747 products carry surrounding
   whitespace; 2 contain newlines and 703 contain quotes; the longest is 435 characters; 106
   categories are blank and a few more are misspelled. The entree file has no whitespace problems;
-  the weights file has 7 blank weights and 4 units with surrounding whitespace.
+  the weights file has 7 blank weights and 4 units with surrounding whitespace. A data scientist
+  is sending an updated copy with new entries and some cleaning; the go-live import runs on that,
+  so these counts will move.
 - **Two data scientists run the lab locally and will keep doing so.** They rely heavily on AI
   agents when writing code, so any credential they hold is one an agent may misuse. Their
   current copies of the caches are already behind GBD's.
@@ -248,9 +250,8 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 Nothing here needs GBD's data. A fresh clone runs the whole app against its local Supabase with
 an empty `product_categorization`, exactly as a missing CSV behaves today; the system e2e runs
 the same way; a `live` worker without `CACHE_DB_CONNECTION_STRING` keeps its cache in the local
-database, read and written; the lab without it is the lab of today. A contributor who is given a
-CSV loads it into their local stack with the import script. The lab's push and pull against a
-local stack work as `postgres`.
+database, read and written; the lab without it is the lab of today. The lab's push and pull
+against a local stack work as `postgres`.
 
 *Rejected: encrypting the CSVs into git.* A multi-megabyte blob per review round is neither
 diffable nor mergeable, key rotation rewrites history, and the data scientists need the database
@@ -263,36 +264,70 @@ table on `is_verified = false`, order by `created_at`, read `suggested_by` for w
 from, fix `category` (or the label, or the weight) in place, tick `is_verified`. The next worker
 claim, and the next lab pull, see it.
 
-## PR 1 — import script
+## PR 1 — temporary go-live import script
 
-The go-live path for GBD's three CSVs, and how a contributor seeds a local stack.
+**Temporary.** It loads GBD's three CSVs into the tables once, at go-live (§ Go-live step 2), and
+PR 1b deletes it as soon as that import is checked. After that the hosted tables are the source
+of truth, and rows only reach them through the worker's harvest, the lab's push, or Studio. Every
+name says so, even at the cost of length, so nobody mistakes it for a sync tool or builds on it.
+*Rejected: keeping it as a permanent seeding tool.* Nobody outside GBD has the CSVs, a fresh
+clone works with an empty cache, and a developer who wants real rows points
+`CACHE_DB_CONNECTION_STRING` at the hosted project. A CSV that turns up later can be loaded by
+restoring the script from git history.
 
-- `packages/db/src/cache-csv.ts`: a ~40-line first-party RFC 4180 reader (quoted fields, `""`,
-  embedded newlines; BOM and line endings normalized; malformed quoting throws), header by name.
-  Not lifted from `apps/web/.../csv/read/`, which is tuned for validation and the browser.
-- `packages/db/src/product-categorization.ts`: `upsertVerifiedProductCategorizations(db, rows,
-  {suggestedBy})` in chunks of 1,000 — `ON CONFLICT (product) DO UPDATE SET category,
-  cleaned_name, is_verified = true, suggested_by WHERE NOT product_categorization.is_verified`,
-  so a re-run never clobbers a reviewer's edit but does promote an unverified suggestion to the
-  golden value. Cleaning mirrors `from_frame`: strip the product and the category
-  (JavaScript's `trim` agrees with the tables' checks), skip blank products and blank categories
-  to stderr with line numbers, later duplicate wins. A misspelled category is
-  imported as is — the script cannot read the YAML — and § Go-live has a person eyeball
-  `SELECT DISTINCT category` afterwards (38 values today) and fix the odd ones in place. Never
-  trim `cleaned_name`; a blank one becomes null; a cleaned name equal to its product is imported
-  as it is, harmless to the cleaned-name index and not ours to rewrite.
-- `packages/db/scripts/import-cache.ts`, `pnpm import:cache -- product <csv>`: one
-  `withTransaction`, `suggestedBy = import:<basename>`, counts to stdout. Reads `DATABASE` from
-  `src/env.ts`, so `TEST_DB=1` and `DB_CONNECTION_STRING` behave as for `migrate`.
-- `pnpm import:cache -- entrees <csv>` and `-- units <csv>` the same way: the entree import
-  normalizes labels the way `_normalize_entree_classification` does (the two spellings in the
-  file are already canonical); the unit import keeps the unit verbatim and maps a blank weight
-  or example to null. CSV columns map to the table's at the boundary (`entree_classification` →
-  `classification`, `llm_cleaned_unit` → `cleaned_unit`, `llm_extracted_weight` →
-  `extracted_weight`, `cleaned_item_names` → `cleaned_name`).
-- Tests: the reader on the three awkward shapes; the upsert — new rows, promotes an unverified
-  row, leaves a verified edit alone, second run writes nothing, 1,001 rows exercise chunking.
-- Root `README.md` scripts table; the "get the CSV from GBD" paragraph goes in PR 3.
+Everything lives in one directory, `packages/db/scripts/temporary-go-live-cache-import/`, so the
+deletion is one directory and one `package.json` line. Nothing goes in `packages/db/src/` or
+`@gbd/db`'s exports, and no README mentions it. Each file opens with a header naming this plan and
+saying the directory is deleted after go-live.
+
+- `csv.ts`: a ~40-line first-party RFC 4180 reader (quoted fields, `""`, embedded newlines; BOM
+  and line endings normalized; malformed quoting throws), header by name. Not lifted from
+  `apps/web/.../csv/read/`, which is tuned for validation and the browser.
+- `clean.ts`: pure functions from CSV records to table rows plus a list of skips, each with its
+  line number and reason. This is where the import cleans beyond what the data scientists'
+  updated file already does. Product cleaning mirrors `from_frame`:
+  - Strip the product and the category. JavaScript's `trim` agrees with the tables' checks.
+  - Skip blank products and blank categories.
+  - Let a later duplicate win, and report a duplicate whose category differs from the earlier
+    one separately from an identical repeat.
+  - Check each category against the names in
+    `python/insights/.../data_files/GBD_categories.yaml` plus `No Matches Found`, taking the
+    names from its top-level `- name:` lines, since adding a YAML dependency is not worth it for
+    a script that will be deleted. A category that matches a name case-insensitively is
+    rewritten to it. Any other unknown category makes the import refuse, listing each one with
+    its count and first line, to be fixed in the CSV. Imported as is, a misspelled verified row
+    would block that product's suggestion forever while the child drops it on every run.
+  - Never trim `cleaned_name`, and turn a blank one into null. Import a cleaned name equal to its
+    product unchanged: it is harmless to the cleaned-name index and not ours to rewrite.
+
+  The entree import normalizes labels the way `_normalize_entree_classification` does. The two
+  spellings in the file are already canonical. The unit import keeps the unit verbatim and maps
+  a blank weight or example to null. CSV columns map to the table's at the boundary:
+  `entree_classification` → `classification`, `llm_cleaned_unit` → `cleaned_unit`,
+  `llm_extracted_weight` → `extracted_weight`, `cleaned_item_names` → `cleaned_name`.
+- `upsert.ts`: one upsert per table in chunks of 1,000, for example `ON CONFLICT (product) DO
+  UPDATE SET category, cleaned_name, is_verified = true, suggested_by WHERE NOT
+  product_categorization.is_verified`. A re-run never clobbers a reviewer's edit but does promote
+  an unverified harvested suggestion to the golden value (§ Go-live step 3).
+- `main.ts`, run as `pnpm --filter @gbd/db temporary-go-live-cache-import <product|entrees|units>
+  <csv> [--write]`: one `withTransaction`, `suggestedBy = import:<basename>`. It prints the skip
+  report and the counts (inserted, promoted, left alone because already verified). Without
+  `--write` it rolls the transaction back, so a dry run against production reports exactly what
+  the real run would do and can go back to the data scientist before anything is written. It
+  reads `DATABASE` from `src/env.ts`, so `TEST_DB=1` and `DB_CONNECTION_STRING` behave as for
+  `migrate`.
+- Tests, colocated in the directory (vitest and `tsconfig.json` already cover `scripts/`):
+  - the reader on the three awkward shapes;
+  - the cleaners: whitespace, blank skips, both kinds of duplicate, the case-insensitive category
+    rewrite, refusal on an unknown category, and the name extraction against the real YAML;
+  - the upsert: inserts new rows, promotes an unverified row, leaves a verified edit alone,
+    writes nothing on a second run, and chunks 1,001 rows;
+  - a dry run writes nothing.
+
+## PR 1b — delete the temporary go-live import script
+
+Lands as soon as § Go-live step 2's checks pass, independent of PRs 2–6. It deletes the
+directory and its `package.json` script, and removes PR 1 and this PR from this plan.
 
 ## PR 2 — contract: cache document in, parent materializes per claim
 
@@ -309,7 +344,7 @@ ignores it until PR 3, so this PR changes no report.
   (`CategorizationCacheSchema`, a valibot `strictObject` with no trimming;
   `buildCategorizationCache`; `parseCategorizationCache` for the fixture test),
   `child/run-directory.ts` (`writeCategorizationCache`).
-  `packages/db/src/product-categorization.ts`: `listVerifiedProductCategorizations(db)` —
+  `packages/db/src/product-categorization.ts` (new): `listVerifiedProductCategorizations(db)` —
   `SELECT product, category, cleaned_name WHERE is_verified ORDER BY product`; note the
   `EXPLAIN ANALYZE` in the PR per the db README's convention.
   `attempt/lifecycle.ts` `startAttempt`: the query beside `loadAttemptInputs`, under the same
@@ -425,7 +460,9 @@ cache and the worker image needs no file.
   notebook global, which the role's idle-session timeout would close after 10 minutes.
   `pull(connection)` selecting the verified rows of each
   table and writing the three CSVs through a temp file and rename, column names mapped to what
-  the loaders expect (the reverse of the import's mapping), `""` for a null; the pure frame-building functions separate
+  the loaders expect (`cleaned_name` → `cleaned_item_names`, `classification` →
+  `entree_classification`, `cleaned_unit` → `llm_cleaned_unit`, `extracted_weight` →
+  `llm_extracted_weight`), `""` for a null; the pure frame-building functions separate
   from the connection so they test without a database. `python -m
   gbd_foodservice_insights_lab.cache_sync pull`, and `just pull-caches`.
 - The categorize runscript pulls first when the variable is set, and otherwise logs one WARNING
@@ -506,10 +543,11 @@ the import both connect through `buildPoolConfig`, so the pooler's acceptance of
    migrate` against prod (additive; the running worker is unaffected); `ALTER ROLE cache_client PASSWORD '…'` in the SQL editor; compose your own
    `CACHE_DB_CONNECTION_STRING` from the Connect dialog's session-pooler string with
    `cache_client.<project-ref>` and that password, and check it from a laptop with `psql`.
-2. Merge PR 1; `pnpm import:cache` each of the three CSVs from a workstation; check each count
-   against the CSV's rows minus the reported skips and duplicates; read `SELECT DISTINCT category` in
-   the SQL editor and fix any misspelling in place; spot-check a `No Matches Found` row and a
-   multi-line product in Studio.
+2. Merge PR 1. From a workstation, dry-run each of the three CSVs against prod; take any
+   refused category or surprising skip back to the data scientist and repeat until the report is
+   clean; then run each with `--write`. Check each count against the CSV's rows minus the
+   reported skips and duplicates, and spot-check a `No Matches Found` row and a multi-line
+   product in Studio. Then merge PR 1b.
 3. Merge PRs 2–4 and dispatch a worker deploy. If 2 is deployed before the import, the parent
    writes `{"rows": []}` and the run costs LLM calls, nothing more; if 4 lands before the import,
    the import's `DO UPDATE … WHERE NOT is_verified` later promotes any harvested rows the CSV
