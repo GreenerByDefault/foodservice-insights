@@ -54,6 +54,10 @@ export const DEFAULT_LIMITS: DatabaseLimits = {
 export type DatabaseConfig = {
   connectionString: string;
   limits?: Partial<DatabaseLimits>;
+  /** The PEM of the CA to verify the server against: `DB_SSL_CA`, holding the committed
+   * `supabase-ca.crt`. Unset or empty means no TLS at all, as on the local stacks. A connection
+   * string carrying its own `sslmode` overrides this. */
+  sslCa?: string | undefined;
   /** Where the pool reports a dropped connection. `'console'` suits scripts and tests, whose
    * readers want a line rather than a record. Required, so that no caller falls back to it by
    * forgetting. */
@@ -80,6 +84,8 @@ export function buildPoolConfig(config: Omit<DatabaseConfig, 'log'>): PoolConfig
       `-c statement_timeout=${limits.statementTimeoutMs} ` +
       `-c idle_in_transaction_session_timeout=${limits.idleInTransactionSessionTimeoutMs} ` +
       `-c idle_session_timeout=${limits.idleSessionTimeoutMs}`,
+    // Node checks both the chain and the hostname: libpq's `verify-full`.
+    ...(config.sslCa ? { ssl: { ca: config.sslCa } } : {}),
   };
 }
 

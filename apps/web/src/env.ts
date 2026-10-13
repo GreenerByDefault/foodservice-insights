@@ -11,6 +11,7 @@ const optionalPublic = { ...optional, public: true };
 
 export const variables = defineEnvVars({
   DB_CONNECTION_STRING: optional,
+  DB_SSL_CA: optional,
   SITE_URL: optional,
 
   S3_ENDPOINT: optional,
