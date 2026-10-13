@@ -9,10 +9,8 @@ workspace rather than the image, deploys that only ever fix forward, report page
 their poll is answered by another deploy, a web server that refuses to start without its config
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)),
 `ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
-missing, as the hosted database would, and the gate in
-[`deploy-target`](../../.github/actions/deploy-target/action.yml) that both deploy jobs pass
-first. That gate deploys only a commit on main. `deploy-web` moves a `deploy/web` tag on success,
-and `deploy-worker` refuses a commit that is not behind it. Nothing deploys for real yet —
+missing, as the hosted database would, and `deploy-web` moving a `deploy/web` tag on success, which
+names the commit `deploy-worker` deploys, dispatched from main only. Nothing deploys for real yet —
 [`deploy-service`](../../.github/actions/deploy-service/action.yml) is a stub and
 [`deploy-migrations.md`](deploy-migrations.md) has not landed — so each fix here is cheapest now.
 
@@ -50,10 +48,6 @@ Findings that went elsewhere rather than into a PR here:
   of variable names, so a variable added to an existing handle needs no change there; a new
   handle needs one line. And it leaves `/health` free for `observability-vendors.md`'s split into
   liveness and a dependency check.
-- **Open:** whether a rollback should reuse the digest it shipped before. `deploy-service`
-  resolves `:<sha>` again, and tags are mutable — `force_rebuild`, or any same-repo branch's
-  workflow with `packages: write`, can repoint one. Each `deploy/*` tag records the digest it
-  shipped, but nothing reads it back.
 
 ## PR 1 — Production secrets live in a `production` Environment
 
@@ -65,7 +59,7 @@ run from a same-repo branch, so any PR — agent-authored included — can edit 
 them. Both deploy jobs declare `environment: production`; the Environment limits deployment
 branches to `main` and holds the secrets. The secrets living only there is the boundary: a
 dispatch runs the chosen branch's own `deploy.yml`, which can drop the declaration and
-`deploy-target`'s branch check alike, but then has no credentials. The branch rule and that check
+`deploy-worker`'s branch check alike, but then has no credentials. The branch rule and that check
 stop honest mistakes; keep both.
 
 While these jobs gain prod credentials (on top of `packages: write` and `contents: write`), pin
@@ -88,30 +82,14 @@ from a branch named `main` — and this job will hold prod credentials. Builds f
 main's CI (**verified** 2026-10-11: under two minutes against four to eight), and `deploy-service`
 already fails clearly on a missing image.
 
-A trigger instead of a wait means a failed or cancelled CI never starts a deploy, re-running a
-flaked CI fires `workflow_run` again so the deploy follows, `deploy-web` holds its concurrency
-slot only while deploying, and tooling from main's tip still holds, since `workflow_run` runs the
-default branch's workflow. *Rejected: polling for CI inside `deploy-web`* (#489's first draft) —
-the job held the `deploy-web` slot for the whole CI run, and a rollback dispatched meanwhile sat
-pending, where the next push cancels it.
+A trigger instead of a wait means a failed or cancelled CI never starts a deploy, and re-running a
+flaked CI fires `workflow_run` again, so the deploy follows. *Rejected: polling for CI inside
+`deploy-web`* (#489's first draft) — a poll loop, a grace period for a run that might not exist
+yet, and a `cancelled` result every caller had to refuse, all to wait for an event GitHub already
+sends.
 
-**A dispatch checks CI once, without waiting**, in `deploy-target`: refuse unless main's CI on the
-target concluded `success`. A rollback targets a commit whose CI finished long ago; a blank `sha`
-whose CI is still running is refused, since its `workflow_run` deploy will ship it. When the
-target's CI failed or was cancelled, the message leads with picking an older commit whose CI
-passed — re-running an older commit's CI joins `ci.yml`'s concurrency group on main, where it can
-replace a newer commit's pending run.
-
-**A blank-`sha` dispatch gets the supersession check too.** A re-run keeps its first attempt's
-`github.sha`, so re-running a failed blank-`sha` dispatch after a newer push deployed would roll
-prod back. With the check, every re-run is safe, and a message can just say "re-run this job".
-
-**`queue: max` on both deploy jobs' `concurrency`.** By default a newly queued job cancels the one
-already pending, so a rollback waiting behind a push deploy is dropped by the next push.
-
-**Open:** `queue: max` on `ci.yml`'s push concurrency as well, so no run on main is cancelled and
-every commit is a rollback target, at the cost of a serial queue on a busy day. Two of 40 runs on
-main were cancelled as of 2026-10-11.
+The worker needs no check of its own: it deploys the commit `deploy/web` names, which `deploy-web`
+then moves only once CI has passed.
 
 ## PR 3 — The fleet's connections fit the session pooler
 
@@ -183,7 +161,7 @@ Not PRs here; sequencing checks for whoever flips production on.
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
 PR 1 by dispatching from a branch whose workflow declares the Environment and confirming it is
-refused before any step runs. PR 2 after it merges: the push run only builds, the `workflow_run`
-run deploys once CI passes, and a dispatch naming a commit whose CI failed is refused. PR 3 by
+refused before any step runs. PR 2 after it merges: the push run only builds, and the
+`workflow_run` run deploys once CI passes. PR 3 by
 holding more session-mode connections than Pool Size against the dev stack's pooler and
 confirming the worker keeps ticking.

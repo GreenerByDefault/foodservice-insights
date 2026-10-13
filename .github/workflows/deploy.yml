@@ -7,13 +7,11 @@ name: Deploy
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
-# The worker only ever deploys via workflow_dispatch from main, at main's latest commit. This is
+# The worker only ever deploys via workflow_dispatch from main, at the commit the web runs. This is
 # because deploying the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
 #
 # Nothing here rolls back: a bad deploy is reverted and deploys forward like any other change, per
 # ARCHITECTURE.md § Bad deploys are fixed forward.
-#
-# Whichever way it starts, a deploy ships only a commit on main (.github/actions/deploy-target).
 on:
   push:
     branches: [main]
@@ -74,10 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # for the ancestry checks, and to move the tag
-
-      - uses: ./.github/actions/deploy-target
-        id: target
+          fetch-depth: 0 # for the supersession check below, and to move the tag
 
       # Build time varies, so runs can finish out of push order: push A (a slow base-layer change)
       # can finish after push B (a fast cache hit) has already deployed, which would roll prod
@@ -90,7 +85,7 @@ jobs:
         shell: bash
         run: |
           current_tip=$(git rev-parse origin/main)
-          if [ "${{ steps.target.outputs.sha }}" != "$current_tip" ]; then
+          if [ "${{ github.sha }}" != "$current_tip" ]; then
             echo "::notice::Skipping: main has moved on to $(git rev-parse --short "$current_tip"), whose own deploy will ship instead."
             echo "superseded=true" >> "$GITHUB_ENV"
           fi
@@ -100,15 +95,15 @@ jobs:
         if: env.superseded != 'true'
         with:
           service: web
-          sha: ${{ steps.target.outputs.sha }}
+          sha: ${{ github.sha }}
 
-      # deploy-worker refuses a commit that is not behind this tag.
+      # deploy-worker deploys the commit this tag names.
       - name: Move the deploy/web tag
         if: env.superseded != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f -a deploy/web "${{ steps.target.outputs.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
+          git tag -f -a deploy/web "${{ github.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
           git push -f origin deploy/web
 
   deploy-worker:
@@ -122,25 +117,29 @@ jobs:
     permissions:
       contents: write # to move the deploy/worker tag on success
     steps:
+      # The deploy tooling is the dispatched branch's copy. This catches a mistake, not an
+      # attacker: a branch's own deploy.yml can simply drop it.
+      - name: Refuse a dispatch from outside main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::The worker deploys from main only, not ${GITHUB_REF#refs/heads/}. Run the workflow again with 'Use workflow from' set to main."
+          exit 1
+
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # need full history and tags for the checks below, and to move the tag
+          fetch-depth: 0 # need full history and tags for the steps below, and to move the tag
 
-      - uses: ./.github/actions/deploy-target
+      # Not main's tip: the worker never runs ahead of the web, which applies the migrations it
+      # needs, and main's tip may still be migrating or have failed to.
+      - name: Resolve the commit the web runs
         id: target
-
-      # The worker runs behind the web, which runs the migrations it may need. A dispatch takes
-      # main's tip, possibly while that push's deploy-web is still migrating, or after it failed.
-      - name: Refuse a commit the web has not deployed
         run: |
-          if ! git rev-parse -q --verify refs/tags/deploy/web >/dev/null; then
-            echo "::error::The web has never deployed through this workflow, and the worker may only run a commit the web already runs. Wait for the next push to main to deploy the web."
+          if ! sha=$(git rev-parse -q --verify 'refs/tags/deploy/web^{commit}'); then
+            echo "::error::The web has never deployed through this workflow, and the worker deploys only a commit the web runs. Wait for the next push to main to deploy the web."
             exit 1
           fi
-          if ! git merge-base --is-ancestor "${{ steps.target.outputs.sha }}" deploy/web; then
-            echo "::error::The web runs $(git rev-parse --short deploy/web), older than $(git rev-parse --short "${{ steps.target.outputs.sha }}"). The worker may only run a commit the web already runs, since the web applies the migrations it needs. Wait for the web to deploy this commit (the push's Deploy web job), then run this workflow again."
-            exit 1
-          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying the worker at the commit the web runs: $(git log -1 --format='%h %s' "$sha")"
 
       - name: Show commits since the last worker deploy
         run: |
