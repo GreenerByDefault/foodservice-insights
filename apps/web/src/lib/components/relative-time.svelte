@@ -15,7 +15,8 @@ interface Props {
 let { at, now, direction, class: className }: Props = $props();
 </script>
 
-<!-- The absolute time is in `title` only. Showing it on every row would be a redesign. -->
+<!-- For now the absolute time is only in `title`, which touch and keyboard users can't reach.
+     Showing it on every row is a design change, so it waits for one. -->
 <time datetime={at.toISOString()} title={formatTimestamp(at)} class={className}
   >{direction === 'future' ? formatUntil(now, at) : formatWhen(now, at)}</time
 >

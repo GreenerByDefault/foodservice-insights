@@ -42,7 +42,8 @@ const currentOrganization = $derived(page.data.organization);
 
   <!-- Lists span this full width; a form caps itself at `max-w-md`. `items-start` shrinks a child
        to its content, so a page's wrapper needs `w-full` or its width varies with its data. -->
-  <!-- No skip link: two focusable elements precede this on a phone, three on desktop. -->
+  <!-- No skip link for now: only two focusable elements precede this on a phone, three on
+       desktop. Add one if the header grows. -->
   <main class="page-width flex flex-1 flex-col items-start gap-4 py-8">
     {@render children()}
   </main>

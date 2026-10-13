@@ -7,8 +7,9 @@ let { subject }: { subject: 'report' | 'reports' } = $props();
 let verb = $derived(subject === 'reports' ? 'are' : 'is');
 </script>
 
-<!-- `Alert` is `role="alert"`, which interrupts — deliberately: losing the connection is worth
-     it, and callers keep this mounted while retrying, so it speaks once rather than every poll. -->
+<!-- `Alert` is `role="alert"`, which interrupts a screen reader. For now we judge losing the
+     connection worth that, and it speaks once, not every poll: callers keep it mounted while
+     retrying. If it proves noisy, `role="status"` is the polite alternative. -->
 <Alert>
   <WifiOffIcon />
   <AlertTitle>Reconnecting…</AlertTitle>

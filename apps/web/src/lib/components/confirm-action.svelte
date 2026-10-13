@@ -129,8 +129,8 @@ async function confirm() {
     {#if actionState.status === 'error'}
       <p role="alert" class="text-sm text-destructive">{actionState.message}</p>
     {/if}
-    <!-- Two shadcn conventions, kept: the dialog opens with focus on its container, and on a
-         phone the footer stacks Confirm above Cancel while Tab still reaches Cancel first. -->
+    <!-- shadcn's defaults, kept for now: focus opens on the dialog itself rather than a button,
+         and on a phone Confirm stacks above Cancel though Tab reaches Cancel first. -->
     <AlertDialogFooter>
       <AlertDialogCancel disabled={actionState.status === 'loading'}>
         {cancelLabel}
