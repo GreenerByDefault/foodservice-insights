@@ -86,7 +86,8 @@ design.
 
 **A Content Security Policy is what stands between an XSS and a stolen session**, because the
 session cookie cannot be `HttpOnly`. See `kit.csp` in `apps/web/vite.config.ts` and
-`apps/web/src/lib/server/security-headers.ts`.
+`apps/web/src/lib/server/security-headers.ts`. Browsers report violations to `/csp-report`, which
+logs each one at `warn` as `CSP violation`.
 
 **Open:** validating sessions with `getClaims()` instead of `getUser()`, once the hosted project is
 confirmed on asymmetric signing keys. It checks the JWT locally, removing the round trip to Supabase

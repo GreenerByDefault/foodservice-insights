@@ -28,7 +28,7 @@ describe('applySecurityHeaders', () => {
     expect(response.headers.get('x-frame-options')).toBe('DENY');
   });
 
-  test("lets a page's policy reach Supabase", () => {
+  test("lets a page's policy reach Supabase, and names where it reports", () => {
     const response = applySecurityHeaders(
       new Response('<html>', {
         headers: {
@@ -40,5 +40,6 @@ describe('applySecurityHeaders', () => {
     expect(response.headers.get('content-security-policy')).toBe(
       "default-src 'self'; connect-src 'self' https://abcdefgh.supabase.co; base-uri 'none'",
     );
+    expect(response.headers.get('reporting-endpoints')).toBe('csp="/csp-report"');
   });
 });

@@ -61,6 +61,10 @@ export default defineConfig(({ command }) => ({
           'base-uri': ['none'],
           'form-action': ['self'],
           'frame-ancestors': ['none'],
+          // Both, since Firefox and Safari read only `report-uri`. `csp` names the endpoint in
+          // `Reporting-Endpoints`, set beside this policy in `handle`.
+          'report-uri': ['/csp-report'],
+          'report-to': ['csp'],
         },
       },
     }),
