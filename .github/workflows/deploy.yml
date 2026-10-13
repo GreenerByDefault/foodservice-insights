@@ -4,6 +4,9 @@ name: Deploy
 # commit is what allows a deploy to simply point at a commit SHA to move the pointer to the
 # pre-built image.
 #
+# Deploying on push needs no wait for CI: main only moves through the merge queue, which ran the
+# full suite on the very commit that lands, so every image built here is of a tested commit.
+#
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
