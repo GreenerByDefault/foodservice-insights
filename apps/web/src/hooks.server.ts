@@ -8,6 +8,7 @@ import { identifyUser } from '#lib/server/auth/identify.js';
 import type { AuthContext } from '#lib/server/auth/types.js';
 import { assertConfigured } from '#lib/server/config.js';
 import { closeDatabase, database, withDbErrorHandling } from '#lib/server/db.js';
+import { requirePublicVar } from '#lib/server/env.js';
 import { bindRequestLogger, logger } from '#lib/server/log.js';
 import { applySecurityHeaders } from '#lib/server/security-headers.js';
 import { closeBlobStore } from '#lib/server/storage.js';
@@ -30,8 +31,15 @@ const FILE_LINK_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
   '/file/result/[id=uuid]',
 ]);
 
+/** Where the browser signs in. `placeholder` mode never contacts Supabase, and a deploy in it need
+ * not set the URL. */
+function supabaseOrigin(): string | null {
+  if (authMode() !== 'supabase') return null;
+  return new URL(requirePublicVar('PUBLIC_SUPABASE_URL')).origin;
+}
+
 function applyHeaders(response: Response, requestId: string): Response {
-  applySecurityHeaders(response);
+  applySecurityHeaders(response, supabaseOrigin());
   response.headers.set('X-Request-Id', requestId);
   return response;
 }

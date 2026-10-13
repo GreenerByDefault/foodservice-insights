@@ -14,9 +14,33 @@ const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
 
-export function applySecurityHeaders(response: Response): Response {
+/** For everything that is not a page: `/api`, polls, `__data.json`, redirects, `/health`. */
+const NON_PAGE_POLICY = "default-src 'none'; frame-ancestors 'none'";
+
+/** `supabaseOrigin` is where the browser signs in, or null in `placeholder` mode. */
+export function applySecurityHeaders(response: Response, supabaseOrigin: string | null): Response {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(name, value);
   }
+  response.headers.set(
+    'Content-Security-Policy',
+    contentSecurityPolicy(response.headers.get('Content-Security-Policy'), supabaseOrigin),
+  );
   return response;
+}
+
+/** `pagePolicy` is what `kit.csp` in `vite.config.ts` set, which it does only on a rendered page, so
+ * its absence is what marks every other response. */
+export function contentSecurityPolicy(
+  pagePolicy: string | null,
+  supabaseOrigin: string | null,
+): string {
+  if (pagePolicy === null) return NON_PAGE_POLICY;
+  if (supabaseOrigin === null) return pagePolicy;
+  return pagePolicy
+    .split('; ')
+    .map((directive) =>
+      directive.startsWith('connect-src ') ? `${directive} ${supabaseOrigin}` : directive,
+    )
+    .join('; ');
 }

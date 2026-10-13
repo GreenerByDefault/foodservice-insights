@@ -3,6 +3,8 @@ import { ensureHydrated } from '@gbd/browser-testing';
 import { APP_NAME } from '@gbd/core';
 import type { ReportId } from '@gbd/db';
 import { expect } from '@playwright/test';
+import { unzipSync } from 'fflate';
+import { aWorkbook } from '../../src/lib/reports/excel/testing/workbook.ts';
 import { succeedLatestAttempt } from '../fixtures/reports.ts';
 import { test } from '../fixtures/test.ts';
 import { chooseCsv, chooseWorkbook } from '../lib/upload.ts';
@@ -105,3 +107,29 @@ test('uploading a workbook creates a report whose uploaded file is the workbook 
   );
   expect(new Uint8Array(await download.body())).toEqual(new Uint8Array(workbook));
 });
+
+// fflate inflates an entry of 512 KiB or more in a `blob:` worker, which `worker-src` must allow.
+test('a workbook big enough to be unzipped in a worker converts', async ({ page, org }) => {
+  const workbook = aWorkbook([
+    ['product', 'date', 'weight'],
+    ...Array.from({ length: 6_000 }, () => ['beef', { date: '2026-01-05' }, 12] as const),
+  ]);
+  expect(sheetXmlBytes(workbook)).toBeGreaterThan(512 * 1024);
+
+  await page.goto(`/orgs/${org.slug}/reports/new`);
+  await ensureHydrated(page);
+  await chooseWorkbook(page, 'orders.xlsx', workbook);
+
+  await expect(page.getByText('1 of 1 months still need a count')).toBeVisible();
+});
+
+function sheetXmlBytes(workbook: Uint8Array): number {
+  let bytes = 0;
+  unzipSync(workbook, {
+    filter: ({ name, originalSize }) => {
+      if (name === 'xl/worksheets/sheet1.xml') bytes = originalSize;
+      return false;
+    },
+  });
+  return bytes;
+}

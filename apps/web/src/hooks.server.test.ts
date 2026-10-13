@@ -6,6 +6,7 @@ import * as mode from '#lib/auth/mode.js';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import * as authorization from '#lib/server/auth/authorization.js';
 import * as identify from '#lib/server/auth/identify.js';
+import * as env from '#lib/server/env.js';
 import { anAuthContext } from '#lib/server/testing/fixtures.js';
 import { SERVER_LOGS } from '#lib/server/testing/logs.js';
 import { getRequestEvent } from '$app/server';
@@ -17,6 +18,10 @@ import { handle, handleError } from './hooks.server.ts';
 vi.mock('#lib/server/auth/identify.js', () => ({ identifyUser: vi.fn() }));
 vi.mock('#lib/server/auth/authorization.js', () => ({ loadAuthorization: vi.fn() }));
 vi.mock('#lib/auth/mode.js', () => ({ authMode: vi.fn() }));
+vi.mock('#lib/server/env.js', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  requirePublicVar: vi.fn(),
+}));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 
@@ -24,6 +29,7 @@ beforeEach(() => {
   vi.mocked(identify.identifyUser).mockReset().mockResolvedValue(A_USER_ID);
   vi.mocked(authorization.loadAuthorization).mockReset().mockResolvedValue(anAuthContext());
   vi.mocked(mode.authMode).mockReset().mockReturnValue('supabase');
+  vi.mocked(env.requirePublicVar).mockReset().mockReturnValue('https://abcdefgh.supabase.co/');
 });
 
 /** The parts of a request the hooks actually read. */
@@ -52,6 +58,44 @@ describe('handle', () => {
 
     // The full set is asserted in security-headers.test.ts.
     expect(response.headers.get('x-frame-options')).toBe('DENY');
+  });
+
+  describe('the content security policy', () => {
+    const aPage = async () =>
+      new Response('<html>', {
+        headers: { 'Content-Security-Policy': "default-src 'self'; connect-src 'self'" },
+      });
+
+    test('lets a page reach Supabase', async () => {
+      const response = await handle({ event: anEvent(), resolve: aPage });
+
+      expect(response.headers.get('content-security-policy')).toBe(
+        "default-src 'self'; connect-src 'self' https://abcdefgh.supabase.co",
+      );
+    });
+
+    // A placeholder deploy need not set PUBLIC_SUPABASE_URL, so reading it would fail every page.
+    test('leaves the Supabase URL unread in placeholder mode', async () => {
+      vi.mocked(mode.authMode).mockReturnValue('placeholder');
+
+      const response = await handle({ event: anEvent(), resolve: aPage });
+
+      expect(response.headers.get('content-security-policy')).toBe(
+        "default-src 'self'; connect-src 'self'",
+      );
+      expect(env.requirePublicVar).not.toHaveBeenCalled();
+    });
+
+    test('gives a response that is not a page a policy that loads nothing', async () => {
+      const response = await handle({
+        event: anEvent('/orgs/acme/poll', '/(app)/orgs/[organizationSlug=slug]/poll'),
+        resolve: async () => Response.json({ reports: [] }),
+      });
+
+      expect(response.headers.get('content-security-policy')).toBe(
+        "default-src 'none'; frame-ancestors 'none'",
+      );
+    });
   });
 
   test('logs one line per request, under the id the response carries', async () => {

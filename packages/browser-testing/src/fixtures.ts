@@ -10,7 +10,7 @@
 import { type Database, type OrganizationId, type UserId, withTransaction } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { insertOrganization } from '@gbd/db/testing';
-import { type BrowserContext, test as base } from '@playwright/test';
+import { type BrowserContext, test as base, expect } from '@playwright/test';
 import { type Kysely, sql } from 'kysely';
 import {
   deleteGoTrueUser,
@@ -157,15 +157,18 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
   },
 
   context: async ({ context, signedInAs, baseURL }, use) => {
+    const violations = await recordCspViolations(context);
     if (signedInAs?.signInEmail) {
       await signIn(context, signedInAs.signInEmail, baseURL);
     }
     await use(context);
+    expectNoCspViolations(violations);
   },
 
   users: async ({ db, browser, baseURL }, use) => {
     const created: MintedUser[] = [];
     const contexts: BrowserContext[] = [];
+    const violations: CspViolation[][] = [];
 
     await use({
       create: async (options = {}) => {
@@ -179,6 +182,7 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
       contextFor: async (user) => {
         const context = await browser.newContext({ baseURL });
         contexts.push(context);
+        violations.push(await recordCspViolations(context));
         await signIn(context, user.signInEmail, baseURL);
         return context;
       },
@@ -186,6 +190,7 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
 
     await Promise.all(contexts.map((context) => context.close()));
     await Promise.all(created.map((user) => deleteGoTrueUser(user.id)));
+    expectNoCspViolations(violations.flat());
   },
 
   // Playwright's own `request` shares no cookies with the browser, so it would be signed out.
@@ -211,6 +216,37 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
     await db.deleteFrom('organization').where('id', '=', organization.id).execute();
   },
 });
+
+/** What a `securitypolicyviolation` event says, cut to what names the cause. */
+type CspViolation = { effectiveDirective: string; blockedURI: string; documentURI: string };
+
+/** Every violation any page of `context` reports from here on, which a browser otherwise only
+ * prints to its console. */
+async function recordCspViolations(context: BrowserContext): Promise<CspViolation[]> {
+  const violations: CspViolation[] = [];
+  await context.exposeBinding('__recordCspViolation', (_source, violation: CspViolation) => {
+    violations.push(violation);
+  });
+  // Serialized into the page by its source, so it can close over nothing, and typed by hand
+  // because this package compiles without the DOM lib.
+  await context.addInitScript(() => {
+    const page = globalThis as unknown as {
+      document: { addEventListener(type: string, listener: (event: CspViolation) => void): void };
+      __recordCspViolation(violation: CspViolation): void;
+    };
+    page.document.addEventListener(
+      'securitypolicyviolation',
+      ({ effectiveDirective, blockedURI, documentURI }) => {
+        page.__recordCspViolation({ effectiveDirective, blockedURI, documentURI });
+      },
+    );
+  });
+  return violations;
+}
+
+function expectNoCspViolations(violations: readonly CspViolation[]): void {
+  expect(violations, 'The app broke its Content-Security-Policy (`kit.csp`)').toEqual([]);
+}
 
 async function signIn(
   context: BrowserContext,
