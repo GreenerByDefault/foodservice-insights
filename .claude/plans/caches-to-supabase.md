@@ -52,13 +52,13 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   Supabase's own roles post creates one that way; `postgres` is not a superuser but has the
   admin privileges that covers. Every process reaches the project over the direct connection,
   `db.<project-ref>.supabase.co`, with the IPv4 add-on and TLS
-  ([`hosted-database.md`](hosted-database.md) § Connectivity), so a custom role logs in under its
+  ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Supabase), so a custom role logs in under its
   bare name, as on the local stacks. Dashboard roles: Owner, Administrator and Developer can all
   run arbitrary SQL;
   Read-Only, which runs SELECT only as `supabase_read_only_user`, exists on Team and Enterprise
   plans only. So on a Free or Pro plan, anyone who can open Studio can drop a table.
-- **No prod migration pipeline yet** ([`hosted-database.md`](hosted-database.md) is unlanded), so
-  prod steps below are hand-run against the direct connection, as § Go-live says.
+- **`deploy.yml` migrates the hosted project** on every push to `main`, so `002_caches` reaches
+  prod without a hand-run step; what § Go-live hand-runs is everything else.
 - **GBD's product CSV** (copy dated 2026-09-27): 23,505 of 38,692 rows are `No Matches Found`,
   so negative results are most of the cache's value; 20,008 rows have `cleaned_item_names` equal
   to the raw product, from old cache hits written back verbatim; 747 products carry surrounding
@@ -237,7 +237,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   `postgresql://cache_client:<password>@db.<project-ref>.supabase.co:5432/postgres?sslmode=verify-full&sslrootcert=<path to the repo's supabase-ca.crt>`
   — the dashboard's *Direct connection* string with the role, its password, and the TLS
   parameters that psycopg, `psql` and `pg` all read from a URL
-  ([`hosted-database.md`](hosted-database.md) § TLS). Neither sees the `postgres` password, and
+  ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Supabase). Neither sees the `postgres` password, and
   the string they hold can read three tables and insert unverified rows into them, nothing else.
   *Rejected: giving the data scientists `DB_CONNECTION_STRING`.* It is `postgres`, and an agent
   with it can drop a table. *Considered: Supabase's temporary access*, where a dashboard member
@@ -394,7 +394,7 @@ ignores it until PR 3, so this PR changes no report.
   (§ A role that can read and suggest), and with no `ssl` of its own: this string is only ever
   composed by hand on a laptop and carries its TLS as `sslmode` and `sslrootcert`, which `pg`
   reads from the URL; `DB_SSL_CA` belongs to the production handles alone
-  (`hosted-database.md` § TLS); else it passes
+  (`ARCHITECTURE.md` § Supabase); else it passes
   `WORKER_DATABASE`, and logs which at startup; `resolveWorkerMode` takes the variable and says
   whether the mode uses it, and `main.ts` logs the WARNING when it is set but unused, which is in
   `stubbed` and `mock-llm`. `.env.example` gains the variable,
@@ -583,17 +583,14 @@ can 5 and 6.
 
 ## Go-live
 
-Hand-run until [`hosted-database.md`](hosted-database.md) lands, against the direct connection
-with `DB_CONNECTION_STRING` set for the one command, carrying `sslmode=verify-full&sslrootcert=…`
-the way a hand-composed string does (§ A role that can read and suggest) — which needs that plan's
-IPv4 add-on turned on, or an IPv6 laptop. If that plan lands first, its first deploy applies
-`002_caches`, the first incremental migration to reach the hosted database through the pipeline
-— the rehearsal that plan asks for — and step 1's migrate is that deploy. A hand-run migrate
-before that plan's PR 2 runs with `DEFAULT_LIMITS`' 30s statement timeout; `002` is seconds of
-work, so that is fine.
+`deploy.yml`'s migrate step applies `002_caches` with the first deploy after the hosted project is
+set up. Each hand-run step below connects directly, with `DB_CONNECTION_STRING` set for the one
+command, carrying `sslmode=verify-full&sslrootcert=…` the way a hand-composed string does (§ A role
+that can read and suggest).
 
 1. Run the smoke test in § A role that can read and suggest; then `pnpm --filter @gbd/db
-   migrate` against prod (additive; the running worker is unaffected); `ALTER ROLE cache_client PASSWORD '…'` in the SQL editor; compose your own
+   migrate` against prod, which reports no pending migrations once a deploy has applied `002`;
+   `ALTER ROLE cache_client PASSWORD '…'` in the SQL editor; compose your own
    `CACHE_DB_CONNECTION_STRING` in the form § A role that can read and suggest gives, with that
    password, and check it from a laptop with `psql`.
 2. Merge PR 1. From a workstation, dry-run each of the three CSVs against prod; take any
