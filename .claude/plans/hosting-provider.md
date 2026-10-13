@@ -19,7 +19,8 @@ tagged by commit, and resolves the tag to a digest; migrations run from the work
 provider builds nothing and needs no git integration. What is left:
 
 1. **Run a public GHCR image, pinned by digest, on a call from CI that returns a real exit code.**
-   Web and worker deploy separately; a rollback is the same call at an older commit.
+   Web and worker deploy separately. `deploy.yml` never rolls back, so the dashboard's rollback
+   to an earlier deployment is the emergency hatch; confirm it works for an image pinned by digest.
 2. **A shutdown grace measured in minutes.** An attempt averages ~5 minutes (range 2–15). The
    worker drains on SIGTERM and needs the platform to wait;
    [`config.ts`](../../apps/worker/src/config.ts)'s `PLATFORM_SHUTDOWN_GRACE_MS` check makes that

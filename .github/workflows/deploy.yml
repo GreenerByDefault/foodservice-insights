@@ -1,36 +1,21 @@
 name: Deploy
 
 # Every push to main builds *both* images, whichever service ends up deploying. One image per
-# commit is what allows promotion and rollbacks to simply point at a commit SHA to move the
-# pointer to the pre-built image.
+# commit is what allows a deploy to simply point at a commit SHA to move the pointer to the
+# pre-built image.
 #
 # Web deploys on every push to main because it runs the database migrations, which the worker
 # may later need.
 #
-# The worker only ever deploys via workflow_dispatch, naming a SHA. This is because deploying
-# the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
+# The worker only ever deploys via workflow_dispatch from main, at main's latest commit. This is
+# because deploying the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
 #
-# We also use workflow_dispatch for rollbacks of either service: dispatch it again naming an
-# older commit SHA.
+# Nothing here rolls back: a bad deploy is reverted and deploys forward like any other change, per
+# ARCHITECTURE.md § Bad deploys are fixed forward.
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      service:
-        description: Service to deploy
-        type: choice
-        options: [web, worker]
-        required: true
-      sha:
-        description: Commit SHA to deploy (defaults to the branch tip)
-        type: string
-        required: false
-      force_rebuild:
-        description: Rebuild the chosen service's image even if this commit already has one
-        type: boolean
-        required: false
-        default: false
+  workflow_dispatch: # deploys the worker
 
 permissions:
   contents: read
@@ -38,68 +23,45 @@ permissions:
 jobs:
   build-web:
     name: Build web image
-    if: >-
-      github.event_name == 'push'
-      || (inputs.force_rebuild == true && inputs.service == 'web')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: build-web-${{ inputs.sha || github.sha }}
+      group: build-web-${{ github.sha }}
       cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.sha || github.sha }}
-
-      - name: Resolve full commit SHA
-        id: sha
-        shell: bash
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/build-image
         with:
           service: web
-          sha: ${{ steps.sha.outputs.sha }}
-          force_rebuild: ${{ inputs.force_rebuild }}
+          sha: ${{ github.sha }}
 
   build-worker:
     name: Build worker image
-    if: >-
-      github.event_name == 'push'
-      || (inputs.force_rebuild == true && inputs.service == 'worker')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: build-worker-${{ inputs.sha || github.sha }}
+      group: build-worker-${{ github.sha }}
       cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.sha || github.sha }}
-
-      - name: Resolve full commit SHA
-        id: sha
-        shell: bash
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/build-image
         with:
           service: worker
-          sha: ${{ steps.sha.outputs.sha }}
-          force_rebuild: ${{ inputs.force_rebuild }}
+          sha: ${{ github.sha }}
 
   deploy-web:
     name: Deploy web
     needs: build-web
-    if: >-
-      !cancelled() && needs.build-web.result != 'failure' && needs.build-web.result != 'cancelled'
-      && (github.event_name == 'push' || inputs.service == 'web')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -108,31 +70,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.sha || github.sha }}
           fetch-depth: 0 # need origin/main's current tip for the supersession check below
-
-      - name: Resolve full commit SHA
-        id: sha
-        shell: bash
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Build time varies, so runs can finish out of push order: push A (a slow base-layer change)
       # can finish after push B (a fast cache hit) has already deployed, which would roll prod
-      # *backwards*. Skip a push run once main has moved
-      # past its SHA.
-      #
-      # Push-only — a workflow_dispatch deliberately names a non-tip SHA for rollback and must
-      # never be skipped.
+      # *backwards*. Skip a run once main has moved past its SHA. The same check makes re-running
+      # an old failed run safe.
       #
       # This check must sit above the migrate step deploy-migrations.md will add, so a
       # superseded run does nothing at all rather than migrating and then declining to deploy.
       - name: Skip if main has moved past this commit
-        if: github.event_name == 'push'
         shell: bash
         run: |
           current_tip=$(git rev-parse origin/main)
-          if [ "${{ steps.sha.outputs.sha }}" != "$current_tip" ]; then
-            echo "::notice::main is now at $current_tip, past ${{ steps.sha.outputs.sha }} — a newer push will deploy instead. Skipping."
+          if [ "${{ github.sha }}" != "$current_tip" ]; then
+            echo "::notice::main is now at $current_tip, past ${{ github.sha }} — a newer push will deploy instead. Skipping."
             echo "superseded=true" >> "$GITHUB_ENV"
           fi
 
@@ -140,15 +92,11 @@ jobs:
         if: env.superseded != 'true'
         with:
           service: web
-          sha: ${{ steps.sha.outputs.sha }}
+          sha: ${{ github.sha }}
 
   deploy-worker:
     name: Deploy worker
-    needs: build-worker
-    if: >-
-      !cancelled() && needs.build-worker.result != 'failure'
-      && needs.build-worker.result != 'cancelled'
-      && github.event_name == 'workflow_dispatch' && inputs.service == 'worker'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -159,12 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.sha || github.sha }}
           fetch-depth: 0 # need full history and tags for the delta below, and to move the tag
-
-      - name: Resolve full commit SHA
-        id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Show commits since the last worker deploy
         run: |
@@ -178,7 +121,7 @@ jobs:
         id: deploy
         with:
           service: worker
-          sha: ${{ steps.sha.outputs.sha }}
+          sha: ${{ github.sha }}
 
       - name: Move the deploy/worker tag
         run: |

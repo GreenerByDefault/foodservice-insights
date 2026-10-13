@@ -300,8 +300,7 @@ where agents operate. Explore production data in Grafana Cloud instead.
 - **The last step of `deploy-web` pushes to Grafana Cloud.** It upserts the data source, runs
   `gcx resources push` over the dashboard files, and then deletes the dashboards in our folder
   that no longer have a file, since gcx never deletes anything.
-  - It sits after the migrate step, and runs under the same conditions as migrating: on a push to
-    `main`, or on a dispatch that names no SHA. It is skipped when a newer push has superseded the
+  - It sits after the migrate step and, like it, is skipped when a newer push has superseded the
     run.
   - It comes after the deploy to the host, so a Grafana outage can fail the run but can never hold
     back the app.

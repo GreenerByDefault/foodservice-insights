@@ -5,7 +5,7 @@
 A review on 2026-10-08 of what can break when deploying web and worker, on top of the mitigations
 already in place: image-per-commit promotion, `deploy-web`'s supersession guard, the
 worker-runs-behind invariant, the drain with its `config.ts` relations, migrations from the
-workspace rather than the image, rollbacks skipping migrations, report pages that reload once
+workspace rather than the image, deploys that only ever fix forward, report pages that reload once
 their poll is answered by another deploy, a web server that refuses to start without its config
 (`assertConfigured`, from `init` in [`hooks.server.ts`](../../apps/web/src/hooks.server.ts)), and
 `ts-db-types` migrating the base branch first so that Kysely refuses a migration out of order or
@@ -26,8 +26,11 @@ Findings that went elsewhere rather than into a PR here:
 
 ## Decisions
 
-- *Rejected: a switch to pause web auto-deploy after a rollback.* A rollback lasts only until the
-  next merge, but merges are infrequent enough that this is overkill.
+- *Rejected: rollbacks in `deploy.yml`.* Most of what this review found in them — a re-run
+  dispatch rolling prod back, a queued rollback cancelled by the next push, a migrate step that
+  must know when to skip — came from deploying an arbitrary older commit. A bad deploy is reverted
+  instead, and the host's dashboard rollback covers an outage that can't wait
+  (`ARCHITECTURE.md` § Bad deploys are fixed forward).
 - *Rejected: checking in-flight attempts before a worker deploy.* "Dispatch it at a quiet hour"
   stays a human judgement.
 - *Rejected: pinning the UBI base images by digest.* The image CI tests (`tests/e2e` builds its
@@ -42,29 +45,16 @@ Findings that went elsewhere rather than into a PR here:
   handle needs one line. And it leaves `/health` free for `observability-vendors.md`'s split into
   liveness and a dependency check.
 
-## PR 1 — `deploy.yml` deploys only merged, tested commits, with today's tooling
+## PR 1 — `deploy.yml` deploys only merged, tested commits
 
 One file, one theme: what a deploy job is allowed to ship.
 
-**Deploy tooling comes from main's tip, not the target SHA.** Both deploy jobs check out
-`inputs.sha || github.sha` and then run `uses: ./.github/actions/deploy-service`, which is the
-*target commit's* copy of the action (**verified**). Once the stub is replaced, a rollback to any
-commit before that lands runs the stub: green, "Would deploy…", nothing deployed. Every later
-rollback would also replay that commit's provider call and config-as-code. Check out `github.sha`
-for tooling; pass `inputs.sha` only as the image to resolve (`git rev-parse` it to 40 characters
-— `fetch-depth: 0` is already there). This loses nothing: a named-SHA dispatch skips migrations
-(`deploy-migrations.md`), and a blank one targets the tip, where tooling and target are the same
-tree. A rollback rolls back the image, not the deploy machinery — say so on the step.
+**The worker deploys only from main.** `workflow_dispatch` runs from any branch, with that
+branch's deploy tooling and at its tip. Refuse a dispatch from outside main.
 
-**Only merged commits deploy.** `workflow_dispatch` runs from any branch, so a blank `sha` from a
-feature branch deploys that branch, and once migrations are wired, migrates prod with unmerged
-migrations. Both jobs require `git merge-base --is-ancestor "$sha" origin/main`.
-
-**The worker never deploys ahead of the web.** A blank-`sha` worker dispatch takes main's tip even
-while that push's `deploy-web` is still migrating, or after it failed. `deploy-web` moves a
-`deploy/web` tag on success, mirroring `deploy/worker`; `deploy-worker` requires its SHA to be an
-ancestor of `deploy/web`. `deploy-web` on a rollback also logs when the target is behind
-`deploy/worker`, since the web ↔ worker contract then has to hold the other way round.
+**The worker never deploys ahead of the web.** A worker dispatch takes main's tip even while that
+push's `deploy-web` is still migrating, or after it failed. `deploy-web` moves a `deploy/web` tag
+on success, mirroring `deploy/worker`, and `deploy-worker` deploys the commit it names.
 
 **Production secrets live in a `production` Environment.** The repo has no environments
 (**verified**). `deploy-migrations.md` adds six production secrets; as repo secrets they reach any
@@ -157,7 +147,6 @@ Not PRs here; sequencing checks for whoever flips production on.
 ## Verification
 
 Per PR, from the repo root: `pnpm lint && pnpm check && pnpm test`.
-PR 1 by dispatching against a fork or with the deploy step still stubbed: a branch dispatch is
-refused, a worker dispatch ahead of `deploy/web` is refused, and a rollback logs the current
-`deploy-service` rather than the target's. PR 2 by holding more session-mode connections than Pool
+PR 1 by dispatching with the deploy step still stubbed: a branch dispatch is refused, and a worker
+dispatch deploys the commit `deploy/web` names. PR 2 by holding more session-mode connections than Pool
 Size against the dev stack's pooler and confirming the worker keeps ticking.

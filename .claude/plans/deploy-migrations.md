@@ -98,15 +98,11 @@ migrations need splitting) before it first runs against the hosted database. Rai
 `deploy-safety.md` PR 1 creates it — repo secrets reach any `pull_request` run from a same-repo
 branch.
 
-**A rollback must skip the migrate step, and skipping is the safe direction.** Kysely errors —
-`corrupted migrations: previously executed migration X is missing` (**verified**) — when the
-database has applied a migration the checkout does not contain, which is precisely a
-`workflow_dispatch` at an older SHA. It does not no-op, so an ungated step would fail every
-rollback in the step *before* the deploy. That check is also what catches a genuinely mangled
-history, so gate the step rather than teach it to tolerate a missing migration: run it on `push`
-and on a dispatch that left `sha` blank; skip it whenever a SHA was named. Nothing ever calls
-`migrateDown` — § Rollback's fix-forward rule is the whole story for schema. Put that reasoning on
-the step's `if:`.
+**The migrate step is ungated.** `deploy.yml` never rolls back (`ARCHITECTURE.md` § Bad deploys
+are fixed forward), so the checkout is always the commit being deployed. Kysely's
+`corrupted migrations: previously executed migration X is missing` (**verified**) then fires only
+on a genuinely mangled history, failing the deploy before `deploy-service`. Nothing ever calls
+`migrateDown`.
 
 **The worker never migrates.** § Worker deploys only on demand's invariant is that the deployed
 worker is always the side running behind, so the schema it needs is a subset of what the web
@@ -149,8 +145,6 @@ Against the dev Supabase stack first, then the real project.
    placeholder identity all land.
 2. Add a throwaway `002_*` migration, run migrate again, and confirm only it applies — the
    ordinary forward-migration path this plan commits to.
-3. Point a checkout that is missing the latest migration at the same database and confirm the
-   rollback gate is what stands between the Kysely corruption error and a failed deploy.
 
 Stale elsewhere, worth fixing when convenient: `deploy-service/action.yml` and several plans still
 cite `ARCHITECTURE.md` § Hosting, a heading fd5aad4 replaced with § Deployments and § Choosing a
