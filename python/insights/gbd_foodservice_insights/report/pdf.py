@@ -24,7 +24,13 @@ from gbd_foodservice_insights.plotting_utils import (
     close_new_figures_on_error,
 )
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
-from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, date_range_label
+from gbd_foodservice_insights.report.food_report import (
+    FoodReport,
+    ReportCharts,
+    co2e_kg_per_diner_or_meal,
+    date_range_label,
+    total_co2e_kg,
+)
 from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import (
@@ -911,10 +917,8 @@ def write_report_pdf(
 def _executive_narrative(
     report: FoodReport, client_name: str, quality_status: QualityStatus
 ) -> ExecutiveNarrative:
-    # Positive: every GBD category has a nonzero emission factor, and `build_food_report` rejects
-    # rows that all weigh 0.
     co2e_by_cat = report.emissions_summary.dropna(subset=["total_kg_co2e"])
-    total_co2e = float(co2e_by_cat["total_kg_co2e"].sum())
+    total_co2e = total_co2e_kg(report)
 
     # A category bought only at zero weight sums to 0 and would otherwise fill a spare slot.
     top = co2e_by_cat[co2e_by_cat["total_kg_co2e"] > 0].nlargest(3, "total_kg_co2e")
@@ -923,8 +927,7 @@ def _executive_narrative(
         period=date_range_label(report.rows),
         total_food_kg=float(report.rows[KILOS.column].sum()),
         total_co2e_kg=total_co2e,
-        # Positive, since `build_food_report` requires a positive count for every month.
-        co2e_kg_per_diner_or_meal=total_co2e / report.diner_meals_in_data,
+        co2e_kg_per_diner_or_meal=co2e_kg_per_diner_or_meal(report),
         diner_or_meal=report.diner_or_meal,
         plant_pct=report.plant_animal_split.plant_pct,
         animal_pct=report.plant_animal_split.animal_pct,

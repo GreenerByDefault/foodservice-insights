@@ -96,7 +96,11 @@ def _finding(
     status: DiagnosticStatus, message: str, *, sample_values: list[str] | None = None
 ) -> Finding:
     return make_finding(
-        stage="test", category="test", status=status, message=message, sample_values=sample_values
+        stage="test",
+        category="date_distribution",
+        status=status,
+        message=message,
+        sample_values=sample_values,
     )
 
 

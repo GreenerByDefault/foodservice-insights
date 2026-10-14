@@ -7,6 +7,7 @@ wrapper that also writes the data scientists' bundle.
 """
 
 import logging
+from collections import Counter
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -29,8 +30,14 @@ from gbd_foodservice_insights.report.aggregation import (
 )
 from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.plots import report as report_plots
-from gbd_foodservice_insights.report.quality import Finding
-from gbd_foodservice_insights.report.schema import DinerOrMeal, Region
+from gbd_foodservice_insights.report.quality import Finding, QualityCheck
+from gbd_foodservice_insights.report.schema import (
+    DiagnosticStatus,
+    DinerOrMeal,
+    QualityStatus,
+    Region,
+    quality_status_from_findings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +73,27 @@ class ReportCharts:
     """Closed when the `build_report_charts` block exits."""
 
     figures: list[Figure]
+
+
+@dataclass(frozen=True)
+class FindingCount:
+    check: QualityCheck
+    status: DiagnosticStatus
+    findings: int
+
+
+@dataclass(frozen=True)
+class ReportSummary:
+    """The report's headline numbers, for recording how the analysis went."""
+
+    quality_status: QualityStatus
+    # Only the pairs that occurred, sorted by check and then status.
+    finding_counts: tuple[FindingCount, ...]
+    total_co2e_kg: float
+    co2e_kg_per_diner_or_meal: float
+    plant_pct: float
+    # `None` when the rows have no protein.
+    plant_protein_pct: float | None
 
 
 def _log_stage(stage_key: str, report_progress: Callable[[], None]) -> None:
@@ -152,6 +180,36 @@ def build_food_report(
         plant_animal_split=plant_animal_split,
         plant_protein_share=plant_protein_share,
         findings=tuple(findings),
+    )
+
+
+def total_co2e_kg(report: FoodReport) -> float:
+    # Positive: every GBD category has a nonzero emission factor, and `build_food_report` rejects
+    # rows that all weigh 0.
+    return float(report.emissions_summary["total_kg_co2e"].sum())
+
+
+def co2e_kg_per_diner_or_meal(report: FoodReport) -> float:
+    # `build_food_report` requires a positive count for every month with rows.
+    return total_co2e_kg(report) / report.diner_meals_in_data
+
+
+def summarize_report(report: FoodReport) -> ReportSummary:
+    counts = Counter((finding["category"], finding["status"]) for finding in report.findings)
+    return ReportSummary(
+        quality_status=quality_status_from_findings(report.findings),
+        finding_counts=tuple(
+            FindingCount(check, status, findings)
+            for (check, status), findings in sorted(counts.items())
+        ),
+        total_co2e_kg=total_co2e_kg(report),
+        co2e_kg_per_diner_or_meal=co2e_kg_per_diner_or_meal(report),
+        plant_pct=report.plant_animal_split.plant_pct,
+        plant_protein_pct=(
+            None
+            if report.plant_protein_share is None
+            else report.plant_protein_share.plant_protein_pct
+        ),
     )
 
 

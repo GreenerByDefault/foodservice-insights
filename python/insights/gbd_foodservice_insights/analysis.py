@@ -57,7 +57,12 @@ from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataErr
 from gbd_foodservice_insights.errors import UpstreamApiError as UpstreamApiError
 from gbd_foodservice_insights.input_csv import read_input_csv
 from gbd_foodservice_insights.report.excel import write_client_workbook
-from gbd_foodservice_insights.report.food_report import build_food_report, build_report_charts
+from gbd_foodservice_insights.report.food_report import (
+    ReportSummary,
+    build_food_report,
+    build_report_charts,
+    summarize_report,
+)
 from gbd_foodservice_insights.report.pdf import write_report_pdf
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 
@@ -86,7 +91,7 @@ class StageFinished:
 
 
 type ReportProgress = Callable[[], None]
-type Telemetry = LlmCall | InputSummary | CategorizationSummary | StageFinished
+type Telemetry = LlmCall | InputSummary | CategorizationSummary | ReportSummary | StageFinished
 type ReportTelemetry = Callable[[Telemetry], None]
 
 
@@ -165,6 +170,7 @@ def analyze(
             top_n_drivers=5,
             report_progress=report_progress,
         )
+        report_telemetry(summarize_report(report))
 
     with _stage("pdf", report_telemetry):
         report_progress()
