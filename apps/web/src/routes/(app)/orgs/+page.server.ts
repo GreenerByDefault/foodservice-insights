@@ -34,35 +34,45 @@ export async function _organizationsPageRedirect(
   db: DatabaseExecutor,
   auth: AuthContext,
 ): Promise<string | null> {
-  if (await hasLiveInvite(db, auth)) return '/invites';
+  const invite = await waitingInvite(db, auth);
+  if (invite === 'live') return '/invites';
 
   // Even if a superadmin doesn't belong as a normal member to any organizations,
   // they should see the full organization list rather than the org creation list.
   if (auth.user.isSuperadmin) return null;
 
-  if (auth.memberships.length === 0) return '/orgs/new';
+  // Somebody who belongs nowhere most likely signed up through the invite, so they are told it
+  // ran out rather than offered a new organization as if they had never been invited. A member
+  // is not: they have somewhere to go, and `/invites` is in the user menu.
+  if (auth.memberships.length === 0) return invite === 'expired' ? '/invites' : '/orgs/new';
 
   const singleOrg = auth.memberships.length === 1 ? auth.memberships[0] : undefined;
   return singleOrg ? organizationHref(singleOrg.organizationSlug) : null;
 }
 
-/** Whether an invite is waiting that has not run out. */
-async function hasLiveInvite(db: DatabaseExecutor, auth: AuthContext): Promise<boolean> {
+/** Whether an undismissed invite is waiting, and if so whether any has not run out. */
+async function waitingInvite(
+  db: DatabaseExecutor,
+  auth: AuthContext,
+): Promise<'live' | 'expired' | 'none'> {
   const invite = await withDbErrorHandling(
     () =>
       db
         .selectFrom('organizationInvite')
-        .select('id')
+        // Reads `expires_at` rather than trusting `status`, because nothing writes `expired`
+        // when the deadline passes — only dismissing it on `/invites` does.
+        // Compares against the database's clock, not the server's.
+        .select(sql<boolean>`expires_at <= now()`.as('isExpired'))
         // `email` is stored lowercased, which its own CHECK constraint guarantees.
         .where('email', '=', auth.user.email.toLowerCase())
-        // Reads `expires_at` rather than trusting `status`, because nothing writes `expired`
-        // when the deadline passes.
         .where('status', '=', 'pending')
-        // Compares against the database's clock, not the server's.
-        .where('expiresAt', '>', sql<Date>`now()`)
+        // The latest deadline decides: if it has passed, every one has.
+        .orderBy('expiresAt', 'desc')
+        .limit(1)
         .executeTakeFirst(),
     { action: 'look for a pending invite', context: { userId: auth.user.id } },
   );
 
-  return invite !== undefined;
+  if (invite === undefined) return 'none';
+  return invite.isExpired ? 'expired' : 'live';
 }

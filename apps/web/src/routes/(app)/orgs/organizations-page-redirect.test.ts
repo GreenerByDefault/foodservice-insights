@@ -26,7 +26,7 @@ describe('_organizationsPageRedirect', () => {
     });
   });
 
-  test('an invite past its deadline is ignored, however its status still reads', async () => {
+  test('a member is not sent to an invite past its deadline, however its status still reads', async () => {
     await withRollback(database(), async (transaction) => {
       const email = anEmail();
       const { organization } = await insertOrganization(transaction);
@@ -41,6 +41,61 @@ describe('_organizationsPageRedirect', () => {
       await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe(
         `/orgs/${access.organizationSlug}`,
       );
+    });
+  });
+
+  test('a live invite forwards a member who also holds an expired one', async () => {
+    await withRollback(database(), async (transaction) => {
+      const email = anEmail();
+      const { organization: first } = await insertOrganization(transaction);
+      const { organization: second } = await insertOrganization(transaction);
+      await insertOrganizationInvite(transaction, {
+        organizationId: first.id,
+        email,
+        expiresAt: IN_A_WEEK,
+      });
+      await insertOrganizationInvite(transaction, {
+        organizationId: second.id,
+        email,
+        expiresAt: A_WEEK_AGO,
+      });
+      const auth = anAuthContext({
+        user: { email },
+        memberships: [anOrganizationAccess('Acme Foods')],
+      });
+
+      await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe('/invites');
+    });
+  });
+
+  test('somebody who belongs nowhere is shown an invite past its deadline instead of creating an organization', async () => {
+    await withRollback(database(), async (transaction) => {
+      const email = anEmail();
+      const { organization } = await insertOrganization(transaction);
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email,
+        expiresAt: A_WEEK_AGO,
+      });
+      const auth = anAuthContext({ user: { email } });
+
+      await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe('/invites');
+    });
+  });
+
+  test('a dismissed expired invite no longer stops somebody creating an organization', async () => {
+    await withRollback(database(), async (transaction) => {
+      const email = anEmail();
+      const { organization } = await insertOrganization(transaction);
+      await insertOrganizationInvite(transaction, {
+        organizationId: organization.id,
+        email,
+        expiresAt: A_WEEK_AGO,
+        status: 'expired',
+      });
+      const auth = anAuthContext({ user: { email } });
+
+      await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe('/orgs/new');
     });
   });
 

@@ -95,7 +95,7 @@ test('declining empties the page, and /orgs stops forwarding', async ({ organiza
   await expect(page).toHaveURL('/orgs/new');
 });
 
-test('an expired invite never forwards, and Dismiss clears it', async ({
+test('an expired invite forwards a newcomer, and Dismiss clears it', async ({
   db,
   organizations,
   users,
@@ -109,14 +109,15 @@ test('an expired invite never forwards, and Dismiss clears it', async ({
   const page = await (await users.contextFor(invitee)).newPage();
 
   await page.goto('/orgs');
-  await expect(page).toHaveURL('/orgs/new');
-
-  await page.goto('/invites');
+  await expect(page).toHaveURL('/invites');
   await ensureHydrated(page);
   await expect(page.getByText(/Your invitation expired/)).toBeVisible();
 
   await page.getByRole('button', { name: `Dismiss invitation to ${name}` }).click();
   await expect(page.getByText('No invitations waiting.')).toBeVisible();
+
+  await page.goto('/orgs');
+  await expect(page).toHaveURL('/orgs/new');
 
   const invite = await db
     .selectFrom('organizationInvite')
