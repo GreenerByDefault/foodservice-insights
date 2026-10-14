@@ -946,7 +946,7 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
 
 
 def _finding(status: DiagnosticStatus) -> Finding:
-    return make_finding(stage="test", category="test", status=status, message="")
+    return make_finding(stage="test", category="date_distribution", status=status, message="")
 
 
 @pytest.mark.parametrize(

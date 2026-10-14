@@ -1,3 +1,4 @@
+from dataclasses import asdict, replace
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -7,12 +8,16 @@ import pytest
 from gbd_foodservice_insights import emissions
 from gbd_foodservice_insights.report import aggregation, checks, food_report
 from gbd_foodservice_insights.report.food_report import (
+    FindingCount,
     FoodReport,
     build_food_report,
     build_report_charts,
     date_range_label,
+    summarize_report,
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
+from gbd_foodservice_insights.report.quality import Finding, QualityCheck, make_finding
+from gbd_foodservice_insights.report.schema import DiagnosticStatus
 
 JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
 
@@ -73,6 +78,62 @@ def test_rows_without_protein_have_no_plant_protein_share():
     rows = _rows().assign(category=["Cheese", "Oat Milk", "Cheese", "Oat Milk"])
 
     assert _build(rows).plant_protein_share is None
+
+
+# ----------------------------------------------------------------------
+# Tests for summarize_report
+# ----------------------------------------------------------------------
+
+
+def test_summarize_report_holds_the_headline_numbers():
+    summary = summarize_report(_build(_rows()))
+
+    assert asdict(summary) == {
+        "quality_status": "pass",
+        "finding_counts": (
+            {"check": "diner_meal_count_reasonableness", "status": "success", "findings": 1},
+            {"check": "missing_internal_months", "status": "success", "findings": 1},
+            {"check": "month_over_month_total_volatility", "status": "success", "findings": 1},
+            {"check": "outlier_line_items", "status": "success", "findings": 1},
+            {"check": "per_product_weight_bounds", "status": "success", "findings": 1},
+        ),
+        "total_co2e_kg": pytest.approx(970.5),
+        "co2e_kg_per_diner_or_meal": pytest.approx(970.5 / 220),
+        "plant_pct": 63.3,
+        "plant_protein_pct": 63.3,
+    }
+
+
+def test_summarize_report_without_protein_has_no_plant_protein_pct():
+    rows = _rows().assign(category=["Cheese", "Oat Milk", "Cheese", "Oat Milk"])
+
+    assert summarize_report(_build(rows)).plant_protein_pct is None
+
+
+def test_summarize_report_counts_findings_per_check_and_status_in_order():
+    def finding(check: QualityCheck, status: DiagnosticStatus) -> Finding:
+        return make_finding(stage="test", category=check, status=status, message="")
+
+    report = replace(
+        _build(_rows()),
+        findings=(
+            finding("date_distribution", "warning"),
+            finding("outlier_line_items", "error"),
+            finding("date_distribution", "info"),
+            finding("date_distribution", "warning"),
+            finding("outlier_line_items", "success"),
+        ),
+    )
+
+    summary = summarize_report(report)
+
+    assert summary.quality_status == "invalid"
+    assert summary.finding_counts == (
+        FindingCount("date_distribution", "info", 1),
+        FindingCount("date_distribution", "warning", 2),
+        FindingCount("outlier_line_items", "error", 1),
+        FindingCount("outlier_line_items", "success", 1),
+    )
 
 
 def test_a_missing_required_column_raises():

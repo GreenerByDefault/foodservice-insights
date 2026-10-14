@@ -2,15 +2,52 @@
 
 from datetime import timedelta
 from itertools import combinations, pairwise
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from gbd_foodservice_insights.report.quality import Finding, make_finding
+from gbd_foodservice_insights.report import quality
+from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.schema import DiagnosticStatus
 from Levenshtein import distance
 
 from gbd_foodservice_insights_lab.categories import meat_categories
 from gbd_foodservice_insights_lab.food_report.thresholds import get_diagnostic_threshold
+
+LabCheck = Literal[
+    "meat_weights",
+    "near_duplicate_product_names",
+    "missing_weeks_within_month",
+    "category_discontinuity",
+    "single_product_dominance",
+    "category_concentration",
+]
+
+
+def make_finding(
+    *,
+    stage: str,
+    category: LabCheck,
+    status: DiagnosticStatus,
+    message: str,
+    column: str | None = None,
+    count: int | None = None,
+    sample_values: list[Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Finding:
+    """`quality.make_finding` for the lab's checks, whose names are not the product's
+    `QualityCheck`s. The product's `Finding` types its category as one, so this is the one place
+    that says otherwise."""
+    return quality.make_finding(
+        stage=stage,
+        category=category,  # ty: ignore[invalid-argument-type]
+        status=status,
+        message=message,
+        column=column,
+        count=count,
+        sample_values=sample_values,
+        metadata=metadata,
+    )
 
 
 def summarise_numeric_columns(
@@ -408,7 +445,7 @@ def _check_top_share_concentration(
     metric_col: str,
     *,
     group_col: str,
-    diagnostic_name: str,
+    diagnostic_name: Literal["single_product_dominance", "category_concentration"],
     threshold_key: str,
     subject_label: str,
 ) -> list[Finding]:

@@ -1,13 +1,24 @@
 """Quality-audit helpers for the food-report pipeline."""
 
-from typing import Any, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from gbd_foodservice_insights.report.schema import DiagnosticStatus
+
+# The checks `checks.run_all_diagnostics` runs. Closed, so that what is recorded about them can
+# name each one.
+QualityCheck = Literal[
+    "outlier_line_items",
+    "per_product_weight_bounds",
+    "month_over_month_total_volatility",
+    "diner_meal_count_reasonableness",
+    "missing_internal_months",
+    "date_distribution",
+]
 
 
 class Finding(TypedDict):
     stage: str
-    category: str
+    category: QualityCheck
     status: DiagnosticStatus
     message: str
     column: NotRequired[str]
@@ -19,7 +30,7 @@ class Finding(TypedDict):
 def make_finding(
     *,
     stage: str,
-    category: str,
+    category: QualityCheck,
     status: DiagnosticStatus,
     message: str,
     column: str | None = None,

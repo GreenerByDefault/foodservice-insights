@@ -20,6 +20,7 @@ from gbd_foodservice_insights.analysis import (
     InputSummary,
     InvalidInputError,
     LlmCall,
+    ReportSummary,
     StageFinished,
     Telemetry,
     UnitSystem,
@@ -30,7 +31,7 @@ from gbd_foodservice_insights.analysis import (
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.llm import OnLlmCall
 from gbd_foodservice_insights.report import pdf
-from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
+from gbd_foodservice_insights.report.food_report import FindingCount, FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import quality_status_from_findings
 from gbd_foodservice_insights.testing import (
@@ -80,6 +81,16 @@ def cache_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return path
 
 
+FAKE_REPORT_SUMMARY = ReportSummary(
+    quality_status="warning",
+    finding_counts=(FindingCount("date_distribution", "warning", 2),),
+    total_co2e_kg=12.5,
+    co2e_kg_per_diner_or_meal=0.25,
+    plant_pct=40.0,
+    plant_protein_pct=None,
+)
+
+
 class FakeReport:
     """Stands in for `build_food_report` and the writers after it, which take seconds, to check
     what `analyze()` hands them."""
@@ -93,6 +104,9 @@ class FakeReport:
         self.rows = rows
         self.kwargs = kwargs
         return object()
+
+    def summarize_report(self, report: object) -> ReportSummary:
+        return FAKE_REPORT_SUMMARY
 
     @contextmanager
     def build_report_charts(self, report: object) -> Generator[object]:
@@ -111,6 +125,7 @@ def fake_report(monkeypatch: pytest.MonkeyPatch) -> FakeReport:
     fake = FakeReport()
     for name in (
         "build_food_report",
+        "summarize_report",
         "build_report_charts",
         "write_report_pdf",
         "write_client_workbook",
@@ -129,12 +144,15 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     request.input_csv.write_text(sample_input_csv())
     llm = KeywordLlmClient()
     progress_calls = 0
+    reported: list[Telemetry] = []
 
     def count_progress() -> None:
         nonlocal progress_calls
         progress_calls += 1
 
-    outcome = analyze(request, report_progress=count_progress, llm=llm)
+    outcome = analyze(
+        request, report_progress=count_progress, report_telemetry=reported.append, llm=llm
+    )
 
     assert outcome.pdf == request.output_directory / "report.pdf"
     assert outcome.xlsx == request.output_directory / "report.xlsx"
@@ -157,6 +175,9 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     # charts, the PDF and the workbook.
     assert llm.calls
     assert progress_calls == len(llm.calls) + 10
+    (summary,) = [record for record in reported if isinstance(record, ReportSummary)]
+    assert summary.quality_status == "pass"
+    assert summary.total_co2e_kg > 0
 
 
 class NaIsCheeseLlmClient(KeywordLlmClient):
@@ -558,6 +579,7 @@ def test_reports_each_stages_summary_and_time_in_order(
             categorized_rows=12,
             categorized_kilograms=120.0,
         ),
+        FAKE_REPORT_SUMMARY,
         StageFinished("report", ms=0),
         StageFinished("pdf", ms=0),
         StageFinished("xlsx", ms=0),

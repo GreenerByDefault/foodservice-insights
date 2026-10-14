@@ -8,8 +8,8 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.report.food_report import ReportCharts
-from gbd_foodservice_insights.report.quality import make_finding
 from gbd_foodservice_insights_lab.food_report import serving
+from gbd_foodservice_insights_lab.food_report.diagnostics import make_finding
 from gbd_foodservice_insights_lab.food_report.serving import (
     SERVINGS,
     ServingReport,
@@ -290,7 +290,7 @@ def test_write_serving_pdf_summarises_as_key_values_without_the_procurement_pros
     recording_pdf: _RecordingPdf,
 ):
     # A finding the lab added after building, as `run_food_report` does.
-    warning = make_finding(stage="lab", category="test", status="warning", message="Odd.")
+    warning = make_finding(stage="lab", category="meat_weights", status="warning", message="Odd.")
     built = _build()
     report = dataclasses.replace(built, findings=(*built.findings, warning))
     chart, _ax = plt.subplots()

@@ -48,7 +48,7 @@ landed) that shape the design:
   `analysis.py` hands the reporter to `OpenAiLlmClient.from_env(on_call=…)`, and re-exports
   `LlmCall`, `LlmOperation`, `cost_micro_usd` and `CategorizationSummary`, so `worker_child`
   imports only from the seam. `type Telemetry = LlmCall | InputSummary | CategorizationSummary |
-  StageFinished`. `analyze` reports, in order:
+  ReportSummary | StageFinished`. `analyze` reports, in order:
   - `StageFinished("read", ms)`, then `InputSummary(rows, kilograms, unique_products,
     cache_entries)`. The read stage includes loading the cache. The first three describe the
     upload: kilograms are after lb→kg, and unique products are counted after stripping, as
@@ -60,9 +60,15 @@ landed) that shape the design:
     answers, and the rows and kilograms categorized. `CategorizedProducts` carries
     `unrecognized_llm_answers`, which `categorize_with_llm` now returns beside its frame; it
     counts unique cleaned names sent to the LLM, not products.
-  - `StageFinished` for `report`, `pdf` and `xlsx`. The report stage begins with
-    `merge_categorizations`, so a run that fails the 20% check has already reported its
-    categorization summary and both earlier stage times. The pdf stage includes the charts.
+  - `ReportSummary`, from the pure `summarize_report` in `report/food_report.py`, right after
+    `build_food_report`, then `StageFinished("report", ms)`. It holds `quality_status`, the
+    findings counted per check and status (`FindingCount`s, only the pairs that occurred, sorted),
+    `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`, and `plant_protein_pct` or `None`.
+    `total_co2e_kg` and `co2e_kg_per_diner_or_meal` are functions in `food_report.py`, which
+    `pdf.py`'s `_executive_narrative` calls too, so the PDF and the record cannot disagree.
+  - `StageFinished` for `pdf` and `xlsx`. The report stage begins with `merge_categorizations`,
+    so a run that fails the 20% check has already reported its categorization summary and both
+    earlier stage times. The pdf stage includes the charts.
 
   A stage that raises reports no time, timed with `time.monotonic()` in whole milliseconds.
   `stub_analysis` takes `report_telemetry=` and `telemetry=`, and reports those records before
@@ -80,10 +86,7 @@ landed) that shape the design:
   change to a terminal row except the notification columns. So anything recorded after the
   verdict needs its own table, and a new column on the attempt must be written at claim or in the
   terminal `UPDATE`.
-- **What the report knows, `analyze()` still discards.**
-  - The findings' status counts are computed in `quality_lines` and dropped.
-  - `ExecutiveNarrative`'s totals are built inside `write_report_pdf` and dropped.
-  - Nothing measures memory.
+- **Nothing measures memory.** The report's numbers are reported now; peak memory is not.
 
   The lab keeps its own `MergeCounts.between` and `match_type` `value_counts` for the runscript's
   summary, which also subtracts the non-entree rows.
@@ -200,8 +203,10 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   *Rejected: a table per stage.* Every panel would join three or four 1:1 tables.
 - **`analysis_attempt_quality_check`: one row per attempt × check × status**, holding the number
   of findings. The status counts per check are what threshold tuning reads, and success rows
-  are kept so a firing rate has a denominator. Check names become a `Literal` on `make_finding`,
-  so the type checker closes the set.
+  are kept so a firing rate has a denominator. Check names are `QualityCheck`, a `Literal` on
+  `make_finding`'s `category`, so the type checker closes the set. The lab's own checks go
+  through `diagnostics.make_finding`, typed with a `LabCheck` literal of its own, since their
+  names are not the product's.
 - **`analysis_attempt.worker_git_sha`**, written at claim, is the one new attempt column. The
   claim is before the row is frozen.
 - **Typed columns, never jsonb**, per #230 and the metrics plan's no-free-text rule. The two
@@ -265,8 +270,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   stages done so far. There is no attempt id: the parent inserts under its own.
 - **The library reports facts; the child folds and writes them.** `analyze` takes
   `report_telemetry: ReportTelemetry`, and `Telemetry` is a union of typed records: `LlmCall`,
-  `InputSummary`, `CategorizationSummary` and `StageFinished`, which PR 1 widens with
-  `ReportSummary`.
+  `InputSummary`, `CategorizationSummary`, `ReportSummary` and `StageFinished`.
   - `OpenAiLlmClient` reports `LlmCall`s through its `on_call`.
   - `analyze` reports each summary and stage time as it gets one, and so *before* a later check
     raises.
@@ -291,7 +295,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   `_complete`'s `finally`, that replaces the call's own error, so the run reads `unknown`.
   `progress.json` has the same exposure. Accepted.
 - **Two fsync'd writes per call, instead of one, are probably free**, since a call takes hundreds
-  of milliseconds and three are in flight. PR 3 measures it and has a fallback.
+  of milliseconds and three are in flight. PR 2 measures it and has a fallback.
 
 ### The parent records after the verdict, whatever the ending
 
@@ -325,27 +329,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
 
-## PR 1 — the library reports the report
-
-Python only, still unwired.
-
-- `report/quality.py`: `QualityCheck = Literal[…]` names the six checks `run_all_diagnostics`
-  runs (`outlier_line_items`, `per_product_weight_bounds`, `month_over_month_total_volatility`,
-  `diner_meal_count_reasonableness`, `missing_internal_months`, `date_distribution`).
-  `make_finding`'s `category` takes it.
-- `report/pdf.py`: `total_co2e_kg(report)` comes out of `_executive_narrative`, which calls it.
-- `report/food_report.py`: a pure `summarize_report(report) -> ReportSummary`. It holds the
-  quality status, the findings counted per check and status, `total_co2e_kg`, the kg per diner or
-  meal, `plant_pct`, and `plant_protein_pct` or `None`. `analyze` reports it after
-  `build_food_report`, inside the report stage, and `Telemetry` gains it.
-- Tests:
-  - `summarize_report` on the golden report, with a full `==`;
-  - a report without a protein share;
-  - a finding of every status;
-  - the golden PDF's narrative is unchanged.
-- `just test-lab`.
-
-## PR 2 — the three tables and the build's SHA column
+## PR 1 — the three tables and the build's SHA column
 
 `packages/db`, migration `0NN_attempt_telemetry.ts`.
 
@@ -401,12 +385,10 @@ Python only, still unwired.
   removes it by organization. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
   and rename the "ai columns" test titles in `lifecycle.test.ts` and `queue.test.ts`.
 
-PRs 1 and 2 are independent.
-
-## PR 3 — the contract, and the child writes `telemetry.json`
+## PR 2 — the contract, and the child writes `telemetry.json`
 
 Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet. This
-needs PRs 1–2.
+needs PR 1.
 
 - `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
   operation, quality-status, diagnostic-status and check vocabularies.
@@ -460,7 +442,7 @@ needs PRs 1–2.
     second plus a final one.
   - Put the numbers in the PR.
 
-## PR 4 — the parent records telemetry on every ending
+## PR 3 — the parent records telemetry on every ending
 
 `apps/worker`. This is the first PR that writes telemetry in production.
 
@@ -497,13 +479,13 @@ needs PRs 1–2.
     post-verdict records get the bounded retry, then are dropped.
   - `REQUIREMENTS.md` § Persistence: both **Open**s become statements.
   - `packages/db/README.md`: who writes the tables.
-- Go-live: hand-run PR 2's migration against production before dispatching a worker deploy that
+- Go-live: hand-run PR 1's migration against production before dispatching a worker deploy that
   contains this PR. If someone forgets, every settle logs `42P01` and loses that telemetry, but
   verdicts are untouched.
 
-## PR 5 — the build's SHA on every attempt
+## PR 4 — the build's SHA on every attempt
 
-Independent of PRs 1–4 except PR 2's column. This touches CI and the image, which is this task.
+Independent of PRs 2–3 except PR 1's column. This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -516,13 +498,13 @@ Independent of PRs 1–4 except PR 2's column. This touches CI and the image, wh
 - Tests:
   - `queue.test.ts`: a claim with and without a SHA;
   - `config.test.ts`: the variable's three cases;
-  - `packages/db`: the pattern CHECK (in PR 2).
+  - `packages/db`: the pattern CHECK (in PR 1).
 - `ARCHITECTURE.md` § Images: the image carries its SHA as an env var as well as the OCI label.
   Promotion keeps it true, since the SHA is the build's.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
   commit.
 
-## PR 6 — keep the traceback of an `unknown` failure
+## PR 5 — keep the traceback of an `unknown` failure
 
 `apps/worker` only. Independent.
 
@@ -536,7 +518,7 @@ Independent of PRs 1–4 except PR 2's column. This touches CI and the image, wh
   - one long enough to truncate, keeping its end.
 - `ARCHITECTURE.md` § Failure modes, if it describes `failure_detail`'s contents.
 
-## PR 7 — the views and panels
+## PR 6 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -571,11 +553,11 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - and, on an impact dashboard, CO2e analyzed and plant share per month.
 - `metrics-dashboards.md` loses AI cost from its Out of scope.
 - This PR deletes this plan. If the metrics plan has not reached PR 1 by then, end this plan at
-  PR 6. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
+  PR 5. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1 in parallel with 2; then 3, then 4. PRs 5 and 6 can go any time, 5 after 2.
-PR 7 is last.
+Order: 1, then 2, then 3. PRs 4 and 5 can go any time, 4 after 1.
+PR 6 is last.
 
 ## Failure paths
 
@@ -599,26 +581,26 @@ PR 7 is last.
 
 Each PR runs its stack's gate:
 
-- Python: `just lint && just check && just test`, plus `just test-lab` for PR 1.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 3 and 4.
+- Python: `just lint && just check && just test`.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 2 and 3.
 
 Then by hand, against the dev stack:
 
-- After PR 4, on `stubbed`:
+- After PR 3, on `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
   - A `!slow` upload canceled from the waiting page leaves its usage and input group on a
     `canceled` attempt.
-- After PR 4, on `mock-llm`:
+- After PR 3, on `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 4, on `live`, with a small real file:
+- After PR 3, on `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
-- After PR 5's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 7: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+- After PR 4's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 6: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.
