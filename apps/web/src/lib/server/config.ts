@@ -1,5 +1,6 @@
 import { authMode } from '#lib/auth/mode.js';
 import { supabaseProject } from './auth/identify.ts';
+import { sitePassword } from './auth/site-password.ts';
 import { database } from './db.ts';
 import { emailer } from './email.ts';
 import { rootLogger } from './root-log.ts';
@@ -18,6 +19,6 @@ export function assertConfigured(): void {
   database();
   blobStore();
   emailer();
-  authMode();
   supabaseProject();
+  if (authMode() === 'placeholder') sitePassword();
 }

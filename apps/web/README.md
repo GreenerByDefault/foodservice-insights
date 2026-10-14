@@ -188,12 +188,14 @@ changes auth state, such as logging out, it calls `refreshAll()` so that SvelteK
 server `load()` functions without a full page refresh.
 
 **`PUBLIC_AUTH_MODE` decides who a request is**, and is required ([`src/lib/auth/mode.ts`](src/lib/auth/mode.ts)).
-In `placeholder`, every request is the seeded user from `pnpm seed:identity`, with no sign-in and
-no Supabase Auth. It is `.env.example`'s default, so `pnpm dev` needs no sign-in, and how a hosted
-environment runs until there is an email provider; locally, `supabase` works too, against Mailpit.
+In `placeholder`, signing in takes `SITE_PASSWORD` rather than an email, and whoever does is the
+seeded user from `pnpm seed:identity`; Supabase Auth is never contacted. It is `.env.example`'s
+default and how a hosted environment runs until there is an email provider; locally, `supabase`
+works too, against Mailpit. Changing `SITE_PASSWORD` signs every browser out
+([`src/lib/server/auth/site-password.ts`](src/lib/server/auth/site-password.ts)).
 In `supabase`, `identifyUser` in `src/lib/server/auth/identify.ts` validates the session
 cookie with `getUser()` on every request — never `getSession()`, which trusts the cookie unverified.
-Everything downstream of `identifyUser` is the same in both.
+Everything downstream of `identifyUser` is the same in both, signing out included.
 
 **An unreachable Supabase Auth is a 503, not a sign-out** — a sign-in form would ask someone
 already signed in to sign in again. `classifyAuthResult` in `identify.ts` maps every other

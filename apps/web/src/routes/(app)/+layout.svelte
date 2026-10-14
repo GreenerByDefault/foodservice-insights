@@ -32,11 +32,7 @@ const currentOrganization = $derived(page.data.organization);
     </div>
 
     <div class="ml-auto sm:ml-0">
-      <UserMenu
-        email={data.user.email}
-        displayName={data.user.displayName}
-        canSignOut={authMode() === 'supabase'}
-      />
+      <UserMenu email={data.user.email} displayName={data.user.displayName} mode={authMode()} />
     </div>
   </SiteHeader>
 

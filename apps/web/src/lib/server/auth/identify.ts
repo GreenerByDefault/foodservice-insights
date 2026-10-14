@@ -1,8 +1,9 @@
 /** Who is making this request? Everything downstream — `loadAuthorization`, the guards — takes
  * the id this answers with and never asks how it was found.
  *
- * In `placeholder` mode every request is the seeded user from `pnpm seed:identity`. Keep the
- * `@gbd/db/seed` import confined to this file so it's easy to remove later.
+ * In `placeholder` mode a request is the seeded user from `pnpm seed:identity` if it carries a site
+ * password session (`site-password.ts`), and nobody otherwise. Keep the `@gbd/db/seed` import
+ * confined to this file so it's easy to remove later.
  *
  * In `supabase` mode it is the session cookie, validated by `getUser()` — a round trip to Supabase
  * Auth on every request, never the unverified `getSession()`. That round trip is also what catches a
@@ -26,9 +27,10 @@ import { authMode } from '#lib/auth/mode.js';
 import { SERVICE_UNAVAILABLE_MESSAGE } from '#lib/errors/messages.js';
 import { requirePublicVar } from '#lib/server/env.js';
 import { logger } from '#lib/server/log.js';
+import { hasSiteSession } from './site-password.ts';
 
 export async function identifyUser(event: RequestEvent): Promise<UserId | null> {
-  if (authMode() === 'placeholder') return PLACEHOLDER_USER_ID;
+  if (authMode() === 'placeholder') return hasSiteSession(event) ? PLACEHOLDER_USER_ID : null;
   return await identifyFromSession(event);
 }
 

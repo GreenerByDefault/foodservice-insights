@@ -7,6 +7,7 @@
  * rather than part of the package's index.
  */
 
+import { requireEnv } from '@gbd/core/env';
 import { type Database, type OrganizationId, type UserId, withTransaction } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { insertOrganization } from '@gbd/db/testing';
@@ -37,7 +38,7 @@ export type IdentityOption = 'onboarded' | 'new' | 'pinned' | 'anonymous';
 
 export type SharedTestOptions = {
   /** Who this test's browser is signed in as. `placeholder` mode has one identity, the run's, so
-   * there anything but the default throws.
+   * there anything but the default and `anonymous` throws.
    *
    * - `onboarded` (the default): a GoTrue user of this test's own, named
    *   `MINTED_USER_DISPLAY_NAME`. Its address is unique, so a screenshot must not render it.
@@ -90,8 +91,8 @@ export type SharedTestFixtures = {
   org: TestOrganization;
 
   /** `user`, and the GoTrue address its browser signs in with — null in `placeholder` mode, where
-   * no request carries a session. Null altogether for `anonymous`. Split out from `user` so that
-   * `context` can depend on it without throwing for an anonymous test. */
+   * it signs in with the site password instead. Null altogether for `anonymous`. Split out from
+   * `user` so that `context` can depend on it without throwing for an anonymous test. */
   signedInAs: { user: TestIdentity; signInEmail: string | null } | null;
 
   users: UserFactory;
@@ -120,6 +121,11 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
   identity: ['onboarded', { option: true }],
 
   signedInAs: async ({ db, identity }, use) => {
+    if (identity === 'anonymous') {
+      await use(null);
+      return;
+    }
+
     if (runAuthMode() === 'placeholder') {
       if (identity !== 'onboarded') {
         throw new Error(`identity: '${identity}' needs a run in supabase mode.`);
@@ -129,9 +135,6 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
     }
 
     switch (identity) {
-      case 'anonymous':
-        await use(null);
-        return;
       case 'pinned': {
         const { signInEmail, ...user } = await readPinnedIdentity(db);
         await use({ user, signInEmail });
@@ -158,7 +161,9 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
 
   context: async ({ context, signedInAs, baseURL }, use) => {
     const violations = await recordCspViolations(context);
-    if (signedInAs?.signInEmail) {
+    if (signedInAs?.signInEmail === null) {
+      await signInWithSitePassword(context, baseURL);
+    } else if (signedInAs) {
       await signIn(context, signedInAs.signInEmail, baseURL);
     }
     await use(context);
@@ -258,6 +263,21 @@ async function signIn(
   // so the cookie is scoped to the host that browser actually requests.
   const cookies = await signInCookies(signInEmail);
   await context.addCookies(cookies.map((cookie) => ({ ...cookie, url: baseURL })));
+}
+
+/** `placeholder` mode's sign-in, through the app itself, since only the server can sign its
+ * session cookie. `context.request` shares the context's cookies, so the browser holds it too. */
+async function signInWithSitePassword(
+  context: BrowserContext,
+  baseURL: string | undefined,
+): Promise<void> {
+  if (baseURL === undefined) throw new Error('Signing a browser in needs a baseURL.');
+  const response = await context.request.post(new URL('/api/site-session', baseURL).href, {
+    data: { password: requireEnv('SITE_PASSWORD') },
+  });
+  if (!response.ok()) {
+    throw new Error(`Signing in with SITE_PASSWORD answered ${response.status()}.`);
+  }
 }
 
 /** The one organization called `name` in this run, creating it if this is the first test to ask.

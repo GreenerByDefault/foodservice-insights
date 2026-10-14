@@ -273,6 +273,8 @@ export function webContainerCommand(options: {
       PROTOCOL_HEADER: 'x-forwarded-proto',
       // Whatever `test-run.ts` chose, which matches how production is hosted and flips with it.
       PUBLIC_AUTH_MODE: requireEnv('PUBLIC_AUTH_MODE'),
+      // What `@gbd/browser-testing` signs each browser in with, in `placeholder` mode.
+      SITE_PASSWORD: requireEnv('SITE_PASSWORD'),
       // Required at startup in every auth mode (`supabaseProject` in `assertConfigured`).
       PUBLIC_SUPABASE_URL: requireEnv('PUBLIC_SUPABASE_URL'),
       PUBLIC_SUPABASE_PUBLISHABLE_KEY: requireEnv('PUBLIC_SUPABASE_PUBLISHABLE_KEY'),

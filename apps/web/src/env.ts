@@ -31,6 +31,7 @@ export const variables = defineEnvVars({
   LOG_LEVEL: optional,
   LOG_FORMAT: optional,
 
+  SITE_PASSWORD: optional,
   PUBLIC_AUTH_MODE: optionalPublic,
   PUBLIC_SUPABASE_URL: optionalPublic,
   PUBLIC_SUPABASE_PUBLISHABLE_KEY: optionalPublic,

@@ -62,6 +62,22 @@ describe('assertConfigured', () => {
     },
   );
 
+  test('throws without SITE_PASSWORD in placeholder mode', async () => {
+    const assertConfigured = await freshAssertConfigured();
+    publicEnv.PUBLIC_AUTH_MODE = 'placeholder';
+    privateEnv.SITE_PASSWORD = undefined;
+
+    expect(assertConfigured).toThrow("Must set the env var 'SITE_PASSWORD'");
+  });
+
+  test('passes without SITE_PASSWORD in supabase mode', async () => {
+    const assertConfigured = await freshAssertConfigured();
+    publicEnv.PUBLIC_AUTH_MODE = 'supabase';
+    privateEnv.SITE_PASSWORD = undefined;
+
+    expect(assertConfigured).not.toThrow();
+  });
+
   test('throws on an unset PUBLIC_AUTH_MODE', async () => {
     const assertConfigured = await freshAssertConfigured();
     publicEnv.PUBLIC_AUTH_MODE = undefined;

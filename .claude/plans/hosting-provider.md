@@ -21,10 +21,12 @@ Other plans own these pieces:
   [`alerts.md`](alerts.md). **`log_destinations:`**: [`logs.md`](logs.md). Both add to the spec
   files PR 1 creates, and both pass their tokens the same way as every other secret (§ Secrets).
 - **Postmark's credentials**: [`email-provider.md`](email-provider.md) adds them the same way.
-- **The site password** is separate work already in progress. **The web app must not be on a
-  public URL before the password lands.** Production runs `PUBLIC_AUTH_MODE=placeholder`, so the
-  password is the only thing in front of the placeholder admin. The rehearsal below waits for it
-  for the same reason.
+- **The site password** has landed (`SITE_PASSWORD`, checked by
+  [`site-password.ts`](../../apps/web/src/lib/server/auth/site-password.ts)). Production runs
+  `PUBLIC_AUTH_MODE=placeholder`, so it is the only thing in front of the placeholder admin. Set it
+  to a long, random value as a secret in the `production` Environment and in `.do/web.yaml`, like
+  any other (§ Secrets): the app refuses a short one, and refuses to start without it in
+  placeholder mode.
 
 DigitalOcean facts, read from its docs and the `doctl` source on 2026-10-14:
 
@@ -174,7 +176,7 @@ Nothing deploys yet; the stub still only warns.
 
 ## Rehearsal, by hand
 
-Do this after PR 1 merges and the site password has landed.
+Do this after PR 1 merges.
 
 Create both apps from the committed specs with `doctl apps create --spec -`, behind the same `yq`
 substitution, using `main`'s current image digests. Run the worker with `WORKER_MODE=mock-llm`

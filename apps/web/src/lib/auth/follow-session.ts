@@ -1,5 +1,6 @@
 /** How an open page keeps up with a session that changes underneath it. The root layout wires
- * both into the browser in `supabase` mode. */
+ * `refreshWhenRestoredByBack` into the browser in both modes, and `sessionUserChanged` in
+ * `supabase` mode only. */
 
 import type { Session } from '@supabase/supabase-js';
 

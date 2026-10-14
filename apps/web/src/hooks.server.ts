@@ -135,7 +135,7 @@ export const init: ServerInit = () => {
   assertConfigured();
   if (authMode() === 'placeholder') {
     logger().warn(
-      'PUBLIC_AUTH_MODE=placeholder: every request is the one seeded user, with no sign-in.',
+      'PUBLIC_AUTH_MODE=placeholder: whoever signs in with SITE_PASSWORD is the one seeded user.',
     );
   }
 

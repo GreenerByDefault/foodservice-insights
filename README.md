@@ -28,8 +28,11 @@ pnpm migrate
 pnpm seed:identity
 ```
 
-`pnpm seed:identity` creates the placeholder user that every request runs as in the default
-`PUBLIC_AUTH_MODE=placeholder`. The app will not serve a request without it.
+`pnpm seed:identity` creates the placeholder user that you sign in as, with `.env`'s
+`SITE_PASSWORD`, in the default `PUBLIC_AUTH_MODE=placeholder`. The app cannot sign anyone in
+without it. `.env.example` ships a working `SITE_PASSWORD`; if you change it, keep it at or above the
+minimum length in [`site-password.ts`](apps/web/src/lib/server/auth/site-password.ts), or sign-in
+errors.
 
 Optionally, you can also get the `previously_categorized_items.csv` cache from Greener by Default and place it in
 [`python/insights/gbd_foodservice_insights/data_files/`](python/insights/gbd_foodservice_insights/data_files/).
@@ -55,7 +58,7 @@ pnpm dev:worker
 
 Alternatively, `pnpm dev` runs both in one terminal, with their logs interleaved.
 
-Open <http://localhost:5173> and upload a CSV.
+Open <http://localhost:5173> and upload a CSV. Enter the `SITE_PASSWORD` from `.env`, which defaults to `local-password`.
 You can use [`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) for an example CSV. The report page
 updates on its own once the analysis finishes. Emails the app sends arrive at
 <http://localhost:55324>. When you're done, run `scripts/supabase stop` to free the memory the
@@ -76,7 +79,7 @@ page checks for a result.
 
 ### Signing in for real
 
-By default, there is no sign-in: every request is the placeholder user. To use Supabase Auth
+By default, sign-in is the site password, and makes you the placeholder user. To use Supabase Auth
 instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
 address; the code arrives at <http://localhost:55324>, and an address that is new creates an
 account. To make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio

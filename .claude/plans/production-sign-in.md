@@ -31,7 +31,7 @@ bounce spike on `auth`.
 ## PR 1 — production signs in for real
 
 - `.do/web.yaml` sets `PUBLIC_AUTH_MODE=supabase`.
-- Take down the site password that stands in front of placeholder mode.
+- Take down the site password that stands in front of placeholder mode (the code goes in PR 2).
 - `tests/e2e`'s run flips to `supabase` in the same PR.
   [`test-run.ts`](../../tests/e2e/scripts/test-run.ts) runs it as `placeholder` only because that
   is how production runs today.
@@ -46,7 +46,10 @@ With one mode left, `PUBLIC_AUTH_MODE` goes too. This PR removes:
   `tests/e2e/scripts/containers.ts`;
 - `pnpm seed:identity`: its script in `packages/db`, its turbo task, its root script, and the
   `deploy.yml` step that runs it;
-- the browser-testing fixtures' `placeholder` branch.
+- the browser-testing fixtures' `placeholder` branch;
+- the site password: `SITE_PASSWORD` (`.env.example`, `turbo.json`, `tests/e2e/scripts/containers.ts`,
+  the Environment secret), [`site-password.ts`](../../apps/web/src/lib/server/auth/site-password.ts),
+  and the `api/site-session` route.
 
 After this, `pnpm dev` signs in with codes caught by Mailpit, so `apps/web/README.md` § Auth and
 the root README need to say so. The PR also deletes this plan.

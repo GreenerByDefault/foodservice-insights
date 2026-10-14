@@ -14,11 +14,13 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as mode from '#lib/auth/mode.js';
 import { SERVER_LOGS } from '../testing/logs.ts';
 import { classifyAuthResult, identifyUser } from './identify.ts';
+import { hasSiteSession } from './site-password.ts';
 
 const { createServerClient } = vi.hoisted(() => ({ createServerClient: vi.fn() }));
 vi.mock('@supabase/ssr', () => ({ createServerClient }));
 vi.mock('#lib/auth/mode.js', () => ({ authMode: vi.fn() }));
 vi.mock('#lib/server/env.js', () => ({ requirePublicVar: (name: string) => `<${name}>` }));
+vi.mock('./site-password.ts', () => ({ hasSiteSession: vi.fn() }));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 
@@ -122,11 +124,26 @@ describe('identifyUser', () => {
     return createServerClient.mock.calls[0]?.[2].cookies.setAll;
   }
 
-  test('in placeholder mode, is the placeholder, without asking Supabase', async () => {
-    vi.mocked(mode.authMode).mockReturnValue('placeholder');
+  describe('in placeholder mode', () => {
+    beforeEach(() => {
+      vi.mocked(mode.authMode).mockReturnValue('placeholder');
+    });
 
-    expect(await identifyUser(anEvent())).toBe(PLACEHOLDER_USER_ID);
-    expect(createServerClient).not.toHaveBeenCalled();
+    test('a site session is the placeholder, without asking Supabase', async () => {
+      vi.mocked(hasSiteSession).mockReturnValue(true);
+      const event = anEvent();
+
+      expect(await identifyUser(event)).toBe(PLACEHOLDER_USER_ID);
+      expect(hasSiteSession).toHaveBeenCalledWith(event);
+      expect(createServerClient).not.toHaveBeenCalled();
+    });
+
+    test('no site session is nobody', async () => {
+      vi.mocked(hasSiteSession).mockReturnValue(false);
+
+      expect(await identifyUser(anEvent())).toBeNull();
+      expect(createServerClient).not.toHaveBeenCalled();
+    });
   });
 
   test('is the session user, read through the pinned cookie name', async () => {

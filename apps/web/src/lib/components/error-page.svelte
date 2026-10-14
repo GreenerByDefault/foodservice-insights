@@ -1,8 +1,10 @@
 <script lang="ts">
 import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
+import { authMode } from '#lib/auth/mode.js';
 import DisplayNameForm from '#lib/components/account/display-name-form.svelte';
 import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
+import SitePasswordForm from '#lib/components/auth/site-password-form.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import { describeError } from '#lib/errors/messages.js';
 import { pageTitle } from '#lib/page-title.js';
@@ -35,12 +37,16 @@ const title = $derived(code === 'onboarding_required' ? 'Welcome' : presentation
   </div>
 {:else if status === 401}
   <!-- Signing in here re-runs the loads, so the page that was asked for renders at its own URL:
-       no redirect, no `?next=`. No mode check — in `placeholder` nothing is ever signed out. -->
+       no redirect, no `?next=`. -->
   <div class="flex w-full max-w-sm flex-col gap-4 self-center">
     <PageHeading>{presentation.title}</PageHeading>
     <p class="text-muted-foreground">{presentation.body}</p>
 
-    <SignInFlow auth={browserAuth()} onSignedIn={refreshAll} />
+    {#if authMode() === 'placeholder'}
+      <SitePasswordForm onSignedIn={refreshAll} />
+    {:else}
+      <SignInFlow auth={browserAuth()} onSignedIn={refreshAll} />
+    {/if}
   </div>
 {:else}
   <!-- No calls to action yet, deliberately. The 5xx cases want a retry plus somewhere to report
