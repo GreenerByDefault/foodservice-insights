@@ -109,7 +109,7 @@ export function createPlaywrightConfig(
         ...webServer?.env,
       },
       // `url` waits for a 2xx response; `port` only waits for a listening socket.
-      url: `${baseURL}/health`,
+      url: `${baseURL}/health/ready`,
       // Every run gets its own port. Reusing a listener here would risk using the server from
       // another worktree.
       reuseExistingServer: false,

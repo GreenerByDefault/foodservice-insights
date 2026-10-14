@@ -11,7 +11,7 @@ import { blobStore } from './storage.ts';
  * first request that reads it.
  *
  * It checks handles, not a list of variables, so a variable added to one of these is covered with
- * no change here. A new handle still needs a line. Nothing here connects to anything: `/health`
+ * no change here. A new handle still needs a line. Nothing here connects to anything: `/health/ready`
  * owns reachability.
  */
 export function assertConfigured(): void {

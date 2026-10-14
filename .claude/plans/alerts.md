@@ -31,14 +31,10 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 - **The spec also has two probes.** If an instance fails `health_check`, the readiness probe, it
   gets no traffic, and a deploy whose new instances never pass it fails. A component that fails
   `liveness_health_check` is restarted. A worker can have only liveness, and ours has no port.
-- **[`/health`](../../apps/web/src/routes/health/+server.ts) checks the database and the
-  bucket**, and answers 503 if either fails. Its comment calls it a liveness probe, but as one, a
-  Supabase blip would restart every web instance at once. As a readiness probe it does what we
-  want: if a deploy's new containers cannot reach Supabase (a wrong secret, a missing CA), the
-  deploy fails and the old containers keep serving.
-  [`hosting-provider.md`](hosting-provider.md) points `health_check` at it, and Playwright's
-  readiness probe uses it too. `hooks.server.ts` skips auth for it by exact path, and logs its
-  access lines at `debug`.
+- **The web app has both probes' routes.**
+  [`/health/ready`](../../apps/web/src/routes/health/ready/+server.ts) answers 503 unless the
+  database and the bucket are reachable, and `/health/live` touches nothing.
+  [`hosting-provider.md`](hosting-provider.md) points each probe at its route.
 - **Web and worker are separate DigitalOcean apps** (`hosting-provider.md`), with specs in
   `.do/web.yaml` and `.do/worker.yaml`, so every app-level rule appears twice. Each file is
   canonical, because an update replaces the whole spec. Secrets in a spec are `${NAME}`
@@ -74,7 +70,7 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 | --- | --- | --- | --- |
 | Host | DigitalOcean | CPU, memory and restarts per component; p95 latency on web; deploy failed per app | Each app spec's `alerts:` |
 | Data | Grafana Cloud | `count(*)` over `metrics` views: queue wait, failures, attempts left `processing`, notifications gave up or stuck, database connections | Rule files in `apps/grafana/`, pushed by `deploy-web` |
-| Outside | Better Stack | The public `/health`; any `error` log line | Its UI |
+| Outside | Better Stack | The public `/health/ready`; any `error` log line | Its UI |
 
 Each layer stays useful when the others' inputs fail. The host's alerts still fire when the
 database is down. The data alerts fire when the host is healthy but the queue is not. The monitor
@@ -112,18 +108,11 @@ point per vendor, if the team ends up working in a Slack channel.
 - *Considered, not done: a request-rate rule.* Nothing yet tells us what rate is wrong, and
   Cloudflare absorbs floods.
 
-### The health routes split
+### The worker gets no probe
 
-- **`/health` keeps checking the database and the bucket, and its comment now names its two
-  callers:** DigitalOcean's readiness probe, and Better Stack's monitor.
-- **A new `/health/live` answers 200 without touching anything.** It is the web's
-  `liveness_health_check`, so a wedged process restarts and a Supabase blip does not restart
-  anything. It joins `ANONYMOUS_PATHS` and `UNATTENDED_ROUTES` in
-  [`hooks.server.ts`](../../apps/web/src/hooks.server.ts).
-- **The worker gets no probe.** A crashed parent exits, and DigitalOcean restarts it, which
-  `RESTART_COUNT` reports. If a wedged parent stops renewing its leases, other workers reap its
-  attempts as `abandoned`, which the failures rule counts. If it was the only worker, the
-  queue-wait rule fires instead.
+A crashed parent exits, and DigitalOcean restarts it, which `RESTART_COUNT` reports. If a wedged parent stops renewing its leases, other workers reap its
+attempts as `abandoned`, which the failures rule counts. If it was the only worker, the queue-wait
+rule fires instead.
 
 ### Data rules
 
@@ -159,7 +148,7 @@ point per vendor, if the team ends up working in a Slack channel.
   connections, `metrics_reader` cannot get one either. No-data is *OK*, because a count always
   returns a row.
 - **Rule files sit beside the dashboards, in the resource format gcx pushes for alert rules.**
-  **Open, verify in PR 4:** that gcx round-trips an alert rule through `gcx dev serve` the way it
+  **Open, verify in PR 3:** that gcx round-trips an alert rule through `gcx dev serve` the way it
   does a dashboard. If it does not, rules are files that `deploy.ts` pushes through Grafana's
   alerting provisioning API. Either way, edits made in the Cloud UI are overwritten at the next
   deploy.
@@ -186,7 +175,7 @@ secret key, so it can be revoked on its own.
 
 ### Outside: Better Stack
 
-- **One monitor on the public `/health`**, through the same Cloudflare and DNS a user goes
+- **One monitor on the public `/health/ready`**, through the same Cloudflare and DNS a user goes
   through, every 3 minutes on the free plan. It watches the starter domain until
   [`cloudflare-and-domain.md`](cloudflare-and-domain.md) moves users to our domain, and then
   moves with them. Three minutes is slow for a page, but the host's readiness probe and the data
@@ -195,7 +184,7 @@ secret key, so it can be revoked on its own.
 - **An alert on any `error` line** from either app. `error` is already kept for things a person
   should read (§ Context), and this alert catches what no other layer does: a 500 on a page, a
   sweep that keeps failing, or a verdict write waiting out a database blip. Needs
-  [`logs.md`](logs.md) PR 1. **Open, verify in PR 5:** whether the free plan alerts on a log
+  [`logs.md`](logs.md) PR 1. **Open, verify in PR 4:** whether the free plan alerts on a log
   query. If it does not, the query is saved and read whenever another alert fires, until logs
   are paid for.
 - **Both are made in Better Stack's UI**, and `ARCHITECTURE.md` names them, so they are not
@@ -213,28 +202,18 @@ secret key, so it can be revoked on its own.
   and what it buys is grouping. That matters only once errors are too frequent to read one by one,
   and until then the `error`-line alert is the same signal.
 
-## PR 1 — the liveness route
-
-`apps/web` only. It needs no vendor and no hosting change, so it can land now.
-
-- `routes/health/live/+server.ts`: a `GET` that answers 200 and touches nothing.
-- `hooks.server.ts`: `/health/live` joins `ANONYMOUS_PATHS` and `UNATTENDED_ROUTES`.
-- `routes/health/+server.ts`: the comment says readiness, and names its two callers.
-- Tests: the new route answers 200 with the database unreachable, and
-  `hooks.server.test.ts` covers the new path beside `/health`'s cases.
-
-## PR 2 — host rules
+## PR 1 — host rules
 
 After `hosting-provider.md` commits the app specs.
 
 - `.do/web.yaml` and `.do/worker.yaml`: the component rules and `DEPLOYMENT_FAILED`. The web's
-  spec also gets the p95 rule, and `liveness_health_check` at `/health/live`.
+  spec also gets the p95 rule.
 - Once, by hand: alert destinations through `doctl apps update-alert-destinations`, to the team's
   emails. **Open, verify in this PR:** whether destinations survive the next deploy, given that
   `PUT /v2/apps` replaces the whole spec. If they do not, the deploy step re-applies them after
   every update, from `ALERT_EMAILS`.
 
-## PR 3 — the views
+## PR 2 — the views
 
 `packages/db`, the next migration. Needs `metrics-dashboards.md` PR 1.
 
@@ -249,9 +228,9 @@ After `hosting-provider.md` commits the app specs.
   - The existing conventions cover the rest: no free text, and `metrics_reader` can read both
     views.
 
-## PR 4 — the data rules
+## PR 3 — the data rules
 
-Needs `metrics-dashboards.md` PR 5, so that a push to Grafana Cloud exists, and PR 3 here.
+Needs `metrics-dashboards.md` PR 5, so that a push to Grafana Cloud exists, and PR 2 here.
 
 - `apps/grafana/resources/`: one rule file per rule from Decisions, in a folder of its own.
   Thresholds sit in the files, each with a comment saying what firing would mean.
@@ -263,11 +242,11 @@ Needs `metrics-dashboards.md` PR 5, so that a push to Grafana Cloud exists, and 
 - A panel for `metrics.database_connection` on the product dashboard.
 - `ALERT_EMAILS` joins the `production` Environment, and `deploy-web`'s Grafana step passes it.
 
-## PR 5 — Better Stack, and the docs
+## PR 4 — Better Stack, and the docs
 
 After [`logs.md`](logs.md) PR 1, once production serves traffic.
 
-- By hand: the `/health` monitor and the `error`-line alert, both emailing every team member.
+- By hand: the `/health/ready` monitor and the `error`-line alert, both emailing every team member.
 - `ARCHITECTURE.md`:
   - § Observability, created here or by `logs.md`, gains the three layers in a few lines, and
     where each layer's rules live.
@@ -280,15 +259,14 @@ After [`logs.md`](logs.md) PR 1, once production serves traffic.
 
 Each PR runs its stack's gate: `pnpm lint && pnpm check && pnpm test`. Then by hand:
 
-- After PR 1, with local Supabase stopped, `/health/live` answers 200 and `/health` 503.
-- After PR 2, a threshold lowered below the current reading emails everyone, and still does after
+- After PR 1, a threshold lowered below the current reading emails everyone, and still does after
   a second deploy.
-- After PR 4, on the local Grafana against the dev database:
+- After PR 3, on the local Grafana against the dev database:
   - A `pending` attempt backdated past the queue-wait threshold puts one email in Mailpit, and
     claiming it brings the resolve email.
   - The same holds for a failed attempt, and for a notification row stuck past an hour.
   - Stopping the database makes every rule fire as an error.
   - Renaming a column a rule reads fails `pnpm test`, naming the rule.
-- After PR 4's first deploy, every rule shows as *Normal* in Grafana Cloud, and testing the
+- After PR 3's first deploy, every rule shows as *Normal* in Grafana Cloud, and testing the
   contact point emails everyone.
-- After PR 5, a temporary monitor on a path that answers 404 emails everyone. Delete it after.
+- After PR 4, a temporary monitor on a path that answers 404 emails everyone. Delete it after.
